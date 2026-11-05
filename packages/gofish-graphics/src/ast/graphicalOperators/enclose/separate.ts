@@ -33,7 +33,7 @@
  * field once asked.
  */
 import type { Pt } from "./prims";
-import { SegGrid, Inside, segsOf } from "./meshBlend";
+import { SegGrid, Inside, segsOf } from "./blend";
 import { closingRings } from "./arcs";
 import { signedArea2, pointInRing } from "../../geometry/plane";
 

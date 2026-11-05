@@ -9,7 +9,7 @@
  */
 import type { Pt } from "./prims";
 import { signedArea2 } from "../../geometry/plane";
-import { SegGrid, Inside, segsOf } from "./meshBlend";
+import { SegGrid, Inside, segsOf } from "./blend";
 
 /** A keep-in constraint: a segment ab (a disc when a = b) grown to `R`. The
  *  outline must keep every point of it inside. */

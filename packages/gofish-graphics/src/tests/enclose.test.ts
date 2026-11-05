@@ -45,10 +45,10 @@ import {
 } from "../ast/graphicalOperators/enclose/oval";
 import { closingRings } from "../ast/graphicalOperators/enclose/arcs";
 import {
-  buildMeshBlend,
-  meshArea,
-  meshLevel,
-} from "../ast/graphicalOperators/enclose/meshBlend";
+  buildBlend,
+  blendArea,
+  blendLevel,
+} from "../ast/graphicalOperators/enclose/blend";
 import { penguins } from "../data/penguins";
 import { countryPopulations } from "../data/countryPopulations";
 import { packSiblings } from "d3-hierarchy";
@@ -472,12 +472,12 @@ console.log("# a 1,000-point line and 300 dots");
   // piecewise quadratic lost its digits (a pocket read as filled to its
   // mouth at 0.5): each pocket's level holds its share exactly
   const J = pieceLinks(members, 4, 1, 1);
-  const MB = buildMeshBlend(
+  const MB = buildBlend(
     closingRings([...members, ...J.links], 4, 4, false, 0.05)
   );
   const worst = Math.max(
     ...[0.25, 0.5, 0.9].flatMap((c) =>
-      MB.pockets.map((P) => Math.abs(meshArea(P, meshLevel(P, c)) / P.area - c))
+      MB.pockets.map((P) => Math.abs(blendArea(P, blendLevel(P, c)) / P.area - c))
     )
   );
   check(

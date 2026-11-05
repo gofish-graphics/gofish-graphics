@@ -8,7 +8,7 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/outline.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/prims.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/arcs.ts
-  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/meshBlend.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/enclose/blend.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/beyond.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/separate.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/enclose/smooth.ts
@@ -291,13 +291,19 @@ same way under any coordinate transform.
    keep-outs (`routeAround`). The padded members and the links, closed at
    radius `padding`, are the piece's spine.
 3. **Convexity.** Each piece is filled on its own. Between 0 and 1 the fill
-   is the per-bay blend (`meshBlend.ts`): every pocket of the padded hull less
+   is the per-bay blend (`blend.ts`): every pocket of the padded hull less
    the spine fills `convexity` of its own area. In a pocket with a mouth on
    the hull, a harmonic field u is 0 on the spine and 1 on the mouth, solved
-   with finite elements on a constrained Delaunay mesh of the pocket; the
-   outline is u's level set at the level that holds that share of the area,
-   which is closed form per triangle. On a Delaunay mesh the field has no lake
-   and no island at any level. Behind a narrow channel u is exponentially
+   on a square grid over the pocket (4 px, finer in a small pocket). The
+   pocket's boundary crosses the grid lines at exact points, and a node next
+   to the boundary has its arm to the crossing shortened (Shortley and
+   Weller, in Gibou's symmetric form), so the matrix is symmetric and the
+   field has no lake and no island at any level. It is solved by conjugate
+   gradients with an incomplete Cholesky preconditioner. The field is read
+   on triangles: a whole grid cell is two, and a cell the boundary cuts is
+   its inside part, ear clipped. The outline is u's level set at the level
+   that holds that share of the area, which is closed form per triangle.
+   Behind a narrow channel u is exponentially
    small (under 1e-5 between the line and dots of the test below), and a
    pocket's level can sit there, so the area is summed per triangle in a form
    that keeps its digits at any level, and the solve runs to a relative
@@ -397,11 +403,15 @@ Shortcuts, each a known approximation:
 - With `holes` on, a fillet at `neck: 0` can leave a horn at a hole's mouth.
 - The closing samples its arcs at most 0.2 px off the exact curve; at a
   radius near 12 on loose dots the outline was measured up to 0.46 px off.
-- A blob over a 1,000-point line and 300 dots takes about 0.11 s at
-  convexity 0 and 0.35 to 0.4 s at 0.5 and 0.9 (in Node),
-  against about 0.15 s for the old blob. Most of it is the exact closing of the members and links and the
-  blend's mesh of the pockets (about 50,000 vertices there). The work is
-  cached only within one call, so changing only the convexity recomputes the
-  join tree and the mesh.
+- A blob over a 1,000-point line and 300 dots takes about 0.15 s at
+  convexity 0 and 0.15 to 0.2 s at 0.5 and 0.9 (in Node), against about
+  0.15 s for the old blob. Most of it is the exact closing of the members and
+  links. The work is cached only within one call, so changing only the
+  convexity recomputes the join tree and the blend's grid.
+- The blend is solved on a grid, so its outline is off the exact harmonic
+  level set by the grid's error: within 0.3 px of a fine finite-element
+  solve on the stories, and up to about 2.5 px deep in the narrow bays of the
+  line and dots at convexity 0.25, where the fine solve had not converged
+  either.
 - There is no `members` option and no list-taking `resolve` yet; members are
   the children or the refs of the chart's data.

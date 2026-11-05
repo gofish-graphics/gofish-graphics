@@ -3,10 +3,10 @@
 // </gofish-wiki>
 
 /**
- * The per-bay blend, what a blob's
- * convexity between 0 and 1 means, solved on a triangle mesh (an earlier
- * version on a 1 px grid is deleted). Every pocket of hull − spine fills
- * share c of its own area, by the level sets of a harmonic field:
+ * The per-bay blend, what a blob's convexity between 0 and 1 means, solved
+ * on a regular grid per pocket (earlier versions on a 1 px raster and on a
+ * Delaunay mesh are deleted). Every pocket of hull − spine fills share c of
+ * its own area, by the level sets of a harmonic field:
  *
  *  - the pockets are the pieces of the padded hull less the spine (the exact
  *    closing at r = padding). The hull is the convex hull of the spine's own
@@ -16,47 +16,48 @@
  *    spine run behind it (walked backward from the mouth's end to the next
  *    mouth's start) is its wall. A spine hole (with `holes`) is a pocket
  *    with no mouth.
- *  - in a pocket with a mouth, u is harmonic, 0 on the spine and 1 on the
- *    mouth: P1 finite elements on a Delaunay triangulation of the pocket
- *    (boundary sampled finer where the wall nears the mouth, interior points
- *    from a quadtree graded by distance from the boundary), solved by
- *    conjugate gradients with an incomplete Cholesky preconditioner. On a
- *    Delaunay mesh the cotangent weights are nonnegative, so the discrete u
- *    keeps the maximum principle: no lake and no island at any level.
  *  - where the mouth is tangent to the wall (every mouth end) the pocket is a
  *    cusp of zero width; it is cut off where it is `delta` px wide, and u in
  *    the cusp is the share of the way across it (the limit of the harmonic u
  *    in a thin channel). The cut edge carries that linear u.
+ *  - in a pocket with a mouth, u is harmonic, 0 on the spine and 1 on the
+ *    mouth, on a square grid of step h (BLEND.h, or the pocket's size over
+ *    BLEND.k in a small pocket). The boundary's crossings of the grid lines
+ *    are exact, and a node next to the boundary has its arm to the crossing
+ *    shortened (Shortley and Weller) in Gibou's symmetric form, so the
+ *    matrix is a symmetric M-matrix: u keeps the maximum principle, with no
+ *    lake and no island at any level. Solved by conjugate gradients
+ *    preconditioned by an incomplete Cholesky factor, IC(0) (solveNodes).
  *  - in a pocket with no mouth, u is the distance from its wall over the
- *    greatest such distance, exact at every mesh vertex.
+ *    greatest such distance, exact at every node.
+ *  - the field is read on triangles: a grid cell wholly inside is two, a
+ *    cell the boundary cuts is the polygon of the boundary's run through it
+ *    and its inside corners, ear clipped; u is linear on each.
  *  - each pocket fills share c of its own area: the area of {u <= l} is
  *    summed over the pocket's triangles, each in closed form as a product of
  *    two ratios of at most 1 (so it is exact however near a triangle's
  *    values are, and behind a narrow channel they are all within 1e-6), and
  *    the level for c is the root of that sum by regula falsi.
- *  - the outline at c is exact for the P1 field: the level set is a
- *    straight segment per triangle, chained, run through the cusps to the
- *    mouth ends, and stitched to the spine runs on the hull between pockets.
+ *  - the outline at c is exact for that piecewise linear field: the level
+ *    set is a straight segment per triangle, chained, run through the cusps
+ *    to the mouth ends, and stitched to the spine runs on the hull between
+ *    pockets.
  */
-import { Delaunay } from "d3-delaunay";
 import type { Pt } from "./prims";
 import { signedArea2, cross } from "../../geometry/plane";
 
-/** The mesh's knobs, px. delta: the cusp cut width; s0: the
- *  longest boundary step; beta: a boundary step's share of its distance to
- *  the other boundary (wall to mouth); alpha: how fast the interior's step
- *  grows away from the boundary; hMax: the longest interior step. */
-export const MESH_BLEND = {
+/** The blend's knobs, px. delta: the cusp cut width; h: the grid step; k: a
+ *  small pocket's grid step is its size (the square root of its area) over
+ *  k; hMin: the least step. */
+export const BLEND = {
   delta: 0.02,
-  s0: 2,
-  sMin: 0.002,
-  beta: 1,
-  alpha: 0.3,
-  hMax: 6,
-  /** CG stops at this relative residual. Behind a narrow channel u is
-   *  exponentially small (1e-6 and less), and a pocket's level can sit
+  h: 4,
+  k: 12,
+  hMin: 0.25,
+  /** the solve stops at this relative residual. Behind a narrow channel u
+   *  is exponentially small (1e-6 and less), and a pocket's level can sit
    *  there: at 1e-7 the level set in such a chamber moved by up to 12 px
-   *  between two solves of one mesh. */
+   *  between two solves. */
   tol: 1e-10,
 };
 
@@ -274,57 +275,6 @@ export class Inside {
   }
 }
 
-/** Edges bucketed by rows, for the nonzero winding number of a point. */
-class Rows {
-  y0: number;
-  h: number;
-  ny: number;
-  lists: number[][];
-  E: Float64Array;
-  constructor(E: Float64Array, h = 2) {
-    this.E = E;
-    const n = E.length / 4;
-    let ya = Infinity,
-      yb = -Infinity;
-    for (let s = 0; s < n; s++) {
-      ya = Math.min(ya, E[4 * s + 1], E[4 * s + 3]);
-      yb = Math.max(yb, E[4 * s + 1], E[4 * s + 3]);
-    }
-    if (!n) [ya, yb] = [0, 1];
-    this.y0 = ya - h;
-    this.h = h;
-    this.ny = Math.ceil((yb - this.y0) / h) + 2;
-    this.lists = Array.from({ length: this.ny }, () => []);
-    for (let s = 0; s < n; s++) {
-      const lo = Math.min(E[4 * s + 1], E[4 * s + 3]),
-        hi = Math.max(E[4 * s + 1], E[4 * s + 3]);
-      for (
-        let j = Math.floor((lo - this.y0) / h);
-        j <= Math.floor((hi - this.y0) / h);
-        j++
-      )
-        this.lists[j].push(s);
-    }
-  }
-  winding(x: number, y: number): number {
-    const j = Math.floor((y - this.y0) / this.h);
-    if (j < 0 || j >= this.ny) return 0;
-    const E = this.E;
-    let w = 0;
-    for (const s of this.lists[j]) {
-      const ax = E[4 * s],
-        ay = E[4 * s + 1],
-        bx = E[4 * s + 2],
-        by = E[4 * s + 3];
-      if (ay <= y !== by <= y) {
-        const xc = ax + ((y - ay) * (bx - ax)) / (by - ay);
-        if (xc > x) w += by > ay ? 1 : -1;
-      }
-    }
-    return w;
-  }
-}
-
 // ── the pockets ─────────────────────────────────────────────────────────────
 
 /** A vertex of the spine: its ring and index. */
@@ -358,7 +308,7 @@ type Pocket = {
   area: number;
 };
 
-export type MeshBlend = {
+export type Blend = {
   spine: Pt[][];
   hull: Pt[];
   mouths: Mouth[];
@@ -366,23 +316,17 @@ export type MeshBlend = {
   /** each corner's pocket */
   cornerPocket: number[];
   pockets: Pocket[];
-  /** the solved P1 mesh: vertex positions and u, the pocket triangles (3
-   *  vertex ids each) and their pocket */
+  /** the vertices (boundary points, grid crossings and grid nodes) with
+   *  their u, the triangles (3 vertex ids each) and their pocket */
   X: Float64Array;
   Y: Float64Array;
   U: Float64Array;
   tri: Int32Array;
   triPocket: Int32Array;
-  /** the triangles the outline and areas are read from, each triangle
-   *  edge's id (shared by the two triangles on it) and, for a cut edge's id,
-   *  its corner */
-  RX: Float64Array;
-  RY: Float64Array;
-  RU: Float64Array;
-  rtri: Int32Array;
-  rtriPocket: Int32Array;
-  redge: Int32Array;
-  nREdge: number;
+  /** each triangle edge's id (shared by the two triangles on it), how many
+   *  there are, and for a cut edge's id its corner */
+  edge: Int32Array;
+  nEdge: number;
   cutCorner: Map<number, number>;
 };
 
@@ -422,16 +366,23 @@ const footOn = (A: Pt, B: Pt, p: Pt): Pt => {
 };
 
 /**
- * The blend's field on a mesh, for the spine rings (outer rings winding
- * positive; holes, with `holes`, the other way).
+ * The pockets of the padded hull less the spine rings (outer rings winding
+ * positive; holes, with `holes`, the other way), each as its boundary loops
+ * with its cusps cut.
  */
-export function buildMeshBlend(spine: Pt[][]): MeshBlend {
-  const { delta, s0, sMin, beta, alpha, hMax } = MESH_BLEND;
+export function pocketsOf(spine: Pt[][]): {
+  clean: Pt[][];
+  hull: Pt[];
+  mouths: Mouth[];
+  corners: Corner[];
+  pockets: Pocket[];
+  loops: Loop[];
+} {
+  const { delta } = BLEND;
   // drop points within 0.01 px of the next (arc joins can repeat a point
   // to within rounding, or step back by a few thousandths of a px: a
-  // near-zero edge or a zig-zag that crosses itself defeats the Delaunay's
-  // edge recovery, which can never recover two crossing edges), and split
-  // outer rings from holes
+  // near-zero edge, or a zig-zag that crosses itself and so splits a cell's
+  // run), and split outer rings from holes
   const clean = spine
     .map((r) =>
       r.filter((p, i) => {
@@ -471,7 +422,7 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
       chains: { r: number; idx: Chain }[] = [];
     let m = m0;
     for (let guard = 0; ; guard++) {
-      if (guard > mouths.length) throw new Error("meshBlend: pocket walk");
+      if (guard > mouths.length) throw new Error("blend: pocket walk");
       seen[m] = 1;
       ms.push(m);
       const { r, i } = mouths[m].b;
@@ -488,7 +439,7 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
           break;
         }
       }
-      if (next < 0) throw new Error("meshBlend: no next mouth");
+      if (next < 0) throw new Error("blend: no next mouth");
       chains.push({ r, idx });
       if (next === m0) break;
       m = next;
@@ -516,7 +467,7 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
     // it and the one before
     let k = 1;
     while (k < pts.length && gapTo(M.A, M.B, pts[k]) < delta) k++;
-    if (k >= pts.length) throw new Error("meshBlend: cusp never opens");
+    if (k >= pts.length) throw new Error("blend: cusp never opens");
     const g0 = gapTo(M.A, M.B, pts[k - 1]),
       g1 = gapTo(M.A, M.B, pts[k]);
     const t = (delta - g0) / (g1 - g0);
@@ -552,7 +503,7 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
       const s = cutAt(Mb, pts);
       const e = cutAt(Ma, pts.slice().reverse());
       if (s.k > pts.length - 1 - e.k + 1)
-        throw new Error("meshBlend: cusp cuts cross");
+        throw new Error("blend: cusp cuts cross");
       pocket.cuspArea += s.area + e.area;
       const cb = corners.length;
       corners.push({
@@ -622,457 +573,509 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
       corner: pts.map(() => -1),
     });
   }
+  return { clean, hull, mouths, corners, pockets, loops };
+}
 
-  // ── the boundary, sampled ─────────────────────────────────────────────────
-  const segsOfKind = (kind: number) => {
-    const out: number[] = [];
-    for (const L of loops)
-      for (let i = 0; i < L.pts.length; i++)
-        if (L.kind[i] === kind) {
-          const a = L.pts[i],
-            b = L.pts[(i + 1) % L.pts.length];
-          out.push(a[0], a[1], b[0], b[1]);
-        }
-    return new SegGrid(Float64Array.from(out));
-  };
-  const hasMouth = mouths.some((m) => m.kept);
-  const wallIdx = segsOfKind(0),
-    mouthIdx = segsOfKind(1);
-  /** the boundary step at a point of a wall (kind 0) or mouth (kind 1): a
-   *  share of its distance to the other kind, at most s0 */
-  const stepAt = (x: number, y: number, kind: number) => {
-    if (!hasMouth) return s0;
-    const d = (kind === 0 ? mouthIdx : wallIdx).nearest(x, y)[0];
-    return Math.max(sMin, Math.min(s0, beta * d));
-  };
-  const BX: number[] = [],
-    BY: number[] = [],
-    BV: number[] = [];
-  /** per loop: its vertex ids, each edge's kind and (cut edges) corner */
-  const bl: {
-    pocket: number;
-    v: number[];
-    kind: number[];
-    corner: number[];
+// ── the field on a grid ─────────────────────────────────────────────────────
+
+/** A pocket boundary's crossing of a grid line: where along the line, which
+ *  way it crosses (+1 toward increasing x or y), its vertex and u. */
+type Cross = { c: number; dir: number; id: number; u: number };
+
+/** A pocket's boundary inside one grid cell, from where it enters the
+ *  cell's perimeter to where it leaves (perimeter parameters, 0..4 from the
+ *  lower left corner, counterclockwise in y-down px: along y0, up x1, back
+ *  along y1, down x0), as vertex ids. */
+type Run = { inT: number; outT: number; verts: number[] };
+
+/** Ear clipping of a simple polygon (vertex ids, counterclockwise), into
+ *  `out` as vertex triples. A cut cell's polygon has a few vertices, so the
+ *  quadratic search is cheap. */
+function earClip(
+  poly: number[],
+  X: number[],
+  Y: number[],
+  out: number[]
+): void {
+  const idx = poly.slice();
+  const cr = (a: number, b: number, c: number) =>
+    (X[b] - X[a]) * (Y[c] - Y[a]) - (Y[b] - Y[a]) * (X[c] - X[a]);
+  const inTri = (p: number, a: number, b: number, c: number) =>
+    cr(a, b, p) >= 0 && cr(b, c, p) >= 0 && cr(c, a, p) >= 0;
+  while (idx.length > 3) {
+    const n = idx.length;
+    let found = -1;
+    for (let k = 0; k < n && found < 0; k++) {
+      const a = idx[(k + n - 1) % n],
+        b = idx[k],
+        c = idx[(k + 1) % n];
+      if (cr(a, b, c) <= 0) continue;
+      let blocked = false;
+      for (let q = 0; q < n && !blocked; q++) {
+        const d = idx[q];
+        if (d === a || d === b || d === c) continue;
+        if (X[d] === X[a] && Y[d] === Y[a]) continue;
+        blocked = inTri(d, a, b, c);
+      }
+      if (!blocked) found = k;
+    }
+    if (found < 0) {
+      // only collinear or repeated corners are left: clip the flattest
+      let bv = Infinity;
+      for (let k = 0; k < n; k++) {
+        const v = Math.abs(cr(idx[(k + n - 1) % n], idx[k], idx[(k + 1) % n]));
+        if (v < bv) [bv, found] = [v, k];
+      }
+    }
+    out.push(idx[(found + n - 1) % n], idx[found], idx[(found + 1) % n]);
+    idx.splice(found, 1);
+  }
+  if (idx.length === 3) out.push(idx[0], idx[1], idx[2]);
+}
+
+/** The vertices and triangles the blend is read from, shared by its
+ *  pockets. */
+class Tris {
+  X: number[] = [];
+  Y: number[] = [];
+  U: number[] = [];
+  tri: number[] = [];
+  triPocket: number[] = [];
+  /** loop pieces on cut edges: [a, b, corner] */
+  cuts: number[] = [];
+  vert(x: number, y: number, u: number): number {
+    this.X.push(x);
+    this.Y.push(y);
+    this.U.push(u);
+    return this.X.length - 1;
+  }
+  add(a: number, b: number, c: number, p: number) {
+    this.tri.push(a, b, c);
+    this.triPocket.push(p);
+  }
+}
+
+/**
+ * One pocket's field on a grid of step h and its triangles, into T; false
+ * when a boundary loop lies wholly inside one grid cell (a cell with a hole
+ * in it, which the cell triangulation does not handle: the caller retries
+ * at h / 2).
+ */
+function gridPocket(
+  pid: number,
+  hole: boolean,
+  Ls: Loop[],
+  h: number,
+  T: Tris
+): boolean {
+  const T0 = { v: T.X.length, t: T.tri.length, p: T.triPocket.length };
+  const T0cuts = T.cuts.length;
+  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const L of Ls)
+    for (const [x, y] of L.pts) {
+      xa = Math.min(xa, x);
+      xb = Math.max(xb, x);
+      ya = Math.min(ya, y);
+      yb = Math.max(yb, y);
+    }
+  // the grid's origin off any round number, so a boundary vertex (often on
+  // a member's axis) is not on a grid line
+  const gx0 = xa - h * 1.3183,
+    gy0 = ya - h * 1.2718;
+  const nx = Math.ceil((xb - gx0) / h) + 2,
+    ny = Math.ceil((yb - gy0) / h) + 2;
+  const W = nx + 1;
+  const gx = (i: number) => gx0 + i * h,
+    gy = (j: number) => gy0 + j * h;
+  // ── the boundary's crossings of the grid lines, in loop order ──
+  const rows: Cross[][] = Array.from({ length: ny + 1 }, () => []);
+  const cols: Cross[][] = Array.from({ length: nx + 1 }, () => []);
+  /** per crossing vertex (less T0.v): its line (0 vertical, 1 horizontal)
+   *  and index; -1 for a loop vertex */
+  const crossLine: number[] = [],
+    crossIdx: number[] = [];
+  /** each loop as vertex ids, and whether each is a crossing */
+  const seqs: { id: number[]; cross: boolean[] }[] = [];
+  const cs: {
+    t: number;
+    x: number;
+    y: number;
+    line: number;
+    li: number;
+    dir: number;
   }[] = [];
-  for (const L of loops) {
-    const out = {
-      pocket: L.pocket,
-      v: [] as number[],
-      kind: [] as number[],
-      corner: [] as number[],
-    };
-    const add = (x: number, y: number, v: number, kind: number, c: number) => {
-      BX.push(x);
-      BY.push(y);
-      BV.push(v);
-      out.v.push(BX.length - 1);
-      out.kind.push(kind);
-      out.corner.push(c);
-    };
+  const vert = (x: number, y: number, u: number, line: number, li: number) => {
+    crossLine.push(line);
+    crossIdx.push(li);
+    return T.vert(x, y, u);
+  };
+  for (const L of Ls) {
     const n = L.pts.length;
-    for (let i = 0; i < n; i++) {
-      const a = L.pts[i],
-        b = L.pts[(i + 1) % n];
-      const kind = L.kind[i];
-      add(a[0], a[1], L.val[i], kind, L.corner[i]);
-      if (kind === 2) continue;
-      // march along the edge, one step (at the current point) at a time
-      const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-      let t = 0;
-      for (let guard = 0; guard < 100000; guard++) {
-        const x = a[0] + t * (b[0] - a[0]),
-          y = a[1] + t * (b[1] - a[1]);
-        const s = stepAt(x, y, kind);
-        if (len * (1 - t) <= 1.2 * s) break;
-        t += s / len;
-        add(
-          a[0] + t * (b[0] - a[0]),
-          a[1] + t * (b[1] - a[1]),
-          kind === 1 ? 1 : 0,
-          kind,
-          -1
-        );
+    const ids = L.pts.map((p, k) => vert(p[0], p[1], L.val[k], -1, -1));
+    const seq = { id: [] as number[], cross: [] as boolean[] };
+    for (let k = 0; k < n; k++) {
+      const a = L.pts[k],
+        b = L.pts[(k + 1) % n];
+      const ua = L.val[k],
+        ub = L.val[(k + 1) % n];
+      seq.id.push(ids[k]);
+      seq.cross.push(false);
+      cs.length = 0;
+      if (a[0] !== b[0]) {
+        const lo = Math.min(a[0], b[0]),
+          hi = Math.max(a[0], b[0]);
+        const dir = b[0] > a[0] ? 1 : -1;
+        for (let i = Math.ceil((lo - gx0) / h); gx(i) <= hi; i++) {
+          const x = gx(i);
+          if (a[0] <= x === b[0] <= x) continue;
+          const t = (x - a[0]) / (b[0] - a[0]);
+          cs.push({ t, x, y: a[1] + t * (b[1] - a[1]), line: 0, li: i, dir });
+        }
       }
-    }
-    bl.push(out);
-  }
-  const nB0 = BX.length;
-
-  // ── interior points: a quadtree graded by distance from the boundary ──────
-  const allSegs: number[] = [];
-  for (const L of bl)
-    for (let i = 0; i < L.v.length; i++) {
-      const a = L.v[i],
-        b = L.v[(i + 1) % L.v.length];
-      allSegs.push(BX[a], BY[a], BX[b], BY[b]);
-    }
-  const AS = Float64Array.from(allSegs);
-  const bIdx = new SegGrid(AS);
-  const rows = new Rows(AS);
-  const IX: number[] = [],
-    IY: number[] = [];
-  if (nB0) {
-    let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
-    for (let v = 0; v < nB0; v++) {
-      xa = Math.min(xa, BX[v]);
-      xb = Math.max(xb, BX[v]);
-      ya = Math.min(ya, BY[v]);
-      yb = Math.max(yb, BY[v]);
-    }
-    const side = Math.max(xb - xa, yb - ya);
-    const visit = (cx: number, cy: number, L: number) => {
-      const [d] = bIdx.nearest(cx, cy);
-      const half = L * Math.SQRT1_2;
-      if (d > half && rows.winding(cx, cy) === 0) return; // wholly outside
-      const h = Math.min(hMax, s0 + alpha * Math.max(0, d - half));
-      if (L > h && L > sMin) {
-        const q = L / 4;
-        visit(cx - q, cy - q, L / 2);
-        visit(cx + q, cy - q, L / 2);
-        visit(cx - q, cy + q, L / 2);
-        visit(cx + q, cy + q, L / 2);
-        return;
+      if (a[1] !== b[1]) {
+        const lo = Math.min(a[1], b[1]),
+          hi = Math.max(a[1], b[1]);
+        const dir = b[1] > a[1] ? 1 : -1;
+        for (let j = Math.ceil((lo - gy0) / h); gy(j) <= hi; j++) {
+          const y = gy(j);
+          if (a[1] <= y === b[1] <= y) continue;
+          const t = (y - a[1]) / (b[1] - a[1]);
+          cs.push({ t, x: a[0] + t * (b[0] - a[0]), y, line: 1, li: j, dir });
+        }
       }
-      if (d >= 0.5 * L && rows.winding(cx, cy) !== 0) {
-        IX.push(cx);
-        IY.push(cy);
+      if (cs.length > 1) cs.sort((p, q) => p.t - q.t);
+      const start = seq.id.length - 1;
+      for (const c of cs) {
+        const u = ua + c.t * (ub - ua);
+        const id = vert(c.x, c.y, u, c.line, c.li);
+        if (c.line === 0) cols[c.li].push({ c: c.y, dir: c.dir, id, u });
+        else rows[c.li].push({ c: c.x, dir: c.dir, id, u });
+        seq.id.push(id);
+        seq.cross.push(true);
       }
-    };
-    visit((xa + xb) / 2, (ya + yb) / 2, side * 1.0001);
+      // a cut edge's pieces, for its corner
+      if (L.kind[k] === 2)
+        for (let q = start; q < seq.id.length; q++)
+          T.cuts.push(
+            seq.id[q],
+            q + 1 < seq.id.length ? seq.id[q + 1] : ids[(k + 1) % n],
+            L.corner[k]
+          );
+    }
+    seqs.push(seq);
   }
 
-  // ── Delaunay, splitting boundary edges it misses ──────────────────────────
-  // the free points, bucketed, for dropping those that block a boundary edge
-  const PB = 4;
-  let pbx0 = Infinity,
-    pby0 = Infinity;
-  for (let k = 0; k < IX.length; k++) {
-    pbx0 = Math.min(pbx0, IX[k] - PB);
-    pby0 = Math.min(pby0, IY[k] - PB);
-  }
-  if (!IX.length) pbx0 = pby0 = 0;
-  const pBuckets = new Map<number, number[]>();
-  const pKey = (x: number, y: number) =>
-    Math.floor((x - pbx0) / PB) * 100003 + Math.floor((y - pby0) / PB);
-  IX.forEach((x, k) => {
-    const kk = pKey(x, IY[k]);
-    const l = pBuckets.get(kk);
-    if (l) l.push(k);
-    else pBuckets.set(kk, [k]);
-  });
-  const alive = new Uint8Array(IX.length).fill(1);
-  let rounds = 0;
-  let T!: Uint32Array, HE!: Int32Array;
-  let X!: Float64Array, Y!: Float64Array;
-  // each boundary vertex's next along its loop, and that edge's loop and
-  // position (every boundary vertex is on exactly one loop, once)
-  let nxt = new Int32Array(0),
-    pos = new Int32Array(0);
-  let nV = 0;
-  const nextHe = (e: number) => (e % 3 === 2 ? e - 2 : e + 1);
-  for (; rounds < 40; rounds++) {
-    const nB = BX.length;
-    let nI = 0;
-    for (let k = 0; k < IX.length; k++) nI += alive[k];
-    nV = nB + nI;
-    X = new Float64Array(nV);
-    Y = new Float64Array(nV);
-    const coords = new Float64Array(2 * nV);
-    for (let v = 0; v < nB; v++) {
-      X[v] = coords[2 * v] = BX[v];
-      Y[v] = coords[2 * v + 1] = BY[v];
+  // ── the nodes inside, and each one's distance to the boundary along the
+  // four grid directions (E, W, S, N; th = 1 and reg = 1: a node) ──
+  const N = W * (ny + 1);
+  const inside = new Uint8Array(N);
+  const th = new Float64Array(4 * N),
+    gv = new Float64Array(4 * N),
+    reg = new Uint8Array(4 * N);
+  for (let j = 0; j <= ny; j++) {
+    const R = rows[j];
+    if (R.length > 1) R.sort((p, q) => p.c - q.c);
+    // the winding number of a node: the crossings to its right
+    let w = 0;
+    let k = R.length - 1;
+    for (let i = nx; i >= 0; i--) {
+      const x = gx(i);
+      while (k >= 0 && R[k].c > x) w += R[k--].dir;
+      inside[j * W + i] = w !== 0 ? 1 : 0;
     }
-    for (let k = 0, q = nB; k < IX.length; k++)
-      if (alive[k]) {
-        X[q] = coords[2 * q] = IX[k];
-        Y[q] = coords[2 * q + 1] = IY[k];
-        q++;
-      }
-    const D = new Delaunay(coords);
-    T = D.triangles;
-    HE = D.halfedges;
-    nxt = new Int32Array(nB);
-    pos = new Int32Array(nB);
-    bl.forEach((L, li) => {
-      for (let i = 0; i < L.v.length; i++) {
-        nxt[L.v[i]] = L.v[(i + 1) % L.v.length];
-        pos[L.v[i]] = li * 1_000_000 + i;
-      }
-    });
-    const found = new Uint8Array(nB);
-    let nFound = 0;
-    for (let e = 0; e < T.length; e++) {
-      const a = T[e],
-        b = T[nextHe(e)];
-      if (a >= nB || b >= nB) continue;
-      const s0 = nxt[a] === b ? a : nxt[b] === a ? b : -1;
-      if (s0 >= 0 && !found[s0]) {
-        found[s0] = 1;
-        nFound++;
-      }
-    }
-    if (nFound === nB) break;
-    for (const L of bl) {
-      const nv: number[] = [],
-        nk: number[] = [],
-        nc: number[] = [];
-      for (let i = 0; i < L.v.length; i++) {
-        const a = L.v[i],
-          b = L.v[(i + 1) % L.v.length];
-        nv.push(a);
-        nk.push(L.kind[i]);
-        nc.push(L.corner[i]);
-        if (found[a]) continue;
-        const mx = (BX[a] + BX[b]) / 2,
-          my = (BY[a] + BY[b]) / 2;
-        const r2 = ((BX[b] - BX[a]) ** 2 + (BY[b] - BY[a]) ** 2) / 4;
-        const r = Math.sqrt(r2);
-        // free points in the edge's diametral circle go
-        for (
-          let gx = Math.floor((mx - r - pbx0) / PB);
-          gx <= Math.floor((mx + r - pbx0) / PB);
-          gx++
-        )
-          for (
-            let gy = Math.floor((my - r - pby0) / PB);
-            gy <= Math.floor((my + r - pby0) / PB);
-            gy++
-          )
-            for (const k of pBuckets.get(gx * 100003 + gy) ?? [])
-              if ((IX[k] - mx) ** 2 + (IY[k] - my) ** 2 < 1.0001 * r2)
-                alive[k] = 0;
-        BX.push(mx);
-        BY.push(my);
-        BV.push((BV[a] + BV[b]) / 2);
-        nv.push(BX.length - 1);
-        nk.push(L.kind[i]);
-        nc.push(L.corner[i]);
-      }
-      L.v = nv;
-      L.kind = nk;
-      L.corner = nc;
+    let q = 0;
+    for (let i = 0; i <= nx; i++) {
+      const x = gx(i);
+      while (q < R.length && R[q].c <= x) q++;
+      const v = 4 * (j * W + i);
+      if (q < R.length && R[q].c < x + h) {
+        th[v] = (R[q].c - x) / h;
+        gv[v] = R[q].u;
+      } else reg[v] = 1;
+      if (q > 0 && R[q - 1].c > x - h) {
+        th[v + 1] = (x - R[q - 1].c) / h;
+        gv[v + 1] = R[q - 1].u;
+      } else reg[v + 1] = 1;
     }
   }
-  if (rounds === 40) {
-    throw new Error("meshBlend: boundary edges not recovered");
-  }
-  const nB = BX.length;
-  const nT = T.length / 3;
-  // boundary halfedges; the triangles on a boundary edge's left (its loop's
-  // pocket side) seed a flood that stops at boundary edges
-  const isBHe = new Uint8Array(T.length);
-  const tP = new Int32Array(nT).fill(-1);
-  const isB = new Uint8Array(nV);
-  for (let v = 0; v < nB; v++) isB[v] = 1;
-  const cutHe: [number, number][] = [];
-  const stack: number[] = [];
-  for (let e = 0; e < T.length; e++) {
-    const a = T[e],
-      b = T[nextHe(e)];
-    if (a >= nB || b >= nB) continue;
-    let p: number, q: number;
-    if (nxt[a] === b) [p, q] = [a, b];
-    else if (nxt[b] === a) [p, q] = [b, a];
-    else continue;
-    isBHe[e] = 1;
-    const k = pos[p];
-    const L = bl[Math.floor(k / 1_000_000)];
-    const i = k % 1_000_000;
-    if (L.kind[i] === 2) cutHe.push([e, L.corner[i]]);
-    const c = T[nextHe(nextHe(e))];
-    const t = (e / 3) | 0;
-    if (
-      tP[t] < 0 &&
-      (X[q] - X[p]) * (Y[c] - Y[p]) - (Y[q] - Y[p]) * (X[c] - X[p]) > 0
-    ) {
-      tP[t] = L.pocket;
-      stack.push(t);
+  for (let i = 0; i <= nx; i++) {
+    const C = cols[i];
+    if (C.length > 1) C.sort((p, q) => p.c - q.c);
+    let q = 0;
+    for (let j = 0; j <= ny; j++) {
+      const y = gy(j);
+      while (q < C.length && C[q].c <= y) q++;
+      const v = 4 * (j * W + i);
+      if (q < C.length && C[q].c < y + h) {
+        th[v + 2] = (C[q].c - y) / h;
+        gv[v + 2] = C[q].u;
+      } else reg[v + 2] = 1;
+      if (q > 0 && C[q - 1].c > y - h) {
+        th[v + 3] = (y - C[q - 1].c) / h;
+        gv[v + 3] = C[q - 1].u;
+      } else reg[v + 3] = 1;
     }
   }
-  while (stack.length) {
-    const t = stack.pop()!;
-    for (let q = 0; q < 3; q++) {
-      const e = 3 * t + q;
-      const o = HE[e];
-      if (o < 0 || isBHe[e]) continue;
-      const u = (o / 3) | 0;
-      if (tP[u] >= 0) continue;
-      tP[u] = tP[t];
-      stack.push(u);
-    }
-  }
-  let nIn = 0;
-  for (let t = 0; t < nT; t++) if (tP[t] >= 0) nIn++;
-  const tri = new Int32Array(3 * nIn),
-    triPocket = new Int32Array(nIn),
-    triOf = new Int32Array(nT).fill(-1);
-  for (let t = 0, w = 0; t < nT; t++) {
-    if (tP[t] < 0) continue;
-    tri[3 * w] = T[3 * t];
-    tri[3 * w + 1] = T[3 * t + 1];
-    tri[3 * w + 2] = T[3 * t + 2];
-    triPocket[w] = tP[t];
-    triOf[t] = w++;
-  }
-  // each triangle edge's id: one per unique edge (the lower halfedge)
-  const edgeId = new Int32Array(3 * nIn);
-  for (let t = 0; t < nT; t++) {
-    const w = triOf[t];
-    if (w < 0) continue;
-    for (let q = 0; q < 3; q++) {
-      const e = 3 * t + q;
-      edgeId[3 * w + q] = HE[e] >= 0 ? Math.min(e, HE[e]) : e;
-    }
-  }
-  const nEdgeIds = T.length;
 
-  // ── u: holes by distance, pockets by P1 FEM ───────────────────────────────
-  const U = new Float64Array(nV);
-  for (let v = 0; v < nB; v++) U[v] = BV[v];
-  const vP = new Int32Array(nV).fill(-1);
-  for (let t = 0; t < nIn; t++)
-    for (let q = 0; q < 3; q++) vP[tri[3 * t + q]] = triPocket[t];
-  // holes: distance from the wall over the most
-  const holeWall = new Map<number, SegGrid>();
-  for (const L of bl) {
-    if (!pockets[L.pocket].hole) continue;
-    const s: number[] = [];
-    for (let i = 0; i < L.v.length; i++) {
-      const a = L.v[i],
-        b = L.v[(i + 1) % L.v.length];
-      s.push(X[a], Y[a], X[b], Y[b]);
-    }
-    holeWall.set(L.pocket, new SegGrid(Float64Array.from(s)));
-  }
-  const most = new Float64Array(pockets.length);
-  for (let v = 0; v < nV; v++) {
-    const p = vP[v];
-    if (p < 0 || !pockets[p].hole) continue;
-    U[v] = isB[v] ? 0 : holeWall.get(p)!.nearest(X[v], Y[v])[0];
-    most[p] = Math.max(most[p], U[v]);
-  }
-  for (let v = 0; v < nV; v++) {
-    const p = vP[v];
-    if (p >= 0 && pockets[p].hole) U[v] /= most[p] || 1;
-  }
-  // FEM: the unknowns are the free vertices of pockets with mouths; the
-  // stiffness per unique edge is the sum of its triangles' cot / 2
-  const idx = new Int32Array(nV).fill(-1);
+  // ── u at the nodes ──
+  const uid = new Int32Array(N).fill(-1);
   let m = 0;
-  for (let v = 0; v < nV; v++)
-    if (!isB[v] && vP[v] >= 0 && !pockets[vP[v]].hole) idx[v] = m++;
-  const W = new Float64Array(nEdgeIds);
-  for (let t = 0; t < nIn; t++) {
-    if (pockets[triPocket[t]].hole) continue;
-    for (let q = 0; q < 3; q++) {
-      const i = tri[3 * t + q],
-        j = tri[3 * t + ((q + 1) % 3)],
-        k = tri[3 * t + ((q + 2) % 3)];
-      const ux = X[i] - X[k],
-        uy = Y[i] - Y[k],
-        wx = X[j] - X[k],
-        wy = Y[j] - Y[k];
-      const cr = Math.abs(ux * wy - uy * wx);
-      if (cr < 1e-14) continue;
-      W[edgeId[3 * t + q]] += (ux * wx + uy * wy) / cr / 2;
-    }
-  }
-  const deg = new Int32Array(m + 1);
-  const diag = new Float64Array(m),
-    rhs = new Float64Array(m);
-  const endA = (id: number) => T[id],
-    endB = (id: number) => T[nextHe(id)];
-  const edgeSeen = new Uint8Array(nEdgeIds);
-  const uniq: number[] = [];
-  for (let t = 0; t < nIn; t++)
-    for (let q = 0; q < 3; q++) {
-      const id = edgeId[3 * t + q];
-      if (edgeSeen[id] || W[id] === 0) continue;
-      edgeSeen[id] = 1;
-      uniq.push(id);
-      const a = endA(id),
-        b = endB(id);
-      const I = idx[a],
-        J = idx[b];
-      const w = W[id];
-      if (I >= 0) diag[I] += w;
-      if (J >= 0) diag[J] += w;
-      if (I >= 0 && J >= 0) {
-        deg[I + 1]++;
-        deg[J + 1]++;
-      } else if (I >= 0) rhs[I] += w * U[b];
-      else if (J >= 0) rhs[J] += w * U[a];
-    }
-  // CSR, columns sorted, diagonal included
-  const rp = new Int32Array(m + 1);
-  for (let i = 0; i < m; i++) rp[i + 1] = rp[i] + deg[i + 1] + 1;
-  const ci = new Int32Array(rp[m]),
-    cv = new Float64Array(rp[m]);
-  const fill = rp.slice(0, m);
-  for (let i = 0; i < m; i++) {
-    ci[fill[i]] = i;
-    cv[fill[i]++] = diag[i];
-  }
-  for (const id of uniq) {
-    const a = endA(id),
-      b = endB(id);
-    const I = idx[a],
-      J = idx[b];
-    if (I < 0 || J < 0) continue;
-    ci[fill[I]] = J;
-    cv[fill[I]++] = -W[id];
-    ci[fill[J]] = I;
-    cv[fill[J]++] = -W[id];
-  }
-  for (let i = 0; i < m; i++)
-    for (let q = rp[i] + 1; q < rp[i + 1]; q++) {
-      const c = ci[q],
-        v = cv[q];
-      let r = q - 1;
-      while (r >= rp[i] && ci[r] > c) {
-        ci[r + 1] = ci[r];
-        cv[r + 1] = cv[r];
-        r--;
+  for (let v = 0; v < N; v++) if (inside[v]) uid[v] = m++;
+  const sol = new Float64Array(m);
+  if (hole) {
+    // the distance from the wall over the most
+    const G = new SegGrid(segsOf(Ls.map((L) => L.pts)));
+    let most = 0;
+    for (let v = 0; v < N; v++)
+      if (uid[v] >= 0) {
+        const d = G.nearest(gx(v % W), gy(Math.floor(v / W)))[0];
+        sol[uid[v]] = d;
+        most = Math.max(most, d);
       }
-      ci[r + 1] = c;
-      cv[r + 1] = v;
+    for (let k = 0; k < m; k++) sol[k] /= most || 1;
+  } else if (m) solveNodes(W, N, uid, m, th, gv, reg, sol);
+  const vid = new Int32Array(N).fill(-1);
+  for (let v = 0; v < N; v++)
+    if (uid[v] >= 0)
+      vid[v] = T.vert(gx(v % W), gy(Math.floor(v / W)), sol[uid[v]]);
+
+  // ── the loops' runs through each cell ──
+  const runsOf = new Map<number, Run[]>();
+  let island = false;
+  const cellOf = (a: number, b: number) =>
+    Math.floor(((T.Y[a] + T.Y[b]) / 2 - gy0) / h) * nx +
+    Math.floor(((T.X[a] + T.X[b]) / 2 - gx0) / h);
+  /** where crossing `id` is on cell `cell`'s perimeter */
+  const perim = (id: number, cell: number) => {
+    const line = crossLine[id - T0.v],
+      li = crossIdx[id - T0.v];
+    const ci = cell % nx,
+      cj = Math.floor(cell / nx);
+    if (line === 0)
+      return li === ci
+        ? 3 + (gy(cj + 1) - T.Y[id]) / h
+        : 1 + (T.Y[id] - gy(cj)) / h;
+    return li === cj ? (T.X[id] - gx(ci)) / h : 2 + (gx(ci + 1) - T.X[id]) / h;
+  };
+  for (const { id, cross } of seqs) {
+    const n = id.length;
+    const first = cross.indexOf(true);
+    if (first < 0) {
+      island = true;
+      break;
     }
-  const sol = pcgIC(rp, ci, cv, rhs, m);
-  for (let v = 0; v < nV; v++)
-    if (idx[v] >= 0) U[v] = Math.min(1, Math.max(0, sol.x[idx[v]]));
+    let k = first;
+    do {
+      const verts = [id[k]];
+      let q = (k + 1) % n;
+      while (!cross[q]) {
+        verts.push(id[q]);
+        q = (q + 1) % n;
+      }
+      verts.push(id[q]);
+      const cell = cellOf(verts[0], verts[1]);
+      const l = runsOf.get(cell);
+      const run = {
+        inT: perim(verts[0], cell),
+        outT: perim(verts[verts.length - 1], cell),
+        verts,
+      };
+      if (l) l.push(run);
+      else runsOf.set(cell, [run]);
+      k = q;
+    } while (k !== first);
+  }
+  if (island) {
+    T.X.length = T.Y.length = T.U.length = T0.v;
+    T.tri.length = T0.t;
+    T.triPocket.length = T0.p;
+    T.cuts.length = T0cuts;
+    return false;
+  }
 
-  // the triangles the outline and areas are read from, each edge's id, and
-  // the cut edges' corners
-  const nR = nIn;
-  const RX = X,
-    RY = Y,
-    RU = U;
-  const rtri = tri.slice(0, 3 * nIn),
-    rtriPocket = triPocket.slice(0, nIn),
-    redge = edgeId.slice(0, 3 * nIn);
+  // ── the cells: whole ones as two triangles, cut ones as the polygons the
+  // runs and the cell's inside corners make, ear clipped ──
+  const ear: number[] = [];
+  for (let cj = 0; cj < ny; cj++)
+    for (let ci = 0; ci < nx; ci++) {
+      const cell = cj * nx + ci;
+      const corner = [
+        vid[cj * W + ci],
+        vid[cj * W + ci + 1],
+        vid[(cj + 1) * W + ci + 1],
+        vid[(cj + 1) * W + ci],
+      ];
+      const runs = runsOf.get(cell);
+      if (!runs) {
+        if (
+          corner[0] >= 0 &&
+          corner[1] >= 0 &&
+          corner[2] >= 0 &&
+          corner[3] >= 0
+        ) {
+          T.add(corner[0], corner[1], corner[2], pid);
+          T.add(corner[0], corner[2], corner[3], pid);
+        }
+        continue;
+      }
+      // chain each run's exit to the next run's entry, counterclockwise
+      // around the perimeter, through the corners passed
+      const used = new Uint8Array(runs.length);
+      for (let r0 = 0; r0 < runs.length; r0++) {
+        if (used[r0]) continue;
+        const poly: number[] = [];
+        let r = r0;
+        for (let guard = 0; guard <= runs.length; guard++) {
+          used[r] = 1;
+          for (const v of runs[r].verts) poly.push(v);
+          const t0 = runs[r].outT;
+          let best = -1,
+            bd = Infinity;
+          for (let q = 0; q < runs.length; q++) {
+            if (used[q] && q !== r0) continue;
+            let d = runs[q].inT - t0;
+            while (d <= 0) d += 4;
+            while (d > 4) d -= 4;
+            if (d < bd) [bd, best] = [d, q];
+          }
+          for (let k = Math.floor(t0) + 1; k < t0 + bd; k++) {
+            const cv = corner[k % 4];
+            if (cv >= 0) poly.push(cv);
+          }
+          if (best === r0 || best < 0) break;
+          r = best;
+        }
+        ear.length = 0;
+        earClip(poly, T.X, T.Y, ear);
+        for (let k = 0; k < ear.length; k += 3)
+          T.add(ear[k], ear[k + 1], ear[k + 2], pid);
+      }
+    }
+  return true;
+}
+
+/**
+ * The nodes' u: the five-point Laplacian, its arm to a boundary crossing
+ * shortened to th · h with the crossing's u (Shortley and Weller), in the
+ * symmetric form (Gibou, Fedkiw, Cheng and Kang 2002: the crossing's
+ * equation moved to the right-hand side, 1/th on the diagonal), so the matrix
+ * is symmetric positive definite and an M-matrix: no u outside [0, 1].
+ */
+function solveNodes(
+  W: number,
+  N: number,
+  uid: Int32Array,
+  m: number,
+  th: Float64Array,
+  gv: Float64Array,
+  reg: Uint8Array,
+  sol: Float64Array
+): void {
+  const nbr = [1, -1, W, -W];
+  const rp = new Int32Array(m + 1);
+  const ci: number[] = [],
+    cv: number[] = [];
+  const rhs = new Float64Array(m);
+  const row: [number, number][] = [];
+  for (let v = 0; v < N; v++) {
+    const r = uid[v];
+    if (r < 0) continue;
+    let diag = 0;
+    row.length = 0;
+    for (let d = 0; d < 4; d++) {
+      const k = 4 * v + d;
+      if (reg[k]) {
+        diag += 1;
+        row.push([uid[v + nbr[d]], -1]);
+      } else {
+        const t = Math.max(1e-9, th[k]);
+        diag += 1 / t;
+        rhs[r] += gv[k] / t;
+      }
+    }
+    row.push([r, diag]);
+    row.sort((p, q) => p[0] - q[0]);
+    for (const [c, x] of row) {
+      ci.push(c);
+      cv.push(x);
+    }
+    rp[r + 1] = ci.length;
+  }
+  const res = pcgIC(rp, Int32Array.from(ci), Float64Array.from(cv), rhs, m);
+  for (let k = 0; k < m; k++) sol[k] = Math.min(1, Math.max(0, res.x[k]));
+}
+
+/**
+ * The blend's field for the spine rings (outer rings winding positive;
+ * holes, with `holes`, the other way): each pocket on its own grid, of step
+ * BLEND.h or, in a small pocket, its size over BLEND.k (at least BLEND.hMin).
+ */
+export function buildBlend(spine: Pt[][]): Blend {
+  const { clean, hull, mouths, corners, pockets, loops } = pocketsOf(spine);
+  const T = new Tris();
+  const byPocket = pockets.map(() => [] as Loop[]);
+  for (const L of loops) byPocket[L.pocket].push(L);
+  pockets.forEach((P, pid) => {
+    const Ls = byPocket[pid];
+    if (!Ls.length) return;
+    let A2 = 0;
+    for (const L of Ls) A2 += signedArea2(L.pts);
+    // the pocket's own loop (its first) crosses the grid lines
+    let h = Math.min(
+      BLEND.h,
+      Math.max(BLEND.hMin, Math.sqrt(Math.abs(A2) / 2) / BLEND.k),
+      boxSize(Ls[0].pts) / 2
+    );
+    // a wall ring inside one cell: a finer grid, or under hMin / 4 px across,
+    // left out
+    while (!gridPocket(pid, P.hole, Ls, h, T)) {
+      if (h / 2 < BLEND.hMin / 4) {
+        const big = Ls.filter((L, k) => k === 0 || boxSize(L.pts) >= 2 * h);
+        gridPocket(pid, P.hole, big, h, T);
+        break;
+      }
+      h /= 2;
+    }
+  });
+  // each triangle edge's id, shared by the two triangles on it
+  const nV = T.X.length;
+  const nT = T.triPocket.length;
+  const ids = new Map<number, number>();
+  const ekey = (a: number, b: number) => (a < b ? a * nV + b : b * nV + a);
+  const edge = new Int32Array(3 * nT);
+  for (let t = 0; t < nT; t++)
+    for (let q = 0; q < 3; q++) {
+      const k = ekey(T.tri[3 * t + q], T.tri[3 * t + ((q + 1) % 3)]);
+      let e = ids.get(k);
+      if (e === undefined) ids.set(k, (e = ids.size));
+      edge[3 * t + q] = e;
+    }
   const cutCorner = new Map<number, number>();
-  for (const [e, c] of cutHe)
-    cutCorner.set(HE[e] >= 0 ? Math.min(e, HE[e]) : e, c);
-  const nREdge = nEdgeIds;
-
+  for (let k = 0; k < T.cuts.length; k += 3) {
+    const e = ids.get(ekey(T.cuts[k], T.cuts[k + 1]));
+    if (e !== undefined) cutCorner.set(e, T.cuts[k + 2]);
+  }
+  const X = Float64Array.from(T.X),
+    Y = Float64Array.from(T.Y),
+    U = Float64Array.from(T.U);
+  const tri = Int32Array.from(T.tri),
+    triPocket = Int32Array.from(T.triPocket);
   // ── each pocket's triangles, as (a ≤ b ≤ c, area) for the area of {u ≤ ℓ}
   const per = pockets.map(() => [] as number[]);
-  for (let t = 0; t < nR; t++) {
-    let i = rtri[3 * t],
-      j = rtri[3 * t + 1],
-      k = rtri[3 * t + 2];
+  for (let t = 0; t < nT; t++) {
+    let i = tri[3 * t],
+      j = tri[3 * t + 1],
+      k = tri[3 * t + 2];
     const ar =
-      Math.abs(
-        (RX[j] - RX[i]) * (RY[k] - RY[i]) - (RY[j] - RY[i]) * (RX[k] - RX[i])
-      ) / 2;
+      Math.abs((X[j] - X[i]) * (Y[k] - Y[i]) - (Y[j] - Y[i]) * (X[k] - X[i])) /
+      2;
     if (ar === 0) continue;
-    if (RU[i] > RU[j]) [i, j] = [j, i];
-    if (RU[j] > RU[k]) [j, k] = [k, j];
-    if (RU[i] > RU[j]) [i, j] = [j, i];
-    const p = rtriPocket[t];
+    if (U[i] > U[j]) [i, j] = [j, i];
+    if (U[j] > U[k]) [j, k] = [k, j];
+    if (U[i] > U[j]) [i, j] = [j, i];
+    const p = triPocket[t];
     pockets[p].area += ar;
-    per[p].push(RU[i], RU[j], RU[k], ar);
+    per[p].push(U[i], U[j], U[k], ar);
   }
   pockets.forEach((P, p) => {
     P.tv = Float64Array.from(per[p]);
@@ -1081,7 +1084,6 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
   const cornerPocket = corners.map((C) =>
     pockets.findIndex((P) => P.mouths.includes(C.mouth))
   );
-
   return {
     spine: clean,
     hull,
@@ -1094,16 +1096,22 @@ export function buildMeshBlend(spine: Pt[][]): MeshBlend {
     U,
     tri,
     triPocket,
-    RX,
-    RY,
-    RU,
-    rtri,
-    rtriPocket,
-    redge,
-    nREdge,
+    edge,
+    nEdge: ids.size,
     cutCorner,
   };
 }
+
+const boxSize = (pts: Pt[]) => {
+  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const [x, y] of pts) {
+    xa = Math.min(xa, x);
+    xb = Math.max(xb, x);
+    ya = Math.min(ya, y);
+    yb = Math.max(yb, y);
+  }
+  return Math.max(xb - xa, yb - ya);
+};
 
 function windingOf(rings: Pt[][], p: Pt): number {
   let w = 0;
@@ -1201,7 +1209,7 @@ function pcgIC(
       r[i] -= al * Ap[i];
       rn += r[i] * r[i];
     }
-    if (Math.sqrt(rn) < MESH_BLEND.tol * bn) {
+    if (Math.sqrt(rn) < BLEND.tol * bn) {
       it++;
       break;
     }
@@ -1218,7 +1226,7 @@ function pcgIC(
 /** The area of {u ≤ ℓ} in a pocket: each triangle's in closed form (its
  *  share is a product of two ratios, each at most 1, so it is exact however
  *  near its corners' values are), and the cusps' (filled at the rate ℓ). */
-export function meshArea(P: Pocket, l: number): number {
+export function blendArea(P: Pocket, l: number): number {
   const tv = P.tv!;
   let s = 0;
   for (let q = 0; q < tv.length; q += 4) {
@@ -1236,15 +1244,20 @@ export function meshArea(P: Pocket, l: number): number {
 
 /** A pocket's level for convexity c: the ℓ at which {u ≤ ℓ} holds share c
  *  of its area (regula falsi, Illinois, on the exact area). */
-export function meshLevel(P: Pocket, c: number): number {
+export function blendLevel(P: Pocket, c: number): number {
   const target = c * P.area;
-  let [a, fa, b, fb] = [0, meshArea(P, 0) - target, 1, meshArea(P, 1) - target];
+  let [a, fa, b, fb] = [
+    0,
+    blendArea(P, 0) - target,
+    1,
+    blendArea(P, 1) - target,
+  ];
   if (fa >= 0) return 0;
   if (fb <= 0) return 1;
   let side = 0;
   for (let it = 0; it < 200 && b - a > 1e-15; it++) {
     const m = (a * fb - b * fa) / (fb - fa);
-    const fm = meshArea(P, m) - target;
+    const fm = blendArea(P, m) - target;
     if (Math.abs(fm) <= 1e-10 * P.area) return m;
     if (fm < 0) {
       [a, fa] = [m, fm];
@@ -1265,14 +1278,20 @@ export function meshLevel(P: Pocket, c: number): number {
  * and joined by the spine's runs on the hull; holes' level sets as their own
  * rings. Outer rings wind positive, holes the other way.
  */
-export function meshBlendRings(
-  MB: MeshBlend,
-  c: number,
-  holes: boolean
-): Pt[][] {
-  const { RX, RY, RU, rtri, rtriPocket, redge, pockets, corners, mouths } = MB;
-  const lv = pockets.map((P) => meshLevel(P, c));
-  const nE = MB.nREdge;
+export function blendRings(MB: Blend, c: number, holes: boolean): Pt[][] {
+  const {
+    X: RX,
+    Y: RY,
+    U: RU,
+    tri: rtri,
+    triPocket: rtriPocket,
+    edge: redge,
+    pockets,
+    corners,
+    mouths,
+  } = MB;
+  const lv = pockets.map((P) => blendLevel(P, c));
+  const nE = MB.nEdge;
   const px = new Float64Array(nE),
     py = new Float64Array(nE);
   const next = new Int32Array(nE).fill(-1);
@@ -1344,7 +1363,7 @@ export function meshBlendRings(
     }
     const cb = MB.cutCorner.get(last);
     if (ca === undefined || cb === undefined)
-      throw new Error("meshBlend: level curve ends off a cut");
+      throw new Error("blend: level curve ends off a cut");
     // the cusps: corner to cut (a), cut to corner (b)
     const head = level(ca, lv[MB.cornerPocket[ca]]);
     const tail = level(cb, lv[MB.cornerPocket[cb]]).reverse();
@@ -1387,13 +1406,13 @@ export function meshBlendRings(
       for (let guard = 0; guard <= kept.length; guard++) {
         doneA.add(a);
         const pc = pieceFrom.get(a);
-        if (!pc) throw new Error("meshBlend: no level curve from a corner");
+        if (!pc) throw new Error("blend: no level curve from a corner");
         ring.push(...pc.pts);
         const mb = corners[pc.end].mouth;
         const nm = kept[(order.get(mb)! + 1) % kept.length].k;
         const B = mouths[mb].b,
           A = mouths[nm].a;
-        if (B.r !== A.r) throw new Error("meshBlend: spine run across rings");
+        if (B.r !== A.r) throw new Error("blend: spine run across rings");
         const R = spine[B.r];
         const n = R.length;
         // the spine from the b corner (the curve's last point) to the a

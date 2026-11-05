@@ -24,7 +24,7 @@
  *     each a tapered tube at `neck` times the padded members' width
  *     (pieceLinks), bent around the keep-outs (routeAround).
  *  3. Each piece is filled on its own (its spine, padded hull and the
- *     per-bay blend of `convexity`, meshBlend.ts; above 1 the hull blends
+ *     per-bay blend of `convexity`, blend.ts; above 1 the hull blends
  *     toward the oval, beyond.ts). `separate` (default false): the pieces may
  *     overlap, and a piece wholly inside another is dropped; true: the
  *     set's other pieces are its keep-outs, as avoided nodes are (below).
@@ -52,7 +52,7 @@
 import { signedArea2, pointInRing, segDist, cross } from "../../geometry/plane";
 import { boxGrid, convexHull, type Member, type Pt } from "./prims";
 import { closingRings, keepIns } from "./arcs";
-import { buildMeshBlend, meshBlendRings } from "./meshBlend";
+import { buildBlend, blendRings } from "./blend";
 import { roundCut, smoothOutline } from "./smooth";
 import { beyondHull, beyondEnds, minkowski } from "./beyond";
 import {
@@ -1197,7 +1197,7 @@ type Fill = {
 /** One blob piece's fill before the keep-out cut and the smoothing: its members, its links
  *  (`spine`) and the convexity. 0: the spine (the members and links closed at r = padding,
  *  so every concave corner is an arc of at least the padding, as every convex one is); 1 the
- *  padded hull; between, the per-bay blend (meshBlend.ts); above 1, the hull toward the oval
+ *  padded hull; between, the per-bay blend (blend.ts); above 1, the hull toward the oval
  *  (beyond.ts). `pk`: the cache key of (members, spine). */
 function fillOne(
   members: Member[],
@@ -1228,11 +1228,11 @@ function fillOne(
         closingRings(all, pad, rMin, holes)
       ),
     };
-  // the mesh wants the spine's arcs to 0.05 px (the closing's own sampling is 0.2 px)
-  const MB = memo(key("meshBlend", pk, pad, holes), () =>
-    buildMeshBlend(closingRings(all, pad, rMin, holes, 0.05))
+  // the blend wants the spine's arcs to 0.05 px (the closing's own sampling is 0.2 px)
+  const MB = memo(key("blend", pk, pad, holes), () =>
+    buildBlend(closingRings(all, pad, rMin, holes, 0.05))
   );
-  return { ...base, rings: meshBlendRings(MB, c, holes) };
+  return { ...base, rings: blendRings(MB, c, holes) };
 }
 
 /**

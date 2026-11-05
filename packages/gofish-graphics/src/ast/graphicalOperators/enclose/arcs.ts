@@ -391,29 +391,45 @@ function boxOfEdge(e: Edge): number[] {
   ];
 }
 
-/** How far inside another grown member every part of an edge must be for it
- *  to be buried (closingRings): past the cover test's tie tolerance, EPS. */
+/** How far inside the other grown members every part of an edge must be for
+ *  it to be buried (closingRings): past the cover test's tie tolerance, EPS. */
 const BURIED = 1e-5;
 
-/** Whether every point of edge e is inside the grown member p by more than
- *  BURIED. p is convex, so its signed distance is a convex function: on a
- *  line it is greatest at an end, and an arc of at most a quarter turn lies
- *  in the triangle of its ends and their tangents' meeting point, where it
- *  is greatest at a corner. A sufficient test, never a false yes. */
-function edgeInside(e: Edge, p: Prim): boolean {
-  const ok = (x: number, y: number) => primD(p, x, y) < -BURIED;
-  if (e.t === "line") return ok(e.ax, e.ay) && ok(e.bx, e.by);
-  const n = Math.max(1, Math.ceil(Math.abs(e.a1 - e.a0) / (Math.PI / 2)));
-  const h = (e.a1 - e.a0) / n;
-  const out = e.R / Math.cos(h / 2);
-  for (let k = 0; k <= n; k++) {
-    const s = e.a0 + h * k;
-    if (!ok(e.cx + e.R * Math.cos(s), e.cy + e.R * Math.sin(s))) return false;
-    if (k === n) break;
-    const m = s + h / 2;
-    if (!ok(e.cx + out * Math.cos(m), e.cy + out * Math.sin(m))) return false;
+/** The least depth a burial walk steps on, px: an edge that comes nearer the
+ *  union's boundary than this is solved exactly instead. */
+const WALK = 0.25;
+
+/**
+ * Whether every point of edge e is inside the union of the grown members
+ * `cands` by more than BURIED: a walk along e, each step as long as the
+ * depth at its start less BURIED, since a signed distance changes by at most
+ * the distance moved, and a step's chord is at most its arc. The depth is
+ * read from the member that held the last point while it holds this one by
+ * WALK, else from the deepest; the union's is at least that. A sufficient
+ * test, never a false yes.
+ */
+function edgeCovered(e: Edge, cands: number[], prims: Prim[]): boolean {
+  if (!cands.length) return false;
+  // the walk's parameter per px of arclength
+  const rate =
+    e.t === "arc" ? 1 / e.R : 1 / Math.hypot(e.bx - e.ax, e.by - e.ay);
+  const [s0, s1] = range(e);
+  const dir = s1 >= s0 ? 1 : -1;
+  let j = cands[0];
+  for (let s = s0; ; ) {
+    const x = atX(e, s),
+      y = atY(e, s);
+    let d = -primD(prims[j], x, y);
+    if (d < WALK)
+      for (const k of cands) {
+        const dk = -primD(prims[k], x, y);
+        if (dk > d) [d, j] = [dk, k];
+      }
+    if (d < WALK) return false;
+    const next = s + dir * (d - BURIED) * rate;
+    if ((next - s1) * dir >= 0) return true;
+    s = next;
   }
-  return true;
 }
 
 /** A piece of an edge from parameter s0 to s1. */
@@ -558,7 +574,7 @@ function taperKeepIns(a: Pt, b: Pt, ra: number, rb: number): KeepIn[] {
  * disc of `radius`. Its outer loops wind as the members do. With `holes`,
  * a hole of the closing stays open, as a loop that winds the other way;
  * otherwise every hole is filled. Arcs are sampled so a chord strays at most
- * `tol` px from its arc (the per-bay blend's mesh and the keep-out cut ask
+ * `tol` px from its arc (the per-bay blend's grid and the keep-out cut ask
  * for finer than the default).
  */
 export function closingRings(
@@ -576,32 +592,23 @@ export function closingRings(
   // 2. The union's boundary.
   const near = boxGrid(prims.map((p) => p.prim.bb));
   const others = prims.map((P, i) => {
-    const [xa, ya, xb, yb] = P.prim.bb;
-    return near
-      .query(xa, ya, xb, yb)
-      .filter((j) => j !== i && overlaps(P.prim.bb, prims[j].prim.bb));
+    const bb = P.prim.bb;
+    const out: number[] = [];
+    near.each(bb[0], bb[1], bb[2], bb[3], (j) => {
+      if (j !== i && overlaps(bb, prims[j].prim.bb)) out.push(j);
+    });
+    return out;
   });
   const edgeBB = prims.map((P) => P.edges.map(boxOfEdge));
   const edgeEnds = prims.map((P) => P.edges.map(endsOf));
-  // An edge buried in another grown member (each part of it inside by more
-  // than BURIED) is not on the union's boundary, and where it crosses or
-  // ends on another edge is inside that member too: there the other edge
-  // is covered on both sides, so the cut would only split a covered stretch.
-  // Its crossings are not solved, and it is not traced.
+  // An edge buried in the other grown members (each part of it inside one by
+  // more than BURIED) is not on the union's boundary, and where it crosses
+  // or ends on another member's edge it is inside a third member: there the
+  // other edge is covered on both sides, so the cut would only split a
+  // covered stretch. Its crossings are not solved, and it is not traced.
+  const grownPrims = prims.map((P) => P.prim);
   const buried = prims.map((P, i) =>
-    P.edges.map((e, ei) => {
-      const eb = edgeBB[i][ei];
-      return others[i].some((j) => {
-        const b = prims[j].prim.bb;
-        return (
-          b[0] <= eb[0] &&
-          b[1] <= eb[1] &&
-          b[2] >= eb[2] &&
-          b[3] >= eb[3] &&
-          edgeInside(e, prims[j].prim)
-        );
-      });
-    })
+    P.edges.map((e) => edgeCovered(e, others[i], grownPrims))
   );
   // Every edge's cut parameters: its ends, and where another member's edge
   // crosses it or ends on it, each crossing solved once for its pair.
