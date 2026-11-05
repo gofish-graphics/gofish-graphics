@@ -1121,6 +1121,26 @@ async function main() {
     );
   }
 
+  console.log("\n# a wire HasUnit has only its own keys");
+  {
+    const bad = {
+      "the old key classes": { unit: "USD", classes: { CanAdd: {} } },
+      "a list of Trait values": { unit: "USD", traits: [Trait.summable()] },
+      "an unknown unit trait": { unit: "USD", traits: { CanSum: {} } },
+    };
+    for (const [name, HasUnit] of Object.entries(bad)) {
+      const got = await errorOf(() =>
+        columnTypeOf("usd", { HasUnit } as any)
+      );
+      check(`${name} throws`, got?.includes("A HasUnit takes") === true, got);
+    }
+    check(
+      "a well-formed record passes",
+      columnTypeOf("usd", { HasUnit: { unit: "USD", traits: { CanAdd: {} } } })
+        .HasUnit?.traits?.CanAdd !== undefined
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

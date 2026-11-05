@@ -2130,7 +2130,8 @@ of a unit and a unit is known by its name. A unit with no name writes no
 Two units of one name with different domains are not compared yet.
 
 A column type is a record keyed by trait name (`ColumnType`), and the engine
-reads only the traits, never the definition. Nine traits exist:
+reads only the traits, never the definition. Seven column traits exist, and
+a unit has one trait of its own (`CanAdd`):
 
 - `HasLevels` (`{ levels }`, from a domain): the values are the levels of a
   fixed list. `splitEntries` groups a `by` over the column in that order

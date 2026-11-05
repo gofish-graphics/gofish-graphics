@@ -582,6 +582,7 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
         `schema.`
     );
   checkLevelsFit(who, type);
+  checkUnitRecord(who, type.HasUnit);
   if (type.HasOrder !== undefined && type.HasLevels === undefined)
     throw new Error(
       `${who} has HasOrder but no HasLevels. An order is an order of ` +
@@ -597,6 +598,31 @@ export function columnTypeOf(column: string, entry: SchemaEntry): ColumnType {
     );
   checkMidpointOnOrder(type.HasLevels!.levels, type.HasMidpoint.at);
   return type;
+}
+
+const UNIT_KEYS = ["unit", "symbol", "traits", "zone", "difference"];
+const UNIT_TRAIT_KEYS = ["CanAdd"];
+
+/** The rule that a wire record's `HasUnit` has only the keys of
+ *  {@link HasUnit}, and that its `traits` is a record keyed by trait name
+ *  ({@link UnitTraits}), not a list of `Trait` values. Without it a
+ *  misspelled key would drop the unit's traits and skip the sum check. */
+function checkUnitRecord(who: string, unit: HasUnit | undefined): void {
+  if (unit === undefined) return;
+  const unknown = Object.keys(unit).filter((k) => !UNIT_KEYS.includes(k));
+  const { traits } = unit as { traits?: unknown };
+  const badTraits =
+    traits !== undefined &&
+    (traits === null ||
+      typeof traits !== "object" ||
+      Array.isArray(traits) ||
+      Object.keys(traits).some((k) => !UNIT_TRAIT_KEYS.includes(k)));
+  if (unknown.length > 0 || badTraits)
+    throw new Error(
+      `${who} has the HasUnit ${JSON.stringify(unit)}. A HasUnit takes ` +
+        `${UNIT_KEYS.join(", ")}, and its traits is a record such as ` +
+        `{ CanAdd: {} }. Unit("USD", { traits: [Trait.summable()] }) writes it.`
+    );
 }
 
 /** The rule that a column's levels fit its other traits: each level is one
