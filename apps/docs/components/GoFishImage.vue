@@ -2,9 +2,10 @@
 /**
  * GoFishImage — the static counterpart of GoFishExample: a picture of a story,
  * captured at docs-build time, for `::: gofish story:<id> image` and
- * `::: gofish example:<id> image` containers (see markdown-it-gofish.ts).
+ * `::: gofish example:<id> image` containers (see markdown-it-gofish.ts) and
+ * the landing page's picture cards (landing/PictureCard.vue).
  *
- * The markdown plugin passes the picture's site path (`/previews/<storyId>.png`).
+ * It takes the picture's site path, from .vitepress/storyImages.ts.
  * It is a component rather than a plain <img> in the markdown for one reason:
  * Vue compiles a static `<img src="/…">` in a page into a build-time import of
  * that file, so a picture that has not been captured yet (e.g. `docs:dev`

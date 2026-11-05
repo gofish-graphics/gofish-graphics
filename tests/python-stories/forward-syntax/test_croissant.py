@@ -4,7 +4,8 @@ Croissant charts: a density curve cut at its quantiles into equal-probability
 slices, each drawn on its own with a small gap, with one dot per slice at the
 slice's median. The first layer draws the curve, unseen; the `.relate()`
 clause turns the grid into quantile rows of that curve, partitions them into
-`Bin.quantiles(n)` cells (ten, or five a month in the ridgeline), and in each
+`Bin.quantiles(n)` cells (five for the standard normal, ten for the penguins,
+five a month in the ridgeline), and in each
 cell draws the curve intersected with the cell's region, drawn in by a few
 pixels, plus a dot at the cell's median. The last story cuts an area into
 calendar months the same way.
@@ -34,6 +35,9 @@ from python_stories.data import PENGUINS, SEATTLE_WEATHER
 
 FILL = "#D1E4F6"
 STROKE = "#467DA8"
+# The colors of the paper's "Anatomy of a Croissant Chart" figure.
+PAPER_FILL = "#CBA45F"
+PAPER_STROKE = "#745931"
 
 
 def _norm_pdf(x, mu=0.0, sd=1.0):
@@ -65,7 +69,7 @@ def _kde(values):
     return f, bw
 
 
-def _croissant(grid, x_title=None):
+def _croissant(grid, n=10, fill=FILL, stroke=STROKE):
     return layer(
         [
             chart(grid)
@@ -79,18 +83,18 @@ def _croissant(grid, x_title=None):
                 derive(
                     lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)
                 ),
-                partition(by=field("x").bin(Bin.quantiles(10)), dir="x"),
+                partition(by=field("x").bin(Bin.quantiles(n)), dir="x"),
             )
             .mark(
                 layer(
                     [
                         intersect(
                             [density, region(inset=3)],
-                            fill=FILL,
-                            stroke=STROKE,
+                            fill=fill,
+                            stroke=stroke,
                             stroke_width=2,
                         ),
-                        circle(cx=field("x").median(), cy=6, r=3, fill=STROKE),
+                        circle(cx=field("x").median(), cy=6, r=3, fill=stroke),
                     ]
                 )
             ),
@@ -102,7 +106,7 @@ NORMAL_GRID = _grid_of(lambda x: _norm_pdf(x), -4, 4, 401)
 
 
 def story_croissant():
-    return _croissant(NORMAL_GRID), {
+    return _croissant(NORMAL_GRID, n=5, fill=PAPER_FILL, stroke=PAPER_STROKE), {
         "w": 480,
         "h": 200,
         "axes": {"x": True, "y": False},
