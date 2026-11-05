@@ -145,11 +145,10 @@ const domainPlan = (
 
 /**
  * The chains of `node` along `axis` (each `distribute` there) that have a
- * member with no size of its own (`GoFishNode.sizedOn`): the children that
- * hold the chain's parts, and those members, each with its weight
- * (`GoFishNode.flexWeight`), in the order the chain names them. They
- * depend on the node's claim alone, so they are read once per claim
- * (`ClaimMemo.chains`).
+ * member with no size of its own (`GoFishNode.sizedOn`): per chain, those
+ * members, each with its weight (`GoFishNode.flexWeight`), in the order the
+ * chain names them. They depend on the node's claim alone, so they are read
+ * once per claim (`ClaimMemo.chains`).
  */
 const chainsOf = (
   node: GoFishNode,
@@ -161,18 +160,18 @@ const chainsOf = (
   const chains: ChainMembers[] = [];
   for (const c of node.constraints) {
     if (c.type !== "distribute" || axisIndex(c.dir) !== axis) continue;
-    const holders = new Set<number>();
-    const flex: ChainMembers["flex"] = [];
+    const flex: ChainMembers = [];
     for (const ref of c.children) {
-      const op = refs.operands.get(refs.keyOf(ref));
-      if (op === undefined || holders.has(op.child)) continue;
-      holders.add(op.child);
       const k = directSlot(refs, ref);
       const child = k === undefined ? undefined : node.children[k];
-      if (child instanceof GoFishNode && !child.sizedOn(axis))
+      if (
+        child instanceof GoFishNode &&
+        !child.sizedOn(axis) &&
+        !flex.some((m) => m.child === k)
+      )
         flex.push({ child: k!, weight: child.flexWeight(axis) });
     }
-    if (flex.length > 0) chains.push({ gap: c, holders: [...holders], flex });
+    if (flex.length > 0) chains.push(flex);
   }
   node._claimMemo.chains[axis] = chains;
   return chains;
@@ -943,11 +942,14 @@ export const layer = createNodeOperatorSequential(
 
           // The room of each member of a chain along `axis` that has no size
           // of its own (#1257): its need (its claim at the σ this layer hands
-          // its children) plus its share of its chain's slack. A chain's
-          // slack is what the room its parts are proposed leaves past its
-          // needs: its parts' claims and the gaps between them. Each chain
-          // splits its own slack, so two chains side by side each fill the
-          // room. An `fr(k)` member takes k shares. This is CSS's
+          // its children) plus its share of the slack, what this layer's
+          // room leaves past the hull of its content's needs (chrome or
+          // labels seated beside a chain included). Each chain splits the
+          // slack among its own members, so two chains side by side (two
+          // rows of one width) each fill the room. An `fr(k)` member takes
+          // k shares.
+          // TODO(#1257): a chain narrower than the hull gets only the
+          // hull's slack; its own would need the boxes beside it on its row. This is CSS's
           // `flex: 1 1 auto`. σ is solved from the needs alone, so where the
           // needs fill the room (a scope fitted to it) the slack is 0, and
           // on an axis with no room (an unsized render) the members keep
@@ -967,13 +969,13 @@ export const layer = createNodeOperatorSequential(
                 c instanceof GoFishNode ? c.resolveExtent()[axis] : undefined;
               return claim === undefined ? 0 : Pwl.at(claim.width, sigma);
             };
+            const whole = contentExtents[axis];
+            const slack = room(
+              size[axis] -
+                (whole === undefined ? 0 : Pwl.at(whole.width, sigma))
+            );
             const rooms = new Map<number, number>();
-            for (const { gap, holders, flex } of chains) {
-              const gaps =
-                (holders.length - 1) * Pwl.at(node.gapOf(gap, axis), sigma);
-              const needs = holders.reduce((s, i) => s + need(i), gaps);
-              const given = Math.max(...holders.map((i) => roomOf(i, axis)));
-              const slack = room(given - needs);
+            for (const flex of chains) {
               const total = flex.reduce((s, m) => s + m.weight, 0);
               for (const { child, weight } of flex)
                 if (!rooms.has(child))

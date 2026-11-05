@@ -887,11 +887,12 @@ fixed-size nodes report their size).
   (a `distribute` on the axis), a member with no size of its own
   (`GoFishNode.sizedOn`: no literal, data or percent size, and no claim of
   its own as a leaf) gets its need, its claim at the σ the layer hands its
-  children, plus its share of its chain's slack: what the room its parts
-  are proposed leaves past the chain's needs (its parts' claims and the gaps
-  between them), split by `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1).
-  Each chain splits its own slack (`chainsOf` in `layer`), so two chains side
-  by side each fill the room. This is CSS's `flex: 1 1 auto`. σ is solved from the
+  children, plus its share of the slack: what the layer's room leaves past
+  the hull of the needs, split among the members of its own chain by
+  `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1). Each chain splits the
+  slack on its own (`chainsOf` in `layer`), so two chains of one width side
+  by side each fill the room; a chain narrower than the hull gets only the
+  hull's slack. This is CSS's `flex: 1 1 auto`. σ is solved from the
   needs alone, so where a scope fits its needs to its room the slack is 0
   and the members get their needs, the σ the scope solved. A filler (a rect
   with no height) is its room, so a backdrop behind a bar fills the band,

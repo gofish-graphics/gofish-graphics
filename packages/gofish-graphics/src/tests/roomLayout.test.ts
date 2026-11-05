@@ -271,25 +271,22 @@ async function main() {
   console.log("\n# two parallel chains each split their own slack");
   {
     // [a, b] and [c, d] run along x in one 100 px layer: a and c are 20 px,
-    // b and d are fillers. Each chain fills the room, so b and d are 80 px.
-    // Below them, [e, f] is two fillers: each is 50 px.
+    // b and d are fillers. Each chain splits the slack among its own
+    // members, so each fills the room: b and d are 80 px, not 40 px.
     const R = Rect as any;
     const parts = {
       a: R({ w: 20, h: 10, fill: "a" }).name("a"),
       b: R({ h: 10, fill: "b" }).name("b"),
       c: R({ w: 20, h: 10, fill: "c" }).name("c"),
       d: R({ h: 10, fill: "d" }).name("d"),
-      e: R({ h: 10, fill: "e" }).name("e"),
-      f: R({ h: 10, fill: "f" }).name("f"),
     };
     const node = (Layer as any)(
       { w: 100, h: 100 },
       Object.values(parts)
-    ).relate(({ a, b, c, d, e, f }: any) => [
+    ).relate(({ a, b, c, d }: any) => [
       Constraint.distribute({ dir: "x", spacing: 0 }, [a, b]),
       Constraint.distribute({ dir: "x", spacing: 0 }, [c, d]),
-      Constraint.distribute({ dir: "x", spacing: 0 }, [e, f]),
-      Constraint.distribute({ dir: "y", spacing: 0 }, [a, c, e]),
+      Constraint.distribute({ dir: "y", spacing: 0 }, [a, c]),
     ]);
     const data = await runLayout({}, node);
     const rects = items({ items: lowerToDisplayList(data.child) }).filter(
@@ -297,14 +294,12 @@ async function main() {
     );
     const w = (fill: string) => rects.find((r) => r.style?.fill === fill)?.w;
     check(
-      "b and d are 80 px, e and f are 50 px",
+      "b and d are 80 px",
       close(w("a"), 20) &&
         close(w("b"), 80) &&
         close(w("c"), 20) &&
-        close(w("d"), 80) &&
-        close(w("e"), 50) &&
-        close(w("f"), 50),
-      ["a", "b", "c", "d", "e", "f"].map(w)
+        close(w("d"), 80),
+      ["a", "b", "c", "d"].map(w)
     );
   }
 

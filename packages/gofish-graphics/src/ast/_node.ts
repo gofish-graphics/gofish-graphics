@@ -241,14 +241,10 @@ type ClaimMemo = {
   chains: [ChainMembers[] | undefined, ChainMembers[] | undefined];
 };
 
-/** One chain of a layer along an axis (a `distribute` there): the children
- *  that hold its parts, and its members with no size of their own, each
- *  with its weight in the chain's slack (`chainsOf` in `layer`). */
-export type ChainMembers = {
-  gap: GapConstraint;
-  holders: number[];
-  flex: { child: number; weight: number }[];
-};
+/** One chain of a layer along an axis (a `distribute` there): its members
+ *  with no size of their own, each with its weight in the slack
+ *  (`chainsOf` in `layer`). */
+export type ChainMembers = { child: number; weight: number }[];
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
