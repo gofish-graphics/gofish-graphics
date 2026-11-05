@@ -59,7 +59,15 @@ const TOL = 0.2;
 /** The longest straight run between two samples, in pixels (the cut search
  *  of step 4 works between samples). */
 const MAX_STEP = 4;
-const EPS = 1e-7;
+/** The cover test's tie tolerance, px: two edges nearer than this are one
+ *  edge (two members that share a cap or a side), and the first member keeps
+ *  it. The test is made at a piece's middle, and the edges where it changes
+ *  (±EPS off another edge) are not cuts, so a piece that runs from inside
+ *  the band to outside it is judged by its middle alone. Two near edges
+ *  apart by a few EPS then keep both or neither of a stretch, which opens or
+ *  links the wrong loops: the band must be no wider than rounding, below
+ *  any distance a layout means. */
+const EPS = 1e-10;
 const TAU = 2 * Math.PI;
 
 /** An edge of a grown member, run so the member is on its left (angle

@@ -240,7 +240,12 @@ box for a box): `grownPrim` in `prims.ts`, whose signed distance (`primD`) is
 the cover test, with its boundary as exact edges. The union's boundary is
 traced exactly, by cutting every edge where another shape's edge crosses it
 (each crossing solved once for the pair) and keeping the parts no other shape
-covers. That boundary is then shrunk by radius: arcs keep their centers, lines
+covers. A part is judged at its middle, and two edges nearer than 1e-10 px
+there are one edge (two members that share a cap or a side), kept by the
+first member. That tie band is not a cut, so it must be no wider than
+rounding: at 1e-7, two caps 1e-6 apart (a chain of segments with its shared
+ends nudged) kept both or neither of a stretch, and the bubble treemap's
+continent contour moved by 48 px. That boundary is then shrunk by radius: arcs keep their centers, lines
 move inward, and each corner becomes an arc of `radius`. Where the shrunk
 boundary crosses itself, only the points a full radius from the union's
 boundary are kept, and the cut points are found by bisection on the exact
@@ -297,7 +302,9 @@ same way under any coordinate transform.
    radius `padding`, are the piece's spine.
 3. **Convexity.** Each piece is filled on its own. Between 0 and 1 the fill
    is the per-bay blend (`blend.ts`): every pocket of the padded hull less
-   the spine fills `convexity` of its own area. In a pocket with a mouth on
+   the spine fills `convexity` of its own area. A spine vertex on a hull
+   side (three boxes in a row) is a hull vertex too, so the side is two
+   mouths that meet there and no pocket of width 0. In a pocket with a mouth on
    the hull, a harmonic field u is 0 on the spine and 1 on the mouth, solved
    on a square grid over the pocket (4 px, finer in a small pocket). The
    pocket's boundary crosses the grid lines at exact points, and a node next

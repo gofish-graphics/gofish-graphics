@@ -8,6 +8,11 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { items } from "./testHelpers";
+import { encloseOutline } from "../ast/graphicalOperators/enclose/outline";
+import type { Member } from "../ast/graphicalOperators/enclose/prims";
+import { pointInRing } from "../ast/geometry/plane";
+import { countryPopulations } from "../data/countryPopulations";
+import { gapminderCountries } from "../data/gapminderCountries";
 
 declare const process: { exit(code: number): never };
 const {
@@ -15,9 +20,13 @@ const {
   circle,
   enclose,
   ellipse,
+  filter,
   live,
   pack,
+  project,
   rect,
+  scatter,
+  selectAll,
   Shape,
   spread,
   treemap,
@@ -351,6 +360,146 @@ for (const clearance of [NaN, -2, "4"]) {
     /enclose\(\{ clearance \}\)/.test(message),
     message || "no error"
   );
+}
+
+console.log("# a nudge of 1e-6 px moves an outline by less than 0.5 px");
+type Pt = [number, number];
+/** A path item's rings, one per subpath. */
+const ringsOf = (d: string): Pt[][] =>
+  d
+    .split("M")
+    .filter(Boolean)
+    .map((s) => {
+      const n = s.match(/-?[\d.]+(e-?\d+)?/g)!.map(Number);
+      const r: Pt[] = [];
+      for (let i = 0; i + 1 < n.length; i += 2) r.push([n[i], n[i + 1]]);
+      return r;
+    });
+/** The farthest a point of either set of rings is from the other's edges. */
+const hausdorff = (A: Pt[][], B: Pt[][]): number => {
+  const segD = (p: Pt, a: Pt, b: Pt) => {
+    const dx = b[0] - a[0],
+      dy = b[1] - a[1];
+    const L = dx * dx + dy * dy || 1;
+    const t = Math.max(
+      0,
+      Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / L)
+    );
+    return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy);
+  };
+  const dTo = (p: Pt, R: Pt[][]) => {
+    let d = Infinity;
+    for (const r of R)
+      r.forEach((a, i) => (d = Math.min(d, segD(p, a, r[(i + 1) % r.length]))));
+    return d;
+  };
+  const far = (X: Pt[][], Y: Pt[][]) => {
+    let m = 0;
+    for (const r of X) for (const p of r) m = Math.max(m, dTo(p, Y));
+    return m;
+  };
+  if (!A.length || !B.length) return A.length === B.length ? 0 : Infinity;
+  return Math.max(far(A, B), far(B, A));
+};
+let seed = 1;
+/** Each coordinate nudged on its own by up to 1e-6 px, so the ends two
+ *  pieces of an outline share are no longer shared. */
+const nudge = (members: Member[]): Member[] => {
+  const j = () =>
+    ((seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296 - 0.5) *
+    2e-6;
+  return members.map((m): Member =>
+    m.kind === "disc"
+      ? { ...m, cx: m.cx + j(), cy: m.cy + j() }
+      : m.kind === "segment"
+        ? {
+            ...m,
+            a: [m.a[0] + j(), m.a[1] + j()],
+            b: [m.b[0] + j(), m.b[1] + j()],
+          }
+        : m
+  );
+};
+const steady = (name: string, members: Member[], o: any) => {
+  const base = encloseOutline(members, o);
+  let worst = 0;
+  for (let k = 0; k < 3; k++)
+    worst = Math.max(worst, hausdorff(base, encloseOutline(nudge(members), o)));
+  check(`${name}: moves ${worst.toFixed(3)} px`, worst < 0.5);
+};
+{
+  // the bubble treemap's continent contours, each over its region contours
+  const dl = await chart(countryPopulations)
+    .flow(
+      pack({ by: "continent", spacing: 4 }),
+      enclose({ shape: Shape.fillet({ radius: 12 }), padding: 4, stroke: "#333" }),
+      pack({ by: "region", spacing: 4 }),
+      enclose({ shape: Shape.fillet({ radius: 8 }), padding: 4, stroke: "#999" }),
+      pack()
+    )
+    .mark((d: any[]) => circle({ r: 1.6 * Math.sqrt(d[0].pop) })(d))
+    .toDisplayList({ w: 720, h: 600 });
+  const paths = items(dl).filter((it) => it.kind === "path");
+  const regions = paths
+    .filter((it) => it.style.stroke === "#999")
+    .map((it) => ringsOf(it.d));
+  paths
+    .filter((it) => it.style.stroke === "#333")
+    .forEach((it, k) => {
+      const contour = ringsOf(it.d)[0];
+      const members = regions
+        .filter((R) => pointInRing(R[0][0], contour))
+        .flatMap((R) =>
+          R.flatMap((r) =>
+            r.map(
+              (a, i): Member => ({
+                kind: "segment",
+                a,
+                b: r[(i + 1) % r.length],
+                w: 1,
+              })
+            )
+          )
+        );
+      steady(`bubble treemap continent ${k} (${members.length} pieces)`, members, {
+        kind: "fillet",
+        radius: 12,
+        padding: 4,
+        avoiding: [],
+      });
+    });
+}
+{
+  // ChartAccent's blob around the Sub-Saharan African countries
+  const dl = await chart(gapminderCountries, { w: 520, h: 320 })
+    .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+    .mark(circle({ r: 3.5 }).name("countries"))
+    .layer(
+      chart(selectAll("countries"))
+        .flow(
+          filter((c: any) => project(c, "Region") === "Sub-Saharan Africa")
+        )
+        .mark(
+          enclose({
+            shape: Shape.blob({ convexity: 0.1, neck: 0.6 }),
+            padding: 6,
+          })
+        )
+    )
+    .toDisplayList({ w: 520, h: 320 });
+  const members = items(dl)
+    .filter(
+      (it) =>
+        it.kind === "ellipse" && it.datum?.[0]?.Region === "Sub-Saharan Africa"
+    )
+    .map((it): Member => ({ kind: "disc", cx: it.cx, cy: it.cy, r: it.rx }));
+  steady(`ChartAccent Sub-Saharan Africa (${members.length} countries)`, members, {
+    kind: "blob",
+    convexity: 0.1,
+    neck: 0.6,
+    padding: 6,
+    avoiding: [],
+  });
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);
