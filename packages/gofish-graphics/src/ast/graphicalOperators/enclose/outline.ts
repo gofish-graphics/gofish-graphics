@@ -62,7 +62,7 @@ import {
   type Pt,
 } from "./prims";
 import { closingRings } from "./arcs";
-import { buildBlend, blendRings } from "./blend";
+import { blendSpine, buildBlend, blendRings } from "./blend";
 import { keepIns, roundCut, smoothOutline } from "./smooth";
 import { beyondEnds, minkowski } from "./beyond";
 import {
@@ -897,6 +897,49 @@ function keepOutRegion(K: Disc[]): KeepOutRegion {
       : [];
 }
 
+/** Whether the inside of ring `r` (an outer ring) and the region of rings `keep` meet:
+ *  their sides touch or cross, or one holds a point of the other. */
+function meets(r: Pt[], keep: Pt[][]): boolean {
+  const segs: [Pt, Pt][] = keep.flatMap((k) =>
+    k.map((p, i): [Pt, Pt] => [p, k[(i + 1) % k.length]])
+  );
+  const grid = boxGrid(
+    segs.map(([a, b]) => [
+      Math.min(a[0], b[0]),
+      Math.min(a[1], b[1]),
+      Math.max(a[0], b[0]),
+      Math.max(a[1], b[1]),
+    ])
+  );
+  // closed segments ab and cd meet: each one's ends are not both strictly on one side of the
+  // other's line, and their boxes overlap (for collinear ones)
+  const side = (a: Pt, b: Pt, p: Pt) => Math.sign(cross(a, b, p));
+  const meet = (a: Pt, b: Pt, c: Pt, d: Pt) =>
+    side(a, b, c) * side(a, b, d) <= 0 &&
+    side(c, d, a) * side(c, d, b) <= 0 &&
+    Math.max(a[0], b[0]) >= Math.min(c[0], d[0]) &&
+    Math.max(c[0], d[0]) >= Math.min(a[0], b[0]) &&
+    Math.max(a[1], b[1]) >= Math.min(c[1], d[1]) &&
+    Math.max(c[1], d[1]) >= Math.min(a[1], b[1]);
+  for (let i = 0; i < r.length; i++) {
+    const [a, b] = [r[i], r[(i + 1) % r.length]];
+    for (const k of grid.query(
+      Math.min(a[0], b[0]),
+      Math.min(a[1], b[1]),
+      Math.max(a[0], b[0]),
+      Math.max(a[1], b[1])
+    ))
+      if (meet(a, b, segs[k][0], segs[k][1])) return true;
+  }
+  // no sides meet: one lies wholly inside the other, or they are apart
+  const winding = (p: Pt) =>
+    keep.reduce(
+      (w, k) => w + (pointInRing(p, k) ? Math.sign(signedArea2(k)) : 0),
+      0
+    );
+  return winding(r[0]) !== 0 || keep.some((k) => pointInRing(k[0], r));
+}
+
 /** A shape's rings (a blob piece, a fillet piece, the box) cut by the keep-outs' region:
  *  never into the padded members (a link is cut like any other ground), the cut's corners
  *  rounded inward (cutAndRound), and what the cut fences off from every member dropped.
@@ -907,13 +950,29 @@ function avoidCut(
   pad: number,
   keepOut: KeepOutRegion
 ): Pt[][] {
-  const box = boxOf(rings);
-  const keep = keepOut(box);
+  const keep = keepOut(boxOf(rings));
   if (!keep.length) return rings;
+  // an outer ring (with its holes) that does not meet the keep-out region is its own cut:
+  // only the others are cut (on the cut's grid, which traces a ring finer than its step
+  // only roughly)
+  const hitOuter = rings.filter((r) => signedArea2(r) > 0 && meets(r, keep));
+  const hit = rings.filter((r) =>
+    signedArea2(r) > 0
+      ? hitOuter.includes(r)
+      : !rings.some(
+          (o) =>
+            signedArea2(o) > 0 && !hitOuter.includes(o) && pointInRing(r[0], o)
+        )
+  );
+  if (!hit.length) return rings;
+  const box = boxOf(hit);
   // the padded members' union with its holes: a keep-out inside a ring of members is cut
   // out of the fill there
   const F = cutField(closingRings(pm, pad, 0, true), box, keep);
-  const cut = cutAndRound(rings, pm, pad, F);
+  const cut = [
+    ...cutAndRound(hit, pm, pad, F),
+    ...rings.filter((r) => !hit.includes(r)),
+  ];
   // the ground the keep-outs fence off from every member (a link's or a fill's sliver
   // between keep-outs) is not the enclosure: an outer ring that holds no member is dropped,
   // and the holes inside it
@@ -1193,8 +1252,7 @@ function fillOne(
   }
   if (c >= 1) return { all, rings: [paddedHull(all, pad)] };
   if (c <= 0) return { all, rings: closingRings(all, pad, pad, holes) };
-  // the blend wants the spine's arcs to 0.05 px (the closing's own sampling is 0.2 px)
-  const MB = buildBlend(closingRings(all, pad, pad, holes, 0.05));
+  const MB = buildBlend(blendSpine(all, pad, holes));
   return { all, rings: blendRings(MB, c, holes) };
 }
 

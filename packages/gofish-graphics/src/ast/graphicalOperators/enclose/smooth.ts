@@ -10,6 +10,7 @@
 import { boxGrid, type Member, type Pt } from "./prims";
 import { signedArea2 } from "../../geometry/plane";
 import { SegGrid, Inside, segsOf } from "./grid";
+import { closingRings } from "./arcs";
 
 /** A keep-in constraint: a segment ab (a disc when a = b) grown to `R`. The
  *  outline must keep every point of it inside. */
@@ -144,17 +145,93 @@ function needed(rings: Pt[][], keep: KeepIn[]): number {
 
 /**
  * The outline smoothed: a Gaussian along arclength (SIGMA px, on rings
- * resampled every px), then the whole outline moved out along its normals
- * by the least amount that holds every keep-in capsule again (smoothing
- * pulls a convex part of radius rho in by about SIGMA^2 / (2 rho)).
+ * resampled every px), then grown (grow) by the least amount that holds
+ * every keep-in capsule again (smoothing pulls a convex part of radius rho in
+ * by about SIGMA^2 / (2 rho)).
  */
 export function smoothOutline(rings: Pt[][], keep: KeepIn[]): Pt[][] {
   const sm = rings.map((ring) => gauss(resample(ring, 1)[0], SIGMA));
-  const c = needed(sm, keep) + MARGIN;
-  return sm.map((r) => {
-    const N = normals(r);
-    return r.map((p, i) => [p[0] + c * N[i][0], p[1] + c * N[i][1]] as Pt);
-  });
+  return grow(sm, needed(sm, keep) + MARGIN);
+}
+
+/**
+ * The rings' region grown by c: every point within c of it. Its boundary is
+ * where the distance to the rings is c. Each ring moved out along its normals
+ * (offsetRing) is that boundary when every point of it is c from the rings
+ * (to the joins' chord error): the usual case, a smoothed ring curving no
+ * tighter than c where it is concave. Where it is, the moved ring passes
+ * nearer than c: past a dent tighter than c it crosses itself in a small
+ * loop that winds the other way and is left unfilled, and a hole no wider
+ * than 2c turns inside out through its middle, to a hole across the fill.
+ * Then the boundary is the union engine's (arcs.ts), exactly: the band of
+ * every side grown by c, its rings outside the region (the outer ones moved
+ * out, and each hole shrunk, or gone).
+ */
+function grow(rings: Pt[][], c: number): Pt[][] {
+  if (c <= 0) return rings;
+  const moved = rings.map((r) => offsetRing(r, c));
+  const lim = c - 2 * JOIN_TOL;
+  const G = new SegGrid(segsOf(rings), 4);
+  if (moved.every((r) => r.every(([x, y]) => G.capped(x, y, lim) >= lim)))
+    return moved;
+  const sides = rings.flatMap((r) =>
+    r.map(
+      (a, i): Member => ({ kind: "segment", a, b: r[(i + 1) % r.length], w: 0 })
+    )
+  );
+  const In = new Inside(segsOf(rings));
+  return closingRings(sides, c, 0, true).filter(
+    (q) => !In.has(q[0][0], q[0][1])
+  );
+}
+
+/** The chord error of the arcs offsetRing adds at a sharp convex vertex, px. */
+const JOIN_TOL = 0.05;
+
+/**
+ * A ring moved out by c: each vertex along its normal (normals), and at a
+ * convex vertex that turns more than an arc step of radius c the arc of c
+ * around it, from its incoming side's normal to its outgoing side's (a round
+ * join). A vertex normal alone moves a sharp tip (where a member narrower
+ * than the smoothing collapsed) by c along its bisector only, and the chord
+ * between its two neighbors' moved points cuts across the cap; with the arc
+ * the ring holds every point within c of it on its convex side, as `needed`
+ * reckons.
+ */
+function offsetRing(r: Pt[], c: number): Pt[] {
+  const n = r.length;
+  const N = normals(r);
+  const step =
+    2 * Math.acos(Math.max(-1, 1 - JOIN_TOL / Math.max(c, JOIN_TOL)));
+  const side = (i: number): Pt => {
+    const [p, q] = [r[i], r[(i + 1) % n]];
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+    return [(q[1] - p[1]) / L, -(q[0] - p[0]) / L];
+  };
+  const out: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = r[i];
+    const a = side((i - 1 + n) % n),
+      b = side(i);
+    // the turn from the incoming side's normal to the outgoing's, as the
+    // travel turns: positive turns left, a convex vertex (the region is on
+    // the left)
+    const turn = Math.atan2(
+      a[0] * b[1] - a[1] * b[0],
+      a[0] * b[0] + a[1] * b[1]
+    );
+    if (c <= 0 || turn <= step) {
+      out.push([p[0] + c * N[i][0], p[1] + c * N[i][1]]);
+      continue;
+    }
+    const a0 = Math.atan2(a[1], a[0]);
+    const k = Math.ceil(turn / step);
+    for (let j = 0; j <= k; j++) {
+      const t = a0 + (turn * j) / k;
+      out.push([p[0] + c * Math.cos(t), p[1] + c * Math.sin(t)]);
+    }
+  }
+  return out;
 }
 
 /** Resample a closed ring at a uniform step of about ds, each sample marked when the edge it

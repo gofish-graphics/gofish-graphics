@@ -1161,5 +1161,278 @@ console.log("# the blend's hull (enclose/blend.ts)");
   }
 }
 
+console.log("# reproducers from a random sweep (#1315)");
+{
+  type Opts = Parameters<typeof encloseOutline>[1];
+  const B = (x: number, y: number, w: number, h: number): Member => ({
+    kind: "box",
+    x,
+    y,
+    w,
+    h,
+  });
+  // the outline, or the message it threw
+  const run = (members: Member[], o: Opts): [Pt[][], string] => {
+    try {
+      return [encloseOutline(members, o), ""];
+    } catch (e) {
+      return [[], (e as Error).message];
+    }
+  };
+  // every padded member inside the outline (nonzero winding, as SVG fills),
+  // read at its center and at points on its padded edge pulled in by 0.2 px
+  // (the drawn arcs' chords cut inside by less), for a member at least that
+  // thick once padded
+  const IN = 0.2;
+  const covers = (members: Member[], pad: number, loops: Pt[][]) =>
+    members.every((m) => {
+      const pts: Pt[] =
+        m.kind === "disc"
+          ? m.r + pad > IN
+            ? [[m.cx, m.cy], ...around([m.cx, m.cy], m.r + pad - IN, 32)]
+            : []
+          : m.kind === "box"
+            ? Math.min(m.w, m.h) / 2 + pad > IN
+              ? [
+                  [m.x, m.y],
+                  [m.x + m.w, m.y],
+                  [m.x + m.w, m.y + m.h],
+                  [m.x, m.y + m.h],
+                  [m.x + m.w / 2, m.y - pad + IN],
+                  [m.x + m.w + pad - IN, m.y + m.h / 2],
+                  [m.x + m.w / 2, m.y + m.h + pad - IN],
+                  [m.x - pad + IN, m.y + m.h / 2],
+                ]
+              : []
+            : [m.a, m.b];
+      return pts.every((p) => winds(p, loops));
+    });
+  const winds = (p: Pt, loops: Pt[][]) => {
+    let w = 0;
+    for (const l of loops)
+      for (let i = 0, j = l.length - 1; i < l.length; j = i++) {
+        const [a, b] = [l[i], l[j]];
+        if (a[1] > p[1] !== b[1] > p[1]) {
+          const x = ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0];
+          if (p[0] < x) w += a[1] > b[1] ? 1 : -1;
+        }
+      }
+    return w !== 0;
+  };
+  const ok = (name: string, members: Member[], o: Opts, n?: number) => {
+    const [rings, msg] = run(members, o);
+    const finite = rings.every((r) => r.every((p) => isFinite(p[0]) && isFinite(p[1])));
+    check(
+      name,
+      !msg &&
+        finite &&
+        rings.length > 0 &&
+        (n === undefined || rings.length === n) &&
+        covers(members, o.padding ?? 0, rings),
+      msg || `${rings.length} rings${finite ? "" : ", not finite"}`
+    );
+  };
+
+  // a level of the blend equal to a corner's u: the two crossings coincide,
+  // and the curve's direction is read off the triangle's corners
+  ok(
+    "a 4 + 4 + 2 grid of boxes at convexity 0.05",
+    [0, 30, 60, 90]
+      .flatMap((x) => [0, 30, 60].map((y) => B(x, y, 20, 20)))
+      .filter((b) => !(b.kind === "box" && b.y === 60 && b.x > 30)),
+    { kind: "blob", padding: 2, convexity: 0.05, holes: true, connection: 1, neck: 1 }
+  );
+  // a box of no height at padding 0: the blend's spine is grown by its
+  // resolution, so it has no part thinner than that
+  ok(
+    "a box of no height at padding 0",
+    [B(144.5433709770441, 32, 24, 18.442914616316557), B(88, 64, 20.650414563715458, 0)],
+    { kind: "blob", padding: 0, convexity: 0.25, holes: false, connection: 1, neck: 0.5 }
+  );
+  ok(
+    "a 1 × 12 box and dots of radius 0 at padding 0",
+    [B(10, 10, 1, 12), C(30, 8, 0), C(31, 30, 0), B(40, 12, 0.01, 20)],
+    { kind: "blob", padding: 0, convexity: 0.3, holes: true, connection: 1, neck: 1 }
+  );
+  // two boxes sharing a side are one ring: the shared side faces both ways,
+  // and both drop it
+  ok(
+    "two boxes sharing a side",
+    [B(0, 0, 10, 10), B(0, 10, 10, 7)],
+    { kind: "blob", padding: 0, convexity: 0, holes: true, connection: 1, neck: 1 },
+    1
+  );
+  // two discs touching at a point: each one's outline, neither taken for a
+  // hole of the other at the point they share
+  ok(
+    "two discs touching at a point",
+    [C(0, 0, 5), C(10, 0, 5)],
+    { kind: "fillet", padding: 0, radius: 0, holes: true, connection: 1, neck: 1 }
+  );
+  // an avoided disc of radius 0 is no loop
+  ok(
+    "an avoided disc of radius 0",
+    [
+      { kind: "segment", a: [-27, 10], b: [22, 10], w: 6 },
+      B(22, -18, 3, 30),
+    ],
+    {
+      kind: "blob",
+      padding: 0,
+      convexity: 1,
+      connection: 0,
+      separate: true,
+      avoiding: [C(-27, -10, 0)],
+    }
+  );
+  // a tip thinner than the smoothing keeps its cap: the offset adds the arc
+  ok(
+    "a thin tip between two dots of radius 0",
+    [C(26, 53, 0), C(43, 71, 0)],
+    { kind: "blob", padding: 1, convexity: 0, connection: 1, neck: 0.0099 }
+  );
+  // a hole narrower than twice the offset is shrunk to nothing, not turned
+  // inside out across the fill
+  ok(
+    "a small hole between members, shrunk away",
+    [
+      B(43.781, 280.62, 0, 0),
+      C(18.117, 252.353, 0),
+      { kind: "segment", a: [0.752, 251.689], b: [4.895, 255.832], w: 0.289 },
+      C(-7.097, 119.594, 8.891),
+      B(-9.809, 125.619, 25.726, 6.907),
+      B(1.338, 113.579, 0.01, 37.675),
+    ],
+    { kind: "blob", padding: 0, convexity: 0, connection: 1, neck: 1, holes: true }
+  );
+  // a ring that does not meet the keep-outs is not traced again on the cut's
+  // 1 px grid, where a ring this small vanishes
+  ok(
+    "a small dot near a keep-out it does not touch",
+    [C(0, 0, 0.3), C(25, 0, 3)],
+    {
+      kind: "blob",
+      padding: 0,
+      convexity: 0,
+      connection: 0,
+      avoiding: [C(15, 0, 1)],
+      clearance: 1,
+    },
+    2
+  );
+  // a disc no wider than the arcs' tolerance is sampled as a triangle at
+  // least, not a ring of no area
+  ok(
+    "a dot of radius 0.2 at padding 0",
+    [C(0, 0, 0.2)],
+    { kind: "blob", padding: 0, convexity: 0 },
+    1
+  );
+
+  // a seeded sweep: random members (dots, boxes, segments and tapered links,
+  // some of no size) and options, for every shape kind (the box and the oval
+  // through cutOutline); none throws or has a non-finite point, and every
+  // member set that avoids nothing has an outline (a keep-out's cut traces on
+  // a 1 px grid, where a member thinner than that can vanish: #1319)
+  const boxRing = (members: Member[], pad: number): Pt[] => {
+    const pts = members.flatMap((m): Pt[] =>
+      m.kind === "disc"
+        ? [
+            [m.cx - m.r, m.cy - m.r],
+            [m.cx + m.r, m.cy + m.r],
+          ]
+        : m.kind === "box"
+          ? [
+              [m.x, m.y],
+              [m.x + m.w, m.y + m.h],
+            ]
+          : [m.a, m.b]
+    );
+    const xs = pts.map((q) => q[0]),
+      ys = pts.map((q) => q[1]);
+    const [x0, y0, x1, y1] = [
+      Math.min(...xs) - pad,
+      Math.min(...ys) - pad,
+      Math.max(...xs) + pad,
+      Math.max(...ys) + pad,
+    ];
+    return [
+      [x0, y0],
+      [x1, y0],
+      [x1, y1],
+      [x0, y1],
+    ];
+  };
+  const rand = seeded(1315);
+  const pick = <T,>(xs: T[]) => xs[Math.floor(rand() * xs.length)];
+  const size = () => (rand() < 0.15 ? 0 : rand() * 20);
+  let throws = 0,
+    bad = 0;
+  const first: string[] = [];
+  for (let k = 0; k < 300; k++) {
+    const n = 1 + Math.floor(rand() * 8);
+    const span = pick([30, 80, 200]);
+    const members: Member[] = Array.from({ length: n }, (): Member => {
+      const [x, y] = [rand() * span, rand() * span];
+      const t = rand();
+      if (t < 0.35) return C(x, y, size() / 2);
+      if (t < 0.7) return B(x, y, size(), size());
+      const b: Pt = [x + (rand() - 0.5) * 60, y + (rand() - 0.5) * 60];
+      return rand() < 0.5
+        ? { kind: "segment", a: [x, y], b, w: size() / 4 }
+        : { kind: "segment", a: [x, y], b, w: size() / 4, w2: size() / 4 };
+    });
+    const padding = pick([0, 0, 1, 4, rand() * 8]);
+    const kind = pick(["blob", "blob", "fillet", "oval", "box"] as const);
+    const avoid: AvoidOptions =
+      rand() < 0.25
+        ? {
+            padding,
+            avoiding: [C(rand() * span, rand() * span, rand() * 6)],
+            clearance: pick([0, 2, 5]),
+          }
+        : { padding };
+    const holes = rand() < 0.6;
+    const o: Opts | undefined =
+      kind === "blob"
+        ? {
+            kind,
+            ...avoid,
+            holes,
+            convexity: pick([0, 0.05, 0.25, 0.5, 0.9, 1, 1.5, rand() * 2]),
+            connection: pick([0, 0.5, 1, rand()]),
+            neck: pick([0.1, 0.5, 1]),
+            separate: rand() < 0.3,
+          }
+        : kind === "fillet"
+          ? { kind, ...avoid, holes, radius: pick([0, 5, 20]), neck: pick([0.1, 1]) }
+          : undefined;
+    let rings: Pt[][] = [];
+    let msg = "";
+    try {
+      rings = o
+        ? encloseOutline(members, o)
+        : cutOutline(
+            kind === "oval" ? ovalOutline(members, padding) : [boxRing(members, padding)],
+            members,
+            avoid
+          );
+    } catch (e) {
+      msg = (e as Error).message;
+    }
+    const empty = !rings.length && !avoid.avoiding && padding > 0.05;
+    if (msg) throws++;
+    else if (empty || rings.some((r) => r.some((q) => !isFinite(q[0]) || !isFinite(q[1]))))
+      bad++;
+    if ((msg || empty) && first.length < 3)
+      first.push(`${msg || "empty"}: ${JSON.stringify({ kind, members, o, avoid })}`);
+  }
+  check(
+    "300 seeded random member sets: none throws, none is empty or not finite",
+    throws === 0 && bad === 0,
+    `${throws} threw, ${bad} empty or not finite; ${first.join(" | ")}`
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

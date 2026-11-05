@@ -241,8 +241,11 @@ the cover test, with its boundary as exact edges. The union's boundary is
 traced exactly, by cutting every edge where another shape's edge crosses it
 (each crossing solved once for the pair) and keeping the parts no other shape
 covers. A part is judged at its middle, and two edges nearer than 1e-10 px
-there are one edge (two members that share a cap or a side), kept by the
-first member. That tie band is not a cut, so it must be no wider than
+there are one edge (two members that share a cap or a side). Which one keeps
+it is read off the other member's distance gradient: where the two face the
+same way (equal members) the first member keeps it, and where they face each
+other (two boxes that share a side) both drop it, so the two are one ring.
+That tie band is not a cut, so it must be no wider than
 rounding: at 1e-7, two caps 1e-6 apart (a chain of segments with its shared
 ends nudged) kept both or neither of a stretch, and the bubble treemap's
 continent contour moved by 48 px. That boundary is then shrunk by radius: arcs keep their centers, lines
@@ -250,10 +253,13 @@ move inward, and each corner becomes an arc of `radius`. Where the shrunk
 boundary crosses itself, only the points a full radius from the union's
 boundary are kept, and the cut points are found by bisection on the exact
 curves. Every output point lies on the exact curve, sampled at most 0.2 px off
-it and at most 4 px apart. With `holes` off, only the outer loops are kept, and a loop inside another is
+it and at most 4 px apart, and a whole disc as at least a triangle, so a disc
+no wider than the tolerance still bounds its area. With `holes` off, only the outer loops are kept, and a loop inside another is
 dropped. With `holes` on, a loop is kept by the winding of the other loops
 around it: an outer loop they wind around 0 times bounds filled ground (an
-island inside a hole too), and a hole they wind around once is its hole.
+island inside a hole too), and a hole they wind around once is its hole. The
+winding is read at the middle of the loop's first piece, not at an end: two
+loops meet only at pieces' ends, as two discs that touch at a point do.
 
 At radius 0 the outline is the padded union, and as radius grows it nears the
 padded convex hull. Two members join when the disc cannot pass between them:
@@ -315,6 +321,15 @@ same way under any coordinate transform.
    on triangles: a whole grid cell is two, and a cell the boundary cuts is
    its inside part, ear clipped. The outline is u's level set at the level
    that holds that share of the area, which is closed form per triangle.
+   A level curve runs with the fill on its left, and its direction in a
+   triangle is read off the order of the triangle's corners, not off the
+   places it crosses the sides: at a level equal to a corner's u the two
+   crossings are one point, and a sign from them would be noise. The blend
+   reads its spine at a resolution of 0.01 px (points nearer are one), so the
+   spine is the members grown by at least that (`blendSpine`): at padding 0 a
+   member of no width, a disc of radius 0 or a box 0.01 px wide, would make
+   a spike or a pinch narrower than the resolution, where a pocket's cusps
+   never open. Below a padding of 0.01 the outline moves by at most 0.01 px.
    Behind a narrow channel u is exponentially
    small (under 1e-5 between the line and dots of the test below), and a
    pocket's level can sit there, so the area is summed per triangle in a form
@@ -335,8 +350,17 @@ true`, each piece keeps out of the set's other pieces, as of an avoided
    piece's outline depend on the other's, so at a convexity above 0 two
    outlines may still meet in a bay between their pieces.
 5. **Smoothing.** The outline is smoothed by a Gaussian along its length
-   (σ = 6 px), then moved out by the least uniform offset that holds every
-   padded member and link again (`smooth.ts`).
+   (σ = 6 px), then grown by the least distance c that holds every padded
+   member and link again (`smooth.ts`, `grow`): the outline is every point
+   within c of the smoothed one. Each ring moved out along its normals, with
+   an arc of radius c at a convex vertex sharper than an arc step (so a
+   collapsed thin tip keeps its cap), is that outline when every point of it
+   is c from the smoothed rings, as it is where the rings are concave no
+   tighter than c. Where they are tighter, the moved ring crosses itself in
+   a loop that is left unfilled, and a hole no wider than 2c turns inside out
+   through its middle, to a hole across the fill. Then the outline is the
+   exact closing's (`closingRings`, at padding c, of every side of the
+   smoothed rings), its loops outside the smoothed rings.
 
 A blob keeps a hole only where its members close a loop (a ring of touching
 members): the per-bay blend fills each pocket from its walls, so a bay that is
@@ -360,7 +384,11 @@ offset moves the outline back across it. It is one step after the shape's
 own: an outline that no ring of the keep-out region comes within the cut's
 reach of is returned as it is, and the region is closed once, only when some
 outline comes near the keep-outs (a closing lies within the dilation by its
-disc, so this test is exact). The field's distances and windings come from
+disc, so this test is exact). Of an outline the cut does reach, only the
+outer rings (with their holes) that meet the keep-out region, their sides
+touching or crossing or one holding a point of the other, are cut; the rest
+are kept as they are, since the cut's grid would trace a ring smaller than
+its step only roughly. The field's distances and windings come from
 grids over the rings' segments (`grid.ts`), which the blend and the
 smoothing share. `src/tests/enclose.test.ts` checks
 that no outline point is within an avoided node's clearance, and that
@@ -441,3 +469,8 @@ Shortcuts, each a known approximation:
   either.
 - There is no `members` option and no list-taking `resolve` yet; members are
   the children or the refs of the chart's data.
+- The keep-out cut traces the rings it cuts on a 1 px grid, so a member
+  thinner than about 4 px once padded, next to a keep-out or a separate
+  neighbor, can lose part of its cover or vanish. In a random sweep of 60,000
+  member sets (`src/tests/enclose.test.ts` runs 300 of the same kind), 181
+  were of this kind and none of any other (#1319).

@@ -48,6 +48,7 @@ import {
   grownPrim,
   PRIM,
   primD,
+  primGrad,
   type Member,
   type Prim,
   type Pt,
@@ -526,9 +527,11 @@ function sampleParams(e: Edge, s0: number, s1: number, tol: number): number[] {
     const L = Math.hypot(e.bx - e.ax, e.by - e.ay) * Math.abs(s1 - s0);
     n = Math.max(1, Math.ceil(L / MAX_STEP));
   } else {
+    // within tol of an arc no wider than tol is any chord; a third of a turn
+    // at most, so a whole disc is a triangle and bounds its area
     const step =
       e.R <= tol
-        ? Math.PI
+        ? (2 * Math.PI) / 3
         : Math.min(2 * Math.acos(1 - tol / e.R), MAX_STEP / e.R);
     n = Math.max(1, Math.ceil(Math.abs(s1 - s0) / step));
   }
@@ -598,23 +601,31 @@ export function closingRings(
       if (buried) return;
       const touching = others[i].filter((j) => overlaps(eb, prims[j].prim.bb));
       const cs = cuts.sort((a, b) => a - b);
-      // covered by another member; on a tie (two equal members) the first
-      // keeps it. The member that covered the last part is tried first. A
-      // point off a member's box (grown past EPS) is not covered by it.
-      const covers = (j: number, x: number, y: number) => {
+      // covered by another member. On a tie (the point on that member's
+      // boundary too) the two boundaries run together there: facing each
+      // other (two members that touch along it, the other's inside on this
+      // edge's outer side) the stretch is inside the union, and both drop it;
+      // facing the same way (two equal members) the first keeps it. The
+      // member that covered the last part is tried first. A point off a
+      // member's box (grown past EPS) is not covered by it.
+      const covers = (j: number, x: number, y: number, n: Pt) => {
         const b = prims[j].prim.bb;
         if (x < b[0] - 1e-6 || x > b[2] + 1e-6) return false;
         if (y < b[1] - 1e-6 || y > b[3] + 1e-6) return false;
         const d = sdf(j, x, y);
-        return d < -EPS || (d <= EPS && j < i);
+        if (d < -EPS) return true;
+        if (d > EPS) return false;
+        const g = primGrad(prims[j].prim, x, y);
+        return g[0] * n[0] + g[1] * n[1] < 0 || j < i;
       };
       let lastCover = -1;
       for (let k = 0; k + 1 < cs.length; k++) {
         const [s0, s1] = [cs[k], cs[k + 1]];
         if (s1 - s0 < 1e-12) continue;
         const [mx, my] = at(e, (s0 + s1) / 2);
-        if (lastCover >= 0 && covers(lastCover, mx, my)) continue;
-        lastCover = touching.find((j) => covers(j, mx, my)) ?? -1;
+        const n = normal(e, (s0 + s1) / 2);
+        if (lastCover >= 0 && covers(lastCover, mx, my, n)) continue;
+        lastCover = touching.find((j) => covers(j, mx, my, n)) ?? -1;
         if (lastCover >= 0) continue;
         const last = pieces.at(-1);
         if (last && last.e === e && Math.abs(last.s1 - s0) < 1e-12)
@@ -634,7 +645,7 @@ export function closingRings(
     ),
   }));
   // Outer loops wind as the members do; the holes the other way. A loop's
-  // depth is the winding of the other loops at its first point: an outer
+  // depth is the winding of the other loops at a point of it (probe): an outer
   // loop at 0 bounds filled ground, and a hole at 1 is a hole of it. With
   // holes, that keeps an island inside a hole (+1 − 1 = 0) and its own holes;
   // without, every hole is filled, so a loop inside an outer one is dropped.
@@ -642,8 +653,14 @@ export function closingRings(
     .filter(({ ring }) => signedArea2(ring) > 0)
     .sort((a, b) => signedArea2(b.ring) - signedArea2(a.ring));
   const boxes = loops.map(({ ring }) => ringExtent(ring));
+  // a loop's point to test against the others: the middle of its first piece, not an end
+  // (loops meet only at pieces' ends, as two members that touch at a point do)
+  const probe = ({ loop }: (typeof loops)[number]): Pt => {
+    const q = loop[0];
+    return at(q.e, (q.s0 + q.s1) / 2);
+  };
   const depth = (k: number) => {
-    const [x, y] = loops[k].ring[0];
+    const [x, y] = probe(loops[k]);
     let w = 0;
     loops.forEach(({ ring }, j) => {
       const b = boxes[j];
@@ -661,7 +678,7 @@ export function closingRings(
         ),
       ]
     : outer.filter(
-        (L, k) => !outer.slice(0, k).some((B) => pointInRing(L.ring[0], B.ring))
+        (L, k) => !outer.slice(0, k).some((B) => pointInRing(probe(L), B.ring))
       );
   const boundary = kept.flatMap((L) => L.loop);
 
@@ -731,6 +748,8 @@ export function closingRings(
         samples.push({ p, c, s, ok: valid(p) });
       }
     }
+    // a loop of no length (a disc of radius 0) bounds nothing
+    if (samples.length === 0) continue;
     if (samples.length > 1) {
       const [f, l] = [samples[0].p, samples.at(-1)!.p];
       if (Math.hypot(f[0] - l[0], f[1] - l[1]) < 1e-6) samples.pop();

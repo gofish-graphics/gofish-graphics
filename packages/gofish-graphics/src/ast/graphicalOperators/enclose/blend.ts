@@ -42,7 +42,8 @@
  *    to the mouth ends, and stitched to the spine runs on the hull between
  *    pockets.
  */
-import { boxGrid, boxOf, type Pt } from "./prims";
+import { boxGrid, boxOf, type Member, type Pt } from "./prims";
+import { closingRings } from "./arcs";
 import { SegGrid, segsOf } from "./grid";
 import { signedArea2, cross, pointInRing } from "../../geometry/plane";
 
@@ -50,6 +51,10 @@ import { signedArea2, cross, pointInRing } from "../../geometry/plane";
  *  small pocket's grid step is its size (the square root of its area) over
  *  k; hMin: the least step. */
 const BLEND = {
+  /** the spine's resolution: points nearer than this are one (the
+   *  cleaning in pocketsOf), so the spine the blend reads has no part
+   *  narrower than twice it (blendSpine) */
+  res: 0.01,
   delta: 0.02,
   h: 4,
   k: 12,
@@ -60,6 +65,23 @@ const BLEND = {
    *  between two solves. */
   tol: 1e-10,
 };
+
+/**
+ * The spine the blend reads: the members (and links) grown by the padding,
+ * at least BLEND.res, and closed at r = padding, arcs to 0.05 px (the
+ * closing's own sampling is 0.2 px). Every part of it is at least
+ * 2 · BLEND.res across, so the cleaning in pocketsOf, which makes points
+ * nearer than BLEND.res one, keeps each ring simple: a member of no width
+ * (a box of height 0, a disc of radius 0, a link to one) at padding 0 would
+ * be a ring that runs out and back on itself, or touches itself at a point,
+ * and its pockets and their cusps would not be defined. So at a padding
+ * under BLEND.res the blend is the one at BLEND.res, at most that far out.
+ */
+export const blendSpine = (
+  members: Member[],
+  pad: number,
+  holes: boolean
+): Pt[][] => closingRings(members, Math.max(pad, BLEND.res), pad, holes, 0.05);
 
 // ── the pockets ─────────────────────────────────────────────────────────────
 
@@ -208,7 +230,7 @@ export function pocketsOf(spine: Pt[][]): {
   loops: Loop[];
 } {
   const { delta } = BLEND;
-  // drop points within 0.01 px of the next (arc joins can repeat a point
+  // drop points within BLEND.res of the next (arc joins can repeat a point
   // to within rounding, or step back by a few thousandths of a px: a
   // near-zero edge, or a zig-zag that crosses itself and so splits a cell's
   // run), and split outer rings from holes
@@ -216,7 +238,7 @@ export function pocketsOf(spine: Pt[][]): {
     .map((r) =>
       r.filter((p, i) => {
         const q = r[(i + 1) % r.length];
-        return Math.hypot(p[0] - q[0], p[1] - q[1]) > 0.01;
+        return Math.hypot(p[0] - q[0], p[1] - q[1]) > BLEND.res;
       })
     )
     .filter((r) => r.length >= 3);
@@ -1119,16 +1141,14 @@ export function blendRings(MB: Blend, c: number, holes: boolean): Pt[][] {
       const s = (l - RU[p]) / (RU[r] - RU[p]);
       px[id] = RX[p] + s * (RX[r] - RX[p]);
       py[id] = RY[p] + s * (RY[r] - RY[p]);
-      if (i0 < 0) i0 = id;
+      // the filled side on the left: every triangle winds positive (as its
+      // cell, or the polygon it was clipped from, does), so the curve runs
+      // from the edge that leaves {u <= l} to the edge that enters it. Read
+      // off the corners' order, not the crossings' places: those coincide
+      // when the level is a corner's u, and a sign from them would be noise
+      if (ia) i0 = id;
       else i1 = id;
     }
-    // the filled side on the left: the lone vertex is in or out
-    const lone = in0 === in1 ? v2 : in1 === in2 ? v0 : v1;
-    const loneIn = RU[lone] <= l;
-    const cr =
-      (px[i1] - px[i0]) * (RY[lone] - py[i0]) -
-      (py[i1] - py[i0]) * (RX[lone] - px[i0]);
-    if (cr > 0 !== loneIn) [i0, i1] = [i1, i0];
     next[i0] = i1;
     hasPrev[i1] = 1;
     used.push(i0);
