@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from "vue";
-import { docsLang } from "../../docsLang";
+import { withBase } from "vitepress";
+import { docsLang, examplesHref as examplesHrefOf } from "../../docsLang";
 import { data as pkgData } from "../../../data/version.data.js";
 
 // Shared call-to-action: the three nav buttons + the copy-to-clipboard install
@@ -16,10 +17,13 @@ const props = defineProps<{ version?: boolean }>();
 const VERSION = pkgData.version;
 //
 // All links follow the reader's language preference (the toggle lives in the
-// real navbar). VitePress intercepts internal <a href> for SPA navigation.
-const getStartedHref = computed(() => `/${docsLang.value}/get-started`);
-const examplesHref = computed(() => `/${docsLang.value}/examples/`);
-const apiHref = computed(() => `/${docsLang.value}/api/core/chart`);
+// real navbar). VitePress intercepts internal <a href> for SPA navigation, but
+// does not add the site base to a plain <a>, hence withBase.
+const getStartedHref = computed(() =>
+  withBase(`/${docsLang.value}/get-started`)
+);
+const examplesHref = computed(() => examplesHrefOf(docsLang.value));
+const apiHref = computed(() => withBase(`/${docsLang.value}/api/core/chart`));
 
 // The computed text is SSR-safe; clipboard/document access is confined to the
 // click handler below.

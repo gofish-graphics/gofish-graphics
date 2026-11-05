@@ -9,11 +9,12 @@
  *      SolidJS chart pipelines live on page load (the old measure-on-mount pass —
  *      see GalleryPage.vue), and shared example links unfurl as a branded chart
  *      card.
- *   2. Story images: every story a `::: gofish … image` container pictures (the
- *      tutorials index cards, for one), and every chart the landing page shows
- *      as a picture (its hero collage and spectrum row), cropped to its
- *      drawing. See markdown-it-gofish.ts and the landing page's
- *      landingCards.ts.
+ *   2. Story images, cropped to the drawing: every story a `::: gofish … image`
+ *      container pictures (the tutorials index cards, for one; see
+ *      markdown-it-gofish.ts), and every gallery example the landing page shows
+ *      as a picture (its hero collage and spectrum row; see landingCards.ts).
+ *      A landing card is a gallery example, so its crop is taken in the same
+ *      render as its thumbnail.
  *
  * These are docs BUILD ARTIFACTS (gitignored, not committed): `docs:build` runs
  * this (`docs:images`) before `vitepress build`, which copies public/ into the
@@ -37,24 +38,25 @@
  * the heavy bird-migration trails panels this stretched the run from about a
  * minute to hours.
  *
- * Both lists come from the SAME sources the docs use, so the file names line up
+ * Every list comes from the SAME source the docs use, so the file names line up
  * with what the pages load by construction (no re-derived id to drift out of
  * sync): the gallery examples (`id` / `storyId`) from `loadStoryExamples()`, the
  * gallery and docs config's loader; the story images from `findImageStoryIds()`,
- * which reads the docs markdown through the `::: gofish` plugin itself, plus
- * the landing page's `LANDING_CARDS`, the list LandingPage.vue renders; and
- * their paths from the plugin's `storyImagePath()`.
+ * which reads the docs markdown through the `::: gofish` plugin itself; the
+ * landing cards from `LANDING_CARDS`, the list LandingPage.vue renders; and the
+ * picture paths from storyImages.ts, which the pages use too.
  *
  * Output:
  *   apps/docs/docs/public/gallery/<id>.png        (chart thumbnail, for the wall)
  *   apps/docs/docs/public/gallery/og/<id>.png     (branded 1200×630 card, og:image)
  *   apps/docs/docs/public/gallery/manifest.json   ({ id: { w, h } }, fetched at runtime)
  *   apps/docs/docs/public/previews/<storyId>.png  (story image, for <GoFishImage>)
+ *   apps/docs/docs/public/previews/examples/<id>.png  (landing card picture)
  */
 
 import { type Page } from "playwright";
 import { writeFileSync, readFileSync, mkdirSync, rmSync, existsSync } from "fs";
-import { join } from "path";
+import { dirname, join } from "path";
 import {
   discoverStories,
   printLine,
@@ -65,51 +67,50 @@ import {
 } from "./capture-core";
 
 // The docs package is `type: commonjs` while this one is `type: module`, so a
-// static named import of this .ts trips Node's CJS↔ESM named-export interop under
-// tsx. A dynamic import with a default-namespace fallback is robust either way.
-// This is the SAME loader the gallery + docs config use, so the example `id`s line
-// up with the runtime `ex.id` and the `/js/examples/<id>` slugs by construction.
-async function loadGalleryExamples(): Promise<
-  { id: string; title: string; storyId: string }[]
-> {
-  const mod: any = await import(
-    "../../apps/docs/docs/.vitepress/data/storyExamples.ts"
-  );
-  const load = mod.loadStoryExamples ?? mod.default?.loadStoryExamples;
-  if (typeof load !== "function")
-    throw new Error("loadStoryExamples export not found in storyExamples.ts");
-  return load();
+// static named import of a docs .ts trips Node's CJS↔ESM named-export interop
+// under tsx. A dynamic import with a default-namespace fallback is robust
+// either way.
+async function importExport<T>(path: string, name: string): Promise<T> {
+  const mod: any = await import(path);
+  const value = mod[name] ?? mod.default?.[name];
+  if (value === undefined)
+    throw new Error(`${name} export not found in ${path}`);
+  return value;
 }
 
-// The `::: gofish` markdown plugin: which stories the docs picture with
-// `image`, and where each picture lives. Same interop dance as above.
-async function loadImagePlugin(): Promise<{
-  findImageStoryIds: () => string[];
-  STORY_IMAGES_DIR: string;
-  storyImagePath: (storyId: string) => string;
-}> {
-  const mod: any = await import(
-    "../../apps/docs/docs/.vitepress/markdown-it-gofish.ts"
-  );
-  const plugin = mod.findImageStoryIds ? mod : mod.default;
-  if (typeof plugin?.findImageStoryIds !== "function")
-    throw new Error(
-      "findImageStoryIds export not found in markdown-it-gofish.ts"
-    );
-  return plugin;
-}
+const DOCS_VITEPRESS = "../../apps/docs/docs/.vitepress";
 
+type GalleryExample = { id: string; title: string; storyId: string };
+
+// The SAME loader the gallery + docs config use, so the example `id`s line up
+// with the runtime `ex.id` and the `/js/examples/<id>` slugs by construction.
+const loadStoryExamples = await importExport<() => Promise<GalleryExample[]>>(
+  `${DOCS_VITEPRESS}/data/storyExamples.ts`,
+  "loadStoryExamples"
+);
+// The `::: gofish` markdown plugin: which stories the docs picture with `image`.
+const findImageStoryIds = await importExport<() => string[]>(
+  `${DOCS_VITEPRESS}/markdown-it-gofish.ts`,
+  "findImageStoryIds"
+);
+// Where each picture lives (the pages read the same module).
+const STORY_IMAGES_DIR = await importExport<string>(
+  `${DOCS_VITEPRESS}/storyImages.ts`,
+  "STORY_IMAGES_DIR"
+);
+const storyImagePath = await importExport<(storyId: string) => string>(
+  `${DOCS_VITEPRESS}/storyImages.ts`,
+  "storyImagePath"
+);
+const exampleImagePath = await importExport<(id: string) => string>(
+  `${DOCS_VITEPRESS}/storyImages.ts`,
+  "exampleImagePath"
+);
 // The landing page's picture cards (LandingPage.vue renders the same list).
-// Same interop dance as above.
-async function loadLandingCards(): Promise<{ id: string; storyId: string }[]> {
-  const mod: any = await import(
-    "../../apps/docs/docs/.vitepress/theme/components/landing/landingCards.ts"
-  );
-  const cards = mod.LANDING_CARDS ?? mod.default?.LANDING_CARDS;
-  if (!Array.isArray(cards))
-    throw new Error("LANDING_CARDS export not found in landingCards.ts");
-  return cards;
-}
+const LANDING_CARDS = await importExport<{ id: string }[]>(
+  `${DOCS_VITEPRESS}/theme/components/landing/landingCards.ts`,
+  "LANDING_CARDS"
+);
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
@@ -167,8 +168,58 @@ html,body{width:1200px;height:630px}
 </div></div></body></html>`;
 }
 
+/** Write a captured picture at its site path under public/. */
+function writeImage(sitePath: string, png: Buffer): void {
+  const file = join(DOCS_PUBLIC_DIR, sitePath);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, png);
+}
+
 const dataUrl = (png: Buffer) =>
   "data:image/png;base64," + png.toString("base64");
+
+type Shot = { png: Buffer; width: number; height: number } | { skip: string };
+
+/**
+ * Screenshot the story's drawing, cropped to it rather than to the story's own
+ * canvas (its margins would only shrink the drawing inside a small preview
+ * cell): give the svg a viewBox of its getBBox() plus 2% of the longer side
+ * (slack so strokes on the outermost marks are not clipped), drawn at one CSS
+ * px per user unit, and screenshot that. The viewBox also brings in any marks
+ * that overflow the story's own canvas. Changes the svg, so take any other
+ * shot of the page first.
+ */
+async function shootDrawing(page: Page): Promise<Shot> {
+  const box = await page.evaluate(() => {
+    const svg = document.querySelector<SVGSVGElement>("#stories-root svg");
+    if (!svg) return null;
+    const b = svg.getBBox();
+    if (!(b.width > 0 && b.height > 0)) return null;
+    const pad = 0.02 * Math.max(b.width, b.height);
+    const w = b.width + 2 * pad;
+    const h = b.height + 2 * pad;
+    svg.setAttribute("viewBox", `${b.x - pad} ${b.y - pad} ${w} ${h}`);
+    svg.style.width = `${w}px`;
+    svg.style.height = `${h}px`;
+    const r = svg.getBoundingClientRect();
+    return {
+      x: r.x + window.scrollX,
+      y: r.y + window.scrollY,
+      width: r.width,
+      height: r.height,
+    };
+  });
+  if (!box) return { skip: "no svg, or an empty drawing" };
+  // fullPage so a drawing wider or taller than the viewport is not trimmed to
+  // it; `clip` is then in page coordinates.
+  const png = await page.screenshot({
+    type: "png",
+    omitBackground: true,
+    fullPage: true,
+    clip: box,
+  });
+  return { png, width: box.width, height: box.height };
+}
 
 /**
  * Render one story in a fresh runner page (its own context, on the fake clock;
@@ -196,34 +247,22 @@ async function withStoryPage<T>(
   }
 }
 
-type Shot = { png: Buffer; width: number; height: number } | { skip: string };
-
 async function main() {
-  const examples = await loadGalleryExamples();
+  const examples = await loadStoryExamples();
   console.log(`Found ${examples.length} gallery examples.`);
-  const { findImageStoryIds, STORY_IMAGES_DIR, storyImagePath } =
-    await loadImagePlugin();
-  // Each landing card links to its gallery example and shows its story's
-  // picture: check the two name the same story, so a card never links to a
-  // different chart from the one it shows.
-  const storyOfExample = new Map(examples.map((ex) => [ex.id, ex.storyId]));
-  const landingCards = await loadLandingCards();
-  for (const card of landingCards) {
-    if (storyOfExample.get(card.id) !== card.storyId)
+  // Each landing card is a gallery example: its picture is taken in the same
+  // render as the example's thumbnail.
+  const galleryIds = new Set(examples.map((ex) => ex.id));
+  const landingIds = new Set(LANDING_CARDS.map((card) => card.id));
+  for (const id of landingIds)
+    if (!galleryIds.has(id))
       throw new Error(
-        `landingCards.ts: card "${card.id}" pictures story "${card.storyId}", ` +
-          `but gallery example "${card.id}" is story ` +
-          `"${storyOfExample.get(card.id) ?? "(none)"}".`
+        `landingCards.ts: card "${id}" is not a gallery example id.`
       );
-  }
-  const imageStoryIds = [
-    ...new Set([
-      ...findImageStoryIds(),
-      ...landingCards.map((card) => card.storyId),
-    ]),
-  ].sort();
+  const imageStoryIds = [...new Set(findImageStoryIds())].sort();
   console.log(
-    `Found ${imageStoryIds.length} story image(s) in the docs and landing page.\n`
+    `Found ${landingIds.size} landing card(s) and ` +
+      `${imageStoryIds.length} story image(s) in the docs.\n`
   );
 
   const manifest: Record<string, { w: number; h: number }> = {};
@@ -236,18 +275,21 @@ async function main() {
     const stories = new Map(
       (await discoverStories(open)).map((story) => [story.id, story])
     );
-    // Fresh output dir each run so a removed gallery story doesn't leave a stale PNG.
-    if (existsSync(PUBLIC_DIR)) rmSync(PUBLIC_DIR, { recursive: true });
+    // Fresh output dirs each run so a removed story doesn't leave a stale PNG.
+    const imagesDir = join(DOCS_PUBLIC_DIR, STORY_IMAGES_DIR);
+    for (const dir of [PUBLIC_DIR, imagesDir])
+      if (existsSync(dir)) rmSync(dir, { recursive: true });
     mkdirSync(PUBLIC_DIR, { recursive: true });
+    let imageCount = 0;
 
     for (const ex of examples) {
       process.stdout.write(`  ${ex.title} (${ex.id}) ... `);
       try {
-        const shot = await withStoryPage(
+        const { shot, landing } = await withStoryPage(
           open,
           stories,
           ex.storyId,
-          async (page): Promise<Shot> => {
+          async (page) => {
             // Measure the svg in one evaluate and screenshot the page
             // clipped to that box.
             const box = await page.evaluate(() => {
@@ -256,16 +298,35 @@ async function main() {
               const r = svg.getBoundingClientRect();
               return { x: r.x, y: r.y, width: r.width, height: r.height };
             });
-            if (!box) return { skip: "no svg" };
-            if (box.width <= 0 || box.height <= 0) return { skip: "empty box" };
-            const png = await page.screenshot({
-              type: "png",
-              omitBackground: true,
-              clip: box,
-            });
-            return { png, width: box.width, height: box.height };
+            let shot: Shot;
+            if (!box) shot = { skip: "no svg" };
+            else if (box.width <= 0 || box.height <= 0)
+              shot = { skip: "empty box" };
+            else {
+              const png = await page.screenshot({
+                type: "png",
+                omitBackground: true,
+                clip: box,
+              });
+              shot = { png, width: box.width, height: box.height };
+            }
+            // The landing card's picture, cropped to the drawing (this
+            // changes the svg, so it comes after the thumbnail).
+            const landing = landingIds.has(ex.id)
+              ? await shootDrawing(page)
+              : undefined;
+            return { shot, landing };
           }
         );
+        if (landing) {
+          if ("skip" in landing) {
+            console.log(`landing picture SKIP (${landing.skip}) `);
+            failed.push(`${ex.id} (landing picture)`);
+          } else {
+            writeImage(exampleImagePath(ex.id), landing.png);
+            imageCount++;
+          }
+        }
         if ("skip" in shot) {
           console.log(`SKIP (${shot.skip})`);
           failed.push(ex.id);
@@ -299,69 +360,18 @@ async function main() {
         `\nWrote manifest (${captured.length} entries) to ${MANIFEST_PATH}`
     );
 
-    // ---- Story images for `::: gofish … image` containers, in their own
-    // directory, also rebuilt fresh each run.
-    const imagesDir = join(DOCS_PUBLIC_DIR, STORY_IMAGES_DIR);
+    // ---- Story images for `::: gofish … image` containers.
     console.log(`\nCapturing ${imageStoryIds.length} story image(s)...`);
-    if (existsSync(imagesDir)) rmSync(imagesDir, { recursive: true });
-    mkdirSync(imagesDir, { recursive: true });
-    let imageCount = 0;
     for (const storyId of imageStoryIds) {
       process.stdout.write(`  ${storyId} ... `);
       try {
-        const shot = await withStoryPage(
-          open,
-          stories,
-          storyId,
-          async (page): Promise<Shot> => {
-            // Crop to the drawing, not the story's own canvas (its margins
-            // would only shrink the drawing inside a small preview cell):
-            // give the svg a viewBox of its getBBox() plus 2% of the longer
-            // side (slack so strokes on the outermost marks are not clipped),
-            // drawn at one CSS px per user unit, and screenshot that. The
-            // viewBox also brings in any marks that overflow the story's own
-            // canvas.
-            const box = await page.evaluate(() => {
-              const svg =
-                document.querySelector<SVGSVGElement>("#stories-root svg");
-              if (!svg) return null;
-              const b = svg.getBBox();
-              if (!(b.width > 0 && b.height > 0)) return null;
-              const pad = 0.02 * Math.max(b.width, b.height);
-              const w = b.width + 2 * pad;
-              const h = b.height + 2 * pad;
-              svg.setAttribute(
-                "viewBox",
-                `${b.x - pad} ${b.y - pad} ${w} ${h}`
-              );
-              svg.style.width = `${w}px`;
-              svg.style.height = `${h}px`;
-              const r = svg.getBoundingClientRect();
-              return {
-                x: r.x + window.scrollX,
-                y: r.y + window.scrollY,
-                width: r.width,
-                height: r.height,
-              };
-            });
-            if (!box) return { skip: "no svg, or an empty drawing" };
-            // fullPage so a drawing wider or taller than the viewport is not
-            // trimmed to it; `clip` is then in page coordinates.
-            const png = await page.screenshot({
-              type: "png",
-              omitBackground: true,
-              fullPage: true,
-              clip: box,
-            });
-            return { png, width: box.width, height: box.height };
-          }
-        );
+        const shot = await withStoryPage(open, stories, storyId, shootDrawing);
         if ("skip" in shot) {
           console.log(`SKIP (${shot.skip})`);
           failed.push(storyId);
           continue;
         }
-        writeFileSync(join(DOCS_PUBLIC_DIR, storyImagePath(storyId)), shot.png);
+        writeImage(storyImagePath(storyId), shot.png);
         imageCount++;
         console.log(
           `OK (${Math.round(shot.width)}×${Math.round(shot.height)})`
@@ -371,7 +381,9 @@ async function main() {
         failed.push(storyId);
       }
     }
-    console.log(`Wrote ${imageCount} story image(s) to ${imagesDir}`);
+    console.log(
+      `Wrote ${imageCount} story and landing image(s) to ${imagesDir}`
+    );
 
     // ---- Branded OG cards (1200×630, deviceScaleFactor 1 for exact dimensions).
     console.log(`\nBuilding ${captured.length} branded OG card(s)...`);

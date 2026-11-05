@@ -69,15 +69,12 @@ import {
   getStoryTitle,
   type StoryExample,
 } from "./data/storyExamples";
-import { STORY_IMAGES_DIR, storyImagePath } from "./storyImages";
+import { storyImagePath } from "./storyImages";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const EXAMPLES_DIR = join(__dirname, "examples");
 /** The docs source root (`apps/docs/docs`). */
 const DOCS_DIR = join(__dirname, "..");
-
-// Where the captured story pictures live; re-exported for the capture script.
-export { STORY_IMAGES_DIR, storyImagePath };
 
 /** One `::: gofish` container's info string, parsed. */
 interface Directive {

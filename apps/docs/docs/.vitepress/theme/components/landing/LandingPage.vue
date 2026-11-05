@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { withBase } from "vitepress";
-import { docsLang } from "../../docsLang";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { docsLang, examplesHref } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
-import { COLLAGE, SPECTRUM, cardImage, type LandingCard } from "./landingCards";
+import PictureCard from "./PictureCard.vue";
+import { COLLAGE, SPECTRUM } from "./landingCards";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the inline chart art never goes through
@@ -19,18 +19,11 @@ const rootEl = ref<HTMLElement | null>(null);
 const demoEl = ref<HTMLButtonElement | null>(null);
 const pulltabEl = ref<HTMLElement | null>(null);
 const railEl = ref<HTMLElement | null>(null);
+const axisEl = ref<HTMLElement | null>(null);
 const knobEl = ref<HTMLElement | null>(null);
 const jsReady = ref(false);
 const heroCards = ref("");
-
-// Card links follow the reader's language, like the CTA buttons. The picture
-// URL is bound at runtime through withBase, as in GoFishImage.vue: a static
-// `<img src="/…">` would compile to a build-time import of a PNG that the docs
-// build only captures later (and that `docs:dev` may not have at all).
-const exampleHref = (card: LandingCard) =>
-  withBase(`/${docsLang.value}/examples/${card.id}`);
-const examplesHref = () => withBase(`/${docsLang.value}/examples/`);
-const imageSrc = (card: LandingCard) => withBase(cardImage(card));
+const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -281,19 +274,31 @@ function wireHeroCards(): void {
 }
 
 // ---- spectrum swipe row (narrow screens): a dot on the pencil line under the
-// row tracks how far it has been swiped.
+// row tracks how far it has been swiped, from 4% to 92% of the line. The
+// sizes are measured on mount and resize, so a scroll only sets a transform.
 function wireRail(): void {
   const rail = railEl.value;
+  const axis = axisEl.value;
   const knob = knobEl.value;
-  if (!rail || !knob) return;
+  if (!rail || !axis || !knob) return;
+  let axisW = 0;
+  let max = 0;
   const update = () => {
-    const max = rail.scrollWidth - rail.clientWidth;
     const f = max > 0 ? rail.scrollLeft / max : 0;
-    knob.style.left = 4 + f * 88 + "%";
+    knob.style.transform = `translateX(${(0.04 + 0.88 * f) * axisW}px)`;
+  };
+  const measure = () => {
+    axisW = axis.clientWidth;
+    max = rail.scrollWidth - rail.clientWidth;
+    update();
   };
   rail.addEventListener("scroll", update, { passive: true });
-  cleanups.push(() => rail.removeEventListener("scroll", update));
-  update();
+  window.addEventListener("resize", measure);
+  cleanups.push(() => {
+    rail.removeEventListener("scroll", update);
+    window.removeEventListener("resize", measure);
+  });
+  measure();
 }
 
 // ---- scroll reveal.
@@ -371,33 +376,16 @@ onBeforeUnmount(() => {
              of taped specimen cards, each linking to its example page -->
         <div class="collage-wrap">
           <div class="collage">
-            <a
+            <PictureCard
               v-for="card in COLLAGE"
               :key="card.id"
-              class="pin"
-              :class="[card.place, { tall: card.tall }]"
-              :style="{
-                '--tilt': `${card.tilt}deg`,
-                '--tape-angle': `${card.tape}deg`,
-                marginTop: card.drop ? `${card.drop}px` : undefined,
-              }"
-              :href="exampleHref(card)"
-            >
-              <span class="tape" aria-hidden="true"></span>
-              <span class="card">
-                <img
-                  :src="imageSrc(card)"
-                  :alt="card.alt"
-                  :style="{ aspectRatio: card.aspect }"
-                  loading="lazy"
-                  decoding="async"
-                />
-              </span>
-              <span class="cap">{{ card.caption }}</span>
-            </a>
+              :card="card"
+              :class="{ wide: card.wide, tall: card.tall }"
+              :style="{ marginTop: card.drop ? `${card.drop}px` : undefined }"
+            />
           </div>
           <p class="collage-more">
-            <a :href="examplesHref()">see all examples →</a>
+            <a :href="allExamplesHref">see all examples →</a>
           </p>
         </div>
       </section>
@@ -419,88 +407,36 @@ onBeforeUnmount(() => {
             tabindex="0"
             aria-label="Four charts, from simple to complex"
           >
-            <div
+            <PictureCard
               v-for="(card, i) in SPECTRUM"
               :key="card.id"
+              :card="card"
+              lift
               class="specimen"
               role="group"
               :aria-label="`${i + 1} of ${SPECTRUM.length}`"
-              :style="{ transform: `rotate(${card.tilt}deg)` }"
-            >
-              <a :href="exampleHref(card)">
-                <div class="card lift">
-                  <span
-                    class="tape"
-                    :style="{ '--tape-angle': `${card.tape}deg` }"
-                    aria-hidden="true"
-                  ></span>
-                  <img
-                    :src="imageSrc(card)"
-                    :alt="card.alt"
-                    :style="{ aspectRatio: card.aspect }"
-                    loading="lazy"
-                    decoding="async"
-                  />
-                </div>
-                <div class="cap">{{ card.caption }}</div>
-              </a>
-            </div>
+            />
           </div>
 
-          <!-- narrow screens: the pencil line under the swipe row, with a dot
-               that moves along it as the row scrolls (wireRail) -->
+          <!-- the pencil axis under the row, simple to complex; on narrow
+               screens a dot moves along it as the row is swiped (wireRail).
+               The line stretches with the row; its arrowhead keeps its shape. -->
           <div class="spec-axis" aria-hidden="true">
-            <svg viewBox="0 0 340 22" preserveAspectRatio="none">
-              <path
-                d="M2 10 Q90 6 170 9 T334 8"
-                fill="none"
-                stroke="var(--graphite)"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                vector-effect="non-scaling-stroke"
-              />
-              <path
-                d="M326 3 L335 8 L326 14"
-                fill="none"
-                stroke="var(--graphite)"
-                stroke-width="1.8"
-                stroke-linecap="round"
-                vector-effect="non-scaling-stroke"
-              />
-            </svg>
-            <span ref="knobEl" class="knob"></span>
+            <div ref="axisEl" class="axis-line">
+              <svg
+                class="axis-stroke"
+                viewBox="0 0 1080 60"
+                preserveAspectRatio="none"
+              >
+                <path d="M6 40 Q270 32 540 38 T1066 30" />
+              </svg>
+              <svg class="axis-head" viewBox="0 0 12 16">
+                <path d="M1 0.5 L11.5 8 L0.5 15.5" />
+              </svg>
+              <span ref="knobEl" class="knob"></span>
+            </div>
             <span class="lbl l">simple</span>
             <span class="lbl r">complex</span>
-          </div>
-
-          <!-- pencil axis line -->
-          <svg
-            class="track-line"
-            viewBox="0 0 1080 60"
-            preserveAspectRatio="none"
-            aria-hidden="true"
-          >
-            <path
-              d="M6 40 Q270 32 540 38 T1066 30"
-              fill="none"
-              stroke="var(--graphite)"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              vector-effect="non-scaling-stroke"
-            />
-            <path
-              d="M1057 22 L1068 30 L1056 38"
-              fill="none"
-              stroke="var(--graphite)"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              vector-effect="non-scaling-stroke"
-            />
-          </svg>
-          <div class="track-labels">
-            <span>simple</span>
-            <span>complex</span>
           </div>
         </div>
       </section>

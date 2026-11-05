@@ -237,6 +237,38 @@ html.landing-page .DocSearch-Button {
     4px 14px 30px var(--shadow-warm);
 }
 
+/* A picture card (PictureCard.vue): tilted by --tilt, its tape centered on
+   its top edge. The collage resizes the card, tape and caption. */
+.landing .pic {
+  position: relative;
+  transform: rotate(var(--tilt, 0deg));
+}
+.landing .pic a {
+  display: block;
+  text-decoration: none;
+}
+.landing .pic .card {
+  display: block;
+}
+.landing .pic .tape {
+  top: -11px;
+  left: calc(50% - 32px);
+}
+.landing .pic img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+.landing .pic .cap {
+  display: block;
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  text-align: center;
+  font-size: 1rem;
+  margin-top: 8px;
+}
+
 /* ---------- BUTTONS ---------- */
 .landing .btn {
   display: inline-block;
@@ -482,50 +514,26 @@ html.landing-page .DocSearch-Button {
   gap: 18px 16px;
   align-items: start;
 }
-.landing .pin {
-  position: relative;
-  display: block;
-  text-decoration: none;
-  transform: rotate(var(--tilt, 0deg));
-}
-.landing .pin.left {
-  grid-column: 1;
-}
-.landing .pin.right {
-  grid-column: 2;
-}
-.landing .pin.wide {
+.landing .collage .pic.wide {
   grid-column: 1 / -1;
 }
-.landing .pin.tall {
+.landing .collage .pic.tall {
   grid-row: span 2;
   align-self: center;
 }
-.landing .pin .card {
-  display: block;
+.landing .collage .card {
   padding: 8px;
   border-radius: 5px;
 }
-.landing .pin img {
-  display: block;
-  width: 100%;
-  height: auto;
-  object-fit: contain;
-}
-.landing .pin .tape {
+.landing .collage .tape {
   top: -9px;
-  left: 50%;
+  left: calc(50% - 29px);
   width: 58px;
   height: 18px;
-  margin-left: -29px;
 }
-.landing .pin .cap {
-  display: block;
-  font-family: "Architects Daughter", cursive;
+.landing .collage .cap {
   font-size: 14px;
   line-height: 1.2;
-  color: var(--ink-soft);
-  text-align: center;
   margin-top: 4px;
 }
 .landing .collage-more {
@@ -542,7 +550,7 @@ html.landing-page .DocSearch-Button {
     margin: 22px -14px 0;
     gap: 10px 8px;
   }
-  .landing .pin.wide {
+  .landing .collage .pic.wide {
     width: 104%;
     margin-left: -2%;
   }
@@ -601,22 +609,6 @@ html.landing-page .DocSearch-Button {
   max-width: 1080px;
   margin: 36px auto 0;
 }
-.landing .track-line {
-  position: absolute;
-  left: 62px;
-  width: calc(100% - 172px);
-  bottom: -6px;
-  height: 60px;
-  pointer-events: none;
-}
-.landing .track-labels {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 18px;
-  font-family: "Architects Daughter", cursive;
-  color: var(--ink-soft);
-  font-size: 1.15rem;
-}
 .landing .specimens {
   display: flex;
   gap: 20px;
@@ -627,73 +619,98 @@ html.landing-page .DocSearch-Button {
   flex: 1;
   position: relative;
 }
-.landing .specimen a {
-  display: block;
-  text-decoration: none;
-}
-.landing .specimen .tape {
-  top: -11px;
-  left: calc(50% - 32px);
-}
-.landing .specimen img {
-  display: block;
-  width: 100%;
-  height: auto;
-  object-fit: contain;
-}
-.landing .specimen .cap {
-  text-align: center;
+/* The pencil axis under the row: the stroke stretches across the row, the
+   arrowhead keeps its shape at its right end. On wide screens the line runs
+   behind the two labels (positioned against .track); on narrow ones it is a
+   thin line above them, with a dot that tracks the swipe (wireRail). */
+.landing .spec-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
   font-family: "Architects Daughter", cursive;
   color: var(--ink-soft);
-  font-size: 1rem;
-  margin-top: 8px;
+  font-size: 1.15rem;
 }
-/* The swipe row's pencil line, with a dot that tracks the scroll. */
-.landing .spec-axis {
-  display: none;
-  position: relative;
-  height: 34px;
-  margin-top: 6px;
-}
-.landing .spec-axis svg {
+.landing .axis-line {
   position: absolute;
+  left: 62px;
+  width: calc(100% - 172px);
+  bottom: -6px;
+  height: 60px;
+  pointer-events: none;
+  --axis-stroke: 2.2;
+}
+.landing .axis-line svg {
+  position: absolute;
+  overflow: visible;
+}
+.landing .axis-line path {
+  fill: none;
+  stroke: var(--graphite);
+  stroke-width: var(--axis-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.landing .axis-stroke {
   inset: 0;
   width: 100%;
-  height: 22px;
+  height: 100%;
 }
-.landing .spec-axis .lbl {
-  position: absolute;
-  bottom: -2px;
-  font-family: "Architects Daughter", cursive;
-  color: var(--ink-soft);
-  font-size: 15px;
-}
-.landing .spec-axis .lbl.l {
-  left: 0;
-}
-.landing .spec-axis .lbl.r {
-  right: 0;
+.landing .axis-head {
+  right: 1.1%;
+  top: 50%;
+  width: 10px;
+  height: 16px;
+  margin-top: -8px;
 }
 .landing .spec-axis .knob {
+  display: none;
   position: absolute;
-  top: 3px;
-  left: 4%;
+  top: 7px;
+  left: 0;
   width: 12px;
   height: 12px;
+  margin-left: -6px;
   border-radius: 50%;
   background: var(--leaf);
-  transform: translateX(-50%);
-  transition: left 0.15s;
+  transition: transform 0.15s;
 }
 /* Narrow screens: the four cards become one row you swipe sideways, each card
    78% wide so the next one peeks in, bleeding to the sheet's edges. */
 @media (max-width: 900px) {
-  .landing .track-line,
-  .landing .track-labels {
-    display: none;
-  }
   .landing .spec-axis {
     display: block;
+    position: relative;
+    height: 34px;
+    margin-top: 6px;
+    font-size: 15px;
+  }
+  .landing .axis-line {
+    left: 0;
+    width: 100%;
+    top: -4px;
+    bottom: auto;
+    height: 22px;
+    --axis-stroke: 1.8;
+  }
+  .landing .axis-head {
+    width: 7px;
+    height: 11px;
+    margin-top: -5.5px;
+  }
+  .landing .spec-axis .knob {
+    display: block;
+  }
+  .landing .spec-axis .lbl {
+    position: absolute;
+    bottom: -2px;
+  }
+  .landing .spec-axis .lbl.l {
+    left: 0;
+  }
+  .landing .spec-axis .lbl.r {
+    right: 0;
   }
   .landing .specimens {
     gap: 14px;
