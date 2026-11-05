@@ -983,7 +983,13 @@ It emits:
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
   polymorphic operator-vs-combinator dispatch stays hand-written in
-  `ast.py`, calling into these generated cores.
+  `ast.py`, calling into these generated cores. A field whose type is a
+  number with bounds (`enclose`'s `clearance`, `pack`'s `spacing`:
+  `t.num({ min: 0, finite: true })`) is checked at the call when it is given,
+  by the same checks a strategy factory runs on its params (below):
+  `enclose(clearance=-1)` raises `ValueError`, as JS's
+  `enclose({ clearance: -1 })` throws at render. Every generated function
+  does this, the cores and the leaf and combinator-only factories.
 - One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`

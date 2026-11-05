@@ -11,6 +11,7 @@ shorthand kwarg was removed).
 """
 
 import json
+import math
 
 from gofish.ast import ir_payload
 
@@ -27,6 +28,7 @@ from gofish import (
     circle,
     datum,
     ellipse,
+    enclose,
     field,
     group,
     join,
@@ -294,6 +296,32 @@ def test_pack_combinator_form():
     assert ir(pack([circle(r=1)]))["options"] == {}
     with pytest.raises(ValueError):
         pack([circle(r=1)], by="lake")
+
+
+@pytest.mark.parametrize(
+    "make, error, message",
+    [
+        (lambda: enclose(clearance=-1), ValueError, "enclose(clearance=...) must be >= 0, got -1"),
+        (lambda: enclose(clearance=math.inf), ValueError, "enclose(clearance=...) must be finite"),
+        (lambda: enclose(clearance=math.nan), ValueError, "enclose(clearance=...) must be finite"),
+        (lambda: enclose(clearance="4"), TypeError, "enclose(clearance=...) must be a finite number >= 0, got str"),
+        (lambda: enclose([circle(r=4)], clearance=-2), ValueError, "enclose(clearance=...) must be >= 0"),
+        (lambda: pack(spacing=-1), ValueError, "pack(spacing=...) must be >= 0, got -1"),
+        (lambda: pack([circle(r=4)], spacing=math.inf), ValueError, "pack(spacing=...) must be finite"),
+    ],
+)
+def test_bounded_pixel_options_are_checked_at_the_call(make, error, message):
+    # A construct option whose type has bounds (a pixel clearance or spacing)
+    # is checked at the call, as a strategy param is.
+    with pytest.raises(error) as e:
+        make()
+    assert message in str(e.value)
+
+
+def test_bounded_pixel_options_pass_when_in_range():
+    assert ir(enclose(clearance=0))["clearance"] == 0
+    assert ir(enclose([circle(r=4)], clearance=6.5))["options"]["clearance"] == 6.5
+    assert ir(pack(spacing=2))["spacing"] == 2
 
 
 def test_treemap_serializes_tile_strategy_and_gaps():

@@ -12,6 +12,7 @@ lambda/RPC bridge) stays hand-written there.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from . import ast as _ast
@@ -864,6 +865,13 @@ def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: 
         spacing: Gap between sibling circles, in pixels: each child's enclosing circle is packed as if its radius were `spacing / 2` larger. Default 0.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
+    if spacing is not None:
+        if not (isinstance(spacing, (int, float)) and not isinstance(spacing, bool)):
+            raise TypeError(f"pack(spacing=...) must be a finite number >= 0, got {type(spacing).__name__}")
+        if not math.isfinite(spacing):
+            raise ValueError(f"pack(spacing=...) must be finite, got {spacing!r}")
+        if spacing < 0:
+            raise ValueError(f"pack(spacing=...) must be >= 0, got {spacing!r}")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
@@ -1183,6 +1191,13 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
         fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
+    if clearance is not None:
+        if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):
+            raise TypeError(f"enclose(clearance=...) must be a finite number >= 0, got {type(clearance).__name__}")
+        if not math.isfinite(clearance):
+            raise ValueError(f"enclose(clearance=...) must be finite, got {clearance!r}")
+        if clearance < 0:
+            raise ValueError(f"enclose(clearance=...) must be >= 0, got {clearance!r}")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("padding", _channel(padding)),

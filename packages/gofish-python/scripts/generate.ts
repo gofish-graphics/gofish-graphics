@@ -21,7 +21,9 @@
  *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
  *    mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
- *    hand-written in `ast.py`, calling these cores. `_chart_opts` is the
+ *    hand-written in `ast.py`, calling these cores (every generated
+ *    function checks its bounded number fields at the call: `fieldChecks`).
+ *    `_chart_opts` is the
  *    same kind of core for `chart(data, **options)` (CHART_OPTIONS), and
  *    `_label_opts` for `.label(accessor, **options)` (LABEL_OPTIONS).
  *  - `_OPTION_TYPES` + `_to_wire`: the key structure of each named option
@@ -275,6 +277,37 @@ function renderPairs(ents: Array<[string, string, FieldSpec]>): string {
     .join("\n");
 }
 
+/** Whether a construct field's type is a number with bounds
+ *  (`t.num({ min: 0, finite: true })`, a pixel clearance): a constraint the
+ *  Python annotation does not state, so the generated function checks it at
+ *  the call. */
+const isBoundedNumber = (type: FieldType): boolean =>
+  type.kind === "number" &&
+  (type.min !== undefined ||
+    type.exclusiveMin !== undefined ||
+    type.max !== undefined ||
+    type.exclusiveMax !== undefined ||
+    type.finite === true ||
+    type.integer === true);
+
+/** The checks a construct's generated function runs on its bounded number
+ *  fields when they are given (`pyParamChecks`, as a strategy factory runs on
+ *  its params), so `enclose(clearance=-1)` fails at the Python call, as JS's
+ *  `enclose({ clearance: -1 })` does at render. */
+function fieldChecks(
+  ents: Array<[string, string, FieldSpec]>,
+  construct: string
+): string[] {
+  return ents
+    .filter(([, , spec]) => isBoundedNumber(spec.type))
+    .flatMap(([py, , spec]) => [
+      `    if ${py} is not None:`,
+      ...pyParamChecks(spec.type, py, `${construct}(${py}=...)`).map(
+        (l) => `        ${l}`
+      ),
+    ]);
+}
+
 /** Render an `_xxx_opts(...) -> dict` core: same kwargs-collection body as a
  *  leaf factory, but returns the dict instead of wrapping it in a Mark/Operator
  *  — used by hand-written dual-form dispatch in ast.py. */
@@ -283,6 +316,10 @@ function renderOptsCore(
   fields: FieldGroup,
   doc?: string
 ): string {
+  // `_pack_combinator_opts` checks its fields as `pack(...)`
+  const construct = fnName
+    .replace(/^_/, "")
+    .replace(/(_combinator)?_opts$/, "");
   const ents = entries(fields);
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
@@ -295,6 +332,7 @@ function renderOptsCore(
   ].join("\n");
   const pairs = renderPairs(ents);
   const body = [
+    ...fieldChecks(ents, construct),
     `    opts: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
     pairs,
@@ -336,6 +374,7 @@ function renderCombinatorFactory(opts: {
   } else {
     const pairs = renderPairs(ents);
     body = [
+      ...fieldChecks(ents, pyName),
       `    kwargs: Dict[str, Any] = {}`,
       `    for _k, _v in [`,
       pairs,
@@ -368,6 +407,7 @@ lambda/RPC bridge) stays hand-written there.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from . import ast as _ast
@@ -518,6 +558,7 @@ for (const name of GENERATED_LEAF_MARKS) {
   ].join("\n");
   const pairs = renderPairs(ents);
   const bodyLines = [
+    ...fieldChecks(ents, name),
     `    _kw: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
     pairs,
