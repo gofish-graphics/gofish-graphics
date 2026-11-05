@@ -718,8 +718,8 @@ export class GoFishNode {
    *  (see {@link resolvePlotExtent}); cleared with the claims. */
   public _plotExtent?: Size<Extent | undefined> = undefined;
   /** Set by a layer with a size of its own whose dressing reaches past it:
-   *  its box without its dressing (see {@link resolveBareExtent}); cleared
-   *  with the claims. */
+   *  per axis, its box without its dressing, undefined where that is its
+   *  box (see {@link resolveBareExtent}); cleared with the claims. */
   public _bareExtent?: Size<Extent | undefined> = undefined;
   /** {@link resolvePlotExtent}'s answer where the plot is the box on one
    *  axis only, a new array, with the claim and plot it was read from, so
@@ -1860,13 +1860,11 @@ export class GoFishNode {
    * over the axis. Inner chrome is part of it. A layer's is its plan's
    * (`ChildForms.bare`, read there); a node with a size of its own has its
    * content's at the σ it solved (`layer`); any other node is all box, as
-   * is a chart's box ({@link plotIsBox}).
+   * is a chart's box ({@link plotIsBox}). Undefined where it is its box.
    */
-  public resolveBareExtent(): Size<Extent | undefined> {
-    const extent = this.resolveExtent();
-    const bare = this._bareExtent;
-    if (bare === undefined || this._chartRing === true) return extent;
-    return bare;
+  public resolveBareExtent(axis: 0 | 1): Extent | undefined {
+    this.resolveExtent();
+    return this._chartRing === true ? undefined : this._bareExtent?.[axis];
   }
 
   /**

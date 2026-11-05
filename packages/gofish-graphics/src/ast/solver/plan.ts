@@ -32,9 +32,10 @@ export type ChildForms = {
   box: Extent;
   /** Its plot: what a chain lays it by (its box less dressing and chrome). */
   plot: Extent | undefined;
-  /** Its box without its dressing: what chrome is laid beside. Inner
-   *  chrome is part of it, and a chart's box is all of it. */
-  bare: Extent;
+  /** Its box without its dressing, where that is not its box (undefined:
+   *  it is its box): what chrome is laid beside. Inner chrome is part of
+   *  it, and a chart's box is all of it. */
+  bare?: Extent;
   /** All it draws: its box widened by the outlines and dressing at its
    *  ends. This is what takes room. */
   whole: Extent;
@@ -43,6 +44,19 @@ export type ChildForms = {
    *  is past its box's descent from it); 0 for most. */
   zero: Pwl.Value;
 };
+
+/** `forms` with each of its extents mapped by `f` (a reflection, a
+ *  widening, a scale), its data 0 kept. */
+export const mapForms = (
+  forms: ChildForms,
+  f: (e: Extent) => Extent
+): ChildForms => ({
+  whole: f(forms.whole),
+  box: f(forms.box),
+  plot: forms.plot && f(forms.plot),
+  bare: forms.bare && f(forms.bare),
+  zero: forms.zero,
+});
 
 /** A layer's plan on one axis. */
 export type LayerPlan = {
@@ -166,8 +180,6 @@ const formsOf = (
   axis: 0 | 1
 ): ChildForms => {
   let forms: ChildForms;
-  const own =
-    c instanceof GoFishNode && c.claimWalk?.ownSize(axis) !== undefined;
   const rec = planOf(c, axis)?.summary;
   if (c instanceof GoFishNode && rec !== undefined) {
     const zero = zeroOf(c, rec, axis);
@@ -176,15 +188,16 @@ const formsOf = (
     // that claim instead.
     const w = whole !== c.resolveExtent()[axis] ? whole : recWhole;
     const box = reaching(w, recWhole, shiftExtent(rec.box, zero));
+    const placedWhole = c.plotIsBox(axis);
     forms = {
       whole: w,
       box,
-      plot: c.plotIsBox(axis)
+      plot: placedWhole
         ? box
         : rec.plot && reaching(w, recWhole, shiftExtent(rec.plot, zero)),
       bare:
-        c.plotIsBox(axis) || rec.bare === rec.box
-          ? box
+        placedWhole || rec.bare === undefined
+          ? undefined
           : reaching(w, recWhole, shiftExtent(rec.bare, zero)),
       zero,
     };
@@ -196,31 +209,26 @@ const formsOf = (
       claim === undefined || b === undefined
         ? whole
         : reaching(whole, claim, b);
+    const own =
+      c instanceof GoFishNode && c.claimWalk?.ownSize(axis) !== undefined;
     const plot =
       c instanceof GoFishNode && !own ? c.resolvePlotExtent()[axis] : undefined;
-    // A node with a size of its own has its box less what its dressing
-    // reaches past it (`GoFishNode.resolveBareExtent`); any other node that
-    // is no layer is all box.
-    const bare =
-      c instanceof GoFishNode ? c.resolveBareExtent()[axis] : undefined;
     forms = {
       whole,
       box,
-      plot: plot === undefined || plot === c.resolveExtent()[axis] ? box : plot,
-      bare: bare === undefined || bare === claim ? box : bare,
+      plot: plot === undefined || plot === claim ? box : plot,
+      // A node with a size of its own has its box less what its dressing
+      // reaches past it (`GoFishNode.resolveBareExtent`); any other node
+      // that is no layer is all box.
+      bare: c instanceof GoFishNode ? c.resolveBareExtent(axis) : undefined,
       zero: Pwl.ZERO,
     };
   }
-  if (flips(parent, c, axis)) {
-    const box = reflectedExtent(forms.box);
+  if (flips(parent, c, axis))
     forms = {
-      whole: reflectedExtent(forms.whole),
-      box,
-      plot: forms.plot && reflectedExtent(forms.plot),
-      bare: forms.bare === forms.box ? box : reflectedExtent(forms.bare),
+      ...mapForms(forms, reflectedExtent),
       zero: Pwl.negate(forms.zero),
     };
-  }
   return forms;
 };
 
@@ -274,7 +282,6 @@ export function buildPlan(
             whole: c.placed.extent,
             box: c.placed.extent,
             plot: c.placed.extent,
-            bare: c.placed.extent,
             zero: Pwl.ZERO,
           }
         : undefined
@@ -289,7 +296,7 @@ export function buildPlan(
         ...c,
         extent: f?.box,
         plot: f === undefined || f.plot === f.box ? undefined : f.plot,
-        bare: f === undefined || f.bare === f.box ? undefined : f.bare,
+        bare: f?.bare,
         placesItself: placesItself(node.children[i], axis),
         chrome: ring && i > 0,
       };
@@ -328,10 +335,19 @@ export function buildPlan(
   const box: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const whole: [Pwl.Value[], Pwl.Value[]] = [[], []];
   const plot: [Pwl.Value[], Pwl.Value[]] = [[], []];
-  const bare: [Pwl.Value[], Pwl.Value[]] = [[], []];
-  // Whether the box without the dressing differs from the box: else it is
-  // the box itself, which readers tell apart by identity.
-  let bareSkipped = false;
+  // The box without the dressing, enveloped only where it is not the box:
+  // a child is dressing or ink, or has a box without its dressing of its
+  // own.
+  const bare: [Pwl.Value[], Pwl.Value[]] | undefined = [
+    ...placement.boxes().keys(),
+  ].some(
+    (i) =>
+      placement.dressing.has(i) ||
+      placement.ink.has(i) ||
+      forms[i]?.bare !== undefined
+  )
+    ? [[], []]
+    : undefined;
   const plotWhole: [Pwl.Value[], Pwl.Value[]] = [[], []];
   // Whether a child is left out of the plot: else the plot's whole is the
   // whole, which is not enveloped twice.
@@ -362,20 +378,18 @@ export function buildPlan(
     whole[0].push(wHi);
     whole[1].push(wLo);
     roomOn(whole);
-    // The box without the dressing: every child but the dressing and the
-    // ink, a ring's chrome included.
-    if (placement.dressing.has(i) || placement.ink.has(i)) bareSkipped = true;
-    else {
-      if (f !== undefined && f.bare !== f.box) bareSkipped = true;
-      const [bHi, bLo] = reach(f?.bare);
+    // The box without the dressing is every child but the dressing and
+    // the ink, a ring's chrome included; the plot also leaves out a ring's
+    // chrome, and a child with no plot.
+    const dressed = placement.dressing.has(i) || placement.ink.has(i);
+    if (bare !== undefined && !dressed) {
+      const [bHi, bLo] = reach(f?.bare ?? f?.box);
       bare[0].push(bHi);
       bare[1].push(bLo);
       roomOn(bare);
     }
-    // Dressing, ink and a ring's chrome are no part of the plot.
     if (
-      placement.dressing.has(i) ||
-      placement.ink.has(i) ||
+      dressed ||
       (ring && i > 0) ||
       (f !== undefined && f.plot === undefined)
     ) {
@@ -395,21 +409,19 @@ export function buildPlan(
   const sBox = env(box);
   const sWhole = env(whole);
   // A `transform.scale` draws the content scaled about the layer's data 0.
-  const sumBox = sBox && scaleExtent(scale, sBox);
   const summary =
-    sumBox === undefined || sWhole === undefined
+    sBox === undefined || sWhole === undefined
       ? undefined
-      : {
-          box: sumBox,
-          whole: scaleExtent(scale, sWhole),
-          plot:
-            plot[0].length === 0 ? undefined : scaleExtent(scale, env(plot)!),
-          bare:
-            !bareSkipped || bare[0].length === 0
-              ? sumBox
-              : scaleExtent(scale, env(bare)!),
-          zero: Pwl.ZERO,
-        };
+      : mapForms(
+          {
+            box: sBox,
+            whole: sWhole,
+            plot: env(plot),
+            bare: bare && env(bare),
+            zero: Pwl.ZERO,
+          },
+          (e) => scaleExtent(scale, e)
+        );
   return {
     placement,
     forms,
