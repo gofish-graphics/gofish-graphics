@@ -104,6 +104,11 @@ for (const [name, data, opts] of [
   ["d3-energy", energy, { w: 960, h: 600, padding: 10 }],
   ["d3-small", small, { w: 480, h: 300, padding: 10, byName: true }],
   [
+    "d3-energy-no-relax",
+    energy,
+    { w: 960, h: 600, padding: 10, iterations: 0 },
+  ],
+  [
     "d3-small-no-relax",
     small,
     { w: 480, h: 300, padding: 10, byName: true, iterations: 0 },

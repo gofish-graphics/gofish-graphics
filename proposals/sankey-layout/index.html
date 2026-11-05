@@ -1,0 +1,1692 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Sankey Node Layout</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <style>
+      :root {
+        --bg: #f7f8fa;
+        --surface: #ffffff;
+        --surface-2: #f0f2f5;
+        --text: #1c2129;
+        --muted: #5a6472;
+        --border: #d9dee5;
+        --accent: #2458a6;
+        --accent-soft: #e4ecf8;
+        --good: #1f7a4d;
+        --warn: #9a5b00;
+        --bad: #b3261e;
+        --code-bg: #f3f5f8;
+        --code-text: #1c2129;
+        --tok-keyword: #8a2be2;
+        --tok-string: #1f7a4d;
+        --tok-number: #b35c00;
+        --tok-comment: #7a8594;
+        --tok-title: #2458a6;
+        --tok-attr: #a3366f;
+        --tok-builtin: #0f6e80;
+        --hl-bg: #fff2c2;
+        --hl-bar: #e0a800;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #12151a;
+          --surface: #1a1e25;
+          --surface-2: #222731;
+          --text: #e3e7ee;
+          --muted: #9aa4b2;
+          --border: #2e3440;
+          --accent: #7aa7ec;
+          --accent-soft: #1f2c42;
+          --good: #5cc28f;
+          --warn: #e0a54a;
+          --bad: #f07b72;
+          --code-bg: #161a20;
+          --code-text: #e3e7ee;
+          --tok-keyword: #c792ea;
+          --tok-string: #8fd18f;
+          --tok-number: #f2a65a;
+          --tok-comment: #7f8a99;
+          --tok-title: #82aaff;
+          --tok-attr: #f07bb0;
+          --tok-builtin: #6fd1e0;
+          --hl-bg: #3a3218;
+          --hl-bar: #d4a72c;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #12151a;
+        --surface: #1a1e25;
+        --surface-2: #222731;
+        --text: #e3e7ee;
+        --muted: #9aa4b2;
+        --border: #2e3440;
+        --accent: #7aa7ec;
+        --accent-soft: #1f2c42;
+        --good: #5cc28f;
+        --warn: #e0a54a;
+        --bad: #f07b72;
+        --code-bg: #161a20;
+        --code-text: #e3e7ee;
+        --tok-keyword: #c792ea;
+        --tok-string: #8fd18f;
+        --tok-number: #f2a65a;
+        --tok-comment: #7f8a99;
+        --tok-title: #82aaff;
+        --tok-attr: #f07bb0;
+        --tok-builtin: #6fd1e0;
+        --hl-bg: #3a3218;
+        --hl-bar: #d4a72c;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: "IBM Plex Sans", system-ui, sans-serif;
+        font-size: 15.5px;
+        line-height: 1.55;
+        overflow-x: hidden;
+      }
+      main {
+        max-width: 1160px;
+        margin: 0 auto;
+        padding: 24px 16px 64px;
+      }
+      h1 {
+        font-size: 1.85rem;
+        margin: 0 0 6px;
+        line-height: 1.2;
+      }
+      h2 {
+        font-size: 1.35rem;
+        margin: 44px 0 10px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+      }
+      h3 {
+        font-size: 1.08rem;
+        margin: 22px 0 8px;
+      }
+      p,
+      li {
+        max-width: 78ch;
+      }
+      a {
+        color: var(--accent);
+      }
+      .sub {
+        color: var(--muted);
+        margin: 0 0 18px;
+      }
+      .summary {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-left: 4px solid var(--accent);
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin: 16px 0;
+      }
+      .summary p {
+        margin: 4px 0;
+      }
+      .rec {
+        background: var(--accent-soft);
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin: 12px 0;
+      }
+      code {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-size: 0.88em;
+      }
+      p code,
+      li code,
+      td code,
+      figcaption code,
+      h3 code,
+      summary code {
+        background: var(--surface-2);
+        padding: 1px 4px;
+        border-radius: 4px;
+      }
+      pre {
+        background: var(--code-bg);
+        color: var(--code-text);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 12px;
+        overflow-x: auto;
+        margin: 8px 0;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        font-size: 13px;
+      }
+      .hljs {
+        color: var(--code-text);
+        background: transparent;
+      }
+      .hljs-keyword,
+      .hljs-literal {
+        color: var(--tok-keyword);
+      }
+      .hljs-string {
+        color: var(--tok-string);
+      }
+      .hljs-number {
+        color: var(--tok-number);
+      }
+      .hljs-comment {
+        color: var(--tok-comment);
+        font-style: italic;
+      }
+      .hljs-title,
+      .hljs-title.function_ {
+        color: var(--tok-title);
+      }
+      .hljs-attr,
+      .hljs-property {
+        color: var(--tok-attr);
+      }
+      .hljs-built_in,
+      .hljs-params {
+        color: var(--tok-builtin);
+      }
+      .ln-hl {
+        display: inline-block;
+        min-width: 100%;
+        background: var(--hl-bg);
+        box-shadow: inset 3px 0 0 var(--hl-bar);
+        margin: 0 -12px;
+        padding: 0 12px;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 10px 0;
+        font-size: 14px;
+        background: var(--surface);
+      }
+      th,
+      td {
+        border: 1px solid var(--border);
+        padding: 6px 8px;
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        background: var(--surface-2);
+        font-weight: 600;
+      }
+      .table-wrap {
+        overflow-x: auto;
+      }
+      img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        background: #fff;
+      }
+      .grid {
+        display: grid;
+        gap: 14px;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr));
+      }
+      .grid.wide {
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 520px), 1fr));
+      }
+      figure {
+        margin: 0;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 10px;
+        min-width: 0;
+      }
+      figcaption {
+        font-size: 13.5px;
+        color: var(--muted);
+        margin-top: 8px;
+      }
+      figcaption b {
+        color: var(--text);
+      }
+      .count {
+        display: inline-block;
+        font-weight: 600;
+        color: var(--text);
+        background: var(--surface-2);
+        border-radius: 4px;
+        padding: 0 6px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 14px 16px;
+        margin: 18px 0;
+        min-width: 0;
+      }
+      .card h3 {
+        margin-top: 4px;
+      }
+      .example {
+        margin: 14px 0 6px;
+        padding-top: 10px;
+        border-top: 1px dashed var(--border);
+      }
+      .label {
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted);
+        margin: 10px 0 2px;
+      }
+      .label.now {
+        color: var(--warn);
+      }
+      .label.new {
+        color: var(--accent);
+      }
+      .two {
+        display: grid;
+        gap: 12px;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+      }
+      .two > div {
+        min-width: 0;
+      }
+      details {
+        margin: 8px 0;
+      }
+      details > summary {
+        cursor: pointer;
+        color: var(--accent);
+        font-weight: 500;
+      }
+      .pill {
+        display: inline-block;
+        font-size: 12px;
+        border-radius: 999px;
+        padding: 1px 8px;
+        border: 1px solid var(--border);
+        margin-right: 4px;
+      }
+      .pill.bug {
+        color: var(--bad);
+        border-color: var(--bad);
+      }
+      .pill.design {
+        color: var(--warn);
+        border-color: var(--warn);
+      }
+      .pill.ok {
+        color: var(--good);
+        border-color: var(--good);
+      }
+      dl.terms {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        gap: 6px 14px;
+        margin: 10px 0;
+      }
+      dl.terms dt {
+        font-weight: 600;
+      }
+      dl.terms dd {
+        margin: 0;
+      }
+      @media (max-width: 560px) {
+        dl.terms {
+          grid-template-columns: 1fr;
+        }
+        dl.terms dd {
+          margin-bottom: 6px;
+        }
+      }
+      ul.rules li {
+        margin: 4px 0;
+      }
+      ol.qs li {
+        margin: 6px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Sankey node layout</h1>
+      <p class="sub">
+        API proposal for where the nodes of a sankey (and of other layered graph
+        diagrams) go. The ribbons between them are the
+        <a href="https://claude.ai/artifact/QnDyewZaCKrvpFo9r8QYXE"
+          >stacked-ribbons proposal</a
+        >
+        (<a href="https://claude.ai/artifact/2dHLhTeiQwpdHmkDjbw6oU"
+          >design space</a
+        >).
+      </p>
+
+      <div class="summary">
+        <p>
+          <b>d3-sankey does two kinds of work.</b> Discrete graph decisions
+          (which column a node goes in, and the order inside each column) read
+          the whole link table and produce fields. Continuous placement, given
+          those fields, is already GoFish: a spread of columns, a gapped spread
+          of nodes, and one shared scale that equals d3's to the digit.
+        </p>
+        <p>
+          What is left over is relaxation (sliding nodes toward their neighbors)
+          and virtual nodes (bend points for long edges). Both are global and
+          iterative, and neither is a strategy on a single column.
+        </p>
+        <p>
+          All renders below come from prototype stories on today's main with no
+          core changes.
+        </p>
+      </div>
+
+      <div class="rec">
+        <b>Recommendation: A now, C later.</b> Add the two graph decisions as
+        <code>derive</code> data helpers with strategy families (<code
+          >layers(links, { layering: Layering.justify() })</code
+        >, <code>order(links, { ordering: Ordering.barycenter() })</code>) that
+        feed the existing <code>spread</code>. Relaxation and virtual nodes are
+        a declared follow-up whose home is a <code>layered(...)</code> operator
+        over nodes and links (C), built on A's helpers and on
+        <code>spread</code>.
+      </div>
+
+      <ul class="rules">
+        <li>
+          <b>Columns and order are data.</b> They are fields
+          (<code>layer</code>, <code>order</code>) a helper computes or a user
+          writes, like Lupton's editable <em>ordering</em>.
+        </li>
+        <li>
+          <b>Geometry is composition.</b> Columns are
+          <code>spread({ by: "layer", dir: "x" })</code>; nodes are a gapped
+          <code>spread</code> on y; the shared scale is the existing σ fit.
+        </li>
+        <li>
+          <b>One phase, one strategy family.</b> <code>Layering.*</code> for
+          columns, <code>Ordering.*</code> for crossing reduction, like
+          <code>Tile.*</code> for treemaps.
+        </li>
+        <li>
+          <b>Iteration never enters the layout engine.</b> Relaxation lives in a
+          helper or a layout node that sees nodes and links.
+        </li>
+        <li>
+          <b>Ribbons are not decided here.</b> Link ends and ribbon spelling
+          belong to the stacked-ribbons proposal.
+        </li>
+        <li>
+          <b>A template is sugar.</b> A <code>sankey()</code> template may
+          expand into A; it cannot replace A.
+        </li>
+      </ul>
+
+      <h2 id="terms">Terms</h2>
+      <dl class="terms">
+        <dt>Layer (column)</dt>
+        <dd>
+          The discrete x slot a node sits in. Graph-layout papers say layer or
+          rank; d3-sankey says <code>layer</code> or <code>depth</code>.
+        </dd>
+        <dt>Order</dt>
+        <dd>A node's rank from the top inside its layer.</dd>
+        <dt>Layer assignment</dt>
+        <dd>
+          Choosing each node's layer. d3 uses the longest path from any source,
+          then a rule for where sources and sinks go (<code>nodeAlign</code>).
+        </dd>
+        <dt>Crossing reduction</dt>
+        <dd>
+          Choosing the order inside each layer so few links cross. Finding the
+          best order is NP-hard (no known fast exact method), so tools use
+          heuristics.
+        </dd>
+        <dt>Barycenter</dt>
+        <dd>
+          The weighted mean position of a node's neighbors. Sorting each layer
+          by it, sweeping back and forth, is the classic crossing heuristic.
+        </dd>
+        <dt>Coordinate assignment</dt>
+        <dd>Given layers and orders, choosing exact y positions.</dd>
+        <dt>Relaxation</dt>
+        <dd>
+          d3's coordinate assignment: move each node part way toward the y that
+          would make its links level, then push overlapping nodes apart, and
+          repeat.
+        </dd>
+        <dt>Virtual node</dt>
+        <dd>
+          A placeholder put in each layer a long edge skips (Sugiyama's dummy
+          node), so the edge can bend around boxes and take part in ordering.
+        </dd>
+        <dt>Sugiyama framework</dt>
+        <dd>
+          The standard four-phase layered graph layout (Sugiyama, Tagawa, Toda
+          1981): 1 cycle removal, 2 layer assignment, 3 crossing reduction, 4
+          coordinate assignment.
+        </dd>
+        <dt>ky, σ</dt>
+        <dd>
+          Pixels per data unit. d3-sankey calls it <code>ky</code>; GoFish's
+          layout engine calls it σ and solves it from the space every node and
+          gap needs.
+        </dd>
+      </dl>
+
+      <h2 id="phases">d3-sankey, phase by phase</h2>
+      <p>
+        Read from <code>d3-sankey/src/sankey.js</code> (research §1). Status
+        says what GoFish has today.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <tr>
+            <th>Phase</th>
+            <th>Math</th>
+            <th>GoFish counterpart</th>
+            <th>Status</th>
+          </tr>
+          <tr>
+            <td>Link lists</td>
+            <td>join links to nodes</td>
+            <td><code>resolve</code> / anchors</td>
+            <td><span class="pill ok">ribbons proposal</span></td>
+          </tr>
+          <tr>
+            <td>Node value</td>
+            <td>max(Σ in, Σ out)</td>
+            <td>a node is as tall as its taller port stack</td>
+            <td><span class="pill ok">ribbons proposal</span></td>
+          </tr>
+          <tr>
+            <td>Depth, height</td>
+            <td>
+              longest path from a source / to a sink (a fold over the whole
+              graph)
+            </td>
+            <td>none</td>
+            <td>
+              <span class="pill design">A: <code>layers</code> helper</span>
+            </td>
+          </tr>
+          <tr>
+            <td>Column rule</td>
+            <td><code>nodeAlign</code>: left, right, center, justify</td>
+            <td>none</td>
+            <td>
+              <span class="pill design">A: <code>Layering.*</code></span>
+            </td>
+          </tr>
+          <tr>
+            <td>Column x</td>
+            <td>x = layer · (W − node width) / (n − 1)</td>
+            <td>
+              <code>spread({ by: "layer", dir: "x", spacing: fr(1) })</code>,
+              exact
+            </td>
+            <td><span class="pill ok">today</span></td>
+          </tr>
+          <tr>
+            <td>Padding cap</td>
+            <td>py = min(padding, H / (max column size − 1))</td>
+            <td>keeps px gaps and warns</td>
+            <td><span class="pill ok">fine as is</span></td>
+          </tr>
+          <tr>
+            <td>Shared scale</td>
+            <td>ky = min over columns of (H − (n − 1)·py) / Σ value</td>
+            <td>the σ fit over sibling columns, <b>same number</b></td>
+            <td><span class="pill ok">today</span></td>
+          </tr>
+          <tr>
+            <td>Initial stack</td>
+            <td>stack each column with gap py</td>
+            <td><code>spread({ dir: "y", spacing: 10 })</code></td>
+            <td><span class="pill ok">today</span></td>
+          </tr>
+          <tr>
+            <td>Leftover height</td>
+            <td>
+              split evenly above, between and below nodes (CSS space-evenly)
+            </td>
+            <td>
+              a short column is aligned as a block; <code>fr</code> gaps warn
+            </td>
+            <td><span class="pill design">gap, #1165</span></td>
+          </tr>
+          <tr>
+            <td>Order</td>
+            <td>re-sort each column by y after every move</td>
+            <td>accepts an order field (<code>field("order").sort()</code>)</td>
+            <td>
+              <span class="pill design">A: <code>Ordering.*</code></span>
+            </td>
+          </tr>
+          <tr>
+            <td>Relaxation</td>
+            <td>move toward neighbors' level y, damped, 6 rounds</td>
+            <td>none; needs other columns' positions</td>
+            <td><span class="pill design">C follow-up</span></td>
+          </tr>
+          <tr>
+            <td>Collisions</td>
+            <td>push apart along y with padding, inside the extent</td>
+            <td><code>Overlap</code> only moves the other axis</td>
+            <td><span class="pill design">C follow-up</span></td>
+          </tr>
+          <tr>
+            <td>Link ends</td>
+            <td>stack ends in each node by far node's y</td>
+            <td>anchors with slots</td>
+            <td><span class="pill ok">ribbons proposal</span></td>
+          </tr>
+        </table>
+      </div>
+
+      <figure style="max-width: min(100%, 520px)">
+        <img
+          src="img/probe-shared-scale-fixed-gaps.png"
+          alt="Two columns of bars: two tall blue bars on the left, ten short yellow bars on the right filling the full height"
+        />
+        <figcaption>
+          <b>The shared scale is d3's ky.</b> Column A has 2 nodes of 50, column
+          B has 10 nodes of 10, gaps 20 px, height 300. d3: ky = min(280/100,
+          120/100) = 1.2. Measured: B nodes 12.0 px, B spans exactly 300, A
+          nodes 60.0 px. Story <code>Scale Probe/FixedGaps</code>.
+        </figcaption>
+      </figure>
+      <pre><code class="language-js">chart(rows)
+  .flow(
+    spread({ by: "col", dir: "x", spacing: 40, alignment: "start" }),
+    spread({ by: "node", dir: "y", spacing: 20 })
+  )
+  .mark(rect({ w: 30, h: "v", fill: "col" }))
+  .render(container, { w: 200, h: 300 });</code></pre>
+
+      <h2 id="strategies">Strategy grid</h2>
+      <p>
+        The same data under each choice. Crossings count pairs of links between
+        the same two columns whose ends swap order (node centers; long links not
+        counted). Scripts: <code>d3-reference/crossings.ts</code>.
+      </p>
+
+      <h3>Small flow (10 nodes, columns of 3, 2 and 5)</h3>
+      <div class="grid">
+        <figure>
+          <img
+            src="img/a-small-input-order.png"
+            alt="Small sankey in data order"
+          />
+          <figcaption>
+            <b>Data order, tight</b>: A with no <code>order</code> step. Columns
+            packed from the top in input order.
+            <span class="count">5 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/a-small-barycenter.png"
+            alt="Small sankey ordered by barycenter"
+          />
+          <figcaption>
+            <b><code>Ordering.barycenter()</code>, tight</b>: four up-and-down
+            sweeps, then the same spreads. <span class="count">1 crossing</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="img/c-small-relax.png" alt="Small sankey relaxed" />
+          <figcaption>
+            <b>Relaxed</b>: C's <code>Positioning.relax()</code>, a port of d3's
+            loop. Matches d3 to 0.00 px here.
+            <span class="count">3 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/d3-small.png"
+            alt="d3-sankey reference render of the small flow"
+          />
+          <figcaption>
+            <b>d3-sankey reference</b>: <code>nodeAlign(sankeyJustify)</code>, 6
+            iterations. <span class="count">3 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/d3-small-no-relax.png"
+            alt="d3-sankey with zero iterations"
+          />
+          <figcaption>
+            <b>d3-sankey, <code>iterations(0)</code></b
+            >: data order, leftover height spread evenly. Same order as the
+            first card. <span class="count">5 crossings</span>
+          </figcaption>
+        </figure>
+      </div>
+
+      <h3>UK energy (48 nodes, 68 links)</h3>
+      <div class="grid">
+        <figure>
+          <img
+            src="img/a-energy-input-order.png"
+            alt="Energy sankey in data order"
+          />
+          <figcaption>
+            <b>Data order, tight</b>. <span class="count">72 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/a-energy-tight.png"
+            alt="Energy sankey with barycenter order"
+          />
+          <figcaption>
+            <b><code>Ordering.barycenter()</code>, tight</b>. Fewest crossings
+            of all, but columns are packed and bands slant.
+            <span class="count">17 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="img/c-energy-relax.png" alt="Energy sankey relaxed" />
+          <figcaption>
+            <b>Relaxed</b> (C). Straighter bands; up to 45 px from d3 (two tied
+            nodes swap in the first sweep).
+            <span class="count">26 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img src="img/d3-energy.png" alt="d3-sankey energy reference" />
+          <figcaption>
+            <b>d3-sankey reference</b>. <span class="count">27 crossings</span>
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/d3-energy-no-relax.png"
+            alt="d3-sankey energy with zero iterations"
+          />
+          <figcaption>
+            <b>d3-sankey, <code>iterations(0)</code></b
+            >. <span class="count">72 crossings</span>
+          </figcaption>
+        </figure>
+      </div>
+      <p>
+        <b>Reading the grid:</b> d3's relaxation does not minimize crossings;
+        barycenter ordering beats it (17 vs 27 on energy, 1 vs 3 on the small
+        flow). Relaxation straightens bands and uses the leftover height. These
+        are different goals, which is one reason to keep ordering and coordinate
+        assignment as separate phases.
+      </p>
+
+      <h2 id="approaches">Approaches</h2>
+
+      <div class="card" id="A">
+        <h3>
+          A. Graph phases as data helpers, placement by existing operators
+        </h3>
+        <p>
+          Two <code>derive</code> helpers read the links table and add fields to
+          the nodes: <code>layers</code> adds <code>layer</code>,
+          <code>order</code> adds <code>order</code>. Each takes a strategy, in
+          the style of ELK's per-phase options and d3-dag's slots. Everything
+          after that is today's <code>spread</code>. Not calling
+          <code>order</code> keeps the data order, which is how a user supplies
+          their own ordering (Lupton's d3-sankey-diagram does the same: given an
+          ordering, no algorithm runs).
+        </p>
+
+        <div class="example">
+          <b>UK energy sankey</b>
+          <img src="img/a-energy-tight.png" alt="Energy sankey, approach A" />
+          <div class="two">
+            <div>
+              <div class="label new">Proposed, JS</div>
+              <pre><code class="language-js">layer([
+  chart(nodes)
+    .flow(
+      derive(layers(links, { key: "name", layering: Layering.justify() })), // @hl
+      derive(
+        order(links, {
+          key: "name",
+          by: "layer",
+          ordering: Ordering.barycenter(),
+        })
+      ), // @hl
+      spread({ by: "layer", dir: "x", spacing: fr(1) }),
+      spread({ by: field("order").sort(), dir: "y", spacing: 10 })
+    )
+    .mark(rect({ w: 12, h: "value" }).name("nodes")),
+  // ribbons: see the stacked-ribbons proposal
+]);</code></pre>
+              <div class="label new">Proposed, Python</div>
+              <pre><code class="language-python">layer(
+    [
+        chart(nodes)
+        .flow(
+            derive(layers(links, key="name", layering=Layering.justify())),  # @hl
+            derive(
+                order(links, key="name", by="layer", ordering=Ordering.barycenter())
+            ),  # @hl
+            spread(by="layer", dir="x", spacing=fr(1)),
+            spread(by=field("order").sort(), dir="y", spacing=10),
+        )
+        .mark(rect(w=12, h="value").name("nodes")),
+    ]
+)</code></pre>
+            </div>
+            <div>
+              <div class="label now">Today (prototype story)</div>
+              <pre><code class="language-js">const col = layers(names, links, "justify"); // @hl
+const order = barycenterOrder(names, links, col); // @hl
+const ends = linkEnds(links, col, order);
+layer([
+  chart(ends)
+    .flow(
+      spread({
+        by: field("layer").sort(),
+        dir: "x",
+        spacing: fr(1),
+        alignment: "end",
+        axes: false,
+      }),
+      spread({
+        by: field("node").sort(sortedNames(names, col, order)),
+        dir: "y",
+        spacing: 10,
+        axes: false,
+      }), // @hl
+      spread({
+        by: field("side").sort(["in", "out"]),
+        dir: "x",
+        spacing: 0,
+        alignment: "start",
+        axes: false,
+      }),
+      spread({ by: field("far").sort(), dir: "y", spacing: 0, axes: false })
+    )
+    .mark(rect({ w: 6, h: "value", fill: "#555" }).name("ports")),
+  chart(selectAll("ports"))
+    .flow(group({ by: "link" }))
+    .mark(ribbon({ opacity: 0.4, fill: "src", curve: Curve.bezier() })),
+]);</code></pre>
+              <details>
+                <summary>
+                  The hand-written helpers today (about 120 lines)
+                </summary>
+                <p>
+                  <code>layers</code> (longest path plus the d3 column rule),
+                  <code>barycenterOrder</code> (sweeps),
+                  <code>linkEnds</code> (the ends table) and
+                  <code>sortedNames</code> are plain JS in
+                  <code>stories/_proposals/sankey-layout/_proto.ts</code>. The
+                  ends table and its two port tiers are the stacked-ribbons
+                  proposal's form; with its anchors, the flow drops to the two
+                  node tiers shown on the left. The label layer and the
+                  <code>alignment: "end"</code> workaround are omitted here (see
+                  Gaps).
+                </p>
+              </details>
+            </div>
+          </div>
+        </div>
+
+        <div class="example">
+          <b>Package dependency graph (fixed-size boxes, arrows)</b>
+          <img
+            src="img/a-dependencies.png"
+            alt="Dependency graph laid out by approach A; two long edges run through boxes"
+            style="max-width: min(100%, 520px)"
+          />
+          <div class="two">
+            <div>
+              <div class="label new">Proposed, JS</div>
+              <pre><code class="language-js">chart(nodes)
+  .flow(
+    derive(layers(links, { key: "name", layering: Layering.longestPath() })), // @hl
+    derive(
+      order(links, {
+        key: "name",
+        by: "layer",
+        ordering: Ordering.barycenter(),
+      })
+    ), // @hl
+    spread({ by: "layer", dir: "x", spacing: fr(1), alignment: "middle" }),
+    spread({ by: field("order").sort(), dir: "y", spacing: 24 })
+  )
+  .mark(
+    rect({ w: 56, h: 24 }).label("name", { position: "center" }).name("box")
+  )
+  .layer(
+    chart(links)
+      .flow(resolve(["source", "target"], { from: selectAll("box") }))
+      .mark((edges) =&gt; layer(edges.map((e) =&gt; arrow({}, [e.source, e.target]))))
+  );</code></pre>
+              <div class="label new">Proposed, Python</div>
+              <pre><code class="language-python">chart(nodes).flow(
+    derive(layers(links, key="name", layering=Layering.longest_path())),  # @hl
+    derive(order(links, key="name", by="layer", ordering=Ordering.barycenter())),  # @hl
+    spread(by="layer", dir="x", spacing=fr(1), alignment="middle"),
+    spread(by=field("order").sort(), dir="y", spacing=24),
+).mark(rect(w=56, h=24).label("name", position="center").name("box"))</code></pre>
+            </div>
+            <div>
+              <div class="label now">Today</div>
+              <pre><code class="language-js">const col = layers(depNames, depLinks, "left"); // @hl
+const order = barycenterOrder(depNames, depLinks, col); // @hl
+const nodes = depNames.map((name) =&gt; ({ name, layer: col.get(name) })); // @hl
+chart(nodes)
+  .flow(
+    spread({
+      by: field("layer").sort(),
+      dir: "x",
+      spacing: fr(1),
+      alignment: "middle",
+    }),
+    spread({
+      by: field("name").sort(sortedNames(depNames, col, order)),
+      dir: "y",
+      spacing: 24,
+    }) // @hl
+  )
+  .mark(
+    rect({ w: 56, h: 24 }).label("name", { position: "center" }).name("box")
+  )
+  .layer(
+    chart(depLinks)
+      .flow(resolve(["source", "target"], { from: selectAll("box") }))
+      .mark((edges) =&gt;
+        layer(
+          edges.map((e) =&gt; arrow({ bow: 0, stretch: 0 }, [e.source, e.target]))
+        )
+      )
+  );</code></pre>
+            </div>
+          </div>
+          <p>
+            The two edges that skip layers (<code>ui → utils</code>,
+            <code>cli → utils</code>) run straight through <code>http</code> and
+            <code>ui</code>. Fixing that needs virtual nodes, which are not data
+            rows. That is the one thing A cannot do (see C).
+          </p>
+        </div>
+
+        <p>
+          <b>Composes with:</b> any flow tier after it (the fields are ordinary
+          fields), <code>Coord.polar()</code> (layers as rings, a dependency
+          wheel), and the stacked-ribbons anchors for link ends. It desugars to
+          <code>derive</code> plus <code>spread</code>.
+        </p>
+        <p>
+          <b>Overlap check:</b> none with <code>spread</code> or the σ fit,
+          since A does no placement. <code>Ordering.*</code> is close to a
+          <code>sort</code>, but it reads the links table, so it is not a sort
+          over one column of the rows.
+        </p>
+        <p>
+          <b>Trade-offs:</b> easy to explain and to override (write your own
+          <code>layer</code> or <code>order</code> field). New terms: two
+          helpers and two families. It cannot produce d3's relaxed look or bend
+          long edges. It needs a second table (<code>links</code>) passed to a
+          helper over the nodes; today's <code>derive</code> helpers see only
+          the current rows.
+        </p>
+      </div>
+
+      <div class="card" id="B">
+        <h3>
+          B. Relaxed y as a precomputed field, placed by <code>scatter</code>
+        </h3>
+        <p>
+          A helper runs d3's relaxation and outputs each node's y interval in
+          value units. The node tier becomes
+          <code>scatter({ yMin, yMax })</code> instead of a spread. It draws
+          d3's look today, but the costs are measurable.
+        </p>
+
+        <div class="example">
+          <b>UK energy sankey, relaxed</b>
+          <img
+            src="img/b-energy-relaxed.png"
+            alt="Energy sankey with relaxed positions placed by scatter"
+          />
+          <div class="two">
+            <div>
+              <div class="label new">Proposed, JS</div>
+              <pre><code class="language-js">chart(nodes)
+  .flow(
+    derive(layers(links, { key: "name", layering: Layering.justify() })),
+    derive(
+      relax(links, {
+        key: "name",
+        by: "layer",
+        size: "value",
+        padding: 10,
+        height: 600,
+      })
+    ), // @hl
+    spread({ by: "layer", dir: "x", spacing: fr(1) }),
+    scatter({ by: "name", yMin: "yMin", yMax: "yMax" }) // @hl
+  )
+  .mark(rect({ w: 12, h: "value" }));</code></pre>
+              <div class="label new">Proposed, Python</div>
+              <pre><code class="language-python">chart(nodes).flow(
+    derive(layers(links, key="name", layering=Layering.justify())),
+    derive(
+        relax(links, key="name", by="layer", size="value", padding=10, height=600)
+    ),  # @hl
+    spread(by="layer", dir="x", spacing=fr(1)),
+    scatter(by="name", y_min="yMin", y_max="yMax"),  # @hl
+).mark(rect(w=12, h="value"))</code></pre>
+            </div>
+            <div>
+              <div class="label now">Today (prototype story)</div>
+              <pre><code class="language-js">const { box, ky } = relax(names, links, col, { height: 600, padding: 10 }); // @hl
+const ends = linkEnds(links, col, yTop).map((e) =&gt; ({
+  ...e,
+  yMin: (600 - box.get(e.node).y1) / ky, // @hl
+  yMax: (600 - box.get(e.node).y0) / ky, // @hl
+}));
+chart(ends).flow(
+  spread({
+    by: field("layer").sort(),
+    dir: "x",
+    spacing: fr(1),
+    alignment: "start",
+    axes: false,
+  }),
+  scatter({ by: "node", yMin: "yMin", yMax: "yMax", axes: false }), // @hl
+  spread({
+    by: field("side").sort(["in", "out"]),
+    dir: "x",
+    spacing: 0,
+    alignment: "start",
+    axes: false,
+  }),
+  spread({ by: field("far").sort(), dir: "y", spacing: 0, axes: false })
+);</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid wide">
+          <figure>
+            <img
+              src="img/b-energy-relax-then-resolve.png"
+              alt="Energy sankey, relaxation without interleaved collision removal"
+            />
+            <figcaption>
+              <b>Relax as a data step, then remove overlaps once per column.</b>
+              This is the split "relaxation is a <code>derive</code>, collisions
+              are a column strategy". Total vertical travel of the bands (Σ
+              value·|Δy|) rises 13%: 574,847 vs 509,045 interleaved (d3:
+              510,730). Crossings happen to drop (17 vs 26), so it is a
+              different layout, not uniformly worse.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/b-small-relax-then-resolve.png"
+              alt="Small sankey, relax then resolve"
+            />
+            <figcaption>
+              <b>Same split, small flow.</b> Export and Losses swap compared
+              with d3 (<code>img/d3-small.png</code>).
+            </figcaption>
+          </figure>
+        </div>
+
+        <p>
+          <b>Can relaxation be a strategy on the column's spread?</b> No, for
+          three reasons:
+        </p>
+        <ol>
+          <li>
+            <b>It reads other columns.</b> A node's target is the y that would
+            level its links, which depends on the positions of nodes in other
+            columns and the order of links inside them. A strategy on one column
+            sees only its own children.
+          </li>
+          <li>
+            <b>It is a fixed point.</b> Column i depends on columns i − 1 and i
+            + 1, which depend on column i.
+          </li>
+          <li>
+            <b>It cannot be split.</b> d3 removes overlaps inside every sweep,
+            because the next sweep reads the resolved positions. Moving
+            collision removal to a single local step changes the layout (figures
+            above). Even that local step has no home: the
+            <code>Overlap</code> strategies move only the free axis (a beeswarm
+            moves x and keeps y).
+          </li>
+        </ol>
+        <p>
+          <b>Overlap check:</b> large partial overlap. The helper recomputes ky,
+          padding and the chart height in pixels, which the spreads and the σ
+          fit already own, and must be told the canvas height.
+        </p>
+        <p>
+          <b>Trade-offs:</b> works today with a helper; matches d3. But it
+          duplicates the scale, breaks if the visualization is resized or
+          nested, and needs a y flip (helper pixels go down, the data axis goes
+          up).
+        </p>
+      </div>
+
+      <div class="card" id="C">
+        <h3>
+          C. One <code>layered</code> operator over nodes and links, phases as
+          strategies
+        </h3>
+        <p>
+          One operator owns nodes and edges and runs the three Sugiyama phases
+          as strategy options, like d3-dag's
+          <code>sugiyama().layering().decross().coord()</code> or ELK Layered.
+          Because it sees edges, it can add virtual nodes and run relaxation.
+          The prototype computes every position in JS and emits placed marks, so
+          it is a stand-in.
+        </p>
+
+        <div class="example">
+          <b>Dependency graph with virtual nodes</b>
+          <img
+            src="img/c-dependencies-virtual-nodes.png"
+            alt="Dependency graph where long edges bend around boxes"
+            style="max-width: min(100%, 520px)"
+          />
+          <div class="two">
+            <div>
+              <div class="label new">Proposed, JS</div>
+              <pre><code class="language-js">layered(
+  {
+    spacing: 24,
+    layering: Layering.longestPath(),
+    ordering: Ordering.barycenter(),
+    positioning: Positioning.stack(),
+    virtualNodes: true, // @hl
+  },
+  {
+    nodes,
+    links,
+    node: rect({ w: 56, h: 24 }).label("name", { position: "center" }),
+    link: arrow(),
+  }
+);</code></pre>
+              <div class="label new">Proposed, Python</div>
+              <pre><code class="language-python">layered(
+    spacing=24,
+    layering=Layering.longest_path(),
+    ordering=Ordering.barycenter(),
+    positioning=Positioning.stack(),
+    virtual_nodes=True,  # @hl
+    nodes=nodes,
+    links=links,
+    node=rect(w=56, h=24).label("name", position="center"),
+    link=arrow(),
+)</code></pre>
+            </div>
+            <div>
+              <div class="label now">Today</div>
+              <p>
+                No spelling. The prototype's <code>layeredGeometry</code> (in
+                <code>_proto.ts</code>) inserts the virtual nodes, orders and
+                stacks them with the real ones, and the story draws each long
+                edge as a <code>line</code> through the bend points plus an
+                <code>arrow</code> for the last segment, all inside
+                <code>.relate()</code>.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="example">
+          <b>UK energy sankey, relaxed</b>
+          <img
+            src="img/c-energy-relax.png"
+            alt="Energy sankey from the layered stand-in"
+          />
+          <div class="two">
+            <div>
+              <div class="label new">Proposed, JS</div>
+              <pre><code class="language-js">layered(
+  {
+    size: "value",
+    spacing: 10,
+    layering: Layering.justify(),
+    ordering: Ordering.barycenter(),
+    positioning: Positioning.relax({ iterations: 6 }), // @hl
+  },
+  {
+    nodes,
+    links,
+    node: rect({ w: 12, fill: "#555" }),
+    link: ribbon({ opacity: 0.4 }),
+  }
+);</code></pre>
+            </div>
+            <div>
+              <div class="label new">Proposed, Python</div>
+              <pre><code class="language-python">layered(
+    size="value",
+    spacing=10,
+    layering=Layering.justify(),
+    ordering=Ordering.barycenter(),
+    positioning=Positioning.relax(iterations=6),  # @hl
+    nodes=nodes,
+    links=links,
+    node=rect(w=12, fill="#555"),
+    link=ribbon(opacity=0.4),
+)</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <figure style="max-width: min(100%, 520px)">
+          <img
+            src="img/c-small-stack.png"
+            alt="Small sankey with stacked, centered columns"
+          />
+          <figcaption>
+            <b><code>Positioning.stack()</code></b> on the small flow:
+            barycenter order, centered columns. This is exactly A's two spreads,
+            which is the overlap the check below is about.
+          </figcaption>
+        </figure>
+
+        <p>
+          <b>Composes with:</b> <code>Coord.*</code> via <code>frame</code>;
+          node and link marks are ordinary marks. It would be a layout node like
+          <code>treemap</code> or <code>pack</code>: an algorithm behind an
+          operator.
+        </p>
+        <p>
+          <b>Overlap check:</b> large partial overlap unless it is built on A.
+          <code>Positioning.stack()</code> is A's column spread plus node
+          spread, and the shared scale is the σ fit. To stay clean, C must
+          desugar into A's helpers for layering and ordering and into
+          <code>spread</code> for stacked placement, adding only what A cannot
+          do: virtual nodes and <code>Positioning.relax()</code>.
+        </p>
+        <p>
+          <b>Trade-offs:</b> serves DAG diagrams and flowcharts, not only
+          sankeys. Three new families and one operator. It hides the flow tiers:
+          a user cannot insert a tier between columns and nodes.
+        </p>
+      </div>
+
+      <div class="card" id="D">
+        <h3>D. A GoTree-style template</h3>
+        <p>
+          A <code>sankey(spec, data)</code> function that expands into A's spec,
+          like <code>gofish-gotree</code>'s
+          <code>tree(spec, data)</code> expands into <code>spread</code>,
+          <code>layer</code> and <code>.relate()</code> calls.
+        </p>
+        <div class="example">
+          <img
+            src="img/d-energy-template.png"
+            alt="Energy sankey drawn by the template; identical to approach A"
+          />
+          <div class="two">
+            <div>
+              <div class="label new">Proposed, JS</div>
+              <pre><code class="language-js">sankey({ layering: Layering.justify(), spacing: 10 }, { nodes, links }).render(
+  container,
+  {
+    w: 960,
+    h: 600,
+  }
+);</code></pre>
+              <div class="label new">Proposed, Python</div>
+              <pre><code class="language-python">sankey(nodes=nodes, links=links, layering=Layering.justify(), spacing=10)</code></pre>
+            </div>
+            <div>
+              <div class="label now">What it expands into</div>
+              <p>
+                Approach A's spec, line for line. The render is
+                <b>byte-identical</b> to A's (<code>cmp</code> on the two PNGs).
+              </p>
+            </div>
+          </div>
+        </div>
+        <p>
+          <b>Is it "elaboration like GoTree"?</b> GoTree elaborates
+          <em>local</em> relations (parent to child, sibling to sibling) into
+          combinators, because a tree's structure is the data's nesting. A
+          sankey's missing pieces are whole-graph folds: longest paths and
+          crossing sweeps over every link. Elaboration can only express those by
+          calling A's helpers before it emits operators. So a template is sugar
+          over A and does not remove the need for A.
+        </p>
+        <p>
+          <b>Overlap check:</b> exact composition (defined by its rewrite).
+          <b>Trade-offs:</b> short user code; hides the tiers; another name for
+          one chart type (the "geom_sankey" pattern GoFish avoids).
+        </p>
+      </div>
+
+      <h2 id="precedent">Prior work</h2>
+      <div class="grid">
+        <figure>
+          <img src="img/d3-energy.png" alt="d3-sankey energy render" />
+          <figcaption>
+            <b>d3-sankey</b>. Monolithic; columns, order, y and link ends in one
+            function. Order falls out of relaxation.
+            <pre><code class="language-js">sankey().nodeAlign(sankeyJustify).nodePadding(10).nodeSort(null).iterations(6);</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>d3-dag</b>. A builder with one slot per Sugiyama phase, each
+            filled by an operator. The model for C.
+            <pre><code class="language-js">sugiyama()
+  .layering(layeringLongestPath())
+  .decross(decrossTwoLayer())
+  .coord(coordSimplex());</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>ELK Layered</b>. Every phase is a strategy option.
+            <code>INTERACTIVE</code> and <code>NONE</code> ("keep the user's
+            order") are strategies, not a separate API.
+            <pre><code class="language-js">({
+  "elk.layered.layering.strategy": "LONGEST_PATH",
+  "elk.layered.crossingMinimization.strategy": "LAYER_SWEEP",
+  "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+});</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>dagre / Graphviz dot</b>. Monolithic with knobs. dagre exposes
+            one phase as a strategy (<code>ranker</code>); dot takes constraints
+            in the graph (<code>rank=same</code>, <code>minlen</code>).
+            <pre><code class="language-js">g.setGraph({ rankdir: "LR", ranker: "longest-path", nodesep: 50, ranksep: 50 });</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>Lupton, d3-sankey-diagram / floweaver</b>. Order is a data
+            structure the user writes (layers of bands of node ids); when it is
+            given, no ranking or ordering runs. The model for A.
+            <pre><code class="language-js">layout.ordering([[["coal"], ["gas"]], [["grid"]]]);</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>PiCCL</b>. No graph layout: the column is a data field, nodes are
+            a stack, columns are a stack. The same shape as A without the
+            helpers.
+            <pre><code class="language-js">pcg
+  .replicate(pcg.replicate(glyph, "Name").stackLayout("y", 6), "Kind")
+  .stackLayout("x", 500);</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>ggalluvial</b>. Axes and stratum order come from the data (factor
+            levels); the system only stacks. No crossing reduction.
+            <pre><code class="language-plaintext">ggplot(df, aes(x = axis, stratum = stratum, alluvium = id, y = n)) +
+  geom_flow() + geom_stratum()</code></pre>
+          </figcaption>
+        </figure>
+        <figure>
+          <figcaption>
+            <b>Plotly / ECharts</b>. d3-sankey's algorithm behind options.
+            Plotly takes optional user <code>node.x</code>/<code>node.y</code>
+            and an <code>arrangement</code> drag mode; ECharts takes
+            <code>layoutIterations</code> and per-node <code>depth</code>.
+            <pre><code class="language-js">({ type: "sankey", nodeAlign: "justify", layoutIterations: 32, nodeGap: 8 });</code></pre>
+          </figcaption>
+        </figure>
+      </div>
+
+      <h2 id="gaps">Gaps and bugs</h2>
+      <p>
+        Each has a repro story under
+        <code>stories/_proposals/sankey-layout/</code>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <tr>
+            <th>Item</th>
+            <th>Kind</th>
+            <th>Repro / evidence</th>
+          </tr>
+          <tr>
+            <td>
+              A sibling label layer flips what <code>alignment</code> means on
+              y: the short column moves from top (y 0) to bottom (y 105).
+            </td>
+            <td><span class="pill bug">bug to file</span></td>
+            <td>
+              <code>Repro/AlignStartNoLabels</code> vs
+              <code>AlignStartWithLabels</code>; A and D use
+              <code>alignment: "end"</code> as a declared workaround.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              The same repro without <code>axes: false</code> throws "axis 1 has
+              a continuous type but no size claim".
+            </td>
+            <td><span class="pill bug">bug to file</span></td>
+            <td>
+              <code>Repro/AlignStartWithLabels</code> with default render
+              options.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              A <code>line</code> from a box ref hid the label drawn on that
+              box.
+            </td>
+            <td><span class="pill bug">bug, not reduced</span></td>
+            <td>
+              <code>Approach C/Dependencies</code> before its 1 px start-point
+              workaround.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              No spacing with a pixel minimum that spreads leftover height
+              between nodes (d3's space-evenly).
+              <code>spacing: fr(1)</code> warns and rescales nodes.
+            </td>
+            <td><span class="pill design">design, #1165</span></td>
+            <td>
+              <code>Scale Probe/FlexibleGaps</code>: nodes 27.5 px instead of
+              12.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              Labeling a node when the flow's leaf is a port. The stories label
+              the first port.
+            </td>
+            <td><span class="pill design">design</span></td>
+            <td><code>Approach A/Small</code> label layer.</td>
+          </tr>
+          <tr>
+            <td>
+              No 1D overlap removal along the placed axis;
+              <code>Overlap.*</code> moves only the free axis.
+            </td>
+            <td><span class="pill design">design, C follow-up</span></td>
+            <td>research §5.3</td>
+          </tr>
+          <tr>
+            <td>
+              Two y conventions: a literal <code>rect({ y })</code> counts down
+              from the top, <code>scatter</code>'s y points up.
+            </td>
+            <td><span class="pill design">design question</span></td>
+            <td>C used d3's pixels as is; B had to flip them.</td>
+          </tr>
+          <tr>
+            <td>Long right-column labels run past the canvas.</td>
+            <td><span class="pill design">design (chrome room)</span></td>
+            <td><code>Approach A/Energy</code> at 960 px.</td>
+          </tr>
+        </table>
+      </div>
+
+      <div class="grid">
+        <figure>
+          <img
+            src="img/bug-align-no-labels.png"
+            alt="Two columns, short one at the top"
+          />
+          <figcaption>
+            <b>No label layer</b>: <code>alignment: "start"</code> puts the
+            short column at the top.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/bug-align-with-labels.png"
+            alt="Two columns with labels, short one at the bottom"
+          />
+          <figcaption>
+            <b>With a label layer</b>: the same spec puts it at the bottom.
+          </figcaption>
+        </figure>
+      </div>
+      <pre><code class="language-js">layer([
+  bars(), // spread({ by: "col", dir: "x", alignment: "start" }) over spread({ by: "node", dir: "y" })
+  chart(selectAll("bars")) // @hl
+    .flow(group({ by: "node" }))
+    .mark((refs) =&gt;
+      spread({ dir: "x", spacing: 3 }, [
+        refs[0],
+        text({ text: String(project(refs[0], "node")) }),
+      ])
+    ),
+]).render(container, { w: 200, h: 200, axes: false, legend: false });</code></pre>
+
+      <h2 id="recommendation">Recommendation</h2>
+      <div class="rec">
+        <p>
+          <b>A now.</b> It desugars into the existing core: two
+          <code>derive</code> helpers and the spread composition GoFish already
+          has, with the shared scale coming free. One concept per helper. The
+          strategy families follow the <code>Tile</code> and
+          <code>Curve</code> precedent and cross to Python as IR. The JS and
+          Python shapes are the same. A user can always replace a helper with
+          their own field, which is the Lupton model.
+        </p>
+        <p>
+          <b>Runner-up: C, as the follow-up.</b> Relaxation and virtual nodes
+          need an operator that sees nodes and links. It should desugar into A's
+          helpers and <code>spread</code> and add only
+          <code>Positioning.relax()</code> and virtual nodes, so it does not
+          overlap A.
+        </p>
+        <p>
+          <b>What would flip the pick to C now:</b> if d3's relaxed look should
+          be the default sankey, or if layered DAG diagrams with bent edges are
+          wanted soon. Note that barycenter ordering already has fewer crossings
+          than d3, so the relaxed look is mainly straighter bands and fuller
+          columns.
+        </p>
+      </div>
+
+      <h2 id="decisions">Decisions for Josh</h2>
+      <ol class="qs">
+        <li>A now and C later, or C now?</li>
+        <li>
+          Where do the graph phases live: <code>derive</code> helpers over nodes
+          that take the links table as an argument, or a flow operator over the
+          links?
+        </li>
+        <li>
+          Family names: <code>Layering</code> and <code>Ordering</code>, and for
+          C's coordinate phase <code>Positioning</code>? (<code>Place</code> is
+          the label family, <code>Coord</code> is coordinate transforms, and
+          <code>align</code> means the cross axis in GoFish.)
+        </li>
+        <li>
+          Default column rule: <code>justify</code> (sinks in the last column,
+          like d3) or <code>longestPath</code> (left)?
+        </li>
+        <li>
+          Is fill-the-height spacing part of this effort, or does it stay with
+          #1165?
+        </li>
+        <li>Is a <code>sankey()</code> template wanted at all?</li>
+      </ol>
+
+      <details>
+        <summary>Rationale</summary>
+        <ul>
+          <li>
+            <b>Desugar into the core</b> (principles, "Why keep the core
+            small"): A adds data helpers; placement stays
+            <code>spread</code> and the σ fit.
+          </li>
+          <li>
+            <b>No geom_sankey</b> (composition-not-enumeration): D alone would
+            be one more chart type.
+          </li>
+          <li>
+            <b>No iteration in the engine</b> (constraints-as-core: "There is no
+            fixpoint iteration anywhere"): relaxation belongs in a helper or a
+            layout node, which is C.
+          </li>
+          <li>
+            <b>Overlap only at the edges</b> (api-design): B duplicates ky and
+            padding by another route; C would too unless built on A.
+          </li>
+          <li>
+            <b>Data flows as lists</b> (api-design): the helpers take node and
+            link rows, never a graph object.
+          </li>
+          <li>
+            <b>Accepting an order is the zero-engine path</b>
+            (<code>notes/design/modular-layout-algorithms.md</code>, option D):
+            A keeps it, since skipping <code>order</code> keeps the data order.
+          </li>
+          <li>
+            <b>Correction to earlier notes:</b> d3 with a fixed
+            <code>nodeSort</code> is closed-form only with
+            <code>iterations(0)</code>; it still relaxes positions otherwise.
+          </li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Related issues</summary>
+        <ul>
+          <li>
+            <b>#47</b> Stacked ribbons: the link-end half of sankeys (the
+            companion proposal).
+          </li>
+          <li>
+            <b>#631</b> Modular layout algorithms: can the engine host sankey
+            and graph layout as pluggable passes.
+          </li>
+          <li>
+            <b>#701</b> The design note for #631
+            (<code>modular-layout-algorithms.md</code>).
+          </li>
+          <li>
+            <b>#355</b> Decompose treemap, tidy tree and Sugiyama into grouping
+            primitives.
+          </li>
+          <li>
+            <b>#485</b> Solvers as tactics that emit discrete commitments
+            (layers, orders) for the core.
+          </li>
+          <li>
+            <b>#610</b> A layout-program IR for inspectable algorithmic layouts.
+          </li>
+          <li>
+            <b>#1165</b> Fill the frame without hand-tuned pixel spacing; where
+            fill-the-height gaps would go.
+          </li>
+          <li>
+            <b>#1013</b> One namespace per strategy family
+            (<code>Tile.squarify()</code>), the pattern for
+            <code>Layering</code> and <code>Ordering</code>.
+          </li>
+          <li>
+            <b>#1003</b> <code>scatter</code> overlap strategies; why
+            <code>Overlap</code> moves only the free axis.
+          </li>
+          <li>
+            <b>#1163</b> Extension packages (gotree) crossing to Python from one
+            definition; relevant if D ships.
+          </li>
+          <li>
+            <b>#46</b> Composite visualization examples, including a
+            FrankenSankey (a hard case).
+          </li>
+        </ul>
+      </details>
+
+      <details>
+        <summary>Prototype stand-ins and how to reproduce</summary>
+        <p>
+          Stories:
+          <code
+            >packages/gofish-graphics/stories/_proposals/sankey-layout/</code
+          >
+          (ApproachA to D, ScaleProbe, Repro). Throwaway helpers:
+          <code>_proto.ts</code>. d3 references:
+          <code>d3-reference/render-d3.mjs</code> (d3-sankey 0.12.3). Notes with
+          every story's code: <code>NOTES-prototypes.md</code>. Research:
+          <code>research.md</code>.
+        </p>
+      </details>
+    </main>
+    <script>
+      document
+        .querySelectorAll("pre code")
+        .forEach((el) => hljs.highlightElement(el));
+      // Tint changed lines: a line ending in "// @hl" or "# @hl" is tinted, and so
+      // are the lines above it back to where its unclosed brackets opened (a
+      // statement the formatter broke over several lines).
+      const bal = (t) =>
+        (t.match(/[)\]}]/g) || []).length - (t.match(/[([{]/g) || []).length;
+      document.querySelectorAll("pre code").forEach((el) => {
+        if (!el.innerHTML.includes("@hl")) return;
+        const lines = el.innerHTML.split("\n");
+        const text = lines.map((l) =>
+          l.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/g, " ")
+        );
+        const tint = new Set();
+        lines.forEach((l, i) => {
+          if (!/(\/\/|#) @hl/.test(text[i])) return;
+          lines[i] = l
+            .replace(/<span class="hljs-comment">\s*(\/\/|#) @hl<\/span>/, "")
+            .replace(/\s*(\/\/|#) @hl/, "")
+            .replace(/\s+$/, "");
+          let b = bal(text[i].replace(/(\/\/|#) @hl.*/, ""));
+          let j = i;
+          tint.add(i);
+          while (b > 0 && j > 0) {
+            j--;
+            b += bal(text[j]);
+            tint.add(j);
+          }
+        });
+        el.innerHTML = lines
+          .map((l, i) =>
+            tint.has(i) ? '<span class="ln-hl">' + l + "</span>" : l
+          )
+          .join("\n");
+      });
+    </script>
+  </body>
+</html>

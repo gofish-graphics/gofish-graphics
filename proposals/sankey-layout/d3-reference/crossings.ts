@@ -74,16 +74,21 @@ for (const [name, names, links, h] of [
       )
     );
   }
-  const d3 = JSON.parse(
-    fs.readFileSync(`tests/tmp/sankey-proposal/out/d3-${name}.json`, "utf8")
-  );
-  console.log(
-    name,
-    "d3-sankey       ",
-    count(
-      links as any,
-      col,
-      new Map(d3.map((n: any) => [n.name, (n.y0 + n.y1) / 2]))
-    )
-  );
+  for (const ref of ["", "-no-relax"]) {
+    const d3 = JSON.parse(
+      fs.readFileSync(
+        `tests/tmp/sankey-proposal/out/d3-${name}${ref}.json`,
+        "utf8"
+      )
+    );
+    console.log(
+      name,
+      `d3-sankey${ref}`.padEnd(16),
+      count(
+        links as any,
+        col,
+        new Map(d3.map((n: any) => [n.name, (n.y0 + n.y1) / 2]))
+      )
+    );
+  }
 }

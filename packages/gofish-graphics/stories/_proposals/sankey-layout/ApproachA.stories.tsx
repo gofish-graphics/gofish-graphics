@@ -90,3 +90,7 @@ export const Dependencies: StoryObj = {
     return container;
   },
 };
+
+export const EnergyInputOrder: StoryObj = {
+  render: () => sankey(energyNames, energyLinks, { w: 960, h: 600, ordered: false }),
+};
