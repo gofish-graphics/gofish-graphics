@@ -960,7 +960,10 @@ fixed-size nodes report their size).
   no domain is fitted by the same fit, which solves no scope there, and
   claims the size and the reach of what dresses it where its plot fills
   the size. Layout lays the node out at the box its claim solved
-  (`ScopeRegistry.fixedBox`). A chart's chrome goes around
+  (`ScopeRegistry.fixedBox`), and its box covers its size from its
+  origin, as its claim does, whether or not its content fills it: a
+  scatter that maps x only is still `h` tall, and its x axis sits below
+  that. A chart's chrome goes around
   the chart's frame (`frameChart`, #1257), so it is no part of those forms:
   the ticks read their datums in the frame (`position`'s `in`), and the size
   is the plot alone. What dresses the content inside the frame still is: a

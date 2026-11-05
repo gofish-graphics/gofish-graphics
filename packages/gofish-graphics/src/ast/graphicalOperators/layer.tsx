@@ -1552,10 +1552,26 @@ export const layer = createNodeOperatorSequential(
             mins[axis].push(domain[0]);
             maxs[axis].push(domain[1]);
           }
-          const minX = foldFinite(mins[0], Math.min);
-          const maxX = foldFinite(maxs[0], Math.max);
-          const minY = foldFinite(mins[1], Math.min);
-          const maxY = foldFinite(maxs[1], Math.max);
+          const hull = ([0, 1] as const).map((axis) => {
+            const lo = foldFinite(mins[axis], Math.min);
+            const hi = foldFinite(maxs[axis], Math.max);
+            // A node with a size of its own whose content maps no domain
+            // there lays it out from its start edge, and its plot is its
+            // size there (#1032: `w`/`h` are the plot), as its claim is
+            // (`fixedClaim`): from the start of what it holds, in its axis
+            // order, whether or not that fills it.
+            const fixed = node.fixedSize(axis);
+            if (
+              typeof fixed !== "number" ||
+              scopes.fixedSolve(node, axis) !== undefined
+            )
+              return [lo, hi];
+            return axis === 1 && direction === -1
+              ? [Math.min(lo, hi - fixed), hi]
+              : [lo, Math.max(hi, lo + fixed)];
+          });
+          const [minX, maxX] = hull[0];
+          const [minY, maxY] = hull[1];
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 

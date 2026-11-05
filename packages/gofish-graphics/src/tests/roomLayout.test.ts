@@ -241,6 +241,34 @@ async function main() {
     }
   }
 
+  console.log(
+    "\n# a sized chart whose content maps no domain on y: its plot is its size"
+  );
+  {
+    // The scatter maps x only. Its `h` is still its plot, in its claim and
+    // in its layout, so the x axis sits below the 50 px plot, and the
+    // chart's box is the box it claimed.
+    const node = await chart([{ v: 1 }, { v: 5 }], { w: 100, h: 50 })
+      .flow(scatter({ x: "v" }))
+      .mark(circle({ r: 3 }))
+      .resolve();
+    const data = await runLayout({ axes: true }, node);
+    const nodes = nodesOf(data.child);
+    const plot = nodes.find((n) => n._chartBox === true)!;
+    const box = nodes.find((n) => n._chartRing === true)!;
+    const claim = box.resolveExtent()[1]!;
+    check(
+      "the plot is 50 px tall",
+      close(plot.dims[1].size, 50),
+      plot.dims[1].size
+    );
+    check(
+      "the chart lays out at the height it claims",
+      close(box.dims[1].size, Pwl.at(claim.width, 0)),
+      { box: box.dims[1].size, claim: Pwl.at(claim.width, 0) }
+    );
+  }
+
   console.log("\n# fr charts with axes split a chain's slack by their weights");
   {
     const data = [{ v: 1 }, { v: 5 }];
