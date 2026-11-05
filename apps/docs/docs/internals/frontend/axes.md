@@ -85,8 +85,8 @@ Tick and category labels are chrome, so they lie outside the content.
 Chrome sits outside its chart and takes room: every chrome shape claims its
 size (a text is measured when the claims are resolved), each ring claims the
 hull of what it wraps and of its shapes where its constraints place them
-(`placeByClaims`), and the outermost ring hands its content what its gutters
-leave of its slot. A category label is centered on its slot's ref. The claim
+(`placeByClaims`), and each ring hands its content what its chrome leaves
+of the ring's room (`plotRooms` in `layer`). A category label is centered on its slot's ref. The claim
 walk knows where the slot lands (`planPlacement`): on a data axis (time or
 number bins) through the data, and on a category axis because a band is a
 share, which claims one σ (#493 piece 3, `GoFishNode.sharesRoom`). So the
@@ -138,7 +138,9 @@ axis with an origin, the content its axes are seated beside (`_axesBeside`)
 widens its claim and its plot to the domain, rounded as the axis over it is
 (`KeyedDomains.scope`, the same widen-then-nice the marks are placed by). On
 a difference axis the domain is a width, and the plot covers it centered on
-its content, where the difference axis draws its line. The
+its content, where the difference axis draws its line: both read it from
+one formula (`differenceSpan`), in the content's frame, which measures
+widths from the content's start wherever its interval starts. The
 claim walk widens its plan (`domainPlan` in `layer`) and layout widens its box
 (`GoFishNode.domainSpan`), so the two agree. Every axis line then distributes
 just past the content's box without its dressing, like any other chrome
@@ -174,8 +176,8 @@ when specified it is honored **literally** (frame-relative: `"start"`=near,
 elaboration can tell an explicit `"start"` apart from the default. The per-dim
 side is threaded `elaborateChrome → elaborationsFor → elaborate{Continuous,
 Difference,Ordinal}Axis`, and each seating decision reads the resolved edge:
-`gutterConstraints` flips the `innerAlign` edge and the `distribute`/standoff
-order, the ordinal label row flips its `distribute([label, content])` pair, and the
+`gutterConstraints` flips the `innerAlign` edge and the order of the
+`distribute` that seats the line past the content, the ordinal label row flips its `distribute([label, content])` pair, and the
 axis **titles** follow their axis to the same edge (see below). The tick-and-label
 pair (`tickMark`) is a plain spread, which reads in pixel order, so it orders its
 two parts by the axis's SCREEN side (the side in axis order, turned into the screen

@@ -275,7 +275,12 @@ measure?)`:
   carries the datum's measure.
 - **none**: there is no origin at all, only a width, so the interval is
   `[0, width]` and only differences along it mean anything. A middle-aligned
-  overlay is one.
+  overlay is one. An overlay of an origin-less child and a free one seated
+  on its baseline keeps the free child's interval, so it can start below 0
+  (`none [−20, 7]` for a bar of −20 beside an origin-less bar of 7). Only
+  its width means anything, so what reads one reads its width: a
+  difference axis spans its niced width from the content's start
+  (`differenceSpan`).
 
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
@@ -302,7 +307,7 @@ is a nonnegative magnitude). Most extents sit wholly above their data 0 and
 never spell the descent. Every claim is measured from data 0, whatever its
 origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
 `50σ` and descent `−30σ` (its low edge lies `30σ` above its 0), and its width
-is `20σ`. An origin-less interval starts at 0, so its descent is 0. The
+is `20σ`. A middle-aligned overlay's origin-less interval starts at 0, so its descent is 0. The
 claim's `width` is `ascent + descent`, computed once by the `Extent`
 constructor, and it is what a scope solves σ against. The places that read
 the two sides:
@@ -1763,8 +1768,8 @@ placed beside a node inside another child (a label on its mark's ref) takes
 room where the claim walk knows that node lands (`planPlacement`), a band of
 a category axis included (a share is a claim), and is ink where it does not
 (inside a coordinate space, or beside a band in a scope that mixes data and
-bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a chart's
-content, seated past its chrome's start gutter) shares the layer's frame from
+bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a ring's
+content, seated at the ring's origin, `wrapRing`) shares the layer's frame from
 that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
 the pin. The axes drawn over each domain are recorded once `resolveAxes` has
 assigned them (`refreshDemand`, which `layout()` calls once, after the axes

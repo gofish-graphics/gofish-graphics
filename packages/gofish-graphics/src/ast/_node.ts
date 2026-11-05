@@ -82,7 +82,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
-  dataWidth,
+  differenceSpan,
   originIs,
   placeBaseline,
   MeasureClash,
@@ -2711,19 +2711,12 @@ export class GoFishNode {
       undefined
     )[0];
     if (!isCONTINUOUS(niced) || !isCONTINUOUS(space)) return undefined;
-    // A difference axis's width, centered on the content's: half the
-    // widening on each side.
-    const half =
+    // A difference axis's niced width, centered on the content's, in the
+    // content's frame (`differenceSpan`), as the axis draws it.
+    const [min, max] =
       axisOver(space) === "delta"
-        ? (dataWidth(niced) - dataWidth(space)) / 2
-        : 0;
-    const { min, max } =
-      axisOver(space) === "delta"
-        ? {
-            min: space.dataInterval.min - half,
-            max: space.dataInterval.max + half,
-          }
-        : niced.dataInterval;
+        ? differenceSpan(space, niced)
+        : [niced.dataInterval.min, niced.dataInterval.max];
     if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
     const a = frame.sigma * min + frame.originPx;
     const b = frame.sigma * max + frame.originPx;

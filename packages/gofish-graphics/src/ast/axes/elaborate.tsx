@@ -29,6 +29,7 @@ import {
   isORDINAL,
   isCONTINUOUS,
   dataWidth,
+  differenceSpan,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
   axisOver,
@@ -645,19 +646,20 @@ function elaborateDifferenceAxis(
   // `space` is the axis's niced space (`niceContinuous`), so its width is a
   // nice value from 0 and the ticks step evenly up to it: the scope that sizes
   // the content solves against the same niced width (`niceScope`), so ticks
-  // line up with the marks they annotate. The axis line spans [0, width].
+  // line up with the marks they annotate. The axis counts [0, width], and
+  // it lies at `differenceSpan` in the content's frame, as the plot covers.
   const width = dataWidth(space);
   const tickValues = d3Ticks(0, width, ticks.count);
-  const slack = (width - dataWidth(content)) / 2;
+  const [lineMin, lineMax] = differenceSpan(content, space);
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
-    value: (v + tickValues[i + 1]) / 2 - slack,
+    value: (v + tickValues[i + 1]) / 2 + lineMin,
     text: fmtNum(tickValues[i + 1] - v),
   }));
   return positionAxis({
     dim,
-    lineMin: -slack,
-    lineMax: width - slack,
-    tickValues: tickValues.map((v) => v - slack),
+    lineMin,
+    lineMax,
+    tickValues: tickValues.map((v) => v + lineMin),
     tickNode: () => tickRect(dim),
     extraLabels,
     side,

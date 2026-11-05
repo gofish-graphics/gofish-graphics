@@ -299,6 +299,22 @@ export const placeBaseline = <T extends UnderlyingSpace | undefined>(
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
+/** Where a difference axis over `content` (a space with no data 0) spans
+ *  its niced width `niced` in the content's frame. That frame measures
+ *  widths from the content's start, wherever its interval starts (an
+ *  overlay of a free bar below 0 and an origin-less one has a negative
+ *  min), and the content sits centered in the niced width, as centering
+ *  makes a difference axis: `[−slack, width − slack]`. The axis is drawn
+ *  there (`elaborateDifferenceAxis`) and the plot covers it
+ *  (`GoFishNode.domainSpan`). */
+export const differenceSpan = (
+  content: CONTINUOUS_TYPE,
+  niced: CONTINUOUS_TYPE
+): [number, number] => {
+  const slack = (dataWidth(niced) - dataWidth(content)) / 2;
+  return [-slack, dataWidth(niced) - slack];
+};
+
 /** What an axis ticks at, which is what a scope that draws the axis nices
  *  its domain to (#659, #1057): about `count` ticks, or, on a time axis, the
  *  cells of its `rows`, whose inner row (`rows[0]`) sets the nicing. A time

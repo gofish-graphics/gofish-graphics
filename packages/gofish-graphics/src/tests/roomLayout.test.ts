@@ -21,6 +21,7 @@ import {
   layer,
   percent,
   fr,
+  value,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import { GoFishNode } from "../ast/_node";
@@ -406,6 +407,36 @@ async function main() {
         xLine !== undefined &&
         xLine.y! >= yLine.y! + yLine.h! - 1e-6,
       { plot: plot.dims[1].size, yLine, xLine }
+    );
+  }
+
+  console.log(
+    "\n# a difference axis whose content starts below 0: plot and axis agree"
+  );
+  {
+    // A free bar of -20 and an origin-less bar of 7 overlay to a space
+    // with no data 0 over [-20, 7]. Its frame measures widths from the
+    // content's start, so the plot covers the niced width where the axis
+    // line is drawn (`differenceSpan`), not shifted by the interval's min.
+    const L = Layer as any;
+    const R = Rect as any;
+    const node = await L({ w: 100, h: 200 }, [
+      R({ w: 10, h: value(-20), fill: "red" }),
+      R({ x: 30, y: 5, w: 10, h: value(7), fill: "blue" }),
+    ]);
+    const data = await runLayout({ axes: true }, node);
+    const plot = nodesOf(data.child).find((n) => n._axesBeside)!;
+    const span = plot.domainSpan(1);
+    const yLine = items({ items: lowerToDisplayList(data.child) }).find(
+      (i) => i.kind === "rect" && i.style?.fill === "gray" && (i.h ?? 0) > 100
+    );
+    check(
+      "the plot is the 200 px the axis line spans",
+      span !== undefined &&
+        close(span[1] - span[0], 200, 1e-6) &&
+        close(plot.dims[1].size, 200, 1e-6) &&
+        close(yLine?.h, 200, 1e-6),
+      { span, box: plot.dims[1].size, line: yLine?.h }
     );
   }
 
