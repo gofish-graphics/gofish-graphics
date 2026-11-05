@@ -1741,8 +1741,8 @@ chart(rows)
             >). This alone takes 442 to 386 px. It is not tree-specific: it
             spreads any children as close as their outlines allow. Outlines
             already exist on every node (labels and <code>enclose</code> use
-            them); what is missing is a size claim that carries a per-layer
-            profile up instead of one number.
+            them); what is missing is a <code>geometry()</code> query for a
+            per-layer profile (see below).
           </li>
           <li>
             <b>Center the parent on its first and last child</b>, not on the
@@ -1897,9 +1897,15 @@ chart(rows)
         tidy tree becomes one point in GoTree's space plus a measure option, not
         a separate algorithm. Open: <code>measure</code> only changes distribute
         (align ignores it, and nest measured on outlines is closer to
-        <code>enclose</code>); the size claim must carry a profile per layer
-        instead of one number, which is an engine change; radial trees need the
-        profile in angular bands.
+        <code>enclose</code>); the placement needs only a new
+        <code>geometry()</code> query, a per-layer profile that falls back to
+        the box (as <code>enclosingCircle</code> does) and that a container
+        composes from its placed children; <code>pack</code> and
+        <code>Overlap</code>
+        already read children's geometry inside layout. What remains is sizing:
+        until a sizing-time form exists, the spread reports the sum of its
+        children's boxes, the same open question as #967 for
+        <code>pack</code>. Radial trees need the profile in angular bands.
       </p>
       <p>
         So <code>Positioning</code> is one family with two parts, a center and
