@@ -12,7 +12,12 @@ import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
 import { Size, elaborateOwnDims, FancyDims, displayTranslate } from "../dims";
-import { UnderlyingSpace, isUNDEFINED, magnitude } from "../underlyingSpace";
+import {
+  UNDEFINED,
+  UnderlyingSpace,
+  isUNDEFINED,
+  magnitude,
+} from "../underlyingSpace";
 import { Extent, impliedExtent, padExtent, shiftExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import type { KeyedDomains } from "../keyedDomains";
@@ -277,6 +282,7 @@ export const layer = createNodeOperatorSequential(
         key: c.uid,
         extent: extents[i]?.[axis],
         space: c.resolveUnderlyingSpace()[axis],
+        part: partOf(c, axis),
         standIn: c instanceof GoFishRef,
         fromRefs: c instanceof GoFishNode && c.placedFromRefs !== undefined,
         placed: placed[i],
@@ -289,6 +295,18 @@ export const layer = createNodeOperatorSequential(
         dataPositioned: placedByOwnData(node, i, axis),
         startBaseline: c instanceof GoFishNode && c.baselineIsStart(axis),
       }));
+    };
+    // The part of this layer's space `c` is in on `axis` (`ClaimWalk.parts`).
+    // A `ref` stand-in is in the part its target is in, in its target's
+    // layer: it stands for that node.
+    const partOf = (c: GoFishAST, axis: 0 | 1): UnderlyingSpace | undefined => {
+      const target = c instanceof GoFishRef ? c.targetNode : c;
+      if (!(target instanceof GoFishNode)) return undefined;
+      const holder = c instanceof GoFishRef ? target.parent : node;
+      const i = holder?.indexOfChild(target);
+      const part =
+        i === undefined ? undefined : holder?.claimWalk?.parts(axis)?.[i];
+      return part ?? target.resolveUnderlyingSpace()[axis];
     };
     // A category label along its own axis takes room only past the ends
     // of its axis (#1115): between neighbors it overdraws them rather than
@@ -460,11 +478,38 @@ export const layer = createNodeOperatorSequential(
           if (!isUNDEFINED(gridAxes[axis])) resolved[axis] = gridAxes[axis];
         }
       }
+      // The layer's space is a collection of its children's spaces: per
+      // axis, the space each child is in here. A child the layer nests in
+      // its own space (at a datum, in a distribute's slot or a grid's
+      // track) is in the space it reports there. A child a literal pixel
+      // places elsewhere, and a box placed whole (a chart's box, or a node
+      // with a size of its own: it solves its own σ, so to this layer it is
+      // a box of pixels, `GoFishNode.plotIsBox`), is in no space of the
+      // layer's. Any other child is in its own space, which a `nest` has
+      // unified with what it pads (`effectiveChildren`). The layer's axes
+      // attach to the parts that are continuous or ordinal, and the rest
+      // is dressing (`placeByClaims`).
+      // TODO(type system): a shortcut. A part is one space per child, read
+      // off the sharing plan, and pixels are no space: a text at a literal
+      // pixel and a chart placed whole are both "undefined" here, so a
+      // caption beside a chart is plot, while a caption beside a scatter
+      // whose marks are this layer's is dressing. Once data types and
+      // space types are aligned, pixels should be a space of their own and
+      // the collection keyed by space, not by child.
+      const parts = ([0, 1] as const).map((axis) =>
+        effectiveChildren.map((c, i) => {
+          if (sharing.nested[axis].has(i)) return resolved[axis];
+          const child = childNodes[i];
+          const whole = child instanceof GoFishNode && child.plotIsBox(axis);
+          return whole || sharing.sets[axis][i] !== 0 ? UNDEFINED : c[axis];
+        })
+      ) as [UnderlyingSpace[], UnderlyingSpace[]];
       return {
         nestPlan,
         effectiveChildren,
         plan,
         resolved,
+        parts,
       };
     };
 
@@ -1469,6 +1514,10 @@ export const layer = createNodeOperatorSequential(
         return typeof min === "number" ? min : undefined;
       },
       ownSize: (axis) => node.fixedSize(axis),
+      parts: (axis) => {
+        node.resolveUnderlyingSpace();
+        return layerTypes?.parts[axis];
+      },
       plan: (axis) => {
         node.resolveExtent();
         return node._claimMemo.plans[axis];

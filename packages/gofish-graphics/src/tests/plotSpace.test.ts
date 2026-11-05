@@ -1,12 +1,14 @@
 /**
- * The plot is the part of a layer that carries its space (#1257): a child
- * whose own type on an axis is continuous or ordinal, that a `position`
- * places at a datum, that its options place at a literal pixel, that a
- * relation ties to a child that carries it, or that stands for a node
- * placed elsewhere (a `ref`) carries the layer's space there. Any other child, in a layer where one
- * does, is dressing: an `enclose` around refs, a chart of outlines or a
- * line layered over a scatter, a value label beside its bar. Dressing
- * takes room but is no part of the plot, and the axes sit beside the plot.
+ * A layer's space is a collection of its children's spaces (#1257): the
+ * type pass gives each child the space it is in in the layer
+ * (`ClaimWalk.parts`). The layer's axes attach to the children whose space
+ * there is continuous or ordinal; any other child is dressing, beside or
+ * over them: an `enclose` around refs, a chart of outlines or a line
+ * layered over a scatter, a value label beside its bar. A ref is in the
+ * part its target is in, and a `nest` unifies its outer box with the inner
+ * it pads. A box placed whole (a chart's box, a node with a size of its
+ * own) is pixels to its layer, as a text at a literal pixel is: neither is
+ * in the layer's space. Dressing takes room but is no part of the plot.
  * Run: `tsx src/tests/plotSpace.test.ts` (wired into `pnpm test` as
  * `test:plot-space`).
  */
@@ -233,7 +235,7 @@ async function main() {
     );
   }
 
-  console.log("\n# a nest's outer box and a literal caption are no dressing");
+  console.log("\n# a nest's outer box, and a caption beside a chart, are no dressing");
   {
     // The outer box a nest sizes from its data-sized inner is tied to it,
     // so the spread lays the padded boxes `spacing` apart.
@@ -262,7 +264,8 @@ async function main() {
       rects.map((r) => [r.x, r.w])
     );
 
-    // A text its own options place at a literal pixel beside a chart.
+    // A text at a literal pixel beside a chart placed whole: both are
+    // pixels to the layer, so it has no part its axes visualize.
     const captioned = layer([
       chart(points, { axes: false, w: 100, h: 50 })
         .flow(scatter({ x: "x", y: "y" }))
@@ -271,7 +274,7 @@ async function main() {
     ]);
     const c = await runLayout({}, await (captioned as any)(undefined));
     check(
-      "a caption at a literal pixel is no dressing",
+      "a caption beside a chart placed whole is no dressing",
       (c.child as GoFishNode).claimWalk?.dressing[1].size === 0,
       [...((c.child as GoFishNode).claimWalk?.dressing[1] ?? [])]
     );

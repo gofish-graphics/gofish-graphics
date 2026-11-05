@@ -289,6 +289,11 @@ export type ClaimWalk = {
   /** Per axis, its own size there: pixels, a data value, or undefined. A
    *  size of its own makes it a σ-scope of its own there. */
   ownSize: (axis: 0 | 1) => MaybeValue<number> | undefined;
+  /** Per axis, by child index, the space each child is in in this layer,
+   *  as its type pass infers it: the layer's space is the collection of
+   *  them, and its axes attach to the parts that are continuous or
+   *  ordinal (`ClaimChild.part`). */
+  parts: (axis: 0 | 1) => readonly UnderlyingSpace[] | undefined;
 };
 
 export type Placeable = {

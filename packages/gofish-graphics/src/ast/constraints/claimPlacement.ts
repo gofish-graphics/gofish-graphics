@@ -108,10 +108,11 @@ export type ClaimChild = {
    *  takes it where layout put it (`at:`) unless a `position` override
    *  owns the axis. */
   placesItself?: boolean;
-  /** It places itself at a position its own options spell (a literal
-   *  start, a shape's own pixel position), not one read off refs: the
-   *  spec places it, as data places a datum, so it is no dressing. */
-  literal?: boolean;
+  /** The part of the layer's space it is in on the axis: its space in
+   *  the layer, as the type pass infers it (`ClaimWalk.parts`). The
+   *  layer's axes visualize the parts that are continuous or ordinal;
+   *  any other child is beside them or over them (dressing). */
+  part?: UnderlyingSpace;
   /** Its plot on the axis, about its origin, where it is not its whole
    *  claim (an outline, dressing or chrome around it): a chain lays it by
    *  its plot, as layout's `localPlotSpan` does, so what dresses a part
@@ -546,67 +547,22 @@ export function placeByClaims(
     )
       unplaced.add(i);
   });
-  // Dressing: a child that carries none of the layer's space on the axis,
-  // in a layer where another child does. A child carries the space when
-  // its own type there is continuous or ordinal, when a `position` places
-  // it at a datum, when its own data places it, when its own options place
-  // it at a literal pixel (`literal`: a caption at `y: 132`), or when it
-  // stands for a node placed elsewhere (a `ref`). So a value label beside its bar, an
-  // outline drawn around refs (an `enclose`), and a chart of outlines
-  // layered over a scatter are dressing: their geometry is read off other
-  // nodes' pixels, not placed by data on this axis. Dressing takes room,
-  // but it is no part of the plot: the axes sit beside the plot, and a
-  // node with a size of its own maps its plot into that size (#1032). A
-  // ring's chrome is chrome, not dressing. A layer where no child carries
-  // the space has no dressing: all of it is plot.
-  const carriesOwn = (i: number): boolean => {
-    const c = children[i];
-    return (
-      c.standIn ||
-      c.dataPositioned ||
-      c.literal === true ||
-      atDatum.has(i) ||
-      c.space?.kind === "continuous" ||
-      c.space?.kind === "ordinal"
-    );
-  };
-  // A relation (an align, a distribute, a nest) between children makes
-  // them one figure on the axis, of the type of the part that carries it:
-  // the outer box of a `nest` is sized from the inner it pads, so it is
-  // part of the plot. A stand-in carries for itself alone: what is tied
-  // to it is placed beside a node placed elsewhere, off that node's
-  // pixels, as a value label is beside its bar.
-  const tied = new Map<number, number>();
-  const root = (i: number): number => {
-    let r = i;
-    while (tied.has(r) && tied.get(r) !== r) r = tied.get(r)!;
-    return r;
-  };
-  for (const c of onAxis) {
-    if (!relates(c)) continue;
-    const members = c.children
-      .map((r) => operands.get(keyOf(r)))
-      .filter((op) => op?.direct === true && !children[op.child].standIn)
-      .map((op) => op!.child);
-    for (let k = 1; k < members.length; k++) {
-      const [a, b] = [root(members[0]), root(members[k])];
-      if (a !== b) tied.set(b, a);
-    }
-  }
-  const carryingRoots = new Set(
-    children
-      .map((c, i) => i)
-      .filter((i) => !children[i].standIn && carriesOwn(i))
-      .map(root)
-  );
-  const carries = (i: number): boolean =>
-    carriesOwn(i) || carryingRoots.has(root(i));
+  // Dressing: a child outside the part of the layer's space its axes
+  // visualize (`ClaimChild.part`, from the type pass). A layer is a
+  // collection of its children's spaces; its axes attach to the children
+  // whose space there is continuous or ordinal, and the rest (an outline
+  // around refs, a value label, a chart of outlines over a scatter) is
+  // beside them or over them. It takes room, but is no part of the plot.
+  // A layer with no such part has no dressing: all of it is plot. Ink and
+  // a ring's chrome are neither.
+  const visualized = (c: ClaimChild) =>
+    c.part?.kind === "continuous" || c.part?.kind === "ordinal";
   const plotPart = (c: ClaimChild, i: number) =>
     !ink.has(i) && c.chrome !== true;
   const dressing = new Set<number>();
-  if (children.some((c, i) => plotPart(c, i) && carries(i)))
+  if (children.some((c, i) => plotPart(c, i) && visualized(c)))
     children.forEach((c, i) => {
-      if (plotPart(c, i) && !carries(i)) dressing.add(i);
+      if (plotPart(c, i) && !visualized(c)) dressing.add(i);
     });
   // What the solve leaves out: the ink, and the stand-ins it cannot place.
   const out = (i: number) =>

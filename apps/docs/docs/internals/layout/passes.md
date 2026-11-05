@@ -961,21 +961,18 @@ fixed-size nodes report their size).
   is the plot alone. What dresses the content inside the frame still is: a
   label hanging off the first bar is dressing, so it adds around the plot. Labels beside a plain layer's content (and
   the outlines of its shapes) add around it the same way.
-- **The plot leaves out dressing.** The plot of a layer on an axis is the
-  part of it that carries its space there (see
-  [Underlying Space](/internals/core/underlying-space)): a child whose own
-  type there is continuous or ordinal, one a `position` places at a datum,
-  one its own data places, one its own options place at a literal pixel,
-  a `ref` stand-in for a node placed elsewhere, or one a relation ties to
-  a child that carries it other than a stand-in (the outer box of a
-  `nest`). Dressing is any other child of a layer where one child carries the space:
-  its geometry is read off other nodes' pixels, not placed by data on that
-  axis. That is a value label beside its bar's `ref`, a tier of texts
+- **The plot leaves out dressing.** A layer's space is a collection of
+  its children's spaces (see
+  [Underlying Space](/internals/core/underlying-space)): the type pass
+  gives each child the space it is in in the layer (`ClaimWalk.parts`),
+  and the layer's axes attach to the children whose space there is
+  continuous or ordinal. Dressing is any other child of a layer that has
+  such a part: its geometry is read off other nodes' pixels, not placed by
+  data on that axis. That is a value label beside its bar's `ref`, a tier of texts
   seated beside the bars of another tier, an `enclose` drawn around placed
   members, and a chart of outlines or a line layered over a scatter
   (`.layer(chart(selectAll(…)))`), whose type is `undefined` on both axes. A
-  layer where no child carries the space has no dressing: all of it is
-  plot. A ring's chrome is chrome, not dressing (`ClaimChild.chrome`). Each node has a plot claim
+  layer with no such part has no dressing: all of it is plot. A ring's chrome is chrome, not dressing (`ClaimChild.chrome`). Each node has a plot claim
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`buildPlan`'s plot

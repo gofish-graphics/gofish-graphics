@@ -578,25 +578,39 @@ each inherent to what the origin states are:
   chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts
   larger than a sized layer warn `fixed-overflow`.
 - **A plot claim beside the claim**: a layer's plan also computes the
-  claim of the plot, the part of the layer that carries its type. On each
-  axis, a child carries the layer's type when its own type there is
-  continuous or ordinal, when a `position` places it at a datum, when its
-  own data places it, when its own options place it at a literal pixel
-  (`ClaimChild.literal`), or when it is a `ref` stand-in for a node placed
-  elsewhere. A relation (an align, a distribute, a nest) ties the children
-  it names into one figure, which carries the type when one of them does:
-  the outer box of a `nest` is part of the plot. A stand-in carries for
-  itself alone, so a label aligned to it does not. In a layer where some child carries the type, every other
-  child is **dressing** (`placeByClaims`): its type is `undefined` there,
-  because its geometry is read off other nodes' pixels rather than placed
-  by data on that axis. An `enclose` drawn around refs, a `line` or
-  `ribbon` connecting refs, a `.label()` text beside its mark's ref, and a
-  chart of those layered over a scatter
-  (`.layer(chart(selectAll("points")).mark(enclose()))`) all have type
-  `undefined` on both axes, so they are dressing of the layer that holds
-  them, while the layer's own type stays the scatter's continuous one. A
-  layer where no child carries its type (a layer of literal shapes) has no
-  dressing. The plot also leaves out a shape's outline (half its stroke
+  claim of the plot, the part of the layer its axes visualize. A layer's
+  space is a **collection** of its children's spaces, not one space. The
+  type pass gives each child, on each axis, the space it is in in the
+  layer (`ClaimWalk.parts`, `composeLayerTypes` in `layer`):
+  - a child the layer nests in its own space (at a datum a `position`
+    places it at, in a distribute's slot, in a grid's track) is in the
+    space the layer reports there;
+  - a child a literal pixel `position` places elsewhere is in none;
+  - a box placed whole (a chart's box, or a node with a size of its own,
+    `GoFishNode.plotIsBox`) is in none either: it solves its own σ, so to
+    the layer it is a box of pixels;
+  - any other child is in its own type, which a `nest` has unified with
+    the inner it pads (`applyNestSpacePlan`), so the outer box of a nest
+    is in the inner's space;
+  - a `ref` stand-in is in the part its target is in, in its target's
+    layer.
+
+  The layer's axes attach to the children whose part is continuous or
+  ordinal. Every other child of a layer that has such a part is
+  **dressing** (`placeByClaims`): it is beside the part or over it. An
+  `enclose` drawn around refs, a `line` or `ribbon` connecting refs, a
+  `.label()` text beside its mark's ref, and a chart of those layered over
+  a scatter (`.layer(chart(selectAll("points")).mark(enclose()))`) all
+  have type `undefined` on both axes, so they are dressing of the layer
+  that holds them, while the layer's own type stays the scatter's
+  continuous one. A layer with no such part (a layer of literal shapes,
+  or a chart placed whole with a caption at a literal pixel beside it)
+  has no dressing. This is a deliberate shortcut until data types and
+  space types are aligned: pixels are no space here, so a text at a
+  literal pixel beside a scatter whose marks the layer holds is dressing,
+  while beside a chart placed whole it is plot.
+
+  The plot also leaves out a shape's outline (half its stroke
   past its box, which its claim reaches and its plot leaves out; a node a
   `nest` derives reaches its own outline past the padded inner's plot,
   `applyNestExtentPlan`) and the chrome rings of a nested node, short of
@@ -604,15 +618,22 @@ each inherent to what the origin states are:
   the outermost ring of a `chart()`: a parent lays a chart out whole,
   `GoFishNode.plotIsBox`). Chrome is laid beside a third claim, the box
   without its dressing (`ChildForms.bare`, `GoFishNode.resolveBareExtent`
-  and `localBareSpan`), which keeps inner chrome, so a title sits past
-  the tick labels. So the axes attach to the part that carries the
-  continuous type, and dressing draws over them. A chain of parts of the plot lays them by their plots, so dressing never
+  and `localBareSpan`). Neither of the other two is it. The box holds the
+  dressing, so ovals that reach past a scatter would push its axes out.
+  The plot of a node with a size of its own is its whole box, dressing
+  included, since a parent lays it out whole (#1210); and the plot of a
+  ring leaves out its chrome, so a title laid beside it would cover the
+  tick labels. The box without its dressing keeps inner chrome and leaves
+  the dressing out, and a node with a size of its own has its content's
+  at the σ it solved. So the axes attach to the part of the layer whose
+  space is continuous, and dressing draws over them. A chain of parts of the plot lays them by their plots, so dressing never
   moves the parts it dresses: it reaches past the chain, or sits in the gaps
   (`ClaimChild.plot` in `placeByClaims`). The plot leaves out what is
   placed beside a stand-in, so a chain with a stand-in reaches, in its
   plot, only as far as its stand-ins. A chart with a size of its own maps its plot
   into that size (see
   [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)).
+
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
