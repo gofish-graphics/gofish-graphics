@@ -13,7 +13,7 @@ LEVELS = ["Strongly disagree", "Disagree", "Neutral", "Agree", "Strongly agree"]
 
 chart(
     survey,
-    schema={"response": Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])},
+    schema={"response": Unit(domain=Domain.discrete(LEVELS), traits=[Trait.diverging()])},
     axes=True,
 ).flow(
     spread(by="question", dir="y"),
@@ -28,12 +28,12 @@ Unit(name)                              # a unit
 Unit(name, domain=..., traits=[...])    # a unit with a domain and traits
 Unit(domain=..., traits=[...])          # a unit with no name: a type of levels
 
-Domain.discrete(levels)                 # levels with no order (nominal): HasLevels
-Domain.ordered(levels)                  # levels in order (ordinal): HasLevels and HasOrder
+Domain.discrete(levels)                 # the values are `levels`: HasLevels
 
-Trait.diverging()                       # the order has a midpoint (HasMidpoint), at n / 2
+Trait.ordered()                         # the levels are ordered, first to last (HasOrder)
+Trait.diverging()                       # the order has a midpoint (HasMidpoint), at n / 2; implies Trait.ordered()
 Trait.diverging(midpoint)               # the same, at `midpoint`
-Trait.summable()                        # the unit's amounts add up (CanAdd)
+Trait.summable()                        # the unit's amounts add up (CanSum)
 
 Unit.time()                             # the unit of instants (a time), read in UTC
 Unit.time(zone=zone)                    # the same, read in the time zone `zone`
@@ -44,8 +44,9 @@ unit                                    # a Unit: the same as {"unit": unit}
 "km²"                                   # a unit's name: the same as {"unit": "km²"}
 ```
 
-A column type is a set of traits. A unit definition separates what its
-values are, its `domain`, from the traits they have, its `traits`.
+A column type is a set of traits. A unit definition separates which values
+exist, its `domain`, from everything else about them, its `traits`: an
+order, a midpoint, whether they add up.
 `Domain` and `Trait` are families: a unit takes one domain and a list of
 traits. A `Unit` is declared once and used by every column in it, so its
 columns agree on what it can do:
@@ -54,10 +55,10 @@ columns agree on what it can do:
 from gofish import Unit, Domain, Trait
 
 Likert = Unit(
-    domain=Domain.ordered(["SD", "D", "N", "A", "SA"]),
+    domain=Domain.discrete(["SD", "D", "N", "A", "SA"]),
     traits=[Trait.diverging()],
 )
-Stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+Stars = Unit("stars", domain=Domain.discrete([1, 2, 3, 4, 5]), traits=[Trait.ordered()])
 Party = Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"]))
 USD = Unit("USD", traits=[Trait.summable()])
 
@@ -76,29 +77,29 @@ chart(
 A column record takes the keys `"name"` and `"unit"`. Any other key raises a
 `TypeError`. `"unit"` is a `Unit` or a unit's name.
 
-| Entry                         | Trait                   | Meaning                                                 |
-| ----------------------------- | ----------------------- | ------------------------------------------------------- |
-| `Domain.discrete(levels)`     | `HasLevels`             | The column's values are `levels`, listed in this order. |
-| `Domain.ordered(levels)`      | `HasLevels`, `HasOrder` | The same, and the levels are ordered, first to last.    |
-| `Trait.diverging(midpoint)`   | `HasMidpoint`           | The order has a midpoint, a point along it. See below.  |
-| `Unit(name)`, `{"unit": ...}` | `HasUnit`               | The column's values are amounts in the unit.            |
-| `Unit.time()`                 | `HasUnit`               | The column's values are instants, read on a calendar.   |
-| `Unit.duration`               | `HasUnit`, `CanAdd`     | The column's values are spans of time.                  |
-| `Trait.summable()`            | `CanAdd`                | The unit's amounts add up. See below.                   |
-| `{"unit": ...}`, a name       | `HasUnit`               | The same, with no word on whether the amounts add up.   |
-| `{"name": ...}`               | `HasQuantity`           | The column's values are amounts of the quantity `name`. |
+| Entry                         | Trait                     | Meaning                                                 |
+| ----------------------------- | ------------------------- | ------------------------------------------------------- |
+| `Domain.discrete(levels)`     | `HasLevels`               | The column's values are `levels`, listed in this order. |
+| `Trait.ordered()`             | `HasOrder`                | The levels are ordered, first to last.                  |
+| `Trait.diverging(midpoint)`   | `HasOrder`, `HasMidpoint` | The order has a midpoint, a point along it. See below.  |
+| `Unit(name)`, `{"unit": ...}` | `HasUnit`                 | The column's values are amounts in the unit.            |
+| `Unit.time()`                 | `HasUnit`                 | The column's values are instants, read on a calendar.   |
+| `Unit.duration`               | `HasUnit`, `CanSum`       | The column's values are spans of time.                  |
+| `Trait.summable()`            | `CanSum`                  | The unit's amounts add up. See below.                   |
+| `{"unit": ...}`, a name       | `HasUnit`                 | The same, with no word on whether the amounts add up.   |
+| `{"name": ...}`               | `HasQuantity`             | The column's values are amounts of the quantity `name`. |
 
 ## Parameters
 
-| Parameter  | Type               | Description                                                                                                                                                                                       |
-| ---------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`     | `str`              | `Unit`'s name, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal. A record's `"name"` is its quantity, e.g. `"Pay"`, which titles the axis in place of the column's name. |
-| `domain`   | `Domain`           | What the unit's values are: `Domain.discrete(levels)` or `Domain.ordered(levels)`. Without it, a named unit's values are amounts (numbers).                                                       |
-| `traits`   | `list[Trait]`      | The traits the unit's values have, as `Trait` values: `Trait.summable()` declares `CanAdd` and `Trait.diverging()` declares `HasMidpoint`. Each appears at most once.                             |
-| `levels`   | `list[str \| int]` | Every value the column takes, in the order to lay them out in.                                                                                                                                    |
-| `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`.                                                                                |
-| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                                                                                                 |
-| `unit`     | `Unit \| str`      | A record's unit: a `Unit`, or a unit's name.                                                                                                                                                      |
+| Parameter  | Type               | Description                                                                                                                                                                                                                  |
+| ---------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | `str`              | `Unit`'s name, e.g. `"USD"` or `"mm"`. Two units are the same when their names are equal. A record's `"name"` is its quantity, e.g. `"Pay"`, which titles the axis in place of the column's name.                            |
+| `domain`   | `Domain`           | Which values the unit has: `Domain.discrete(levels)`. Without it, a named unit's values are amounts (numbers).                                                                                                               |
+| `traits`   | `list[Trait]`      | The traits the unit's values have, as `Trait` values: `Trait.ordered()` declares `HasOrder`, `Trait.diverging()` declares `HasMidpoint` and `HasOrder`, and `Trait.summable()` declares `CanSum`. Each appears at most once. |
+| `levels`   | `list[str \| int]` | Every value the column takes, in the order to lay them out in.                                                                                                                                                               |
+| `midpoint` | `float`            | Where the midpoint lies along the order, from 0 (before the first level) to `n` (after the last). Default `n / 2`.                                                                                                           |
+| `zone`     | `str`              | The IANA time zone the column's instants are read in, e.g. `"America/New_York"`. Default `"UTC"`.                                                                                                                            |
+| `unit`     | `Unit \| str`      | A record's unit: a `Unit`, or a unit's name.                                                                                                                                                                                 |
 
 ## Behavior
 
@@ -108,13 +109,16 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
   types its columns' levels and adds no unit to an axis title. Two such
   units are not compared with each other.
 - A named unit with a domain is a unit whose amounts are its levels, so its
-  levels must be numbers: `Unit("stars", domain=Domain.ordered([1, 2, 3]))`.
+  levels must be numbers: `Unit("stars", domain=Domain.discrete([1, 2, 3]))`.
   Text levels in a named unit are an error.
 - `domain` takes a `Domain` value. A bare list, or an interval, is an error.
   A domain that is an interval of numbers is not supported yet.
-- A trait listed twice is an error. `Trait.diverging()` needs a
-  `Domain.ordered` domain, and `Trait.summable()` needs a name. Each is
-  checked when the `Unit` is made, with the same messages as in JS.
+- `Trait.diverging()` implies `Trait.ordered()`. Listing both is the same
+  unit.
+- A trait listed twice is an error. `Trait.ordered()` and
+  `Trait.diverging()` need a domain, and `Trait.summable()` needs a name.
+  Each is checked when the `Unit` is made, with the same messages as in JS,
+  with code spelled in Python.
 
 **`HasLevels`.**
 
@@ -131,8 +135,8 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
 **`HasOrder`.**
 
 - The groups of a split over the column are ordered. An outer level of an
-  ordinal axis over them starts each label at its run. Over the levels of
-  `Domain.discrete`, which are not ordered, it centers each label.
+  ordinal axis over them starts each label at its run. Over levels without
+  `Trait.ordered()`, which are not ordered, it centers each label.
 - Only an ordered column can have a midpoint.
 
 **`HasMidpoint`.**
@@ -215,16 +219,16 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
   axis as `x` does and shares its unit. Counts, `.normalize()` shares, and
   times add no unit to an axis title.
 
-**`CanAdd`.**
+**`CanSum`.**
 
 - A `size` channel (`w`, `h`, ...), a [`stack`](/python/api/operators/stack), a
   [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
-  unit needs `CanAdd`: without it, it is an error that names the column and
+  unit needs `CanSum`: without it, it is an error that names the column and
   the unit, and says to declare the unit with `Unit(name, traits=[Trait.summable()])`, or,
   for a unit whose differences add up (a time), to subtract a reference
   first.
-- A time column never has `CanAdd`: two instants do not add up. Its
+- A time column never has `CanSum`: two instants do not add up. Its
   difference does (`end - start` is a duration), and a mark with two
   positions (`x="start", x2="end"`) adds nothing.
 - A column with no declared unit adds up without `Trait.summable()`, and so does
@@ -238,12 +242,12 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
   is °C), except the difference of two times, which is a duration
   (`Unit.duration`). A size
   read from a time column is a duration too, never a time.
-- `CanAdd` is the unit's, not the column's. A unit is its name, so two
+- `CanSum` is the unit's, not the column's. A unit is its name, so two
   `Unit`s of one name in one chart's schema, or in the columns two charts
   of one figure draw, must agree on `Trait.summable()`: a disagreement is an
-  error that names both columns. A column whose unit is a name alone takes the `CanAdd` of a
+  error that names both columns. A column whose unit is a name alone takes the `CanSum` of a
   `Unit` of that name in the same chart; a stack of it also takes the
-  `CanAdd` of a `Unit` of that name in another chart of the figure.
+  `CanSum` of a `Unit` of that name in another chart of the figure.
 - A stack checks only the columns it adds, so a `start` column in days may
   share an axis with a stacked width in days.
 
@@ -269,7 +273,7 @@ both sides:
 ```python
 chart(
     population,
-    schema={"sex": Unit(domain=Domain.ordered(["Women", "Men"]), traits=[Trait.diverging()])},
+    schema={"sex": Unit(domain=Domain.discrete(["Women", "Men"]), traits=[Trait.diverging()])},
 ).flow(
     spread(by=field("age").reverse(), dir="y", spacing=1),
     stack(by="sex", dir="x"),

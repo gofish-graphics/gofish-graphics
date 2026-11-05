@@ -1,4 +1,4 @@
-"""Equivalent of StackNeedsCanAdd.stories.tsx — Forward Syntax/Bar/Stack Needs CanAdd.
+"""Equivalent of StackNeedsCanSum.stories.tsx — Forward Syntax/Bar/Stack Needs CanSum.
 
 CelsiusRefused is exempt (see tests/.python-sync-exempt): its JS story shows
 the error GoFish throws, which a Python spec cannot reproduce.

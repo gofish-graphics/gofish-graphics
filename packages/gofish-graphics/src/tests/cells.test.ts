@@ -1614,7 +1614,7 @@ async function main() {
       JSON.stringify(plain.mid)
     );
     const ordered = await outerX({
-      g: Unit({ domain: Domain.ordered(["p", "q"]) }),
+      g: Unit({ domain: Domain.discrete(["p", "q"]), traits: [Trait.ordered()] }),
     });
     check(
       "an outer level over an ordered column starts its runs",

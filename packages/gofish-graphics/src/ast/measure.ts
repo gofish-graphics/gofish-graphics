@@ -34,7 +34,7 @@ import type { ColumnType, HasUnit, UnitTraits } from "./schema";
  * (`spaceTitle` in underlyingSpace.ts).
  *
  * A unit also says what its amounts can do, its traits: whether they add
- * up (`CanAdd`, #1197). The traits belong to the unit, not to a column
+ * up (`CanSum`, #1197). The traits belong to the unit, not to a column
  * (`HasUnit.traits`): `Unit(name, { traits: [Trait.summable()] })` defines
  * them, and a unit's name alone (`"USD"`) leaves them unknown. A unit is
  * its name, so every occurrence of one name is one unit, and where two
@@ -72,7 +72,7 @@ export type Quantity = {
  *  which adds up. */
 export const DURATION = {
   unit: "duration",
-  traits: { CanAdd: {} },
+  traits: { CanSum: {} },
 } satisfies HasUnit;
 
 /** The unit of a time column, an instant, without its zone: `Unit.time({
@@ -88,7 +88,7 @@ export const INSTANT = {
 /** The unit `.count()` and `.distinct()` declare. Counts add up. */
 export const COUNT = {
   unit: "count",
-  traits: { CanAdd: {} },
+  traits: { CanSum: {} },
 } satisfies HasUnit;
 
 /** The quantities {@link columnQuantity} has made, by column type and
@@ -160,11 +160,11 @@ const quoteList = (xs: readonly string[]): string =>
   xs.map((x) => `"${x}"`).join(", ");
 
 /** Whether values of quantity `q` may be summed (#1197): its unit has
- *  `CanAdd`, or it has no declared unit, or its unit's traits are unknown
+ *  `CanSum`, or it has no declared unit, or its unit's traits are unknown
  *  (a unit's name alone): gradual typing (#1125), what its unit can do is
  *  unknown, so it passes. */
 export const addsUp = (q: Quantity): boolean =>
-  q.unit?.traits === undefined || q.unit.traits.CanAdd !== undefined;
+  q.unit?.traits === undefined || q.unit.traits.CanSum !== undefined;
 
 /**
  * Check that `where` may sum values of quantity `q` ({@link addsUp}). Else
@@ -178,7 +178,7 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
   const what = whoOf(q);
   const unit = q.unit!.unit; // declared, or it would add up
   const difference = q.unit!.difference;
-  if (difference?.traits?.CanAdd !== undefined)
+  if (difference?.traits?.CanSum !== undefined)
     throw new Error(
       `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
         `summed: two amounts in it do not add up, but their difference, in ` +
@@ -188,7 +188,7 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
     );
   throw new Error(
     `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
-      `summed: it has no CanAdd. If its amounts add up (money, counts, ` +
+      `summed: it has no CanSum. If its amounts add up (money, counts, ` +
       `lengths), declare it with ` +
       `Unit("${unit}", { traits: [Trait.summable()] }). If ` +
       `they do not (temperatures, prices, rates), average them instead, ` +
@@ -211,7 +211,7 @@ export const whoOf = (q: Quantity): string =>
 
 /** How a definition of unit `name` with `traits` is written. */
 const definitionOf = (name: string, traits: UnitTraits): string =>
-  traits.CanAdd !== undefined
+  traits.CanSum !== undefined
     ? `Unit(${JSON.stringify(name)}, { traits: [Trait.summable()] })`
     : `Unit(${JSON.stringify(name)})`;
 
@@ -239,7 +239,7 @@ export function meetUnitTraits(
   if (b.traits === undefined) return a;
   if (a.traits === undefined) return b;
   if (sameTraits(a.traits, b.traits)) return a;
-  const [yes, no] = a.traits.CanAdd !== undefined ? [a, b] : [b, a];
+  const [yes, no] = a.traits.CanSum !== undefined ? [a, b] : [b, a];
   throw new Error(
     `${capitalize(whoOf(yes.who))} and ${whoOf(no.who)} are both in the unit ` +
       `${JSON.stringify(name)}, but they define it differently: ` +
@@ -413,7 +413,7 @@ export class Units {
     const waiting = this.waiting.get(name);
     if (waiting === undefined) return;
     this.waiting.delete(name);
-    if (traits.CanAdd !== undefined) return;
+    if (traits.CanSum !== undefined) return;
     for (const s of waiting) checkSummable(withTraits(s.q, traits), s.where);
   }
 
@@ -427,7 +427,7 @@ export class Units {
     const name = q.unit.unit;
     const { traits } = this.definitions.get(name)!;
     if (traits !== undefined) {
-      if (traits.CanAdd === undefined)
+      if (traits.CanSum === undefined)
         checkSummable(withTraits(q, traits), where);
       return;
     }
