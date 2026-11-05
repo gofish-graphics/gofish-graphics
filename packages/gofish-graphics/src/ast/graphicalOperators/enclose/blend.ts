@@ -891,14 +891,9 @@ export function buildBlend(spine: Pt[][]): Blend {
   };
 }
 
+/** The larger side of a ring's box. */
 const boxSize = (pts: Pt[]) => {
-  let [xa, ya, xb, yb] = [Infinity, Infinity, -Infinity, -Infinity];
-  for (const [x, y] of pts) {
-    xa = Math.min(xa, x);
-    xb = Math.max(xb, x);
-    ya = Math.min(ya, y);
-    yb = Math.max(yb, y);
-  }
+  const [xa, ya, xb, yb] = boxOf([pts]);
   return Math.max(xb - xa, yb - ya);
 };
 

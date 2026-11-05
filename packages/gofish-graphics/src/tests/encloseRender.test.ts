@@ -339,5 +339,19 @@ console.log("# a box-shape enclose is packed by the circle around its box");
   );
 }
 
+console.log("# clearance is a number of pixels at least 0");
+for (const clearance of [NaN, -2, "4"]) {
+  const message = await errorOf(() =>
+    enclose({ clearance, avoiding: [] }, [
+      ellipse({ w: 20, h: 10 }),
+    ]).toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    `enclose({ clearance: ${JSON.stringify(clearance) ?? String(clearance)} }) is an error naming clearance`,
+    /enclose\(\{ clearance \}\)/.test(message),
+    message || "no error"
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

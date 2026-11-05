@@ -143,6 +143,18 @@ function Enclose(
         `number of pixels at least 0. A field name must name a column of ` +
         `the enclosed rows, whose value is such a number.`
     );
+  const { clearance } = o;
+  if (
+    clearance !== undefined &&
+    (typeof clearance !== "number" ||
+      !Number.isFinite(clearance) ||
+      clearance < 0)
+  )
+    throw new Error(
+      `[gofish] enclose({ clearance }): ${
+        typeof clearance === "number" ? clearance : JSON.stringify(clearance)
+      } is not a number of pixels at least 0.`
+    );
   const { fill = "none", stroke = gray, strokeWidth = 1 } = o;
   const { strokeDasharray, opacity = 1, fillOpacity } = o;
   const memberCount = members.length;
@@ -223,7 +235,7 @@ function Enclose(
           {
             padding,
             avoiding: geometry(memberCount, children.length),
-            clearance: o.clearance,
+            clearance,
           },
           { min: [minX, minY], max: [maxX, maxY] }
         );
@@ -494,6 +506,7 @@ function outlineOf(
     case "oval":
       return cutOutline(ovalOutline(own, avoid.padding), own, avoid);
     case "box": {
+      if (!avoid.avoiding?.length) return undefined;
       const { rx, ry } = cornerRadii(shape.rx, shape.ry, 2);
       const ring = [
         roundedBoxOutline(box, rx, ry, 1, BOX_TOLERANCE).points as Pt[],
