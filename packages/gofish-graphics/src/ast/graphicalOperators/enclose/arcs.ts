@@ -22,7 +22,9 @@
  *     box a rounded box.
  *  2. Trace the union's boundary exactly: split every edge where another
  *     grown member's edge crosses it and keep the parts no other grown member
- *     covers, then link them into loops. Keep the outer loops (holes are
+ *     covers, then link them into loops (an edge buried inside another grown
+ *     member is skipped: it has no such part, and where it meets an edge
+ *     that edge is covered). Keep the outer loops (holes are
  *     filled), and drop a loop that lies inside another.
  *  3. Shrink the outer boundary by radius: each arc keeps its center and loses
  *     radius (a disc's arc becomes the padded disc's), each line moves inward,
@@ -271,15 +273,25 @@ function lineCircle(l: Line, c: Arc): number[] {
   return [(-B - q) / (2 * A), (-B + q) / (2 * A)];
 }
 
-/** Cut e (onto `out`) where an end of f lies on it, so an arc that shares a
- *  circle with another, as two lines' joined ends do, or a line that runs
- *  along another, is cut where the other stops. */
-function endsOn(e: Edge, f: Edge, out: number[]): void {
-  const [s0, s1] = f.t === "line" ? [0, 1] : [f.a0, f.a1];
-  const t0 = paramOn(e, atX(f, s0), atY(f, s0));
-  if (!Number.isNaN(t0)) out.push(t0);
-  const t1 = paramOn(e, atX(f, s1), atY(f, s1));
-  if (!Number.isNaN(t1)) out.push(t1);
+/** An edge's two ends, [x0, y0, x1, y1]. */
+const endsOf = (e: Edge): number[] => {
+  const [s0, s1] = range(e);
+  return [atX(e, s0), atY(e, s0), atX(e, s1), atY(e, s1)];
+};
+
+/** Cut e (onto `out`) where an end of f (`fe`, endsOf) lies on it, so an
+ *  arc that shares a circle with another, as two lines' joined ends do, or
+ *  a line that runs along another, is cut where the other stops. An end
+ *  outside e's box (`eb`, boxOfEdge: grown past paramOn's tolerance) is
+ *  not on it. */
+function endsOn(e: Edge, eb: number[], fe: number[], out: number[]): void {
+  for (let k = 0; k < 4; k += 2) {
+    const x = fe[k],
+      y = fe[k + 1];
+    if (x < eb[0] || x > eb[2] || y < eb[1] || y > eb[3]) continue;
+    const t = paramOn(e, x, y);
+    if (!Number.isNaN(t)) out.push(t);
+  }
 }
 
 /** The parameters on arc e (onto `out`) where the circle of arc f crosses
@@ -302,11 +314,21 @@ function arcArc(e: Arc, f: Arc, out: number[]): void {
 /**
  * Where edges e and f cross, as cut parameters on each: onto `ce` the
  * parameters on e where f crosses it or ends on it, onto `cf` the same on f.
- * Each crossing is solved once for the pair.
+ * Each crossing is solved once for the pair. `eb`, `fb`: their boxes
+ * (boxOfEdge); `ee`, `fe`: their ends (endsOf).
  */
-function crossPair(e: Edge, f: Edge, ce: number[], cf: number[]): void {
-  endsOn(e, f, ce);
-  endsOn(f, e, cf);
+function crossPair(
+  e: Edge,
+  f: Edge,
+  ce: number[],
+  cf: number[],
+  eb: number[],
+  fb: number[],
+  ee: number[],
+  fe: number[]
+): void {
+  endsOn(e, eb, fe, ce);
+  endsOn(f, fb, ee, cf);
   if (e.t === "arc" && f.t === "arc") {
     arcArc(e, f, ce);
     arcArc(f, e, cf);
@@ -367,6 +389,31 @@ function boxOfEdge(e: Edge): number[] {
     e.cx + e.R * x1 + 1e-6,
     e.cy + e.R * y1 + 1e-6,
   ];
+}
+
+/** How far inside another grown member every part of an edge must be for it
+ *  to be buried (closingRings): past the cover test's tie tolerance, EPS. */
+const BURIED = 1e-5;
+
+/** Whether every point of edge e is inside the grown member p by more than
+ *  BURIED. p is convex, so its signed distance is a convex function: on a
+ *  line it is greatest at an end, and an arc of at most a quarter turn lies
+ *  in the triangle of its ends and their tangents' meeting point, where it
+ *  is greatest at a corner. A sufficient test, never a false yes. */
+function edgeInside(e: Edge, p: Prim): boolean {
+  const ok = (x: number, y: number) => primD(p, x, y) < -BURIED;
+  if (e.t === "line") return ok(e.ax, e.ay) && ok(e.bx, e.by);
+  const n = Math.max(1, Math.ceil(Math.abs(e.a1 - e.a0) / (Math.PI / 2)));
+  const h = (e.a1 - e.a0) / n;
+  const out = e.R / Math.cos(h / 2);
+  for (let k = 0; k <= n; k++) {
+    const s = e.a0 + h * k;
+    if (!ok(e.cx + e.R * Math.cos(s), e.cy + e.R * Math.sin(s))) return false;
+    if (k === n) break;
+    const m = s + h / 2;
+    if (!ok(e.cx + out * Math.cos(m), e.cy + out * Math.sin(m))) return false;
+  }
+  return true;
 }
 
 /** A piece of an edge from parameter s0 to s1. */
@@ -535,30 +582,68 @@ export function closingRings(
       .filter((j) => j !== i && overlaps(P.prim.bb, prims[j].prim.bb));
   });
   const edgeBB = prims.map((P) => P.edges.map(boxOfEdge));
+  const edgeEnds = prims.map((P) => P.edges.map(endsOf));
+  // An edge buried in another grown member (each part of it inside by more
+  // than BURIED) is not on the union's boundary, and where it crosses or
+  // ends on another edge is inside that member too: there the other edge
+  // is covered on both sides, so the cut would only split a covered stretch.
+  // Its crossings are not solved, and it is not traced.
+  const buried = prims.map((P, i) =>
+    P.edges.map((e, ei) => {
+      const eb = edgeBB[i][ei];
+      return others[i].some((j) => {
+        const b = prims[j].prim.bb;
+        return (
+          b[0] <= eb[0] &&
+          b[1] <= eb[1] &&
+          b[2] >= eb[2] &&
+          b[3] >= eb[3] &&
+          edgeInside(e, prims[j].prim)
+        );
+      });
+    })
+  );
   // Every edge's cut parameters: its ends, and where another member's edge
   // crosses it or ends on it, each crossing solved once for its pair.
   const cuts = prims.map((P) => P.edges.map(range));
   prims.forEach((P, i) => {
     for (const j of others[i]) {
       if (j < i) continue;
+      const fs = prims[j].edges;
       P.edges.forEach((e, ei) => {
+        if (buried[i][ei]) return;
         const eb = edgeBB[i][ei];
-        prims[j].edges.forEach((f, fi) => {
-          if (overlaps(eb, edgeBB[j][fi]))
-            crossPair(e, f, cuts[i][ei], cuts[j][fi]);
-        });
+        for (let fi = 0; fi < fs.length; fi++) {
+          const fb = edgeBB[j][fi];
+          if (!buried[j][fi] && overlaps(eb, fb))
+            crossPair(
+              e,
+              fs[fi],
+              cuts[i][ei],
+              cuts[j][fi],
+              eb,
+              fb,
+              edgeEnds[i][ei],
+              edgeEnds[j][fi]
+            );
+        }
       });
     }
   });
   const pieces: Piece[] = [];
   prims.forEach((P, i) => {
     P.edges.forEach((e, ei) => {
+      if (buried[i][ei]) return;
       const eb = edgeBB[i][ei];
       const touching = others[i].filter((j) => overlaps(eb, prims[j].prim.bb));
       const cs = cuts[i][ei].sort((a, b) => a - b);
       // covered by another member; on a tie (two equal members) the first
-      // keeps it. The member that covered the last part is tried first.
+      // keeps it. The member that covered the last part is tried first. A
+      // point off a member's box (grown past EPS) is not covered by it.
       const covers = (j: number, x: number, y: number) => {
+        const b = prims[j].prim.bb;
+        if (x < b[0] - 1e-6 || x > b[2] + 1e-6) return false;
+        if (y < b[1] - 1e-6 || y > b[3] + 1e-6) return false;
         const d = sdf(j, x, y);
         return d < -EPS || (d <= EPS && j < i);
       };
