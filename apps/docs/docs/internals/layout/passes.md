@@ -808,7 +808,9 @@ fixed-size nodes report their size).
   that frame's data 0 and one data unit up the plans from the node to the
   layer (`frameIn` in `solver/plan.ts`), crossing each scope at the σ it
   solved (`leaving`), and layout measures them (`in0:`, `in1:`). Where a
-  scope between cannot be read out of, what the datum places is ink.
+  scope between cannot be read out of, or where the child of the layer that
+  holds the node is placed by the solve (its frame would move with it, which
+  needs a relation, not a pin), what the datum places is ink.
 - **Placement claims.** A `ref` stand-in, or an operand nested in a child,
   stands where its node lands in the layer's frame. The claim walk knows
   that (`planPlacement` in `solver/plan.ts`): it takes the node's box and
@@ -885,9 +887,11 @@ fixed-size nodes report their size).
   (a `distribute` on the axis), a member with no size of its own
   (`GoFishNode.sizedOn`: no literal, data or percent size, and no claim of
   its own as a leaf) gets its need, its claim at the σ the layer hands its
-  children, plus its share of the slack: what the layer's room leaves past
-  the hull of the plot's needs, split by `GoFishNode.flexWeight` (`k` for
-  `fr(k)`, else 1). This is CSS's `flex: 1 1 auto`. σ is solved from the
+  children, plus its share of its chain's slack: what the room its parts
+  are proposed leaves past the chain's needs (its parts' claims and the gaps
+  between them), split by `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1).
+  Each chain splits its own slack (`chainsOf` in `layer`), so two chains side
+  by side each fill the room. This is CSS's `flex: 1 1 auto`. σ is solved from the
   needs alone, so where a scope fits its needs to its room the slack is 0
   and the members get their needs, the σ the scope solved. A filler (a rect
   with no height) is its room, so a backdrop behind a bar fills the band,
@@ -895,9 +899,12 @@ fixed-size nodes report their size).
   children that are part of the layer's plot are proposed the layer's room
   less how far the rest (dressing, a ring's chrome) reaches past what they
   draw (`LayerPlan.plotWhole`), so a ring's content gets what its chrome
-  leaves. A percent is laid out in the room its parent gives it at layout
-  (`ρ·room`, read by `fixedSize`), so `[percent(100), 40]` in a stack
-  overflows by 40 px.
+  leaves. A percent is laid out at the length its claim reads
+  (`GoFishNode.ownLength`), so the claim walk and layout agree (#1300): a
+  part of the nearest room with a size (`roomFor`), in pixels, or `ρσ` for
+  a percent of a band, at the σ its parent hands it. So `[percent(100), 40]`
+  in a stack overflows by 40 px, and a percent inside a chain member with
+  no size of its own is of the chain's room, not the member's.
 - **Category labels overdraw their neighbors (#1115).** A category label is
   centered on its slot's ref, and only its overhang past the ends of its
   axis takes room: the claim of a ring is the hull of its labels, so labels
@@ -917,11 +924,13 @@ fixed-size nodes report their size).
   `GoFishNode.widenToDomain` applies for every reader) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
-  already reach past it. The plot an axis is seated beside covers its whole
-  niced domain (`_axesBeside`): its plan (`domainPlan` in `layer`) and its
-  layout box (`GoFishNode.domainSpan`) both reach the domain's ends, so its
-  axes frame the domain's corner, and the room handed to it counts the
-  domain as plot, not as dressing.
+  already reach past it. On a difference axis the claim is centered in the
+  niced width, by the same farther-end rule, so widening twice is widening
+  once. The plot an axis is seated beside covers its whole niced domain
+  (`_axesBeside`), a difference axis's centered width included: its plan
+  (`domainPlan` in `layer`) and its layout box (`GoFishNode.domainSpan`)
+  both reach the domain's ends, so its axes frame the domain's corner, and
+  the room handed to it counts the domain as plot, not as dressing.
 - **The layout.** A ring lays its content out in the room its chrome leaves
   (`plotRooms` in `layer`), and seats it at its origin on both axes, as any
   layer seats a child it pins at a literal pixel. A chart is placed whole, its chrome

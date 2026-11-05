@@ -290,7 +290,8 @@ export const widenScope = <S extends UnderlyingSpace | undefined>(
  *  mark's size at a datum, a tick label past the plot) need no more room
  *  when the domain already reaches past them. A delta axis comes from
  *  centering (`middle` alignment), so the content sits centered in the wider
- *  width: half the widening on each side. */
+ *  width: `to`'s width centered on the claim, by the same farther-end rule,
+ *  so widening twice is widening once. */
 const widenTo = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined,
@@ -299,7 +300,6 @@ const widenTo = <S extends UnderlyingSpace | undefined>(
   const s = space as CONTINUOUS_TYPE;
   const widenedSpace = { ...s, dataInterval: to } as S;
   if (extent === undefined) return [widenedSpace, undefined];
-  const iv = s.dataInterval;
   if (axisOver(placeBaseline(s)) !== "delta")
     return [
       widenedSpace,
@@ -308,12 +308,19 @@ const widenTo = <S extends UnderlyingSpace | undefined>(
         Pwl.envelope([extent.descent, Pwl.affine(-to.min, 0)])
       ),
     ];
-  const half = (width(to) - width(iv)) / 2;
+  // Centered on the claim's middle, `to` reaches half its width each way;
+  // each side reaches the farther of the claim and that end, so a claim
+  // already as wide (one widened before) is left as it is.
+  const middle = Pwl.scale(
+    0.5,
+    Pwl.add(extent.ascent, Pwl.negate(extent.descent))
+  );
+  const reach = Pwl.affine(width(to) / 2, 0);
   return [
     widenedSpace,
     Extent(
-      Pwl.add(extent.ascent, Pwl.affine(half, 0)),
-      Pwl.add(extent.descent, Pwl.affine(half, 0))
+      Pwl.envelope([extent.ascent, Pwl.add(middle, reach)]),
+      Pwl.envelope([extent.descent, Pwl.add(Pwl.negate(middle), reach)])
     ),
   ];
 };

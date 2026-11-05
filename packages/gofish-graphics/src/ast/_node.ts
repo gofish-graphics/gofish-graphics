@@ -75,6 +75,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  dataWidth,
   originIs,
   placeBaseline,
   MeasureClash,
@@ -235,12 +236,18 @@ type ClaimMemo = {
   /** Per constraint and axis, the gap it lays out between its parts
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
-  /** Per axis, the members of its chains with no size of their own and
-   *  their weights (`flexMembers` in `layer`), once read. */
-  flex: [
-    { child: number; weight: number }[] | undefined,
-    { child: number; weight: number }[] | undefined,
-  ];
+  /** Per axis, its chains with members that have no size of their own
+   *  (`chainsOf` in `layer`), once read. */
+  chains: [ChainMembers[] | undefined, ChainMembers[] | undefined];
+};
+
+/** One chain of a layer along an axis (a `distribute` there): the children
+ *  that hold its parts, and its members with no size of their own, each
+ *  with its weight in the chain's slack (`chainsOf` in `layer`). */
+export type ChainMembers = {
+  gap: GapConstraint;
+  holders: number[];
+  flex: { child: number; weight: number }[];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
@@ -249,7 +256,7 @@ const freshClaimMemo = (): ClaimMemo => ({
   plans: [undefined, undefined],
   lengths: [undefined, undefined],
   gaps: new Map(),
-  flex: [undefined, undefined],
+  chains: [undefined, undefined],
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -1626,7 +1633,7 @@ export class GoFishNode {
   public fixedSize(axis: 0 | 1): MaybeValue<number> | undefined {
     const size = this.ownDims?.[axis]?.size;
     return isLength(size)
-      ? (this._laidLengths?.[axis] ?? this.lengthPx(axis))
+      ? this.lengthPx(axis)
       : (size as MaybeValue<number> | undefined);
   }
 
@@ -1938,7 +1945,6 @@ export class GoFishNode {
     this._extent = undefined;
     this._plotExtent = undefined;
     this._claimMemo = freshClaimMemo();
-    this._laidLengths = undefined;
     this._sharing = undefined;
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.clearUnderlyingSpace();
@@ -2296,21 +2302,23 @@ export class GoFishNode {
         this.layout(size, scales, shape)
       );
     }
-    // A percent is laid out in the room its parent gives this node (#1257):
-    // `ρ·room + px` (`lengthIn`), read by `fixedSize` for the rest of this
-    // layout.
-    let laid: Size<number | undefined> | undefined;
+    // A percent is laid out at the length its claim reads (`ownLength`), so
+    // the claim walk and layout agree (#1300): a constant where its room is
+    // known before the layer solve (`fixedSize`), and a share of its scope
+    // (`ρσ` for a percent of a band) at the σ its parent hands it, which is
+    // the room it fills.
     for (const axis of [0, 1] as const) {
       const len = this.lengthOn(axis);
-      const room = size[axis];
-      if (len === undefined || isFr(len) || !Number.isFinite(room)) continue;
-      (laid ??= [undefined, undefined])[axis] = Pwl.at(
-        lengthIn(len, () => Pwl.constant(room)),
-        0
-      );
+      const share =
+        len === undefined || isFr(len) ? undefined : this.shareOf(axis);
+      const sigma = scales[axis]?.sigma;
+      if (share === undefined || sigma === undefined) continue;
+      size = (
+        axis === 0
+          ? [Pwl.at(share, sigma), size[1]]
+          : [size[0], Pwl.at(share, sigma)]
+      ) as Size;
     }
-    this._laidLengths = laid;
-    if (laid !== undefined) size = [laid[0] ?? size[0], laid[1] ?? size[1]];
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
     this._plotSpan = [undefined, undefined];
@@ -2482,10 +2490,6 @@ export class GoFishNode {
     return this._projectTranslate(dir);
   }
 
-  /** Its percent lengths' pixels in the room it was last laid out in
-   *  (`layout`), per axis; cleared with its claims. */
-  private _laidLengths?: Size<number | undefined>;
-
   /** {@link localPlotSpan}'s memo, per axis, cleared when it is laid out
    *  (`null`: its plot is its box). */
   private _plotSpan: [
@@ -2537,15 +2541,18 @@ export class GoFishNode {
    * type on `axis` is `space`, the type its whole niced domain is read in
    * there: `space` placed ({@link placedSpace}). A plot covers that domain,
    * in its claim (`domainPlan` in `layer`) and in its layout
-   * ({@link domainSpan}). Undefined on any other node, on an axis with no
-   * data 0, and outside a render.
+   * ({@link domainSpan}). On a difference axis (no data 0, an axis over
+   * widths) the domain is a width, which its content sits centered in, as
+   * the axis draws it (`elaborateDifferenceAxis`) and as the claim widens
+   * (`widenTo`). Undefined on any other node, on an axis with no axis over
+   * it, and outside a render.
    */
   public coveredDomain(
     axis: 0 | 1,
     space: UnderlyingSpace | undefined
   ): UnderlyingSpace | undefined {
     return this._axesBeside === true &&
-      hasOrigin(space) &&
+      (hasOrigin(space) || axisOver(space) === "delta") &&
       this.tryGetRenderSession()?.keyedDomains !== undefined
       ? this.placedSpace(space!, axis)
       : undefined;
@@ -2553,13 +2560,15 @@ export class GoFishNode {
 
   /**
    * On the box a chart's axes are seated beside ({@link _axesBeside}), the
-   * pixels its whole domain spans on `axis` in its local frame, once laid
-   * out: the keyed domain it maps, widened and niced as every axis over it
+   * pixels its whole domain spans on `axis` in its local frame and its own
+   * axis order (as its layout reads its box), once laid out: the keyed
+   * domain it maps, widened and niced as every axis over it
    * is (`KeyedDomains.scope`). That box is a plot, and a plot covers its
    * niced domain, not only the hull of its marks, so an axis seated beside
    * it sits at the domain's floor, on both axes (a facet panel that draws
-   * only its y axis still covers the shared x domain). Undefined on any
-   * other node, and on an axis with no data 0.
+   * only its y axis still covers the shared x domain). On a difference
+   * axis the niced width is centered on the content's. Undefined on any
+   * other node, and on an axis with no axis over it.
    */
   public domainSpan(axis: 0 | 1): [number, number] | undefined {
     const frame = this.layoutFrames?.[axis];
@@ -2571,8 +2580,20 @@ export class GoFishNode {
       space,
       undefined
     )[0];
-    if (!isCONTINUOUS(niced)) return undefined;
-    const { min, max } = niced.dataInterval;
+    if (!isCONTINUOUS(niced) || !isCONTINUOUS(space)) return undefined;
+    // A difference axis's width, centered on the content's: half the
+    // widening on each side.
+    const half =
+      axisOver(space) === "delta"
+        ? (dataWidth(niced) - dataWidth(space)) / 2
+        : 0;
+    const { min, max } =
+      axisOver(space) === "delta"
+        ? {
+            min: space.dataInterval.min - half,
+            max: space.dataInterval.max + half,
+          }
+        : niced.dataInterval;
     if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
     const a = frame.sigma * min + frame.originPx;
     const b = frame.sigma * max + frame.originPx;
@@ -2581,7 +2602,13 @@ export class GoFishNode {
 
   private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
     if (this.plotIsBox(axis)) return undefined;
-    const domain = this.domainSpan(axis);
+    // The domain's span is in this node's axis order, as its layout reads
+    // it; its box is stored in pixels, `direction × order` (`frameAt` in
+    // `layer`), so a y-up node reflects it.
+    const ordered = this.domainSpan(axis);
+    const dir = axis === 0 ? 1 : this.yFrame.direction;
+    const domain: [number, number] | undefined =
+      ordered === undefined || dir === 1 ? ordered : [-ordered[1], -ordered[0]];
     // A child's plot in its parent's frame, or its box when that is its
     // plot. Both are in pixels, as the child stores its box, whichever way
     // the parent reads y: a parent that reads y the other way sees the span

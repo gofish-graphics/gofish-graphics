@@ -2,7 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, placedByOwnData, type ToPixel } from "../_node";
+import {
+  GoFishNode,
+  placedByOwnData,
+  type ChainMembers,
+  type ToPixel,
+} from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { getScopeRegistry, seatInBand, seatInScope } from "../solver/scopes";
 import { isToken } from "../createName";
@@ -139,35 +144,38 @@ const domainPlan = (
 };
 
 /**
- * The members of a chain of `node` along `axis` (a `distribute` there)
- * that have no size of their own (`GoFishNode.sizedOn`), each with its
- * weight (`GoFishNode.flexWeight`), in the order the chains name them.
- * They depend on the node's claim alone, so they are read once per claim
- * (`ClaimMemo.flex`).
+ * The chains of `node` along `axis` (each `distribute` there) that have a
+ * member with no size of its own (`GoFishNode.sizedOn`): the children that
+ * hold the chain's parts, and those members, each with its weight
+ * (`GoFishNode.flexWeight`), in the order the chain names them. They
+ * depend on the node's claim alone, so they are read once per claim
+ * (`ClaimMemo.chains`).
  */
-const flexMembers = (
+const chainsOf = (
   node: GoFishNode,
   axis: 0 | 1,
   refs: Pick<ResolvedConstraints, "operands" | "keyOf">
-): { child: number; weight: number }[] => {
-  const memo = node._claimMemo.flex[axis];
+): ChainMembers[] => {
+  const memo = node._claimMemo.chains[axis];
   if (memo !== undefined) return memo;
-  const members = new Set<number>();
+  const chains: ChainMembers[] = [];
   for (const c of node.constraints) {
     if (c.type !== "distribute" || axisIndex(c.dir) !== axis) continue;
+    const holders = new Set<number>();
+    const flex: ChainMembers["flex"] = [];
     for (const ref of c.children) {
+      const op = refs.operands.get(refs.keyOf(ref));
+      if (op === undefined || holders.has(op.child)) continue;
+      holders.add(op.child);
       const k = directSlot(refs, ref);
-      if (k !== undefined) members.add(k);
+      const child = k === undefined ? undefined : node.children[k];
+      if (child instanceof GoFishNode && !child.sizedOn(axis))
+        flex.push({ child: k!, weight: child.flexWeight(axis) });
     }
+    if (flex.length > 0) chains.push({ gap: c, holders: [...holders], flex });
   }
-  const flex: { child: number; weight: number }[] = [];
-  for (const k of members) {
-    const c = node.children[k];
-    if (c instanceof GoFishNode && !c.sizedOn(axis))
-      flex.push({ child: k, weight: c.flexWeight(axis) });
-  }
-  node._claimMemo.flex[axis] = flex;
-  return flex;
+  node._claimMemo.chains[axis] = chains;
+  return chains;
 };
 
 export const layer = createNodeOperatorSequential(
@@ -902,11 +910,6 @@ export const layer = createNodeOperatorSequential(
           // none (a scope no data sizes), so its children's claims are
           // constants.
           const sigmaOf = (axis: 0 | 1) => room(childScaleFactors[axis] ?? 0);
-          // How wide this layer's content is on `axis` at that σ.
-          const wholeWidth = (axis: 0 | 1): number => {
-            const whole = contentExtents[axis];
-            return whole === undefined ? 0 : Pwl.at(whole.width, sigmaOf(axis));
-          };
 
           // The room this layer gives the children that are part of its plot
           // (#1257): its own room less how far what dresses its plot (labels
@@ -932,43 +935,52 @@ export const layer = createNodeOperatorSequential(
             !dressingChildren[axis].has(i) &&
             !inkChildren[axis].has(i) &&
             !(ring && i > 0);
-          // Every child is part of the plot: each is proposed `plotRooms`.
-          const allInPlot =
-            !ring &&
-            ([0, 1] as const).every(
-              (axis) =>
-                dressingChildren[axis].size === 0 &&
-                inkChildren[axis].size === 0
-            );
+          // The room this layer proposes child `i` on `axis`: what the
+          // dressing leaves (`plotRooms`) for a part of its plot, and its
+          // whole room for anything else.
+          const roomOf = (i: number, axis: 0 | 1) =>
+            inPlot(i, axis) ? plotRooms[axis] : size[axis];
 
           // The room of each member of a chain along `axis` that has no size
           // of its own (#1257): its need (its claim at the σ this layer hands
-          // its children) plus its share of the slack, what this layer's
-          // room leaves past the hull of the needs. An `fr(k)` member takes
-          // k shares. This is CSS's `flex: 1 1 auto`. σ is solved from the
-          // needs alone, so where the needs fill the room (a scope fitted to
-          // it) the slack is 0, and on an axis with no room (an unsized
-          // render) the members keep their needs. The members and their
-          // weights are read once per claim (`flexMembers`).
+          // its children) plus its share of its chain's slack. A chain's
+          // slack is what the room its parts are proposed leaves past its
+          // needs: its parts' claims and the gaps between them. Each chain
+          // splits its own slack, so two chains side by side each fill the
+          // room. An `fr(k)` member takes k shares. This is CSS's
+          // `flex: 1 1 auto`. σ is solved from the needs alone, so where the
+          // needs fill the room (a scope fitted to it) the slack is 0, and
+          // on an axis with no room (an unsized render) the members keep
+          // their needs. The chains are read once per claim (`chainsOf`).
+          // A member of two chains on one axis takes the first one's room.
           const chainRoomsOn = (
             axis: 0 | 1
           ): Map<number, number> | undefined => {
-            if (!Number.isFinite(plotRooms[axis])) return undefined;
-            const flex = flexMembers(node, axis, { operands, keyOf });
-            if (flex.length === 0) return undefined;
+            if (!Number.isFinite(size[axis])) return undefined;
+            const chains = chainsOf(node, axis, { operands, keyOf });
+            if (chains.length === 0) return undefined;
             const sigma = sigmaOf(axis);
-            const slack = room(size[axis] - wholeWidth(axis));
-            const total = flex.reduce((s, m) => s + m.weight, 0);
+            const need = (i: number) => {
+              if (inkChildren[axis].has(i)) return 0;
+              const c = node.children[i];
+              const claim =
+                c instanceof GoFishNode ? c.resolveExtent()[axis] : undefined;
+              return claim === undefined ? 0 : Pwl.at(claim.width, sigma);
+            };
             const rooms = new Map<number, number>();
-            for (const { child, weight } of flex) {
-              const claim = (
-                node.children[child] as GoFishNode
-              ).resolveExtent()[axis];
-              const need = claim === undefined ? 0 : Pwl.at(claim.width, sigma);
-              rooms.set(
-                child,
-                need + (total > 0 ? (slack * weight) / total : 0)
-              );
+            for (const { gap, holders, flex } of chains) {
+              const gaps =
+                (holders.length - 1) * Pwl.at(node.gapOf(gap, axis), sigma);
+              const needs = holders.reduce((s, i) => s + need(i), gaps);
+              const given = Math.max(...holders.map((i) => roomOf(i, axis)));
+              const slack = room(given - needs);
+              const total = flex.reduce((s, m) => s + m.weight, 0);
+              for (const { child, weight } of flex)
+                if (!rooms.has(child))
+                  rooms.set(
+                    child,
+                    need(child) + (total > 0 ? (slack * weight) / total : 0)
+                  );
             }
             return rooms;
           };
@@ -998,12 +1010,7 @@ export const layer = createNodeOperatorSequential(
             // the chrome leaves of the ring's room (`plotRooms`).
             const proposal = childLayoutSizeProposal(
               childKey,
-              allInPlot
-                ? plotRooms
-                : [
-                    inPlot(i, 0) ? plotRooms[0] : size[0],
-                    inPlot(i, 1) ? plotRooms[1] : size[1],
-                  ],
+              [roomOf(i, 0), roomOf(i, 1)],
               gridCellByKey,
               spanByKey,
               own,

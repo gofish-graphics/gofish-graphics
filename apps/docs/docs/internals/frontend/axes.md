@@ -136,7 +136,9 @@ axis's datum-pinned ticks sit at `scale(v)`.
 A plot covers its whole niced domain, not only the hull of its marks: on each
 axis with an origin, the content its axes are seated beside (`_axesBeside`)
 widens its claim and its plot to the domain, rounded as the axis over it is
-(`KeyedDomains.scope`, the same widen-then-nice the marks are placed by). The
+(`KeyedDomains.scope`, the same widen-then-nice the marks are placed by). On
+a difference axis the domain is a width, and the plot covers it centered on
+its content, where the difference axis draws its line. The
 claim walk widens its plan (`domainPlan` in `layer`) and layout widens its box
 (`GoFishNode.domainSpan`), so the two agree. Every axis line then distributes
 just past the plot's box, like any other chrome. The two lines of a scatter

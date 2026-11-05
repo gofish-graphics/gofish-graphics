@@ -190,11 +190,13 @@ export function buildChildSpans(
  *      boxes at the layer's σ, `gridCellSizesAt`), keyed by the child's key
  *      (its uid, `keyOf`), on each
  *      axis where its track has one, and the layer's box on any other;
- *   2. the child's own room in a share scope (`own`, where defined): its
- *      claim at the layer's σ, when σ is the size of a share
- *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
- *      keeps the room the scope solved for it;
- *   3. default layer box: any other child is proposed the full layer size.
+ *   2. its room in a chain (`own`, where defined): a member of a chain with
+ *      no size of its own is proposed its need (its claim at the layer's σ)
+ *      plus its share of its chain's slack (`chainRooms` in `layer`, #1257);
+ *   3. default layer box: any other child is proposed the layer's room, or
+ *      what dressing leaves of it for a part of its plot (`plotRooms` in
+ *      `layer`). A child with a size of its own keeps it, and one without
+ *      fills the room.
  *
  * A span (`spanByKey`, {@link buildChildSpans}) then owns the axes it
  * spans: an interval's pins set the child's extent there, and a cell is the
