@@ -226,11 +226,11 @@ wrote: JS `toJSON` writes a chart's with `schemaToWire` (`schema.ts`), JS
 `chart` and `derive` write theirs with `_schema_wire`, so a `Unit`, a unit's name and a
 column record `{ name, unit }` reach the wire the same from both languages.
 A unit's traits ride in its `HasUnit`: `Unit("USD", { traits: [Trait.summable()] })` is
-`{ "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanAdd": {} } } }`,
+`{ "HasUnit": { "unit": "USD", "symbol": "USD", "traits": { "CanSum": {} } } }`,
 `Unit("°C")` has `"traits": {}`, and the name `"km²"` alone has no
 `traits`, since what it can do is unknown. A unit's `domain` and `traits` do
 not reach the wire as such, only the traits they expand into: the Likert
-unit `Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] })`
+unit `Unit({ domain: Domain.discrete(LEVELS), traits: [Trait.diverging()] })`
 is `{ "HasLevels": { "levels": [...] }, "HasOrder": {}, "HasMidpoint":
 { "at": 2.5 } }`, with no `HasUnit`, since it has no name. (A `derive` once also carried a
 measure `provenance` map for the rows of the `bin()` data helper; both are

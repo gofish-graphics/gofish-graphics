@@ -74,7 +74,7 @@ export const Likert: StoryObj<Args> = {
     chart(survey, {
       schema: {
         response: Unit({
-          domain: Domain.ordered(LEVELS),
+          domain: Domain.discrete(LEVELS),
           traits: [Trait.diverging()],
         }),
       },
@@ -117,7 +117,7 @@ export const LikertEven: StoryObj<Args> = {
     chart(forcedChoice, {
       schema: {
         response: Unit({
-          domain: Domain.ordered(LEVELS4),
+          domain: Domain.discrete(LEVELS4),
           traits: [Trait.diverging()],
         }),
       },
@@ -179,7 +179,7 @@ export const PopulationPyramid: StoryObj<Args> = {
     chart(population, {
       schema: {
         sex: Unit({
-          domain: Domain.ordered(["Women", "Men"]),
+          domain: Domain.discrete(["Women", "Men"]),
           traits: [Trait.diverging()],
         }),
       },

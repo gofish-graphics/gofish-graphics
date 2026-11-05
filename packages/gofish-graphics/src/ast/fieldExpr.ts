@@ -619,14 +619,14 @@ const datumQuantity = (v: MaybeValue<number>): Quantity | undefined =>
  * (two nesting levels of the same mosaic) stay distinct units even though
  * both are "count share". The name doubles as the axis title. The unit has
  * no symbol: a share is a plain number, so the title adds no "(unit)". Shares
- * add up (to 1), so the unit has `CanAdd`.
+ * add up (to 1), so the unit has `CanSum`.
  */
 export const shareQuantity = (
   base: Quantity | undefined,
   byName?: string
 ): Quantity => {
   const name = `${base?.name ?? "value"} share${byName ? ` by ${byName}` : ""}`;
-  return { name, unit: { unit: name, traits: { CanAdd: {} } } };
+  return { name, unit: { unit: name, traits: { CanSum: {} } } };
 };
 
 /**

@@ -85,7 +85,7 @@ export type ChartOptions = {
   padding?: number;
   /**
    * Column types, keyed by column name: the traits each column has (#984),
-   * e.g. `{ response: Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] }) }`.
+   * e.g. `{ response: Unit({ domain: Domain.discrete(LEVELS), traits: [Trait.diverging()] }) }`.
    * A column with levels (`HasLevels`, a unit's `domain`) splits in the
    * order of its levels, and a value outside them is an error where the
    * levels are used; a stack over a column with `HasMidpoint` puts its 0 at the

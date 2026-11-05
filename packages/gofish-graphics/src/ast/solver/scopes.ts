@@ -114,7 +114,7 @@ export type Seat = { px: number; anchor: "baseline" | "min" };
  *
  *  TODO(#1051): data 0 is the additive identity of the measure's algebraic
  *  structure (an ordered additive group's 0). Sums are checked now: a unit
- *  without `CanAdd` (dates, temperatures) cannot be summed or stacked
+ *  without `CanSum` (dates, temperatures) cannot be summed or stacked
  *  (#1197, `checkSummable` in measure.ts). What is left is the zero itself
  *  (`HasZero`): every measure is still seated as if it had one, so a bar of
  *  a single date or temperature (`.mean()`, which sums nothing) still hangs

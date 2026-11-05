@@ -112,7 +112,7 @@ async function main() {
       const dl = await chart(rows, {
         schema: {
           r: Unit({
-            domain: Domain.ordered(LEVELS5),
+            domain: Domain.discrete(LEVELS5),
             traits: [Trait.diverging()],
           }),
         },
@@ -145,7 +145,7 @@ async function main() {
         {
           schema: {
             r: Unit({
-              domain: Domain.ordered(LEVELS5),
+              domain: Domain.discrete(LEVELS5),
               traits: [Trait.diverging()],
             }),
           },
@@ -178,7 +178,7 @@ async function main() {
     const dl = await chart(rows, {
       schema: {
         r: Unit({
-          domain: Domain.ordered(LEVELS5),
+          domain: Domain.discrete(LEVELS5),
           traits: [Trait.diverging(2.25)],
         }),
       },

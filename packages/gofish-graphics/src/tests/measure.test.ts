@@ -1090,9 +1090,9 @@ console.log("# measure: titles are Quantity (unit)");
   );
 }
 
-// ── CanAdd: only amounts that add up are summed (#1197) ─────────────────────
+// ── CanSum: only amounts that add up are summed (#1197) ─────────────────────
 
-console.log("# measure: CanAdd");
+console.log("# measure: CanSum");
 {
   const sales = [
     { region: "n", product: "a", usd: 10, temp: 20, day: "2024-03-01" },
@@ -1552,21 +1552,21 @@ console.log("# measure: CanAdd");
     meanBar
   );
 
-  // CanAdd is a trait of the unit, not of the column.
-  const columnCanAdd = await errorOf(() =>
-    chart(sales, { schema: { usd: { CanAdd: {} } } })
+  // CanSum is a trait of the unit, not of the column.
+  const columnCanSum = await errorOf(() =>
+    chart(sales, { schema: { usd: { CanSum: {} } } })
       .flow(spread({ by: "region", dir: "x" }))
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
   ok(
-    "a column-level CanAdd is not a column trait, and throws",
-    columnCanAdd !== undefined && /unknown key "CanAdd"/.test(columnCanAdd),
-    columnCanAdd
+    "a column-level CanSum is not a column trait, and throws",
+    columnCanSum !== undefined && /unknown key "CanSum"/.test(columnCanSum),
+    columnCanSum
   );
   const wire = await errorOf(() =>
     chart(sales, {
-      schema: { usd: { HasUnit: { unit: "USD", traits: { CanAdd: {} } } } },
+      schema: { usd: { HasUnit: { unit: "USD", traits: { CanSum: {} } } } },
     })
       .flow(
         spread({ by: "region", dir: "x" }),
@@ -1575,11 +1575,11 @@ console.log("# measure: CanAdd");
       .mark(rect({ h: "usd" }))
       .toDisplayList(SIZE)
   );
-  ok("the wire form HasUnit.traits.CanAdd sums", wire === undefined, wire);
+  ok("the wire form HasUnit.traits.CanSum sums", wire === undefined, wire);
 
   // A unit is its name across the whole figure: two charts that share an
   // axis meet their occurrences of "USD" in the type walk. Chart `defines`
-  // defines USD without CanAdd (its bars are means, which sum nothing);
+  // defines USD without CanSum (its bars are means, which sum nothing);
   // chart `names` names USD only, and stacks it.
   const ledger = sales.map((d) => ({ ...d, cost: d.usd / 2 }));
   const defines = (unit: unknown) =>
