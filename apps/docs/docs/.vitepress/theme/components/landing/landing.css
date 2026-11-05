@@ -444,11 +444,11 @@ html.landing-page .DocSearch-Button {
   line-height: 1;
 }
 
-/* floating specimen cards */
+/* Floating specimen cards (wide screens): picture cards from landingCards.ts
+   (FLOATING), each placed in one corner of the hero. */
 .landing .float-card {
   position: absolute;
   z-index: 4;
-  width: max-content;
 }
 .landing .float-card .card {
   padding: 10px;
@@ -456,18 +456,22 @@ html.landing-page .DocSearch-Button {
 .landing .fc-tl {
   left: 6%;
   top: 14%;
+  animation-delay: 400ms;
 }
 .landing .fc-tr {
   right: 6%;
   top: 12%;
+  animation-delay: 520ms;
 }
 .landing .fc-bl {
   left: 4%;
   bottom: 6%;
+  animation-delay: 640ms;
 }
 .landing .fc-br {
   right: 5%;
   bottom: 7%;
+  animation-delay: 720ms;
 }
 /* Breakpoint must equal --sheet-w (a media query can't read a custom prop). */
 @media (max-width: 1240px) {
@@ -484,12 +488,15 @@ html.landing-page .DocSearch-Button {
   }
 }
 @media (max-width: 1200px) {
-  .landing .float-card.fc-bottom {
+  .landing .fc-bl,
+  .landing .fc-br {
     display: none;
   }
 }
+/* display:none, not just hidden: Chrome does not fetch a lazy image inside a
+   display:none ancestor, so phones never download these pictures. */
 @media (max-width: 1100px) {
-  .landing .float-card {
+  .landing .hero-cards {
     display: none;
   }
 }
@@ -568,9 +575,13 @@ html.landing-page .DocSearch-Button {
     transform: translateY(0);
   }
 }
+/* longhands, so the shorthand does not reset each corner's animation-delay */
 .landing .float-card {
   opacity: 0;
-  animation: gf-settle 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  animation-name: gf-settle;
+  animation-duration: 0.8s;
+  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation-fill-mode: forwards;
 }
 @keyframes gf-settle {
   from {

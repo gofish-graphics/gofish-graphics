@@ -104,8 +104,8 @@ Two flags go after the mode, and each does one thing:
   reading the docs markdown through this same plugin (`findImageStoryIds()` in
   `markdown-it-gofish.ts`), so adding `image` to a container is all it takes. Use it
   where a page shows many previews that need no interaction, like the tutorials index
-  cards. The home page's picture cards (its phone collage and spectrum row) are
-  gallery examples, pictured the same way at `docs/public/previews/examples/<id>.png`
+  cards. The home page's picture cards (its floating hero cards, phone collage and
+  spectrum row) are gallery examples, pictured the same way at `docs/public/previews/examples/<id>.png`
   (keyed by gallery id, captured in the same render as the gallery thumbnail) and shown
   through `GoFishImage`; their one list is
   `.vitepress/theme/components/landing/landingCards.ts`, which the page renders and

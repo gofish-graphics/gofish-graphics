@@ -12,7 +12,8 @@
  *   2. Story images, cropped to the drawing: every story a `::: gofish … image`
  *      container pictures (the tutorials index cards, for one; see
  *      markdown-it-gofish.ts), and every gallery example the landing page shows
- *      as a picture (its hero collage and spectrum row; see landingCards.ts).
+ *      as a picture (its floating hero cards, hero collage and spectrum row;
+ *      see landingCards.ts).
  *      A landing card is a gallery example, so its crop is taken in the same
  *      render as its thumbnail.
  *

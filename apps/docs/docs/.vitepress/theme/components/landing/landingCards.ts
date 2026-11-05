@@ -1,6 +1,7 @@
 /**
- * The charts the landing page shows as pictures: the phone and tablet hero
- * collage, and the "simple when you want, complex when you need" row.
+ * The charts the landing page shows as pictures: the four cards floating
+ * around the hero on wide screens, the phone and tablet hero collage, and the
+ * "simple when you want, complex when you need" row.
  *
  * This list is the one source of truth for them. LandingPage.vue renders it,
  * and the docs build's capture script (tests/scripts/capture-docs-images.ts)
@@ -15,8 +16,8 @@
 export interface LandingCard {
   /** Gallery example id: the card links to `/<lang>/examples/<id>` and shows its picture. */
   id: string;
-  /** Handwritten caption under the card. */
-  caption: string;
+  /** Handwritten caption under the card. The floating hero cards have none. */
+  caption?: string;
   /** Alt text for the picture. */
   alt: string;
   /**
@@ -35,6 +36,58 @@ export interface LandingCard {
   /** Collage: pixels to drop the card below its row's top, for a loose pile. */
   drop?: number;
 }
+
+/** A card floating around the hero on wide screens. */
+export interface FloatingCard extends LandingCard {
+  /** Which corner of the hero it sits in (placed by landing.css). */
+  corner: "tl" | "tr" | "bl" | "br";
+  /** Width of the card, in pixels. */
+  width: number;
+}
+
+/**
+ * The four cards floating around the hero on wide screens (hidden at 1100px
+ * and below, where the collage takes their place; the bottom two are hidden at
+ * 1200px and below).
+ */
+export const FLOATING: FloatingCard[] = [
+  {
+    id: "bottle-fill-chart",
+    corner: "tl",
+    alt: "Bottle fill chart: four wine bottles filled to 30, 60, 75 and 100 percent",
+    aspect: 1.84,
+    width: 250,
+    tilt: -5,
+    tape: -8,
+  },
+  {
+    id: "flower-chart",
+    corner: "tr",
+    alt: "Flower chart: flowers on stems of different heights, with petals sized by value",
+    aspect: 1.14,
+    width: 190,
+    tilt: 4,
+    tape: 6,
+  },
+  {
+    id: "python-tutor-memory-diagram",
+    corner: "bl",
+    alt: "Python Tutor memory diagram: a global frame with arrows into nested tuples on the heap",
+    aspect: 4,
+    width: 360,
+    tilt: 3,
+    tape: -5,
+  },
+  {
+    id: "titanic-unit-mosaic",
+    corner: "br",
+    alt: "Titanic unit mosaic: one dot per passenger, colored by survival, grouped by class and sex",
+    aspect: 1.07,
+    width: 200,
+    tilt: -3,
+    tape: 5,
+  },
+];
 
 /**
  * The hero collage, in grid order (two columns, filled row by row): the
@@ -142,4 +195,8 @@ export const SPECTRUM: LandingCard[] = [
 ];
 
 /** Every landing card, for the capture script. */
-export const LANDING_CARDS: LandingCard[] = [...COLLAGE, ...SPECTRUM];
+export const LANDING_CARDS: LandingCard[] = [
+  ...FLOATING,
+  ...COLLAGE,
+  ...SPECTRUM,
+];

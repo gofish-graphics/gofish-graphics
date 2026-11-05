@@ -3,15 +3,13 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { docsLang, examplesHref } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
 import PictureCard from "./PictureCard.vue";
-import { COLLAGE, SPECTRUM } from "./landingCards";
+import { COLLAGE, FLOATING, SPECTRUM } from "./landingCards";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the inline chart art never goes through
-// the Vue template compiler. The 500KB of hero-card art is loaded on demand
-// (see wireHeroCards).
+// the Vue template compiler.
 import demoSvg from "./fragments/demo-svg.html?raw";
 import codeStrip from "./fragments/code-strip.html?raw";
-import heroCardsUrl from "./fragments/hero-cards.htm?url";
 
 import "./landing.css";
 
@@ -25,7 +23,6 @@ const knobEl = ref<HTMLElement | null>(null);
 // then is it a tab stop with a label, so keyboard users can scroll it.
 const railScrolls = ref(false);
 const jsReady = ref(false);
-const heroCards = ref("");
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
@@ -253,37 +250,6 @@ function wireBrackets(): void {
   cleanups.push(stopLang);
 }
 
-// ---- the floating hero cards: ~500KB of inline SVG that only wide screens
-// show (landing.css hides .float-card at max-width 1100px). Fetch it only when
-// the viewport is wide enough to show it, so phones never download it. It is
-// a hashed static asset (`?url`), fetched as text, rather than a dynamic
-// import(): VitePress modulepreloads every dynamic import of a page's chunk,
-// which would send it to phones anyway. The file ends in `.htm`, not `.html`,
-// because the VitePress dev server answers every `.html` URL with its app shell.
-function wireHeroCards(): void {
-  const wide = window.matchMedia("(min-width: 1101px)");
-  let requested = false;
-  const load = () => {
-    if (!wide.matches || requested) return;
-    requested = true;
-    fetch(heroCardsUrl)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.text();
-      })
-      .then((html) => {
-        heroCards.value = html;
-      })
-      .catch((err) => {
-        // The cards are decoration: leave them out.
-        console.warn("GoFish landing: hero cards did not load", err);
-      });
-  };
-  load();
-  wide.addEventListener("change", load);
-  cleanups.push(() => wide.removeEventListener("change", load));
-}
-
 // ---- spectrum swipe row (narrow screens): a dot on the pencil line under the
 // row tracks how far it has been swiped, from 4% to 92% of the line. The
 // sizes are measured on mount and resize, so a scroll only sets a transform.
@@ -347,7 +313,6 @@ onMounted(() => {
   document.documentElement.classList.add("landing-page");
   injectFonts();
   jsReady.value = true;
-  wireHeroCards();
   wireRail();
   wireDemo();
   wireBrackets();
@@ -366,8 +331,18 @@ onBeforeUnmount(() => {
     <div class="sheet">
       <!-- ===================== HERO ===================== -->
       <section class="hero" aria-labelledby="hero-h">
-        <!-- floating taped specimen cards -->
-        <div class="hero-cards" v-html="heroCards"></div>
+        <!-- wide screens: taped specimen cards floating around the title,
+             each linking to its example page. The container is display:none
+             at 1100px and below, so phones never fetch their lazy pictures. -->
+        <div class="hero-cards">
+          <PictureCard
+            v-for="card in FLOATING"
+            :key="card.id"
+            :card="card"
+            :class="['float-card', `fc-${card.corner}`]"
+            :style="{ width: `${card.width}px` }"
+          />
+        </div>
 
         <div class="inner">
           <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
