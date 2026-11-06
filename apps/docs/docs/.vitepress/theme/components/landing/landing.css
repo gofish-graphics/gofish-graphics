@@ -247,8 +247,45 @@ html.landing-page .DocSearch-Button {
   display: block;
   text-decoration: none;
 }
-.landing .pic .card {
+/* Each card is taped at its top edge and its bottom lifts a little off the
+   sheet, hinged at the tape: --lift (1 to 3.5 degrees, PictureCard.vue)
+   turns the card about its top edge, and its shadow on the sheet (.shade)
+   is all but nothing under the tape and grows lower, further right and
+   softer toward the bottom edge. The card itself keeps only a contact
+   shadow. --rise lifts the whole card while it is taped down (gf-hang). */
+.landing .pic {
+  --lift: var(--lift-rest, 0deg);
+  --rise: 0;
+}
+.landing .pic .mount {
+  position: relative;
   display: block;
+  perspective: 1400px;
+  perspective-origin: 50% 0;
+}
+.landing .pic .card {
+  position: relative;
+  z-index: 1;
+  display: block;
+  transform-origin: 50% 0;
+  rotate: x var(--lift);
+  box-shadow: 0 1px 2px var(--shadow-warm);
+}
+.landing .pic .shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: rgba(38, 28, 18, 0.3);
+  transform-origin: 50% 0;
+  transform: translate(calc(var(--rise) * 0.5px), calc(var(--rise) * 0.9px))
+    skewX(calc(var(--lift) * 0.6)) scaleY(calc(1 + sin(var(--lift))));
+  filter: blur(calc(2px + sin(var(--lift)) * 150px + var(--rise) * 0.6px));
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / calc(var(--rise) / 12)),
+    #000 60%
+  );
+  pointer-events: none;
 }
 .landing .pic .tape {
   top: -11px;
@@ -551,61 +588,51 @@ html.landing-page .DocSearch-Button {
     transform: translateY(0);
   }
 }
-/* Taped picture cards drop onto the sheet and get taped down: each card
-   falls from a little above the paper (larger, more tilted, its shadow wide,
-   soft and far), lands with a small settle, and its tape is pressed on just
-   after. The animations only run the individual translate / rotate / scale
-   properties, which compose with each card's own tilt transform, and they
-   fill backwards only, so the resting styles (and the hover lift) take over
-   once they end. --drop-delay staggers the cards: the floating hero cards
-   and the collage at load (LandingPage.vue), the spectrum row when it
-   scrolls into view (.drops below). */
-.landing .pic {
-  animation: gf-drop 0.6s var(--drop-delay, 0ms) backwards;
+/* The hero's cards are taped down as the page loads: each drifts in from
+   just above the sheet with its bottom swung up, the tape is pressed on at
+   its top, and the bottom swings down around the tape to its lifted rest
+   (--lift-rest), passing it once by a little. The animation runs the
+   individual translate property and the --lift / --rise properties that the
+   card's hinge and shadow read, and fills backwards only, so the resting
+   styles take over once it ends. --drop-delay (LandingPage.vue) staggers the
+   cards in list order. */
+.landing .hero .pic {
+  animation: gf-hang 0.75s var(--drop-delay, 0ms) backwards;
 }
-.landing .pic .card {
-  animation: gf-drop-shadow 0.6s var(--drop-delay, 0ms) backwards;
-}
-.landing .pic .tape {
-  animation: gf-tape 0.2s calc(var(--drop-delay, 0ms) + 0.48s) ease-out
+.landing .hero .pic .tape {
+  animation: gf-tape 0.18s calc(var(--drop-delay, 0ms) + 0.22s) ease-out
     backwards;
 }
-@keyframes gf-drop {
+@keyframes gf-hang {
   0% {
     opacity: 0;
-    translate: 0 -18px;
-    rotate: calc(var(--tilt, 0deg) * 1.5 + 1deg);
-    scale: 1.12;
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.6);
+    translate: 0 -10px;
+    --rise: 12;
+    --lift: calc(var(--lift-rest) + 11deg);
+    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
   }
-  30% {
+  15% {
     opacity: 1;
   }
-  82% {
-    translate: 0 1px;
-    rotate: 0deg;
-    scale: 0.992;
-    animation-timing-function: ease-out;
+  32% {
+    translate: 0 0;
+    --rise: 0;
+    --lift: calc(var(--lift-rest) + 10deg);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
+  }
+  72% {
+    --lift: calc(var(--lift-rest) - 1deg);
+    animation-timing-function: ease-in-out;
+  }
+  88% {
+    --lift: calc(var(--lift-rest) + 0.3deg);
+    animation-timing-function: ease-in-out;
   }
   100% {
     opacity: 1;
     translate: 0 0;
-    rotate: 0deg;
-    scale: 1;
-  }
-}
-@keyframes gf-drop-shadow {
-  0% {
-    box-shadow:
-      0 6px 10px rgba(60, 40, 20, 0.04),
-      16px 34px 44px rgba(60, 40, 20, 0.12);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.6);
-  }
-  82% {
-    box-shadow:
-      0 1px 1px var(--shadow-warm),
-      2px 4px 14px var(--shadow-warm);
-    animation-timing-function: ease-out;
+    --rise: 0;
+    --lift: var(--lift-rest);
   }
 }
 @keyframes gf-tape {
@@ -613,25 +640,6 @@ html.landing-page .DocSearch-Button {
     opacity: 0;
     scale: 1.25;
   }
-}
-/* The spectrum row reveals by dropping its cards in, not by rising as a
-   block: the row itself stays put, its cards wait until it is visible, and
-   the axis under them fades in as they land. */
-.landing.landing--js .reveal.drops {
-  opacity: 1;
-  transform: none;
-}
-.landing .drops .spec-axis {
-  transition: opacity 0.5s ease 0.35s;
-}
-.landing.landing--js .drops:not(.visible) .pic,
-.landing.landing--js .drops:not(.visible) .spec-axis {
-  opacity: 0;
-}
-.landing.landing--js .drops:not(.visible) .pic,
-.landing.landing--js .drops:not(.visible) .pic .card,
-.landing.landing--js .drops:not(.visible) .pic .tape {
-  animation-name: none;
 }
 
 /* ---------- SECTIONS ---------- */
@@ -1205,7 +1213,6 @@ html.landing-page .VPNavBarSocialLinks {
     transform: none !important;
   }
   .landing .pic,
-  .landing .pic .card,
   .landing .pic .tape {
     animation: none !important;
     opacity: 1 !important;
@@ -1371,6 +1378,19 @@ html.landing-page .VPNavBarSocialLinks {
   html.landing-page .VPNavBar .content-body {
     animation: none !important;
   }
+}
+
+/* registered custom properties that animate a picture card being taped
+   down (gf-hang) */
+@property --lift {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+@property --rise {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
 /* registered custom property that animates the pull-apart explosion */
