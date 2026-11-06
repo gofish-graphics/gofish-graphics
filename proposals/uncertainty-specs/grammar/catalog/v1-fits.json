@@ -1,0 +1,874 @@
+{
+"ggdist-01-slabinterval-family": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-02-slabinterval-components": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-03-group-halfeye": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-04-eye-side": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-05-eyeh-side": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-06-eye-dodge": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-07-dist-eye-dodge-distributional": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-08-beta-stacked": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-09-beta-overplotted-slabh": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-10-prior-dist-halfeyeh": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-11-prior-post": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-12-dist-halfeyeh-log-scale": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-13-stat-histinterval-horizontal": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-14-stat-histintervalh-outlines": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-15-dist-slab-discrete": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-16-ccdf-barplot": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-17-ccdf-justification": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-18-gradient-dodge": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-19-gradient-dodge-nice": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-20-dots-dodge-nocolor": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-21-quantile-dots-dodge": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-22-ccdf-gradient": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-23-norm-vs-t-highlight": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-24-norm-vs-t-gradient-eye": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-25-correll-gradient": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-26-helske-gradient-eye": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-27-tukey-pencils": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-28-halfeye-filled-intervals": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-29-halfeye-filled-intervals-2": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-30-halfeye-qi-vs-hdi": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-31-halfeye-qi-vs-hdi-spikes": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-32-halfeye-filled-intervals-subgroup": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-33-dist-interval-color-ramp": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-34-raindrop": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-35-slab-ridge": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-36-slab-ridge-ramp": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-37-varying-side-dotplot": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-38-halfeye-quantile-dotplot": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-39-slab-and-pointinterval": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-40-dotsinterval-components": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-41-dots-components": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-42-layout-params": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-43-horizontal-side": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-44-vertical-side": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-45-layout-top": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-46-layout-both": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-47-beeswarm-bin": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-48-beeswarm-hex": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-49-geom-weave": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-50-beeswarm-dodge": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-51-beeswarm-shape-color-together": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-52-beeswarm-shape-color-together-stacked": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-53-beeswarm-shape-color-continuous": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-54-increasing-samples": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-55-increasing-samples-min-binwidth": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-56-increasing-samples-min-binwidth-compress": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-57-discrete-dots-too-small": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-58-discrete-dots-bar": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-59-discrete-dots-ep": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-60-dotsinterval-dist": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-61-dotsinterval-dist-1000-level-color": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-62-dotsinterval-dist-color": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-63-dist-dots-weave": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-64-halfeye-dotplot": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-65-mcse-blur-dots": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-66-mcse-interval-dots": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-67-iris-v": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-68-logit-dotplot": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-69-spaghetti": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-70-one-ribbon": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-71-geom-lineribbon": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-72-stat-lineribbon": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-73-stat-lineribbon-gradient": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-74-stat-lineribbon-density": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-75-stat-lineribbon-density-smooth": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-76-stat-lineribbon-2groups-brewer": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-77-stat-lineribbon-2groups-alpha": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-78-stat-lineribbon-2groups-ramp": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-79-stat-lineribbon-2groups-group-order": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-80-stat-lineribbon-dist": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-81-curve-draws": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-82-pointwise-ribbon": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-83-curvewise-ribbon": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-84-pointwise-curvewise": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-85-mtcars-spaghetti": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-86-mtcars-point-interval": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-87-mtcars-curve-interval": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-88-mtcars-curve-interval-bd": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-89-data-plot": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-90-halfeye": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-91-halfeye-with-data": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-92-gradientinterval": {
+"fit": "does-not-fit",
+"verdict": null
+},
+"ggdist-93-ccdfinterval": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-94-dotplot": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdist-95-lineribbon": {
+"fit": "fits",
+"verdict": null
+},
+"ggdist-96-lineribbon-lightened": {
+"fit": "gofish-gap",
+"verdict": null
+},
+"ggdibbler-01": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-02": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-03": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-04": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-05": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-06": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-07": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-08": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-09": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-10": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-11": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-12": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-13": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-14": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-15": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-16": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-17": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-18": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-19": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-20": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-21": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-22": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-23": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-24": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-25": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-26": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-27": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-28": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-29": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-30": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-31": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-32": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-33": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-34": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-35": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-36": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-37": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-38": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-39": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-40": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-41": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-42": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-43": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-44": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-45": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-46": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-47": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-48": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-49": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-50": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-51": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-52": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-53": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-54": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-55": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-56": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-57": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-58": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-59": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-60": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-61": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-62": {
+"fit": "does-not-fit",
+"verdict": "ok"
+},
+"ggdibbler-63": {
+"fit": "does-not-fit",
+"verdict": "ok"
+},
+"ggdibbler-64": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-65": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-66": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-67": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-68": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-69": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-70": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-71": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-72": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-73": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-74": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-75": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-76": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-77": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-78": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-79": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-80": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-81": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-82": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-83": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-84": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-85": {
+"fit": "fits",
+"verdict": "error: stack on the draw key; draws are alternatives, not parts of a sum, so stack needs CanSum (fragment 2.5)"
+},
+"ggdibbler-86": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-87": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-88": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-89": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-90": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-91": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-92": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-93": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-94": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-95": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-96": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-97": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-98": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-99": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-100": {
+"fit": "does-not-fit",
+"verdict": "ok"
+},
+"ggdibbler-101": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-102": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-103": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-104": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-105": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-106": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-107": {
+"fit": "does-not-fit",
+"verdict": "error: not expressible; one draw key sorts whole draws by one value, so marginal quantiles of two columns cannot be paired"
+},
+"ggdibbler-108": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-109": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-110": {
+"fit": "fits",
+"verdict": "error: stack on the draw key (fragment 2.5, CanSum)"
+},
+"ggdibbler-111": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-112": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-113": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-114": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-115": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-116": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-117": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-118": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-119": {
+"fit": "gofish-gap",
+"verdict": "ok"
+},
+"ggdibbler-120": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-121": {
+"fit": "fits",
+"verdict": "ok"
+},
+"ggdibbler-122": {
+"fit": "fits",
+"verdict": "ok"
+}
+}

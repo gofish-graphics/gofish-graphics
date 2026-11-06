@@ -1,0 +1,1222 @@
+[
+  {
+    "id": "ggdibbler-01",
+    "slug": "readme-contour",
+    "source": "README",
+    "title": "Uncertain contours of faithfuld",
+    "r_code": "ggplot(uncertain_faithfuld, aes(waiting, eruptions, z = density0)) +\n  geom_contour_sample(alpha = 0.2)",
+    "img": "img/ggdibbler-01-readme-contour.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-02",
+    "slug": "raster-faithfuld",
+    "source": "README; Rd geom_raster_sample ex 1; paper Fig 5c",
+    "title": "Raster of faithfuld density, some error (identity_dodge)",
+    "r_code": "ggplot(uncertain_faithfuld, aes(waiting, eruptions)) +\n  geom_raster_sample(aes(fill = density))",
+    "img": "img/ggdibbler-02-raster-faithfuld.png",
+    "render": "rendered",
+    "merged": ["Rd geom_raster_sample example 1 (no title/theme)", "paper Fig 5c (palette, title)"]
+  },
+  {
+    "id": "ggdibbler-03",
+    "slug": "raster-faithfuld-more",
+    "source": "README; paper Fig 5d",
+    "title": "Raster of faithfuld density, more error",
+    "r_code": "ggplot(uncertain_faithfuld, aes(waiting, eruptions)) +\n  geom_raster_sample(aes(fill = density2))",
+    "img": "img/ggdibbler-03-raster-faithfuld-more.png",
+    "render": "rendered",
+    "merged": "paper Fig 5d (palette, title)"
+  },
+  {
+    "id": "ggdibbler-04",
+    "slug": "readme-stack-deterministic",
+    "source": "README",
+    "title": "geom_bar_sample stack on deterministic mpg",
+    "r_code": "ggplot(mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), position = \"stack\")",
+    "img": "img/ggdibbler-04-readme-stack-deterministic.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-05",
+    "slug": "stack-identity",
+    "source": "README; Rd position_stack_nested ex 3",
+    "title": "Uncertain mpg counts, stack_identity",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), alpha = 0.15, position = \"stack_identity\")",
+    "img": "img/ggdibbler-05-stack-identity.png",
+    "render": "rendered",
+    "merged": "Rd position_stack_nested example 3 (alpha 0.2 instead of 0.15)"
+  },
+  {
+    "id": "ggdibbler-06",
+    "slug": "stack-dodge",
+    "source": "README; Rd position_stack_nested ex 4",
+    "title": "Uncertain mpg counts, stack_dodge",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), position = \"stack_dodge\")",
+    "img": "img/ggdibbler-06-stack-dodge.png",
+    "render": "rendered",
+    "merged": "Rd position_stack_nested example 4 (byte-identical plot code; README adds theme and title)"
+  },
+  {
+    "id": "ggdibbler-07",
+    "slug": "readme-sf-map",
+    "source": "README",
+    "title": "Iowa temperature map, subdivided, with borders",
+    "r_code": "toy_temp_dist |>\n  ggplot() +\n  geom_sf_sample(aes(geometry = county_geometry, fill = temp_dist),\n    linewidth = 0, times = 50) +\n  geom_sf(aes(geometry = county_geometry), fill = NA, linewidth = 0.7) +\n  scale_fill_distiller(palette = \"OrRd\")",
+    "img": "img/ggdibbler-07-readme-sf-map.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-08",
+    "slug": "abline-intercept",
+    "source": "Rd geom_abline_sample",
+    "title": "Random intercept reference line over points",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(alpha = 0.3) +\n  geom_abline_sample(intercept = dist_normal(20, 1), alpha = 0.3)",
+    "img": "img/ggdibbler-08-abline-intercept.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-09",
+    "slug": "vline",
+    "source": "Rd geom_abline_sample",
+    "title": "Random vertical reference line",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(alpha = 0.3) +\n  geom_vline_sample(xintercept = dist_normal(5, 0.1), alpha = 0.3)",
+    "img": "img/ggdibbler-09-vline.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-10",
+    "slug": "hline",
+    "source": "Rd geom_abline_sample",
+    "title": "Random horizontal reference line",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(alpha = 0.3) +\n  geom_hline_sample(yintercept = dist_normal(20, 1), alpha = 0.3)",
+    "img": "img/ggdibbler-10-hline.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-11",
+    "slug": "abline-coef",
+    "source": "Rd geom_abline_sample; paper Fig 10a",
+    "title": "Regression line with random slope and intercept",
+    "r_code": "ggplot(mtcars, aes(wt, mpg)) + geom_point() +\n  geom_abline_sample(intercept = dist_normal(37, 1.8),\n    slope = dist_normal(-5, 0.56), times = 30, alpha = 0.3)",
+    "img": "img/ggdibbler-11-abline-coef.png",
+    "render": "rendered",
+    "merged": "paper Fig 10a (line colour only)"
+  },
+  {
+    "id": "ggdibbler-12",
+    "slug": "bar-count",
+    "source": "Rd geom_bar_sample",
+    "title": "Uncertain class counts (stack_dodge default)",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) + geom_bar_sample()",
+    "img": "img/ggdibbler-12-bar-count.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-13",
+    "slug": "bar-count-identity",
+    "source": "Rd geom_bar_sample",
+    "title": "Uncertain class counts, identity_identity",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(position = \"identity_identity\", alpha = 0.1)",
+    "img": "img/ggdibbler-13-bar-count-identity.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-14",
+    "slug": "col",
+    "source": "Rd geom_bar_sample",
+    "title": "Uncertain bar heights (geom_col_sample)",
+    "r_code": "uncertain_df <- data.frame(trt = c(\"a\", \"b\", \"c\"),\n  outcome = dist_normal(mean = c(2.3, 1.9, 3.2), sd = c(0.5, 0.8, 0.7)))\nggplot(uncertain_df, aes(x = trt, y = outcome)) + geom_col_sample()",
+    "img": "img/ggdibbler-14-col.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-15",
+    "slug": "bar-horizontal-reverse",
+    "source": "Rd geom_bar_sample",
+    "title": "Horizontal stacked counts, stack_dodge(reverse)",
+    "r_code": "ggplot(uncertain_mpg, aes(y = class)) +\n  geom_bar_sample(aes(fill = drv), alpha = 1,\n    position = position_stack_dodge(reverse = TRUE)) +\n  theme(legend.position = \"top\")",
+    "img": "img/ggdibbler-15-bar-horizontal-reverse.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-16",
+    "slug": "bin2d",
+    "source": "Rd geom_bin_2d_sample",
+    "title": "2D bin counts, 100 draws dodged",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(x, y)) + geom_bin_2d_sample(times = 100)",
+    "img": "img/ggdibbler-16-bin2d.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-17",
+    "slug": "bin2d-identity",
+    "source": "Rd geom_bin_2d_sample",
+    "title": "2D bin counts, draws overlaid",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(x, y)) +\n  geom_bin_2d_sample(position = \"identity\", alpha = 0.1)",
+    "img": "img/ggdibbler-17-bin2d-identity.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-18",
+    "slug": "bin2d-10",
+    "source": "Rd geom_bin_2d_sample",
+    "title": "2D bin counts, 10 bins",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(x, y)) + geom_bin_2d_sample(bins = 10)",
+    "img": "img/ggdibbler-18-bin2d-10.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-19",
+    "slug": "boxplot",
+    "source": "Rd geom_boxplot_sample",
+    "title": "Uncertain boxplots",
+    "r_code": "ggplot(uncertain_mpg, aes(class, hwy)) + geom_boxplot_sample(alpha = 0.1)",
+    "img": "img/ggdibbler-19-boxplot.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-20",
+    "slug": "boxplot-varwidth",
+    "source": "Rd geom_boxplot_sample",
+    "title": "Uncertain boxplots, varwidth",
+    "r_code": "ggplot(uncertain_mpg, aes(class, hwy)) +\n  geom_boxplot_sample(alpha = 0.1, varwidth = TRUE)",
+    "img": "img/ggdibbler-20-boxplot-varwidth.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-21",
+    "slug": "boxplot-dodge-identity",
+    "source": "Rd geom_boxplot_sample",
+    "title": "Boxplots by drv, dodge_identity",
+    "r_code": "ggplot(uncertain_mpg, aes(class, hwy)) +\n  geom_boxplot_sample(aes(colour = drv), alpha = 0.05, position = \"dodge_identity\")",
+    "img": "img/ggdibbler-21-boxplot-dodge-identity.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-22",
+    "slug": "contour",
+    "source": "Rd geom_contour_sample",
+    "title": "Contours of a filtered faithfuld",
+    "r_code": "ggplot(uncertain_faithfuld |> filter(waiting > 80) |> filter(eruptions > 3),\n  aes(waiting, eruptions, z = density)) + geom_contour_sample()",
+    "img": "img/ggdibbler-22-contour.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-23",
+    "slug": "contour-filled",
+    "source": "Rd geom_contour_sample",
+    "title": "Filled contours",
+    "r_code": "ggplot(uncertain_faithfuld |> filter(waiting > 80) |> filter(eruptions > 3),\n  aes(waiting, eruptions, z = density)) + geom_contour_filled_sample()",
+    "img": "img/ggdibbler-23-contour-filled.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-24",
+    "slug": "point-cty-hwy",
+    "source": "Rd geom_count_sample",
+    "title": "Overplotted uncertain points",
+    "r_code": "ggplot(uncertain_mpg, aes(cty, hwy)) + geom_point_sample()",
+    "img": "img/ggdibbler-24-point-cty-hwy.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-25",
+    "slug": "count",
+    "source": "Rd geom_count_sample; paper Fig 14a; paper Fig 10e",
+    "title": "geom_count bubbles, draws overlaid",
+    "r_code": "ggplot(uncertain_mpg, aes(cty, hwy)) + geom_count_sample(alpha = 0.15)",
+    "img": "img/ggdibbler-25-count.png",
+    "render": "rendered",
+    "merged": ["paper Fig 14a (same help-file example, theme)", "paper Fig 10e (colour/shape only; reconstructed match)"]
+  },
+  {
+    "id": "ggdibbler-26",
+    "slug": "count-size-area",
+    "source": "Rd geom_count_sample",
+    "title": "geom_count with scale_size_area",
+    "r_code": "ggplot(uncertain_mpg, aes(cty, hwy)) + geom_count_sample(alpha = 0.15) +\n  scale_size_area()",
+    "img": "img/ggdibbler-26-count-size-area.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-27",
+    "slug": "density2d",
+    "source": "Rd geom_density_2d_sample",
+    "title": "2D density contours over points",
+    "r_code": "ggplot(uncertain_faithful, aes(x = eruptions, y = waiting)) +\n  geom_point_sample(size = 2/10) +\n  scale_x_continuous_distribution(limits = c(0.5, 6)) +\n  scale_y_continuous_distribution(limits = c(40, 110)) +\n  geom_density_2d_sample(linewidth = 2/10, alpha = 0.5)",
+    "img": "img/ggdibbler-27-density2d.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-28",
+    "slug": "density2d-filled",
+    "source": "Rd geom_density_2d_sample",
+    "title": "2D density bands",
+    "r_code": "ggplot(uncertain_faithful, aes(x = eruptions, y = waiting)) +\n  geom_point_sample(size = 2/10) +\n  scale_x_continuous_distribution(limits = c(0.5, 6)) +\n  scale_y_continuous_distribution(limits = c(40, 110)) +\n  geom_density_2d_filled_sample(alpha = 0.1)",
+    "img": "img/ggdibbler-28-density2d-filled.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-29",
+    "slug": "density",
+    "source": "Rd geom_density_sample",
+    "title": "Density of carat, one curve per draw",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat)) + geom_density_sample(alpha = 0.5)",
+    "img": "img/ggdibbler-29-density.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-30",
+    "slug": "density-by-cut",
+    "source": "Rd geom_density_sample",
+    "title": "Densities of depth by cut",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(depth, fill = cut)) +\n  geom_density_sample(aes(colour = after_stat(fill)), alpha = 0.1) +\n  scale_x_continuous_distribution(limits = c(55, 70))",
+    "img": "img/ggdibbler-30-density-by-cut.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-31",
+    "slug": "dotplot",
+    "source": "Rd geom_dotplot_sample; paper Fig 14 (middle)",
+    "title": "Dot plot of mpg, draws overlaid",
+    "r_code": "ggplot(uncertain_mtcars, aes(x = mpg)) + geom_dotplot_sample(alpha = 0.2)",
+    "img": "img/ggdibbler-31-dotplot.png",
+    "render": "rendered",
+    "merged": "paper Fig 14 middle panel (same help-file example)"
+  },
+  {
+    "id": "ggdibbler-32",
+    "slug": "dotplot-binwidth",
+    "source": "Rd geom_dotplot_sample",
+    "title": "Dot plot, binwidth 1.5",
+    "r_code": "ggplot(uncertain_mtcars, aes(x = mpg)) +\n  geom_dotplot_sample(binwidth = 1.5, alpha = 0.2)",
+    "img": "img/ggdibbler-32-dotplot-binwidth.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-33",
+    "slug": "dotplot-histodot",
+    "source": "Rd geom_dotplot_sample",
+    "title": "Dot plot, fixed-width bins (histodot)",
+    "r_code": "ggplot(uncertain_mtcars, aes(x = mpg)) +\n  geom_dotplot_sample(method = \"histodot\", binwidth = 1.5, alpha = 0.2)",
+    "img": "img/ggdibbler-33-dotplot-histodot.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-34",
+    "slug": "hex",
+    "source": "Rd geom_hex_sample",
+    "title": "Hex bins of carat and price",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat, price)) + geom_hex_sample(alpha = 0.15)",
+    "img": "img/ggdibbler-34-hex.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-35",
+    "slug": "hex-10",
+    "source": "Rd geom_hex_sample",
+    "title": "Hex bins, 10 bins",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat, price)) +\n  geom_hex_sample(bins = 10, alpha = 0.15)",
+    "img": "img/ggdibbler-35-hex-10.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-36",
+    "slug": "histogram",
+    "source": "Rd geom_histogram_sample",
+    "title": "Histogram of carat (stack_dodge default)",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat)) + geom_histogram_sample()",
+    "img": "img/ggdibbler-36-histogram.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-37",
+    "slug": "histogram-identity",
+    "source": "Rd geom_histogram_sample",
+    "title": "Histogram, identity_identity",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat)) +\n  geom_histogram_sample(position = \"identity_identity\", alpha = 0.15)",
+    "img": "img/ggdibbler-37-histogram-identity.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-38",
+    "slug": "freqpoly",
+    "source": "Rd geom_histogram_sample",
+    "title": "Frequency polygons of price by cut",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(price, colour = cut)) +\n  geom_freqpoly_sample(binwidth = 500)",
+    "img": "img/ggdibbler-38-freqpoly.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-39",
+    "slug": "histogram-fill",
+    "source": "Rd geom_histogram_sample",
+    "title": "Histogram of price filled by cut",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(price, fill = cut)) +\n  geom_histogram_sample(binwidth = 500)",
+    "img": "img/ggdibbler-39-histogram-fill.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-40",
+    "slug": "point-cyl-hwy",
+    "source": "Rd geom_jitter_sample",
+    "title": "Points of cyl and hwy",
+    "r_code": "ggplot(uncertain_mpg, aes(cyl, hwy)) + geom_point_sample(times = 10)",
+    "img": "img/ggdibbler-40-point-cyl-hwy.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-41",
+    "slug": "jitter",
+    "source": "Rd geom_jitter_sample",
+    "title": "Jittered uncertain points",
+    "r_code": "ggplot(uncertain_mpg, aes(cyl, hwy)) + geom_jitter_sample(times = 10)",
+    "img": "img/ggdibbler-41-jitter.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-42",
+    "slug": "jitter-deterministic",
+    "source": "Rd geom_jitter_sample",
+    "title": "geom_jitter_sample on deterministic mpg",
+    "r_code": "ggplot(mpg, aes(cyl, hwy)) + geom_jitter_sample(aes(colour = class))",
+    "img": "img/ggdibbler-42-jitter-deterministic.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-43",
+    "slug": "linerange",
+    "source": "Rd geom_linerange_sample",
+    "title": "Uncertain line ranges",
+    "r_code": "df <- data.frame(trt = factor(c(1, 1, 2, 2)), resp = c(1, 5, 3, 4),\n  group = factor(c(1, 2, 1, 2)), upper = c(1.1, 5.3, 3.3, 4.2),\n  lower = c(0.8, 4.6, 2.4, 3.6))\nuncertain_df <- df |> group_by(trt, group) |>\n  mutate(resp = dist_normal(resp, runif(1, 0, 0.2)),\n    upper = dist_normal(upper, runif(1, 0, 0.2)),\n    lower = dist_normal(lower, runif(1, 0, 0.2)))\n\nggplot(uncertain_df, aes(trt, resp, colour = group)) +\n  geom_linerange_sample(aes(ymin = lower, ymax = upper), linewidth = 4)",
+    "img": "img/ggdibbler-43-linerange.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-44",
+    "slug": "pointrange",
+    "source": "Rd geom_linerange_sample",
+    "title": "Uncertain point ranges",
+    "r_code": "df <- data.frame(trt = factor(c(1, 1, 2, 2)), resp = c(1, 5, 3, 4),\n  group = factor(c(1, 2, 1, 2)), upper = c(1.1, 5.3, 3.3, 4.2),\n  lower = c(0.8, 4.6, 2.4, 3.6))\nuncertain_df <- df |> group_by(trt, group) |>\n  mutate(resp = dist_normal(resp, runif(1, 0, 0.2)),\n    upper = dist_normal(upper, runif(1, 0, 0.2)),\n    lower = dist_normal(lower, runif(1, 0, 0.2)))\n\nggplot(uncertain_df, aes(trt, resp, colour = group)) +\n  geom_pointrange_sample(aes(ymin = lower, ymax = upper))",
+    "img": "img/ggdibbler-44-pointrange.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-45",
+    "slug": "crossbar",
+    "source": "Rd geom_linerange_sample",
+    "title": "Uncertain crossbars",
+    "r_code": "df <- data.frame(trt = factor(c(1, 1, 2, 2)), resp = c(1, 5, 3, 4),\n  group = factor(c(1, 2, 1, 2)), upper = c(1.1, 5.3, 3.3, 4.2),\n  lower = c(0.8, 4.6, 2.4, 3.6))\nuncertain_df <- df |> group_by(trt, group) |>\n  mutate(resp = dist_normal(resp, runif(1, 0, 0.2)),\n    upper = dist_normal(upper, runif(1, 0, 0.2)),\n    lower = dist_normal(lower, runif(1, 0, 0.2)))\n\nggplot(uncertain_df, aes(trt, resp, colour = group)) +\n  geom_crossbar_sample(aes(ymin = lower, ymax = upper), width = 0.2)",
+    "img": "img/ggdibbler-45-crossbar.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-46",
+    "slug": "errorbar",
+    "source": "Rd geom_linerange_sample",
+    "title": "Uncertain error bars",
+    "r_code": "df <- data.frame(trt = factor(c(1, 1, 2, 2)), resp = c(1, 5, 3, 4),\n  group = factor(c(1, 2, 1, 2)), upper = c(1.1, 5.3, 3.3, 4.2),\n  lower = c(0.8, 4.6, 2.4, 3.6))\nuncertain_df <- df |> group_by(trt, group) |>\n  mutate(resp = dist_normal(resp, runif(1, 0, 0.2)),\n    upper = dist_normal(upper, runif(1, 0, 0.2)),\n    lower = dist_normal(lower, runif(1, 0, 0.2)))\n\nggplot(uncertain_df, aes(trt, resp, colour = group)) +\n  geom_errorbar_sample(aes(ymin = lower, ymax = upper), width = 0.2)",
+    "img": "img/ggdibbler-46-errorbar.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-47",
+    "slug": "line-economics",
+    "source": "Rd geom_path_sample",
+    "title": "Unemployment over time, one line per draw",
+    "r_code": "ggplot(uncertain_economics, aes(date, unemploy)) + geom_line_sample(alpha = 0.1)",
+    "img": "img/ggdibbler-47-line-economics.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-48",
+    "slug": "step",
+    "source": "Rd geom_path_sample",
+    "title": "Step lines since 2013",
+    "r_code": "uncertain_recent <- uncertain_economics[uncertain_economics$date > as.Date(\"2013-01-01\"), ]\nggplot(uncertain_recent, aes(date, unemploy)) + geom_step_sample(alpha = 0.5)",
+    "img": "img/ggdibbler-48-step.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-49",
+    "slug": "path",
+    "source": "Rd geom_path_sample",
+    "title": "Connected scatter of unemploy and psavert, coloured by date",
+    "r_code": "ggplot(uncertain_economics, aes(unemploy, psavert)) +\n  geom_path_sample(aes(colour = as.numeric(date)), alpha = 0.15)",
+    "img": "img/ggdibbler-49-path.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-50",
+    "slug": "line-na",
+    "source": "Rd geom_path_sample",
+    "title": "Points and lines with a missing value, shared seed",
+    "r_code": "df <- data.frame(x = 1:5, y = c(1, 2, NA, 4, 5))\nuncertain_df <- df |> mutate(y = dist_normal(y, 0.3))\nggplot(uncertain_df, aes(x, y)) +\n  geom_point_sample(seed = 33) + geom_line_sample(seed = 33)",
+    "img": "img/ggdibbler-50-line-na.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-51",
+    "slug": "point-mtcars",
+    "source": "Rd geom_point_sample",
+    "title": "Scatter of wt and mpg, 50 draws",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(times = 50, alpha = 0.5)",
+    "img": "img/ggdibbler-51-point-mtcars.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-52",
+    "slug": "point-colour",
+    "source": "Rd geom_point_sample",
+    "title": "Scatter coloured by a random category",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) +\n  geom_point_sample(aes(colour = dist_transformed(cyl, factor, as.numeric))) +\n  labs(colour = \"factor(cyl)\")",
+    "img": "img/ggdibbler-52-point-colour.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-53",
+    "slug": "point-shape",
+    "source": "Rd geom_point_sample",
+    "title": "Scatter with a random shape",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) +\n  geom_point_sample(aes(shape = dist_transformed(cyl, factor, as.numeric))) +\n  labs(shape = \"factor(cyl)\")",
+    "img": "img/ggdibbler-53-point-shape.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-54",
+    "slug": "bubble",
+    "source": "Rd geom_point_sample",
+    "title": "Bubble chart with random size",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(aes(size = qsec), alpha = 0.15)",
+    "img": "img/ggdibbler-54-bubble.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-55",
+    "slug": "polygon",
+    "source": "Rd geom_polygon_sample",
+    "title": "Polygons with random vertices and fill",
+    "r_code": "ids <- factor(c(\"1.1\", \"2.1\", \"1.2\", \"2.2\", \"1.3\", \"2.3\"))\npositions <- data.frame(id = rep(ids, each = 4),\n  x = c(2, 1, 1.1, 2.2, 1, 0, 0.3, 1.1, 2.2, 1.1, 1.2, 2.5, 1.1, 0.3,\n        0.5, 1.2, 2.5, 1.2, 1.3, 2.7, 1.2, 0.5, 0.6, 1.3),\n  y = c(-0.5, 0, 1, 0.5, 0, 0.5, 1.5, 1, 0.5, 1, 2.1, 1.7, 1, 1.5,\n        2.2, 2.1, 1.7, 2.1, 3.2, 2.8, 2.1, 2.2, 3.3, 3.2))\n\nvalues <- data.frame(id = ids, value = c(3, 3.1, 3.1, 3.2, 3.15, 3.5))\ndatapoly <- merge(values, positions, by = c(\"id\"))\nuncertain_datapoly <- datapoly |>\n  mutate(x = dist_uniform(x - 0.1, x + 0.1), y = dist_uniform(y - 0.1, y + 0.1),\n    value = dist_uniform(value - 0.5, value + 0.5))\nggplot(uncertain_datapoly, aes(x = x, y = y)) +\n  geom_polygon_sample(aes(fill = value, group = id), alpha = 0.15)",
+    "img": "img/ggdibbler-55-polygon.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-56",
+    "slug": "qq-t",
+    "source": "Rd geom_qq_sample",
+    "title": "QQ plot of uncertain t draws",
+    "r_code": "uncertain_df <- data.frame(y = dist_normal(rt(200, df = 5), runif(200)))\nggplot(uncertain_df, aes(sample = y)) + stat_qq_sample() + stat_qq_line_sample()",
+    "img": "img/ggdibbler-56-qq-t.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-57",
+    "slug": "qq-mtcars",
+    "source": "Rd geom_qq_sample",
+    "title": "QQ plot of mpg",
+    "r_code": "ggplot(uncertain_mtcars, aes(sample = mpg)) + stat_qq_sample() + stat_qq_line_sample()",
+    "img": "img/ggdibbler-57-qq-mtcars.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-58",
+    "slug": "quantile-reg",
+    "source": "Rd geom_quantile_sample",
+    "title": "Quantile regression lines",
+    "r_code": "ggplot(uncertain_mpg, aes(displ, hwy)) + geom_point_sample(alpha = 0.3) +\n  geom_quantile_sample(alpha = 0.3)",
+    "img": "img/ggdibbler-58-quantile-reg.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-59",
+    "slug": "quantile-reg-median",
+    "source": "Rd geom_quantile_sample",
+    "title": "Median regression line",
+    "r_code": "ggplot(uncertain_mpg, aes(displ, hwy)) + geom_point_sample(alpha = 0.3) +\n  geom_quantile_sample(quantiles = 0.5, alpha = 0.3)",
+    "img": "img/ggdibbler-59-quantile-reg-median.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-60",
+    "slug": "ribbon-area",
+    "source": "Rd geom_ribbon_sample",
+    "title": "Area from 0 to Lake Huron level",
+    "r_code": "huron <- data.frame(year = 1875:1972, level = as.vector(LakeHuron))\nuncertain_huron <- huron |> group_by(year) |>\n  mutate(level = dist_normal(level, runif(1, 0, 2)))\n\nggplot(uncertain_huron, aes(year)) +\n  geom_ribbon_sample(aes(ymin = 0, ymax = level), alpha = 0.15)",
+    "img": "img/ggdibbler-60-ribbon-area.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-61",
+    "slug": "ribbon-band-line",
+    "source": "Rd geom_ribbon_sample",
+    "title": "Band of level +/- 1 with a line, shared seed",
+    "r_code": "huron <- data.frame(year = 1875:1972, level = as.vector(LakeHuron))\nuncertain_huron <- huron |> group_by(year) |>\n  mutate(level = dist_normal(level, runif(1, 0, 2)))\n\nggplot(uncertain_huron, aes(year)) +\n  geom_ribbon_sample(aes(ymin = level - 1, ymax = level + 1),\n    fill = \"grey70\", seed = 4, alpha = 0.15) +\n  geom_line_sample(aes(y = level), seed = 4, alpha = 0.15)",
+    "img": "img/ggdibbler-61-ribbon-band-line.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-62",
+    "slug": "area-facet",
+    "source": "Rd geom_ribbon_sample",
+    "title": "Faceted areas with random x and y, points share the seed",
+    "r_code": "df <- data.frame(g = c(\"a\", \"a\", \"a\", \"b\", \"b\", \"b\"), x = c(1, 3, 5, 2, 4, 6),\n  y = c(2, 5, 1, 3, 6, 7))\nuncertain_df <- df |> mutate(x = dist_normal(x, 0.8), y = dist_normal(y, 0.8))\nggplot(uncertain_df, aes(x, y, fill = g)) +\n  geom_area_sample(seed = 100, alpha = 0.15) + geom_point_sample(seed = 100) +\n  facet_grid(g ~ .)",
+    "img": "img/ggdibbler-62-area-facet.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-63",
+    "slug": "rug",
+    "source": "Rd geom_rug_sample",
+    "title": "Rug in the margins, shared seed",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(seed = 4) +\n  geom_rug_sample(seed = 4, alpha = 0.5)",
+    "img": "img/ggdibbler-63-rug.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-64",
+    "slug": "segment-curve",
+    "source": "Rd geom_segment_sample",
+    "title": "A random segment and curve over points",
+    "r_code": "uncertain_df <- data.frame(x1 = dist_normal(2.62, 0.1), x2 = dist_normal(3.57, 0.1),\n  y1 = dist_normal(21.0, 0.1), y2 = dist_normal(15.0, 0.1))\nggplot(uncertain_mtcars, aes(wt, mpg)) + geom_point_sample(seed = 77, alpha = 0.5) +\n  geom_curve_sample(aes(x = x1, y = y1, xend = x2, yend = y2, colour = \"curve\"),\n    data = uncertain_df, seed = 77, alpha = 0.5) +\n  geom_segment_sample(aes(x = x1, y = y1, xend = x2, yend = y2, colour = \"segment\"),\n    data = uncertain_df, seed = 77, alpha = 0.5)",
+    "img": "img/ggdibbler-64-segment-curve.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-65",
+    "slug": "sf-subdivide",
+    "source": "Rd geom_sf_sample",
+    "title": "Three counties subdivided into 100 draws",
+    "r_code": "toy_temp_dist |>\n  filter(county_name %in% c(\"Pottawattamie County\", \"Mills County\", \"Cass County\")) |>\n  ggplot() +\n  geom_sf_sample(times = 100, linewidth = 0, aes(geometry = county_geometry, fill = temp_dist))",
+    "img": "img/ggdibbler-65-sf-subdivide.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-66",
+    "slug": "sf-subdivide-border",
+    "source": "Rd geom_sf_sample",
+    "title": "Three counties subdivided, with borders",
+    "r_code": "toy_temp_dist |>\n  filter(county_name %in% c(\"Pottawattamie County\", \"Mills County\", \"Cass County\")) |>\n  ggplot() +\n  geom_sf_sample(aes(geometry = county_geometry, fill = temp_dist), linewidth = 0, times = 100) +\n  geom_sf(aes(geometry = county_geometry), fill = NA, linewidth = 1)",
+    "img": "img/ggdibbler-66-sf-subdivide-border.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-67",
+    "slug": "smooth",
+    "source": "Rd geom_smooth_sample; paper Fig 7b",
+    "title": "Loess smooth per draw, with points",
+    "r_code": "ggplot(uncertain_mpg, aes(displ, hwy)) +\n  geom_point_sample(alpha = 0.5, size = 0.2, seed = 22) +\n  geom_smooth_sample(linewidth = 0.2, alpha = 0.1, seed = 22)",
+    "img": "img/ggdibbler-67-smooth.png",
+    "render": "rendered",
+    "merged": "paper Fig 7b (same chart; paper code not given, reconstructed match)"
+  },
+  {
+    "id": "ggdibbler-68",
+    "slug": "smooth-lm-class",
+    "source": "Rd geom_smooth_sample",
+    "title": "Linear fits per class per draw",
+    "r_code": "ggplot(uncertain_mpg, aes(displ, hwy, colour = class)) +\n  geom_point_sample(alpha = 0.5, size = 0.2, seed = 22) +\n  geom_smooth_sample(linewidth = 0.2, alpha = 0.1, se = FALSE, method = lm, seed = 22)",
+    "img": "img/ggdibbler-68-smooth-lm-class.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-69",
+    "slug": "spoke",
+    "source": "Rd geom_spoke_sample",
+    "title": "Vector field with random angle and speed",
+    "r_code": "set.seed(1)\ndf <- expand.grid(x = 1:10, y = 1:10)\ndf$angle <- runif(100, 0, 2 * pi)\ndf$speed <- runif(100, 0, sqrt(0.1 * df$x))\nuncertain_df <- df |> group_by(x, y) |>\n  mutate(angle = dist_normal(angle, runif(1, 0, 0.5)),\n    speed = dist_normal(speed, runif(1, 0, 0.1))) |> ungroup()\nggplot(uncertain_df, aes(x, y)) + geom_point_sample() +\n  geom_spoke_sample(aes(angle = angle, radius = speed), alpha = 0.3)",
+    "img": "img/ggdibbler-69-spoke.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-70",
+    "slug": "text",
+    "source": "Rd geom_text_sample",
+    "title": "Car names at random positions",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg, label = rownames(uncertain_mtcars))) +\n  geom_text_sample(times = 3, alpha = 0.5)",
+    "img": "img/ggdibbler-70-text.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-71",
+    "slug": "label",
+    "source": "Rd geom_text_sample",
+    "title": "Car labels with background",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg, label = rownames(uncertain_mtcars))) +\n  geom_label_sample(times = 3, alpha = 0.5)",
+    "img": "img/ggdibbler-71-label.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-72",
+    "slug": "text-random-label",
+    "source": "Rd geom_text_sample",
+    "title": "Random text at a fixed position",
+    "r_code": "ggplot(uncertain_mtcars, aes(mean(wt), mean(mpg), lab = cyl)) +\n  geom_text_sample(aes(label = after_stat(lab)), size = 6, alpha = 0.3)",
+    "img": "img/ggdibbler-72-text-random-label.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-73",
+    "slug": "raster-grid",
+    "source": "Rd geom_raster_sample",
+    "title": "6 x 6 raster of random fill",
+    "r_code": "df <- expand.grid(x = 0:5, y = 0:5)\nset.seed(1)\ndf$z <- runif(nrow(df))\nuncertain_df <- df |> group_by(x, y) |>\n  mutate(z = dist_normal(z, runif(1, 0, 0.1))) |> ungroup()\nggplot(uncertain_df, aes(x, y, fill = z)) + geom_raster_sample()",
+    "img": "img/ggdibbler-73-raster-grid.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-74",
+    "slug": "tile-categorical",
+    "source": "Rd geom_raster_sample",
+    "title": "Tiles of varying width with a random category, identity_dodge",
+    "r_code": "tile_df <- data.frame(x = rep(c(2, 5, 7, 9, 12), 2), y = rep(c(1, 2), each = 5),\n  z = factor(rep(1:5, each = 2)), w = rep(diff(c(0, 4, 6, 8, 10, 14)), 2))\n\nuncertain_tile_df <- tile_df\nuncertain_tile_df$z <- dist_transformed((1 + dist_binomial(rep(1:5, each = 2), 0.5)),\n  factor, as.numeric)\nggplot(uncertain_tile_df, aes(x, y)) +\n  geom_tile_sample(aes(fill = z), position = \"identity_dodge\") +\n  geom_tile(fill = NA, colour = \"grey50\", linewidth = 1) +\n  labs(fill = \"z\")",
+    "img": "img/ggdibbler-74-tile-categorical.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-75",
+    "slug": "rect",
+    "source": "Rd geom_raster_sample",
+    "title": "Rectangles with four random edges",
+    "r_code": "tile_df <- data.frame(x = rep(c(2, 5, 7, 9, 12), 2), y = rep(c(1, 2), each = 5),\n  z = factor(rep(1:5, each = 2)), w = rep(diff(c(0, 4, 6, 8, 10, 14)), 2))\n\nrect_df <- tile_df |> mutate(xmin = x - w / 2, xmax = x + w / 2, ymin = y, ymax = y + 1)\nuncertain_rect <- rect_df |>\n  mutate(xmin = dist_normal(xmin, 0.5), xmax = dist_normal(xmax, 0.5),\n    ymin = dist_normal(ymin, 0.5), ymax = dist_normal(ymax, 0.5))\nggplot(data = uncertain_rect,\n  aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, f = z)) +\n  geom_rect_sample(aes(fill = as.factor(after_stat(f))), colour = \"grey50\", alpha = 0.2) +\n  labs(fill = \"z\")",
+    "img": "img/ggdibbler-75-rect.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-76",
+    "slug": "violin",
+    "source": "Rd geom_violin_sample",
+    "title": "Violins of mpg by a random cyl",
+    "r_code": "ggplot(uncertain_mtcars, aes(dist_transformed(cyl, factor, as.numeric), mpg)) +\n  geom_violin_sample(alpha = 0.1)",
+    "img": "img/ggdibbler-76-violin.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-77",
+    "slug": "violin-untrimmed",
+    "source": "Rd geom_violin_sample",
+    "title": "Violins, untrimmed",
+    "r_code": "ggplot(uncertain_mtcars, aes(dist_transformed(cyl, factor, as.numeric), mpg)) +\n  geom_violin_sample(trim = FALSE, alpha = 0.1)",
+    "img": "img/ggdibbler-77-violin-untrimmed.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-78",
+    "slug": "dodge",
+    "source": "Rd position_dodge_nested",
+    "title": "Plain dodge of groups and draws",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) + geom_bar_sample(aes(fill = drv), position = \"dodge\")",
+    "img": "img/ggdibbler-78-dodge.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-79",
+    "slug": "dodge-identity",
+    "source": "Rd position_dodge_nested",
+    "title": "dodge_identity",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), position = \"dodge_identity\", alpha = 0.2)",
+    "img": "img/ggdibbler-79-dodge-identity.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-80",
+    "slug": "dodge-dodge",
+    "source": "Rd position_dodge_nested",
+    "title": "dodge_dodge",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) + geom_bar_sample(aes(fill = drv), position = \"dodge_dodge\")",
+    "img": "img/ggdibbler-80-dodge-dodge.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-81",
+    "slug": "identity-dodge",
+    "source": "Rd position_dodge_nested",
+    "title": "identity_dodge",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), position = \"identity_dodge\", alpha = 0.7)",
+    "img": "img/ggdibbler-81-identity-dodge.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-82",
+    "slug": "identity-fill",
+    "source": "Rd position_identity_identity",
+    "title": "Counts by drv overlaid, position identity",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), position = \"identity\", alpha = 0.1)",
+    "img": "img/ggdibbler-82-identity-fill.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-83",
+    "slug": "identity-identity-fill",
+    "source": "Rd position_identity_identity",
+    "title": "Counts by drv overlaid, identity_identity",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), position = \"identity_identity\", alpha = 0.1)",
+    "img": "img/ggdibbler-83-identity-identity-fill.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-84",
+    "slug": "nest-stack-dodge",
+    "source": "Rd position_nest",
+    "title": "position_nest(\"stack_dodge\")",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) +\n  geom_bar_sample(aes(fill = drv), alpha = 0.9, position = position_nest(\"stack_dodge\"))",
+    "img": "img/ggdibbler-84-nest-stack-dodge.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-85",
+    "slug": "stack-uncertain",
+    "source": "Rd position_stack_nested; paper Fig 8b (horizontal)",
+    "title": "Plain stack of groups and draws",
+    "r_code": "ggplot(uncertain_mpg, aes(class)) + geom_bar_sample(aes(fill = drv), position = \"stack\")",
+    "img": "img/ggdibbler-85-stack-uncertain.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-86",
+    "slug": "subdivide-polygon",
+    "source": "Rd position_subdivide",
+    "title": "Polygons subdivided into 50 draws",
+    "r_code": "ids <- factor(c(\"1.1\", \"2.1\", \"1.2\", \"2.2\", \"1.3\", \"2.3\"))\npositions <- data.frame(id = rep(ids, each = 4),\n  x = c(2, 1, 1.1, 2.2, 1, 0, 0.3, 1.1, 2.2, 1.1, 1.2, 2.5, 1.1, 0.3,\n        0.5, 1.2, 2.5, 1.2, 1.3, 2.7, 1.2, 0.5, 0.6, 1.3),\n  y = c(-0.5, 0, 1, 0.5, 0, 0.5, 1.5, 1, 0.5, 1, 2.1, 1.7, 1, 1.5,\n        2.2, 2.1, 1.7, 2.1, 3.2, 2.8, 2.1, 2.2, 3.3, 3.2))\n\nvalues <- data.frame(id = ids, value = c(1, 2, 3, 4, 5, 6))\ndatapoly <- merge(values, positions, by = c(\"id\"))\nuncertain_datapoly <- datapoly |> mutate(value = dist_uniform(value, value + 0.8))\nggplot(uncertain_datapoly, aes(x = x, y = y)) +\n  geom_polygon_sample(aes(fill = value, group = id), times = 50, position = \"subdivide\")",
+    "img": "img/ggdibbler-86-subdivide-polygon.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-87",
+    "slug": "connect",
+    "source": "Rd stat_connect_sample",
+    "title": "Custom connection shapes between points",
+    "r_code": "x <- seq(0, 1, length.out = 20)[-1]\nsmooth <- cbind(x, scales::rescale(1 / (1 + exp(-(x * 10 - 5)))))\nzigzag <- cbind(c(0.4, 0.6, 1), c(0.75, 0.25, 1))\nggplot(head(uncertain_economics, 10), aes(date, unemploy)) +\n  stat_connect_sample(aes(colour = \"zigzag\"), connection = zigzag, seed = 64) +\n  stat_connect_sample(aes(colour = \"smooth\"), connection = smooth, seed = 64) +\n  geom_point_sample(seed = 64)",
+    "img": "img/ggdibbler-87-connect.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-88",
+    "slug": "ecdf",
+    "source": "Rd stat_ecdf_sample",
+    "title": "ECDF step, one per draw",
+    "r_code": "set.seed(44)\ndf <- data.frame(x = c(rnorm(100, 0, 3), rnorm(100, 0, 10)), g = gl(2, 100))\nuncertain_df <- df |> group_by(x) |>\n  mutate(x = dist_normal(x, runif(1, 0, 5)),\n    g_pred = dist_bernoulli(0.9 - 0.8 * (2 - as.numeric(g))))\n\nggplot(uncertain_df, aes(x)) + stat_ecdf_sample(geom = \"step\", alpha = 0.3)",
+    "img": "img/ggdibbler-88-ecdf.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-89",
+    "slug": "ecdf-groups",
+    "source": "Rd stat_ecdf_sample",
+    "title": "ECDFs of two groups",
+    "r_code": "set.seed(44)\ndf <- data.frame(x = c(rnorm(100, 0, 3), rnorm(100, 0, 10)), g = gl(2, 100))\nuncertain_df <- df |> group_by(x) |>\n  mutate(x = dist_normal(x, runif(1, 0, 5)),\n    g_pred = dist_bernoulli(0.9 - 0.8 * (2 - as.numeric(g))))\n\nggplot(uncertain_df, aes(x, colour = g)) + stat_ecdf_sample(alpha = 0.3)",
+    "img": "img/ggdibbler-89-ecdf-groups.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-90",
+    "slug": "ellipse",
+    "source": "Rd stat_ellipse_sample",
+    "title": "Normal data ellipse per draw",
+    "r_code": "ggplot(uncertain_faithful, aes(waiting, eruptions)) +\n  geom_point_sample() + stat_ellipse_sample()",
+    "img": "img/ggdibbler-90-ellipse.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-91",
+    "slug": "ellipse-t-groups",
+    "source": "Rd stat_ellipse_sample",
+    "title": "t ellipses by a random group",
+    "r_code": "ggplot(uncertain_faithful, aes(waiting, eruptions,\n    color = dist_transformed(eruptions, function(x) x > 3, identity))) +\n  geom_point_sample() + stat_ellipse_sample(type = \"t\") +\n  labs(colour = \"eruptions > 3\")",
+    "img": "img/ggdibbler-91-ellipse-t-groups.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-92",
+    "slug": "ellipse-polygon",
+    "source": "Rd stat_ellipse_sample",
+    "title": "Filled ellipses by a random group",
+    "r_code": "ggplot(uncertain_faithful, aes(waiting, eruptions,\n    fill = dist_transformed(eruptions, function(x) x > 3, identity))) +\n  stat_ellipse_sample(geom = \"polygon\", alpha = 0.1) +\n  labs(fill = \"eruptions > 3\")",
+    "img": "img/ggdibbler-92-ellipse-polygon.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-93",
+    "slug": "identity-drawid",
+    "source": "Rd stat_identity_sample",
+    "title": "Points coloured by draw ID",
+    "r_code": "ggplot(uncertain_mtcars, aes(wt, mpg)) +\n  stat_identity_sample(aes(colour = after_stat(drawID)))",
+    "img": "img/ggdibbler-93-identity-drawid.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-94",
+    "slug": "manual-hull",
+    "source": "Rd stat_manual_sample",
+    "title": "Convex hull per group per draw",
+    "r_code": "make_hull <- function(data) {\n  hull <- chull(x = data$x, y = data$y)\n  data.frame(x = data$x[hull], y = data$y[hull])\n}\nq <- ggplot(uncertain_mtcars,\n  aes(disp, mpg, colour = dist_transformed(cyl, factor, as.numeric))) +\n  labs(colour = \"factor(cyl)\") + geom_point_sample()\n\nq + stat_manual_sample(geom = \"polygon\", fun = make_hull, fill = NA)",
+    "img": "img/ggdibbler-94-manual-hull.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-95",
+    "slug": "manual-segment",
+    "source": "Rd stat_manual_sample",
+    "title": "Segments to the group mean per draw",
+    "r_code": "make_hull <- function(data) {\n  hull <- chull(x = data$x, y = data$y)\n  data.frame(x = data$x[hull], y = data$y[hull])\n}\nq <- ggplot(uncertain_mtcars,\n  aes(disp, mpg, colour = dist_transformed(cyl, factor, as.numeric))) +\n  labs(colour = \"factor(cyl)\") + geom_point_sample()\n\nq + stat_manual_sample(geom = \"segment\", fun = transform,\n  args = list(xend = quote(mean(x)), yend = quote(mean(y))))",
+    "img": "img/ggdibbler-95-manual-segment.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-96",
+    "slug": "manual-centroid",
+    "source": "Rd stat_manual_sample",
+    "title": "Group centroids per draw",
+    "r_code": "make_hull <- function(data) {\n  hull <- chull(x = data$x, y = data$y)\n  data.frame(x = data$x[hull], y = data$y[hull])\n}\nq <- ggplot(uncertain_mtcars,\n  aes(disp, mpg, colour = dist_transformed(cyl, factor, as.numeric))) +\n  labs(colour = \"factor(cyl)\") + geom_point_sample()\n\nq + stat_manual_sample(size = 10, shape = 21, fun = dplyr::summarise,\n  args = vars(x = mean(x), y = mean(y)))",
+    "img": "img/ggdibbler-96-manual-centroid.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-97",
+    "slug": "summary-2d",
+    "source": "Rd stat_summary_2d_sample",
+    "title": "Mean price in 2D bins",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat, depth, z = price)) + stat_summary_2d_sample()",
+    "img": "img/ggdibbler-97-summary-2d.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-98",
+    "slug": "summary-hex",
+    "source": "Rd stat_summary_2d_sample",
+    "title": "Sum of squared price in hex bins",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat, depth, z = price)) +\n  stat_summary_hex_sample(fun = ~ sum(.x^2), alpha = 0.3)",
+    "img": "img/ggdibbler-98-summary-hex.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-99",
+    "slug": "summary-median",
+    "source": "Rd stat_summary_sample",
+    "title": "Median mpg per cyl",
+    "r_code": "ggplot(uncertain_mtcars, aes(cyl, mpg)) + geom_point_sample(seed = 4) +\n  stat_summary_sample(fun = \"median\", colour = \"red\", geom = \"point\")",
+    "img": "img/ggdibbler-99-summary-median.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-100",
+    "slug": "summary-mean-line",
+    "source": "Rd stat_summary_sample",
+    "title": "Mean mpg per cyl as a line, by a random vs",
+    "r_code": "ggplot(uncertain_mtcars, aes(cyl, mpg)) + geom_point_sample(seed = 4) +\n  aes(colour = dist_transformed(vs, factor, as.numeric)) +\n  stat_summary_sample(fun = mean, geom = \"line\", seed = 4) +\n  labs(colour = \"factor(vs)\")",
+    "img": "img/ggdibbler-100-summary-mean-line.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-101",
+    "slug": "unique-overplot",
+    "source": "Rd stat_unique_sample",
+    "title": "Binary vs and am, heavy overplotting",
+    "r_code": "ggplot(uncertain_mtcars, aes(vs, am)) + geom_point_sample(alpha = 0.01)",
+    "img": "img/ggdibbler-101-unique-overplot.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-102",
+    "slug": "unique",
+    "source": "Rd stat_unique_sample",
+    "title": "Binary vs and am, unique per draw",
+    "r_code": "ggplot(uncertain_mtcars, aes(vs, am)) +\n  geom_point_sample(alpha = 0.01, stat = \"unique_sample\")",
+    "img": "img/ggdibbler-102-unique.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-103",
+    "slug": "paper-fig1c-density",
+    "source": "paper Fig 1c (reconstructed)",
+    "title": "Density of 15 uncertain heights",
+    "r_code": "# reconstructed: 15 heights with measurement error (paper Section 2)\nset.seed(15)\nheights <- data.frame(x = round(rnorm(15, 165, 7)), sigma = runif(15, 5, 20))\n\nheights |> mutate(height = dist_normal(x, sigma)) |>\n  ggplot(aes(height)) + geom_density_sample(times = 100, alpha = 0.3)",
+    "img": "img/ggdibbler-103-paper-fig1c-density.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-104",
+    "slug": "paper-fig3-convergence",
+    "source": "paper Fig 3 top row (reconstructed)",
+    "title": "Density plot as the measurement error shrinks",
+    "r_code": "# reconstructed: 15 heights with measurement error (paper Section 2)\nset.seed(15)\nheights <- data.frame(x = round(rnorm(15, 165, 7)), sigma = runif(15, 5, 20))\n\npanel <- function(k) heights |> mutate(height = dist_normal(x, sigma * k)) |>\n  ggplot(aes(height)) + geom_density_sample(times = 100, alpha = 0.3) +\n  ggtitle(paste0(\"sd x \", k)) + theme_void() + theme(plot.title = element_text(size = 8))\npanel(1) | panel(0.3) | panel(0.05) | panel(0)",
+    "img": "img/ggdibbler-104-paper-fig3-convergence.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-105",
+    "slug": "paper-fig6a-quantile-intercept",
+    "source": "paper Fig 6a (reconstructed; quantile contrast panel)",
+    "title": "Lines at quantiles of a random intercept",
+    "r_code": "# reconstructed: paper Fig 6. Lines y = a + b x, coloured by the marginal\n# quantile of the intercept. ggdibbler draws (b) and (d); (a) and (c) are the\n# paper's quantile contrast, drawn here with ggplot2.\nset.seed(6)\nqcol <- scale_colour_viridis_c(option = \"magma\", guide = \"none\")\n\np <- ppoints(50)\nggplot(data.frame(a = qnorm(p), p = p)) +\n  geom_abline(aes(intercept = a, slope = 1, colour = p), alpha = 0.6) + qcol +\n  xlim(-2, 2) + ylim(-2, 2)",
+    "img": "img/ggdibbler-105-paper-fig6a-quantile-intercept.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-106",
+    "slug": "paper-fig6b-sample-intercept",
+    "source": "paper Fig 6b (reconstructed)",
+    "title": "Lines at draws of a random intercept",
+    "r_code": "# reconstructed: paper Fig 6. Lines y = a + b x, coloured by the marginal\n# quantile of the intercept. ggdibbler draws (b) and (d); (a) and (c) are the\n# paper's quantile contrast, drawn here with ggplot2.\nset.seed(6)\nqcol <- scale_colour_viridis_c(option = \"magma\", guide = \"none\")\n\nd <- data.frame(a = rnorm(50))\nd$p <- rank(d$a) / 51\nggplot(d) + geom_abline(aes(intercept = a, slope = 1, colour = p), alpha = 0.6) + qcol +\n  xlim(-2, 2) + ylim(-2, 2)",
+    "img": "img/ggdibbler-106-paper-fig6b-sample-intercept.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-107",
+    "slug": "paper-fig6c-quantile-joint",
+    "source": "paper Fig 6c (reconstructed; quantile contrast panel)",
+    "title": "Lines at paired marginal quantiles of a joint intercept and slope",
+    "r_code": "# reconstructed: paper Fig 6. Lines y = a + b x, coloured by the marginal\n# quantile of the intercept. ggdibbler draws (b) and (d); (a) and (c) are the\n# paper's quantile contrast, drawn here with ggplot2.\nset.seed(6)\nqcol <- scale_colour_viridis_c(option = \"magma\", guide = \"none\")\n\np <- ppoints(50)\nggplot(data.frame(a = qnorm(p), b = qnorm(p), p = p)) +\n  geom_abline(aes(intercept = a, slope = b, colour = p), alpha = 0.6) + qcol +\n  xlim(-2, 2) + ylim(-2, 2)",
+    "img": "img/ggdibbler-107-paper-fig6c-quantile-joint.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-108",
+    "slug": "paper-fig6d-sample-joint",
+    "source": "paper Fig 6d (reconstructed)",
+    "title": "Lines at draws of a joint intercept and slope",
+    "r_code": "# reconstructed: paper Fig 6. Lines y = a + b x, coloured by the marginal\n# quantile of the intercept. ggdibbler draws (b) and (d); (a) and (c) are the\n# paper's quantile contrast, drawn here with ggplot2.\nset.seed(6)\nqcol <- scale_colour_viridis_c(option = \"magma\", guide = \"none\")\n\nab <- generate(dist_multivariate_normal(list(c(0, 0)),\n  list(matrix(c(1, -0.8, -0.8, 1), 2))), 50)[[1]]\nd <- data.frame(a = ab[, 1], b = ab[, 2])\nd$p <- rank(d$a) / 51\nggplot(d) + geom_abline(aes(intercept = a, slope = b, colour = p), alpha = 0.6) + qcol +\n  xlim(-2, 2) + ylim(-2, 2)",
+    "img": "img/ggdibbler-108-paper-fig6d-sample-joint.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-109",
+    "slug": "paper-fig7a-smooth-pooled",
+    "source": "paper Fig 7a (reconstructed)",
+    "title": "One smooth over all draws pooled (group without draw)",
+    "r_code": "draws <- sample_expand(uncertain_mpg, times = 10)\nggplot(draws, aes(displ, hwy)) + geom_point(alpha = 0.05, size = 0.2) + geom_smooth()",
+    "img": "img/ggdibbler-109-paper-fig7a-smooth-pooled.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-110",
+    "slug": "paper-fig8b-stack-stack",
+    "source": "paper Fig 8b (reconstructed)",
+    "title": "Horizontal stack_stack",
+    "r_code": "ggplot(uncertain_mpg, aes(y = class)) + geom_bar_sample(aes(fill = drv), position = \"stack\")",
+    "img": "img/ggdibbler-110-paper-fig8b-stack-stack.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-111",
+    "slug": "paper-fig8c-stack-dodge",
+    "source": "paper Fig 8c (reconstructed)",
+    "title": "Horizontal stack_dodge",
+    "r_code": "ggplot(uncertain_mpg, aes(y = class)) +\n  geom_bar_sample(aes(fill = drv), position = \"stack_dodge\")",
+    "img": "img/ggdibbler-111-paper-fig8c-stack-dodge.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-112",
+    "slug": "paper-fig8d-stack-identity",
+    "source": "paper Fig 8d (reconstructed)",
+    "title": "Horizontal stack_identity",
+    "r_code": "ggplot(uncertain_mpg, aes(y = class)) +\n  geom_bar_sample(aes(fill = drv), position = \"stack_identity\", alpha = 0.15)",
+    "img": "img/ggdibbler-112-paper-fig8d-stack-identity.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-113",
+    "slug": "paper-fig9a-text-transparency",
+    "source": "paper Fig 9a (reconstructed)",
+    "title": "Random category as text, overlaid",
+    "r_code": "# reconstructed: a 5 x 5 grid of cells, each with a random category and a\n# random value (paper Fig 9)\nset.seed(9)\ngrid <- expand.grid(col = 1:5, row = 1:5)\ngrid$mode <- dist_categorical(lapply(seq_len(25), function(i) {\n  p <- runif(3)^3; p / sum(p) }), list(c(\"Bus\", \"Cycle\", \"Drive\")))\ngrid$value <- dist_normal(runif(25, 0, 10), runif(25, 0.2, 3))\n\nggplot(grid, aes(col, row, lab = mode)) +\n  geom_text_sample(aes(label = after_stat(lab)), alpha = 0.2, position = \"identity\", size = 2.5) + theme_void()",
+    "img": "img/ggdibbler-113-paper-fig9a-text-transparency.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-114",
+    "slug": "paper-fig9b-text-jitter",
+    "source": "paper Fig 9b (reconstructed)",
+    "title": "Random category as text, jittered",
+    "r_code": "# reconstructed: a 5 x 5 grid of cells, each with a random category and a\n# random value (paper Fig 9)\nset.seed(9)\ngrid <- expand.grid(col = 1:5, row = 1:5)\ngrid$mode <- dist_categorical(lapply(seq_len(25), function(i) {\n  p <- runif(3)^3; p / sum(p) }), list(c(\"Bus\", \"Cycle\", \"Drive\")))\ngrid$value <- dist_normal(runif(25, 0, 10), runif(25, 0.2, 3))\n\nggplot(grid, aes(col, row, lab = mode)) +\n  geom_text_sample(aes(label = after_stat(lab)), position = position_jitter(0.3, 0.3), size = 2.5) + theme_void()",
+    "img": "img/ggdibbler-114-paper-fig9b-text-jitter.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-115",
+    "slug": "paper-fig9c-colour-dodge",
+    "source": "paper Fig 9c (reconstructed)",
+    "title": "Random value as tile colour, dodged",
+    "r_code": "# reconstructed: a 5 x 5 grid of cells, each with a random category and a\n# random value (paper Fig 9)\nset.seed(9)\ngrid <- expand.grid(col = 1:5, row = 1:5)\ngrid$mode <- dist_categorical(lapply(seq_len(25), function(i) {\n  p <- runif(3)^3; p / sum(p) }), list(c(\"Bus\", \"Cycle\", \"Drive\")))\ngrid$value <- dist_normal(runif(25, 0, 10), runif(25, 0.2, 3))\n\nggplot(grid, aes(col, row, fill = value)) +\n  geom_tile_sample(position = \"identity_dodge\") + theme_void()",
+    "img": "img/ggdibbler-115-paper-fig9c-colour-dodge.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-116",
+    "slug": "paper-fig9d-colour-transparency",
+    "source": "paper Fig 9d (reconstructed)",
+    "title": "Random value as tile colour, overlaid",
+    "r_code": "# reconstructed: a 5 x 5 grid of cells, each with a random category and a\n# random value (paper Fig 9)\nset.seed(9)\ngrid <- expand.grid(col = 1:5, row = 1:5)\ngrid$mode <- dist_categorical(lapply(seq_len(25), function(i) {\n  p <- runif(3)^3; p / sum(p) }), list(c(\"Bus\", \"Cycle\", \"Drive\")))\ngrid$value <- dist_normal(runif(25, 0, 10), runif(25, 0.2, 3))\n\nggplot(grid, aes(col, row, fill = value)) +\n  geom_tile_sample(position = \"identity\", alpha = 0.15) + theme_void()",
+    "img": "img/ggdibbler-116-paper-fig9d-colour-transparency.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-117",
+    "slug": "paper-fig10b-pie",
+    "source": "paper Fig 10b (reconstructed)",
+    "title": "Pie chart of a random class, blended",
+    "r_code": "ggplot(uncertain_mpg, aes(x = \"\", fill = class)) +\n  geom_bar_sample(width = 1, position = \"stack_identity\", alpha = 0.15) +\n  coord_polar(theta = \"y\") + theme_void()",
+    "img": "img/ggdibbler-117-paper-fig10b-pie.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-118",
+    "slug": "paper-fig10c-histogram",
+    "source": "paper Fig 10c (reconstructed)",
+    "title": "Histogram of carat filled by cut, overlaid",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(carat, fill = cut)) +\n  geom_histogram_sample(position = \"stack_identity\", alpha = 0.15)",
+    "img": "img/ggdibbler-118-paper-fig10c-histogram.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-119",
+    "slug": "paper-fig10d-map",
+    "source": "paper Fig 10d (reconstructed; Iowa counties stand in for Australia)",
+    "title": "Choropleth with subdivided regions",
+    "r_code": "ggplot(toy_temp_dist) +\n  geom_sf_sample(aes(geometry = county_geometry, fill = temp_dist), linewidth = 0, times = 25) +\n  scale_fill_viridis_c(option = \"magma\") + theme_void()",
+    "img": "img/ggdibbler-119-paper-fig10d-map.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-120",
+    "slug": "paper-fig10f-network",
+    "source": "paper Fig 10f (reconstructed)",
+    "title": "Network with uncertain edges",
+    "r_code": "nodes <- data.frame(id = 1:5, x = c(0, 1.2, 1, 2, 0.7), y = c(0, 1, -1, 0.2, 0.3))\nedges <- data.frame(from = c(1, 1, 2, 2, 3, 3, 5, 5), to = c(2, 5, 4, 5, 4, 5, 4, 1),\n  p = c(0.2, 0.9, 0.6, 0.8, 0.3, 0.95, 0.7, 0.4))\nedges <- edges |> mutate(x = nodes$x[from], y = nodes$y[from],\n  xend = nodes$x[to], yend = nodes$y[to], present = dist_bernoulli(p))\nggplot() +\n  geom_segment_sample(data = edges, aes(x, y, xend = xend, yend = yend,\n    alpha = present), colour = \"firebrick\", linewidth = 1, times = 30) +\n  scale_alpha_continuous(range = c(0, 0.08), guide = \"none\") +\n  geom_point(data = nodes, aes(x, y)) + theme_void()",
+    "img": "img/ggdibbler-120-paper-fig10f-network.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-121",
+    "slug": "paper-fig11b-pie",
+    "source": "paper Fig 11b",
+    "title": "Pie chart of clarity (stack_dodge default)",
+    "r_code": "ggplot(smaller_uncertain_diamonds, aes(x = \"\", fill = clarity)) +\n  geom_bar_sample(width = 1) +\n  coord_polar(theta = \"y\")",
+    "img": "img/ggdibbler-121-paper-fig11b-pie.png",
+    "render": "rendered",
+    "merged": []
+  },
+  {
+    "id": "ggdibbler-122",
+    "slug": "paper-fig13-times",
+    "source": "paper Fig 13 (reconstructed)",
+    "title": "Scatter of mpg and wt as times grows",
+    "r_code": "panel <- function(n) ggplot(uncertain_mtcars,\n    aes(mpg, wt, colour = dist_transformed(cyl, factor, as.numeric))) +\n  geom_point_sample(times = n, alpha = 0.3, size = 0.6) +\n  ggtitle(paste(\"times =\", n)) + theme(legend.position = \"none\",\n    plot.title = element_text(size = 8))\npanel(10) | panel(100) | panel(1000)",
+    "img": "img/ggdibbler-122-paper-fig13-times.png",
+    "render": "rendered",
+    "merged": []
+  }
+]

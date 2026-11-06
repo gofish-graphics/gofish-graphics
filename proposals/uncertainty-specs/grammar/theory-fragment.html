@@ -1,0 +1,66 @@
+<section class="lede">
+  <p>This tab puts ggdist and ggdibbler inside GoFish. The claim is that neither package needs a grammar of its own: once draws are rows, every chart in either package is a GoFish flow over those rows. GoFish needs four additions, listed in section 1. This is version 2 of the claim. Version 1 was checked against every example in both packages (the <a href="#catalog">Catalog</a> tab: 96 ggdist vignette charts and 122 ggdibbler examples), and section 4 lists what that check changed. Section 5 compares real ggdist and ggdibbler renders with the GoFish spec for each.</p>
+</section>
+
+<h2>1. What GoFish needs</h2>
+<p>A cell is one uncertain value, such as one bar's height or one map region's rate.</p>
+<ol>
+  <li><strong><code>sample(data, { n })</code></strong> is a data step. It turns each distribution cell into n rows and adds two columns: <code>draw</code>, which says which draw a row is, and <code>level</code>, the row's quantile level inside its own cell (its value's CDF, a number from 0 to 1). <code>n</code> may be <code>Infinity</code>. <code>at: "quantiles"</code> takes evenly spaced levels instead of random draws, which is what ggdist's dotplots of a distribution do. Because it is a data step, several layers can read one sample. Data that already arrives as draws declares its draw key in the schema, as in the proposal, and gets its <code>level</code> from each cell's ranks.</li>
+  <li><strong><code>blend: "mean"</code></strong> on <code>group</code> puts every draw in one frame and averages them. This is from <a href="#limits">Blur as a limit</a>.</li>
+  <li><strong>Folds over draws</strong>: aggregates that turn a group of draws into one value or one curve: <code>mean</code>, <code>median</code>, <code>quantile(p)</code>, <code>min</code>, <code>max</code>, the probability of a bin, and the density. Some exist today. They are general aggregates, not special to draws, but ggdist is built on them.</li>
+  <li><strong>The draw key's type.</strong> The key records whether draws are shared across cells (draw 3 is one whole run of a model) or made per cell, and whether n is finite. Section 3 gives the rules that read it.</li>
+</ol>
+<p>Everything else is GoFish as it is today.</p>
+
+<h2>2. Every chart is one way of using up the draws</h2>
+<div class="tw"><table>
+  <thead><tr><th>GoFish step that uses up the draws</th><th>At finite n</th><th>At n = Infinity</th><th>Package</th></tr></thead>
+  <tbody>
+    <tr><td><code>group({ by: "draw", blend: "mean" })</code></td><td>overlay, averaged</td><td>the expected picture, e.g. a CCDF fade</td><td>ggdist CCDF fade (limit); no ggdibbler example averages</td></tr>
+    <tr><td><code>group({ by: "draw" })</code>, no blend</td><td>overlay, painted over each other</td><td>error: saturates, no limit</td><td>every ggdibbler overlay (fixed alpha); ggdist spaghetti</td></tr>
+    <tr><td><code>spread</code>, <code>time.sequence</code> or <code>table</code> by <code>"draw"</code></td><td>dodged bars, subdivided map, HOP, lineup</td><td>error: no limit</td><td>ggdibbler</td></tr>
+    <tr><td><code>spread({ by: "level" })</code></td><td>sorted dodged bars, sorted subdivided map</td><td>the quantile function: CCDF bar, quantile ramp</td><td>ggdist CCDF bar (limit)</td></tr>
+    <tr><td><code>partition</code> by a bin of the value, then <code>stack</code></td><td>dotplot</td><td>error: use the density fold</td><td>ggdist dots</td></tr>
+    <tr><td>a fold in a channel, per cell</td><td>empirical mean, interval, median line</td><td>exact quantiles, intervals, density slab</td><td>ggdist interval, point, slab, lineribbon</td></tr>
+    <tr><td>a fold per draw, then steps on the draws</td><td>rank whole curves by depth, keep the deepest</td><td>curvewise bands</td><td>ggdist <code>curve_interval</code></td></tr>
+  </tbody>
+</table></div>
+
+<h2>3. Rules the draw key's type checks</h2>
+<h3>3.1 n = Infinity</h3>
+<p>An infinite draw key has no list of draws to place. A chart may use one only if every step that reads it turns the draws into something with a meaning at the limit: an average picture (<code>blend: "mean"</code>), a fold, or the <code>level</code> column. A step that places each draw on its own (<code>spread</code>, <code>time.sequence</code> or <code>table</code> by <code>draw</code>, painting without a blend, <code>stack</code> in a bin), a channel that reads <code>draw</code> (such as color by draw), or a draw key that nothing uses up, is an error at n = Infinity.</p>
+
+<h3>3.2 Combining cells within one draw</h3>
+<p>Many steps combine several cells into one shape: a line across x, a polygon, a scatter of two Dist columns, or a stat computed per draw over many cells (density, contour, smoother, boxplot). The shape then shows one joint value of those cells, and which joint it shows depends on the key that ties the cells together:</p>
+<ul>
+  <li>a <strong>shared draw key</strong> shows the joint the data states. No message.</li>
+  <li>a <strong>per-cell draw key</strong> shows the cells as independent. That is a possible world only if the cells really are independent, which GoFish cannot know, so it gets a warning that the chart assumes independence.</li>
+  <li><strong><code>level</code></strong> shows the cells as moving in lockstep: every cell at its own 10th percentile at once. The data never states that, so it gets a warning that the shape is a quantile curve, not a draw. This also covers <code>at: "quantiles"</code> over several cells, which is how the ggdibbler paper's anti-example in Figure 6c can be written.</li>
+  <li>a <strong>fold per cell</strong>, such as a median line, is a summary, not a draw. No message.</li>
+</ul>
+<p>This makes precise the check discussed with Harriet in the <a href="#ggdibbler">ggdibbler side by side</a> tab.</p>
+
+<h3>3.3 Stats that pool draws</h3>
+<p>A stat whose group holds draws of several cells from several draws, such as one smoother fitted to all drawn rows, treats n draws as n times as much data. It gets a warning. The fix is to fit once per draw and then use up the draw key. This is the pooled smooth in Figure 7a of the ggdibbler paper.</p>
+
+<h3>3.4 Stacking draws</h3>
+<p>Two draws of one cell are two alternatives, not two parts of a sum, so a <code>stack</code> along the draw key adds up alternatives. Both stacked-draw charts in the ggdibbler catalog do this, which is the paper's own argument. The stacked quantity there is a count, and a count can be summed, so the <code>CanSum</code> rule does not catch it. The draw key's type has to: a stack whose children differ by <code>draw</code> is an error. A dotplot is different. Its stack runs along a bin of one cell, each dot standing for probability 1/n, and probabilities of different draws do add.</p>
+
+<h2>4. What the catalog changed</h2>
+<ul>
+  <li><strong><code>sample</code> moved from the flow to the data.</strong> Eight ggdibbler examples use one seed so two layers read the same draws. A step inside one chart's flow can't be shared.</li>
+  <li><strong><code>level</code> replaced sorting the draw key.</strong> Version 1 ranked draws with <code>field("draw").sort("value")</code>. That ranks inside a cell only because of how today's sort happens to work, and it breaks when a cell has several rows per draw. A <code>level</code> column says what it means. It also makes the line rule in 3.2 work: version 1's rule fired on ggdist's own median line.</li>
+  <li><strong>Folds are a way to use up draws.</strong> About 60 ggdist charts draw an interval, and none could be written by filtering ranks. They need a <code>quantile(p)</code> fold.</li>
+  <li><strong>The slab is a fold, not the limit of the dotplot.</strong> A dotplot reaches the slab only as the number of draws grows and the bin width shrinks together, so no single flow at n = Infinity gives it. The slab is the density fold. This keeps Josh's 11-04 decision that the slab is separate.</li>
+  <li><strong>ggdist has a second kind of mark.</strong> Its gradient interval sets opacity from the density scaled so the peak is opaque, and the Correll and Gleicher fades are flat in the middle and fade in the tails. Neither is the limit of any picture of draws. Each is a function of the distribution, drawn with an ordinary channel: a density or quantile fold, then opacity from data. So <code>blend</code> stays a plain average with no rescaling option. Today GoFish lacks an opacity that varies along one region, which the catalog counts as a GoFish gap.</li>
+  <li><strong>M(U(X)) and U(M(X)) are kinds of charts, not packages.</strong> A chart that reads only <code>level</code> or folds per cell depends only on each cell's own distribution. A chart that joins cells along a shared draw key, or folds per draw, depends on how cells move together. ggdist's <code>curve_interval</code> is the second kind. Every ggdibbler example uses per-cell draws, so in information they are all the first kind, even when they draw a line along the draw key (which 3.2 warns about).</li>
+  <li><strong>Two levels need a second source of draws.</strong> ggdist's MCSE dots show the uncertainty of a sample itself. That needs a <code>Dist&lt;Dist&lt;T&gt;&gt;</code> made from a sample by resampling, and a way to name the second draw key, since <code>sample</code> always writes <code>draw</code> and <code>level</code>. Both are still missing, so the catalog counts these charts as not fitting.</li>
+</ul>
+<h3>Still open in version 2</h3>
+<ul>
+  <li>Density and CDF folds return a curve, and the text does not yet say how a channel reads one.</li>
+  <li>What <code>sample</code> does on a cell that is not a distribution, and what a cell is for data that arrives as draws.</li>
+  <li>The fixed column names <code>draw</code> and <code>level</code> clash with data (LakeHuron has its own <code>level</code>) and with a second draw key.</li>
+  <li>Thinning a sample to n quantiles, for ggdist's quantile dots of a sample.</li>
+  <li>Band depth compares pairs of whole draws, so it is not a fold per draw (ggdist catalog entry 88).</li>
+</ul>
