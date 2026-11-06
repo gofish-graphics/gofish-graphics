@@ -58,6 +58,9 @@ export type Quantity = {
   /** The column the values were read from, when they were read from one (a
    *  count or a share was not): what a schema declares a unit for. */
   column?: string;
+  /** Set on the square root of an amount of a quantity, which an area
+   *  channel hands its mark ({@link sqrtQuantity}): that quantity. */
+  rootOf?: Quantity;
 };
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
@@ -125,24 +128,39 @@ export const columnQuantity = (
  *  as {@link columnQuantity} makes one per column. */
 const sqrtQuantities = new WeakMap<Quantity, Quantity>();
 
+/** The traits of every root unit (`√unit`, {@link sqrtQuantity}): none. One
+ *  object, so the occurrences of one root unit meet as the same traits. */
+const ROOT_TRAITS: UnitTraits = Object.freeze({});
+
 /**
  * The quantity of the square root of an amount of `q`: the side of a square
  * whose area is that amount (#972). An area channel hands its mark such a
  * length (`inferArea` in channels.ts). It is a unit of its own, `√q`, so a
  * length read from an area never shares a scale with a length read from the
  * column itself (`rect({ h: "count" })` beside `circle({ area: "count" })`).
- * A declared unit stays declared, as `√unit`; its traits are unknown. The
- * root records no column: its values are not the column's.
+ * A declared unit stays declared, as `√unit`, with its symbol rooted too.
+ *
+ * Its traits are known whatever the unit's are: a square root does not
+ * preserve sums (√(a + b) is not √a + √b), so `√unit` has no `CanSum`, and a
+ * stack of area circles is refused by the sum check ({@link checkSummable}).
+ * No other trait of a unit (`UnitTraits`) survives the root, and neither
+ * does a `difference` unit or a `zone`: amounts of an instant never reach
+ * here, since an area channel sums its rows first. An unknown unit stays
+ * unknown, the variable `√name`, so gradual typing passes its sums as it
+ * does the column's own. The root records no column: its values are not the
+ * column's.
  */
 export const sqrtQuantity = (q: Quantity): Quantity => {
   let root = sqrtQuantities.get(q);
   if (root === undefined) {
     root = {
       name: `√${q.name}`,
+      rootOf: q,
       ...(q.unit !== undefined
         ? {
             unit: {
               unit: `√${q.unit.unit}`,
+              traits: ROOT_TRAITS,
               ...(q.unit.symbol !== undefined
                 ? { symbol: `√${q.unit.symbol}` }
                 : {}),
@@ -171,12 +189,23 @@ export const addsUp = (q: Quantity): boolean =>
  * the loud error names the column (or, for values read from none, the
  * quantity) and the unit, and says how to fix it. A unit whose difference
  * is in a unit of its own that adds up (an instant's, a duration) is summed
- * by its differences: the error says to subtract a reference first.
+ * by its differences: the error says to subtract a reference first. A
+ * square root's unit (`Quantity.rootOf`, {@link sqrtQuantity}) is no unit a
+ * user can define, so its error says what to do with the marks instead.
  */
 export function checkSummable(q: Quantity | undefined, where: string): void {
   if (q === undefined || addsUp(q)) return;
   const what = whoOf(q);
   const unit = q.unit!.unit; // declared, or it would add up
+  if (q.rootOf !== undefined)
+    throw new Error(
+      `${where} sums ${what}, in the unit "${unit}", the square root of ` +
+        `"${q.rootOf.unit?.unit}" that an area channel gives its mark. Square roots ` +
+        `do not add up (√(a + b) is not √a + √b), so lengths read from areas ` +
+        `cannot be summed. Place the marks side by side (spread) instead of ` +
+        `stacking them, or size them by a length (r, w or h) if their sizes ` +
+        `should add up.`
+    );
   const difference = q.unit!.difference;
   if (difference?.traits?.CanSum !== undefined)
     throw new Error(

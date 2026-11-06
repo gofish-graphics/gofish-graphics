@@ -333,6 +333,53 @@ console.log("# area: the circle's area is proportional to the value (#972)");
   );
 }
 
+console.log("# area: a square root does not add up (#972, #1197)");
+{
+  const { stack, Unit, Trait } = GoFish as any;
+  const revenue = [
+    { k: "a", revenue: 10 },
+    { k: "b", revenue: 20 },
+  ];
+  // √(a + b) is not √a + √b, so √USD has no CanSum, whether USD's own
+  // traits are known (summable) or unknown (its name alone).
+  for (const [label, unit] of [
+    ["a summable unit", Unit("USD", { traits: [Trait.summable()] })],
+    ["a unit known by its name alone", "USD"],
+  ] as const) {
+    let message: string | undefined;
+    try {
+      await chart(revenue, { schema: { revenue: unit } })
+        .flow(stack({ by: "k", dir: "y" }))
+        .mark(circle({ area: "revenue" }))
+        .toDisplayList({ w: 300, h: 300 });
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    check(
+      `${label}: a stack of area circles is refused (√USD cannot be summed)`,
+      message?.includes('"√USD", the square root of "USD"') === true &&
+        message.includes("Square roots do not add up"),
+      message
+    );
+  }
+  let spreadMessage: string | undefined;
+  try {
+    await chart(revenue, {
+      schema: { revenue: Unit("USD", { traits: [Trait.summable()] }) },
+    })
+      .flow(spread({ by: "k", dir: "y" }))
+      .mark(circle({ area: "revenue" }))
+      .toDisplayList({ w: 300, h: 300 });
+  } catch (e) {
+    spreadMessage = (e as Error).message;
+  }
+  check(
+    "a spread of area circles in √USD sums nothing, so it draws",
+    spreadMessage === undefined,
+    spreadMessage
+  );
+}
+
 console.log("# #1087: an aspect lock ties its data unit's σ on both axes");
 {
   const data = [
