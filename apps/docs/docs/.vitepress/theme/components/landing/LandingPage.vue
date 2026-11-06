@@ -366,12 +366,25 @@ onBeforeUnmount(() => {
              of taped specimen cards, each linking to its example page -->
         <div class="collage-wrap">
           <div class="collage">
+            <!-- two columns that stack on their own (the right one starts
+                 lower, so their card edges never line up), then the wide
+                 cards across both -->
+            <div
+              v-for="column in ['left', 'right'] as const"
+              :key="column"
+              :class="['collage-col', `collage-${column}`]"
+            >
+              <PictureCard
+                v-for="card in COLLAGE.filter((c) => c.column === column)"
+                :key="card.id"
+                :card="card"
+              />
+            </div>
             <PictureCard
-              v-for="card in COLLAGE"
+              v-for="card in COLLAGE.filter((c) => c.column === 'wide')"
               :key="card.id"
               :card="card"
-              :class="{ wide: card.wide, tall: card.tall }"
-              :style="{ marginTop: card.drop ? `${card.drop}px` : undefined }"
+              class="wide"
             />
           </div>
           <p class="collage-more">

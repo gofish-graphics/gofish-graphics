@@ -29,12 +29,6 @@ export interface LandingCard {
   /** Card tilt and tape tilt, in degrees. */
   tilt: number;
   tape: number;
-  /** Collage: spans both columns. */
-  wide?: boolean;
-  /** Collage: spans two rows (centered against the cards beside it). */
-  tall?: boolean;
-  /** Collage: pixels to drop the card below its row's top, for a loose pile. */
-  drop?: number;
 }
 
 /** A card floating around the hero on wide screens. */
@@ -74,7 +68,7 @@ export const FLOATING: FloatingCard[] = [
     corner: "bl",
     alt: "Python Tutor memory diagram: a global frame with arrows into nested tuples on the heap",
     aspect: 4,
-    width: 360,
+    width: 300,
     tilt: 3,
     tape: -5,
   },
@@ -89,13 +83,22 @@ export const FLOATING: FloatingCard[] = [
   },
 ];
 
+/** A card of the phone and tablet hero collage. */
+export interface CollageCard extends LandingCard {
+  /**
+   * Where the card goes: the left or right column (two independent stacks,
+   * the right one starting lower so the two columns' card edges never line
+   * up), or full width under both columns.
+   */
+  column: "left" | "right" | "wide";
+}
+
 /**
- * The hero collage, in grid order (two columns, filled row by row): the
- * croissant chart, then the pulley diagram spanning two rows beside it and the
- * bottle fill chart; then the bubble treemap and flower chart; then two
- * full-width cards.
+ * The hero collage. Each column shows its cards in list order: on the left
+ * the croissant chart, the bottle fill chart and the bubble treemap; on the
+ * right the pulley diagram and the flower chart; then two full-width cards.
  */
-export const COLLAGE: LandingCard[] = [
+export const COLLAGE: CollageCard[] = [
   {
     id: "croissant",
     caption: "a croissant chart",
@@ -103,15 +106,7 @@ export const COLLAGE: LandingCard[] = [
     aspect: 2.28,
     tilt: -1.8,
     tape: 4,
-  },
-  {
-    id: "pulley-diagram",
-    caption: "a pulley diagram",
-    alt: "Pulley diagram: two weights hanging from a system of three pulleys",
-    aspect: 0.78,
-    tilt: 2.2,
-    tape: -3,
-    tall: true,
+    column: "left",
   },
   {
     id: "bottle-fill-chart",
@@ -120,6 +115,7 @@ export const COLLAGE: LandingCard[] = [
     aspect: 1.84,
     tilt: 1.4,
     tape: -2,
+    column: "left",
   },
   {
     id: "bubble-treemap",
@@ -128,6 +124,16 @@ export const COLLAGE: LandingCard[] = [
     aspect: 1.18,
     tilt: -2.2,
     tape: 3,
+    column: "left",
+  },
+  {
+    id: "pulley-diagram",
+    caption: "a pulley diagram",
+    alt: "Pulley diagram: two weights hanging from a system of three pulleys",
+    aspect: 0.78,
+    tilt: 2.2,
+    tape: -3,
+    column: "right",
   },
   {
     id: "flower-chart",
@@ -136,7 +142,7 @@ export const COLLAGE: LandingCard[] = [
     aspect: 1.14,
     tilt: 2,
     tape: -5,
-    drop: 18,
+    column: "right",
   },
   {
     id: "chartaccent-sub-saharan-africa",
@@ -145,7 +151,7 @@ export const COLLAGE: LandingCard[] = [
     aspect: 1.9,
     tilt: 0.9,
     tape: 2,
-    wide: true,
+    column: "wide",
   },
   {
     id: "python-tutor-memory-diagram",
@@ -154,7 +160,7 @@ export const COLLAGE: LandingCard[] = [
     aspect: 4,
     tilt: -0.8,
     tape: 3,
-    wide: true,
+    column: "wide",
   },
 ];
 

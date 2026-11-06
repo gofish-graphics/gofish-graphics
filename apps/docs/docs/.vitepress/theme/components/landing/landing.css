@@ -443,7 +443,7 @@ html.landing-page .DocSearch-Button {
   animation-delay: 520ms;
 }
 .landing .fc-bl {
-  left: 4%;
+  left: 3%;
   bottom: 6%;
   animation-delay: 640ms;
 }
@@ -493,19 +493,27 @@ html.landing-page .DocSearch-Button {
   }
 }
 .landing .collage {
+  --collage-gap: 18px;
   max-width: 620px;
   margin: 40px auto 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 18px 16px;
+  gap: var(--collage-gap) 16px;
   align-items: start;
+}
+/* Each column is its own stack, so a card's height moves only the cards
+   under it. The right column starts lower, so wherever the screen ends it
+   cuts through a card and the reader sees there is more below. */
+.landing .collage-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--collage-gap);
+}
+.landing .collage-right {
+  margin-top: 56px;
 }
 .landing .collage .pic.wide {
   grid-column: 1 / -1;
-}
-.landing .collage .pic.tall {
-  grid-row: span 2;
-  align-self: center;
 }
 .landing .collage .card {
   padding: 8px;
@@ -533,8 +541,12 @@ html.landing-page .DocSearch-Button {
 }
 @media (max-width: 700px) {
   .landing .collage {
+    --collage-gap: 10px;
     margin: 22px -14px 0;
-    gap: 10px 8px;
+    column-gap: 8px;
+  }
+  .landing .collage-right {
+    margin-top: 44px;
   }
   .landing .collage .pic.wide {
     width: 104%;
