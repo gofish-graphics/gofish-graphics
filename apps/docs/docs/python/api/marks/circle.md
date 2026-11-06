@@ -17,8 +17,10 @@ is data.
 - `area` is the circle's area. It is an area channel: it sums the mark's rows
   and hands the circle the square root of the sum, so the area, not the
   radius, is proportional to the value. A data `area` sizes both axes.
-- `w` or `h` is the diameter along that axis. A data `w` or `h` sizes only
-  that axis, and the other axis follows it in pixels.
+- `w` or `h` is the diameter along that axis. The other axis takes the same
+  length, so a data `w` or `h` sizes both axes at one scale. Where the circle
+  is placed at a data value on the other axis (a `scatter` with only `x`),
+  the other axis follows it in pixels and takes no room there.
 
 With none of them, the circle fills the space it is given. Passing more than
 one is an error.

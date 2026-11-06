@@ -597,12 +597,21 @@ the equal-measure step and the root's frame in Pass 10 all read, and
 distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
 (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceUnit(x).unit` and
-`spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
-through overlays do not count), each axis's pixels-per-data-unit — a POSITION
+are built and before `child.layout`: when the two axes are in one measure,
+each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
-maps stay undistorted); the binding axis fills, and on the other the box keeps
+maps stay undistorted). Two axes are in one measure in either of two cases.
+They share a DECLARED unit (`spaceUnit(x).unit` and `spaceUnit(y).unit` are
+equal; two unknowns that unified through overlays do not count). Or they are
+in one TIED unit: an aspect-locked mark whose size is data (`circle({ r })`,
+`circle({ h })`, an `ellipse` with `aspectRatio`) draws one value of its unit as
+a length on both axes, so it ties the unit (`ScopeRegistry.tie`, #1087), and the
+axes equalize when each maps that unit and no other (`inOneUnit`, reading
+`KeyedDomains.unitsOf`). An axis that also maps another unit (a marginal
+histogram's count beside the scatter's) is not one measure with the other
+axis, so a tied unit the two merely both contain does not equalize them. The
+binding axis fills, and on the other the box keeps
 its size and the content sits at its top-left, the leftover empty after it in
 screen terms (its claim takes the leftover at its far end, or at its start for a
 y that grows upward). Stage 6c makes this a named `equalizeMeasure` operation
