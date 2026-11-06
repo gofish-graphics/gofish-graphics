@@ -324,7 +324,7 @@ const inferAreaSum = inferSum("An area channel");
  * length its mark's σ scales like any data size. An area has no length form
  * (`percent`, `fr`) and is never negative.
  */
-export const sqrtArea = (
+const sqrtArea = (
   area: MaybeValue<number> | undefined
 ): MaybeValue<number> | undefined => {
   if (area === undefined) return undefined;
@@ -346,21 +346,6 @@ export const sqrtArea = (
     quantity === undefined ? undefined : sqrtQuantity(quantity)
   );
 };
-
-/**
- * Infer an area channel (#972): sum the rows as a size channel does, then
- * hand the mark the square root of the sum ({@link sqrtArea}). The square
- * root is the channel's encoding, not the mark's: the mark lays the length
- * out as it would any size, and the σ that scales it is linear in it, so a
- * value's area is proportional to the value at every σ the layout solves.
- * A value already wrapped (`datum(9)`) is an area too, and is rooted.
- */
-export const inferArea = <T>(
-  accessor: Parameters<typeof inferAreaSum<T>>[0],
-  data: T[],
-  column?: ColumnInfo
-): MaybeValue<number> | undefined =>
-  sqrtArea(inferAreaSum(accessor, data, column));
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /
@@ -579,7 +564,7 @@ export function resolveChannelAccessors<O extends Record<string, any>>(
  * (`buildCreatedMark` in withGoFish.ts) and the operator factory
  * (`applyChannels` in marks/createOperator.ts). Each kind says what an
  * already-wrapped value (`datum(...)`) means to it: every kind passes it
- * through as it is, except an area, which roots it ({@link inferArea}), and
+ * through as it is, except an area, which roots it ({@link sqrtArea}), and
  * a `dims` bag, which takes one only in a slot.
  *
  * `column` is the channel's resolved {@link ColumnInfo}, computed once per
@@ -593,7 +578,9 @@ export const CHANNEL_INFER: Record<
   (val: any, data: any[], column?: ColumnInfo) => any
 > = {
   size: (val, data, column) => inferSize(val, data, column),
-  area: (val, data, column) => inferArea(val, data, column),
+  // An area (#972) sums its rows as a size does and hands the mark the
+  // square root of the sum, a length linear in the σ that scales it.
+  area: (val, data, column) => sqrtArea(inferAreaSum(val, data, column)),
   pos: (val, data, column) => inferPos(val, data, column),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),

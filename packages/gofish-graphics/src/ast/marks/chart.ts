@@ -9,10 +9,9 @@ import {
 } from "../graphicalOperators/connect";
 import { GoFishNode } from "../_node";
 import {
-  DatumValueImpl,
-  getQuantity,
   getValue,
   isValue,
+  scaleValue,
   value,
   type MaybeValue,
   type Value,
@@ -387,7 +386,7 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
    *  accessor. */
   r?: MaybeValue<number>;
   /** Area. An area channel hands the circle the side of the square of that
-   *  area (its square root, `inferArea` in channels.ts), and the circle
+   *  area (its square root, `CHANNEL_INFER.area` in channels.ts), and the circle
    *  takes the diameter of the disc of that area, `2/√π` times the side. */
   area?: MaybeValue<number>;
   fill?: MaybeValue<string>;
@@ -397,12 +396,6 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
   /** Opacity of the fill alone, 0 to 1; the stroke keeps `opacity`. */
   fillOpacity?: number;
 };
-
-/** A size channel's value times `k`, in the same measure: a radius as a
- *  diameter (`k = 2`), or the side of a square as the diameter of the disc
- *  of the same area (`k = 2/√π`). */
-const times = (k: number, s: MaybeValue<number>): MaybeValue<number> =>
-  isValue(s) ? new DatumValueImpl(k * getValue(s), getQuantity(s)) : k * s;
 
 /** The diameter of a disc over the side of the square of the same area. */
 const DISC_PER_SQUARE = 2 / Math.sqrt(Math.PI);
@@ -448,9 +441,9 @@ export const circle = createMark(
     const both = (d: MaybeValue<number>) => ({ w: d, h: d });
     const diameter =
       r !== undefined
-        ? both(times(2, r))
+        ? both(scaleValue(2, r))
         : area !== undefined
-          ? both(times(DISC_PER_SQUARE, area))
+          ? both(scaleValue(DISC_PER_SQUARE, area))
           : w !== undefined
             ? { w, h: follow(w) }
             : { w: follow(h), h };

@@ -3,14 +3,7 @@ import { path, transformPath } from "../../path";
 import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
-import {
-  DatumValueImpl,
-  getQuantity,
-  getValue,
-  isValue,
-  MaybeValue,
-  Value,
-} from "../data";
+import { getValue, isValue, scaleValue, MaybeValue, Value } from "../data";
 import { resolveUnit, unitKey } from "../measure";
 import { getScopeRegistry } from "../solver/scopes";
 import {
@@ -77,7 +70,7 @@ export const Ellipse = ({
     const other = own.dataSize((1 - axis) as 0 | 1);
     if (size !== undefined || !locked || !isValue(other)) return size;
     const k = axis === 0 ? aspectRatio : 1 / aspectRatio;
-    return new DatumValueImpl(k * getValue(other), getQuantity(other));
+    return scaleValue(k, other);
   };
   const tiedUnit = (): string | undefined => {
     const space = node._underlyingSpace?.[0];

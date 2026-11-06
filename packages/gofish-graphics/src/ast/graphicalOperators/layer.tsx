@@ -54,7 +54,6 @@ import {
   composePlanSpaces,
   planConstraintComposition,
   planSharing,
-  type LayerSharingPlan,
   resolveLayerBaseSpaces,
 } from "../constraints/compose";
 import {
@@ -332,9 +331,7 @@ export const layer = createNodeOperatorSequential(
       // axis, merged with any POSITION domain bubbled up from children. This
       // is what lets the layer build a position scale at layout time so
       // `Constraint.position` can map data values to pixels.
-      // A layer's rule is built on `planSharing`, so its plan carries
-      // `datumPlaced`.
-      const sharing = node.sharing() as LayerSharingPlan;
+      const sharing = node.sharing();
       // Only the datums that place children of the layer's own set: a
       // constraint that places a detached child (a chrome ring's tick, which
       // the ring's sharing puts in a set of its own) positions it in the
@@ -354,7 +351,7 @@ export const layer = createNodeOperatorSequential(
       const placed = ([0, 1] as const).map(
         (axis) =>
           new Set([
-            ...sharing.datumPlaced[axis],
+            ...(sharing.datumPlaced?.[axis] ?? []),
             ...sharing.sets[axis].flatMap((s, i) => (s !== 0 ? [i] : [])),
           ])
       ) as [Set<number>, Set<number>];

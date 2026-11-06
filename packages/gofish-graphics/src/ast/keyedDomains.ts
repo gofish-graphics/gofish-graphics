@@ -256,7 +256,7 @@ export class KeyedDomains {
       for (const domains of axes)
         for (const [key, d] of domains) {
           const unit = key.replace(/\/width$/, "");
-          widths.set(unit, Math.max(widths.get(unit) ?? 0, d.max - d.min));
+          widths.set(unit, Math.max(widths.get(unit) ?? 0, Interval.width(d)));
         }
     return widths;
   }

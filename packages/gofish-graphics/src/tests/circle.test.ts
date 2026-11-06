@@ -33,6 +33,16 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
+/** The message `run` throws, or "" when it does not. */
+const errorOf = async (run: () => Promise<unknown>): Promise<string> => {
+  try {
+    await run();
+    return "";
+  } catch (e) {
+    return (e as Error).message;
+  }
+};
+
 /** The size the built ellipse asks for on each axis: a number (pixels) or a
  *  data value `{ datum, measure }` (`measure`: its quantity's name). */
 const sizesOf = async (mark: any, rows: unknown) => {
@@ -109,25 +119,20 @@ console.log("# circle: w or h sets the diameter");
     JSON.stringify(none)
   );
 
-  let message: string | undefined;
-  try {
-    await circle({ r: 3, h: 4 })(rows);
-  } catch (e) {
-    message = (e as Error).message;
-  }
+  const message = await errorOf(() => circle({ r: 3, h: 4 })(rows));
   check(
     "two of r, w, h is an error",
-    message?.includes("pass one of r, area, w, or h") === true,
+    message.includes("pass one of r, area, w, or h"),
     message
   );
 }
 
-/** Every ellipse in a display list, with its center. */
-const ellipsesAt = (dl: any): { cy: number; rx: number }[] => {
-  const out: { cy: number; rx: number }[] = [];
+/** Every display-list item whose kind is one of `kinds`, depth first. */
+const kindsOf = (dl: any, kinds: readonly string[]): any[] => {
+  const out: any[] = [];
   const walk = (it: any) => {
-    if (it.kind === "ellipse") out.push({ cy: it.cy, rx: it.rx });
-    for (const c of it.children ?? []) walk(c);
+    if (kinds.includes(it.kind)) out.push(it);
+    (it.children ?? []).forEach(walk);
   };
   dl.items.forEach(walk);
   return out;
@@ -135,16 +140,8 @@ const ellipsesAt = (dl: any): { cy: number; rx: number }[] => {
 
 /** Every ellipse in a display list. */
 type Dot = { cx: number; cy: number; rx: number; ry: number };
-const ellipsesOf = (dl: any): Dot[] => {
-  const out: Dot[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "ellipse")
-      out.push({ cx: it.cx, cy: it.cy, rx: it.rx, ry: it.ry });
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
+const ellipsesOf = (dl: any): Dot[] =>
+  kindsOf(dl, ["ellipse"]).map(({ cx, cy, rx, ry }) => ({ cx, cy, rx, ry }));
 
 console.log("# circle: rendered");
 {
@@ -200,7 +197,7 @@ console.log("# a data center (cx/cy) positions the circle (#1099)");
   const node = await circle({ r: 5, cy: "v" })(rows);
   const dy = node.args.dims[1];
   check(
-    "cy: \"v\" keeps the mean of v as the center, with no derived min",
+    'cy: "v" keeps the mean of v as the center, with no derived min',
     dy.center?.datum === 3.5 && dy.min === undefined,
     JSON.stringify(dy)
   );
@@ -215,7 +212,7 @@ console.log("# a data center (cx/cy) positions the circle (#1099)");
       .flow(spread({ by: "k", dir: "x" }))
       .mark(mark)
       .toDisplayList({ w: 300, h: 300 })
-      .then((dl: any) => ellipsesAt(dl));
+      .then(ellipsesOf);
   const dots = await centers(circle({ r: 5, cy: "v" }));
   check("one dot per row", dots.length === 3, `${dots.length}`);
   // The centers sit on one linear scale of v: c is halfway between a and b.
@@ -276,28 +273,20 @@ console.log("# area: the circle's area is proportional to the value (#972)");
   );
 
   for (const other of ["r", "w", "h"]) {
-    let message: string | undefined;
-    try {
-      await circle({ area: "v", [other]: 3 })(rows);
-    } catch (e) {
-      message = (e as Error).message;
-    }
+    const message = await errorOf(() =>
+      circle({ area: "v", [other]: 3 })(rows)
+    );
     check(
       `area and ${other} together is an error`,
-      message?.includes("pass one of r, area, w, or h") === true,
+      message.includes("pass one of r, area, w, or h"),
       message
     );
   }
 
-  let negative: string | undefined;
-  try {
-    await circle({ area: -4 })(rows);
-  } catch (e) {
-    negative = (e as Error).message;
-  }
+  const negative = await errorOf(() => circle({ area: -4 })(rows));
   check(
     "a negative area is an error",
-    negative?.includes("at least 0") === true,
+    negative.includes("at least 0"),
     negative
   );
 
@@ -346,36 +335,30 @@ console.log("# area: a square root does not add up (#972, #1197)");
     ["a summable unit", Unit("USD", { traits: [Trait.summable()] })],
     ["a unit known by its name alone", "USD"],
   ] as const) {
-    let message: string | undefined;
-    try {
-      await chart(revenue, { schema: { revenue: unit } })
+    const message = await errorOf(() =>
+      chart(revenue, { schema: { revenue: unit } })
         .flow(stack({ by: "k", dir: "y" }))
         .mark(circle({ area: "revenue" }))
-        .toDisplayList({ w: 300, h: 300 });
-    } catch (e) {
-      message = (e as Error).message;
-    }
+        .toDisplayList({ w: 300, h: 300 })
+    );
     check(
       `${label}: a stack of area circles is refused (√USD cannot be summed)`,
-      message?.includes('"√USD", the square root of "USD"') === true &&
+      message.includes('"√USD", the square root of "USD"') &&
         message.includes("Square roots do not add up"),
       message
     );
   }
-  let spreadMessage: string | undefined;
-  try {
-    await chart(revenue, {
+  const spreadMessage = await errorOf(() =>
+    chart(revenue, {
       schema: { revenue: Unit("USD", { traits: [Trait.summable()] }) },
     })
       .flow(spread({ by: "k", dir: "y" }))
       .mark(circle({ area: "revenue" }))
-      .toDisplayList({ w: 300, h: 300 });
-  } catch (e) {
-    spreadMessage = (e as Error).message;
-  }
+      .toDisplayList({ w: 300, h: 300 })
+  );
   check(
     "a spread of area circles in √USD sums nothing, so it draws",
-    spreadMessage === undefined,
+    spreadMessage === "",
     spreadMessage
   );
 }
@@ -390,7 +373,10 @@ console.log("# #1087: an aspect lock ties its data unit's σ on both axes");
   for (const mark of [
     ["circle({ h })", circle({ h: "v" })],
     ["circle({ w })", circle({ w: "v" })],
-    ["ellipse({ h, aspectRatio: 1 })", GoFish.ellipse({ h: "v", aspectRatio: 1 })],
+    [
+      "ellipse({ h, aspectRatio: 1 })",
+      GoFish.ellipse({ h: "v", aspectRatio: 1 }),
+    ],
   ] as const) {
     const dots = ellipsesOf(
       await chart(data, { axes: false })
@@ -437,8 +423,7 @@ console.log("# #972: a glyph size is a scale of its own");
   check(
     "a bubble's area is proportional to its value",
     dots.every(
-      (e, i) =>
-        Math.abs((e.rx * e.rx) / rows[i].n / ((15 * 15) / 9) - 1) < 1e-9
+      (e, i) => Math.abs((e.rx * e.rx) / rows[i].n / ((15 * 15) / 9) - 1) < 1e-9
     ),
     JSON.stringify(dots)
   );
@@ -449,7 +434,10 @@ console.log("# #972: a glyph size is a scale of its own");
     await chart(rows)
       .flow(
         partition({
-          by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(10)) },
+          by: {
+            x: field("a").bin(Bin.step(1)),
+            y: field("b").bin(Bin.step(10)),
+          },
         })
       )
       .mark(circle({ area: field("a").count() }))
@@ -467,20 +455,14 @@ console.log("# #972: a glyph size is a scale of its own");
   );
 
   // A coordinate transform warps a length of its space, not a glyph.
-  const kinds = async (flow: unknown) => {
-    const out: string[] = [];
-    const walk = (it: any) => {
-      if (it.kind === "ellipse" || it.kind === "path") out.push(it.kind);
-      (it.children ?? []).forEach(walk);
-    };
-    (
+  const kinds = async (flow: unknown) =>
+    kindsOf(
       await chart(rows, { coord: Coord.polar() })
         .flow(flow)
         .mark(circle({ area: "n" }))
-        .toDisplayList({ w: 300, h: 300 })
-    ).items.forEach(walk);
-    return out;
-  };
+        .toDisplayList({ w: 300, h: 300 }),
+      ["ellipse", "path"]
+    ).map((it) => it.kind);
   const bubbles = await kinds(scatter({ by: "a", x: "a", y: "b" }));
   check(
     "in polar, a scatter's bubbles stay round",
@@ -498,12 +480,7 @@ console.log("# #972: a glyph size is a scale of its own");
   // but its height is not in x's unit and it has no datum position on y, so
   // the height is a length of y. The tallest bar fills the plot's height.
   const { rect } = GoFish as any;
-  const bars: any[] = [];
-  const collect = (it: any) => {
-    if (it.kind === "rect") bars.push(it);
-    (it.children ?? []).forEach(collect);
-  };
-  (
+  const bars = kindsOf(
     await chart([{ v: 1 }, { v: 1.2 }, { v: 2.5 }, { v: 3 }, { v: 3.1 }], {
       axes: true,
       w: 300,
@@ -511,8 +488,9 @@ console.log("# #972: a glyph size is a scale of its own");
     })
       .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
       .mark(rect({ h: field("v").count(), inset: 0.5 }))
-      .toDisplayList()
-  ).items.forEach(collect);
+      .toDisplayList(),
+    ["rect"]
+  );
   check(
     "a histogram bar's height is a length of y, not a glyph",
     Math.abs(Math.max(...bars.map((b) => Math.abs(b.h ?? b.height))) - 200) <
@@ -521,7 +499,9 @@ console.log("# #972: a glyph size is a scale of its own");
   );
 }
 
-console.log("# #972: an aspect lock's derived size follows the size it is given");
+console.log(
+  "# #972: an aspect lock's derived size follows the size it is given"
+);
 {
   const { scatter, Coord } = GoFish as any;
   const years = [
@@ -551,15 +531,11 @@ console.log("# #972: an aspect lock's derived size follows the size it is given"
     JSON.stringify(byH)
   );
   // A length of the space warps in polar, as a histogram bar's height does.
-  const kinds = async (mark: unknown) => {
-    const out: string[] = [];
-    const walk = (it: any) => {
-      if (it.kind === "ellipse" || it.kind === "path") out.push(it.kind);
-      (it.children ?? []).forEach(walk);
-    };
-    (await draw(mark, { coord: Coord.polar() })).items.forEach(walk);
-    return out;
-  };
+  const kinds = async (mark: unknown) =>
+    kindsOf(await draw(mark, { coord: Coord.polar() }), [
+      "ellipse",
+      "path",
+    ]).map((it) => it.kind);
   const warped = await kinds(circle({ h: "value" }));
   check(
     "in polar, circle({ h }) placed on x only warps (a length of r)",
@@ -588,15 +564,10 @@ console.log("# a dims option takes a datum only in a slot");
   // Each channel kind reads a wrapped value itself; a dims bag is axis
   // names, so one datum for the whole bag is an error, not a mark with no
   // value (which would not be drawn) or a bag keyed by the datum's fields.
-  let message: string | undefined;
-  try {
-    await circle({ r: 5, dims: datum(5) })(rows);
-  } catch (e) {
-    message = (e as Error).message;
-  }
+  const message = await errorOf(() => circle({ r: 5, dims: datum(5) })(rows));
   check(
     "dims: datum(5) is an error naming the slot form",
-    message?.includes("A dims option takes axis names") === true,
+    message.includes("A dims option takes axis names"),
     message
   );
   const drawn = ellipsesOf(

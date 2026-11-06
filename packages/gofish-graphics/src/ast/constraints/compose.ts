@@ -375,6 +375,13 @@ export type SharingPlan = {
    *  with content a σ-scope of its own (`GoFishNode.isScope`). None when
    *  absent. */
   rooms?: [Set<number>, Set<number>];
+  /** Per axis: children a datum `position` places. None when absent. */
+  datumPlaced?: [Set<number>, Set<number>];
+  /** Per axis: the data width of the cell a datum interval places a child
+   *  across (an interval coordinate, or a region's span), by child: a
+   *  glyph's room there (#972). A datum-placed child with no entry is
+   *  placed at a point. None when absent. */
+  cells?: [Map<number, number>, Map<number, number>];
 };
 
 /** What a child is to its parent on one axis, by the parent's plan:
@@ -400,12 +407,9 @@ export const childRole = (
 };
 
 /** A layer's plan ({@link planSharing}): its sharing sets, and, per axis, the
- *  children a datum `position` places. The layer's own union leaves those
- *  out, since their own extent is nested at the datum. `cells` holds, per
- *  axis, the data width of the cell a datum interval places a child across
- *  (an interval coordinate, or a region's span), by child: a glyph's room
- *  there (`GoFishNode.glyphRoom`, #972). A datum-placed child with no entry
- *  is placed at a point. */
+ *  children a datum `position` places and the cells it places them across.
+ *  The layer's own union leaves those out, since their own extent is nested
+ *  at the datum. */
 export type LayerSharingPlan = SharingPlan & {
   datumPlaced: [Set<number>, Set<number>];
   cells: [Map<number, number>, Map<number, number>];

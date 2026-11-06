@@ -135,7 +135,7 @@ const ROOT_TRAITS: UnitTraits = Object.freeze({});
 /**
  * The quantity of the square root of an amount of `q`: the side of a square
  * whose area is that amount (#972). An area channel hands its mark such a
- * length (`inferArea` in channels.ts). It is a unit of its own, `√q`, so a
+ * length (`CHANNEL_INFER.area` in channels.ts). It is a unit of its own, `√q`, so a
  * length read from an area never shares a scale with a length read from the
  * column itself (`rect({ h: "count" })` beside `circle({ area: "count" })`).
  * A declared unit stays declared, as `√unit`, with its symbol rooted too.

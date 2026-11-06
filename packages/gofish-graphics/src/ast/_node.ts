@@ -129,11 +129,7 @@ import {
 } from "./axisDirection";
 import type { Token } from "./createName";
 import type { ConstraintSpec } from "./constraints";
-import {
-  childRole,
-  type LayerSharingPlan,
-  type SharingPlan,
-} from "./constraints/compose";
+import { childRole, type SharingPlan } from "./constraints/compose";
 import type { KeyedDomains } from "./keyedDomains";
 import {
   chainOn,
@@ -1357,7 +1353,7 @@ export class GoFishNode {
     const p = this.parent;
     const i = p?.indexOfChild(this);
     if (p === undefined || i === undefined) return undefined;
-    const datumPlaced = (p.sharing() as Partial<LayerSharingPlan>).datumPlaced;
+    const datumPlaced = p.sharing().datumPlaced;
     if (datumPlaced?.[axis].has(i) !== true) return undefined;
     const size = unitOf(this._underlyingSpace?.[axis]);
     if (size === undefined) return undefined;
@@ -1393,13 +1389,11 @@ export class GoFishNode {
   }
 
   /** The room this glyph is placed in on `dim` (#972): the cell its
-   *  parent's position places it across there (`LayerSharingPlan.cells`),
+   *  parent's position places it across there (`SharingPlan.cells`),
    *  else the point it is placed at. */
   private glyphRoom(dim: 0 | 1): GlyphRoom {
     const p = this.parent!;
-    const span = (p.sharing() as Partial<LayerSharingPlan>).cells?.[dim].get(
-      p.indexOfChild(this)!
-    );
+    const span = p.sharing().cells?.[dim].get(p.indexOfChild(this)!);
     if (span === undefined) return { kind: "point" };
     return {
       kind: "cell",

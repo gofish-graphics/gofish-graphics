@@ -206,7 +206,7 @@ Walking `withGoFish.ts:431-477`:
      (`placedChildren` in `scatter.tsx`).
    - `"size"` channel → `inferSize(markValue, data)`. If `markValue` is a
      string, sum that field across `data`; if a number, use as-is.
-   - `"area"` channel → `inferArea(markValue, data)` (#972): sum as a size
+   - `"area"` channel → `sqrtArea(inferAreaSum(markValue, data))` (#972): sum as a size
      does, since areas add up, then hand the mark the square root of the
      sum, the side of the square of that area. A number is square pixels,
      so its root is pixels. A data value of quantity `q` roots to a length in

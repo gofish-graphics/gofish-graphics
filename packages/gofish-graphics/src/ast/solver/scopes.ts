@@ -244,7 +244,7 @@ const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
  * proposal. Until it lands, every glyph unit takes this one internal range,
  * read only here.
  */
-export const GLYPH_ROOM_PX = 30;
+const GLYPH_ROOM_PX = 30;
 
 /** One glyph's room on one axis ({@link ScopeRegistry.fitGlyph}): the
  *  point it is placed at, or the cell it is placed in, which is `span` data

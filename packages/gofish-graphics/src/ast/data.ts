@@ -163,6 +163,23 @@ export class DatumValueImpl {
   }
 }
 
+/** `s` times `k`, in the same measure: a data value keeps its quantity and
+ *  the field it was read from; a number is scaled as pixels. */
+export const scaleValue = (
+  k: number,
+  s: MaybeValue<number>
+): MaybeValue<number> =>
+  isValue(s)
+    ? new DatumValueImpl(
+        k * getValue(s),
+        getQuantity(s),
+        undefined,
+        undefined,
+        getValueField(s),
+        getValueFieldType(s)
+      )
+    : k * s;
+
 export const value = <T>(datum: T): DatumValueImpl => new DatumValueImpl(datum);
 
 /**

@@ -1423,7 +1423,7 @@ set the range of a non-spatial scale. When no room bounds σ, every glyph of
 the unit is 0 wide and is drawn 0 wide at any σ, so σ is 0. The registry
 keeps each unit's bounds as the rooms are recorded (whether some glyph is at
 a point, and per axis the smallest `cell_i / d_i`), and each parent's sharing
-plan holds the cell it places each child in (`LayerSharingPlan.cells`), so
+plan holds the cell it places each child in (`SharingPlan.cells`), so
 sizing N glyphs takes time linear in N.
 
 A glyph claims pixels, not σ (`GoFishNode.glyphClaim`). A glyph in a cell
@@ -2905,7 +2905,7 @@ get their own declared unit, `shareQuantity(base, byName)` — see
 [Space-filling spines](#space-filling-spines-normalize-nests-each-part)
 above for why a share is a distinct unit (0–1, not the base quantity's own
 units) that must never silently union with it. An area channel (#972,
-`inferArea` in `channels.ts`) roots its sum, and the root is in a unit of its
+`CHANNEL_INFER.area` in `channels.ts`) roots its sum, and the root is in a unit of its
 own too, `√q` (`sqrtQuantity` in `measure.ts`), so a circle sized by
 `area: "count"` never shares a scale with a bar of `h: "count"`.
 
