@@ -788,6 +788,11 @@ html.landing-page .DocSearch-Button {
     flex: 0 0 78%;
     scroll-snap-align: start;
   }
+  /* The row is below the first screen here, so its swing on load would play
+     where no one sees it: the cards are simply in place. */
+  .landing .specimens .pic {
+    animation: none;
+  }
   .landing .specimen .card {
     padding: 8px;
   }
