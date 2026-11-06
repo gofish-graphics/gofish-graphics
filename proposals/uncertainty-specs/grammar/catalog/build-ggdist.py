@@ -107,10 +107,12 @@ def r_code(entry):
 
 # ---------------------------------------------------------------- specs
 # Each entry: title, gofish (JS), uses_up, fit, verdict, note. Version 2 of
-# the grammar (../theory-fragment.html). Names used but not defined in a spec
-# (slab, pointinterval, lineribbon, as, withDraw, keepDeepest, INK, SLAB) are
-# the prelude in ggdist-summary.md: plain JS over today's GoFish plus the
-# version 2 additions. The v1 fit of each entry is in v1-fits.json.
+# the grammar (../theory-fragment.html). No spec calls a slab, interval or
+# lineribbon mark: each is written out as the plain GoFish it elaborates
+# into (../../elaborations.md). Names used but not defined in a spec
+# (densityCurve, centralIntervals, as, withDraw, keepDeepest, INK, SLAB)
+# are the prelude in ggdist-summary.md: plain JS over today's GoFish
+# plus the version 2 additions. The v1 fit of each entry is in v1-fits.json.
 
 E = {}
 
@@ -121,44 +123,489 @@ const x = dist.normal({ mean: 4, sd: 1 });
 const cell = [{ mean: 4, sd: 1 }];
 const drawn = sample(cell, { n: Infinity });
 const dots = sample(cell, { n: 100, at: "quantiles" });
-const row = (...charts) => layer(charts);
 // one row per geom
 spread({ dir: "y", spacing: 8 }, [
-  row(chart(cell).mark(layer([slab(x), pointinterval(x)]))), // halfeye
-  row(chart(cell).mark(layer([slab(x, { side: "both" }), pointinterval(x)]))), // eye
-  // gradientinterval: opacity from the density, scaled so the peak is 1
-  row(chart(cell).mark(layer([
-    slab(x, { thickness: 1, opacity: x.density, normalize: "group", fill: SLAB }), // gap: opacity along one region
-    pointinterval(x),
-  ]))),
-  // ccdfinterval: one bar per level, from the axis start to the draw
-  row(
-    chart(drawn).flow(spread({ by: "level", dir: "y", spacing: 0 })).mark(rect({ dims: { x: { min: 0, max: x } }, fill: SLAB })),
-    chart(cell).mark(pointinterval(x)),
+  // halfeye
+  chart(cell).mark(
+    layer([
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, x)),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
   ),
-  // cdfinterval: one bar per level, from the draw to the axis end
-  row(
-    chart(drawn).flow(spread({ by: "level", dir: "y", spacing: 0 })).mark(rect({ dims: { x: { min: x, max: 8 } }, fill: SLAB })),
-    chart(cell).mark(pointinterval(x)),
+  // eye
+  chart(cell).mark(
+    layer([
+      // slab, side both: the density curve of the draws and
+      // its mirror image
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, x)),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, x).map((r) => ({
+              ...r,
+              density: -r.density,
+            }))
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // gap: this should sit on the slab's zero line, but a
+      // layer aligns its children's boxes, not their
+      // origins
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
   ),
-  row(chart(cell).mark(pointinterval(x, { levels: [0.5, 0.8, 0.95], point: false, thickness: 10, opacity: 1 / 3 }))),
-  row(chart(cell).mark(pointinterval(x))),
-  row(chart(cell).mark(slab(x))),
-  row(
-    chart(histDf).flow(partition({ by: field("x").bin(Bin.thresholds(30)), dir: "x" })).mark(rect({ h: field("x").count(), fill: SLAB })),
-    chart(cell).mark(pointinterval(x)),
+  // gradientinterval: opacity from the density, scaled so
+  // the peak is 1
+  chart(cell).mark(
+    layer([
+      // slab: the density curve divided by its peak, read
+      // as opacity over the full height
+      // gap: an opacity that varies along one region
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, x);
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              height: 1,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "height",
+            fill: SLAB,
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
   ),
-  row(chart(dots).flow(partition({ by: x.bin(Bin.step(0.1)), dir: "x" }), stack({ dir: "y" })).mark(circle({ r: 2 }))),
-  row(
-    chart(dots).flow(partition({ by: x.bin(Bin.step(0.1)), dir: "x" }), stack({ dir: "y" })).mark(circle({ r: 2 })),
-    chart(cell).mark(pointinterval(x)),
+  // ccdfinterval: one bar per level, from the axis start to
+  // the draw
+  layer([
+    chart(drawn)
+      .flow(spread({ by: "level", dir: "y", spacing: 0 }))
+      .mark(
+        rect({
+          dims: { x: { min: 0, max: x } },
+          fill: SLAB,
+        })
+      ),
+    chart(cell).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
+  // cdfinterval: one bar per level, from the draw to the
+  // axis end
+  layer([
+    chart(drawn)
+      .flow(spread({ by: "level", dir: "y", spacing: 0 }))
+      .mark(
+        rect({
+          dims: { x: { min: x, max: 8 } },
+          fill: SLAB,
+        })
+      ),
+    chart(cell).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
+  // interval
+  chart(cell).mark(
+    layer([
+      // interval: the 95%, 80% and 50% central intervals of
+      // the draws
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 10,
+            fill: INK,
+            opacity: 1 / 3,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) => centralIntervals(rows, x, [0.8]))
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 10,
+            fill: INK,
+            opacity: 1 / 3,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) => centralIntervals(rows, x, [0.5]))
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 10,
+            fill: INK,
+            opacity: 1 / 3,
+          })
+        ),
+    ])
   ),
+  // pointinterval
+  chart(cell).mark(
+    layer([
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  ),
+  // slab
+  chart(cell).mark(
+    layer([
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, x)),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+    ])
+  ),
+  // histinterval
+  layer([
+    chart(histDf)
+      .flow(
+        partition({
+          by: field("x").bin(Bin.thresholds(30)),
+          dir: "x",
+        })
+      )
+      .mark(rect({ h: field("x").count(), fill: SLAB })),
+    chart(cell).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
+  // dots
+  chart(dots)
+    .flow(
+      partition({ by: x.bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+      stack({ dir: "y" })
+    )
+    .mark(circle({ r: 2 })),
+  // dotsinterval
+  layer([
+    chart(dots)
+      .flow(
+        partition({ by: x.bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+        stack({ dir: "y" })
+      )
+      .mark(circle({ r: 2 })),
+    chart(cell).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
 ]);
 """,
-    uses_up='mixed: ccdf and cdf rows: spread({ by: "level" }) at n = Infinity; gradient row: a density fold read as opacity; slab and interval rows: folds per cell; dots rows: sample at quantiles, then partition and stack',
+    uses_up='mixed: ccdf and cdf rows: spread({ by: "level" }) at n = Infinity; gradient row: the density curve of the draws read as opacity; slab and interval rows: summaries per cell; dots rows: sample at quantiles, then partition and stack',
     fit='gofish-gap',
     verdict='ok',
-    note="Every row can now be written. Version 1 could not write the gradient row, because a blend has no peak scaling. In version 2 it is a density fold scaled to its peak and read as opacity, and the missing piece is that GoFish has no opacity that varies along one region, so the spec marks it as a gap. The eye row has entry 4's layout gap, and the dots rows have the dot-binning gap of entry 20.",
+    note="Every row can now be written. Version 1 could not write the gradient row, because a blend has no peak scaling. In version 2 it is the density curve of the draws divided by its peak and read as opacity, and the missing piece is that GoFish has no opacity that varies along one region, so the spec marks it as a gap. The eye row has entry 4's layout gap, and the dots rows have the dot-binning gap of entry 20.",
 )
 
 E[2] = dict(
@@ -168,18 +615,67 @@ const x = dist.normal({ mean: 4, sd: 1 });
 chart([{ g: 0 }], { axes: { x: { domain: [-1, 10] } } })
   .mark(
     layer([
-      slab(x, { fill: "gray75", stroke: "black", strokeWidth: 1, range: [0, 8] }),
-      pointinterval(x, { levels: [0.6827], thickness: 3, r: 4, stroke: "black", fill: "gray75" }),
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, x, { range: [0, 8] })
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "gray75",
+            stroke: "black",
+            strokeWidth: 1,
+          })
+        ),
+      // interval: the 68.27% central interval of the draws,
+      // and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.6827])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 3,
+              fill: "black",
+            }),
+            circle({
+              cx: "median",
+              r: 4,
+              fill: "gray75",
+              stroke: "black",
+            }),
+          ])
+        ),
     ])
   )
-  // the red annotations: brackets, reference lines, labels and curved arrows
-  .layer(chart(annotations).mark(text({ x: "x", y: "y", text: "label", fill: "#d95f02" })))
+  // the red annotations: brackets, reference lines, labels
+  // and curved arrows
+  .layer(
+    chart(annotations).mark(
+      text({
+        x: "x",
+        y: "y",
+        text: "label",
+        fill: "#d95f02",
+      })
+    )
+  )
   .layer(chart(arrows).mark(arrow({ fill: "#d95f02" })));
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
-    note="The halfeye itself is the elaborations.md half-eye. The annotation layer needs bracket-ended segments (arrowheads at 90 degrees) placed in data coordinates, which GoFish's arrow mark does not offer.",
+    note="The halfeye itself is the elaborations.md half-eye, written out. The annotation layer needs bracket-ended segments (arrowheads at 90 degrees) placed in data coordinates, which GoFish's arrow mark does not offer.",
 )
 
 E[3] = dict(
@@ -187,24 +683,243 @@ E[3] = dict(
     gofish="""
 chart(df)
   .flow(spread({ by: "group", dir: "y" }))
-  .mark(layer([slab("value"), pointinterval("value")]));
+  .mark(
+    layer([
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "value")),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
     verdict='ok',
-    note="This is elaborations.md's half-eye. The slab is the density fold over each group's rows, which ggdist estimates with a kernel, and the interval is the quantile and median folds. Version 1 needed derives for both.",
+    note="This is elaborations.md's half-eye, written out. The slab is a derive of the density curve of each group's rows, which ggdist estimates with a kernel, then a scatter and a ribbon. The interval is a derive of central intervals, drawn as rects by center and size, and a circle at the median. Version 1 computed the distribution by hand in its derives.",
 )
 
 E[4] = dict(
     title='stat_slabinterval() with side = left, both, right (vertical)',
     gofish="""
-const panel = (side) =>
+spread({ dir: "x", spacing: 16 }, [
+  // side start
   chart(df)
     .flow(spread({ by: "group", dir: "x" }))
-    .mark(layer([slab("value", { dir: "y", side }), pointinterval("value", { dir: "y" })]));
-spread({ dir: "x", spacing: 16 }, [panel("start"), panel("both"), panel("end")]);
+    .mark(
+      layer([
+        // slab, side start: the density curve of the draws,
+        // hanging below the line
+        chart()
+          .flow(
+            derive((rows) =>
+              densityCurve(rows, "value").map((r) => ({
+                ...r,
+                density: -r.density,
+              }))
+            ),
+            scatter({ y: "v" })
+          )
+          .mark(
+            ribbon({ dir: "y", w: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cy: "center",
+              h: "size",
+              w: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cy: "center",
+                h: "size",
+                w: 4,
+                fill: INK,
+              }),
+              circle({ cy: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  // side both
+  chart(df)
+    .flow(spread({ by: "group", dir: "x" }))
+    .mark(
+      layer([
+        // slab, side both: the density curve of the draws
+        // and its mirror image
+        chart()
+          .flow(
+            derive((rows) => densityCurve(rows, "value")),
+            scatter({ y: "v" })
+          )
+          .mark(
+            ribbon({ dir: "y", w: "density", fill: SLAB })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              densityCurve(rows, "value").map((r) => ({
+                ...r,
+                density: -r.density,
+              }))
+            ),
+            scatter({ y: "v" })
+          )
+          .mark(
+            ribbon({ dir: "y", w: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cy: "center",
+              h: "size",
+              w: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cy: "center",
+                h: "size",
+                w: 4,
+                fill: INK,
+              }),
+              circle({ cy: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  // side end
+  chart(df)
+    .flow(spread({ by: "group", dir: "x" }))
+    .mark(
+      layer([
+        // slab: the density curve of the draws
+        chart()
+          .flow(
+            derive((rows) => densityCurve(rows, "value")),
+            scatter({ y: "v" })
+          )
+          .mark(
+            ribbon({ dir: "y", w: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cy: "center",
+              h: "size",
+              w: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cy: "center",
+                h: "size",
+                w: 4,
+                fill: INK,
+              }),
+              circle({ cy: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+]);
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="Side start and both need the interval to sit on the slab's zero line, but a GoFish layer aligns its children's boxes, not their origins (elaborations.md, design question 'The line the slab sits on'). Side end works because its origin is its box edge.",
@@ -213,13 +928,186 @@ spread({ dir: "x", spacing: 16 }, [panel("start"), panel("both"), panel("end")])
 E[5] = dict(
     title='stat_slabinterval() with side = bottom, both, top (horizontal)',
     gofish="""
-const panel = (side) =>
+spread({ dir: "x", spacing: 16 }, [
+  // side start
   chart(df)
     .flow(spread({ by: "group", dir: "y" }))
-    .mark(layer([slab("value", { side }), pointinterval("value")]));
-spread({ dir: "x", spacing: 16 }, [panel("start"), panel("both"), panel("end")]);
+    .mark(
+      layer([
+        // slab, side start: the density curve of the draws,
+        // hanging below the line
+        chart()
+          .flow(
+            derive((rows) =>
+              densityCurve(rows, "value").map((r) => ({
+                ...r,
+                density: -r.density,
+              }))
+            ),
+            scatter({ x: "v" })
+          )
+          .mark(
+            ribbon({ dir: "x", h: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  // side both
+  chart(df)
+    .flow(spread({ by: "group", dir: "y" }))
+    .mark(
+      layer([
+        // slab, side both: the density curve of the draws
+        // and its mirror image
+        chart()
+          .flow(
+            derive((rows) => densityCurve(rows, "value")),
+            scatter({ x: "v" })
+          )
+          .mark(
+            ribbon({ dir: "x", h: "density", fill: SLAB })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              densityCurve(rows, "value").map((r) => ({
+                ...r,
+                density: -r.density,
+              }))
+            ),
+            scatter({ x: "v" })
+          )
+          .mark(
+            ribbon({ dir: "x", h: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  // side end
+  chart(df)
+    .flow(spread({ by: "group", dir: "y" }))
+    .mark(
+      layer([
+        // slab: the density curve of the draws
+        chart()
+          .flow(
+            derive((rows) => densityCurve(rows, "value")),
+            scatter({ x: "v" })
+          )
+          .mark(
+            ribbon({ dir: "x", h: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+]);
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The horizontal version of entry 4, with the same layout gap for side start and both.',
@@ -229,15 +1117,84 @@ E[6] = dict(
     title="stat_eye(position = 'dodge')",
     gofish="""
 chart(df)
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
     layer([
-      slab("value", { dir: "y", side: "both", fill: "subgroup" }),
-      pointinterval("value", { dir: "y" }),
+      // slab, side both: the density curve of the draws and
+      // its mirror image
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "value")),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "density",
+            fill: "subgroup",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").map((r) => ({
+              ...r,
+              density: -r.density,
+            }))
+          ),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "density",
+            fill: "subgroup",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // gap: this should sit on the slab's zero line, but a
+      // layer aligns its children's boxes, not their
+      // origins
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="Dodge is a nested spread. The eye is side both, so it has entry 4's gap: the interval must sit on the slab's center line.",
@@ -248,10 +1205,83 @@ E[7] = dict(
     gofish="""
 const y = dist.normal({ mean: "mean", sd: "sd" });
 chart(distDf)
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
-  .mark(layer([slab(y, { dir: "y", side: "both", fill: "subgroup" }), pointinterval(y, { dir: "y" })]));
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
+  .mark(
+    layer([
+      // slab, side both: the density curve of the draws and
+      // its mirror image
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, y)),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "density",
+            fill: "subgroup",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, y).map((r) => ({
+              ...r,
+              density: -r.density,
+            }))
+          ),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "density",
+            fill: "subgroup",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // gap: this should sit on the slab's zero line, but a
+      // layer aligns its children's boxes, not their
+      // origins
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, y, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, y, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='Entry 6 with analytic normals. Same layout gap for the eye.',
@@ -263,9 +1293,55 @@ E[8] = dict(
 const x = dist.beta({ alpha: "alpha", beta: 10 });
 chart(betas)
   .flow(scatter({ by: "alpha", y: "alpha" }))
-  .mark(layer({ h: 24 }, [slab(x), pointinterval(x)]));
+  .mark(
+    layer({ h: 24 }, [
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, x)),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // skewed: center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note='The halfeyes sit at a continuous y position, which scatter gives. It assumes the dist namespace has a beta family and takes a literal parameter.',
@@ -276,10 +1352,22 @@ E[9] = dict(
     gofish="""
 const x = dist.beta({ alpha: "alpha", beta: 10 });
 chart(betas, { color: Color.gradient("viridis") })
-  .flow(group({ by: "alpha" }))
-  .mark(slab(x, { fill: "none", stroke: "alpha" }));
+  .flow(
+    group({ by: "alpha" }),
+    // slab: the density curve of each alpha's distribution
+    derive((rows) => densityCurve(rows, x)),
+    scatter({ x: "v" })
+  )
+  .mark(
+    ribbon({
+      dir: "x",
+      h: "density",
+      fill: "none",
+      stroke: "alpha",
+    })
+  );
 """,
-    uses_up='a density fold per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
+    uses_up='the density curve of the draws per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note="Overplotted slabs on one baseline share the size scale, which is ggdist's default normalize = 'all'.",
@@ -288,12 +1376,62 @@ chart(betas, { color: Color.gradient("viridis") })
 E[10] = dict(
     title='stat_halfeye() of brms priors with parse_dist() and a density subguide',
     gofish="""
-// priors: one row per prior, with a Dist built from its text, e.g. normal(1, 0.5), gamma(2, 2), and normal(0, 1) truncated at 0
+// priors: one row per prior, with a Dist built from its
+// text, e.g. normal(1, 0.5), gamma(2, 2), and normal(0, 1)
+// truncated at 0
 chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
-  .mark(layer([slab("dist"), pointinterval("dist")]));
+  .mark(
+    layer([
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "dist")),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // the gamma and the truncated normal are skewed:
+      // center is the midpoint of an interval, not the
+      // median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The slabs fit if a column may hold Dist values of different families (foldDist accepts that). Missing: the subguide, a small density axis drawn inside each slab, and a truncated Dist for the half-normal prior.',
@@ -304,55 +1442,309 @@ E[11] = dict(
     gofish="""
 const post = dist.normal({ mean: 0.1, sd: 0.5 });
 const prior = dist.normal({ mean: 0, sd: 1 });
-// separate: each slab scaled to its own peak (ggdist default)
+// separate: each slab divided by its own peak (ggdist default)
 const separate = chart([{}]).mark(
   layer([
-    slab(post, { normalize: "group" }),
-    pointinterval(post),
-    slab(prior, { normalize: "group", fill: "none", stroke: "red" }),
+    // the posterior slab, divided by its peak
+    chart()
+      .flow(
+        derive((rows) => {
+          const curve = densityCurve(rows, post);
+          const peak = Math.max(
+            ...curve.map((r) => r.density)
+          );
+          return curve.map((r) => ({
+            ...r,
+            density: r.density / peak,
+          }));
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(ribbon({ dir: "x", h: "density", fill: SLAB })),
+    // interval: the 95% and 66% central intervals of the
+    // draws, and a circle at their median
+    chart()
+      .flow(
+        derive((rows) =>
+          centralIntervals(rows, post, [0.95])
+        )
+      )
+      .mark(
+        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
+      ),
+    chart()
+      .flow(
+        derive((rows) =>
+          centralIntervals(rows, post, [0.66])
+        )
+      )
+      .mark(
+        layer([
+          rect({
+            cx: "center",
+            w: "size",
+            h: 4,
+            fill: INK,
+          }),
+          circle({ cx: "median", r: 4, fill: INK }),
+        ])
+      ),
+    // the prior slab, divided by its peak
+    chart()
+      .flow(
+        derive((rows) => {
+          const curve = densityCurve(rows, prior);
+          const peak = Math.max(
+            ...curve.map((r) => r.density)
+          );
+          return curve.map((r) => ({
+            ...r,
+            density: r.density / peak,
+          }));
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({
+          dir: "x",
+          h: "density",
+          fill: "none",
+          stroke: "red",
+        })
+      ),
   ])
 );
 // shared: one size scale for both (scale_thickness_shared)
 const shared = chart([{}]).mark(
-  layer([slab(post), pointinterval(post), slab(prior, { fill: "none", stroke: "#e41a1c" })])
+  layer([
+    // slab: the density curve of the draws
+    chart()
+      .flow(
+        derive((rows) => densityCurve(rows, post)),
+        scatter({ x: "v" })
+      )
+      .mark(ribbon({ dir: "x", h: "density", fill: SLAB })),
+    // interval: the 95% and 66% central intervals of the
+    // draws, and a circle at their median
+    chart()
+      .flow(
+        derive((rows) =>
+          centralIntervals(rows, post, [0.95])
+        )
+      )
+      .mark(
+        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
+      ),
+    chart()
+      .flow(
+        derive((rows) =>
+          centralIntervals(rows, post, [0.66])
+        )
+      )
+      .mark(
+        layer([
+          rect({
+            cx: "center",
+            w: "size",
+            h: 4,
+            fill: INK,
+          }),
+          circle({ cx: "median", r: 4, fill: INK }),
+        ])
+      ),
+    // the prior slab
+    chart()
+      .flow(
+        derive((rows) => densityCurve(rows, prior)),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({
+          dir: "x",
+          h: "density",
+          fill: "none",
+          stroke: "#e41a1c",
+        })
+      ),
+  ])
 );
 spread({ dir: "x", spacing: 16 }, [separate, shared]);
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
     verdict='ok',
-    note='GoFish\'s default is ggdist\'s scale_thickness_shared, because both slabs read one size scale. The separate version divides each density curve by its own peak (normalize: "group", as in elaborations.md).',
+    note='GoFish\'s default is ggdist\'s scale_thickness_shared, because both slabs read one size scale. The separate version divides each density curve by its own peak in the derive, which is normalize: "group" in elaborations.md.',
 )
 
 E[12] = dict(
     title='stat_halfeye() of a lognormal on scale_x_log10()',
     gofish="""
-const x = dist.lognormal({ meanlog: Math.log(10), sdlog: 2 * Math.log(10) });
+const x = dist.lognormal({
+  meanlog: Math.log(10),
+  sdlog: 2 * Math.log(10),
+});
 chart([{}], { axes: { x: { scale: "log" } } }) // no log axis today
-  .mark(layer([slab(x), pointinterval(x)]));
+  .mark(
+    layer([
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, x)),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // skewed: center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
-    note='GoFish has no log scale. ggdist draws the density of log10(X), so the density fold would also need to know the axis transform. The quantile folds would not, since quantiles move with a monotone transform.',
+    note='GoFish has no log scale. ggdist draws the density of log10(X), so the density curve would also need to know the axis transform. The quantiles would not, since quantiles move with a monotone transform.',
 )
 
 E[13] = dict(
     title='stat_histinterval(), vertical and horizontal',
     gofish="""
-const hist = (dir) =>
-  chart()
-    .flow(partition({ by: field("value").bin(Bin.thresholds(20)), dir }))
-    .mark(rect({ [dir === "x" ? "h" : "w"]: field("value").count(), fill: SLAB }));
+// the histogram of each group's rows, as bars
 const vertical = chart(df)
   .flow(spread({ by: "group", dir: "x" }))
-  .mark(layer([hist("y"), pointinterval("value", { dir: "y" })]));
+  .mark(
+    layer([
+      chart()
+        .flow(
+          partition({
+            by: field("value").bin(Bin.thresholds(20)),
+            dir: "y",
+          })
+        )
+        .mark(
+          rect({ w: field("value").count(), fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 const horizontal = chart(df)
   .flow(spread({ by: "group", dir: "y" }))
-  .mark(layer([hist("x"), pointinterval("value")]));
+  .mark(
+    layer([
+      chart()
+        .flow(
+          partition({
+            by: field("value").bin(Bin.thresholds(20)),
+            dir: "x",
+          })
+        )
+        .mark(
+          rect({ h: field("value").count(), fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 spread({ dir: "x", spacing: 16 }, [vertical, horizontal]);
 """,
-    uses_up='partition by a bin of the value and count over the rows (finite n); the interval is quantile and median folds',
+    uses_up='partition by a bin of the value and count over the rows (finite n); the interval is quantiles and the median of the draws',
     fit='fits',
     verdict='ok',
     note="A histogram per group of rows, which is the bin-and-count form of the dotplot row at finite n. GoFish's bins are the same for every group (cells over the column's domain), while ggdist picks breaks per group; both are histograms.",
@@ -361,22 +1753,122 @@ spread({ dir: "x", spacing: 16 }, [vertical, horizontal]);
 E[14] = dict(
     title='stat_histinterval(outline_bars = FALSE / TRUE)',
     gofish="""
-const hist = (outline) =>
-  chart(df)
-    .flow(spread({ by: "group", dir: "y" }))
-    .mark(
-      layer([
-        chart()
-          .flow(partition({ by: field("value").bin(Bin.thresholds(20)), dir: "x" }))
-          .mark(rect({ h: field("value").count(), fill: SLAB, stroke: outline ? "gray45" : "none" }))
-          // outline_bars = FALSE: one stepped outline over the bar tops
-          .layer(outline ? blank() : line({ curve: Curve.step(), stroke: "gray45" })),
-        pointinterval("value"),
-      ])
-    );
-spread({ dir: "x", spacing: 16 }, [hist(false), hist(true)]);
+// outline_bars = FALSE: one stepped outline over the bar tops
+const separate = chart(df)
+  .flow(spread({ by: "group", dir: "y" }))
+  .mark(
+    layer([
+      chart()
+        .flow(
+          partition({
+            by: field("value").bin(Bin.thresholds(20)),
+            dir: "x",
+          })
+        )
+        .mark(
+          rect({
+            h: field("value").count(),
+            fill: SLAB,
+            stroke: "none",
+          })
+        )
+        .layer(
+          line({ curve: Curve.step(), stroke: "gray45" })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
+// outline_bars = TRUE: every bar outlined
+const outlined = chart(df)
+  .flow(spread({ by: "group", dir: "y" }))
+  .mark(
+    layer([
+      chart()
+        .flow(
+          partition({
+            by: field("value").bin(Bin.thresholds(20)),
+            dir: "x",
+          })
+        )
+        .mark(
+          rect({
+            h: field("value").count(),
+            fill: SLAB,
+            stroke: "gray45",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
+spread({ dir: "x", spacing: 16 }, [separate, outlined]);
 """,
-    uses_up='partition by a bin of the value and count over the rows; the interval is quantile and median folds',
+    uses_up='partition by a bin of the value and count over the rows; the interval is quantiles and the median of the draws',
     fit='fits',
     verdict='ok',
     note='Outlining every bar is a rect stroke; the outline of the whole histogram is a stepped line through the bar tops.',
@@ -387,33 +1879,79 @@ E[15] = dict(
     gofish="""
 const y = dist.poisson({ lambda: "lambda" });
 layer([
-  chart(sample(pois, { n: Infinity }), { color: Color.gradient(["#132b43", "#56b1f7"]) })
-    .flow(spread({ by: "group", dir: "x" }), partition({ by: y.bin(Bin.step(1)), dir: "y" }))
-    .mark(rect({ w: y.probability(), fill: y.probability() })),
+  chart(sample(pois, { n: Infinity }), {
+    color: Color.gradient(["#132b43", "#56b1f7"]),
+  })
+    .flow(
+      spread({ by: "group", dir: "x" }),
+      partition({ by: y.bin(Bin.step(1)), dir: "y" })
+    )
+    .mark(
+      rect({ w: y.probability(), fill: y.probability() })
+    ),
   chart(pois)
     .flow(spread({ by: "group", dir: "x" }))
     .mark(circle({ cy: "lambda", r: 3 }))
     .layer(line({ strokeWidth: 1 })),
 ]);
 """,
-    uses_up='partition by a bin of the drawn value, then the probability-of-a-bin fold in each bin, n = Infinity',
+    uses_up='partition by a bin of the drawn value, then the probability of each bin in each bin, n = Infinity',
     fit='fits',
     verdict='ok',
-    note='A discrete slab is one bar per integer whose width is the pmf. At n = Infinity, partition groups the draws into bins and the probability fold uses them up, which rule 3.1 allows. Version 1 had no fold for this and needed a grid derive. The line joins plain lambda values, not draws.',
+    note='A discrete slab is one bar per integer whose width is the pmf. At n = Infinity, partition groups the draws into bins and the probability of each bin uses them up, which rule 3.1 allows. Version 1 had no summary for this and needed a grid derive. The line joins plain lambda values, not draws.',
 )
 
 E[16] = dict(
     title="stat_ccdfinterval(position = 'dodge') on sample rows",
     gofish="""
-// df has no draw column; withDraw adds a row index, and the schema declares it
-chart(withDraw(df), { schema: { value: { draws: "draw" } } })
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+// df has no draw column; withDraw adds a row index, and the
+// schema declares it
+chart(withDraw(df), {
+  schema: { value: { draws: "draw" } },
+})
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
     layer([
       chart()
         .flow(spread({ by: "level", dir: "x", spacing: 0 }))
         .mark(rect({ h: "value", fill: "subgroup" })),
-      pointinterval("value", { dir: "y" }),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
@@ -426,15 +1964,54 @@ chart(withDraw(df), { schema: { value: { draws: "draw" } } })
 E[17] = dict(
     title="stat_ccdfinterval(position = 'dodge', justification = 1) with y from 0",
     gofish="""
-// df has no draw column; withDraw adds a row index, and the schema declares it
-chart(withDraw(df), { schema: { value: { draws: "draw" } } })
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+// df has no draw column; withDraw adds a row index, and the
+// schema declares it
+chart(withDraw(df), {
+  schema: { value: { draws: "draw" } },
+})
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
     layer([
       chart()
         .flow(spread({ by: "level", dir: "x", spacing: 0 }))
         .mark(rect({ h: "value", fill: "subgroup" })),
-      pointinterval("value", { dir: "y" }),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
@@ -447,38 +2024,156 @@ chart(withDraw(df), { schema: { value: { draws: "draw" } } })
 E[18] = dict(
     title="stat_gradientinterval(position = 'dodge')",
     gofish="""
-const value = field("value");
 chart(df)
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
     layer([
+      // slab: the density curve divided by its peak, read
+      // as opacity over the full width
       // gap: an opacity that varies along one region
-      slab(value, { dir: "y", thickness: 1, opacity: value.density, normalize: "group", fill: "subgroup" }),
-      pointinterval(value, { dir: "y" }),
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "value");
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              height: 1,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "height",
+            fill: "subgroup",
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a density fold per cell, scaled so its peak is 1, read as opacity along the slab (the second kind of ggdist mark)',
+    uses_up='the density curve of the draws per cell, divided by its peak and read as opacity along the slab (the second kind of ggdist mark)',
     fit='gofish-gap',
     verdict='ok',
-    note='ggdist sets opacity from the density, rescaled so the densest point is opaque. Version 1 tried a blend and failed: a blend gives the chance of covering a pixel, which has no peak scaling. Version 2 says it is not a picture of draws at all. It is the density fold, scaled to its peak, read by an ordinary opacity channel. GoFish has no opacity that varies along one region, so the spec marks it as a gap.',
+    note='ggdist sets opacity from the density, rescaled so the densest point is opaque. Version 1 tried a blend and failed: a blend gives the chance of covering a pixel, which has no peak scaling. Version 2 says it is not a picture of draws at all. It is the density curve of the draws, divided by its peak in the derive, read by an ordinary opacity channel. GoFish has no opacity that varies along one region, so the spec marks it as a gap.',
 )
 
 E[19] = dict(
     title="stat_gradientinterval(position = 'dodge', fill_type = 'gradient')",
     gofish="""
-const value = field("value");
 chart(df)
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
     layer([
+      // slab: the density curve divided by its peak, read
+      // as opacity over the full width
       // gap: an opacity that varies along one region
-      slab(value, { dir: "y", thickness: 1, opacity: value.density, normalize: "group", fill: "subgroup" }),
-      pointinterval(value, { dir: "y" }),
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "value");
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              height: 1,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "height",
+            fill: "subgroup",
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a density fold per cell, scaled so its peak is 1, read as opacity along the slab (the second kind of ggdist mark)',
+    uses_up='the density curve of the draws per cell, divided by its peak and read as opacity along the slab (the second kind of ggdist mark)',
     fit='gofish-gap',
     verdict='ok',
     note='Entry 18 drawn with a true gradient fill instead of segments. Same spec and the same gap.',
@@ -491,10 +2186,15 @@ chart(df)
   .flow(
     spread({ by: "group", dir: "x" }),
     spread({ by: "subgroup", dir: "x" }),
-    partition({ by: field("value").bin(Bin.step(0.15)), dir: "y" }),
+    partition({
+      by: field("value").bin(Bin.step(0.15)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "y",
+    }),
     stack({ dir: "x" })
   )
-  .mark(circle({ r: 1, fill: "subgroup", stroke: "subgroup" }));
+  .mark(
+    circle({ r: 1, fill: "subgroup", stroke: "subgroup" })
+  );
 """,
     uses_up='partition by a bin of the value, then stack, over the rows (each row is a draw; finite n)',
     fit='gofish-gap',
@@ -505,13 +2205,21 @@ chart(df)
 E[21] = dict(
     title='stat_dots(quantiles = 50) dodged',
     gofish="""
-// stat_dots(quantiles = 50) of a sample: keep every 20th of each cell's 1000 ranks
-chart(withDraw(df), { schema: { value: { draws: "draw" } } })
+// stat_dots(quantiles = 50) of a sample: keep every 20th of
+// each cell's 1000 ranks
+chart(withDraw(df), {
+  schema: { value: { draws: "draw" } },
+})
   .flow(
     spread({ by: "group", dir: "x" }),
     spread({ by: "subgroup", dir: "x" }),
-    filter((d) => Math.round(d.level * 1000 + 0.5) % 20 === 10),
-    partition({ by: field("value").bin(Bin.step(0.3)), dir: "y" }),
+    filter(
+      (d) => Math.round(d.level * 1000 + 0.5) % 20 === 10
+    ),
+    partition({
+      by: field("value").bin(Bin.step(0.3)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "y",
+    }),
     stack({ dir: "x" })
   )
   .mark(circle({ r: 3, fill: "subgroup" }));
@@ -525,21 +2233,61 @@ chart(withDraw(df), { schema: { value: { draws: "draw" } } })
 E[22] = dict(
     title='stat_ccdfinterval(thickness = 1), aes(slab_alpha = after_stat(f))',
     gofish="""
-chart(withDraw(df), { schema: { value: { draws: "draw" } } })
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+// df has no draw column; withDraw adds a row index, and the
+// schema declares it
+chart(withDraw(df), {
+  schema: { value: { draws: "draw" } },
+})
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
     layer([
       chart()
         .flow(group({ by: "draw", blend: "mean" }))
         .mark(rect({ h: "value", fill: "subgroup" })),
-      pointinterval("value", { dir: "y" }),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cy: "center",
+              h: "size",
+              w: 4,
+              fill: INK,
+            }),
+            circle({ cy: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
     uses_up='group({ by: "draw", blend: "mean" }) over the 1000 rows of each cell',
     fit='fits',
     verdict='ok',
-    note="Full-width bars from 0 to each draw, averaged, have opacity P(Y > y) at height y, which is the CCDF fade of the table. It matches ggdist because the CCDF already runs from 0 to 1, so ggdist's alpha rescaling changes nothing. The same chart is also a fold: opacity 1 - cdf along the bar. Entry 16's caveats about the draw key apply.",
+    note="Full-width bars from 0 to each draw, averaged, have opacity P(Y > y) at height y, which is the CCDF fade of the table. It matches ggdist because the CCDF already runs from 0 to 1, so ggdist's alpha rescaling changes nothing. The same chart is also a summary: opacity 1 - cdf along the bar, from the CDF of the draws. Entry 16's caveats about the draw key apply.",
 )
 
 E[23] = dict(
@@ -549,16 +2297,72 @@ chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(
     layer([
-      slab("dist", { fill: "gray85" }),
-      slab("dist", { fill: "skyblue", range: [-1.5, 1.5] }),
-      pointinterval("dist"),
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "dist")),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: "gray85" })
+        ),
+      // the same curve cut to |x| < 1.5, drawn on top
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "dist").filter(
+              (r) => Math.abs(r.v) < 1.5
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "skyblue",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='density folds per cell, the second cut to |x| < 1.5; quantile and median folds for the interval',
+    uses_up='density curves of the draws per cell, the second cut to |x| < 1.5; quantiles and the median of the draws for the interval',
     fit='fits',
     verdict='ok',
-    note="Coloring a slab by a predicate on x is a second slab whose grid is cut to the region, drawn on top; both read one size scale so they line up. A partition intersected with the slab, as in the proposal's quantile-ribbon example, would also work.",
+    note="Coloring a slab by a predicate on x is a second slab whose curve is filtered to the region, drawn on top; both read one size scale so they line up. A partition intersected with the slab, as in the proposal's quantile-ribbon example, would also work.",
 )
 
 E[24] = dict(
@@ -568,53 +2372,326 @@ chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(
     layer([
-      // fill = x > 1: two eyes cut at 1. gap: an opacity that varies along one region
-      slab("dist", { side: "both", range: [-Infinity, 1], opacity: (v) => as("dist").density(v), normalize: "group", fill: "gray75" }),
-      slab("dist", { side: "both", range: [1, Infinity], opacity: (v) => as("dist").density(v), normalize: "group", fill: "skyblue" }),
-      pointinterval("dist"),
+      // fill = x > 1: two eyes cut at 1
+      // an eye cut to x <= 1, divided by its peak; gap: an
+      // opacity that varies along one region
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => r.v <= 1
+            );
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              density: r.density / peak,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "gray75",
+            opacity: "alpha",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => r.v <= 1
+            );
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              density: -r.density / peak,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "gray75",
+            opacity: "alpha",
+          })
+        ),
+      // an eye cut to x > 1, divided by its peak; gap: an
+      // opacity that varies along one region
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => r.v > 1
+            );
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              density: r.density / peak,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "skyblue",
+            opacity: "alpha",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => r.v > 1
+            );
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              density: -r.density / peak,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "skyblue",
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // gap: this should sit on the slab's zero line, but a
+      // layer aligns its children's boxes, not their
+      // origins
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a density fold per cell, scaled so its peak is 1, read as opacity along the slab (the second kind of ggdist mark)',
+    uses_up='the density curve of the draws per cell, divided by its peak and read as opacity along the slab (the second kind of ggdist mark)',
     fit='gofish-gap',
     verdict='ok',
-    note="An eye whose opacity is the density scaled to its peak. Coloring by x > 1 is two slabs cut at 1, as in entry 23, so the predicate needs no channel. Missing: GoFish has no opacity that varies along one region, so the spec marks it as a gap, and the eye has entry 4's layout gap.",
+    note="An eye whose opacity is the density divided by its peak. Coloring by x > 1 is two eyes whose curves are filtered at 1, as in entry 23, so the predicate needs no channel. Missing: GoFish has no opacity that varies along one region, so the spec marks it as a gap, and the eye has entry 4's layout gap.",
 )
 
 E[25] = dict(
     title='stat_gradientinterval with slab_alpha = -pmax(abs(1 - 2*cdf), .95) (Correll and Gleicher)',
     gofish="""
-// Correll and Gleicher: flat over the central 95%, fading to 0 in the tails
-const fade = (x) => (v) => 1 - Math.max(Math.abs(1 - 2 * as(x).cdf(v)), 0.95);
 chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(
     layer([
-      slab("dist", { thickness: 1, opacity: fade("dist"), normalize: "group", fill: SLAB }), // gap: opacity along one region
-      pointinterval("dist"),
+      // Correll and Gleicher: opacity 1 over the central
+      // 95%, fading to 0 in the tails
+      // gap: an opacity that varies along one region
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "dist").map((r) => ({
+              ...r,
+              height: 1,
+              alpha:
+                (1 -
+                  Math.max(Math.abs(1 - 2 * r.cdf), 0.95)) /
+                0.05,
+            }))
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "height",
+            fill: SLAB,
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a cdf fold per cell, turned into opacity along the slab (the second kind of ggdist mark)',
+    uses_up='the CDF of the draws per cell, turned into opacity along the slab (the second kind of ggdist mark)',
     fit='gofish-gap',
     verdict='ok',
-    note='The opacity is a function of the CDF that no blend makes, because a blend is linear in the distribution. Version 1 stopped there. In version 2 the CDF is a fold, the function is ordinary arithmetic on it, and opacity reads the result. normalize: "group" puts the plateau at 1, as ggdist\'s alpha scale does (ggdist keeps a floor of 0.1). GoFish has no opacity that varies along one region, so the spec marks it as a gap.',
+    note="The opacity is a function of the CDF that no blend makes, because a blend is linear in the distribution. Version 1 stopped there. In version 2 the CDF is a column of the density curve's rows, the function is ordinary arithmetic on it, and opacity reads the result. Dividing by 0.05 puts the plateau at 1, as ggdist's alpha scale does (ggdist keeps a floor of 0.1). GoFish has no opacity that varies along one region, so the spec marks it as a gap.",
 )
 
 E[26] = dict(
     title="stat_eye(fill_type = 'gradient') with slab_alpha = -pmax(abs(1 - 2*cdf), .95) (Helske et al.)",
     gofish="""
-const fade = (x) => (v) => 1 - Math.max(Math.abs(1 - 2 * as(x).cdf(v)), 0.95);
 chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(
     layer([
-      slab("dist", { side: "both", opacity: fade("dist"), normalize: "group", fill: SLAB }), // gap: opacity along one region
-      pointinterval("dist"),
+      // an eye with the fade of entry 25 as its opacity
+      // gap: an opacity that varies along one region
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "dist").map((r) => ({
+              ...r,
+              alpha:
+                (1 -
+                  Math.max(Math.abs(1 - 2 * r.cdf), 0.95)) /
+                0.05,
+            }))
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: SLAB,
+            opacity: "alpha",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "dist")
+              .map((r) => ({
+                ...r,
+                alpha:
+                  (1 -
+                    Math.max(
+                      Math.abs(1 - 2 * r.cdf),
+                      0.95
+                    )) /
+                  0.05,
+              }))
+              .map((r) => ({ ...r, density: -r.density }))
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: SLAB,
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // gap: this should sit on the slab's zero line, but a
+      // layer aligns its children's boxes, not their
+      // origins
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a density fold for the shape and a cdf fold for the opacity, per cell',
+    uses_up='the density curve of the draws for the shape and their CDF for the opacity, per cell',
     fit='gofish-gap',
     verdict='ok',
     note="Entry 25's fade on an eye. Missing: GoFish has no opacity that varies along one region, so the spec marks it as a gap, and the eye has entry 4's layout gap.",
@@ -625,57 +2702,251 @@ E[27] = dict(
     gofish="""
 const y = dist.normal({ mean: "mean", sd: "sd" });
 chart(distDf)
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
   .mark(
-    slab(y, {
-      dir: "y",
-      side: "both",
-      fill: "subgroup", // + fill_ramp by the same curve
-      thickness: (v) => Math.max(0, Math.abs(1 - 2 * y.cdf(v)) - 0.95),
-    })
+    layer([
+      // Tukey pencils: thickness max(0, |1 - 2 cdf| -
+      // 0.95), on both sides. gap: fill_ramp by the same
+      // curve
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, y).map((r) => ({
+              ...r,
+              pencil: Math.max(
+                0,
+                Math.abs(1 - 2 * r.cdf) - 0.95
+              ),
+            }))
+          ),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "pencil",
+            fill: "subgroup",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, y)
+              .map((r) => ({
+                ...r,
+                pencil: Math.max(
+                  0,
+                  Math.abs(1 - 2 * r.cdf) - 0.95
+                ),
+              }))
+              .map((r) => ({ ...r, pencil: -r.pencil }))
+          ),
+          scatter({ y: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "y",
+            w: "pencil",
+            fill: "subgroup",
+          })
+        ),
+    ])
   );
 """,
-    uses_up='a cdf fold per cell, turned into thickness',
+    uses_up='the CDF of the draws per cell, turned into thickness',
     fit='gofish-gap',
     verdict='ok',
-    note='The thickness is arithmetic on the cdf fold, and side both with no interval has no alignment problem. Missing: fill_ramp, the fill lightening along the slab, which needs a fill that varies along one ribbon.',
+    note='The thickness is arithmetic on the CDF column of the density curve, and side both with no interval has no alignment problem. Missing: fill_ramp, the fill lightening along the slab, which needs a fill that varies along one ribbon.',
 )
 
 E[28] = dict(
     title='stat_halfeye(aes(fill = after_stat(level)))',
     gofish="""
-chart(df, { color: Color.palette(["#c6dbef", "#6baed6"]) })
+chart(df)
   .flow(spread({ by: "group", dir: "y" }))
   .mark(
     layer([
-      slab("value", { fill: "gray85" }),
-      slab("value", { fill: "level", within: 0.95 }),
-      slab("value", { fill: "level", within: 0.66 }),
-      pointinterval("value"),
+      // the whole curve
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "value")),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: "gray85" })
+        ),
+      // the curve cut to the central 95% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "#c6dbef",
+          })
+        ),
+      // the curve cut to the central 66% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.66 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "#6baed6",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='density folds per cell, cut to the central 95% and 66% by quantile folds and drawn nested; quantile and median folds for the interval',
+    uses_up='density curves of the draws per cell, cut to the central 95% and 66% by quantiles of the draws and drawn nested; quantiles and the median of the draws for the interval',
     fit='fits',
     verdict='ok',
-    note='Each level is the slab cut to that interval, between x.quantile((1 - p) / 2) and x.quantile((1 + p) / 2), drawn widest first. Bin.quantiles cannot do it, because GoFish computes quantile cells over the whole column, not per group.',
+    note="Each level is the density curve filtered to the central interval, where |cdf - 0.5| <= p / 2, drawn widest first. The cut falls on the curve's grid points, so its ends are as fine as the grid. Bin.quantiles cannot do it, because GoFish computes quantile cells over the whole column, not per group.",
 )
 
 E[29] = dict(
     title='stat_slab(aes(fill = after_stat(level)), .width = c(.66, .95, 1)) + stat_pointinterval()',
     gofish="""
-chart(df, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) })
+chart(df)
   .flow(spread({ by: "group", dir: "y" }))
   .mark(
     layer([
-      slab("value", { fill: "level", within: 1 }),
-      slab("value", { fill: "level", within: 0.95 }),
-      slab("value", { fill: "level", within: 0.66 }),
-      pointinterval("value"),
+      // the whole curve
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "value")),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "#deebf7",
+          })
+        ),
+      // the curve cut to the central 95% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "#9ecae1",
+          })
+        ),
+      // the curve cut to the central 66% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.66 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "#3182bd",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='density folds per cell, cut to the central 95% and 66% by quantile folds and drawn nested; quantile and median folds for the interval',
+    uses_up='density curves of the draws per cell, cut to the central 95% and 66% by quantiles of the draws and drawn nested; quantiles and the median of the draws for the interval',
     fit='fits',
     verdict='ok',
     note='Entry 28 with a 100% level in place of the gray remainder.',
@@ -685,59 +2956,451 @@ E[30] = dict(
     title='stat_halfeye fill = level: median_qi vs mode_hdci, Beta(10, 2)',
     gofish="""
 const x = dist.beta({ alpha: 10, beta: 2 });
-const panel = (kind) =>
-  chart([{}], { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) }).mark(
-    layer([
-      slab(x, { fill: "gray95" }),
-      ...[0.95, 0.8, 0.5].map((p) => slab(x, { fill: "level", within: p, interval: kind })),
-      pointinterval(x, { levels: [0.5, 0.8, 0.95], interval: kind }),
-    ])
-  );
-spread({ dir: "y", spacing: 16 }, [panel("qi"), panel("hdci")]);
+// median_qi
+const qi = chart([{}]).mark(
+  layer([
+    // the whole curve
+    chart()
+      .flow(
+        derive((rows) => densityCurve(rows, x)),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "gray95" })
+      ),
+    // the curve cut to the central 95% interval
+    chart()
+      .flow(
+        derive((rows) =>
+          densityCurve(rows, x).filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+          )
+        ),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
+      ),
+    // the curve cut to the central 80% interval
+    chart()
+      .flow(
+        derive((rows) =>
+          densityCurve(rows, x).filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.8 / 2
+          )
+        ),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
+      ),
+    // the curve cut to the central 50% interval
+    chart()
+      .flow(
+        derive((rows) =>
+          densityCurve(rows, x).filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2
+          )
+        ),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
+      ),
+    // interval: the 95%, 80% and 50% central intervals of
+    // the draws, and a circle at their median
+    // skewed: center is the midpoint, not the median
+    chart()
+      .flow(
+        derive((rows) => centralIntervals(rows, x, [0.95]))
+      )
+      .mark(
+        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
+      ),
+    chart()
+      .flow(
+        derive((rows) => centralIntervals(rows, x, [0.8]))
+      )
+      .mark(
+        rect({
+          cx: "center",
+          w: "size",
+          h: 2.75,
+          fill: INK,
+        })
+      ),
+    chart()
+      .flow(
+        derive((rows) => centralIntervals(rows, x, [0.5]))
+      )
+      .mark(
+        layer([
+          rect({
+            cx: "center",
+            w: "size",
+            h: 4,
+            fill: INK,
+          }),
+          circle({ cx: "median", r: 4, fill: INK }),
+        ])
+      ),
+  ])
+);
+// mode_hdci
+const hdci = chart([{}]).mark(
+  layer([
+    // gap: the mode and the highest-density interval,
+    // written as the helper they would most likely be
+    // the whole curve
+    chart()
+      .flow(
+        derive((rows) => densityCurve(rows, x)),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "gray95" })
+      ),
+    // the curve cut to the 95% highest-density interval
+    chart()
+      .flow(
+        derive((rows) => {
+          const [hdi] = highestDensityIntervals(rows, x, [
+            0.95,
+          ]);
+          return densityCurve(rows, x, {
+            range: [
+              hdi.center - hdi.size / 2,
+              hdi.center + hdi.size / 2,
+            ],
+          });
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
+      ),
+    // the curve cut to the 80% highest-density interval
+    chart()
+      .flow(
+        derive((rows) => {
+          const [hdi] = highestDensityIntervals(rows, x, [
+            0.8,
+          ]);
+          return densityCurve(rows, x, {
+            range: [
+              hdi.center - hdi.size / 2,
+              hdi.center + hdi.size / 2,
+            ],
+          });
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
+      ),
+    // the curve cut to the 50% highest-density interval
+    chart()
+      .flow(
+        derive((rows) => {
+          const [hdi] = highestDensityIntervals(rows, x, [
+            0.5,
+          ]);
+          return densityCurve(rows, x, {
+            range: [
+              hdi.center - hdi.size / 2,
+              hdi.center + hdi.size / 2,
+            ],
+          });
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
+      ),
+    // interval: the 95%, 80% and 50% highest-density
+    // intervals of the draws, and a circle at their mode
+    chart()
+      .flow(
+        derive((rows) =>
+          highestDensityIntervals(rows, x, [0.95])
+        )
+      )
+      .mark(
+        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
+      ),
+    chart()
+      .flow(
+        derive((rows) =>
+          highestDensityIntervals(rows, x, [0.8])
+        )
+      )
+      .mark(
+        rect({
+          cx: "center",
+          w: "size",
+          h: 2.75,
+          fill: INK,
+        })
+      ),
+    chart()
+      .flow(
+        derive((rows) =>
+          highestDensityIntervals(rows, x, [0.5])
+        )
+      )
+      .mark(
+        layer([
+          rect({
+            cx: "center",
+            w: "size",
+            h: 4,
+            fill: INK,
+          }),
+          circle({ cx: "mode", r: 4, fill: INK }),
+        ])
+      ),
+  ])
+);
+spread({ dir: "y", spacing: 16 }, [qi, hdci]);
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
-    note="The quantile-interval panel fits. The second panel needs the mode and the highest-density continuous interval. Neither is in version 2's list of folds. They are general aggregates, not special to draws, so this is a GoFish gap; on draws an HDI is the shortest window of levels.",
+    note="The quantile-interval panel fits. The second panel needs the mode and the highest-density continuous interval. Neither is in version 2's list of summaries, so the spec writes them as the helper they would most likely be. They are general summaries, not special to draws, so this is a GoFish gap; on draws an HDI is the shortest window of levels.",
 )
 
 E[31] = dict(
     title='stat_slab + stat_spike at median and qi vs mode and hdi',
     gofish="""
 const x = dist.beta({ alpha: 10, beta: 2 });
-// a spike: a 1 px rect from 0 to the density at a point
-const spike = (at) => rect({ x: at, w: 1, h: x.density(at) }); // linetype by kind: no field mapping
-const panel = (kind, points) =>
-  chart([{}]).mark(
-    layer([
-      ...[1, 0.95, 0.5].map((p) => slab(x, { fill: "level", within: p, interval: kind })),
-      ...points.map(spike),
-    ])
-  );
-spread({ dir: "y", spacing: 16 }, [
-  panel("qi", [x.median(), x.quantile(0.025), x.quantile(0.975)]),
-  panel("hdi", [x.mode(), ...x.hdi(0.95)]), // gap: mode and HDI folds
-]);
+// a spike: a 1 px rect from 0 to the density at a point, so
+// it shares the slab's size scale
+// median and qi
+const qi = chart([{}]).mark(
+  layer([
+    // the whole curve
+    chart()
+      .flow(
+        derive((rows) => densityCurve(rows, x)),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
+      ),
+    // the curve cut to the central 95% interval
+    chart()
+      .flow(
+        derive((rows) =>
+          densityCurve(rows, x).filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+          )
+        ),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
+      ),
+    // the curve cut to the central 50% interval
+    chart()
+      .flow(
+        derive((rows) =>
+          densityCurve(rows, x).filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2
+          )
+        ),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
+      ),
+    // spikes; linetype by kind: no field mapping
+    rect({ x: x.median(), w: 1, h: x.density(x.median()) }),
+    rect({
+      x: x.quantile(0.025),
+      w: 1,
+      h: x.density(x.quantile(0.025)),
+    }),
+    rect({
+      x: x.quantile(0.975),
+      w: 1,
+      h: x.density(x.quantile(0.975)),
+    }),
+  ])
+);
+// mode and hdi
+const hdi = chart([{}]).mark(
+  layer([
+    // gap: the mode and the highest-density interval,
+    // written as the helper they would most likely be
+    // the whole curve
+    chart()
+      .flow(
+        derive((rows) => densityCurve(rows, x)),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
+      ),
+    // the curve cut to the 95% highest-density interval
+    chart()
+      .flow(
+        derive((rows) => {
+          const [hdi] = highestDensityIntervals(rows, x, [
+            0.95,
+          ]);
+          return densityCurve(rows, x, {
+            range: [
+              hdi.center - hdi.size / 2,
+              hdi.center + hdi.size / 2,
+            ],
+          });
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
+      ),
+    // the curve cut to the 50% highest-density interval
+    chart()
+      .flow(
+        derive((rows) => {
+          const [hdi] = highestDensityIntervals(rows, x, [
+            0.5,
+          ]);
+          return densityCurve(rows, x, {
+            range: [
+              hdi.center - hdi.size / 2,
+              hdi.center + hdi.size / 2,
+            ],
+          });
+        }),
+        scatter({ x: "v" })
+      )
+      .mark(
+        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
+      ),
+    // spikes at the mode and the ends of the 95% hdi
+    rect({ x: x.mode(), w: 1, h: x.density(x.mode()) }),
+    rect({
+      x: x.hdi(0.95)[0],
+      w: 1,
+      h: x.density(x.hdi(0.95)[0]),
+    }),
+    rect({
+      x: x.hdi(0.95)[1],
+      w: 1,
+      h: x.density(x.hdi(0.95)[1]),
+    }),
+  ])
+);
+spread({ dir: "y", spacing: 16 }, [qi, hdi]);
 """,
-    uses_up='density, median and quantile folds per cell',
+    uses_up='the density curve, the median and quantiles of the draws per cell',
     fit='gofish-gap',
     verdict='ok',
-    note="A spike is a 1 px rect from 0 to the density at a point, so it shares the slab's size scale. Missing: the mode and HDI folds (entry 30), and linetype mapped from a field (strokeDasharray is a literal).",
+    note="A spike is a 1 px rect from 0 to the density at a point, so it shares the slab's size scale. Missing: the mode and HDI summaries (entry 30), and linetype mapped from a field (strokeDasharray is a literal).",
 )
 
 E[32] = dict(
     title="stat_halfeye(position = 'dodgejust'), fill = subgroup, fill_ramp = level",
     gofish="""
 chart(df)
-  .flow(spread({ by: "group", dir: "y" }), spread({ by: "subgroup", dir: "y" }))
+  .flow(
+    spread({ by: "group", dir: "y" }),
+    spread({ by: "subgroup", dir: "y" })
+  )
   .mark(
     layer([
-      ...[0.95, 0.8, 0.5].map((p) => slab("value", { fill: "subgroup", within: p })), // + lightened by level
-      pointinterval("value"),
+      // gap: fill_ramp, the subgroup's color lightened by level
+      // the curve cut to the central 95% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "subgroup",
+          })
+        ),
+      // the curve cut to the central 80% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.8 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "subgroup",
+          })
+        ),
+      // the curve cut to the central 50% interval
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2
+            )
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: "subgroup",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The geometry fits as nested slabs. Missing: fill_ramp, a color scale on subgroup lightened by a second field (level); Color.mix exists but no scale combines two fields.',
@@ -748,13 +3411,61 @@ E[33] = dict(
     gofish="""
 const y = dist.normal({ mean: "mean", sd: "sd" });
 chart(distDf)
-  .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
-  .mark(pointinterval(y, { dir: "y", levels: [0.5, 0.8, 0.95], point: false, thickness: 4, fill: "subgroup" })); // + ramp by level
+  .flow(
+    spread({ by: "group", dir: "x" }),
+    spread({ by: "subgroup", dir: "x" })
+  )
+  .mark(
+    layer([
+      // interval: the 95%, 80% and 50% central intervals of
+      // the draws
+      // gap: color_ramp, the subgroup's color lightened by
+      // level
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, y, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 4,
+            fill: "subgroup",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) => centralIntervals(rows, y, [0.8]))
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 4,
+            fill: "subgroup",
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) => centralIntervals(rows, y, [0.5]))
+        )
+        .mark(
+          rect({
+            cy: "center",
+            h: "size",
+            w: 4,
+            fill: "subgroup",
+          })
+        ),
+    ])
+  );
 """,
-    uses_up='quantile(p) and median folds per cell',
+    uses_up='quantiles and the median of the draws per cell',
     fit='gofish-gap',
     verdict='ok',
-    note='Nested intervals are quantile folds. Missing: color_ramp, the subgroup color lightened by level (as in entry 32).',
+    note='Nested intervals are central intervals of the draws. Missing: color_ramp, the subgroup color lightened by level (as in entry 32).',
 )
 
 E[34] = dict(
@@ -764,26 +3475,185 @@ chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(
     layer([
-      slab("dist", { side: "both", fill: "gray85", within: 0.99, normalize: "group", thickness: (v) => Math.log(as("dist").density(v)) }),
-      slab("dist", { side: "both", within: 0.95, normalize: "group", thickness: (v) => Math.log(as("dist").density(v)) }),
-      pointinterval("dist"),
+      // raindrop: log(pdf) inside the 99% interval
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.99 / 2
+            );
+            // thickness log(pdf); normalize = "groups":
+            // edges at 0, peak at 1
+            const lo = Math.min(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            const hi = Math.max(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            return curve.map((r) => ({
+              ...r,
+              density:
+                (Math.log(r.density) - lo) / (hi - lo),
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: "gray85" })
+        ),
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.99 / 2
+            );
+            // thickness log(pdf); normalize = "groups":
+            // edges at 0, peak at 1
+            const lo = Math.min(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            const hi = Math.max(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            return curve.map((r) => ({
+              ...r,
+              density:
+                -(Math.log(r.density) - lo) / (hi - lo),
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: "gray85" })
+        ),
+      // and inside the 95% interval
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+            );
+            // thickness log(pdf); normalize = "groups":
+            // edges at 0, peak at 1
+            const lo = Math.min(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            const hi = Math.max(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            return curve.map((r) => ({
+              ...r,
+              density:
+                (Math.log(r.density) - lo) / (hi - lo),
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, "dist").filter(
+              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
+            );
+            // thickness log(pdf); normalize = "groups":
+            // edges at 0, peak at 1
+            const lo = Math.min(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            const hi = Math.max(
+              ...curve.map((r) => Math.log(r.density))
+            );
+            return curve.map((r) => ({
+              ...r,
+              density:
+                -(Math.log(r.density) - lo) / (hi - lo),
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // gap: this should sit on the slab's zero line, but a
+      // layer aligns its children's boxes, not their
+      // origins
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "dist", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a density fold per cell, turned into thickness log(pdf) and cut to an interval by quantile folds',
+    uses_up='the density curve of the draws per cell, turned into thickness log(pdf) and cut to an interval by quantiles of the draws',
     fit='gofish-gap',
     verdict='ok',
-    note="Any function of the density is arithmetic on the density fold. log(pdf) shifted to start at 0 within each interval is what normalize = 'groups' does. The eye shape has entry 4's gap.",
+    note="Any function of the density is arithmetic on the density curve's rows. log(pdf) shifted so the interval's edges are at 0 and its peak at 1 is what normalize = 'groups' does. The eye shape has entry 4's gap.",
 )
 
 E[35] = dict(
     title="Ridgeline: stat_slab(height = 2, color = 'black')",
     gofish="""
 chart(ridgesDf)
-  .flow(spread({ by: "group", dir: "y", anchor: "baseline", spacing: 24 }))
-  .mark(slab("x", { fill: SLAB, stroke: "black", h: 60 }));
+  .flow(
+    spread({
+      by: "group",
+      dir: "y",
+      anchor: "baseline",
+      spacing: 24,
+    })
+  )
+  .mark(
+    layer({ h: 60 }, [
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, "x")),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "density",
+            fill: SLAB,
+            stroke: "black",
+          })
+        ),
+    ])
+  );
 """,
-    uses_up='a density fold per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
+    uses_up='the density curve of the draws per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note="Overlapping ridges are a baseline spread with a fixed pitch and slabs taller than the pitch, as in GoFish's Ridgeline Chart story.",
@@ -793,11 +3663,38 @@ E[36] = dict(
     title='Ridgeline with fill = group, fill_ramp = abs(x), color_ramp = -dnorm(x, 0, 2)',
     gofish="""
 chart(ridgesDf, { color: Color.palette("viridis") })
-  .flow(spread({ by: "group", dir: "y", anchor: "baseline", spacing: 24 }))
-  .mark(slab("x", { fill: "group", range: "unbounded", h: 60 })) // + ramp along x
-  .layer(chart([{ x: 0 }]).mark(rect({ x: "x", w: 1, strokeDasharray: "4 3" })));
+  .flow(
+    spread({
+      by: "group",
+      dir: "y",
+      anchor: "baseline",
+      spacing: 24,
+    })
+  )
+  .mark(
+    layer({ h: 60 }, [
+      // expand = TRUE: the curve runs over the x axis's
+      // limits, set by hand. gap: fill_ramp and color_ramp
+      // along x
+      chart()
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "x", { range: [-6, 14] })
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: "group" })
+        ),
+    ])
+  )
+  .layer(
+    chart([{ x: 0 }]).mark(
+      rect({ x: "x", w: 1, strokeDasharray: "4 3" })
+    )
+  );
 """,
-    uses_up='a density fold per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
+    uses_up='the density curve of the draws per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The ridges fit. Missing: a fill and an outline color that change along one ribbon (fill_ramp by |x| and color_ramp by a density), which needs a gradient along a mark.',
@@ -809,16 +3706,166 @@ E[37] = dict(
 const x = dist.normal({ mean: "mean", sd: "sd" });
 const cells = distDf.filter((d) => d.subgroup === "h");
 const dots = sample(cells, { n: 100, at: "quantiles" });
-const row = (g, alignment) =>
+spread({ dir: "y", spacing: 20 }, [
+  // a
   layer([
-    chart(dots.filter((d) => d.group === g))
-      .flow(partition({ by: x.bin(Bin.step(0.2)), dir: "x", alignment }), stack({ dir: "y" }))
+    chart(dots.filter((d) => d.group === "a"))
+      .flow(
+        partition({
+          by: x.bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+          dir: "x",
+          alignment: "end",
+        }),
+        stack({ dir: "y" })
+      )
       .mark(circle({ r: 2 })),
-    chart(cells.filter((d) => d.group === g)).mark(pointinterval(x)),
-  ]);
-spread({ dir: "y", spacing: 20 }, [row("a", "end"), row("b", "middle"), row("c", "start")]);
+    chart(cells.filter((d) => d.group === "a")).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
+  // b
+  layer([
+    chart(dots.filter((d) => d.group === "b"))
+      .flow(
+        partition({
+          by: x.bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+          dir: "x",
+          alignment: "middle",
+        }),
+        stack({ dir: "y" })
+      )
+      .mark(circle({ r: 2 })),
+    chart(cells.filter((d) => d.group === "b")).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
+  // c
+  layer([
+    chart(dots.filter((d) => d.group === "c"))
+      .flow(
+        partition({
+          by: x.bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+          dir: "x",
+          alignment: "start",
+        }),
+        stack({ dir: "y" })
+      )
+      .mark(circle({ r: 2 })),
+    chart(cells.filter((d) => d.group === "c")).mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  ]),
+]);
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantile and median folds on the Dist',
+    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws on the Dist',
     fit='gofish-gap',
     verdict='ok',
     note="Quantile dots of a Dist are sample at evenly spaced levels, which version 1 needed a derive for. Side as data (one value per row) is not a channel in GoFish, so each row is its own chart. The both and bottom rows need the interval on the dots' baseline (entry 4's gap), plus the dot-binning gap of entry 20.",
@@ -831,11 +3878,68 @@ const value = field("value");
 const drawn = withDraw(df);
 layer([
   chart(df)
-    .flow(spread({ by: "group", dir: "x" }), spread({ by: "subgroup", dir: "x" }))
+    .flow(
+      spread({ by: "group", dir: "x" }),
+      spread({ by: "subgroup", dir: "x" })
+    )
     .mark(
       layer([
-        slab(value, { dir: "y", side: "start", fill: "subgroup" }),
-        pointinterval(value, { dir: "y" }),
+        // slab, side start: the density curve of the draws,
+        // hanging below the line
+        chart()
+          .flow(
+            derive((rows) =>
+              densityCurve(rows, "value").map((r) => ({
+                ...r,
+                density: -r.density,
+              }))
+            ),
+            scatter({ y: "v" })
+          )
+          .mark(
+            ribbon({
+              dir: "y",
+              w: "density",
+              fill: "subgroup",
+            })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // gap: this should sit on the slab's zero line, but
+        // a layer aligns its children's boxes, not their
+        // origins
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cy: "center",
+              h: "size",
+              w: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cy: "center",
+                h: "size",
+                w: 4,
+                fill: INK,
+              }),
+              circle({ cy: "median", r: 4, fill: INK }),
+            ])
+          ),
         text({ y: value.median(), text: "label" }),
       ])
     ),
@@ -844,30 +3948,93 @@ layer([
     .flow(
       spread({ by: "group", dir: "x" }),
       spread({ by: "subgroup", dir: "x" }),
-      filter((d) => Math.round(d.level * 1000 + 0.5) % 10 === 5),
-      partition({ by: value.bin(Bin.step(0.15)), dir: "y" }),
+      filter(
+        (d) => Math.round(d.level * 1000 + 0.5) % 10 === 5
+      ),
+      partition({
+        by: value.bin(Bin.step(0.15)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "y",
+      }),
       stack({ dir: "x" })
     )
     .mark(circle({ r: 1.5, fill: "subgroup" })),
 ]);
 """,
-    uses_up='slab and label: density and median folds; dots: a filter on level keeps 100 of 1000 rows, then partition and stack',
+    uses_up='slab and label: the density curve and the median of the draws; dots: a filter on level keeps 100 of 1000 rows, then partition and stack',
     fit='gofish-gap',
     verdict='ok',
-    note="A left slab and right dots share one center line, which needs the layer to align children by origin (entry 4's gap), plus the dot-binning gap. The label at the median is a text mark at a median fold. The dots thin a sample to 100 quantiles with a filter on level, as in entry 21.",
+    note="A left slab and right dots share one center line, which needs the layer to align children by origin (entry 4's gap), plus the dot-binning gap. The label at the median is a text mark at the median of the draws. The dots thin a sample to 100 quantiles with a filter on level, as in entry 21.",
 )
 
 E[39] = dict(
     title='stat_slab(alpha = .3) overplotted + stat_pointinterval with position_dodgejust',
     gofish="""
 layer([
-  chart(df).flow(group({ by: "group" })).mark(slab("value", { fill: "group", opacity: 0.3 })),
   chart(df)
-    .flow(spread({ by: "group", dir: "y", spacing: 4 }).translate({ y: -12 }))
-    .mark(pointinterval("value", { fill: "group" })),
+    .flow(
+      group({ by: "group" }),
+      // slab: the density curve of each group's draws,
+      // overplotted
+      derive((rows) => densityCurve(rows, "value")),
+      scatter({ x: "v" })
+    )
+    .mark(
+      ribbon({
+        dir: "x",
+        h: "density",
+        fill: "group",
+        opacity: 0.3,
+      })
+    ),
+  chart(df)
+    .flow(
+      spread({
+        by: "group",
+        dir: "y",
+        spacing: 4,
+      }).translate({ y: -12 })
+    )
+    .mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        // on a sample, center is the midpoint, not the median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: "group",
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, "value", [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: "group",
+              }),
+              circle({ cx: "median", r: 4, fill: "group" }),
+            ])
+          ),
+      ])
+    ),
 ]);
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="The overlaid slabs fit. The dodged intervals sit just below the shared baseline, which is the raincloud placement elaborations.md could not express (a layer aligns boxes, not the slab's zero line).",
@@ -880,14 +4047,51 @@ const x = dist.normal({ mean: 4, sd: 1.2 });
 const cell = [{}];
 layer([
   chart(sample(cell, { n: 100, at: "quantiles" }))
-    .flow(partition({ by: x.bin(Bin.step(0.25)), dir: "x" }), stack({ dir: "y" }))
-    .mark(circle({ r: 3, fill: "gray75", stroke: "gray50" })),
-  chart(cell).mark(pointinterval(x, { levels: [0.6827], thickness: 5, shape: "square" })),
+    .flow(
+      partition({ by: x.bin(Bin.step(0.25)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+      stack({ dir: "y" })
+    )
+    .mark(
+      circle({ r: 3, fill: "gray75", stroke: "gray50" })
+    ),
+  chart(cell).mark(
+    layer([
+      // interval: the 68.27% central interval of the draws,
+      // and a circle at their median
+      // gap: a square point shape
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.6827])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 5,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  ),
 ])
-  .layer(chart(annotations).mark(text({ x: "x", y: "y", text: "label", fill: "#d95f02" })))
+  .layer(
+    chart(annotations).mark(
+      text({
+        x: "x",
+        y: "y",
+        text: "label",
+        fill: "#d95f02",
+      })
+    )
+  )
   .layer(chart(arrows).mark(arrow({ fill: "#d95f02" })));
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantile and median folds',
+    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
     fit='gofish-gap',
     verdict='ok',
     note='Quantile dots plus an interval. Missing: the dot-binning gap of entry 20, bracket-ended annotation segments (entry 2), and a square point shape.',
@@ -898,9 +4102,21 @@ E[41] = dict(
     gofish="""
 const x = dist.normal({ mean: 4, sd: 1.2 });
 chart(sample([{}], { n: 100, at: "quantiles" }))
-  .flow(partition({ by: x.bin(Bin.step(0.25)), dir: "x" }), stack({ dir: "y" }))
+  .flow(
+    partition({ by: x.bin(Bin.step(0.25)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+    stack({ dir: "y" })
+  )
   .mark(circle({ r: 3, fill: "gray75", stroke: "gray50" }))
-  .layer(chart(annotations).mark(text({ x: "x", y: "y", text: "label", fill: "#d95f02" })))
+  .layer(
+    chart(annotations).mark(
+      text({
+        x: "x",
+        y: "y",
+        text: "label",
+        fill: "#d95f02",
+      })
+    )
+  )
   .layer(chart(arrows).mark(arrow({ fill: "#d95f02" })));
 """,
     uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n)',
@@ -912,10 +4128,27 @@ chart(sample([{}], { n: 100, at: "quantiles" }))
 E[42] = dict(
     title='Layout parameters for dots geoms (annotated diagram)',
     gofish="""
-chart([{ x: 0.4 }, { x: 0.7 }, { x: 0.7 }, { x: 1 }, { x: 1 }, { x: 1 }])
-  .flow(partition({ by: field("x").bin(Bin.step(0.3)), dir: "x" }), stack({ dir: "y" }))
+chart([
+  { x: 0.4 },
+  { x: 0.7 },
+  { x: 0.7 },
+  { x: 1 },
+  { x: 1 },
+  { x: 1 },
+])
+  .flow(
+    partition({
+      by: field("x").bin(Bin.step(0.3)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "x",
+    }),
+    stack({ dir: "y" })
+  )
   .mark(circle({ r: 15, opacity: 0.5 }))
-  .layer(chart(annotations).mark(text({ x: "x", y: "y", text: "label" })))
+  .layer(
+    chart(annotations).mark(
+      text({ x: "x", y: "y", text: "label" })
+    )
+  )
   .layer(chart(brackets).mark(arrow({})));
 """,
     uses_up='six plain values as finite draws: partition by a bin, then stack',
@@ -928,8 +4161,21 @@ E[43] = dict(
     title='Horizontal geom_dots() with side = topright / both / bottomleft',
     gofish="""
 const panel = (alignment) =>
-  chart(xs).flow(partition({ by: field("x").bin(Bin.step(0.2)), dir: "x", alignment }), stack({ dir: "y" })).mark(circle({ r: 3 }));
-spread({ dir: "x", spacing: 12 }, [panel("end"), panel("middle"), panel("start")]);
+  chart(xs)
+    .flow(
+      partition({
+        by: field("x").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "x",
+        alignment,
+      }),
+      stack({ dir: "y" })
+    )
+    .mark(circle({ r: 3 }));
+spread({ dir: "x", spacing: 12 }, [
+  panel("end"),
+  panel("middle"),
+  panel("start"),
+]);
 """,
     uses_up='partition by a bin of the value, then stack, over the rows (each row is a draw; finite n)',
     fit='gofish-gap',
@@ -941,8 +4187,21 @@ E[44] = dict(
     title='Vertical geom_dots() with side = topright / both / bottomleft',
     gofish="""
 const panel = (alignment) =>
-  chart(xs).flow(partition({ by: field("x").bin(Bin.step(0.2)), dir: "y", alignment }), stack({ dir: "x" })).mark(circle({ r: 3 }));
-spread({ dir: "x", spacing: 12 }, [panel("end"), panel("middle"), panel("start")]);
+  chart(xs)
+    .flow(
+      partition({
+        by: field("x").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "y",
+        alignment,
+      }),
+      stack({ dir: "x" })
+    )
+    .mark(circle({ r: 3 }));
+spread({ dir: "x", spacing: 12 }, [
+  panel("end"),
+  panel("middle"),
+  panel("start"),
+]);
 """,
     uses_up='partition by a bin of the value, then stack, over the rows (each row is a draw; finite n)',
     fit='gofish-gap',
@@ -953,11 +4212,29 @@ spread({ dir: "x", spacing: 12 }, [panel("end"), panel("middle"), panel("start")
 E[45] = dict(
     title="geom_dots() layouts bin / hex / weave / swarm with side = 'top'",
     gofish="""
-const dots = (flow) => chart(xs).flow(...flow).mark(circle({ r: 3 }));
 spread({ dir: "y", spacing: 12 }, [
-  dots([partition({ by: field("x").bin(Bin.step(0.2)), dir: "x", alignment: "end" }), stack({ dir: "y" })]), // bin
+  // bin
+  chart(xs)
+    .flow(
+      partition({
+        by: field("x").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "x",
+        alignment: "end",
+      }),
+      stack({ dir: "y" })
+    )
+    .mark(circle({ r: 3 })),
   // hex and weave: no GoFish layout
-  dots([scatter({ x: "x", overlap: Overlap.separate(), alignment: "end" })]), // swarm
+  // swarm
+  chart(xs)
+    .flow(
+      scatter({
+        x: "x",
+        overlap: Overlap.separate(),
+        alignment: "end",
+      })
+    )
+    .mark(circle({ r: 3 })),
 ]);
 """,
     uses_up='the rows as finite draws, each placed by a dot layout',
@@ -969,10 +4246,23 @@ spread({ dir: "y", spacing: 12 }, [
 E[46] = dict(
     title="geom_dots() layouts bin / hex / weave / swarm with side = 'both'",
     gofish="""
-const dots = (flow) => chart(xs).flow(...flow).mark(circle({ r: 3 }));
 spread({ dir: "y", spacing: 12 }, [
-  dots([partition({ by: field("x").bin(Bin.step(0.2)), dir: "x", alignment: "middle" }), stack({ dir: "y" })]),
-  dots([scatter({ x: "x", overlap: Overlap.separate() })]),
+  // bin
+  chart(xs)
+    .flow(
+      partition({
+        by: field("x").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "x",
+        alignment: "middle",
+      }),
+      stack({ dir: "y" })
+    )
+    .mark(circle({ r: 3 })),
+  // hex and weave: no GoFish layout
+  // swarm
+  chart(xs)
+    .flow(scatter({ x: "x", overlap: Overlap.separate() }))
+    .mark(circle({ r: 3 })),
 ]);
 """,
     uses_up='the rows as finite draws, each placed by a dot layout',
@@ -985,7 +4275,15 @@ E[47] = dict(
     title="geom_dots(side = 'both') per group (binned beeswarm)",
     gofish="""
 chart(abcDf)
-  .flow(spread({ by: "abc", dir: "x" }), partition({ by: field("value").bin(Bin.step(0.25)), dir: "y", alignment: "middle" }), stack({ dir: "x" }))
+  .flow(
+    spread({ by: "abc", dir: "x" }),
+    partition({
+      by: field("value").bin(Bin.step(0.25)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "y",
+      alignment: "middle",
+    }),
+    stack({ dir: "x" })
+  )
   .mark(circle({ r: 2 }));
 """,
     uses_up='partition by a bin of the value, then stack, over the rows (each row is a draw; finite n)',
@@ -998,7 +4296,10 @@ E[48] = dict(
     title="geom_dots(side = 'both', layout = 'hex')",
     gofish="""
 chart(abcDf)
-  .flow(spread({ by: "abc", dir: "x" }), scatter({ y: "value", overlap: Overlap.separate() })) // nearest: hex has no GoFish layout
+  .flow(
+    spread({ by: "abc", dir: "x" }),
+    scatter({ y: "value", overlap: Overlap.separate() })
+  ) // nearest: hex has no GoFish layout
   .mark(circle({ r: 2 }));
 """,
     uses_up='the rows as finite draws, each placed by a dot layout',
@@ -1011,7 +4312,10 @@ E[49] = dict(
     title='geom_swarm() vs geom_weave()',
     gofish="""
 const swarm = chart(swarmData)
-  .flow(spread({ by: "g", dir: "x" }), scatter({ y: "y", overlap: Overlap.separate() }))
+  .flow(
+    spread({ by: "g", dir: "x" }),
+    scatter({ y: "y", overlap: Overlap.separate() })
+  )
   .mark(circle({ r: 2, opacity: 0.75 }));
 // weave: no GoFish layout
 spread({ dir: "x", spacing: 16 }, [swarm /*, weave */]);
@@ -1026,7 +4330,11 @@ E[50] = dict(
     title="geom_weave(position = 'dodge'), fill = hi",
     gofish="""
 chart(abccDf, { color: Color.palette("Dark2") })
-  .flow(spread({ by: "abc", dir: "x" }), spread({ by: "hi", dir: "x" }), scatter({ y: "value", overlap: Overlap.separate() })) // weave has no GoFish layout
+  .flow(
+    spread({ by: "abc", dir: "x" }),
+    spread({ by: "hi", dir: "x" }),
+    scatter({ y: "value", overlap: Overlap.separate() })
+  ) // weave has no GoFish layout
   .mark(circle({ r: 2, fill: "hi", opacity: 0.75 }));
 """,
     uses_up='the rows as finite draws, each placed by a dot layout',
@@ -1039,7 +4347,14 @@ E[51] = dict(
     title='geom_dots(aes(fill = hi, group = NA)): colors mixed in one stack',
     gofish="""
 chart(abccDf)
-  .flow(spread({ by: "abc", dir: "x" }), partition({ by: field("value").bin(Bin.step(0.25)), dir: "y" }), stack({ dir: "x" }))
+  .flow(
+    spread({ by: "abc", dir: "x" }),
+    partition({
+      by: field("value").bin(Bin.step(0.25)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "y",
+    }),
+    stack({ dir: "x" })
+  )
   .mark(circle({ r: 2, fill: "hi" }));
 """,
     uses_up='partition by a bin of the value, then stack, over the rows (each row is a draw; finite n)',
@@ -1054,7 +4369,10 @@ E[52] = dict(
 chart(abccDf)
   .flow(
     spread({ by: "abc", dir: "x" }),
-    partition({ by: field("value").bin(Bin.step(0.25)), dir: "y" }),
+    partition({
+      by: field("value").bin(Bin.step(0.25)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "y",
+    }),
     stack({ by: field("hi").sort(), dir: "x" })
   )
   .mark(circle({ r: 2, fill: "hi" }));
@@ -1068,8 +4386,17 @@ chart(abccDf)
 E[53] = dict(
     title='geom_dots(aes(shape = abc, color = value))',
     gofish="""
-chart(abccDf, { color: Color.gradient(["#132b43", "#56b1f7"]) })
-  .flow(spread({ by: "abc", dir: "x" }), partition({ by: field("value").bin(Bin.step(0.25)), dir: "y" }), stack({ dir: "x" }))
+chart(abccDf, {
+  color: Color.gradient(["#132b43", "#56b1f7"]),
+})
+  .flow(
+    spread({ by: "abc", dir: "x" }),
+    partition({
+      by: field("value").bin(Bin.step(0.25)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "y",
+    }),
+    stack({ dir: "x" })
+  )
   .mark(circle({ r: 2, fill: "value" })); // shape by abc: no shape channel
 """,
     uses_up='partition by a bin of the value, then stack, over the rows (each row is a draw; finite n)',
@@ -1084,7 +4411,10 @@ E[54] = dict(
 chart(increasingSamples)
   .flow(
     table({ by: { x: "col", y: "row" } }), // facet_wrap(~ n) needs a col/row column per n
-    partition({ by: field("x").bin(Bin.step(0.1)), dir: "x" }),
+    partition({
+      by: field("x").bin(Bin.step(0.1)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "x",
+    }),
     stack({ dir: "y" })
   )
   .mark(circle({ r: 2 }));
@@ -1101,7 +4431,10 @@ E[55] = dict(
 chart(increasingSamples)
   .flow(
     table({ by: { x: "col", y: "row" } }), // facet_wrap(~ n) needs a col/row column per n
-    partition({ by: field("x").bin(Bin.step(0.1)), dir: "x" }),
+    partition({
+      by: field("x").bin(Bin.step(0.1)), // chosen by hand; ggdist picks the width so the tallest stack fits, with a 1 mm minimum
+      dir: "x",
+    }),
     stack({ dir: "y" })
   )
   .mark(circle({ r: 2 }));
@@ -1118,7 +4451,10 @@ E[56] = dict(
 chart(increasingSamples)
   .flow(
     table({ by: { x: "col", y: "row" } }), // facet_wrap(~ n) needs a col/row column per n
-    partition({ by: field("x").bin(Bin.step(0.1)), dir: "x" }),
+    partition({
+      by: field("x").bin(Bin.step(0.1)), // chosen by hand; ggdist picks the width so the tallest stack fits, with a 1 mm minimum
+      dir: "x",
+    }),
     stack({ dir: "y" })
   )
   .mark(circle({ r: 2 }));
@@ -1146,7 +4482,10 @@ E[58] = dict(
     title="geom_dots(layout = 'bar', aes(fill = g)) on a discrete sample",
     gofish="""
 chart(abcdDf)
-  .flow(spread({ by: "x", dir: "x" }), stack({ by: "g", dir: "y" })) // + a grid of dots inside each bar
+  .flow(
+    spread({ by: "x", dir: "x" }),
+    stack({ by: "g", dir: "y" })
+  ) // + a grid of dots inside each bar
   .mark(circle({ r: 1, fill: "g" }));
 """,
     uses_up='the rows as finite draws: spread by category, then a grid of dots',
@@ -1159,7 +4498,13 @@ E[59] = dict(
     title="geom_dots(smooth = smooth_discrete(kernel = 'ep'), side = 'both')",
     gofish="""
 chart(abcdDf)
-  .flow(spread({ by: "x", dir: "x" }), scatter({ x: 0, overlap: Overlap.noise({ smoothing: 0.3 }) }))
+  .flow(
+    spread({ by: "x", dir: "x" }),
+    scatter({
+      x: 0,
+      overlap: Overlap.noise({ smoothing: 0.3 }),
+    })
+  )
   .mark(circle({ r: 0.6 }));
 """,
     uses_up='the rows as finite draws, smoothed along the category axis',
@@ -1174,13 +4519,58 @@ E[60] = dict(
 chart(sample(distDf2, { n: 100, at: "quantiles" }))
   .flow(
     spread({ by: "distName", dir: "y" }),
-    partition({ by: as("dist").bin(Bin.step(0.02)), dir: "x" }),
+    partition({
+      by: as("dist").bin(Bin.step(0.02)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "x",
+    }),
     stack({ dir: "y" })
   )
   .mark(circle({ r: 1.5 }))
-  .layer(chart(distDf2).flow(spread({ by: "distName", dir: "y" })).mark(pointinterval("dist")));
+  .layer(
+    chart(distDf2)
+      .flow(spread({ by: "distName", dir: "y" }))
+      .mark(
+        layer([
+          // interval: the 95% and 66% central intervals of
+          // the draws, and a circle at their median
+          // the beta and the gamma are skewed: center is
+          // the midpoint of an interval, not the median
+          chart()
+            .flow(
+              derive((rows) =>
+                centralIntervals(rows, "dist", [0.95])
+              )
+            )
+            .mark(
+              rect({
+                cx: "center",
+                w: "size",
+                h: 1.5,
+                fill: INK,
+              })
+            ),
+          chart()
+            .flow(
+              derive((rows) =>
+                centralIntervals(rows, "dist", [0.66])
+              )
+            )
+            .mark(
+              layer([
+                rect({
+                  cx: "center",
+                  w: "size",
+                  h: 4,
+                  fill: INK,
+                }),
+                circle({ cx: "median", r: 4, fill: INK }),
+              ])
+            ),
+        ])
+      )
+  );
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantile and median folds',
+    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
     fit='gofish-gap',
     verdict='ok',
     note='Quantile dots and intervals of three families, from a column of Dist cells. Missing: the dot-binning gap (one bin width cannot suit three different scales) and the integer subguide, a count axis inside each row.',
@@ -1189,35 +4579,137 @@ chart(sample(distDf2, { n: 100, at: "quantiles" }))
 E[61] = dict(
     title="stat_dotsinterval(quantiles = 1000, point_interval = mode_hdci, layout = 'weave'), slab_fill = level",
     gofish="""
-chart(sample(distDf2, { n: 1000, at: "quantiles" }), { color: Color.palette(["#9ecae1", "#3182bd"]) })
+chart(sample(distDf2, { n: 1000, at: "quantiles" }), {
+  color: Color.palette(["#9ecae1", "#3182bd"]),
+})
   .flow(
     spread({ by: "distName", dir: "y" }),
-    // the interval a dot falls in, from its level: the hdci needs a fold that does not exist
-    derive((rows) => rows.map((r) => ({ ...r, band: Math.abs(r.level - 0.5) < 0.33 ? 0.66 : 0.95 }))),
+    // the interval a dot falls in, from its level: the hdci
+    // needs a helper that does not exist
+    derive((rows) =>
+      rows.map((r) => ({
+        ...r,
+        band: Math.abs(r.level - 0.5) < 0.33 ? 0.66 : 0.95,
+      }))
+    ),
     scatter({ x: "dist", overlap: Overlap.separate() }) // weave: no GoFish layout
   )
   .mark(circle({ r: 0.5, fill: "band" }))
-  .layer(chart(distDf2).flow(spread({ by: "distName", dir: "y" })).mark(pointinterval("dist", { interval: "hdci" })));
+  .layer(
+    chart(distDf2)
+      .flow(spread({ by: "distName", dir: "y" }))
+      .mark(
+        layer([
+          // interval: the 95% and 66% highest-density
+          // intervals of the draws, and a circle at their
+          // mode
+          // gap: the mode and the highest-density interval,
+          // written as the helper they would most likely be
+          chart()
+            .flow(
+              derive((rows) =>
+                highestDensityIntervals(rows, "dist", [
+                  0.95,
+                ])
+              )
+            )
+            .mark(
+              rect({
+                cx: "center",
+                w: "size",
+                h: 1.5,
+                fill: INK,
+              })
+            ),
+          chart()
+            .flow(
+              derive((rows) =>
+                highestDensityIntervals(rows, "dist", [
+                  0.66,
+                ])
+              )
+            )
+            .mark(
+              layer([
+                rect({
+                  cx: "center",
+                  w: "size",
+                  h: 4,
+                  fill: INK,
+                }),
+                circle({ cx: "mode", r: 4, fill: INK }),
+              ])
+            ),
+        ])
+      )
+  );
 """,
-    uses_up='sample(data, { n: 1000, at: "quantiles" }), then partition by a bin and stack (finite n) by a dot layout; the interval is folds',
+    uses_up='sample(data, { n: 1000, at: "quantiles" }), then partition by a bin and stack (finite n) by a dot layout; the interval is central intervals of the draws',
     fit='gofish-gap',
     verdict='ok',
-    note='Coloring each dot by the interval it falls in reads level, which is exact for an equal-tailed interval. Missing: the weave layout, and the mode and HDCI folds (entry 30); with an HDCI the band is not a function of level alone.',
+    note='Coloring each dot by the interval it falls in reads level, which is exact for an equal-tailed interval. Missing: the weave layout, and the mode and HDCI summaries (entry 30); with an HDCI the band is not a function of level alone.',
 )
 
 E[62] = dict(
     title='stat_dotsinterval(slab_shape = 19, quantiles = 500), slab_color = after_stat(x)',
     gofish="""
-chart(sample(distDf2, { n: 500, at: "quantiles" }), { color: Color.gradient("Blues") })
+chart(sample(distDf2, { n: 500, at: "quantiles" }), {
+  color: Color.gradient("Blues"),
+})
   .flow(
     spread({ by: "distName", dir: "y" }),
-    partition({ by: as("dist").bin(Bin.step(0.01)), dir: "x" }),
+    partition({
+      by: as("dist").bin(Bin.step(0.01)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      dir: "x",
+    }),
     stack({ dir: "y" })
   )
   .mark(circle({ r: 0.7, fill: "dist" }))
-  .layer(chart(distDf2).flow(spread({ by: "distName", dir: "y" })).mark(pointinterval("dist")));
+  .layer(
+    chart(distDf2)
+      .flow(spread({ by: "distName", dir: "y" }))
+      .mark(
+        layer([
+          // interval: the 95% and 66% central intervals of
+          // the draws, and a circle at their median
+          // the beta and the gamma are skewed: center is
+          // the midpoint of an interval, not the median
+          chart()
+            .flow(
+              derive((rows) =>
+                centralIntervals(rows, "dist", [0.95])
+              )
+            )
+            .mark(
+              rect({
+                cx: "center",
+                w: "size",
+                h: 1.5,
+                fill: INK,
+              })
+            ),
+          chart()
+            .flow(
+              derive((rows) =>
+                centralIntervals(rows, "dist", [0.66])
+              )
+            )
+            .mark(
+              layer([
+                rect({
+                  cx: "center",
+                  w: "size",
+                  h: 4,
+                  fill: INK,
+                }),
+                circle({ cx: "median", r: 4, fill: INK }),
+              ])
+            ),
+        ])
+      )
+  );
 """,
-    uses_up='sample(data, { n: 500, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is folds',
+    uses_up='sample(data, { n: 500, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is central intervals of the draws',
     fit='gofish-gap',
     verdict='ok',
     note="Color by the dot's value: on a drawn row the Dist column reads the draw. Missing: the dot-binning gap.",
@@ -1230,11 +4722,17 @@ const x = dist.normal({ mean: "mean", sd: "sd" });
 chart(sample(abDf, { n: 100, at: "quantiles" }))
   .flow(
     spread({ by: "ab", dir: "y" }),
-    derive((rows) => rows.map((r) => ({ ...r, flag: r.x < 6 }))), // x < 6 on the drawn value
+    derive((rows) =>
+      rows.map((r) => ({ ...r, flag: r.x < 6 }))
+    ), // x < 6 on the drawn value
     scatter({ x, overlap: Overlap.separate() }) // weave: no GoFish layout
   )
   .mark(circle({ r: 2, fill: "flag" }))
-  .layer(chart([{ x: 6 }]).mark(rect({ x: "x", w: 1, opacity: 0.25 })));
+  .layer(
+    chart([{ x: 6 }]).mark(
+      rect({ x: "x", w: 1, opacity: 0.25 })
+    )
+  );
 """,
     uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n) by a dot layout',
     fit='gofish-gap',
@@ -1250,18 +4748,74 @@ chart(halfeyeDotDf, { color: Color.palette("Set2") })
   .flow(spread({ by: "abc", dir: "y" }))
   .mark(
     layer([
-      slab(value, { fill: "abc", thickness: (v) => value.density(v) * value.count() }),
+      // slab: the density curve of the draws times their
+      // count, as a ribbon
       chart()
-        .flow(partition({ by: value.bin(Bin.step(0.3)), dir: "x", alignment: "start" }), stack({ dir: "y" }))
+        .flow(
+          derive((rows) =>
+            densityCurve(rows, "value").map((r) => ({
+              ...r,
+              density: r.density * rows.length,
+            }))
+          ),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: "abc" })
+        ),
+      // dots below the line. gap: they should hang from the
+      // slab's zero line
+      chart()
+        .flow(
+          partition({
+            by: value.bin(Bin.step(0.3)), // chosen by hand; ggdist picks the width so the tallest stack fits
+            dir: "x",
+            alignment: "start",
+          }),
+          stack({ dir: "y" })
+        )
         .mark(circle({ r: 2, fill: "abc" })),
-      pointinterval(value),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      // on a sample, center is the midpoint, not the median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, "value", [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='slab: density and count folds over the rows; dots: partition by a bin and stack over the rows',
+    uses_up='slab: the density curve and the count of the draws over the rows; dots: partition by a bin and stack over the rows',
     fit='gofish-gap',
     verdict='ok',
-    note="Dots hanging below the line need entry 4's origin alignment. Scaling the slab by n so it matches the dot stacks needs the slab and the stacks on one count scale, which the hand-set bin width breaks.",
+    note="Dots hanging below the line need entry 4's origin alignment. Scaling the slab's curve by the row count so it matches the dot stacks needs the slab and the stacks on one count scale, which the hand-set bin width breaks.",
 )
 
 E[65] = dict(
@@ -1280,7 +4834,7 @@ chart(inner)
     table({ by: { x: "col", y: "row" } }),
     // the outer draw key, which the inner one has overwritten
     group({ by: "draw", blend: "mean" }),
-    partition({ by: boot.bin(Bin.step(0.1)), dir: "x" }),
+    partition({ by: boot.bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
     stack({ dir: "y" })
   )
   .mark(circle({ r: 2 }));
@@ -1297,13 +4851,13 @@ E[66] = dict(
 // Not writable, for the reasons of entry 65.
 // With two named draw keys it would be: per inner
 // level, the 95% interval of the dot's value across
-// the outer draws (quantile folds per level), drawn
+// the outer draws (quantiles per level), drawn
 // as a rect through each dot.
 """,
-    uses_up='(would be) quantile folds across the outer draws, per inner level',
+    uses_up='(would be) quantiles across the outer draws, per inner level',
     fit='does-not-fit',
     verdict='ok',
-    note="Each dot's interval is the uncertainty of the quantile estimate, an outer level over the sample. In the draw model it is a pair of quantile folds across outer draws, grouped by the inner level. That needs the Dist<Dist> constructor and two draw keys, which entry 65 shows version 2 does not have.",
+    note="Each dot's interval is the uncertainty of the quantile estimate, an outer level over the sample. In the draw model it is a pair of quantiles across the outer draws, grouped by the inner level. That needs the Dist<Dist> constructor and two draw keys, which entry 65 shows version 2 does not have.",
 )
 
 E[67] = dict(
@@ -1311,10 +4865,24 @@ E[67] = dict(
     gofish="""
 layer([
   chart(irisV.filter((d) => d.Species === "versicolor"))
-    .flow(partition({ by: field("Petal.Length").bin(Bin.step(0.1)), dir: "x", alignment: "end" }), stack({ dir: "y" }))
+    .flow(
+      partition({
+        by: field("Petal.Length").bin(Bin.step(0.1)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "x",
+        alignment: "end",
+      }),
+      stack({ dir: "y" })
+    )
     .mark(circle({ r: 2 })),
   chart(irisV.filter((d) => d.Species === "virginica"))
-    .flow(partition({ by: field("Petal.Length").bin(Bin.step(0.1)), dir: "x", alignment: "start" }), stack({ dir: "y" }))
+    .flow(
+      partition({
+        by: field("Petal.Length").bin(Bin.step(0.1)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "x",
+        alignment: "start",
+      }),
+      stack({ dir: "y" })
+    )
     .mark(circle({ r: 2 })),
 ]);
 """,
@@ -1327,25 +4895,65 @@ layer([
 E[68] = dict(
     title='Logit dotplot: geom_dots() with stat_lineribbon() of a transformed normal',
     gofish="""
-const p = dist.transformed({ dist: dist.normal({ mean: "fit", sd: "se.fit" }), f: plogis }); // no transformed Dist
+const p = dist.transformed({
+  dist: dist.normal({ mean: "fit", sd: "se.fit" }),
+  f: plogis,
+}); // no transformed Dist
 layer([
   chart(irisV)
-    .flow(spread({ by: "Species", dir: "y" }), partition({ by: field("Petal.Length").bin(Bin.step(0.1)), dir: "x" }), stack({ dir: "y" }))
+    .flow(
+      spread({ by: "Species", dir: "y" }),
+      partition({
+        by: field("Petal.Length").bin(Bin.step(0.1)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        dir: "x",
+      }),
+      stack({ dir: "y" })
+    )
     .mark(circle({ r: 2 })),
-  chart(predictionGrid).mark(lineribbon(p, { along: "Petal.Length", levels: [0.5, 0.8, 0.95], fill: "#08306b", opacity: 0.25 })),
+  // bands: at each Petal.Length, the 95%, 80% and 50%
+  // central intervals of the draws, then one ribbon per
+  // level
+  chart(predictionGrid)
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, p, [0.95, 0.8, 0.5], {
+          by: "Petal.Length",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "Petal.Length", x: "Petal.Length" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "#08306b", opacity: 0.25 })),
+  // line: the median of the draws at each Petal.Length
+  chart(predictionGrid)
+    .flow(
+      scatter({
+        by: "Petal.Length",
+        x: "Petal.Length",
+        y: p.median(),
+      })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
 ]);
 """,
-    uses_up='dots: partition by a bin and stack over the rows; ribbon: quantile and median folds per x',
+    uses_up='dots: partition by a bin and stack over the rows; ribbon: quantiles and the median of the draws per x',
     fit='gofish-gap',
     verdict='ok',
-    note='The ribbon is quantile folds along x (quantiles pass through the monotone plogis). Missing: a transformed Dist constructor, dots stacked down from y = 1 and up from y = 0 on a continuous y axis (side mirrored by species), and the dot-binning gap.',
+    note='The ribbon is central intervals of the draws along x (quantiles pass through the monotone plogis). Missing: a transformed Dist constructor, dots stacked down from y = 1 and up from y = 0 on a continuous y axis (side mirrored by species), and the dot-binning gap.',
 )
 
 E[69] = dict(
     title='Spaghetti plot: 100 draws of a linear model',
     gofish="""
-chart(df.filter((d) => d[".draw"] <= 100), { schema: { y: { draws: ".draw" } } })
-  .flow(group({ by: ".draw" }), scatter({ by: "x", x: "x", y: "y" }))
+chart(
+  df.filter((d) => d[".draw"] <= 100),
+  { schema: { y: { draws: ".draw" } } }
+)
+  .flow(
+    group({ by: ".draw" }),
+    scatter({ by: "x", x: "x", y: "y" })
+  )
   .mark(line({ opacity: 0.25 }));
 """,
     uses_up='group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema, 100 draws',
@@ -1357,47 +4965,130 @@ chart(df.filter((d) => d[".draw"] <= 100), { schema: { y: { draws: ".draw" } } }
 E[70] = dict(
     title='geom_lineribbon() of median_qi(y) per x (one 95% band)',
     gofish="""
-chart(df).mark(lineribbon("y", { along: "x", levels: [0.95], fill: "gray65" }));
+layer([
+  // bands: at each x, the 95% central interval of the
+  // draws, then one ribbon per level
+  chart(df)
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95], { by: "x" })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "gray65" })),
+  // line: the median of the draws at each x
+  chart(df)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note="The band is a pair of quantile folds at each x, and the median line is a line through median folds, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="The band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[71] = dict(
     title='geom_lineribbon() with .width = c(.5, .8, .95)',
     gofish="""
-chart(df, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) }).mark(
-  lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "level" })
-);
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(df, {
+    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+  })
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each x
+  chart(df)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note="Three nested bands colored by level. The band is a pair of quantile folds at each x, and the median line is a line through median folds, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="Three nested bands colored by level. Each band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[72] = dict(
     title='stat_lineribbon() over the draws',
     gofish="""
-chart(df, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) }).mark(
-  lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "level" })
-);
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(df, {
+    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+  })
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each x
+  chart(df)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note='The same picture as entry 71, computed from the draw rows by the folds.',
+    note='The same picture as entry 71, computed from the draw rows.',
 )
 
 E[73] = dict(
     title='stat_lineribbon(.width = ppoints(50)), fill = .width (merged with the fill_ramp + rampbar version)',
     gofish="""
-const levels = Array.from({ length: 50 }, (_, i) => (i + 0.5) / 50);
-chart(df, { color: Color.gradient("Blues") }).mark(lineribbon("y", { along: "x", levels, fill: "level" }));
+const levels = Array.from(
+  { length: 50 },
+  (_, i) => (i + 0.5) / 50
+);
+layer([
+  // bands: at each x, the central interval of the draws at
+  // each level, then one ribbon per level
+  chart(df, { color: Color.gradient("Blues") })
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", levels, { by: "x" })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each x
+  chart(df)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x, at 50 levels',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x, at 50 levels',
     fit='fits',
     verdict='ok',
     note='Fifty nested bands colored by level. The merged rampbar version maps the same level to a lightened single hue, which is a gradient color scale here; its rampbar legend is a GoFish legend detail.',
@@ -1406,24 +5097,135 @@ chart(df, { color: Color.gradient("Blues") }).mark(lineribbon("y", { along: "x",
 E[74] = dict(
     title='stat_lineribbon(.width = ppoints(50)), fill_ramp = mean density at the band edges',
     gofish="""
-const levels = Array.from({ length: 50 }, (_, i) => (i + 0.5) / 50);
-chart(df, { color: Color.gradient(["white", "#2171b5"]) }).mark(
-  lineribbon("y", { along: "x", levels, fill: (b) => (as("y").density(b.min) + as("y").density(b.max)) / 2 })
+const levels = Array.from(
+  { length: 50 },
+  (_, i) => (i + 0.5) / 50
 );
+layer([
+  // bands: one ribbon per level, colored by the density at
+  // its edges
+  chart(df, { color: Color.gradient(["white", "#2171b5"]) })
+    .flow(
+      derive((rows) => {
+        // at each x and level: the central interval, and
+        // the density at its two ends
+        const bands = Object.values(
+          Object.groupBy(rows, (r) => r.x)
+        ).flatMap((step) =>
+          centralIntervals(step, "y", levels).map(
+            (band) => {
+              const [lo, hi] = densityCurve(step, "y", {
+                n: 2,
+                range: [
+                  band.center - band.size / 2,
+                  band.center + band.size / 2,
+                ],
+              });
+              return {
+                ...band,
+                edge: lo.density + hi.density,
+              };
+            }
+          )
+        );
+        // ave(pdf_min + pdf_max, .width): the mean over
+        // every x, per level
+        const shade = (p) => {
+          const edges = bands
+            .filter((b) => b.level === p)
+            .map((b) => b.edge);
+          return (
+            edges.reduce((sum, e) => sum + e, 0) /
+            edges.length
+          );
+        };
+        return bands.map((b) => ({
+          ...b,
+          shade: shade(b.level),
+        }));
+      }),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "shade" })),
+  // line: the median of the draws at each x
+  chart(df)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x, with the density fold at each band edge',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x, with the density of the draws at each band edge',
     fit='fits',
     verdict='ok',
-    note="Coloring bands by density is the density fold read at each band's edges and averaged, which is a function of the distribution, not a picture of draws. Version 1 called this a blend limit and then could not use one.",
+    note="Coloring bands by density is the density of the draws at each band's two ends, averaged over x per level, which is a function of the distribution, not a picture of draws. The spec spells it out in one derive. Version 1 called this a blend limit and then could not use one.",
 )
 
 E[75] = dict(
     title='stat_lineribbon(.width = pnorm(seq(-2.5, 2.5, length.out = 50))), fill_ramp = density',
     gofish="""
-const levels = Array.from({ length: 50 }, (_, i) => normalCdf(-2.5 + (5 * i) / 49));
-chart(df, { color: Color.gradient(["white", "#2171b5"]) }).mark(lineribbon("y", { along: "x", levels, fill: "pdf" }));
+const levels = Array.from({ length: 50 }, (_, i) =>
+  normalCdf(-2.5 + (5 * i) / 49)
+);
+layer([
+  // bands: one ribbon per level, colored by the density at
+  // its edges
+  chart(df, { color: Color.gradient(["white", "#2171b5"]) })
+    .flow(
+      derive((rows) => {
+        // at each x and level: the central interval, and
+        // the density at its two ends
+        const bands = Object.values(
+          Object.groupBy(rows, (r) => r.x)
+        ).flatMap((step) =>
+          centralIntervals(step, "y", levels).map(
+            (band) => {
+              const [lo, hi] = densityCurve(step, "y", {
+                n: 2,
+                range: [
+                  band.center - band.size / 2,
+                  band.center + band.size / 2,
+                ],
+              });
+              return {
+                ...band,
+                edge: lo.density + hi.density,
+              };
+            }
+          )
+        );
+        // ave(pdf_min + pdf_max, .width): the mean over
+        // every x, per level
+        const shade = (p) => {
+          const edges = bands
+            .filter((b) => b.level === p)
+            .map((b) => b.edge);
+          return (
+            edges.reduce((sum, e) => sum + e, 0) /
+            edges.length
+          );
+        };
+        return bands.map((b) => ({
+          ...b,
+          shade: shade(b.level),
+        }));
+      }),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "shade" })),
+  // line: the median of the draws at each x
+  chart(df)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x, with the density fold at each band edge',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x, with the density of the draws at each band edge',
     fit='fits',
     verdict='ok',
     note='Entry 74 with levels spaced to look smooth.',
@@ -1432,11 +5234,34 @@ chart(df, { color: Color.gradient(["white", "#2171b5"]) }).mark(lineribbon("y", 
 E[76] = dict(
     title='stat_lineribbon() of two groups, color = g, fill = level (brewer)',
     gofish="""
-chart(df2groups, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) })
-  .flow(group({ by: "g" }))
-  .mark(lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "level", stroke: "g" }));
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(df2groups, {
+    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+  })
+    .flow(
+      group({ by: "g" }),
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each x
+  chart(df2groups)
+    .flow(
+      group({ by: "g" }),
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: "g", strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
     note="Two lineribbons; the median line's color is the group.",
@@ -1445,11 +5270,32 @@ chart(df2groups, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) })
 E[77] = dict(
     title='stat_lineribbon(aes(fill = g), alpha = 1/4)',
     gofish="""
-chart(df2groups)
-  .flow(group({ by: "g" }))
-  .mark(lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "g", opacity: 0.25 }));
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(df2groups)
+    .flow(
+      group({ by: "g" }),
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "g", opacity: 0.25 })),
+  // line: the median of the draws at each x
+  chart(df2groups)
+    .flow(
+      group({ by: "g" }),
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: "g", strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
     note="Nested translucent bands in the group's color.",
@@ -1458,11 +5304,33 @@ chart(df2groups)
 E[78] = dict(
     title='stat_lineribbon(aes(fill = g, fill_ramp = after_stat(level)))',
     gofish="""
-chart(df2groups)
-  .flow(group({ by: "g" }))
-  .mark(lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "g" })); // + lightened by level
+// gap: fill_ramp, the group's color lightened by level
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(df2groups)
+    .flow(
+      group({ by: "g" }),
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "g" })),
+  // line: the median of the draws at each x
+  chart(df2groups)
+    .flow(
+      group({ by: "g" }),
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: "g", strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='gofish-gap',
     verdict='ok',
     note="Missing: fill_ramp, the group's color lightened by level (entry 32).",
@@ -1471,25 +5339,68 @@ chart(df2groups)
 E[79] = dict(
     title='stat_lineribbon with order = interaction(level, group)',
     gofish="""
-chart(df2groups)
-  .flow(group({ by: "level" }), group({ by: "g" })) // every group's 95% band first, then 80%, then 50%
-  .mark(lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "g" })); // + lightened by level
+// every group's 95% band first, then 80%, then 50%: level
+// outer, group inner
+// gap: fill_ramp, the group's color lightened by level
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(df2groups)
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: ["g", "x"],
+        })
+      ),
+      group({ by: "level" }),
+      group({ by: "g" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "g" })),
+  // line: the median of the draws at each x
+  chart(df2groups)
+    .flow(
+      group({ by: "g" }),
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: "g", strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='gofish-gap',
     verdict='ok',
-    note="Interleaving the two groups' bands by level is drawing order, which is flow order (level outer, group inner). Here level is the band's level p, not sample's column, and the bands are made inside lineribbon, so the split by level has to come after it; today's flow cannot reorder marks made inside a helper. Missing: fill_ramp as in entry 78.",
+    note="Interleaving the two groups' bands by level is drawing order, which is flow order: group by level, then by g. Written out, the bands are ordinary flow steps, so this ordering is now expressible; version 2's lineribbon helper hid them. Here level is the band's level p, not sample's column. Missing: fill_ramp as in entry 78.",
 )
 
 E[80] = dict(
     title='stat_lineribbon(aes(ydist = dist_normal(y_mean, y_sd)))',
     gofish="""
 const y = dist.normal({ mean: "y_mean", sd: "y_sd" });
-chart(analyticalDf, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) }).mark(
-  lineribbon(y, { along: "x", levels: [0.5, 0.8, 0.95], fill: "level" })
-);
+layer([
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(analyticalDf, {
+    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+  })
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, y, [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each x
+  chart(analyticalDf)
+    .flow(scatter({ by: "x", x: "x", y: y.median() }))
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
     note='The analytic version of entry 72.',
@@ -1499,7 +5410,10 @@ E[81] = dict(
     title='Eleven curves (draws) as lines, alpha = 0.2',
     gofish="""
 chart(curves, { schema: { y: { draws: ".draw" } } })
-  .flow(group({ by: ".draw" }), scatter({ by: "x", x: "x", y: "y" }))
+  .flow(
+    group({ by: ".draw" }),
+    scatter({ by: "x", x: "x", y: "y" })
+  )
   .mark(line({ opacity: 0.2 }));
 """,
     uses_up='group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema, 11 draws',
@@ -1512,16 +5426,36 @@ E[82] = dict(
     title='50% pointwise intervals with point_interval() over the curves',
     gofish="""
 layer([
-  chart(curves, { color: Color.palette(["#3182bd"]) }).mark(lineribbon("y", { along: "x", levels: [0.5], fill: "level" })),
+  // bands: at each x, the 50% central interval of the
+  // draws, then one ribbon per level
+  chart(curves)
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.5], { by: "x" })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "#3182bd" })),
+  // line: the median of the draws at each x
+  chart(curves)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
   chart(curves, { schema: { y: { draws: ".draw" } } })
-    .flow(group({ by: ".draw" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(
+      group({ by: ".draw" }),
+      scatter({ by: "x", x: "x", y: "y" })
+    )
     .mark(line({ opacity: 0.15 })),
 ]);
 """,
-    uses_up='band: quantile(p) and median folds per cell, with one cell per x; curves: group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema',
+    uses_up='band: quantiles and the median of the draws per cell, with one cell per x; curves: group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema',
     fit='fits',
     verdict='ok',
-    note="The pointwise band is narrow in the middle where the curves cross, which is the point of the next entry. The band is a pair of quantile folds at each x, and the median line is a line through median folds, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="The pointwise band is narrow in the middle where the curves cross, which is the point of the next entry. The band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[83] = dict(
@@ -1531,25 +5465,41 @@ E[83] = dict(
 const kept = (width) =>
   chart(curves, { schema: { y: { draws: ".draw" } } })
     .flow(
-      // fold per draw: the mean over x of the pointwise depth min(level, 1 - level),
-      // then keep the deepest share of the draws. gap: a fold whose result a later
-      // filter reads; written as a derive over the rows
-      derive(keepDeepest({ by: ".draw", depth: (r) => Math.min(r.level, 1 - r.level), share: width })),
-      scatter({ by: "x", x: "x", yMin: field("y").min(), yMax: field("y").max() })
+      // a summary per draw: the mean over x of the
+      // pointwise depth min(level, 1 - level), then keep
+      // the deepest share of the draws. gap: a summary
+      // whose result a later filter reads; written as a
+      // derive over the rows
+      derive(
+        keepDeepest({
+          by: ".draw",
+          depth: (r) => Math.min(r.level, 1 - r.level),
+          share: width,
+        })
+      ),
+      scatter({
+        by: "x",
+        x: "x",
+        yMin: field("y").min(),
+        yMax: field("y").max(),
+      })
     )
     .mark(rect({ w: 0 }))
     .layer(ribbon({ fill: "#3182bd" }));
 layer([
   kept(0.5),
   chart(curves, { schema: { y: { draws: ".draw" } } })
-    .flow(group({ by: ".draw" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(
+      group({ by: ".draw" }),
+      scatter({ by: "x", x: "x", y: "y" })
+    )
     .mark(line({ opacity: 0.15 })),
 ]);
 """,
-    uses_up='a fold per draw (mean depth from level), a filter on its rank, then min and max folds per x',
+    uses_up='a summary per draw (mean depth from level), a filter on its rank, then the min and max of the draws per x',
     fit='gofish-gap',
     verdict='ok',
-    note="curve_interval's default, mhd, scores each whole curve by its mean halfspace depth over x. The pointwise depth is min(level, 1 - level), so the score is a fold per draw of the level column, and the band is the min and max folds of the kept draws at each x. That is the 'fold per draw' row of the table, and version 1 could not write it. The missing piece is general: a fold whose result a later step reads, written here as a derive (keepDeepest is plain JavaScript over the rows). Because it is a derive, the checker cannot see that it keeps whole draws.",
+    note="curve_interval's default, mhd, scores each whole curve by its mean halfspace depth over x. The pointwise depth is min(level, 1 - level), so the score is a summary per draw of the level column, and the band is the min and max of the kept draws at each x. That is the 'summary per draw' row of the table, and version 1 could not write it. The missing piece is general: a summary whose result a later step reads, written here as a derive (keepDeepest is plain JavaScript over the rows). Because it is a derive, the checker cannot see that it keeps whole draws.",
 )
 
 E[84] = dict(
@@ -1559,24 +5509,58 @@ E[84] = dict(
 const kept = (width) =>
   chart(largeCurves, { schema: { y: { draws: ".draw" } } })
     .flow(
-      // fold per draw: the mean over x of the pointwise depth min(level, 1 - level),
-      // then keep the deepest share of the draws. gap: a fold whose result a later
-      // filter reads; written as a derive over the rows
-      derive(keepDeepest({ by: ".draw", depth: (r) => Math.min(r.level, 1 - r.level), share: width })),
-      scatter({ by: "x", x: "x", yMin: field("y").min(), yMax: field("y").max() })
+      // a summary per draw: the mean over x of the
+      // pointwise depth min(level, 1 - level), then keep
+      // the deepest share of the draws. gap: a summary
+      // whose result a later filter reads; written as a
+      // derive over the rows
+      derive(
+        keepDeepest({
+          by: ".draw",
+          depth: (r) => Math.min(r.level, 1 - r.level),
+          share: width,
+        })
+      ),
+      scatter({
+        by: "x",
+        x: "x",
+        yMin: field("y").min(),
+        yMax: field("y").max(),
+      })
     )
     .mark(rect({ w: 0 }))
     .layer(ribbon({ fill: "#3182bd" }));
 const pointwise = layer([
-  chart([{ y: 1 }]).mark(rect({ y: "y", h: 1, strokeDasharray: "4 3" })),
-  chart(largeCurves, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) }).mark(
-    lineribbon("y", { along: "x", levels: [0.5, 0.8, 0.95], fill: "level" })
+  chart([{ y: 1 }]).mark(
+    rect({ y: "y", h: 1, strokeDasharray: "4 3" })
   ),
+  // bands: at each x, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(largeCurves, {
+    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+  })
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
+          by: "x",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "x", x: "x" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each x
+  chart(largeCurves)
+    .flow(
+      scatter({ by: "x", x: "x", y: field("y").median() })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
 ]);
 const curvewise = layer([kept(0.95), kept(0.8), kept(0.5)]);
 spread({ dir: "y", spacing: 16 }, [pointwise, curvewise]);
 """,
-    uses_up='pointwise: quantile(p) and median folds per cell, with one cell per x; curvewise: as entry 83',
+    uses_up='pointwise: quantiles and the median of the draws per cell, with one cell per x; curvewise: as entry 83',
     fit='gofish-gap',
     verdict='ok',
     note='The pointwise panel fits. The curvewise panel is entry 83 at three widths, with the same gap.',
@@ -1586,10 +5570,18 @@ E[85] = dict(
     title='mtcars bootstrap loess fits as spaghetti, with the data',
     gofish="""
 layer([
-  chart(mtcarsBoot.filter((d) => d[".draw"] < 400), { schema: { hp: { draws: ".draw" } } })
-    .flow(group({ by: ".draw" }), scatter({ by: "mpg", x: "mpg", y: "hp" }))
+  chart(
+    mtcarsBoot.filter((d) => d[".draw"] < 400),
+    { schema: { hp: { draws: ".draw" } } }
+  )
+    .flow(
+      group({ by: ".draw" }),
+      scatter({ by: "mpg", x: "mpg", y: "hp" })
+    )
     .mark(line({ opacity: 0.1 })),
-  chart(mtcars).flow(scatter({ x: "mpg", y: "hp" })).mark(circle({ r: 1.5 })),
+  chart(mtcars)
+    .flow(scatter({ x: "mpg", y: "hp" }))
+    .mark(circle({ r: 1.5 })),
 ]);
 """,
     uses_up='group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema, 400 bootstrap draws precomputed in R',
@@ -1602,16 +5594,41 @@ E[86] = dict(
     title='stat_lineribbon(.width = c(.5, .7, .9)) of the bootstrap fits, with the data',
     gofish="""
 layer([
-  chart(mtcarsBoot, { color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]) }).mark(
-    lineribbon("hp", { along: "mpg", levels: [0.5, 0.7, 0.9], fill: "level" })
-  ),
-  chart(mtcars).flow(scatter({ x: "mpg", y: "hp" })).mark(circle({ r: 1.5 })),
+  // bands: at each mpg, the 90%, 70% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(mtcarsBoot, {
+    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+  })
+    .flow(
+      derive((rows) =>
+        centralIntervals(rows, "hp", [0.9, 0.7, 0.5], {
+          by: "mpg",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "mpg", x: "mpg" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "level" })),
+  // line: the median of the draws at each mpg
+  chart(mtcarsBoot)
+    .flow(
+      scatter({
+        by: "mpg",
+        x: "mpg",
+        y: field("hp").median(),
+      })
+    )
+    .mark(line({ stroke: INK, strokeWidth: 2 })),
+  chart(mtcars)
+    .flow(scatter({ x: "mpg", y: "hp" }))
+    .mark(circle({ r: 1.5 })),
 ]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note="Pointwise bands over shared draws. The band is a pair of quantile folds at each x, and the median line is a line through median folds, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="Pointwise bands over shared draws. Each band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[87] = dict(
@@ -1621,11 +5638,24 @@ E[87] = dict(
 const kept = (width) =>
   chart(mtcarsBoot, { schema: { hp: { draws: ".draw" } } })
     .flow(
-      // fold per draw: the mean over x of the pointwise depth min(level, 1 - level),
-      // then keep the deepest share of the draws. gap: a fold whose result a later
-      // filter reads; written as a derive over the rows
-      derive(keepDeepest({ by: ".draw", depth: (r) => Math.min(r.level, 1 - r.level), share: width })),
-      scatter({ by: "mpg", x: "mpg", yMin: field("hp").min(), yMax: field("hp").max() })
+      // a summary per draw: the mean over x of the
+      // pointwise depth min(level, 1 - level), then keep
+      // the deepest share of the draws. gap: a summary
+      // whose result a later filter reads; written as a
+      // derive over the rows
+      derive(
+        keepDeepest({
+          by: ".draw",
+          depth: (r) => Math.min(r.level, 1 - r.level),
+          share: width,
+        })
+      ),
+      scatter({
+        by: "mpg",
+        x: "mpg",
+        yMin: field("hp").min(),
+        yMax: field("hp").max(),
+      })
     )
     .mark(rect({ w: 0 }))
     .layer(ribbon({ fill: "#3182bd" }));
@@ -1633,7 +5663,9 @@ layer([
   kept(0.9),
   kept(0.7),
   kept(0.5),
-  chart(mtcars).flow(scatter({ x: "mpg", y: "hp" })).mark(circle({ r: 1.5 })),
+  chart(mtcars)
+    .flow(scatter({ x: "mpg", y: "hp" }))
+    .mark(circle({ r: 1.5 })),
 ]);
 """,
     uses_up='as entry 83',
@@ -1648,20 +5680,23 @@ E[88] = dict(
 // Not writable: band depth compares pairs of whole
 // draws. keepDeepest's depth would have to be, for
 // each draw, the share of pairs of other draws whose
-// band contains it at every x. That is not a fold of
+// band contains it at every x. That is not a summary of
 // one draw's rows, and not a function of level.
 """,
-    uses_up='(would be) a statistic over pairs of whole draws, a filter on its rank, then min and max folds per x',
+    uses_up='(would be) a statistic over pairs of whole draws, a filter on its rank, then the min and max of the draws per x',
     fit='does-not-fit',
     verdict='ok',
-    note="bd-mbd ranks curves by band depth: the share of pairs of other curves whose band contains a curve at every x, with modified band depth to break ties. The table's 'fold per draw' covers mhd and modified band depth, which are means over x of functions of level. Band depth itself needs every pair of draws at once, so it is not a fold per draw.",
+    note="bd-mbd ranks curves by band depth: the share of pairs of other curves whose band contains a curve at every x, with modified band depth to break ties. The table's 'summary per draw' covers mhd and modified band depth, which are means over x of functions of level. Band depth itself needs every pair of draws at once, so it is not a summary per draw.",
 )
 
 E[89] = dict(
     title='The ABC data: response by condition',
     gofish="""
 chart(ABC)
-  .flow(spread({ by: "condition", dir: "y" }), scatter({ x: "response" }))
+  .flow(
+    spread({ by: "condition", dir: "y" }),
+    scatter({ x: "response" })
+  )
   .mark(circle({ r: 2, opacity: 0.5 }));
 """,
     uses_up='no draws: plain data points',
@@ -1673,12 +5708,61 @@ chart(ABC)
 E[90] = dict(
     title='stat_halfeye() of Student t sampling distributions of lm coefficients',
     gofish="""
-const x = dist.studentT({ df: "df", mu: "estimate", sigma: "std.error" });
+const x = dist.studentT({
+  df: "df",
+  mu: "estimate",
+  sigma: "std.error",
+});
 chart(tidyCoefs)
   .flow(spread({ by: "term", dir: "y" }))
-  .mark(layer([slab(x), pointinterval(x)]));
+  .mark(
+    layer([
+      // slab: the density curve of the draws
+      chart()
+        .flow(
+          derive((rows) => densityCurve(rows, x)),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({ dir: "x", h: "density", fill: SLAB })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
+    ])
+  );
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note='A half-eye of a confidence distribution, with a t family in the dist namespace.',
@@ -1687,15 +5771,73 @@ chart(tidyCoefs)
 E[91] = dict(
     title='stat_halfeye(scale = .5) of fitted means, with the data as ticks below',
     gofish="""
-const x = dist.studentT({ df: "df", mu: ".fitted", sigma: ".se.fit" });
+const x = dist.studentT({
+  df: "df",
+  mu: ".fitted",
+  sigma: ".se.fit",
+});
 layer([
-  chart(fitted).flow(spread({ by: "condition", dir: "y" })).mark(layer({ h: 30 }, [slab(x), pointinterval(x)])),
+  chart(fitted)
+    .flow(spread({ by: "condition", dir: "y" }))
+    .mark(
+      layer({ h: 30 }, [
+        // slab: the density curve of the draws
+        chart()
+          .flow(
+            derive((rows) => densityCurve(rows, x)),
+            scatter({ x: "v" })
+          )
+          .mark(
+            ribbon({ dir: "x", h: "density", fill: SLAB })
+          ),
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
+  // the data as ticks below each half-eye. gap: placed by a
+  // hand offset, not from the slab's zero line
   chart(ABC)
-    .flow(spread({ by: "condition", dir: "y" }).translate({ y: -10 }), scatter({ x: "response" }))
+    .flow(
+      spread({ by: "condition", dir: "y" }).translate({
+        y: -10,
+      }),
+      scatter({ x: "response" })
+    )
     .mark(rect({ w: 1, h: 8 })),
 ]);
 """,
-    uses_up='folds per cell: the density fold for the slab, quantile(p) and median folds for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="The data ticks sit just below each half-eye's baseline; as with the raincloud in elaborations.md, placing a second chart's rows relative to the slab's zero line is not expressible, so this relies on a hand offset that matches only if both spreads give identical rows.",
@@ -1704,31 +5846,142 @@ layer([
 E[92] = dict(
     title="stat_gradientinterval(fill_type = 'gradient') of fitted means",
     gofish="""
-const x = dist.studentT({ df: "df", mu: ".fitted", sigma: ".se.fit" });
+const x = dist.studentT({
+  df: "df",
+  mu: ".fitted",
+  sigma: ".se.fit",
+});
 chart(fitted)
   .flow(spread({ by: "condition", dir: "y" }))
   .mark(
-    layer([
-      slab(x, { thickness: 1, h: 30, opacity: x.density, normalize: "group", fill: SLAB }), // gap: opacity along one region
-      pointinterval(x),
+    layer({ h: 30 }, [
+      // slab: the density curve divided by its peak, read
+      // as opacity over the full height
+      // gap: an opacity that varies along one region
+      chart()
+        .flow(
+          derive((rows) => {
+            const curve = densityCurve(rows, x);
+            const peak = Math.max(
+              ...curve.map((r) => r.density)
+            );
+            return curve.map((r) => ({
+              ...r,
+              height: 1,
+              alpha: r.density / peak,
+            }));
+          }),
+          scatter({ x: "v" })
+        )
+        .mark(
+          ribbon({
+            dir: "x",
+            h: "height",
+            fill: SLAB,
+            opacity: "alpha",
+          })
+        ),
+      // interval: the 95% and 66% central intervals of the
+      // draws, and a circle at their median
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.95])
+          )
+        )
+        .mark(
+          rect({
+            cx: "center",
+            w: "size",
+            h: 1.5,
+            fill: INK,
+          })
+        ),
+      chart()
+        .flow(
+          derive((rows) =>
+            centralIntervals(rows, x, [0.66])
+          )
+        )
+        .mark(
+          layer([
+            rect({
+              cx: "center",
+              w: "size",
+              h: 4,
+              fill: INK,
+            }),
+            circle({ cx: "median", r: 4, fill: INK }),
+          ])
+        ),
     ])
   );
 """,
-    uses_up='a density fold per cell, scaled so its peak is 1, read as opacity along the slab (the second kind of ggdist mark)',
+    uses_up='the density curve of the draws per cell, divided by its peak and read as opacity along the slab (the second kind of ggdist mark)',
     fit='gofish-gap',
     verdict='ok',
-    note='The gradient interval of entry 18 on t distributions: a density fold scaled to its peak, read as opacity. GoFish has no opacity that varies along one region, so the spec marks it as a gap.',
+    note='The gradient interval of entry 18 on t distributions: the density curve of the draws divided by its peak, read as opacity. GoFish has no opacity that varies along one region, so the spec marks it as a gap.',
 )
 
 E[93] = dict(
     title='stat_ccdfinterval() of fitted means',
     gofish="""
-const x = dist.studentT({ df: "df", mu: ".fitted", sigma: ".se.fit" });
+const x = dist.studentT({
+  df: "df",
+  mu: ".fitted",
+  sigma: ".se.fit",
+});
 layer([
   chart(sample(fitted, { n: Infinity }))
-    .flow(spread({ by: "condition", dir: "y" }), spread({ by: "level", dir: "y", spacing: 0 }))
-    .mark(rect({ dims: { x: { min: -1.5, max: x } }, fill: SLAB })),
-  chart(fitted).flow(spread({ by: "condition", dir: "y" })).mark(pointinterval(x)),
+    .flow(
+      spread({ by: "condition", dir: "y" }),
+      spread({ by: "level", dir: "y", spacing: 0 })
+    )
+    .mark(
+      rect({
+        dims: { x: { min: -1.5, max: x } },
+        fill: SLAB,
+      })
+    ),
+  chart(fitted)
+    .flow(spread({ by: "condition", dir: "y" }))
+    .mark(
+      layer([
+        // interval: the 95% and 66% central intervals of
+        // the draws, and a circle at their median
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.95])
+            )
+          )
+          .mark(
+            rect({
+              cx: "center",
+              w: "size",
+              h: 1.5,
+              fill: INK,
+            })
+          ),
+        chart()
+          .flow(
+            derive((rows) =>
+              centralIntervals(rows, x, [0.66])
+            )
+          )
+          .mark(
+            layer([
+              rect({
+                cx: "center",
+                w: "size",
+                h: 4,
+                fill: INK,
+              }),
+              circle({ cx: "median", r: 4, fill: INK }),
+            ])
+          ),
+      ])
+    ),
 ]);
 """,
     uses_up='spread({ by: "level" }), n = Infinity',
@@ -1740,11 +5993,15 @@ layer([
 E[94] = dict(
     title='stat_dots(quantiles = 100) of fitted means',
     gofish="""
-const x = dist.studentT({ df: "df", mu: ".fitted", sigma: ".se.fit" });
+const x = dist.studentT({
+  df: "df",
+  mu: ".fitted",
+  sigma: ".se.fit",
+});
 chart(sample(fitted, { n: 100, at: "quantiles" }))
   .flow(
     spread({ by: "condition", dir: "y" }),
-    partition({ by: x.bin(Bin.step(0.05)), dir: "x" }),
+    partition({ by: x.bin(Bin.step(0.05)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
     stack({ dir: "y" })
   )
   .mark(circle({ r: 1.5 }));
@@ -1758,15 +6015,40 @@ chart(sample(fitted, { n: 100, at: "quantiles" }))
 E[95] = dict(
     title='stat_lineribbon of a t confidence band per cyl, alpha = 1/4, with the data',
     gofish="""
-const y = dist.studentT({ df: "df", mu: ".fitted", sigma: ".se.fit" });
+const y = dist.studentT({
+  df: "df",
+  mu: ".fitted",
+  sigma: ".se.fit",
+});
 layer([
+  // bands: at each hp, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
   chart(fittedMpg, { color: Color.palette("Set2") })
-    .flow(group({ by: "cyl" }))
-    .mark(lineribbon(y, { along: "hp", levels: [0.5, 0.8, 0.95], fill: "cyl", stroke: "cyl", opacity: 0.25 })),
-  chart(mtcars).flow(scatter({ x: "hp", y: "mpg" })).mark(circle({ r: 1.5, fill: "cyl" })),
+    .flow(
+      group({ by: "cyl" }),
+      derive((rows) =>
+        centralIntervals(rows, y, [0.95, 0.8, 0.5], {
+          by: "hp",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "hp", x: "hp" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "cyl", opacity: 0.25 })),
+  // line: the median of the draws at each hp
+  chart(fittedMpg)
+    .flow(
+      group({ by: "cyl" }),
+      scatter({ by: "hp", x: "hp", y: y.median() })
+    )
+    .mark(line({ stroke: "cyl", strokeWidth: 2 })),
+  chart(mtcars)
+    .flow(scatter({ x: "hp", y: "mpg" }))
+    .mark(circle({ r: 1.5, fill: "cyl" })),
 ]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
     note="Three nested translucent bands per cylinder count. The fill and stroke use two palettes in ggdist (Set2 and Dark2) for one field, which GoFish's single color scale per field cannot do; a minor color difference.",
@@ -1775,13 +6057,41 @@ layer([
 E[96] = dict(
     title='stat_lineribbon with fill = cyl, fill_ramp = level, with the data',
     gofish="""
-const y = dist.studentT({ df: "df", mu: ".fitted", sigma: ".se.fit" });
+const y = dist.studentT({
+  df: "df",
+  mu: ".fitted",
+  sigma: ".se.fit",
+});
+// gap: fill_ramp, the cylinder count's color lightened by level
 layer([
-  chart(fittedMpg).flow(group({ by: "cyl" })).mark(lineribbon(y, { along: "hp", levels: [0.5, 0.8, 0.95], fill: "cyl" })), // + lightened by level
-  chart(mtcars).flow(scatter({ x: "hp", y: "mpg" })).mark(circle({ r: 1.5, fill: "cyl" })),
+  // bands: at each hp, the 95%, 80% and 50% central
+  // intervals of the draws, then one ribbon per level
+  chart(fittedMpg)
+    .flow(
+      group({ by: "cyl" }),
+      derive((rows) =>
+        centralIntervals(rows, y, [0.95, 0.8, 0.5], {
+          by: "hp",
+        })
+      ),
+      group({ by: "level" }),
+      scatter({ by: "hp", x: "hp" })
+    )
+    .mark(rect({ w: 0, cy: "center", h: "size" }))
+    .layer(ribbon({ fill: "cyl" })),
+  // line: the median of the draws at each hp
+  chart(fittedMpg)
+    .flow(
+      group({ by: "cyl" }),
+      scatter({ by: "hp", x: "hp", y: y.median() })
+    )
+    .mark(line({ stroke: "cyl", strokeWidth: 2 })),
+  chart(mtcars)
+    .flow(scatter({ x: "hp", y: "mpg" }))
+    .mark(circle({ r: 1.5, fill: "cyl" })),
 ]);
 """,
-    uses_up='quantile(p) and median folds per cell, with one cell per x',
+    uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='gofish-gap',
     verdict='ok',
     note='Missing: fill_ramp (entry 32).',

@@ -15,7 +15,7 @@ Sources, chosen by a fixed rule:
 - every `@examples` plot of each exported `geom_*_sample`, `stat_*_sample` and `position_*` function;
 - every paper figure that shows a ggdibbler chart.
 
-Specs follow version 2 of the grammar (`../theory-fragment.html`): `sample(data, { n, seed, at })` as a data step that adds the `draw` and `level` columns, `blend: "mean"`, folds over draws, and the draw key's type. Everything else is today's GoFish. Where a piece is missing, the spec writes the call it would most likely be and marks it with a `// gap:` comment. Those calls are not existing syntax. Each entry keeps its version 1 class and verdict in `v1_fit` and `v1_verdict`.
+Specs follow version 2 of the grammar (`../theory-fragment.html`): `sample(data, { n, seed, at })` as a data step that adds the `draw` and `level` columns, `blend: "mean"`, summaries of the draws, and the draw key's type. Everything else is today's GoFish. Where a piece is missing, the spec writes the call it would most likely be and marks it with a `// gap:` comment. Those calls are not existing syntax. Each entry keeps its version 1 class and verdict in `v1_fit` and `v1_verdict`.
 
 Two conventions changed from version 1:
 
@@ -88,7 +88,7 @@ Each gap is a missing piece of GoFish that has nothing to do with draws. The dra
 | --- | --- |
 | contour stat | 01, 22, 23 |
 | reference line mark (rule, abline) | 08, 09, 10, 11, 105, 106, 108 |
-| boxplot (quartile fold, whiskers, outliers) | 19, 20, 21 |
+| boxplot (quartiles of the draws, whiskers, outliers) | 19, 20, 21 |
 | 2D kernel density | 27, 28 |
 | 1D kernel density (density, violin) | 29, 30, 76, 77, 103, 104 |
 | area-proportional size (#972 not merged) | 25, 26 |

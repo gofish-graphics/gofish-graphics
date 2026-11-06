@@ -248,6 +248,95 @@ p <- ggplot(cells) +
   theme_void()
 save(p, "map-sorted")
 
+# ---- heat-setup ----
+# A 6 x 4 heatmap. Each tile is a normal. The means rise to the east from 30
+# to 90, and the spreads rise to the south: sd 2, 6, 12 and 25 by row.
+heat <- expand.grid(x = 1:6, row = 1:4) |>
+  mutate(mean = 30 + 12 * (x - 1), sd = c(2, 6, 12, 25)[row], y = -row)
+heat_fill <- scale_fill_distiller(
+  palette = "Blues", direction = 1, limits = c(30, 90),
+  oob = scales::squish, guide = "none"
+)
+heat_grid <- geom_tile(
+  data = heat, aes(x, y), fill = NA, colour = "white", linewidth = 1.2
+)
+heat_theme <- list(coord_fixed(expand = FALSE), theme_void())
+
+# ---- heat-subdivide ----
+set.seed(1980)
+p <- heat |>
+  mutate(value = dist_normal(mean, sd)) |>
+  ggplot(aes(x, y, fill = value)) +
+  geom_tile_sample(times = 16) +
+  heat_grid +
+  heat_fill +
+  heat_theme
+save(p, "heat-subdivide")
+
+# ---- heat-sorted ----
+# The same 16 draws per tile, sorted and laid left to right.
+set.seed(1980)
+strips <- heat |>
+  slice(rep(1:n(), each = 16)) |>
+  mutate(value = rnorm(n(), mean, sd)) |>
+  group_by(x, y) |>
+  arrange(value, .by_group = TRUE) |>
+  mutate(i = row_number() - 1) |>
+  ungroup()
+p <- ggplot(strips) +
+  geom_rect(aes(
+    xmin = x - 0.5 + i / 16, xmax = x - 0.5 + (i + 1) / 16,
+    ymin = y - 0.5, ymax = y + 0.5, fill = value
+  )) +
+  heat_grid +
+  heat_fill +
+  heat_theme
+save(p, "heat-sorted")
+
+# ---- heat-blend ----
+# Left: the limit of the blend, the average (in sRGB) of the colors of 4000
+# draws per tile. Right: the color of each tile's mean value.
+set.seed(1980)
+avg_color <- function(mean, sd) {
+  rgb_draws <- col2rgb(heat_fill$map(rnorm(4000, mean, sd)))
+  rgb(t(rowMeans(rgb_draws)), maxColorValue = 255)
+}
+panels <- bind_rows(
+  heat |> mutate(
+    panel = "average of the draws' colors",
+    color = mapply(avg_color, mean, sd)
+  ),
+  heat |> mutate(
+    panel = "color of the mean value",
+    color = heat_fill$map(mean)
+  )
+) |> mutate(panel = factor(panel, levels = unique(panel)))
+p <- ggplot(panels, aes(x, y)) +
+  geom_tile(aes(fill = I(color)), colour = "white", linewidth = 1.2) +
+  facet_wrap(~panel, ncol = 1) +
+  heat_theme +
+  theme(strip.text = element_text(size = 10, margin = margin(2, 0, 4, 0)))
+save(p, "heat-blend", height = 4.4)
+
+# ---- heat-summary ----
+# Fill: the median. The black bar along each tile's bottom is the width of
+# the 95% interval, on one scale for all tiles: the widest fills the tile.
+widths <- heat |>
+  mutate(
+    width = qnorm(0.975, mean, sd) - qnorm(0.025, mean, sd),
+    bar = 0.9 * width / max(width)
+  )
+p <- ggplot(widths) +
+  geom_tile(aes(x, y, fill = qnorm(0.5, mean, sd))) +
+  geom_rect(aes(
+    xmin = x - 0.45, xmax = x - 0.45 + bar,
+    ymin = y - 0.42, ymax = y - 0.3
+  ), fill = "black") +
+  heat_grid +
+  heat_fill +
+  heat_theme
+save(p, "heat-summary")
+
 # ---- blur-setup ----
 # 40 estimates, each with its own standard error, as in "Blur as a limit".
 set.seed(1980)

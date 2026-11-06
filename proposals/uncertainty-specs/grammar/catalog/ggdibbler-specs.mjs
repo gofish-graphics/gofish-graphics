@@ -271,11 +271,11 @@ chart(sample(trials, { n: 10 }))
   "boxplot": D(
     `chart(sample(uncertainMpg, { n: 10 }))
   .flow(spread({ by: "class", dir: "x" }), group({ by: "draw" }))
-  .mark(boxplot({ y: "hwy", opacity: 0.1 })); // gap: boxplot (quartile fold, whiskers, outliers)`,
+  .mark(boxplot({ y: "hwy", opacity: 0.1 })); // gap: boxplot (quartiles of the draws, whiskers, outliers)`,
     "group({ by: \"draw\" }), the plain overlay, n = 10",
     "gofish-gap",
     "ok",
-    "One boxplot per class per draw, painted over each other. GoFish has median but no quartile fold or boxplot glyph."
+    "One boxplot per class per draw, painted over each other. GoFish has the median but no quartiles of the draws and no boxplot glyph."
   ),
   "boxplot-varwidth": D(
     `chart(sample(uncertainMpg, { n: 10 }))
@@ -1000,10 +1000,10 @@ layer([
     group({ by: "draw" }),
   )
   .mark(text({ text: "cyl", fontSize: 16, opacity: 0.3 }));`,
-    "two steps: a mean fold per car places each label (rule 3.1 allows it at any n), then group({ by: \"draw\" }) paints the labels over each other, n = 10",
+    "two steps: the mean of each car's draws places its label (rule 3.1 allows it at any n), then group({ by: \"draw\" }) paints the labels over each other, n = 10",
     "fits",
     "ok",
-    "The label is a random category at the car's mean position. The position is a fold over each car's own draws, which version 2 lists as a way to use up draws; at n = Infinity it is ggdibbler's exact mean."
+    "The label is a random category at the car's mean position. The position is a summary of each car's own draws (their mean), which version 2 lists as a way to use up draws; at n = Infinity it is ggdibbler's exact mean."
   ),
   "raster-grid": D(
     `chart(sample(grid, { n: 10 }))
@@ -1205,7 +1205,7 @@ layer([
     "group({ by: \"draw\" }), the plain overlay, n = 10",
     "gofish-gap",
     "ok",
-    "One ECDF of all 200 cells per draw, painted over each other. GoFish can sort but has no cumulative count fold."
+    "One ECDF of all 200 cells per draw, painted over each other. GoFish can sort but has no cumulative count of the draws."
   ),
   "ecdf-groups": D(
     `chart(sample(sample200, { n: 10 }))
@@ -1322,7 +1322,7 @@ layer([
     "group({ by: \"draw\" }), the plain overlay, n = 10",
     "fits",
     "ok",
-    "Group centroids per draw: a mean fold inside each draw, so no derive is needed."
+    "Group centroids per draw: the mean of the points inside each draw, so no derive is needed."
   ),
   "summary-2d": D(
     `chart(sample(smallerUncertainDiamonds, { n: 10 }))
@@ -1392,7 +1392,7 @@ layer([
     "group({ by: \"draw\" }), the plain overlay, n = 10; both layers read one sample (seed = 4)",
     "fits",
     "warning: 3.2, each mean line joins rows of different cells along a per-cell draw key, so it shows one possible world only if the cells are independent",
-    "The mean lines are the means of the drawn points shown (seed = 4). The lines group the drawn rows by vs, which the points do not, so version 1 could not write it. In version 2 both charts read one sample. Each vertex is a mean over the cars of one draw, not a fold per cell, so rule 3.2 warns."
+    "The mean lines are the means of the drawn points shown (seed = 4). The lines group the drawn rows by vs, which the points do not, so version 1 could not write it. In version 2 both charts read one sample. Each vertex is a mean over the cars of one draw, not a summary per cell, so rule 3.2 warns."
   ),
   "unique-overplot": D(
     `chart(sample(uncertainMtcars, { n: 10 }))

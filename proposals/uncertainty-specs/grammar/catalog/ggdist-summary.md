@@ -51,19 +51,23 @@ installed from CRAN for this run.
 
 The specs follow version 2 of the grammar (`../theory-fragment.html`):
 `sample(data, { n, seed, at })` as a data step that adds `draw` and `level`,
-`blend: "mean"`, folds over draws, and the draw key's type. Each entry keeps
+`blend: "mean"`, summaries of the draws, and the draw key's type. Each entry keeps
 its version 1 class in `v1_fit`. Each entry also has a `verdict` under rules
 3.1 to 3.4. `v1-fits.json` holds the version 1 classes of both catalogs.
 
-Fold spelling. The fragment lists the folds but does not spell them. The
-specs write them as methods on a Dist expression or a field:
-`x.mean()`, `x.median()`, `x.quantile(p)`, `x.min()`, `x.max()`, and
-`x.probability()` inside a cell made by binning `x`. The density and the CDF
-return a curve, so they are written as functions of a position `v`:
-`x.density(v)` and `x.cdf(v)`. On a Dist cell with no `sample` a fold is
-exact, which is the same as `sample(n: Infinity)` followed by the fold. On
-rows of a sample, the density fold is a kernel estimate. `as("dist")` reads a
-column of Dist cells as a Dist expression.
+Summary spelling. A summary takes the list of draws in a group and returns
+one value, such as the mean or a quantile, or one curve, such as the density.
+The fragment lists the summaries but does not spell them. In a channel the
+specs write them as methods on a Dist expression or a field: `x.mean()`,
+`x.median()`, `x.quantile(p)`, `x.min()`, `x.max()`, and `x.probability()`
+inside a cell made by binning `x`. Slabs, intervals and line ribbons are not
+marks (Josh, 11-04). Each one is written out as the plain GoFish it
+elaborates into (`../../elaborations.md`): a `derive` that calls one of two
+data helpers, then `scatter`, `ribbon`, `rect`, `circle` and `line`. The
+helpers are in the prelude below. On a Dist cell with no `sample` a summary
+is exact, which is the same as `sample(n: Infinity)` followed by the
+summary. On rows of a sample, the density curve is a kernel estimate.
+`as("dist")` reads a column of Dist cells as a Dist expression.
 
 ## Counts
 
@@ -79,7 +83,7 @@ column of Dist cells as a Dist expression.
 
 Every verdict is ok. The only joins across cells are the shared-draw
 spaghetti (69, 81, 82, 85), which rule 3.2 allows because the schema declares
-the draws shared, and median lines, which are folds. No spec stacks draws of
+the draws shared, and median lines, which are summaries. No spec stacks draws of
 one cell as parts of a sum, and no spec places single draws at n = Infinity.
 
 Movement from version 1 to version 2:
@@ -94,12 +98,13 @@ Movement from version 1 to version 2:
 No entry moved to a worse class. Many entries kept their class but changed
 how they use up the draws. In version 1, about 60 slabs, intervals and bands
 came from a derive that computed the distribution by hand. In version 2 they
-come from folds, which is a row of the table.
+come from summaries of the draws, which is a row of the table.
 
 How the draw key is used up:
 
-- **Folds per cell.** About 50 entries: every slab, interval, point and
-  lineribbon band. 15 uses the probability fold inside bins.
+- **Summaries per cell.** About 50 entries: every slab (the density curve),
+  interval, point and lineribbon band (quantiles and the median). 15 uses
+  the probability of each bin.
 - **Partition by a bin, then stack.** About 30 dotplot entries. Over a
   sample the rows are the draws. Over a Dist, `sample(d, { n, at:
   "quantiles" })` makes the dots (37, 40, 41, 60 to 63, 94, and part of 01).
@@ -109,14 +114,14 @@ How the draw key is used up:
 - **`blend: "mean"`.** 22, the CCDF fade.
 - **The plain overlay.** 69, 81, 82 and 85 draw shared whole-curve draws with
   `group({ by: ".draw" })`.
-- **A fold per draw.** 83, 84 and 87 score each whole curve and keep the
+- **A summary per draw.** 83, 84 and 87 score each whole curve and keep the
   deepest.
 - **A dot layout over the rows.** 45, 46, 48 to 50, 58 and 59.
 
 ## Prelude used by the specs
 
 The specs use a few names that they do not define. They are plain JavaScript
-over today's GoFish plus the version 2 folds. They add no other syntax.
+over today's GoFish plus the version 2 additions. They add no other syntax.
 
 ```js
 const INK = "black";
@@ -127,70 +132,47 @@ const SLAB = "gray65";
 const withDraw = (rows) => rows.map((r, i) => ({ ...r, draw: i }));
 
 // Read a column of Dist cells as a Dist expression.
-// as("dist").density(v), as("dist").quantile(p), ...
+// as("dist").median(), as("dist").bin(...), ...
 
-// slab: a ribbon whose thickness is the density fold, over the Dist's range.
-// within: p cuts it to the central interval [x.quantile((1-p)/2),
-// x.quantile((1+p)/2)]; range cuts it to [lo, hi]. thickness may be any
-// function of v; opacity may be too (that is the GoFish gap: today opacity
-// is one number per mark). normalize: "group" divides by the curve's peak.
-const slab = (x, { dir = "x", side = "end", thickness = x.density, within, range, normalize, h, ...paint } = {}) => {
-  const size = dir === "x" ? "h" : "w";
-  const half = (sign) =>
-    chart()
-      .flow(scatter({ [dir]: curve(x, { within, range }) })) // positions v along the range
-      .mark(ribbon({ dir, [size]: (v) => sign * thickness(v), normalize, ...paint }));
-  const mark = side === "end" ? half(1) : side === "start" ? half(-1) : layer([half(1), half(-1)]);
-  return h ? layer({ [size]: h }, [mark]) : mark;
-};
+// Two data helpers, used inside derive(...) like normalize() and repeat().
+// x is a column name (plain values or Dist cells) or a Dist expression. Each
+// helper takes one distribution from the rows it is given: their mixture,
+// or the empirical distribution of plain values (elaborations.md, foldDist).
+// Each output row keeps the columns that every input row shares, such as
+// the group's keys, so fill: "subgroup" still reads.
 
-// pointinterval: one rect per level between two quantile folds, widest first,
-// and a circle at the median fold.
-const pointinterval = (x, { dir = "x", levels = [0.66, 0.95], fill = INK, thickness, point = true, r = 4 } = {}) => {
-  const size = dir === "x" ? "h" : "w";
-  const widest = [...levels].sort((a, b) => b - a);
-  return layer([
-    ...widest.map((p, i) =>
-      rect({
-        dims: { [dir]: { min: x.quantile((1 - p) / 2), max: x.quantile((1 + p) / 2) } },
-        [size]: thickness ?? 1.5 + (2.5 * i) / Math.max(1, widest.length - 1),
-        fill,
-      })
-    ),
-    ...(point ? [circle({ ["c" + dir]: x.median(), r, fill })] : []),
-  ]);
-};
+// densityCurve(rows, x, { n = 121, range } = {}): the density curve of the
+// draws at n evenly spaced values. One row per value: { v, density, cdf }.
+// range defaults to the distribution's display range (support()). On a
+// sample the density is a Gaussian kernel estimate (Silverman bandwidth).
+// A slab is this curve, scatter({ x: "v" }), and ribbon({ h: "density" }).
+// Side start negates density; side both is a layer of the two halves;
+// normalize: "group" divides by the curve's peak; a slab cut to a central
+// interval keeps the rows with |cdf - 0.5| <= p / 2.
 
-// lineribbon: per level, a ribbon through the quantile folds at each step of
-// along; then a line through the median fold. Each x is one cell.
-const lineribbon = (y, { along, levels = [0.5, 0.8, 0.95], fill = "level", stroke = INK, opacity } = {}) => {
-  const yy = typeof y === "string" ? field(y) : y;
-  return layer([
-    ...[...levels].sort((a, b) => b - a).map((p) =>
-      chart()
-        .flow(scatter({ by: along, x: along, yMin: yy.quantile((1 - p) / 2), yMax: yy.quantile((1 + p) / 2) }))
-        .mark(rect({ w: 0 }))
-        .layer(ribbon({ fill: fill === "level" ? p : fill, opacity }))
-    ),
-    chart()
-      .flow(scatter({ by: along, x: along, y: yy.median() }))
-      .mark(circle({ r: 0 }))
-      .layer(line({ stroke, strokeWidth: 2 })),
-  ]);
-};
+// centralIntervals(rows, x, levels, { by } = {}): the equal-tailed central
+// interval of the draws at each level p, from Q((1 - p) / 2) to
+// Q((1 + p) / 2). One row per level: { level, center, size, median }, where
+// center is the interval's midpoint and size its width. center equals the
+// median only for a symmetric distribution. With by (a field or a list of
+// fields), one row per level and per value of by, with the by columns.
+// A point interval is one rect per level, rect({ cx: "center", w: "size" }),
+// thickest for the narrowest level, and circle({ cx: "median" }). A line
+// ribbon is these rows by x, group({ by: "level" }), scatter by x,
+// rect({ w: 0, cy: "center", h: "size" }) and ribbon(), plus a line through
+// the median of the draws at each x.
 
 // keepDeepest (83, 84, 87): a derive that scores each draw by the mean over
 // its rows of depth(row) and keeps the deepest share of draws.
 ```
 
-`curve(x, ...)` and the band callback in 74 are prelude names for "the
-positions v along the slab" and "this band's edges". They stand for the fact
-that a fold returns a curve. The fragment does not say how a channel reads a
-curve (critique 6).
-
-A few specs pass options that this prelude does not handle, such as
-`interval: "hdci"` or `point: false`. Each such option sits exactly where the
-entry's note says something is missing.
+Each spec writes the expansion out in full, even where it repeats, so its
+real length shows. A gap is a `// gap:` comment at the place it occurs. The
+mode and the highest-density interval (30, 31, 61) are written as
+`highestDensityIntervals(rows, x, levels)` and `x.mode()`, the calls they
+would most likely be, with a gap comment, because version 2 does not list
+them. Bin widths for dotplots are chosen by hand, and each `Bin.step` says
+so: ggdist picks the width so the tallest stack fits.
 
 Data names are the R data frames in camelCase (`df`, `distDf`, `priors`,
 `abccDf`, `mtcarsBoot` and so on). They have the same columns as in R. Where
@@ -209,23 +191,23 @@ be families of the proposal's `dist` namespace.
   always writes columns named `draw` and `level`, so a second `sample`
   overwrites the first.
 - **66, `stat_mcse_dots(blur = "interval")`.** Each dot's interval is a pair
-  of quantile folds across the outer draws, grouped by the inner level. It
+  of quantiles across the outer draws, grouped by the inner level. It
   needs the same two pieces as 65.
 - **88, `curve_interval(.interval = "bd-mbd")`.** Band depth is the share of
   pairs of other curves whose band contains a curve at every x. That needs
-  every pair of draws at once, so it is not a fold per draw. The table's
-  "fold per draw" row covers mhd (83, 84, 87), which is a mean over x of
+  every pair of draws at once, so it is not a summary per draw. The table's
+  "summary per draw" row covers mhd (83, 84, 87), which is a mean over x of
   `min(level, 1 - level)`.
 
 ## gofish-gap (61), by gap
 
 - **Opacity that varies along one region (01, 18, 19, 24, 25, 26, 92).** These
   are the gradient intervals and the Correll and Helske fades. In version 2
-  each one is a density or CDF fold read as opacity. Today GoFish's opacity
+  each one is the density curve or the CDF of the draws, read as opacity. Today GoFish's opacity
   is one number per mark.
-- **A fold whose result a later step reads (83, 84, 87).** Curvewise mhd
-  bands score each whole draw, filter on the score, then take min and max
-  folds of the kept draws. The score has to feed the filter, which today
+- **A summary whose result a later step reads (83, 84, 87).** Curvewise mhd
+  bands score each whole draw, filter on the score, then take the min and
+  max of the kept draws. The score has to feed the filter, which today
   needs a derive (`keepDeepest`). Because it is a derive, a checker cannot
   see that it keeps whole draws.
 - **Dot layouts (about 30 entries).** These are 20, 21, 37, 38, 40 to 64
@@ -249,10 +231,10 @@ be families of the proposal's `dist` namespace.
   `color_ramp`, a color scale on one field lightened by a second field, and a
   fill or outline that changes along one ribbon.
 - **The mode and the HDI or HDCI (30, 31, 61).** These are general aggregates
-  that version 2's list of folds does not include.
+  that version 2's list of summaries does not include.
 - **Annotation brackets (02, 40, 41, 42).** These are segments with flat
   ends, and `coord_fixed` in 42.
-- **Others.** 12 needs a log scale, and the density fold would need to know
+- **Others.** 12 needs a log scale, and the density curve would need to know
   the axis transform. The subguides (10, 60) are a small axis inside each
   slab. 10 needs a truncated Dist, and 68 needs a transformed Dist. 54 to 56
   need a wrapped facet on one key. 31 maps a linetype from a field.
@@ -271,19 +253,20 @@ be families of the proposal's `dist` namespace.
 3. **Fixed column names collide.** `sample` always writes `draw` and
    `level`. Two levels of draws (65, 66) need two keys. Data with its own
    `level` column collides too (ggdibbler 60, 61).
-4. **"A fold per draw" covers mhd but not band depth.** mhd and modified
+4. **"A summary per draw" covers mhd but not band depth.** mhd and modified
    band depth are means over x of a function of `level`. Band depth (88)
    compares pairs of whole draws.
 5. **"Not a new step" for MCSE fails as stated.** A `Dist<Dist>` constructor
    alone does not make 65 or 66 writable, because of item 3.
-6. **The density fold returns a curve.** The fragment lists "the density"
-   beside one-number folds. A slab reads it at every position, and a
+6. **The density curve is a curve.** The fragment lists "the density"
+   beside one-number summaries. A slab reads it at every position, and a
    gradient reads it as opacity along the slab. The fragment does not say how
-   a channel reads a curve. The specs write it as a function of `v`.
+   a channel reads a curve. The specs turn it into rows with `densityCurve`
+   in a derive, so the channel reads a column.
 7. **The gradient and fade marks need one more GoFish piece.** The fragment
-   names the gap (opacity along one region) correctly. Fades also need
-   `normalize: "group"` on opacity, not only on thickness, so that the
-   plateau is opaque.
+   names the gap (opacity along one region) correctly. Fades also divide
+   the opacity by its peak, not only the thickness, so that the plateau is
+   opaque. Written out, that is arithmetic in the derive.
 8. **`spread({ by: "level" })` at n = Infinity is the CCDF bar only with an
    anchor.** Each bar must run from a fixed point at or below the support to
    the draw (93). A bar from 0 is wrong when the distribution crosses 0.
