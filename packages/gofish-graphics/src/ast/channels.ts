@@ -579,7 +579,8 @@ export function resolveChannelAccessors<O extends Record<string, any>>(
  * (`buildCreatedMark` in withGoFish.ts) and the operator factory
  * (`applyChannels` in marks/createOperator.ts). Each kind says what an
  * already-wrapped value (`datum(...)`) means to it: every kind passes it
- * through as it is, except an area, which roots it ({@link inferArea}).
+ * through as it is, except an area, which roots it ({@link inferArea}), and
+ * a `dims` bag, which takes one only in a slot.
  *
  * `column` is the channel's resolved {@link ColumnInfo}, computed once per
  * channel from the whole input array (which carries the column types even
@@ -598,12 +599,19 @@ export const CHANNEL_INFER: Record<
   raw: (val, data) => inferRaw(val, data),
   // Each slot resolves its own column from `data`: the slots are separate
   // channels that happen to share one option.
-  dims: (val: AxisDims<any>, data) =>
-    isValue(val as any)
-      ? val
-      : mapAxisDims(val, (v, slot) =>
-          CHANNEL_INFER[axisSlotKind(slot)](v, data)
-        ),
+  // A wrapped value (`datum(...)`) is one value, not a bag of axis names: it
+  // goes in a slot (`dims: { x: datum(5) }`).
+  dims: (val: AxisDims<any>, data) => {
+    if (isValue(val as any))
+      throw new Error(
+        "A dims option takes axis names, each with a value or an interval " +
+          "({ x: datum(5) }, { r: { size: 'value' } }), not one value " +
+          "(datum(...))."
+      );
+    return mapAxisDims(val, (v, slot) =>
+      CHANNEL_INFER[axisSlotKind(slot)](v, data)
+    );
+  },
 };
 
 /**

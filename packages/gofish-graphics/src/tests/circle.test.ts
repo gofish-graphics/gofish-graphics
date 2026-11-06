@@ -583,6 +583,34 @@ console.log("# #972: an aspect lock's derived size follows the size it is given"
   );
 }
 
+console.log("# a dims option takes a datum only in a slot");
+{
+  // Each channel kind reads a wrapped value itself; a dims bag is axis
+  // names, so one datum for the whole bag is an error, not a mark with no
+  // value (which would not be drawn) or a bag keyed by the datum's fields.
+  let message: string | undefined;
+  try {
+    await circle({ r: 5, dims: datum(5) })(rows);
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  check(
+    "dims: datum(5) is an error naming the slot form",
+    message?.includes("A dims option takes axis names") === true,
+    message
+  );
+  const drawn = ellipsesOf(
+    await chart(rows)
+      .mark(circle({ r: 5, dims: { y: datum(5) } }))
+      .toDisplayList({ w: 100, h: 100 })
+  );
+  check(
+    "dims: { y: datum(5) } is drawn",
+    drawn.length === 1 && drawn[0].rx === 5,
+    JSON.stringify(drawn)
+  );
+}
+
 console.log("# #972: a glyph unit's σ with no room to bound it");
 {
   const { scatter } = GoFish as any;
