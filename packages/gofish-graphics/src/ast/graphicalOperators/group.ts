@@ -21,7 +21,7 @@ export type GroupOptions = {
 type GroupBox = Omit<GroupOptions, "w" | "h"> & { w?: number; h?: number };
 
 export const group = createOperator<any, GroupOptions>(
-  // TODO: `LayoutFn` types a layout's options as the options the user wrote,
+  // TODO(#1333): `LayoutFn` types a layout's options as the options the user wrote,
   // so `w` and `h` read here as a field name or a length. They reach the
   // layout with their size channels read (a number or a data value, or a
   // length), which `layer` sizes itself from; `LayerOptions` types them as
