@@ -243,47 +243,19 @@ const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
  */
 const GLYPH_ROOM_PX = 30;
 
-/** One glyph's room on one axis ({@link ScopeRegistry.fitGlyph}): the
+/** One glyph's room on one axis ({@link ScopeRegistry.fitGlyphs}): the
  *  point it is placed at, or the cell it is placed in, which is `span` data
  *  wide on `axis`, with `width` the width of the glyph's own domain. */
 export type GlyphRoom =
   | { kind: "point" }
   | { kind: "cell"; axis: 0 | 1; span: number; width: number };
 
-/** A glyph unit's rooms ({@link ScopeRegistry.fitGlyph}), and the bounds
- *  they set on its σ: whether some glyph is at a point, and, per axis, the
- *  smallest ratio of a cell to the glyph in it (`span / width`), so the
- *  cells there bound σ by the frame's σ times it. `Infinity`: no cell there
- *  bounds it (none, or only glyphs 0 wide). */
-type GlyphUnit = {
-  rooms: Map<string, GlyphRoom>;
-  atPoint: boolean;
-  cellFit: [number, number];
-};
-
-const emptyGlyphUnit = (): GlyphUnit => ({
-  rooms: new Map(),
-  atPoint: false,
-  cellFit: [Infinity, Infinity],
-});
-
-/** Fold one room into its unit's bounds. */
-const foldRoom = (g: GlyphUnit, room: GlyphRoom): void => {
-  if (room.kind === "point") g.atPoint = true;
-  else if (room.width > 0)
-    g.cellFit[room.axis] = Math.min(
-      g.cellFit[room.axis],
-      room.span / room.width
-    );
-};
-
-const sameRoom = (a: GlyphRoom, b: GlyphRoom): boolean =>
-  a.kind === "point"
-    ? b.kind === "point"
-    : b.kind === "cell" &&
-      a.axis === b.axis &&
-      a.span === b.span &&
-      a.width === b.width;
+/** The bounds a glyph unit's rooms set on its σ ({@link
+ *  ScopeRegistry.fitGlyphs}): the bound its points set (`Infinity`: none
+ *  does), and, per axis, the smallest ratio of a cell to the glyph in it
+ *  (`span / width`), so the cells there bound σ by the frame's σ times it
+ *  (`Infinity`: no cell there bounds it, none or only glyphs 0 wide). */
+type GlyphUnit = { pointSigma: number; cellFit: [number, number] };
 
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
@@ -329,36 +301,52 @@ export class ScopeRegistry {
     return y.has(u) && this.tied.has(u);
   }
 
-  /** Each glyph unit's rooms (`fitGlyph`), by the unit's key. */
-  private glyphs = new Map<string, GlyphUnit>();
+  /** Each glyph unit's bounds (`fitGlyphs`), by the unit's key. */
+  private glyphs?: ReadonlyMap<string, GlyphUnit>;
 
   /**
-   * Record a glyph's room on one axis (#972, `GoFishNode.isGlyph`): its
-   * size there is at most its room. `id` names the room, so the claim walk
-   * may record it again. The unit's bounds are kept as rooms are recorded,
-   * so {@link glyphSigma} reads them in constant time: a new room folds into
-   * them, and only a room recorded again with another value (never, within
-   * one layout) recomputes them.
+   * Build the bound each glyph unit's rooms set on its σ (#972), once,
+   * before the claim walk: `rooms` is every glyph's room on each axis where
+   * it is a glyph (`GoFishNode.glyphRooms`), by its unit's key, and
+   * `widthOf` the width of a unit's widest glyph (`KeyedDomains.unitWidth`).
+   * The table is read only after.
    */
-  fitGlyph(unit: string, id: string, room: GlyphRoom): void {
-    if (room.kind === "cell" && !(room.span >= 0 && room.width >= 0))
-      throw new Error(
-        `[gofish:layout] a glyph of the unit "${unit}" is placed in a cell ` +
-          `${room.span} wide with a size ${room.width} wide: both must be ` +
-          `finite and at least 0.`
-      );
-    let g = this.glyphs.get(unit);
-    if (g === undefined) this.glyphs.set(unit, (g = emptyGlyphUnit()));
-    const prior = g.rooms.get(id);
-    if (prior !== undefined && sameRoom(prior, room)) return;
-    g.rooms.set(id, room);
-    if (prior === undefined) foldRoom(g, room);
-    else {
-      const fresh = emptyGlyphUnit();
-      for (const r of g.rooms.values()) foldRoom(fresh, r);
-      g.atPoint = fresh.atPoint;
-      g.cellFit = fresh.cellFit;
+  fitGlyphs(
+    rooms: Iterable<readonly [string, GlyphRoom]>,
+    widthOf: (unit: string) => number
+  ): void {
+    const atPoint = new Set<string>();
+    const glyphs = new Map<string, GlyphUnit>();
+    for (const [unit, room] of rooms) {
+      let g = glyphs.get(unit);
+      if (g === undefined)
+        glyphs.set(
+          unit,
+          (g = { pointSigma: Infinity, cellFit: [Infinity, Infinity] })
+        );
+      if (room.kind === "point") atPoint.add(unit);
+      else if (!(room.span >= 0 && room.width >= 0))
+        throw new Error(
+          `[gofish:layout] a glyph of the unit "${unit}" is placed in a ` +
+            `cell ${room.span} wide with a size ${room.width} wide: both ` +
+            `must be finite and at least 0.`
+        );
+      else if (room.width > 0)
+        g.cellFit[room.axis] = Math.min(
+          g.cellFit[room.axis],
+          room.span / room.width
+        );
     }
+    for (const unit of atPoint) {
+      const domain = widthOf(unit);
+      if (!(domain >= 0))
+        throw new Error(
+          `[gofish:layout] the glyph unit "${unit}" has a domain ${domain} ` +
+            `wide: it must be finite and at least 0.`
+        );
+      if (domain > 0) glyphs.get(unit)!.pointSigma = GLYPH_ROOM_PX / domain;
+    }
+    this.glyphs = glyphs;
   }
 
   /**
@@ -386,21 +374,15 @@ export class ScopeRegistry {
    */
   glyphSigma(
     unit: string,
-    domain: number,
     frame?: readonly [number | undefined, number | undefined]
   ): number {
-    const g = this.glyphs.get(unit);
+    const g = this.glyphs?.get(unit);
     if (g === undefined)
       throw new Error(
-        `[gofish:layout] the glyph unit "${unit}" has no room: its glyphs ` +
-          `are sized before the claim walk recorded where they are placed.`
+        `[gofish:layout] the glyph unit "${unit}" is sized before its ` +
+          `glyphs' rooms were fit (fitGlyphs).`
       );
-    if (!(domain >= 0))
-      throw new Error(
-        `[gofish:layout] the glyph unit "${unit}" has a domain ${domain} ` +
-          `wide: it must be finite and at least 0.`
-      );
-    let sigma = g.atPoint && domain > 0 ? GLYPH_ROOM_PX / domain : Infinity;
+    let sigma = g.pointSigma;
     if (frame !== undefined)
       for (const axis of [0, 1] as const) {
         const fit = g.cellFit[axis];

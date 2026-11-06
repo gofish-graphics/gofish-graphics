@@ -618,7 +618,7 @@ console.log("# #972: glyph sizes lay out in linear time");
 {
   const { scatter } = GoFish as any;
   // Each glyph's room comes from its parent's sharing plan, and its unit's
-  // σ from bounds kept as rooms are recorded, so a bubble scatter's layout
+  // σ from bounds built once before the claim walk, so a bubble scatter's layout
   // grows with its points, not their square (5k points took ~9 s when each
   // glyph rescanned every constraint and room).
   const n = 5000;

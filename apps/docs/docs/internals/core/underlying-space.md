@@ -1421,10 +1421,11 @@ widest glyph of the unit (`KeyedDomains.unitWidth`). The range is one
 internal constant (`GLYPH_ROOM_PX`), a placeholder until chart options can
 set the range of a non-spatial scale. When no room bounds σ, every glyph of
 the unit is 0 wide and is drawn 0 wide at any σ, so σ is 0. The registry
-keeps each unit's bounds as the rooms are recorded (whether some glyph is at
-a point, and per axis the smallest `cell_i / d_i`), and each parent's sharing
-plan holds the cell it places each child in (`SharingPlan.cells`), so
-sizing N glyphs takes time linear in N.
+builds each unit's bounds once, before the claim walk, from every glyph's
+room in the final tree (`ScopeRegistry.fitGlyphs`: the points' bound, and per
+axis the smallest `cell_i / d_i`), and each parent's sharing plan holds the
+cell it places each child in (`SharingPlan.cells`), so sizing N glyphs takes
+time linear in N.
 
 A glyph claims pixels, not σ (`GoFishNode.glyphClaim`). A glyph in a cell
 claims nothing past the cell, since the cell's data already claims the

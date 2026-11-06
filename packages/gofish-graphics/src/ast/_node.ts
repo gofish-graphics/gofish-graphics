@@ -1412,19 +1412,19 @@ export class GoFishNode {
     dim: 0 | 1,
     frame?: readonly [number | undefined, number | undefined]
   ): number {
-    const session = this.getRenderSession();
-    const keyed = session.keyedDomains;
-    if (keyed === undefined)
-      throw new Error(
-        "[gofish:layout] a glyph is sized before the render's keyed domains " +
-          "are built, so its unit's widest glyph is unknown."
-      );
-    const unit = this.unitKeyAt(dim)!;
-    return getScopeRegistry(session).glyphSigma(
-      unit,
-      keyed.unitWidth(unit),
+    return getScopeRegistry(this.getRenderSession()).glyphSigma(
+      this.unitKeyAt(dim)!,
       frame
     );
+  }
+
+  /** This node's glyph rooms (#972): on each axis where it is a glyph
+   *  (`isGlyph`), its unit's key and the room it is placed in there
+   *  (`ScopeRegistry.fitGlyphs`). */
+  public glyphRooms(): [string, GlyphRoom][] {
+    return ([0, 1] as const)
+      .filter((dim) => this.isGlyph(dim))
+      .map((dim) => [this.unitKeyAt(dim)!, this.glyphRoom(dim)]);
   }
 
   /**
@@ -1443,13 +1443,11 @@ export class GoFishNode {
     const glyph = [this.isGlyph(0), this.isGlyph(1)] as const;
     const follows = [this.followsAcross(0), this.followsAcross(1)] as const;
     if (!glyph[0] && !glyph[1] && !follows[0] && !follows[1]) return claim;
-    const scopes = getScopeRegistry(this.getRenderSession());
     return ([0, 1] as const).map((dim) => {
       const e = claim[dim];
       if (follows[dim]) return e === undefined ? e : Extent(Pwl.ZERO);
       if (!glyph[dim]) return e;
       const room = this.glyphRoom(dim);
-      scopes.fitGlyph(this.unitKeyAt(dim)!, `${this.uid}/${dim}`, room);
       if (e === undefined) return e;
       if (room.kind === "cell") return Extent(Pwl.ZERO);
       const sigma = this.glyphSigma(dim);

@@ -535,6 +535,13 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
+  // Each glyph unit's bounds on its σ (#972), from every glyph's room in the
+  // final tree, before the claim walk reads them.
+  scopes.fitGlyphs(
+    [...breadthFirst(child)].flatMap((n) => n.glyphRooms()),
+    (unit) => keyedDomains.unitWidth(unit)
+  );
+
   // Author each dim's `embedded` flag (point/line/area) now that underlying
   // space has resolved each coord axis's measure — Route B reads it to keep a
   // foreign-measure size flat. Runs on the final (axis/title/legend-elaborated)
