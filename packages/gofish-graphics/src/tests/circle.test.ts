@@ -371,6 +371,7 @@ console.log("# #1087: an aspect lock ties its data unit's σ on both axes");
     { k: "C", v: 45 },
   ];
   for (const mark of [
+    ["circle({ r })", circle({ r: "v" })],
     ["circle({ h })", circle({ h: "v" })],
     ["circle({ w })", circle({ w: "v" })],
     [

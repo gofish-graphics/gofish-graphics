@@ -255,20 +255,27 @@ export const deferAxisDims = (
  * defers the axis-name-keyed `dims` option to the resolveAliases pass
  * ({@link deferAxisDims}).
  */
+/**
+ * A box's aspect lock (#1087): it draws one value of its data size's unit
+ * as a length on both axes, so the unit is tied (`tieUnit`). On an axis
+ * given no size while the other is given a data one, the size is
+ * `derived`: the other's, times the ratio, and it follows that size.
+ */
+export type AspectLock = { derived: (axis: 0 | 1) => boolean };
+
 export const elaborateOwnDims = <T>(
   options: object,
   aspectRatio?: number
 ): {
   dims: OwnDims<T>;
   /** Its size on an axis as its type reads it ({@link sizeForType}): a
-   *  length is never data. An axis its aspect lock derives (`derivedFrom`)
-   *  has the other axis's data size times the ratio, one unit drawn as a
-   *  length on both axes (#1087). Read live, after the `dims` option is
-   *  merged. */
+   *  length is never data. An axis its aspect lock derives
+   *  ({@link AspectLock}) has the other axis's data size times the ratio.
+   *  Read live, after the `dims` option is merged. */
   dataSize: (axis: 0 | 1) => T | undefined;
   bind: (node: {
     ownDims?: OwnDims<unknown>;
-    derivedFrom?: (axis: 0 | 1) => 0 | 1 | undefined;
+    aspectLock?: AspectLock;
     _elaborateInAxisScope?: AxisScopeHook;
   }) => void;
 } => {
@@ -277,28 +284,27 @@ export const elaborateOwnDims = <T>(
     if (k !== "w" && k !== "h") rejectLength(`${k} here`, v);
   const dims = intervalsOf(fancy) as OwnDims<T>;
   const given = (axis: 0 | 1) => sizeForType(dims[axis].size);
-  // The axis an aspect lock derives this one's size from: the other, when
-  // only the other is given a size there and it is data.
-  const derivedFrom = (axis: 0 | 1): 0 | 1 | undefined => {
-    const other = (1 - axis) as 0 | 1;
-    return aspectRatio !== undefined &&
-      aspectRatio > 0 &&
-      given(axis) === undefined &&
-      isValue(given(other) as MaybeValue<unknown>)
-      ? other
+  const lock: AspectLock | undefined =
+    aspectRatio !== undefined && aspectRatio > 0
+      ? {
+          derived: (axis) =>
+            given(axis) === undefined &&
+            isValue(given((1 - axis) as 0 | 1) as MaybeValue<unknown>),
+        }
       : undefined;
-  };
   return {
     dims,
     dataSize: (axis) => {
-      const from = derivedFrom(axis);
-      if (from === undefined) return given(axis);
+      if (!lock?.derived(axis)) return given(axis);
       const k = axis === 0 ? aspectRatio! : 1 / aspectRatio!;
-      return scaleValue(k, given(from) as MaybeValue<number>) as T;
+      return scaleValue(
+        k,
+        given((1 - axis) as 0 | 1) as MaybeValue<number>
+      ) as T;
     },
     bind: (node) => {
       node.ownDims = dims as OwnDims<unknown>;
-      node.derivedFrom = derivedFrom;
+      node.aspectLock = lock;
       node._elaborateInAxisScope = deferAxisDims(fancy, dims);
     },
   };

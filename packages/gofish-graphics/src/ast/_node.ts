@@ -37,6 +37,7 @@ import {
   type SpaceDeclaration,
   type AxisScopeHook,
   type OwnDims,
+  type AspectLock,
   type Interval,
 } from "./dims";
 import {
@@ -932,9 +933,8 @@ export class GoFishNode {
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */
   public ownDims?: OwnDims<unknown>;
-  /** The axis its aspect lock derives its size on `axis` from, when it
-   *  does (`elaborateOwnDims`, #1087): a derived axis follows its source. */
-  public derivedFrom?: (axis: 0 | 1) => 0 | 1 | undefined;
+  /** Its aspect lock, when it has one (`elaborateOwnDims`, #1087). */
+  public aspectLock?: AspectLock;
   /** Per axis, whether its own layout places it there, from the refs it
    *  reads (an ordinal axis's label span): its parent's plan takes it where
    *  layout put it, as it takes a node that places itself at a literal
@@ -1256,18 +1256,12 @@ export class GoFishNode {
           this.constraints
         )
       );
-      // An axis its aspect lock derives is in the unit of the size it is
-      // derived from: the lock draws one value of that unit as a length on
-      // both axes, so it ties the unit (#1087).
-      for (const axis of [0, 1] as const) {
-        const space = this._underlyingSpace[axis];
-        if (
-          this.derivedFrom?.(axis) !== undefined &&
-          isCONTINUOUS(space) &&
-          space.measure?.unit !== undefined
-        )
-          tieUnit(space.measure.unit);
-      }
+      // An aspect lock draws one value of its data size's unit as a length
+      // on both axes, so it ties the unit (#1087).
+      if (this.aspectLock !== undefined)
+        for (const space of this._underlyingSpace)
+          if (isCONTINUOUS(space) && space.measure?.unit !== undefined)
+            tieUnit(space.measure.unit);
     } catch (e) {
       // A measure clash knows its axis index; this node knows what that axis
       // is called here (`x`, `y`, or a coordinate space's own name).
@@ -1368,11 +1362,11 @@ export class GoFishNode {
       if (
         own !== undefined &&
         ([0, 1] as const).some(
-          (a) => this.derivedFrom?.(a) === undefined && placed[a] === own
+          (a) => !this.aspectLock?.derived(a) && placed[a] === own
         )
       )
         return "glyph";
-      return this.derivedFrom?.(axis) !== undefined &&
+      return this.aspectLock?.derived(axis) === true &&
         placed[axis] !== undefined
         ? "follows"
         : "length";
