@@ -106,3 +106,40 @@ export const weather = seattleWeather.map((d) => ({
 }));
 export const monthDist = (rows: { temp_max: number }[]) =>
   kde(rows.map((r) => r.temp_max));
+
+/**
+ * Emulates a continuum of rows (#1332, the continuous-index candidate): the
+ * index values v in [lo, hi] at which a connecting mark would sample, chosen
+ * adaptively here in data space before layout (the real thing would run in
+ * the connector, in pixels). `toPx(v)` returns every point the rows at v
+ * produce (one per series, stacked tops included), in rough pixels.
+ * Split a segment while it is longer than 10 px or its midpoint misses the
+ * straight line by more than half a pixel, as adaptive-resampling.ts does.
+ */
+export const continuumIndex = (
+  lo: number,
+  hi: number,
+  toPx: (v: number) => [number, number][]
+): number[] => {
+  const out: number[] = [lo];
+  const go = (a: number, b: number, depth: number) => {
+    const m = (a + b) / 2;
+    const [pa, pb, pm] = [toPx(a), toPx(b), toPx(m)];
+    const split =
+      depth < 12 &&
+      pa.some((p, i) => {
+        const q = pb[i];
+        const r = pm[i];
+        const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        const mid = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+        return len > 10 || Math.hypot(r[0] - mid[0], r[1] - mid[1]) > 0.5;
+      });
+    if (split) {
+      go(a, m, depth + 1);
+      go(m, b, depth + 1);
+    } else out.push(b);
+  };
+  for (let i = 0; i < 16; i++)
+    go(lo + ((hi - lo) * i) / 16, lo + ((hi - lo) * (i + 1)) / 16, 0);
+  return out;
+};

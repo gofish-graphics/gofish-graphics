@@ -9,6 +9,7 @@ import {
   field,
   intersect,
   layer,
+  line,
   partition,
   region,
   ribbon,
@@ -18,6 +19,7 @@ import {
 } from "../../src/lib";
 import { fnCurve } from "../../src/ast/shapes/_prototypeFnCurve";
 import {
+  continuumIndex,
   type Dist,
   exactQuantiles,
   FILL,
@@ -246,6 +248,103 @@ export const Parametric: StoryObj = {
           stroke: STROKE,
         })
       )
+      .render(container);
+    return container;
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Candidate C: rows over a continuous index. The spec is the rows spec, with
+// `repeat(interval, "v")` in place of a grid. `continuumIndex` emulates the
+// continuum: it picks the v the connector would sample, adaptively, and the
+// real scatter / stack / ribbon / line run on those rows unchanged.
+
+// The stacked pair: scatter by v, stack per v slice, connect. Pointwise f + g
+// falls out of stack inside each slice.
+const contStackRows = continuumIndex(-4, 4, (v) => [
+  [(v * 420) / 8, f1(v) * 400],
+  [(v * 420) / 8, (f1(v) + f2(v)) * 400],
+]).flatMap((v) => [
+  { v, series: "f", y: f1(v) },
+  { v, series: "g", y: f2(v) },
+]);
+export const ContinuumStack: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(contStackRows, { w: 420, h: 220, axes: true })
+      .flow(scatter({ by: "v", x: "v" }), stack({ by: "series", dir: "y" }))
+      .mark(ribbon({ h: "y", fill: "series", opacity: 0.85 }))
+      .render(container);
+    return container;
+  },
+};
+
+// The normal croissant: the curve layer is rows over the Dist's range.
+const nd = normal(0, 1);
+const contNormalRows = continuumIndex(nd.range[0], nd.range[1], (v) => [
+  [(v * 480) / 6.2, nd.pdf(v) * 450],
+]).map((v) => ({ v, density: nd.pdf(v) }));
+export const ContinuumNormal: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    layer([
+      chart(contNormalRows)
+        .flow(scatter({ x: "v" }))
+        .mark(ribbon({ h: "density" }).name("density").hidden()),
+    ])
+      .relate(({ density }) => [
+        chart(exactQuantiles(nd))
+          .flow(partition({ by: field("v").bin(Bin.quantiles(5)), dir: "x" }))
+          .mark(
+            layer([
+              intersect(
+                { fill: PAPER_FILL, stroke: PAPER_STROKE, strokeWidth: 2 },
+                [density, region({ inset: 3 })]
+              ),
+              circle({
+                cx: field("v").median(),
+                cy: 6,
+                r: 3,
+                fill: PAPER_STROKE,
+              }),
+            ])
+          ),
+      ])
+      .render(container, {
+        w: 480,
+        h: 200,
+        axes: { x: { title: "x" }, y: false },
+      });
+    return container;
+  },
+};
+
+// A plain function: rows over [0, 4π], placed, then connected.
+const wave = (x: number) => Math.sin(x) + 0.3 * Math.sin(7 * x);
+const contSinRows = continuumIndex(0, 4 * Math.PI, (v) => [
+  [(v * 420) / (4 * Math.PI), wave(v) * 60],
+]).map((v) => ({ v, y: wave(v) }));
+export const ContinuumSin: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(contSinRows, { w: 420, h: 160, axes: true })
+      .flow(scatter({ by: "v", x: "v", y: "y" }))
+      .mark(line({ stroke: STROKE, strokeWidth: 1.5 }))
+      .render(container);
+    return container;
+  },
+};
+
+// A parametric curve: rows over t, each placed at (x(t), y(t)), connected in t.
+const contSpiralRows = continuumIndex(0, 6 * Math.PI, (t) => [
+  [t * Math.cos(t) * 8, t * Math.sin(t) * 8],
+]).map((t) => ({ t, x: t * Math.cos(t), y: t * Math.sin(t) }));
+export const ContinuumSpiral: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(contSpiralRows, { w: 300, h: 300, axes: true })
+      .flow(scatter({ by: "t", x: "x", y: "y" }))
+      .mark(line({ stroke: STROKE, strokeWidth: 1.5 }))
       .render(container);
     return container;
   },

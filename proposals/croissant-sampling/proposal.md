@@ -1,31 +1,174 @@
 # Croissant Sampling: removing the hand-sampled grids (#1332)
 
 - Today the croissant stories sample a function by hand: `gridOf`, a hand-written `kde`, and `quantileRows` over 1000 rows, with a grid range and size picked per story.
-- Proposed: the data holds a Dist (as #980 decided), and a channel takes a function of x, `ribbon({ h: x.density() })`. The mark samples it while drawing, at half-pixel accuracy, with the resampler GoFish already uses for coordinate transforms. User code holds no grid, no `n` and no range.
-- The cuts and dots read the Dist exactly. What a curve with no rows cannot do yet (stack two of them, hover a point) points to a continuous value type, sketched at the end.
+- Proposed: keep the rows spec that draws an area today (scatter the rows, then connect them with `ribbon`), and let the rows come from a continuous index: `derive(repeat(x.range(), "v"))`. The connecting mark picks which v to draw, to half a pixel, so the spec never names a grid, an `n` or a step.
+- `ribbon({ h: x.density() })` (approach B) is short for that spec. Because the curve is still rows, `stack` adds two curves at each x with no new machinery: the wall B had alone is gone.
 
 ## Recommendation
 
-Approach B. A channel holds a function, and the mark samples it when it draws. In the spec, a density is `x.density()`, a plain function is `fn(f, { x: [lo, hi] })`, and sampling is never mentioned. A working prototype draws all three croissants, a polar density, a plain function, a parametric spiral and a narrow kernel. It reuses `adaptive-resampling.ts` with one change. One wall is real: `stack` cannot add two curves at each x, because it moves whole boxes. Until a continuous value type gives `stack` pointwise addition, a stacked curve still needs rows (approach A, the runner-up).
+Candidate C: rows over a continuous index, with B as its short form. A continuum of rows comes from #980's `repeat`, given an interval instead of a count. The rest is the spec GoFish already uses for an area: `scatter` places each row, `stack` works inside each x slice, and `ribbon` or `line` connects the slices. Prototype renders of the normal croissant, two stacked densities, a plain function and a spiral all use the real `scatter`, `stack`, `ribbon` and `line`. Their rows are an emulated continuum: the v values were picked adaptively before layout. The wall is the real version. There, the connector has to lay out each slice on demand as it samples, and no prototype does that yet. A continuous `scatter` was weighed and rejected: it makes rows as well as placing them, and it has no spelling for a parametric curve.
 
 ## Relation to #980
 
-This applies #980 to the croissant; it does not compete with it. #980 (first-class distributions: the data holds a Dist; draws and quantile levels are rows; slab and interval are user code, not marks) already says that binning a Dist key by `Bin.quantiles` cuts it at its quantiles. It also lists curve summaries in channels as open. B answers that question: `x.density()` is a curve summary, and a path mark draws it. A is #980's `densityCurve` data helper with written-out defaults. Neither adds a mark or reopens a #980 decision, and both delete `quantileRows` (#1231). The continuous-type section ties into #980's scales tab, which says a density's "per" must name the field it is spread over.
+This applies #980 to the croissant; it does not compete with it. #980 (first-class distributions: the data holds a Dist; draws and quantile levels are rows made by `repeat(n, ...)`; slab and interval are user code, not marks) already says that binning a Dist key by `Bin.quantiles` cuts it at its quantiles. C extends #980's `repeat` from a count to an interval. B answers #980's open question of curve summaries in channels, as the short form of C. A is #980's `densityCurve` helper, which is C with a finite grid. Nothing adds a mark or reopens a #980 decision, and all three delete `quantileRows` (#1231). The continuous-type section ties into #980's scales tab, which says a density's "per" must name the field it is spread over.
 
 Artifact: https://claude.ai/artifact/Fh12g89z1cChzAqpQZ8mGH. The #980 proposal: https://claude.ai/artifact/QKR9jSHs1LWCtjp25bFuBq.
 
 Renders are real GoFish renders. B uses a throwaway prototype node, `packages/gofish-graphics/src/ast/shapes/_prototypeFnCurve.tsx`, which `stories/proposals/CroissantSamplingB.stories.tsx` drives. `fnCurve({ f, range })` stands in for `ribbon({ h: x.density() })`. In both approaches the cut layer emulates an exact Dist cut with 2000 exact quantile rows.
 
-## Rules (approach B)
+## Rules
 
 1. The function lives in the data as a Dist: `dist.normal({ mean, sd })` over parameter columns, or `field(x).kde()` over a group's rows (#980).
-2. A channel may take a function of the other axis: `ribbon({ h: x.density() })`, `line({ y: x.cdf() })`, `line({ y: fn(f, { x: [lo, hi] }) })`. The mark runs along the function's own domain. No rows, no `n`, no range.
-3. This does not clash with #980's rule that a bare Dist in a position channel means its blurred limit. `x.density()` is a different value: a function, not a Dist.
-4. The mark samples while drawing: the curve x ↦ (x, f(x)) goes through the axis scales and the coordinate transform in one adaptive pass, to half a pixel. Sampling has no spelling, so there is no knob to model.
-5. Cuts and dots read the Dist exactly: `x.bin(Bin.quantiles(n))` cuts the Dist at its quantile function, and `x.median()` is exact. `quantileRows` is deleted (#1231).
-6. No new mark. The area Josh floated is `ribbon` with a function in `h`.
+2. `repeat` takes a count or an interval. `repeat(n, "draw")` makes n rows (#980). `repeat(interval(a, b), "v")` makes a row for every v in [a, b]. A Dist's `x.range()` is an interval.
+3. A continuum of rows goes through the same operators as any rows. `scatter({ x: "v" })` places each one, `stack` works inside each slice, and `ribbon` or `line` connects them. The connector picks the v it draws, to half a pixel, through the axis scales and the coordinate transform. Sampling has no spelling, so there is no knob to model.
+4. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, the way #980's `x.quantile("p")` reads a level. With no argument, `ribbon({ h: x.density() })` is short for the whole continuum spec over `x.range()` (approach B).
+5. A bare Dist in a position channel still means its blurred limit (#980). That is the Dist's own measure, where draws pile up. A continuum is uniform over its interval. The two are different index sets, so they get different spellings.
+6. An operator that needs to count or list its rows is an error on a continuum: `spread`, `sort`, `count`, and a mark drawn once per row (rect, circle, text).
+7. Cuts and dots read the Dist exactly: `x.bin(Bin.quantiles(n))` cuts at the quantile function, and `x.median()` is exact. `quantileRows` is deleted (#1231). No new mark.
 
-## The croissants under B
+## Rows over a continuous index
+
+Renders use the real `scatter`, `stack`, `ribbon` and `line` on an emulated continuum (`continuumIndex` in `stories/proposals/croissantDist.ts` picks the v values adaptively before layout).
+
+### Normal croissant, curve from a continuum
+
+**Works: rendered with the real ribbon.**
+
+![](img/c-normal.png)
+
+The curve layer is the rows spec. The cuts and dots still come from the Dist, as in every approach. The short form at the bottom of the code is B.
+
+```js
+// C: the rows spec, with a continuous index in place of a grid
+chart(params)
+  .flow(derive(repeat(x.range(), "v")), scatter({ x: "v" }))
+  .mark(
+    ribbon({ h: x.density("v") })
+      .name("density")
+      .hidden()
+  );
+
+// B is sugar for exactly that
+chart(params).mark(ribbon({ h: x.density() }).name("density").hidden());
+```
+
+Alternative, continuous `scatter`:
+
+```js
+// Alternative: a continuous scatter
+chart(params)
+  .flow(scatter({ x: x.range() }))
+  .mark(ribbon({ h: x.density() }).name("density").hidden());
+```
+
+### Two densities, stacked at each x
+
+**Works: the wall B had alone is gone.**
+
+![](img/c-stack.png)
+
+`scatter({ by: "v" })` makes one slice per v, and `stack` puts g on top of f inside each slice. The sum f(v) + g(v) comes from adding two numbers, the way `stack` always does, so functions need no addition of their own. This is the structure of the stacked area and streamgraph stories today, with a continuum in place of the rows. In the render g is scaled by 0.6.
+
+```js
+// one row per curve: { series, mean, sd }; x = dist.normal({ mean: "mean", sd: "sd" })
+chart(params)
+  .flow(
+    derive(repeat(interval(-4, 4), "v")),
+    scatter({ by: "v", x: "v" }),
+    stack({ by: "series", dir: "y" })
+  )
+  .mark(ribbon({ h: x.density("v"), fill: "series" }));
+```
+
+Alternative, continuous `scatter`:
+
+```js
+// Alternative: scatter makes the slices, so its by-key has to be implicit
+chart(params)
+  .flow(scatter({ x: interval(-4, 4) }), stack({ by: "series", dir: "y" }))
+  .mark(ribbon({ h: x.density(), fill: "series" }));
+```
+
+### A plain function
+
+**Works.**
+
+![](img/c-sin.png)
+
+No Dist, so the interval is written. The row accessor `(d) => wave(d.v)` is a tentative spelling.
+
+```js
+const wave = (v) => Math.sin(v) + 0.3 * Math.sin(7 * v);
+
+chart([{}])
+  .flow(
+    derive(repeat(interval(0, 4 * Math.PI), "v")),
+    scatter({ x: "v", y: (d) => wave(d.v) })
+  )
+  .mark(line());
+```
+
+Alternative, continuous `scatter`:
+
+```js
+// Alternative: a continuous scatter
+chart([{}])
+  .flow(scatter({ x: interval(0, 4 * Math.PI), y: wave }))
+  .mark(line());
+```
+
+### A parametric curve
+
+**Works with repeat; continuous scatter cannot say it.**
+
+![](img/c-spiral.png)
+
+The index t is neither x nor y. `repeat` gives it a column of its own, and `scatter` places each row at (x(t), y(t)). A continuous `scatter` uses its index set as the x axis, so it has no spelling for this curve.
+
+```js
+// The index t is not a position: x and y are both functions of it
+chart([{}])
+  .flow(
+    derive(repeat(interval(0, 6 * Math.PI), "t")),
+    scatter({ x: (d) => d.t * Math.cos(d.t), y: (d) => d.t * Math.sin(d.t) })
+  )
+  .mark(line());
+```
+
+Alternative, continuous `scatter`:
+
+```js
+// Alternative: no spelling. A continuous scatter's index set is its x axis,
+// and here the index t is neither x nor y.
+```
+
+### Which operator makes the continuum
+
+- **Continuous `scatter`: `scatter({ x: interval })`**: Makes the rows and places them in one step. `scatter` today only places rows it is given; it never makes them. So the continuous form would overlap `repeat` + `scatter` over most of its range, which api-design.md calls the wrong factoring. It also cannot spell a parametric curve, and its stack needs an implicit `by`.
+- **A new operator: `sweep(interval, "v")`**: A clean concept: make a continuum of rows. But it is one concept with `repeat`, which makes n rows with an index. A count and an interval are two index sets for the same operation. A second name would split them.
+- **Extend `repeat`: `repeat(interval, "v")` (recommended)**: Keeps today's name and gives it a continuous index set. Mathematica does the same: `Table[expr, {i, imin, imax}]` steps by 1, and `Plot[f, {x, xmin, xmax}]` takes the same iterator form and samples it continuously.
+
+```js
+// Recommended: #980's repeat, given an interval instead of a count
+derive(repeat(1000, "draw")); // 1000 rows, draw = 0, 1, ..., 999
+derive(repeat(interval(0, 1), "p")); // a row for every p in [0, 1]
+
+// Runner-up: a new operator for the continuous case
+derive(sweep(interval(0, 1), "p"));
+```
+
+| Name                                    | What it is                                                                                             | Note                                                             |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| `repeat` (GoFish, #980)                 | `repeat(n, "draw")`: n rows with an index                                                              | the current name; extend it                                      |
+| Mathematica iterator                    | `{i, imin, imax}` in `Table` (steps of 1) and `{x, xmin, xmax}` in `Plot`, `ParametricPlot` (adaptive) | verified: one form, discrete or continuous                       |
+| Vega-Lite `sequence`                    | `{ start, stop, step, as }`; `step` defaults to 1; `stop` exclusive                                    | verified: always discrete                                        |
+| numpy `linspace`, polars `linear_space` | `linear_space(start, end, num_samples, closed="both")`                                                 | verified (polars): a count is required                           |
+| TikZ `domain`, `samples`                | `plot (\x, {f(\x)})` with `domain` (initially -5:5) and `samples` (initially 25)                       | verified: a count, with a default                                |
+| Wilkinson GPL                           | `line(position(density.normal(x)))`: a density function in the position of a line element              | verified in IBM's GPL reference: a function in a channel, like B |
+| `sample`, `range`, `along`              | taken: #980's `value.sample`, `x.range()`, and the `along` option of `line` and `ribbon`               | rule out                                                         |
+| `sweep`, `over`, `continuum`            | no clash in GoFish                                                                                     | no precedent checked; the fallback names                         |
+
+## The croissants in the short form (B)
 
 ### Croissant of the standard normal
 
@@ -302,7 +445,7 @@ const croissant = (grid, { n = 10, fill = FILL, stroke = STROKE } = {}) =>
   ]);
 ```
 
-## Stress tests
+## Stress tests for the short form
 
 ### Coordinates: a density in polar
 
@@ -377,13 +520,13 @@ chart(penguins, { w: 520, h: 60 }).mark(ribbon({ h: mass.density() }));
 
 ### Stacking two curves
 
-**Needs rows (A).**
+**B alone: wall; as C: works.**
 
 ![](img/b-stack.png)
 
 ![](img/b-stack-from-rows.png)
 
-Top: B under `stack`. Stack moves each child's whole box, so the second curve sits on the first one's baseline, not on its curve. Bottom: the same two curves as rows on one grid, stacked at each x. This is the one wall. `stack` on functions needs pointwise addition, which belongs to the continuous type below.
+Top: B alone under `stack`, with a function node per curve. `stack` moves each child's whole box, so the second curve sits on the first one's baseline, not on its curve. Bottom: the same two curves as rows, stacked at each x. C keeps the rows, so its stacked card above works. B is safe as the short form of C, not as a separate node.
 
 ```js
 // B: stack moves whole boxes, so g sits on f's box, not on f's curve
@@ -397,7 +540,7 @@ chart(rows) // { x, series, y }: f and g sampled on one grid
   .mark(ribbon({ h: "y", fill: "series" }));
 ```
 
-## Answers for B
+## Answers for the short form
 
 **Spelling.** `ribbon({ h: x.density() })` for an area, `line({ y: x.cdf() })` for a CDF, and `line({ y: fn(f, { x: [lo, hi] }) })` for a plain function. A function in one channel sets the mark's extent on the other axis. It sits beside #980's rule because `x.density()` is a function, not a Dist. A bare `x` in a position channel still means the blurred limit.
 
@@ -407,17 +550,17 @@ chart(rows) // { x, series, y }: f and g sampled on one grid
 
 **The resampler claim.** It holds, with three caveats. `adaptiveResamplePath` takes any `{ transform }`, so x ↦ coord(scale(x, f(x))) is just a composed transform. (1) Its source must be in pixels, since it forces a split above 10 source units. The prototype passes the curve's parameter scaled to its length on screen. (2) It never splits a segment whose ends coincide, so a closed curve must start as several segments (fixed, see the polar card). (3) It tests one midpoint per segment, so a feature narrower than about 10 px can fall between samples, as in d3. For `intersect`, the mark also needs its outline before coordinates, so the prototype samples once for the outline and once, composed with the coordinates, for paint. In linear coordinates the two passes are the same.
 
-**What is lost without rows.** The hover datum is the mark's own row (the Dist's parameters), not a sample point. `selectAll` finds one curve, not its sample points, which are only how it was drawn. Operators that need rows (`stack`, `connect` between points, a label at the peak) have nothing to read. Hover and labels need only to evaluate the function. `stack` needs pointwise addition. The next section asks whether these are operations on a continuous value.
+**What is lost without rows.** The hover datum is the mark's own row (the Dist's parameters), not a sample point. `selectAll` finds one curve, not its sample points, which are only how it was drawn. Operators that need rows (`stack`, a label at the peak) have nothing to read. Under C the rows are back. Hover is the slice at the pointer. `selectAll` finds the curve, which is the continuum's connector. `stack` works inside each slice. `partition` cuts the index interval into sub-intervals. A cell's median follows the half-weight rule, given a weight (see the decisions).
 
-## Runner-up: approach A
+## A: a finite grid
 
-### Runner-up A: the curve as rows from a data step
+### A: the same spec over a finite grid
 
 ![](img/normal.png)
 
 ![](img/narrow.png)
 
-Same picture, from #980's `densityCurve` helper with written-out defaults (`n: 512`, `range: x.range()`). Rows keep every row operator working, `stack` included. But a data step runs before the pixel scale exists, so it cannot be screen-aware, and `n` and `range` are part of the spec. This is the general pattern for sampling a function in a data step: a parameter grid plus an expression (matplotlib's `linspace`, ggplot2's `stat_function`, pgfplots' `domain`/`samples`, #980's `repeat(n, { level: "p" })` + `value.quantile("p")`). A becomes the pick if `stack` and other row operators on curves matter more than a spec with no sampling.
+Same picture, from #980's `densityCurve` helper with written-out defaults (`n: 512`, `range: x.range()`). Rows keep every row operator working, `stack` included. But a data step runs before the pixel scale exists, so it cannot be screen-aware, and `n` and `range` are part of the spec. This is the general pattern for sampling a function in a data step: a parameter grid plus an expression (matplotlib's `linspace`, ggplot2's `stat_function`, pgfplots' `domain`/`samples`, #980's `repeat(n, { level: "p" })` + `value.quantile("p")`). Under C, A is just `repeat` over a finite grid, so it needs no helper of its own.
 
 A's resolution on the narrow kernel: 101 evenly spaced points (top), 512 (middle), and screen-adaptive (bottom).
 
@@ -456,7 +599,7 @@ croissant(grid, { n: 5, fill: PAPER_FILL, stroke: PAPER_STROKE });
 
 ## A continuous value type?
 
-Everything B loses without rows is an ordinary operation on a continuous value. chebfun ("computing with functions") is the closest precedent: it stores a function adaptively, to about machine precision, and overloads MATLAB's vector commands, so `sum` is a definite integral and `max`, `roots` and `cumsum` work on the function. GoFish would need far less, only what the table below lists.
+C is rows over a continuous type: a continuum is the interval with uniform weight, rows are point masses, and a Dist is a weight that totals 1. Everything B loses without rows is an ordinary operation on a continuous value. chebfun ("computing with functions") is the closest precedent: it stores a function adaptively, to about machine precision, and overloads MATLAB's vector commands, so `sum` is a definite integral and `max`, `roots` and `cumsum` work on the function. GoFish would need far less, only what the table below lists.
 
 | Lost without rows | Operation                | Field                              | Measure                                            | Rows                 |
 | ----------------- | ------------------------ | ---------------------------------- | -------------------------------------------------- | -------------------- |
@@ -527,12 +670,13 @@ Taking a function as a mark input is common (Mathematica, Plots.jl, Makie), and 
 
 ## Open decisions
 
-1. Spelling: is `ribbon({ h: x.density() })` / `line({ y: x.cdf() })` / `line({ y: fn(f, { x: [lo, hi] }) })` right? And what is the name for a plain function (`fn`)? `curve` clashes with the `Curve` family.
-2. Extent: should a curve span its own domain (the prototype), the axis domain (ggplot2), or the union of the two? Does it need any user override?
-3. `stack` of curves: should B wait for pointwise addition on a continuous type, or should `stack` sample its function children onto a shared grid for now (a declared shortcut)?
-4. Median weights: every value in a cell is weight spread over x, and the median is where the pooled weight reaches half. Is a cut cell's weight 1 or its probability (0.2)? That decides what sum and count return for a Dist cell.
-5. Ridgeline: cut each month at the quantiles of its smoothed curve (as drawn), or at the raw days' quantiles? They differ, and the slices are drawn on the smoothed curve.
-6. Continuous type: one type whose unit decides field or measure, or two types? And does it come before or after #980's Dist?
-7. Default range of a smoothed sample: its data plus 3 bandwidths each side (seaborn's `cut`), or cut at the data's ends (ggdist's bounded density)?
-8. An outer cell runs to minus or plus infinity. Should its region stop at the chart's x domain (as the prototype does), or is an infinite cell an error?
-9. Should the mark warn when the curve's true peak, found while drawing, is above the y domain found before layout?
+1. Index operator: extend `repeat` to take an interval (recommended), add a new operator (`sweep`), or give `scatter` a continuous index set?
+2. Real implementation of a continuum: the connector lays out each slice on demand as it samples. Which operators can lay out one slice at a time? `stack` and `scatter` can; `spread`, `sort` and `count` cannot and become errors. Is that list right?
+3. Short form: is `ribbon({ h: x.density() })` (B) worth keeping as sugar for the continuum spec over `x.range()`? And how does a plain function or a parametric curve read the index: `(d) => wave(d.v)`, or a column expression?
+4. Extent of a stack: each Dist's own range, or one shared interval (as the stacked card writes it)? Where one curve has no row at some v, is it 0?
+5. Median weights: every value in a cell is weight spread over x, and the median is where the pooled weight reaches half. Is a cut cell's weight 1 or its probability (0.2)? Does a continuum over a Dist's range carry the Dist's weight, or uniform weight? With uniform weight, `field("v").median()` is a cell's midpoint, not the Dist's median.
+6. Ridgeline: cut each month at the quantiles of its smoothed curve (as drawn), or at the raw days' quantiles? They differ, and the slices are drawn on the smoothed curve.
+7. Continuous type: one type whose unit decides field or measure, or two types? And does it come before or after #980's Dist?
+8. Default range of a smoothed sample: its data plus 3 bandwidths each side (seaborn's `cut`), or cut at the data's ends (ggdist's bounded density)?
+9. An outer cell runs to minus or plus infinity. Should its region stop at the chart's x domain (as the prototype does), or is an infinite cell an error?
+10. Should the mark warn when the curve's true peak, found while drawing, is above the y domain found before layout?
