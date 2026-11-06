@@ -165,8 +165,9 @@ const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
  *  screen's left or top, `-1` when it starts at the bottom). */
 export type EqualMeasureAxis = {
   space: UnderlyingSpace | undefined;
-  /** The units whose domains the axis maps (`KeyedDomains.unitsOf`). */
-  units?: ReadonlySet<string>;
+  /** The units whose domains the axis maps (`KeyedDomains.unitsOf`), read
+   *  only when some mark ties a unit (`ScopeRegistry.tie`). */
+  units?: () => ReadonlySet<string>;
   claim: Extent;
   box: number;
   sigma: number;
@@ -317,10 +318,13 @@ export class ScopeRegistry {
    * does not equalize them.
    */
   private inOneUnit(
-    x: ReadonlySet<string> | undefined,
-    y: ReadonlySet<string> | undefined
+    xUnits: (() => ReadonlySet<string>) | undefined,
+    yUnits: (() => ReadonlySet<string>) | undefined
   ): boolean {
-    if (x?.size !== 1 || y?.size !== 1) return false;
+    if (this.tied.size === 0 || xUnits === undefined || yUnits === undefined)
+      return false;
+    const [x, y] = [xUnits(), yUnits()];
+    if (x.size !== 1 || y.size !== 1) return false;
     const [u] = x;
     return y.has(u) && this.tied.has(u);
   }
@@ -468,15 +472,14 @@ export class ScopeRegistry {
    * claim walk are equalized, and their claims hold the leftover pixels, so
    * the node still claims its size. `yDirection` is the direction of its
    * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
-   * unless both are in one declared or tied unit (`inOneUnit`). `units` are
-   * the units each
-   * axis maps (`KeyedDomains.unitsOf`).
+   * unless both are in one declared or tied unit (`inOneUnit`). `units`
+   * reads the units an axis maps (`KeyedDomains.unitsOf`).
    */
   equalizeFixed(
     node: object,
     rootKey: string,
     yDirection: 1 | -1,
-    units?: readonly [ReadonlySet<string>, ReadonlySet<string>]
+    units?: (axis: 0 | 1) => ReadonlySet<string>
   ): void {
     const solves = this.fixed.get(node);
     const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
@@ -484,7 +487,7 @@ export class ScopeRegistry {
       return (
         s && {
           space: s.space,
-          units: units?.[axis],
+          units: units && (() => units(axis)),
           claim: s.claim,
           box: s.box,
           sigma: s.solution.sigma,
