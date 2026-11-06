@@ -4,6 +4,8 @@ import { docsLang, examplesHref } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
 import PictureCard from "./PictureCard.vue";
 import { HERO, SPECTRUM, type HeroCard } from "./landingCards";
+// The stamp on the wordmark shows the package version, inlined at build time.
+import { version as VERSION } from "../../../../../../../packages/gofish-graphics/package.json";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the inline chart art never goes through
@@ -352,11 +354,11 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="inner">
-          <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
-               its right end at an angle. Kept as real text so it is announced to
+          <!-- The wordmark carries an inked rubber stamp of the version
+               beside its right end. Kept as real text so it is announced to
                screen readers. -->
           <h1 id="hero-h" class="wordmark">
-            GoFish<span class="hero-stamp">alpha</span>
+            GoFish<span class="hero-stamp">v{{ VERSION }}</span>
           </h1>
           <p class="subtitle">
             an open-source visualization library for
