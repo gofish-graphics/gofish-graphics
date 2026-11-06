@@ -22,12 +22,12 @@ import {
   isCONTINUOUS,
   originIs,
   spaceUnit,
+  unitKeyOf,
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import type { Size } from "./dims";
 import { mapsDomain, niceScope, widenScope, type Extent } from "./extent";
-import { unitKey } from "./measure";
 
 /** The part of a node the table reads (duck-typed: `_node.ts` imports this
  *  module). */
@@ -60,8 +60,7 @@ const domainKey = (
   space: UnderlyingSpace | undefined,
   top: KeyedNode
 ): string => {
-  const unit = spaceUnit(space)?.unit;
-  const key = unit === undefined ? `set:${top.uid}` : unitKey(unit);
+  const key = unitKeyOf(space) ?? `set:${top.uid}`;
   // An origin-less space (a middle alignment) has only widths, no data
   // positions, so its domain is the unit's domain of widths, kept apart
   // from the domain of positions.

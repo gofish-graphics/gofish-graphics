@@ -4,7 +4,6 @@ import { GoFishNode, outlineOverhang } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
 import { getValue, isValue, scaleValue, MaybeValue, Value } from "../data";
-import { resolveUnit, unitKey } from "../measure";
 import { getScopeRegistry } from "../solver/scopes";
 import {
   Dimensions,
@@ -21,7 +20,6 @@ import { aesthetic, continuous, posFn } from "../domain";
 import {
   UnderlyingSpace,
   glyphAxis,
-  isCONTINUOUS,
   pointOrMagnitude,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
@@ -72,14 +70,6 @@ export const Ellipse = ({
     const k = axis === 0 ? aspectRatio : 1 / aspectRatio;
     return scaleValue(k, other);
   };
-  const tiedUnit = (): string | undefined => {
-    const space = node._underlyingSpace?.[0];
-    const unit =
-      locked && space !== undefined && isCONTINUOUS(space)
-        ? space.measure?.unit
-        : undefined;
-    return unit === undefined ? undefined : unitKey(resolveUnit(unit));
-  };
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
   const node: GoFishNode = new GoFishNode(
@@ -108,7 +98,7 @@ export const Ellipse = ({
       },
       // A literal pixel size is the ellipse's own (#493), as a rect's is.
       resolveExtent: (_ce, _cs, spaces) => {
-        const tied = tiedUnit();
+        const tied = locked ? node.unitKeyAt(0) : undefined;
         if (tied !== undefined)
           getScopeRegistry(node.tryGetRenderSession()).tie(tied);
         return literalBoxExtents(

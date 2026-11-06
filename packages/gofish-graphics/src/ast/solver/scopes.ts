@@ -26,6 +26,8 @@ import {
   isCONTINUOUS,
   isOneValue,
   originIs,
+  spaceUnit,
+  unitKeyOf,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { Extent, mapsDomain } from "../extent";
@@ -33,7 +35,6 @@ import type { AxisMap } from "../domain";
 import { envFlag } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
-import { resolveUnit, sameUnitVar } from "../measure";
 import { reachAt, type ChromeForms } from "../chromeGutters";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
@@ -222,13 +223,8 @@ export function sharesDeclaredMeasure(
   x: UnderlyingSpace | undefined,
   y: UnderlyingSpace | undefined
 ): boolean {
-  const unitX = x && isCONTINUOUS(x) ? x.measure?.unit : undefined;
-  const unitY = y && isCONTINUOUS(y) ? y.measure?.unit : undefined;
   return (
-    unitX !== undefined &&
-    unitY !== undefined &&
-    resolveUnit(unitX).kind === "declared" &&
-    sameUnitVar(unitX, unitY)
+    spaceUnit(x)?.unit?.kind === "declared" && unitKeyOf(x) === unitKeyOf(y)
   );
 }
 

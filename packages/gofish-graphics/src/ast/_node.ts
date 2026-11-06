@@ -73,15 +73,7 @@ import {
   sameValueUnit,
 } from "./data";
 import { color6 } from "../color";
-import {
-  hasUnits,
-  resolveUnit,
-  sameUnitVar,
-  unitKey,
-  Units,
-  type UnitVar,
-  withUnits,
-} from "./measure";
+import { hasUnits, Units, withUnits } from "./measure";
 import { orderByLevels, type HasLevels } from "./schema";
 import {
   isCONTINUOUS,
@@ -95,6 +87,7 @@ import {
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
   type CONTINUOUS_TYPE,
+  unitKeyOf,
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
@@ -251,11 +244,10 @@ type ClaimMemo = {
   /** Per constraint and axis, the gap it lays out between its parts
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
+  /** Per axis, the key of its unit ({@link GoFishNode.unitKeyAt}), once
+   *  read. */
+  unitKeys?: [string | undefined, string | undefined];
 };
-
-/** The unit a space's values are in, when it is continuous and has one. */
-const unitOf = (space: UnderlyingSpace | undefined) =>
-  space !== undefined && isCONTINUOUS(space) ? space.measure?.unit : undefined;
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
@@ -1335,30 +1327,37 @@ export class GoFishNode {
    * parent's axis that places it.
    */
   public isGlyph(dim: 0 | 1): boolean {
-    const own = unitOf(this._underlyingSpace?.[dim]);
+    const own = this.unitKeyAt(dim);
     if (own === undefined) return false;
-    return ([0, 1] as const).some((axis) => {
-      const size = this.foreignPlaced(axis);
-      return (
-        size !== undefined && this.givesSize(axis) && sameUnitVar(own, size)
-      );
-    });
+    return ([0, 1] as const).some(
+      (axis) => this.givesSize(axis) && this.foreignPlaced(axis) === own
+    );
+  }
+
+  /** The key of this node's unit on `dim` (`unitKeyOf`), or undefined when
+   *  its space there has none. Read after the type walk, and kept with the
+   *  claim walk's memos, which are cleared with its space. */
+  public unitKeyAt(dim: 0 | 1): string | undefined {
+    const spaces = this._underlyingSpace;
+    if (spaces === undefined) return undefined;
+    return (this._claimMemo.unitKeys ??= [
+      unitKeyOf(spaces[0]),
+      unitKeyOf(spaces[1]),
+    ])[dim];
   }
 
   /** The unit of this node's data size on `axis` when its parent places it
    *  at a datum there (at a point, or in a cell) and the parent's axis is
    *  not in that unit: a size that is no length of the axis that places it.
    *  Undefined otherwise. */
-  private foreignPlaced(axis: 0 | 1): UnitVar | undefined {
+  private foreignPlaced(axis: 0 | 1): string | undefined {
     const p = this.parent;
     const i = p?.indexOfChild(this);
     if (p === undefined || i === undefined) return undefined;
     const datumPlaced = p.sharing().datumPlaced;
     if (datumPlaced?.[axis].has(i) !== true) return undefined;
-    const size = unitOf(this._underlyingSpace?.[axis]);
-    if (size === undefined) return undefined;
-    const at = unitOf(p._underlyingSpace?.[axis]);
-    return at === undefined || !sameUnitVar(size, at) ? size : undefined;
+    const size = this.unitKeyAt(axis);
+    return size !== p.unitKeyAt(axis) ? size : undefined;
   }
 
   /** Whether this node's size on `dim` is derived by an aspect lock from a
@@ -1381,11 +1380,6 @@ export class GoFishNode {
    *  of its own (a group) has the size of its content. */
   private givesSize(axis: 0 | 1): boolean {
     return this.ownDims === undefined || this.ownDims[axis]?.size !== undefined;
-  }
-
-  /** The key of the unit of this node's glyph size on `dim` (`unitKey`). */
-  private glyphUnit(dim: 0 | 1): string {
-    return unitKey(resolveUnit(unitOf(this._underlyingSpace?.[dim])!));
   }
 
   /** The room this glyph is placed in on `dim` (#972): the cell its
@@ -1425,7 +1419,7 @@ export class GoFishNode {
         "[gofish:layout] a glyph is sized before the render's keyed domains " +
           "are built, so its unit's widest glyph is unknown."
       );
-    const unit = this.glyphUnit(dim);
+    const unit = this.unitKeyAt(dim)!;
     return getScopeRegistry(session).glyphSigma(
       unit,
       keyed.unitWidth(unit),
@@ -1455,7 +1449,7 @@ export class GoFishNode {
       if (follows[dim]) return e === undefined ? e : Extent(Pwl.ZERO);
       if (!glyph[dim]) return e;
       const room = this.glyphRoom(dim);
-      scopes.fitGlyph(this.glyphUnit(dim), `${this.uid}/${dim}`, room);
+      scopes.fitGlyph(this.unitKeyAt(dim)!, `${this.uid}/${dim}`, room);
       if (e === undefined) return e;
       if (room.kind === "cell") return Extent(Pwl.ZERO);
       const sigma = this.glyphSigma(dim);
