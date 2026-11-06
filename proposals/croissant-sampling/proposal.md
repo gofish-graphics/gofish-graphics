@@ -1,12 +1,12 @@
 # Croissant Sampling: removing the hand-sampled grids (#1332)
 
-- Today the croissant stories sample a function by hand: `gridOf`, a hand-written `kde`, and `quantileRows` over 1000 rows, with a grid range and size picked per story.
-- Proposed: a new flow step, `sweep({ v: x.range() })`, makes a row for every v in an interval. The rows spec that draws an area today runs on them unchanged: `scatter` places each row and `ribbon` connects them. The connecting mark picks which v to draw, to half a pixel, so the spec never names a grid, an `n` or a step.
-- `ribbon({ h: x.density() })` (approach B) is short for that spec. Because the curve is still rows, `stack` adds two curves at each x with no new machinery.
+- Today the croissant stories sample a function by hand: `gridOf`, a hand-written `kde`, and `quantileRows` over 1000 rows, with a grid range and size picked per story. And every line or area chart, croissant or not, needs a `scatter` before its `line` or `ribbon`.
+- Proposed, part 1: `line` and `ribbon` take their position channels, `line({ x: "date", y: "price" })`, and a stack after the mark, `ribbon({ x, h }).stack({ by })`. Both are sugar for one written rewrite: the mark's `x` is a `scatter` right before the mark, and a `.stack()` after the mark goes inside it. Rendered for a line, a multi-series line, an area and a stacked area.
+- Proposed, part 2: `sweep({ v: [a, b] })` makes a row for every v in an interval, so the same `ribbon({ x: "v", h: x.density("v") })` draws a function with no grid. The connecting mark picks which v to draw, to half a pixel.
 
 ## Recommendation
 
-Candidate C: rows over a continuous index, made by a new operator, `sweep`, with B as its short form. `repeat` stays discrete. A count and an interval make rows that allow different operators after them, so they are two operators, not one with two argument types. After `sweep`, the spec is the one GoFish already uses for an area: `scatter` places each row, `stack` works inside each x slice, and `ribbon` or `line` connects the slices. Prototype renders of the normal croissant, two stacked densities, a plain function and a spiral use the real `scatter`, `stack`, `ribbon` and `line` on an emulated continuum: the v values were picked adaptively before layout. The wall is the real version, where the connector lays out each slice on demand as it samples; no prototype does that yet. The runner-up is `repeat` given an interval. A continuous `scatter` was weighed and rejected.
+Josh's spelling holds, as sugar. `chart(params).flow(sweep({ v: [-4, 4] })).mark(ribbon({ x: "v", h: x.density("v"), fill: "series" }).stack({ by: "series", dir: "y" }))` rewrites to `.flow(sweep(...), scatter({ by: "v", x: "v" }), stack({ by: "series" })).mark(ribbon({ h }))`, which the engine draws today (with an emulated continuum). The stack is the flow `stack` with one meaning, a box stack. It stacks pointwise only because the rewrite puts it inside each x slice. Pointwise stacking is not made a general rule of `stack`, because a stack of whole ribbons is a real chart too (a ridgeline), and the rule would depend on what kind of child it gets. The same rewrite drops the `scatter` from every plain line and area chart. Grouping stays explicit in the flow, as #786 decided, and the path order is the `along` key's order, `x` by default. The wall from the last round shrinks but stays: under `sweep`, the connector must lay out each slice on demand. The slice is now only `scatter`, `stack` and an invisible anchor, so the offset at v is a sum of the heights below, but no prototype does it yet.
 
 ## Relation to #980
 
@@ -18,13 +18,178 @@ Renders are real GoFish renders. B uses a throwaway prototype node, `packages/go
 
 ## Rules
 
-1. The function lives in the data as a Dist: `dist.normal({ mean, sd })` over parameter columns, or `field(x).kde()` over a group's rows (#980).
-2. `sweep({ v: [a, b] })` replaces each row with a continuum of rows, one for every v in [a, b], with the index in column `v`. The interval can be a pair or an interval value: a Dist's `x.range()`, or #980's `x.interval(0.95)`. `repeat(n, "draw")` stays the discrete operator (#980).
-3. A continuum goes through the operators that work one slice at a time: `scatter({ x: "v" })` places each row, `stack` works inside each slice, `derive` maps each row, and `ribbon` or `line` connects the slices. The connector picks the v it draws, to half a pixel, through the axis scales and the coordinate transform. Sampling has no spelling, so there is no knob to model.
-4. An operator that counts or lists its rows is an error after `sweep`: `spread`, `sort`, `count`, and a mark drawn once per row (rect, circle, text). After `repeat` they are legal. This is why the two are two operators.
-5. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, the way #980's `x.quantile("p")` reads a level. With no argument, `ribbon({ h: x.density() })` is short for the whole spec over `x.range()` (approach B).
-6. A bare Dist in a position channel still means its blurred limit (#980). That uses the Dist's own weight, where draws pile up. A continuum weighs every v the same. The two are different, so they get different spellings.
-7. Cuts and dots read the Dist exactly: `x.bin(Bin.quantiles(n))` cuts at the quantile function, and `x.median()` is exact. `quantileRows` is deleted (#1231). No new mark.
+1. `line` and `ribbon` take position channels: `x`, `y`, and `along` (the path order, `x` by default). `.mark(R({ x, y, along, ...rest }))` is `.flow(..., scatter({ by: along ?? x, x, y })).mark(R(rest))`. One rewrite, written out, in the place #748 already fuses `h` into an invisible anchor.
+2. Which rows join: the rows of one flow group, exactly as #786 decided. No paint channel splits anything: `stroke: "symbol"` on rows that differ in symbol is still the loud error it is today, so a multi-series line writes `group({ by: "symbol" })`.
+3. In what order: the `along` key's order, which is the order `scatter({ by })` gives today (first appearance, or the column's levels; `field(x).sort()` sorts).
+4. `.stack(s)` after a line or ribbon is the flow `stack(s)` placed after the mark's `scatter`, so it stacks inside each x slice: a stacked area. A `stack` written in the flow before the mark is outside the slices, so it stacks whole ribbons: a ridgeline. The order on the page is the order of the tiers.
+5. `sweep({ v: [a, b] })` replaces each row with a continuum of rows over [a, b]; `repeat(n)` stays discrete (#980). After `sweep`, `spread`, `sort`, `count` and a mark per row are errors, and `line` or `ribbon` sample the continuum to half a pixel.
+6. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, as #980's `x.quantile("p")` reads a level. `ribbon({ h: x.density() })` with no x is short for the whole spec over `x.range()` (approach B). A bare Dist in a position channel still means its blurred limit (#980).
+7. Cuts and dots read the Dist exactly: `x.bin(Bin.quantiles(n))` and `x.median()`. `quantileRows` is deleted (#1231). No new mark.
+
+## Line and ribbon take their position
+
+One rewrite, written out. The renders run it: `xy()` in `stories/proposals/LineRibbonXY.stories.tsx` builds the flow the rewrite gives.
+
+```js
+// The one rewrite (R is line or ribbon; `along` defaults to x)
+chart(data)
+  .flow(...ops)
+  .mark(R({ x, y, along, ...rest }).stack(s));
+
+chart(data)
+  .flow(...ops, scatter({ by: along ?? x, x, y }), stack(s))
+  .mark(R(rest));
+```
+
+### Line chart
+
+![](img/l-line.png)
+
+One line through all the rows, in year order. The gallery Line Chart today.
+
+```js
+chart(drivingShifts).mark(line({ x: "year", y: "gas", stroke: "steelblue" }));
+```
+
+Python:
+
+```python
+chart(driving_shifts).mark(line(x="year", y="gas", stroke="steelblue"))
+```
+
+Today:
+
+```js
+chart(drivingShifts)
+  .flow(scatter({ by: "year", x: "year", y: "gas" }))
+  .mark(line({ stroke: "steelblue" }));
+```
+
+### One line per stock
+
+![](img/l-multi-line.png)
+
+The grouping stays in the flow, so the rule for which rows join is the one #786 shipped. Only the `scatter` goes. (The gallery Line Chart with End Labels today.)
+
+```js
+chart(stocks, { schema: { date: Unit.time() } })
+  .flow(group({ by: "symbol" }))
+  .mark(
+    line({ x: "date", y: "price", stroke: "symbol" }).label("symbol", {
+      position: Place.end(),
+    })
+  );
+```
+
+Python:
+
+```python
+(
+    chart(stocks, schema={"date": Unit.time()})
+    .flow(group(by="symbol"))
+    .mark(line(x="date", y="price", stroke="symbol").label("symbol", position=Place.end()))
+)
+```
+
+Today:
+
+```js
+chart(stocks, { schema: { date: Unit.time() } })
+  .flow(group({ by: "symbol" }), scatter({ by: "date", x: "date", y: "price" }))
+  .mark(
+    line({ stroke: "symbol" }).label("symbol", {
+      position: Place.end(),
+    })
+  );
+```
+
+### Area chart
+
+![](img/l-area.png)
+
+`ribbon` with `x` and `h`. The ribbon's `h` already goes to an invisible anchor today (#748); `x` joins it.
+
+```js
+chart(rows).mark(ribbon({ x: "x", h: "y" }));
+```
+
+Today:
+
+```js
+chart(rows)
+  .flow(scatter({ by: "x", x: "x" }))
+  .mark(ribbon({ h: "y" }));
+```
+
+### Stacked area chart
+
+![](img/l-stacked-area.png)
+
+`.stack()` after the mark lands after the mark's `scatter`, so each x slice is stacked: a stacked area. This is the row-wise stack #290 said a mark-side stack must mean. (The gallery Stacked Area Chart spreads over lakes, a discrete x with gaps; that stays a `spread` in the flow.)
+
+```js
+chart(rows).mark(
+  ribbon({ x: "x", h: "y", fill: "c" }).stack({ by: "c", dir: "y" })
+);
+```
+
+Python:
+
+```python
+chart(rows).mark(ribbon(x="x", h="y", fill="c").stack(by="c", dir="y"))
+```
+
+Today:
+
+```js
+chart(rows)
+  .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ h: "y", fill: "c" }));
+```
+
+### The same stack, written before the mark
+
+![](img/l-stack-before-mark.png)
+
+In the flow, `stack` comes before the mark's `scatter`, so it stacks whole ribbons by their boxes: a ridgeline. Nothing is guessed: the tiers run in the order they are written, and the mark's position channels are the last tier.
+
+```js
+// stack in the flow is outside the mark's x tier: it stacks whole ribbons
+chart(rows)
+  .flow(stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ x: "x", h: "y", fill: "c" }));
+
+// rewrites to
+chart(rows)
+  .flow(stack({ by: "c", dir: "y" }), scatter({ by: "x", x: "x" }))
+  .mark(ribbon({ h: "y", fill: "c" }));
+```
+
+### History: how line, ribbon and stack got here
+
+- **#511 / #519 (merged)**: Added `.connect(line())` as builder sugar for connecting a chart's marks.
+- **#745 (merged)**: Deleted `.connect()` in favor of `.layer()` with relational marks. Rejected: inferring which marks a connector joins from intent. Josh: intent-detection rules "feel spooky". Kept: `by` on the mark, paint under its operands.
+- **#748 (merged)**: Fusion sugar: `.mark(R(opts))` is `.mark(blank(anchor(opts))).layer(R(rest))`. The anchor takes only `w`, `h`, `emX`, `emY`; all paint goes to the connector. Stacked area and streamgraph stayed in the two-tier form in the gallery, because the fused "spread + stack then ribbon" was hard to read.
+- **#786 (merged)**: A fused connector takes its grouping from the flow: the path tier threads as one path, every other tier splits. `along` names the path tier. `by` was removed from `line` and `ribbon`; an array `along` and `by: null` were rejected. A paint field that varies inside one path is a loud error.
+- **#290 (open)**: Stack as a mark method. Josh's 07-10 note: for connectors a mark-side `.stack()` can only mean stacking the rows (stacking whole ribbons draws a ridgeline), so it is a spelling of the flow `stack`, not a new operation; ggplot's position adjustments mark the boundary of what could go mark-side. The waffle case was later solved by `wrap`, so `stack` keeps one meaning, a hard seam, at every level.
+- **#47 (open)**: Stacked ribbons for sankeys. Its candidate `ribbon().stack()` was rejected as a partial overlap with flow `stack`; that case stacks ribbon ends inside nodes, a different job from stacking areas.
+- **api-design.md**: A method chain reads or branches on the caller's state; an option is a local adjective. A method has a function twin only for a one-child operator. `stack` and `spread` differ in spaces (stack glues children into one space), not in spacing.
+- **memory note**: `.connect()` as the canonical line form is out of date: #745 deleted it. The canonical form today is a `scatter` in the flow and a fused `line` in `.mark()`.
+
+### Does this answer the past objections?
+
+- **"Which rows join" (#745, #786)**: Unchanged. The proposal adds no grouping of its own: rows join within one flow group, by #786's rule. It also does not let `stroke: "symbol"` split rows, which would be a second, hidden grouping rule; ggplot (`group` defaults to the interaction of discrete variables) and Vega-Lite (non-position channels set the series) do that. That stays a decision.
+- **"In what order"**: The `along` key's order, `x` when `along` is absent. That is the order `scatter({ by })` gives today: first appearance, or the column's levels. ggplot's `geom_line` sorts by x and `geom_path` keeps data order; GoFish today is `geom_path`. Whether `line({ x })` should sort is a decision.
+- **"Spooky action" in fusion (#748)**: One more key goes to the anchor tier, and it is a position: `x`, `y` and `along` become a `scatter` instead of options on a `blank`. It is the same kind of written rewrite #748 already does for `h`, with the same loud errors.
+- **Stack as a mark modifier (#290, #47)**: Answered as #290 suggested: for `line` and `ribbon`, `.stack(s)` is the flow `stack(s)` placed after the mark's x tier. It is a spelling with one rewrite, not a second stacking rule, and it does not stack whole marks. Where it sits fits the methods rule: it reads the caller's state (the mark's x tier) to know where it goes. It is not a function twin of a one-child operator, so it is a new kind of method; that is a decision. #47's rejected `ribbon().stack()` was a different job (ribbon ends inside sankey nodes).
+- **Is `.stack` on a mark the flow `stack`?**: Yes, the same operator in a different tier. The other reading, making pointwise stacking the general rule of `stack` (with box stacking the case where h is constant along x), was weighed and rejected. A stack of whole ribbons is a real chart (the ridgeline card), so the rule would have to depend on whether a child bends or is rigid, which is a mode. With the order rule, both charts stay writable and `stack` keeps one meaning.
+
+| System          | Stacking and grouping                                                                                                                                                                                                                                                                        | Checked                                                 |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| ggplot2         | `geom_area(position = "stack")`; `geom_density(position = "stack")` stacks densities on a shared grid. The stack is an option of the layer, computed on the rows. `geom_line` connects in x order; `geom_path` in data order. `group` defaults to the interaction of the discrete variables. | verified (aes_group_order, geom_path pages)             |
+| Vega-Lite       | `stack` is a property of the x or y encoding (`zero`, `normalize`, `center`, `null`), on by default for bar, area and arc when a non-position channel maps another field. Non-position channels set the series; the `order` channel sets the stack order.                                    | verified (stack page)                                   |
+| Observable Plot | `Plot.areaY(data, Plot.stackY({ x, y, fill }))`: the stack is a transform on the mark's options; `z`, `fill` or `stroke` set the series.                                                                                                                                                     | from memory: the docs page refused the fetch (HTTP 429) |
+| matplotlib      | `ax.stackplot(x, y1, y2, ...)`: a separate function over shared x.                                                                                                                                                                                                                           | from memory                                             |
 
 ## Rows over a continuous index
 
@@ -36,14 +201,13 @@ Renders use the real `scatter`, `stack`, `ribbon` and `line` on an emulated cont
 
 ![](img/c-normal.png)
 
-The curve layer is the rows spec after `sweep`. The cuts and dots still come from the Dist, as in every approach. The short form at the bottom of the code is B.
+The curve layer: one ribbon over the continuum. The cuts and dots still come from the Dist, as in every approach. B, at the bottom of the code, is shorter still.
 
 ```js
-// sweep makes a row for every v in the Dist's range; the rest is the rows spec
 chart(params)
-  .flow(sweep({ v: x.range() }), scatter({ x: "v" }))
+  .flow(sweep({ v: x.range() }))
   .mark(
-    ribbon({ h: x.density("v") })
+    ribbon({ x: "v", h: x.density("v") })
       .name("density")
       .hidden()
   );
@@ -52,12 +216,12 @@ chart(params)
 chart(params).mark(ribbon({ h: x.density() }).name("density").hidden());
 ```
 
-Runner-up, `repeat` over an interval:
+Rewrites to (runs today):
 
 ```js
-// Runner-up: repeat, given an interval instead of a count
+// What it rewrites to: the mark's x is a scatter right before the mark
 chart(params)
-  .flow(derive(repeat(x.range(), "v")), scatter({ x: "v" }))
+  .flow(sweep({ v: x.range() }), scatter({ by: "v", x: "v" }))
   .mark(
     ribbon({ h: x.density("v") })
       .name("density")
@@ -70,8 +234,8 @@ Python:
 ```python
 (
     chart(params)
-    .flow(sweep(v=x.range()), scatter(x="v"))
-    .mark(ribbon(h=x.density("v")).name("density").hidden())
+    .flow(sweep(v=x.range()))
+    .mark(ribbon(x="v", h=x.density("v")).name("density").hidden())
 )
 ```
 
@@ -81,26 +245,27 @@ Python:
 
 ![](img/c-stack.png)
 
-`scatter({ by: "v" })` makes one slice per v, and `stack` puts g on top of f inside each slice. The sum f(v) + g(v) comes from adding two numbers, the way `stack` always does, so functions need no addition of their own. This is the structure of the stacked area and streamgraph stories today, with a continuum in place of the rows. In the render g is scaled by 0.6.
+Josh's spelling. `sweep` crosses each params row (one per series) with v. The mark's `x: "v"` becomes a `scatter` by v, and `.stack()` goes inside each v slice, so g sits on f at every v: the sum f(v) + g(v) is `stack` adding two numbers. The render runs the rewrite on an emulated continuum. In the render g is scaled by 0.6.
 
 ```js
 // one row per curve: { series, mean, sd }; x = dist.normal({ mean: "mean", sd: "sd" })
 chart(params)
-  .flow(
-    sweep({ v: [-4, 4] }),
-    scatter({ by: "v", x: "v" }),
-    stack({ by: "series", dir: "y" })
-  )
-  .mark(ribbon({ h: x.density("v"), fill: "series" }));
+  .flow(sweep({ v: [-4, 4] }))
+  .mark(
+    ribbon({ x: "v", h: x.density("v"), fill: "series" }).stack({
+      by: "series",
+      dir: "y",
+    })
+  );
 ```
 
-Runner-up, `repeat` over an interval:
+Rewrites to (runs today):
 
 ```js
-// Runner-up: repeat, given an interval
+// What it rewrites to: stack goes inside each v slice, after the scatter
 chart(params)
   .flow(
-    derive(repeat(interval(-4, 4), "v")),
+    sweep({ v: [-4, 4] }),
     scatter({ by: "v", x: "v" }),
     stack({ by: "series", dir: "y" })
   )
@@ -112,12 +277,8 @@ Python:
 ```python
 (
     chart(params)
-    .flow(
-        sweep(v=[-4, 4]),
-        scatter(by="v", x="v"),
-        stack(by="series", dir="y"),
-    )
-    .mark(ribbon(h=x.density("v"), fill="series"))
+    .flow(sweep(v=[-4, 4]))
+    .mark(ribbon(x="v", h=x.density("v"), fill="series").stack(by="series", dir="y"))
 )
 ```
 
@@ -133,21 +294,18 @@ No Dist, so the interval is written as a pair. The row accessor `(d) => wave(d.v
 const wave = (v) => Math.sin(v) + 0.3 * Math.sin(7 * v);
 
 chart([{}])
-  .flow(
-    sweep({ v: [0, 4 * Math.PI] }),
-    scatter({ x: "v", y: (d) => wave(d.v) })
-  )
-  .mark(line());
+  .flow(sweep({ v: [0, 4 * Math.PI] }))
+  .mark(line({ x: "v", y: (d) => wave(d.v) }));
 ```
 
-Runner-up, `repeat` over an interval:
+Rewrites to (runs today):
 
 ```js
-// Runner-up: repeat, given an interval
+// What it rewrites to
 chart([{}])
   .flow(
-    derive(repeat(interval(0, 4 * Math.PI), "v")),
-    scatter({ x: "v", y: (d) => wave(d.v) })
+    sweep({ v: [0, 4 * Math.PI] }),
+    scatter({ by: "v", x: "v", y: (d) => wave(d.v) })
   )
   .mark(line());
 ```
@@ -159,11 +317,7 @@ def wave(v):
     return math.sin(v) + 0.3 * math.sin(7 * v)
 
 
-(
-    chart([{}])
-    .flow(sweep(v=[0, 4 * math.pi]), scatter(x="v", y=lambda d: wave(d["v"])))
-    .mark(line())
-)
+chart([{}]).flow(sweep(v=[0, 4 * math.pi])).mark(line(x="v", y=lambda d: wave(d["v"])))
 ```
 
 ### A parametric curve
@@ -172,26 +326,33 @@ def wave(v):
 
 ![](img/c-spiral.png)
 
-The index t is neither x nor y. `sweep` gives it a column of its own, and `scatter` places each row at (x(t), y(t)). A continuous `scatter`, which uses its index set as the x axis, has no spelling for this curve.
+The index t is neither x nor y, so the path names it with `along: "t"`, the option #786 added. A continuous `scatter`, which uses its index set as the x axis, has no spelling for this curve.
 
 ```js
-// The index t is not a position: x and y are both functions of it
+// The path follows t; x and y are both functions of it
+chart([{}])
+  .flow(sweep({ t: [0, 6 * Math.PI] }))
+  .mark(
+    line({
+      along: "t",
+      x: (d) => d.t * Math.cos(d.t),
+      y: (d) => d.t * Math.sin(d.t),
+    })
+  );
+```
+
+Rewrites to (runs today):
+
+```js
+// What it rewrites to
 chart([{}])
   .flow(
     sweep({ t: [0, 6 * Math.PI] }),
-    scatter({ x: (d) => d.t * Math.cos(d.t), y: (d) => d.t * Math.sin(d.t) })
-  )
-  .mark(line());
-```
-
-Runner-up, `repeat` over an interval:
-
-```js
-// Runner-up: repeat, given an interval
-chart([{}])
-  .flow(
-    derive(repeat(interval(0, 6 * Math.PI), "t")),
-    scatter({ x: (d) => d.t * Math.cos(d.t), y: (d) => d.t * Math.sin(d.t) })
+    scatter({
+      by: "t",
+      x: (d) => d.t * Math.cos(d.t),
+      y: (d) => d.t * Math.sin(d.t),
+    })
   )
   .mark(line());
 ```
@@ -201,14 +362,14 @@ Python:
 ```python
 (
     chart([{}])
-    .flow(
-        sweep(t=[0, 6 * math.pi]),
-        scatter(
+    .flow(sweep(t=[0, 6 * math.pi]))
+    .mark(
+        line(
+            along="t",
             x=lambda d: d["t"] * math.cos(d["t"]),
             y=lambda d: d["t"] * math.sin(d["t"]),
-        ),
+        )
     )
-    .mark(line())
 )
 ```
 
@@ -750,13 +911,17 @@ Taking a function as a mark input is common (Mathematica, Plots.jl, Makie), and 
 
 ## Open decisions
 
-1. Name of the continuous operator: `sweep` (recommended), `continuum`, or Josh's `interval` despite its clash with #980's `x.interval(p)` and `interval({ x, levels })`? (`domain` and `span` clash too.)
-2. Real implementation of a continuum: the connector lays out each slice on demand as it samples. Which operators can lay out one slice at a time? `stack` and `scatter` can; `spread`, `sort` and `count` cannot and become errors. Is that list right?
-3. Short form: is `ribbon({ h: x.density() })` (B) worth keeping as sugar for the continuum spec over `x.range()`? And how does a plain function or a parametric curve read the index: `(d) => wave(d.v)`, or a column expression?
-4. Extent of a stack: each Dist's own range, or one shared interval (as the stacked card writes it)? Where one curve has no row at some v, is it 0?
-5. Median weights: every value in a cell is weight spread over x, and the median is where the pooled weight reaches half. Is a cut cell's weight 1 or its probability (0.2)? Does a continuum over a Dist's range carry the Dist's weight, or uniform weight? With uniform weight, `field("v").median()` is a cell's midpoint, not the Dist's median.
-6. Ridgeline: cut each month at the quantiles of its smoothed curve (as drawn), or at the raw days' quantiles? They differ, and the slices are drawn on the smoothed curve.
-7. Continuous type: one type whose unit decides field or measure, or two types? And does it come before or after #980's Dist?
-8. Default range of a smoothed sample: its data plus 3 bandwidths each side (seaborn's `cut`), or cut at the data's ends (ggdist's bounded density)?
-9. An outer cell runs to minus or plus infinity. Should its region stop at the chart's x domain (as the prototype does), or is an infinite cell an error?
-10. Should the mark warn when the curve's true peak, found while drawing, is above the y domain found before layout?
+1. Should `line` and `ribbon` take `x`, `y` and `along`, as sugar for a `scatter` right before the mark?
+2. Should `.stack()` after a line or ribbon mean the flow `stack` inside its x slices (a new kind of method, not a one-child twin)?
+3. Should a field-valued `stroke` or `fill` split rows into series, as in ggplot and Vega-Lite, or stay a loud error that asks for `group({ by })`? (Splitting closes the door on per-segment color.)
+4. Should `line({ x })` sort its points by x, like ggplot's `geom_line`, or keep data order, like today's `scatter({ by })`?
+5. Name of the continuous operator: `sweep`, `continuum`, or `interval` despite #980's `x.interval(p)` and `interval({ x, levels })`?
+6. Which operators may run one slice at a time on a continuum (so far `scatter`, `stack`, `derive`), and are `spread`, `sort` and `count` errors there?
+7. Keep B, `ribbon({ h: x.density() })`, as the shortest form? And should a row accessor like `(d) => wave(d.v)` be a channel value?
+8. Stack extent: each Dist's own range, or one shared interval? Is a missing curve 0 at that v?
+9. Is a cut cell's weight 1 or its probability (0.2)? Is a continuum over a Dist's range weighted by the Dist or uniform?
+10. Ridgeline: cut at the smoothed curve's quantiles or the raw days'?
+11. Field and measure: one continuous type or two?
+12. Default range of a smoothed sample: data plus 3 bandwidths (seaborn) or the data's ends (ggdist)?
+13. Infinite outer cells: stop at the x domain, or error?
+14. Warn when the true peak found while drawing is above the y domain?
