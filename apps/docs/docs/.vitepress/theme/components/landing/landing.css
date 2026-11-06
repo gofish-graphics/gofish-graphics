@@ -551,22 +551,87 @@ html.landing-page .DocSearch-Button {
     transform: translateY(0);
   }
 }
-/* longhands, so the shorthand does not reset each card's animation-delay */
-.landing .float-card {
-  opacity: 0;
-  animation-name: gf-settle;
-  animation-duration: 0.8s;
-  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation-fill-mode: forwards;
+/* Taped picture cards drop onto the sheet and get taped down: each card
+   falls from a little above the paper (larger, more tilted, its shadow wide,
+   soft and far), lands with a small settle, and its tape is pressed on just
+   after. The animations only run the individual translate / rotate / scale
+   properties, which compose with each card's own tilt transform, and they
+   fill backwards only, so the resting styles (and the hover lift) take over
+   once they end. --drop-delay staggers the cards: the floating hero cards
+   and the collage at load (LandingPage.vue), the spectrum row when it
+   scrolls into view (.drops below). */
+.landing .pic {
+  animation: gf-drop 0.6s var(--drop-delay, 0ms) backwards;
 }
-@keyframes gf-settle {
-  from {
+.landing .pic .card {
+  animation: gf-drop-shadow 0.6s var(--drop-delay, 0ms) backwards;
+}
+.landing .pic .tape {
+  animation: gf-tape 0.2s calc(var(--drop-delay, 0ms) + 0.48s) ease-out
+    backwards;
+}
+@keyframes gf-drop {
+  0% {
     opacity: 0;
-    transform: rotate(0deg) translateY(10px) scale(0.96);
+    translate: 0 -18px;
+    rotate: calc(var(--tilt, 0deg) * 1.5 + 1deg);
+    scale: 1.12;
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.6);
   }
-  to {
+  30% {
     opacity: 1;
   }
+  82% {
+    translate: 0 1px;
+    rotate: 0deg;
+    scale: 0.992;
+    animation-timing-function: ease-out;
+  }
+  100% {
+    opacity: 1;
+    translate: 0 0;
+    rotate: 0deg;
+    scale: 1;
+  }
+}
+@keyframes gf-drop-shadow {
+  0% {
+    box-shadow:
+      0 6px 10px rgba(60, 40, 20, 0.04),
+      16px 34px 44px rgba(60, 40, 20, 0.12);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.9, 0.6);
+  }
+  82% {
+    box-shadow:
+      0 1px 1px var(--shadow-warm),
+      2px 4px 14px var(--shadow-warm);
+    animation-timing-function: ease-out;
+  }
+}
+@keyframes gf-tape {
+  from {
+    opacity: 0;
+    scale: 1.25;
+  }
+}
+/* The spectrum row reveals by dropping its cards in, not by rising as a
+   block: the row itself stays put, its cards wait until it is visible, and
+   the axis under them fades in as they land. */
+.landing.landing--js .reveal.drops {
+  opacity: 1;
+  transform: none;
+}
+.landing .drops .spec-axis {
+  transition: opacity 0.5s ease 0.35s;
+}
+.landing.landing--js .drops:not(.visible) .pic,
+.landing.landing--js .drops:not(.visible) .spec-axis {
+  opacity: 0;
+}
+.landing.landing--js .drops:not(.visible) .pic,
+.landing.landing--js .drops:not(.visible) .pic .card,
+.landing.landing--js .drops:not(.visible) .pic .tape {
+  animation-name: none;
 }
 
 /* ---------- SECTIONS ---------- */
@@ -1135,10 +1200,15 @@ html.landing-page .VPNavBarSocialLinks {
     animation-delay: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-  .landing .rise,
-  .landing .float-card {
+  .landing .rise {
     opacity: 1 !important;
     transform: none !important;
+  }
+  .landing .pic,
+  .landing .pic .card,
+  .landing .pic .tape {
+    animation: none !important;
+    opacity: 1 !important;
   }
   .landing .reveal {
     opacity: 1 !important;

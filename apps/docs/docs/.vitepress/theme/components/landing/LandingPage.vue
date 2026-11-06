@@ -25,15 +25,23 @@ const railScrolls = ref(false);
 const jsReady = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
+// Stagger the taped cards' drop (landing.css, gf-drop): the i-th card of a
+// list lands this long after the first.
+const dropDelay = (i: number, start = 0): Record<string, string> => ({
+  "--drop-delay": `${start + 70 * i}ms`,
+});
+// When the hero's cards start dropping in, after the title has begun to rise.
+const HERO_DROP_START = 300;
+
 // Place a hero card floating around the title (wide screens); the cards
-// settle in one after another, in list order. landing.css scales the width
+// drop in one after another, in list order. landing.css scales the width
 // and centers a "center" card (left: 0; right: 0; margin-inline: auto).
 function floatStyle(card: HeroCard, i: number): Record<string, string> {
   const f = card.float;
   const style: Record<string, string> = {
     top: `${f.y}px`,
     "--fc-w": `${f.width}px`,
-    animationDelay: `${400 + 80 * i}ms`,
+    ...dropDelay(i, HERO_DROP_START),
   };
   if (f.side === "center") {
     style.left = "0";
@@ -48,6 +56,10 @@ const COLLAGE_COLUMNS = (["left", "right"] as const).map((column) =>
   HERO.filter((c) => c.column === column)
 );
 const COLLAGE_WIDE = HERO.filter((c) => c.column === "wide");
+// The collage cards drop in in list order too, whatever column they are in.
+const COLLAGE_DROP = Object.fromEntries(
+  HERO.map((c, i) => [c.id, dropDelay(i, HERO_DROP_START)])
+);
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -397,13 +409,19 @@ onBeforeUnmount(() => {
               :key="column"
               class="collage-col"
             >
-              <PictureCard v-for="card in cards" :key="card.id" :card="card" />
+              <PictureCard
+                v-for="card in cards"
+                :key="card.id"
+                :card="card"
+                :style="COLLAGE_DROP[card.id]"
+              />
             </div>
             <PictureCard
               v-for="card in COLLAGE_WIDE"
               :key="card.id"
               :card="card"
               class="wide"
+              :style="COLLAGE_DROP[card.id]"
             />
           </div>
           <p class="collage-more">
@@ -421,7 +439,8 @@ onBeforeUnmount(() => {
           </h2>
         </div>
 
-        <div class="track reveal">
+        <!-- the row's cards drop in when it scrolls into view -->
+        <div class="track reveal drops">
           <!-- a row on wide screens; a swipe row on narrow ones -->
           <div
             ref="railEl"
@@ -437,6 +456,7 @@ onBeforeUnmount(() => {
               :card="card"
               lift
               class="specimen"
+              :style="dropDelay(i)"
               role="group"
               :aria-label="`${i + 1} of ${SPECTRUM.length}`"
             />
