@@ -610,16 +610,16 @@ html.landing-page .DocSearch-Button {
     translate: 0 -10px;
     --rise: 12;
     --lift: calc(var(--lift-rest) + 11deg);
-    animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
   }
   12% {
     opacity: 1;
   }
+  /* The drift ends here, but the swing has no stop: it runs on in one
+     motion from the start to its first turn past rest. */
   25% {
     translate: 0 0;
     --rise: 0;
-    --lift: calc(var(--lift-rest) + 10deg);
-    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
   }
   56% {
     --lift: calc(var(--lift-rest) - 1.2deg);
