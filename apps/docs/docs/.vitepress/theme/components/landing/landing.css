@@ -226,15 +226,10 @@ html.landing-page .DocSearch-Button {
     3px 6px 18px var(--shadow-warm);
 }
 .landing .card.lift {
-  transition:
-    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
-    box-shadow 0.35s ease;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 .landing .card.lift:hover {
   transform: rotate(0deg) translateY(-6px) scale(1.03);
-  box-shadow:
-    0 1px 2px var(--shadow-warm),
-    4px 14px 30px var(--shadow-warm);
 }
 
 /* A picture card (PictureCard.vue): tilted by --tilt, its tape centered on
@@ -247,8 +242,50 @@ html.landing-page .DocSearch-Button {
   display: block;
   text-decoration: none;
 }
-.landing .pic .card {
+/* Each card is taped at its top edge and its bottom lifts a little off the
+   sheet, hinged at the tape: --gf-lift (1 to 3.5 degrees, PictureCard.vue)
+   turns the card about its top edge, and its shadow on the sheet (.shade)
+   is all but nothing under the tape and grows lower, further right and
+   softer toward the bottom edge. The card itself keeps only a contact
+   shadow. --gf-rise lifts the whole card while it is taped down (gf-hang). */
+.landing .pic {
+  --gf-lift: var(--lift-rest, 0deg);
+  --gf-rise: 0;
+}
+.landing .pic .mount {
+  position: relative;
   display: block;
+  perspective: 1400px;
+  perspective-origin: 50% 0;
+}
+.landing .pic .card {
+  position: relative;
+  z-index: 1;
+  display: block;
+  transform-origin: 50% 0;
+  rotate: x var(--gf-lift);
+  box-shadow: 0 1px 2px var(--shadow-warm);
+}
+.landing .pic .shade {
+  position: absolute;
+  inset: 0;
+  border-radius: 6px;
+  background: rgba(38, 28, 18, 0.3);
+  transform-origin: 50% 0;
+  transform: translate(
+      calc(var(--gf-rise) * 0.5px),
+      calc(var(--gf-rise) * 0.9px)
+    )
+    skewX(calc(var(--gf-lift) * 0.6)) scaleY(calc(1 + sin(var(--gf-lift))));
+  filter: blur(
+    calc(2px + sin(var(--gf-lift)) * 150px + var(--gf-rise) * 0.6px)
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    rgb(0 0 0 / calc(var(--gf-rise) / 12)),
+    #000 60%
+  );
+  pointer-events: none;
 }
 .landing .pic .tape {
   top: -11px;
@@ -329,28 +366,35 @@ html.landing-page .DocSearch-Button {
   margin: 26px auto 0;
 }
 
-/* ---- alpha stamp (on the wordmark) + version tag (under the install chip) ---- */
+/* ---- version stamp (on the wordmark) ---- */
 /* The wordmark shrinks to its text so the stamp can anchor to its right end. */
 .landing .hero h1.wordmark {
   display: inline-block;
   position: relative;
   overflow: visible;
 }
-/* Inked rubber stamp slapped over the right end of "GoFish" at 45°: oxblood,
+/* Inked rubber stamp of the version beside "GoFish", centered on it: oxblood,
    edges eroded by a noise mask so it reads as pressed ink rather than printed. */
 .landing .hero-stamp {
+  /* stamped on once the hero's cards have settled (the last of the seven
+     settles at about 1.56s; see gf-hang) */
+  animation: gf-stamp 0.29s 1.5s backwards;
   position: absolute;
   left: 100%;
   top: 50%;
   z-index: 6;
-  /* rest the stamp against the "h" at the wordmark's end, shallow tilt */
-  transform: translate(-16%, -64%) rotate(27deg);
+  /* x and y are offsets from the wordmark's right end and vertical middle,
+     as a share of the stamp's own size */
+  --stamp-x: 11%;
+  --stamp-y: -50%;
+  --stamp-angle: 0deg;
+  transform: translate(var(--stamp-x), var(--stamp-y))
+    rotate(var(--stamp-angle));
   font-family: "Spline Sans", sans-serif;
   font-weight: 800;
   font-size: clamp(0.8rem, 1.4vw, 1.05rem);
   letter-spacing: 0.2em;
   text-indent: 0.2em; /* balance the trailing letter-spacing */
-  text-transform: uppercase;
   color: #b23a2e;
   padding: 0.26em 0.5em 0.22em;
   border: 2.5px solid #b23a2e;
@@ -367,27 +411,15 @@ html.landing-page .DocSearch-Button {
   --stamp-erode: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='e'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.45 0.5' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.1 0.98'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='1 1 1 1 1 0 1 0 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23e)'/%3E%3C/svg%3E");
 }
 
-/* Release line on a small paper tag, centered under the install chip and held
-   by a strip of the same masking tape as the specimen cards. */
-.landing .hero-version {
-  display: block;
-  width: fit-content;
-  margin: 18px auto 0;
-  position: relative;
-  z-index: 6;
-  font-family: "Spline Sans Mono", monospace;
-  font-size: clamp(0.68rem, 1.15vw, 0.88rem);
-  color: var(--ink);
-  background: #fffdf7;
-  padding: 7px 12px 6px;
-  border-radius: 4px;
-  transform: rotate(-2.5deg);
-  box-shadow:
-    0 1px 2px var(--shadow-warm),
-    2px 4px 12px var(--shadow-warm);
-  pointer-events: none;
+/* The stamp comes down from above the sheet, speeding up, and thuds into
+   the paper: it stops at full speed, with no bounce. */
+@keyframes gf-stamp {
+  from {
+    opacity: 0;
+    scale: 1.7;
+    animation-timing-function: cubic-bezier(0.55, 0, 1, 0.45);
+  }
 }
-
 @media (max-width: 560px) {
   .landing .hero-stamp {
     font-size: 0.68rem;
@@ -444,53 +476,44 @@ html.landing-page .DocSearch-Button {
   line-height: 1;
 }
 
-/* Floating specimen cards (wide screens): picture cards from landingCards.ts
-   (FLOATING), each placed in one corner of the hero. */
+/* Floating hero cards (wide screens): the hero's cards from landingCards.ts
+   (HERO), each placed by its `float` (LandingPage.vue sets top, the side
+   offset and --fc-w). They tilt twice as far as in the collage, for a looser
+   pile, and leave out their captions. */
+.landing .hero-cards {
+  --fc-scale: 1;
+}
 .landing .float-card {
   position: absolute;
   z-index: 4;
+  width: calc(var(--fc-w) * var(--fc-scale));
+  transform: rotate(calc(var(--tilt) * 2));
 }
 .landing .float-card .card {
   padding: 10px;
 }
-.landing .fc-tl {
-  left: 6%;
-  top: 14%;
-  animation-delay: 400ms;
+.landing .float-card .cap {
+  display: none;
 }
-.landing .fc-tr {
-  right: 6%;
-  top: 12%;
-  animation-delay: 520ms;
-}
-.landing .fc-bl {
-  left: 4%;
-  bottom: 6%;
-  animation-delay: 640ms;
-}
-.landing .fc-br {
-  right: 5%;
-  bottom: 7%;
-  animation-delay: 720ms;
-}
-/* Breakpoint must equal --sheet-w (a media query can't read a custom prop). */
-@media (max-width: 1240px) {
-  .landing .fc-tl {
-    left: 2.5%;
-    top: 3%;
+/* room under the install command for the bottom row of cards */
+@media (min-width: 1101px) {
+  .landing .hero {
+    padding-bottom: 230px;
   }
-  .landing .fc-tr {
-    right: 2.5%;
-    top: 3%;
+}
+/* Breakpoint must equal --sheet-w (a media query can't read a custom prop).
+   Below it the hero narrows with the window, so the cards shrink. */
+@media (max-width: 1240px) {
+  .landing .hero-cards {
+    --fc-scale: 0.82;
   }
   .landing .hero h1 {
     font-size: clamp(2.4rem, 4.8vw, 3.9rem);
   }
 }
-@media (max-width: 1200px) {
-  .landing .fc-bl,
-  .landing .fc-br {
-    display: none;
+@media (max-width: 1180px) {
+  .landing .hero-cards {
+    --fc-scale: 0.74;
   }
 }
 /* display:none, not just hidden: Chrome does not fetch a lazy image inside a
@@ -514,19 +537,24 @@ html.landing-page .DocSearch-Button {
   }
 }
 .landing .collage {
+  --collage-gap: 18px;
   max-width: 620px;
   margin: 40px auto 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 18px 16px;
+  gap: var(--collage-gap) 16px;
   align-items: start;
+}
+/* Each column is its own stack, so a card's height moves only the cards
+   under it (the card order in landingCards.ts keeps the two columns' edges
+   apart). */
+.landing .collage-col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--collage-gap);
 }
 .landing .collage .pic.wide {
   grid-column: 1 / -1;
-}
-.landing .collage .pic.tall {
-  grid-row: span 2;
-  align-self: center;
 }
 .landing .collage .card {
   padding: 8px;
@@ -554,8 +582,9 @@ html.landing-page .DocSearch-Button {
 }
 @media (max-width: 700px) {
   .landing .collage {
+    --collage-gap: 10px;
     margin: 22px -14px 0;
-    gap: 10px 8px;
+    column-gap: 8px;
   }
   .landing .collage .pic.wide {
     width: 104%;
@@ -563,33 +592,52 @@ html.landing-page .DocSearch-Button {
   }
 }
 
-/* hero load motion */
-.landing .rise {
-  opacity: 0;
-  transform: translateY(18px);
-  animation: gf-rise 0.7s ease-out forwards;
+/* The hero's and the spectrum row's cards are taped down as the page loads: each drifts in from
+   just above the sheet with its tape already on and its bottom swung up,
+   and the bottom swings down around the tape to its lifted rest
+   (--lift-rest), sways past it, back above it and past it once more, less
+   each time, and settles. The animation runs the individual translate
+   property and the --gf-lift / --gf-rise properties that the card's hinge and
+   shadow read, and fills backwards only, so the resting styles take over
+   once it ends. --drop-delay (LandingPage.vue) staggers the cards in list
+   order. */
+.landing .pic {
+  animation: gf-hang 0.95s var(--drop-delay, 0ms) backwards;
 }
-@keyframes gf-rise {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-/* longhands, so the shorthand does not reset each corner's animation-delay */
-.landing .float-card {
-  opacity: 0;
-  animation-name: gf-settle;
-  animation-duration: 0.8s;
-  animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation-fill-mode: forwards;
-}
-@keyframes gf-settle {
-  from {
+@keyframes gf-hang {
+  0% {
     opacity: 0;
-    transform: rotate(0deg) translateY(10px) scale(0.96);
+    translate: 0 -10px;
+    --gf-rise: 12;
+    --gf-lift: calc(var(--lift-rest) + 11deg);
+    animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
   }
-  to {
+  12% {
     opacity: 1;
+  }
+  /* The drift ends here, but the swing has no stop: it runs on in one
+     motion from the start to its first turn past rest. */
+  25% {
+    translate: 0 0;
+    --gf-rise: 0;
+  }
+  56% {
+    --gf-lift: calc(var(--lift-rest) - 1.2deg);
+    animation-timing-function: ease-in-out;
+  }
+  71% {
+    --gf-lift: calc(var(--lift-rest) + 0.7deg);
+    animation-timing-function: ease-in-out;
+  }
+  85% {
+    --gf-lift: calc(var(--lift-rest) - 0.3deg);
+    animation-timing-function: ease-in-out;
+  }
+  100% {
+    opacity: 1;
+    translate: 0 0;
+    --gf-rise: 0;
+    --gf-lift: var(--lift-rest);
   }
 }
 
@@ -739,6 +787,11 @@ html.landing-page .DocSearch-Button {
   .landing .specimen {
     flex: 0 0 78%;
     scroll-snap-align: start;
+  }
+  /* The row is below the first screen here, so its swing on load would play
+     where no one sees it: the cards are simply in place. */
+  .landing .specimens .pic {
+    animation: none;
   }
   .landing .specimen .card {
     padding: 8px;
@@ -1080,21 +1133,6 @@ html.landing-page .VPNavBarSocialLinks {
   z-index: 1;
 }
 
-/* ---------- REVEAL ---------- */
-.landing .reveal {
-  transition:
-    opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
-    transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.landing.landing--js .reveal {
-  opacity: 0;
-  transform: translateY(26px);
-}
-.landing.landing--js .reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 @media (max-width: 700px) {
   .landing .sheet {
     width: calc(100% - 20px);
@@ -1159,14 +1197,9 @@ html.landing-page .VPNavBarSocialLinks {
     animation-delay: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-  .landing .rise,
-  .landing .float-card {
+  .landing .pic {
+    animation: none !important;
     opacity: 1 !important;
-    transform: none !important;
-  }
-  .landing .reveal {
-    opacity: 1 !important;
-    transform: none !important;
   }
 }
 
@@ -1325,6 +1358,19 @@ html.landing-page .VPNavBarSocialLinks {
   html.landing-page .VPNavBar .content-body {
     animation: none !important;
   }
+}
+
+/* registered custom properties that animate a picture card being taped
+   down (gf-hang) */
+@property --gf-lift {
+  syntax: "<angle>";
+  inherits: true;
+  initial-value: 0deg;
+}
+@property --gf-rise {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
 /* registered custom property that animates the pull-apart explosion */

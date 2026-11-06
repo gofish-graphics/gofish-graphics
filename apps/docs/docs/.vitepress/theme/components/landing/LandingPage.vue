@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { docsLang, examplesHref } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
 import PictureCard from "./PictureCard.vue";
-import { COLLAGE, FLOATING, SPECTRUM } from "./landingCards";
+import { HERO, SPECTRUM, type HeroCard } from "./landingCards";
+// The stamp on the wordmark shows the package version, inlined at build time.
+import { version as VERSION } from "../../../../../../../packages/gofish-graphics/package.json";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the inline chart art never goes through
@@ -22,8 +24,42 @@ const knobEl = ref<HTMLElement | null>(null);
 // Whether the spectrum row overflows, so it scrolls (narrow screens only). Only
 // then is it a tab stop with a label, so keyboard users can scroll it.
 const railScrolls = ref(false);
-const jsReady = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
+
+// The taped cards are taped down one after another as the page loads
+// (landing.css, gf-hang), in list order, starting just after load. The
+// hero's cards and the spectrum row's start together.
+const dropDelay = (i: number): Record<string, string> => ({
+  "--drop-delay": `${250 + 60 * i}ms`,
+});
+
+// Place a hero card floating around the title (wide screens); the cards
+// are taped down one after another, in list order. A "center" card is centered
+// here (left: 0; right: 0; margin-inline: auto); landing.css scales the width.
+function floatStyle(card: HeroCard, i: number): Record<string, string> {
+  const f = card.float;
+  const style: Record<string, string> = {
+    top: `${f.y}px`,
+    "--fc-w": `${f.width}px`,
+    ...dropDelay(i),
+  };
+  if (f.side === "center") {
+    style.left = "0";
+    style.right = "0";
+    style.marginInline = "auto";
+  } else style[f.side] = `${f.x}px`;
+  return style;
+}
+// The hero list never changes, so place and group its cards once.
+const FLOAT_STYLES = HERO.map(floatStyle);
+const COLLAGE_COLUMNS = (["left", "right"] as const).map((column) =>
+  HERO.filter((c) => c.column === column)
+);
+const COLLAGE_WIDE = HERO.filter((c) => c.column === "wide");
+// The collage cards drop in in list order too, whatever column they are in.
+const COLLAGE_DROP = Object.fromEntries(
+  HERO.map((c, i) => [c.id, dropDelay(i)])
+);
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -283,40 +319,13 @@ function wireRail(): void {
   measure();
 }
 
-// ---- scroll reveal.
-function wireReveals(): void {
-  const root = rootEl.value;
-  if (!root) return;
-  const reveals = root.querySelectorAll(".reveal");
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce || !("IntersectionObserver" in window)) {
-    reveals.forEach((el) => el.classList.add("visible"));
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) {
-          e.target.classList.add("visible");
-          io.unobserve(e.target);
-        }
-      });
-    },
-    { threshold: 0.12 }
-  );
-  reveals.forEach((el) => io.observe(el));
-  cleanups.push(() => io.disconnect());
-}
-
 onMounted(() => {
   // Route-scoped desk: drives all html.landing-page body / navbar styling.
   document.documentElement.classList.add("landing-page");
   injectFonts();
-  jsReady.value = true;
   wireRail();
   wireDemo();
   wireBrackets();
-  wireReveals();
 });
 
 onBeforeUnmount(() => {
@@ -327,52 +336,63 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootEl" class="landing" :class="{ 'landing--js': jsReady }">
+  <div ref="rootEl" class="landing">
     <div class="sheet">
       <!-- ===================== HERO ===================== -->
       <section class="hero" aria-labelledby="hero-h">
-        <!-- wide screens: taped specimen cards floating around the title,
-             each linking to its example page. The container is display:none
+        <!-- wide screens: the hero's cards floating around the title, each
+             linking to its example page. The container is display:none
              at 1100px and below, so phones never fetch their lazy pictures. -->
         <div class="hero-cards">
           <PictureCard
-            v-for="card in FLOATING"
+            v-for="(card, i) in HERO"
             :key="card.id"
             :card="card"
-            :class="['float-card', `fc-${card.corner}`]"
-            :style="{ width: `${card.width}px` }"
+            class="float-card"
+            :style="FLOAT_STYLES[i]"
           />
         </div>
 
         <div class="inner">
-          <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
-               its right end at an angle. Kept as real text so it is announced to
-               screen readers. The release-line tag lives under the install chip
-               (CtaBlock, version prop). -->
-          <h1 id="hero-h" class="wordmark rise" style="animation-delay: 0ms">
-            GoFish<span class="hero-stamp" style="animation-delay: 240ms"
-              >alpha</span
-            >
+          <!-- The wordmark carries an inked rubber stamp of the version
+               beside its right end. Kept as real text so it is announced to
+               screen readers. -->
+          <h1 id="hero-h" class="wordmark">
+            GoFish<span class="hero-stamp">v{{ VERSION }}</span>
           </h1>
-          <p class="subtitle rise" style="animation-delay: 90ms">
+          <p class="subtitle">
             an open-source visualization library for
             JavaScript&nbsp;and&nbsp;Python
           </p>
-          <div class="rise" style="animation-delay: 180ms">
-            <CtaBlock version />
+          <div>
+            <CtaBlock />
           </div>
         </div>
 
-        <!-- phones and tablets, where the floating cards are hidden: a pile
-             of taped specimen cards, each linking to its example page -->
+        <!-- phones and tablets, where the floating cards are hidden: the
+             same cards as a pile, each linking to its example page -->
         <div class="collage-wrap">
           <div class="collage">
+            <!-- two columns that stack on their own, then the wide cards
+                 across both -->
+            <div
+              v-for="(cards, column) in COLLAGE_COLUMNS"
+              :key="column"
+              class="collage-col"
+            >
+              <PictureCard
+                v-for="card in cards"
+                :key="card.id"
+                :card="card"
+                :style="COLLAGE_DROP[card.id]"
+              />
+            </div>
             <PictureCard
-              v-for="card in COLLAGE"
+              v-for="card in COLLAGE_WIDE"
               :key="card.id"
               :card="card"
-              :class="{ wide: card.wide, tall: card.tall }"
-              :style="{ marginTop: card.drop ? `${card.drop}px` : undefined }"
+              class="wide"
+              :style="COLLAGE_DROP[card.id]"
             />
           </div>
           <p class="collage-more">
@@ -383,14 +403,14 @@ onBeforeUnmount(() => {
 
       <!-- ===================== SPECTRUM ===================== -->
       <section class="section spectrum" aria-labelledby="spec-h">
-        <div class="head reveal">
+        <div class="head">
           <h2 id="spec-h" class="spec-title">
             <span class="nowrap">Simple when you want,</span>{{ " " }}
             <span class="nowrap">complex when you need</span>
           </h2>
         </div>
 
-        <div class="track reveal">
+        <div class="track">
           <!-- a row on wide screens; a swipe row on narrow ones -->
           <div
             ref="railEl"
@@ -406,6 +426,7 @@ onBeforeUnmount(() => {
               :card="card"
               lift
               class="specimen"
+              :style="dropDelay(i)"
               role="group"
               :aria-label="`${i + 1} of ${SPECTRUM.length}`"
             />
@@ -436,14 +457,14 @@ onBeforeUnmount(() => {
 
       <!-- ===================== COMPOSITION BAND ===================== -->
       <section class="band" aria-labelledby="comp-h">
-        <div class="head reveal">
+        <div class="head">
           <h2 id="comp-h" class="band-title">
             Because graphics are all made of the same stuff
           </h2>
         </div>
 
         <!-- PULL-APART DEMO -->
-        <div class="demo-wrap reveal">
+        <div class="demo-wrap">
           <button
             ref="demoEl"
             class="demo"
@@ -468,12 +489,12 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- CODE STRIP -->
-        <div class="codestrip reveal">
+        <div class="codestrip">
           <div v-html="codeStrip"></div>
         </div>
 
         <!-- closing CTA: easy to get started after reading the whole page -->
-        <div class="band-cta reveal">
+        <div class="band-cta">
           <CtaBlock />
         </div>
 
