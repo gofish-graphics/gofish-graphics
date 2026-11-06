@@ -21,7 +21,7 @@ const props = defineProps<{
 
 const href = computed(() => exampleHref(docsLang.value, props.card.id));
 // How far the card's bottom edge lifts off the sheet, hinged at its tape
-// (landing.css, --lift): 1 to 3.5 degrees, varied per card from its tilt
+// (landing.css, --gf-lift): 1 to 3.5 degrees, varied per card from its tilt
 // and tape angle.
 const liftRest = computed(() => {
   const { tilt, tape } = props.card;

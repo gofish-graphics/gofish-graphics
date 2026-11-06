@@ -34,8 +34,8 @@ const dropDelay = (i: number): Record<string, string> => ({
 });
 
 // Place a hero card floating around the title (wide screens); the cards
-// are taped down one after another, in list order. landing.css scales the width
-// and centers a "center" card (left: 0; right: 0; margin-inline: auto).
+// are taped down one after another, in list order. A "center" card is centered
+// here (left: 0; right: 0; margin-inline: auto); landing.css scales the width.
 function floatStyle(card: HeroCard, i: number): Record<string, string> {
   const f = card.float;
   const style: Record<string, string> = {
