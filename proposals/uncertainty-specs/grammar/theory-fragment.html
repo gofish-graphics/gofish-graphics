@@ -13,10 +13,10 @@
 <p>Everything else is GoFish as it is today.</p>
 <!-- marks -->
 <h3>Marks defined in GoFish</h3>
-<p>ggdist's slab, interval and line ribbon are not new built-in marks. They are ordinary user code, written below in today's GoFish, and every spec in this tab and in the Catalog uses them. Each one is a function that returns a mark. The interval returns a function of the group's rows, as <code>.mark((rows) =&gt; ...)</code> already allows, because each of its levels gets its own fixed thickness. <code>gradientinterval</code> is a variant of the slab that carries a GoFish gap.</p>
+<p>ggdist's slab, interval and line ribbon are not new built-in marks. They are ordinary user code, written below in today's GoFish, and every spec in this tab and in the Catalog uses them. Each one is a function that returns a mark. The interval returns a function of the group's rows, as <code>.mark((rows) =&gt; ...)</code> already allows, because each of its levels gets its own fixed thickness. <code>ccdf</code> is the slab with thickness P(value &gt; v) in place of the density. <code>gradientinterval</code> is a variant of the slab that carries a GoFish gap.</p>
 <p>The definitions use two data helpers. The specs can be read without them.</p>
 <ul>
-  <li><code>densityCurve(rows, x, { n, range, normalize })</code> gives the density curve of the draws as n rows <code>{ v, density, cdf }</code>. <code>normalize: "peak"</code> divides the density by its peak.</li>
+  <li><code>densityCurve(rows, x, { n, range, normalize })</code> gives the density curve of the draws as n rows <code>{ v, density, cdf }</code>. <code>range: [lo, hi]</code> sets where the curve starts and ends; an end left out keeps its default. <code>normalize: "peak"</code> divides the density by its peak. On a sample, <code>cdf</code> is the sample's ECDF.</li>
   <li><code>centralIntervals(rows, x, levels, { by })</code> gives one row per level <code>{ level, center, size, median }</code>: the central interval that holds that share of the draws.</li>
 </ul>
 <p>The core of each mark, without options:</p>
@@ -25,6 +25,13 @@ const slab = (x) =&gt;
   chart()
     .flow(derive((rows) =&gt; densityCurve(rows, x)), scatter({ x: "v" }))
     .mark(ribbon({ h: "density" }));
+
+// ccdf: like the slab, but its thickness is P(value &gt; v), the chance the value is above v
+const ccdf = (x) =&gt;
+  chart()
+    .flow(derive((rows) =&gt; densityCurve(rows, x).map((r) =&gt; ({ ...r, ccdf: 1 - r.cdf }))),
+          scatter({ x: "v" }))
+    .mark(ribbon({ h: "ccdf" }));
 
 // interval: one rect per central interval (the wider, the thinner), and a circle at the median
 const interval = (x, levels = [0.95, 0.66]) =&gt; (rows) =&gt; {
@@ -44,7 +51,7 @@ const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5] }) =&gt; layer([
                scatter({ by: along, x: along, y: "median" }))
     .mark(line()),
 ]);</code></pre>
-<details><summary>Full definitions, with the options the catalog uses (sides, direction, highest-density intervals, the gradient variant)</summary>
+<details><summary>Full definitions, with the options the catalog uses (sides, direction, highest-density intervals, the gradient and CCDF variants)</summary>
 <pre class="gr-marks"><code class="language-js">// slab: the density curve of the draws, as a ribbon. side "start" hangs it below the line,
 // and "both" mirrors it. density holds densityCurve's options; curve(c, rows) may cut or
 // rewrite the curve's rows.
@@ -84,7 +91,12 @@ const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5], fill = "level", strok
 // gradientinterval: the slab divided by its peak, read as opacity over the full height.
 // gap: GoFish has no opacity that varies along one region.
 const gradientinterval = (x, o = {}) =&gt; slab(x, { density: { normalize: "peak" }, opacity: "alpha", ...o,
-  curve: (c) =&gt; c.map((r) =&gt; ({ ...r, alpha: r.density, density: 1 })) });</code></pre>
+  curve: (c) =&gt; c.map((r) =&gt; ({ ...r, alpha: r.density, density: 1 })) });
+
+// ccdf: the slab with thickness P(value &gt; v), the chance the value is above v, instead of the
+// density. ggdist starts the bar at the axis's lower limit: pass it as density: { range: [lo] }.
+const ccdf = (x, o = {}) =&gt;
+  slab(x, { ...o, curve: (c) =&gt; c.map((r) =&gt; ({ ...r, density: 1 - r.cdf })) });</code></pre>
 </details>
 <!-- /marks -->
 
@@ -95,7 +107,7 @@ const gradientinterval = (x, o = {}) =&gt; slab(x, { density: { normalize: "peak
     <tr><td><code>group({ by: "draw", blend: "mean" })</code></td><td>overlay, averaged</td><td>the expected picture, e.g. a CCDF fade</td><td>ggdist CCDF fade (limit); no ggdibbler example averages</td></tr>
     <tr><td><code>group({ by: "draw" })</code>, no blend</td><td>overlay, painted over each other</td><td>error: saturates, no limit</td><td>every ggdibbler overlay (fixed alpha); ggdist spaghetti</td></tr>
     <tr><td><code>spread</code>, <code>time.sequence</code> or <code>table</code> by <code>"draw"</code></td><td>dodged bars, subdivided map, HOP, lineup</td><td>error: no limit</td><td>ggdibbler</td></tr>
-    <tr><td><code>spread({ by: "level" })</code></td><td>sorted dodged bars, sorted subdivided map</td><td>the quantile function: CCDF bar, quantile ramp</td><td>ggdist CCDF bar (limit)</td></tr>
+    <tr><td><code>spread({ by: "level" })</code></td><td>sorted dodged bars, sorted subdivided map</td><td>error: infinitely many bars of zero width. As n grows the sorted bars tend to the CCDF bar, which <code>ccdf</code> draws as a summary</td><td>ggdist CCDF bar (as <code>ccdf</code>)</td></tr>
     <tr><td><code>partition</code> by a bin of the value, then <code>stack</code></td><td>dotplot</td><td>error: use the density curve of the draws</td><td>ggdist dots</td></tr>
     <tr><td>a summary of each cell's draws</td><td>empirical mean, interval, median line</td><td>exact quantiles, intervals, density slab</td><td>ggdist interval, point, slab, lineribbon</td></tr>
     <tr><td>a summary per draw, then steps on the draws</td><td>rank whole curves by depth, keep the deepest</td><td>curvewise bands</td><td>ggdist <code>curve_interval</code></td></tr>
@@ -104,7 +116,8 @@ const gradientinterval = (x, o = {}) =&gt; slab(x, { density: { normalize: "peak
 
 <h2>3. Rules the draw key's type checks</h2>
 <h3>3.1 n = Infinity</h3>
-<p>An infinite draw key has no list of draws to place. A chart may use one only if every step that reads it turns the draws into something with a meaning at the limit: an average picture (<code>blend: "mean"</code>), a summary of the draws, or the <code>level</code> column. A step that places each draw on its own (<code>spread</code>, <code>time.sequence</code> or <code>table</code> by <code>draw</code>, painting without a blend, <code>stack</code> in a bin), a channel that reads <code>draw</code> (such as color by draw), or a draw key that nothing uses up, is an error at n = Infinity.</p>
+<p>An infinite draw key has no list of draws to place. A chart may use one only if every step that reads it turns the draws into something with a meaning at the limit: an average picture (<code>blend: "mean"</code>) or a summary of the draws. A step that places one mark per draw is an error at n = Infinity, because infinitely many marks cannot be drawn. That covers <code>spread</code>, <code>time.sequence</code> or <code>table</code> by <code>draw</code>, painting without a blend, and <code>stack</code> in a bin. It also covers a <code>spread</code> by <code>level</code>, which places one mark per row in order of level: at n = Infinity each mark would have zero width. A channel that reads <code>draw</code> (such as color by draw), or a draw key that nothing uses up, is an error too.</p>
+<p>Sorted bars do have a limit. As n grows, the bars of a <code>spread</code> by <code>level</code> tend to the CCDF bar, which the <code>ccdf</code> mark of section 1 draws from a summary of the draws. That is a relation between two specs, one at finite n and one that summarizes the draws. It is not one spec at n = Infinity. <code>level</code> itself stays legal at n = Infinity when a summary or a channel reads it, such as an opacity from <code>level</code>, and nothing places a mark per row.</p>
 
 <h3>3.2 Combining cells within one draw</h3>
 <p>Many steps combine several cells into one shape: a line across x, a polygon, a scatter of two Dist columns, or a stat computed per draw over many cells (density, contour, smoother, boxplot). The shape then shows one joint value of those cells, and which joint it shows depends on the key that ties the cells together:</p>

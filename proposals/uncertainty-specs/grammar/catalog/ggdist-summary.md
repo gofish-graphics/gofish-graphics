@@ -62,7 +62,7 @@ specs write them as methods on a Dist expression or a field: `x.mean()`,
 `x.median()`, `x.quantile(p)`, `x.min()`, `x.max()`, and `x.probability()`
 inside a cell made by binning `x`. Slabs, intervals and line ribbons are not
 built-in marks (Josh, 11-04). The specs call `slab`, `interval`,
-`lineribbon` and `gradientinterval`, which are ordinary user code of a few
+`lineribbon`, `gradientinterval` and `ccdf`, which are ordinary user code of a few
 lines each, defined in section 1 of `../theory-fragment.html` and copied in
 the prelude below. On a Dist cell with no `sample` a summary
 is exact, which is the same as `sample(n: Infinity)` followed by the
@@ -104,13 +104,16 @@ How the draw key is used up:
 
 - **Summaries per cell.** About 50 entries: every slab (the density curve),
   interval, point and lineribbon band (quantiles and the median). 15 uses
-  the probability of each bin.
+  the probability of each bin. The CCDF bars (16, 17, 93 and part of 01)
+  use the CDF of the draws, through the `ccdf` mark; on a sample (16, 17)
+  that is the sample's ECDF.
 - **Partition by a bin, then stack.** About 30 dotplot entries. Over a
   sample the rows are the draws. Over a Dist, `sample(d, { n, at:
   "quantiles" })` makes the dots (37, 40, 41, 60 to 63, 94, and part of 01).
   21 and 38 take quantile dots of a sample with a filter on `level`.
-- **`level`.** 16 and 17 spread by `level` over a sample (finite n). 93 and
-  part of 01 spread by `level` at n = Infinity, which gives the CCDF bar.
+- **`level`.** No catalog spec spreads by `level`. At n = Infinity that is an
+  error under rule 3.1, because it places one bar of zero width per draw.
+  Sorted bars at finite n tend to the `ccdf` picture, which is a second spec.
 - **`blend: "mean"`.** 22, the CCDF fade.
 - **The plain overlay.** 69, 81, 82 and 85 draw shared whole-curve draws with
   `group({ by: ".draw" })`.
@@ -144,8 +147,10 @@ const withDraw = (rows) => rows.map((r, i) => ({ ...r, draw: i }));
 // densityCurve(rows, x, { n = 121, range, normalize } = {}): the density
 // curve of the draws at n evenly spaced values. One row per value:
 // { v, density, cdf }. range defaults to the distribution's display range
-// (support()). normalize: "peak" divides the density by its peak. On a
-// sample the density is a Gaussian kernel estimate (Silverman bandwidth).
+// (support()); an end left out keeps its default, so range: [0] starts the
+// curve at 0. normalize: "peak" divides the density by its peak. On a
+// sample the density is a Gaussian kernel estimate (Silverman bandwidth)
+// and cdf is the sample's ECDF.
 
 // centralIntervals(rows, x, levels, { by } = {}): the equal-tailed central
 // interval of the draws at each level p, from Q((1 - p) / 2) to
@@ -196,6 +201,11 @@ const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5], fill = "level", strok
 // gap: GoFish has no opacity that varies along one region.
 const gradientinterval = (x, o = {}) => slab(x, { density: { normalize: "peak" }, opacity: "alpha", ...o,
   curve: (c) => c.map((r) => ({ ...r, alpha: r.density, density: 1 })) });
+
+// ccdf: the slab with thickness P(value > v), the chance the value is above v, instead of the
+// density. ggdist starts the bar at the axis's lower limit: pass it as density: { range: [lo] }.
+const ccdf = (x, o = {}) =>
+  slab(x, { ...o, curve: (c) => c.map((r) => ({ ...r, density: 1 - r.cdf })) });
 
 // keepDeepest (83, 84, 87): a derive that scores each draw by the mean over
 // its rows of depth(row) and keeps the deepest share of draws.
@@ -305,9 +315,11 @@ be families of the proposal's `dist` namespace.
    names the gap (opacity along one region) correctly. Fades also divide
    the opacity by its peak, not only the thickness, so that the plateau is
    opaque. That is arithmetic on the curve's rows, in the slab's `curve`.
-8. **`spread({ by: "level" })` at n = Infinity is the CCDF bar only with an
-   anchor.** Each bar must run from a fixed point at or below the support to
-   the draw (93). A bar from 0 is wrong when the distribution crosses 0.
-9. **3.1 lists `spread` among errors at n = Infinity but the table allows
-   `spread({ by: "level" })` there.** The rule means a spread by `draw`. It
-   should say so.
+8. **The CCDF bar needs an anchor.** It must run from a fixed point at or
+   below the support (93). ggdist uses the axis's lower limit; the specs pass
+   it as the curve's range, `density: { range: [lo] }`. A bar from 0 is wrong
+   when the distribution crosses 0.
+9. **A spread by `level` at n = Infinity.** Version 2 first allowed it as the
+   CCDF bar. Rule 3.1 now makes it an error, like a spread by `draw`, and the
+   CCDF bar is the `ccdf` mark. Sorted bars tend to it as n grows, which is a
+   relation between two specs.

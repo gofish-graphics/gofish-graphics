@@ -121,7 +121,6 @@ E[1] = dict(
     gofish="""
 const x = dist.normal({ mean: 4, sd: 1 });
 const cell = [{ mean: 4, sd: 1 }];
-const drawn = sample(cell, { n: Infinity });
 const dots = sample(cell, { n: 100, at: "quantiles" });
 // one row per geom
 spread({ dir: "y", spacing: 8 }, [
@@ -142,32 +141,24 @@ spread({ dir: "y", spacing: 8 }, [
   chart(cell).mark(
     layer([gradientinterval(x), interval(x)])
   ),
-  // ccdfinterval: one bar per level, from the axis start to
-  // the draw
-  layer([
-    chart(drawn)
-      .flow(spread({ by: "level", dir: "y", spacing: 0 }))
-      .mark(
-        rect({
-          dims: { x: { min: 0, max: x } },
-          fill: SLAB,
-        })
-      ),
-    chart(cell).mark(interval(x)),
-  ]),
-  // cdfinterval: one bar per level, from the draw to the
-  // axis end
-  layer([
-    chart(drawn)
-      .flow(spread({ by: "level", dir: "y", spacing: 0 }))
-      .mark(
-        rect({
-          dims: { x: { min: x, max: 8 } },
-          fill: SLAB,
-        })
-      ),
-    chart(cell).mark(interval(x)),
-  ]),
+  // ccdfinterval: thickness P(X > v), from the axis start at 0
+  chart(cell).mark(
+    layer([
+      ccdf(x, { density: { range: [0] } }),
+      interval(x),
+    ])
+  ),
+  // cdfinterval: thickness P(X <= v), up to the axis end at 8
+  chart(cell).mark(
+    layer([
+      slab(x, {
+        density: { range: [undefined, 8] },
+        curve: (c) =>
+          c.map((r) => ({ ...r, density: r.cdf })),
+      }),
+      interval(x),
+    ])
+  ),
   // interval
   chart(cell).mark(
     interval(x, {
@@ -212,7 +203,7 @@ spread({ dir: "y", spacing: 8 }, [
   ]),
 ]);
 """,
-    uses_up='mixed: ccdf and cdf rows: spread({ by: "level" }) at n = Infinity; gradient row: the density curve of the draws read as opacity; slab and interval rows: summaries per cell; dots rows: sample at quantiles, then partition and stack',
+    uses_up='mixed: ccdf and cdf rows: the CDF of the draws as thickness; gradient row: the density curve of the draws read as opacity; slab and interval rows: summaries per cell; dots rows: sample at quantiles, then partition and stack',
     fit='gofish-gap',
     verdict='ok',
     note="Every row can now be written. Version 1 could not write the gradient row, because a blend has no peak scaling. In version 2 it is the density curve of the draws divided by its peak and read as opacity, and the missing piece is that GoFish has no opacity that varies along one region, so the spec marks it as a gap. The eye row has entry 4's layout gap, and the dots rows have the dot-binning gap of entry 20.",
@@ -641,55 +632,60 @@ layer([
 E[16] = dict(
     title="stat_ccdfinterval(position = 'dodge') on sample rows",
     gofish="""
-// df has no draw column; withDraw adds a row index, and the
-// schema declares it
-chart(withDraw(df), {
-  schema: { value: { draws: "draw" } },
-})
+// df's rows are the draws. On a sample, the cdf column of
+// the curve is the sample's ECDF, so the thickness is the
+// share of rows above v.
+chart(df)
   .flow(
     spread({ by: "group", dir: "x" }),
     spread({ by: "subgroup", dir: "x" })
   )
   .mark(
     layer([
-      chart()
-        .flow(spread({ by: "level", dir: "x", spacing: 0 }))
-        .mark(rect({ h: "value", fill: "subgroup" })),
+      // the bar starts at the axis's lower limit, 1.5, as
+      // ggdist's does
+      ccdf("value", {
+        dir: "y",
+        fill: "subgroup",
+        density: { range: [1.5] },
+      }),
       interval("value", { dir: "y" }),
     ])
   );
 """,
-    uses_up='spread({ by: "level" }) over the 1000 rows of each cell (finite n)',
+    uses_up="summaries per cell: the sample's ECDF as thickness (ccdf), and quantiles and the median of the rows",
     fit='fits',
     verdict='ok',
-    note="Sorted dodged bars: at height y the number of bars taller than y is n times P(Y > y), so the outline is the CCDF. level replaces version 1's sort of the draw key. Two caveats. The data still has no draw column, so withDraw adds a row index. And level ranks a row among the rows of its cell, which here must be the rows with the same group and subgroup; version 2 does not say how a cell is found in data that arrives as draws. The bars start at 0, while ggdist's ccdf starts at the axis limit (1.5 here), so the lowest part differs.",
+    note="The ccdf mark of section 1: a slab whose thickness is 1 - cdf, the share of the cell's rows above v. The rows are a sample, so the cdf is the sample's ECDF, read off the curve's grid. The bar starts at the axis's lower limit (1.5), as ggdist's does, through the curve's range. The sorted dodged bars of version 1 tend to this picture as the sample grows, but at 1000 rows ggdist draws the CCDF, not the bars. No draw column is needed, since nothing places single draws.",
 )
 
 E[17] = dict(
     title="stat_ccdfinterval(position = 'dodge', justification = 1) with y from 0",
     gofish="""
-// df has no draw column; withDraw adds a row index, and the
-// schema declares it
-chart(withDraw(df), {
-  schema: { value: { draws: "draw" } },
-})
+// df's rows are the draws. On a sample, the cdf column of
+// the curve is the sample's ECDF, so the thickness is the
+// share of rows above v.
+chart(df)
   .flow(
     spread({ by: "group", dir: "x" }),
     spread({ by: "subgroup", dir: "x" })
   )
   .mark(
     layer([
-      chart()
-        .flow(spread({ by: "level", dir: "x", spacing: 0 }))
-        .mark(rect({ h: "value", fill: "subgroup" })),
+      // the axis starts at 0, so the bar does too
+      ccdf("value", {
+        dir: "y",
+        fill: "subgroup",
+        density: { range: [0] },
+      }),
       interval("value", { dir: "y" }),
     ])
   );
 """,
-    uses_up='spread({ by: "level" }) over the 1000 rows of each cell (finite n)',
+    uses_up="summaries per cell: the sample's ECDF as thickness (ccdf), and quantiles and the median of the rows",
     fit='fits',
     verdict='ok',
-    note="With the axis from 0 this is exactly the sorted-bar picture. justification = 1 puts the interval at the bar's left edge, which is the layer's alignment of the interval child. The caveats of entry 16 apply.",
+    note="As entry 16, with the axis and the bar from 0. justification = 1 puts the interval at the bar's left edge, which is the layer's alignment of the interval child.",
 )
 
 E[18] = dict(
@@ -2914,27 +2910,21 @@ const x = dist.studentT({
   mu: ".fitted",
   sigma: ".se.fit",
 });
-layer([
-  chart(sample(fitted, { n: Infinity }))
-    .flow(
-      spread({ by: "condition", dir: "y" }),
-      spread({ by: "level", dir: "y", spacing: 0 })
-    )
-    .mark(
-      rect({
-        dims: { x: { min: -1.5, max: x } },
-        fill: SLAB,
-      })
-    ),
-  chart(fitted)
-    .flow(spread({ by: "condition", dir: "y" }))
-    .mark(interval(x)),
-]);
+chart(fitted)
+  .flow(spread({ by: "condition", dir: "y" }))
+  .mark(
+    layer([
+      // the bar starts at the axis's lower limit, -1.5, as
+      // ggdist's does
+      ccdf(x, { density: { range: [-1.5] } }),
+      interval(x),
+    ])
+  );
 """,
-    uses_up='spread({ by: "level" }), n = Infinity',
+    uses_up='summaries per cell: the CDF of the draws as thickness (ccdf), and quantiles and the median of the draws',
     fit='fits',
     verdict='ok',
-    note="The CCDF bar is the limit of the sorted bars, and rule 3.1 allows level at n = Infinity. Each bar must run from a fixed point at or below the support to the draw; ggdist uses the axis's lower limit, -1.5 here. A bar from 0 would be wrong, since the distributions cross 0. Version 1's sort named a column that did not exist; level is a column sample writes.",
+    note="The ccdf mark of section 1, which is a summary of the draws, so it is exact on a Dist. The bar must start at a fixed point at or below the support; ggdist uses the axis's lower limit, -1.5 here, which the spec sets as the curve's range. A bar from 0 would be wrong, since the distributions cross 0. Bars sorted by level tend to this picture as n grows, but a spread by level at n = Infinity is an error under rule 3.1.",
 )
 
 E[94] = dict(
