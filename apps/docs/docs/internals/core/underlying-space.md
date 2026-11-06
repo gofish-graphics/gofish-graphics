@@ -1380,7 +1380,13 @@ fixed-pixel (UNDEFINED) sibling never vetoes the magnitude-preserving path.
 same overlay fold (a category axis wins, a declared window pins), annotate the
 result with the transform that will later map underlying positions to display
 positions, and keep it for their own σ-scope; see
-[Flattening the Scenegraph](/internals/layout/coord-flattening).
+[Flattening the Scenegraph](/internals/layout/coord-flattening). A space is
+written as a layer with a coord, `layer({ coord }, [...])`: the layer is then
+the space's box, and hands the space its dims, key, `axes` and `padding`. A
+chart's node is such a layer over its content (`frameChart`), so a
+`chart({ coord })` is one too. The space gets the layer's node children only.
+A `ref` stand-in is left out, because its place is its target's, and only a
+layer without a coord plans that (`planPlacement`).
 
 ## Worked example: stacked bar chart
 

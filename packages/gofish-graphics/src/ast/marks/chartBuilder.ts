@@ -33,6 +33,7 @@ import {
   resolveMarkResult,
   stashLayerName,
   LayerContext,
+  markContext,
 } from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
 import {
@@ -916,7 +917,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
         : nameableMark(((d, key, layerContext) =>
             resolveMarkResult(
               finalMark,
-              layerContext,
+              markContext(layerContext),
               d,
               key
             )) as Mark<TOutput>);

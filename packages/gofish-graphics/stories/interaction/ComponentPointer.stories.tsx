@@ -54,8 +54,9 @@ export const Default: StoryObj<Args> = {
         { spacing: 14, alignment: "middle" },
         boxes.map((box) =>
           // Invoke the mark with `[box]` so this rect's datum IS that list. Reading
-          // pointer() in live() (at resolve, under the ambient context)
-          // registers the input → the runtime attaches for hit-testing. `d` is
+          // pointer() in live() (at resolve, in the thunk's call, which is in
+          // this chart's scope) registers the input → the runtime attaches for
+          // hit-testing. `d` is
           // this box's datum; `p.datum()` is the hovered box's datum — the same
           // list by reference on a hit.
           rect({

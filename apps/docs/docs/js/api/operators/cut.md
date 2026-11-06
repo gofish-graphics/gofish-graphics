@@ -37,7 +37,7 @@ explodes the slices apart with an 8px gap.
 
 ### Pure `cut(source, opts)`
 
-The core primitive. Returns `Promise<GoFishNode>[]` — an array you can drop
+The core primitive. Returns an array of N slice marks that you can drop
 straight into a combinator's children, synchronously:
 
 ```js
@@ -216,7 +216,7 @@ the slices sit on a real axis.
 ## Signatures
 
 ```ts
-// Pure primitive — returns Promise<GoFishNode>[]
+// Pure primitive — returns Mark[], one slice mark per size entry
 cut(source, { dir, size, inset? });
 
 // expand-mark modifier — chainable on image()/rect()

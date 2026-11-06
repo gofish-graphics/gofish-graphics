@@ -28,10 +28,11 @@
  * turns only at `await` points, where no scope is set.
  *
  * The one limit is Solid's: a read after an `await` inside an async user
- * callback is outside the call, so it registers with nothing. GoFish warns
- * once when that happens while such a callback is pending
- * ({@link warnUnscopedRead}; GoFish has no separate development build, so it
- * warns in every build): read the input before the `await`.
+ * callback is outside the call, so it registers with nothing, and the chart
+ * neither re-runs on it nor wires its events. Read the input before the
+ * first `await`. GoFish does not warn: every mark call is async, so a
+ * pending-callback count is never zero during a resolve, and a promise that
+ * never settles would leave it stuck.
  *
  * One rule says where the scope is set: `callMark` scopes the synchronous
  * part of every mark call, and every user callback GoFish calls after an
@@ -68,11 +69,6 @@ export interface Registrar extends SpecInvalidator {
  *  {@link withRegistrar}, for the length of one synchronous call. */
 let scoped: Registrar | undefined;
 
-/** How many async user callbacks called with a registrar have not settled
- *  yet: while any has not, a read with no registrar in scope is likely a read
- *  after an `await` in one of them. For {@link warnUnscopedRead} only. */
-let pendingCallbacks = 0;
-
 /**
  * Call `fn`, user code reached from a resolve, with `registrar` as the scope
  * its input reads register with: the registrar of the context the call is
@@ -87,48 +83,17 @@ export function withRegistrar<T>(
   if (registrar === scoped) return fn();
   const prev = scoped;
   scoped = registrar;
-  let out: T;
   try {
-    out = fn();
+    return fn();
   } finally {
     scoped = prev;
   }
-  // An async callback goes on after its first `await`, outside the scope.
-  if (registrar !== undefined && isThenable(out)) {
-    pendingCallbacks++;
-    const settle = () => void pendingCallbacks--;
-    out.then(settle, settle);
-  }
-  return out;
 }
-
-const isThenable = (v: unknown): v is PromiseLike<unknown> =>
-  typeof (v as PromiseLike<unknown> | null)?.then === "function";
 
 /** The registrar of the synchronous user call in progress, if any. A root
  *  `LayerContext` built with no registrar of its own (a node operator called
  *  in a component thunk) takes it from here, and carries it on from then on. */
 export const scopedRegistrar = (): Registrar | undefined => scoped;
-
-let warned = false;
-
-/**
- * Warn once when an input is read, outside a `live()` channel, with no
- * registrar in scope while an async user callback that was called with one
- * has not settled: that is what a read after an `await` in an async callback
- * looks like. It registers with nothing, so the chart neither re-runs on it
- * nor wires its events.
- */
-export function warnUnscopedRead(): void {
-  if (warned || pendingCallbacks === 0 || inLiveEval()) return;
-  warned = true;
-  console.warn(
-    "[gofish] An input was read during a chart's resolve but outside the " +
-      "call GoFish made, so the chart will not react to it. This happens " +
-      "when an async callback (a derive, a createMark body) reads an input " +
-      "after an `await`: read the input before the first `await`."
-  );
-}
 
 let liveEvalDepth = 0;
 

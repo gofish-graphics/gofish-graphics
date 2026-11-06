@@ -46,6 +46,7 @@ import {
   resolveMarkResult,
   attachTransformModifiers,
 } from "../marks/createOperator";
+import { markContext, type LayerContext } from "../marks/markResult";
 import { intersect } from "./porterDuff";
 import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
@@ -88,6 +89,7 @@ type CutShapeProps = {
 /** Build one slice node spanning source coords [offset, offset+extent). */
 async function buildSliceNode(
   source: Mark<any>,
+  layerContext: LayerContext,
   dirIdx: 0 | 1,
   sourceDimAlong: number,
   offset: number,
@@ -112,7 +114,7 @@ async function buildSliceNode(
   const regionRect = (
     await Rect({ x: 0, y: 0, w: sliceW, h: sliceH })
   ).hidden();
-  const sourceNode = await resolveMarkResult(source);
+  const sourceNode = await resolveMarkResult(source, layerContext);
   const translated = await offsetOp(
     dirIdx === 0 ? { x: translateOffset } : { y: translateOffset },
     [sourceNode]
@@ -186,15 +188,15 @@ function resolveExtents(
 }
 
 /**
- * The core, pure cut. Probes `source` for its extent along `dir`, resolves the
- * `size` array into pixel extents, and returns N slice promises (one per `size`
- * element) — N is `size.length`, known synchronously, so the array is usable as
- * combinator children right away while each slice resolves asynchronously.
+ * The core, pure cut. Returns N slice marks (one per `size` element): N is
+ * `size.length`, known synchronously, so the array is usable as combinator
+ * children right away. Each slice is a mark, so it is resolved in the context
+ * of the place it is a child of, and the inputs its source reads register
+ * with that chart. The slices resolved in one context share one probe of
+ * `source` for its extent along `dir`, and one resolution of `size` into pixel
+ * extents.
  */
-export function cut(
-  source: Mark<any>,
-  opts: CutOptions
-): Promise<GoFishNode>[] {
+export function cut(source: Mark<any>, opts: CutOptions): Mark<any>[] {
   const { dir, size, inset = 0 } = opts;
   if (!Array.isArray(size)) {
     throw new Error(
@@ -203,52 +205,77 @@ export function cut(
     );
   }
 
-  // One shared probe + extent resolution; every slice awaits it.
-  const geom = (async () => {
-    const probe = await resolveMarkResult(source);
-    const dirIdx: 0 | 1 = dir === "x" ? 0 : 1;
-    const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
-    const probeArgs: any = (probe as any).args;
-    const sourceDimAlong: number | undefined = probeArgs?.dims?.[dirIdx]?.size;
-    const sourceDimCross: number | undefined =
-      probeArgs?.dims?.[crossIdx]?.size;
-    if (typeof sourceDimAlong !== "number") {
-      throw new Error(
-        `cut: source shape must have an explicit ${
-          dir === "x" ? "w" : "h"
-        } (got ${JSON.stringify(sourceDimAlong)})`
-      );
-    }
-    if (typeof sourceDimCross !== "number") {
-      throw new Error(
-        `cut: source shape must have an explicit ${
-          dir === "x" ? "h" : "w"
-        } (cross axis); v1 cannot infer it from intrinsic dimensions`
-      );
-    }
-    const extents = resolveExtents(size, sourceDimAlong, dir);
-    const offsets: number[] = [];
-    let acc = 0;
-    for (const e of extents) {
-      offsets.push(acc);
-      acc += e;
-    }
-    return { dirIdx, sourceDimAlong, sourceDimCross, extents, offsets };
-  })();
+  const geoms = new WeakMap<LayerContext, Promise<CutGeometry>>();
+  const geomIn = (layerContext: LayerContext): Promise<CutGeometry> => {
+    let geom = geoms.get(layerContext);
+    if (geom === undefined)
+      geoms.set(layerContext, (geom = probe(source, dir, size, layerContext)));
+    return geom;
+  };
 
-  return size.map((_, i) =>
-    geom.then((g) =>
-      buildSliceNode(
-        source,
-        g.dirIdx,
-        g.sourceDimAlong,
-        g.offsets[i],
-        g.extents[i],
-        g.sourceDimCross,
-        inset
-      )
-    )
+  return size.map(
+    (_, i): Mark<any> =>
+      async (_d, _key, given) => {
+        const layerContext = markContext(given);
+        const g = await geomIn(layerContext);
+        return buildSliceNode(
+          source,
+          layerContext,
+          g.dirIdx,
+          g.sourceDimAlong,
+          g.offsets[i],
+          g.extents[i],
+          g.sourceDimCross,
+          inset
+        );
+      }
   );
+}
+
+type CutGeometry = {
+  dirIdx: 0 | 1;
+  sourceDimAlong: number;
+  sourceDimCross: number;
+  extents: number[];
+  offsets: number[];
+};
+
+/** Probe `source` for its extents, and resolve `size` into the slices'
+ *  pixel extents and offsets along `dir`. */
+async function probe(
+  source: Mark<any>,
+  dir: "x" | "y",
+  size: Value<number>[],
+  layerContext: LayerContext
+): Promise<CutGeometry> {
+  const probe = await resolveMarkResult(source, layerContext);
+  const dirIdx: 0 | 1 = dir === "x" ? 0 : 1;
+  const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
+  const probeArgs: any = (probe as any).args;
+  const sourceDimAlong: number | undefined = probeArgs?.dims?.[dirIdx]?.size;
+  const sourceDimCross: number | undefined = probeArgs?.dims?.[crossIdx]?.size;
+  if (typeof sourceDimAlong !== "number") {
+    throw new Error(
+      `cut: source shape must have an explicit ${
+        dir === "x" ? "w" : "h"
+      } (got ${JSON.stringify(sourceDimAlong)})`
+    );
+  }
+  if (typeof sourceDimCross !== "number") {
+    throw new Error(
+      `cut: source shape must have an explicit ${
+        dir === "x" ? "h" : "w"
+      } (cross axis); v1 cannot infer it from intrinsic dimensions`
+    );
+  }
+  const extents = resolveExtents(size, sourceDimAlong, dir);
+  const offsets: number[] = [];
+  let acc = 0;
+  for (const e of extents) {
+    offsets.push(acc);
+    acc += e;
+  }
+  return { dirIdx, sourceDimAlong, sourceDimCross, extents, offsets };
 }
 
 /**
@@ -257,18 +284,13 @@ export function cut(
  * per-row `datum()` array, an explicit array passes through, and `undefined`
  * stays `undefined`. We default `undefined` to equal slices (`datum(1)` ×N from
  * the data length) and delegate to the pure `cut`. The mark factory's expand
- * path stamps each returned node's datum for `selectAll`.
+ * path resolves the slice marks and stamps each node's datum for `selectAll`.
  */
-async function cutShape(
-  props: CutShapeProps,
-  data?: any[]
-): Promise<GoFishNode[]> {
+function cutShape(props: CutShapeProps, data?: any[]): Mark<any>[] {
   const items = data ?? [];
   const size: Value<number>[] =
     props.size === undefined ? Array(items.length).fill(datum(1)) : props.size;
-  return Promise.all(
-    cut(props.source, { dir: props.dir, size, inset: props.inset })
-  );
+  return cut(props.source, { dir: props.dir, size, inset: props.inset });
 }
 
 const cutFactory = createMark<

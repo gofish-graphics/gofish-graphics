@@ -35,7 +35,11 @@ import { text } from "../ast/shapes/text";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { nameableMark, type NameableMark } from "../ast/marks/createOperator";
-import { resolveMarkResult, type LayerContext } from "../ast/marks/markResult";
+import {
+  markContext,
+  resolveMarkResult,
+  type LayerContext,
+} from "../ast/marks/markResult";
 import type { Mark, MarkChild } from "../ast/types";
 import { clamp, mod } from "../util";
 import { click, drag } from "./inputs";
@@ -63,11 +67,11 @@ function control<I>(spec: {
   input: (hitTest: (pt: SvgPoint, hit: Hit | undefined) => boolean) => I;
   write: (input: I, primaryId: () => string | undefined) => void;
   /** Build the picture in `ctx`, the context the control is applied in: its
-   *  marks resolve in it (`leaf`), so the inputs they read register with that
+   *  marks resolve in it, so the inputs they read register with that
    *  chart. */
   build: (
     input: I,
-    ctx: LayerContext | undefined
+    ctx: LayerContext
   ) => Promise<{ node: GoFishNode; targets: [GoFishNode, GoFishNode] }>;
 }): Control {
   // The uids of the two nodes the latest build produced. Refreshed per build,
@@ -85,7 +89,10 @@ function control<I>(spec: {
   });
 
   const mark: Mark<unknown> = async (_d, _key, layerContext) => {
-    const { node, targets } = await spec.build(input, layerContext);
+    const { node, targets } = await spec.build(
+      input,
+      markContext(layerContext)
+    );
     primary = targets[0].uid;
     secondary = targets[1].uid;
     return node;
@@ -94,11 +101,6 @@ function control<I>(spec: {
   result.dispose = dispose;
   return result;
 }
-
-/** Invoke a leaf mark with no datum in `ctx`, what an operator does to a mark
- *  child. */
-const leaf = (mark: MarkChild, ctx: LayerContext | undefined) =>
-  resolveMarkResult(mark, ctx);
 
 /* -------------------------------- slider -------------------------------- */
 
@@ -231,7 +233,7 @@ export function slider(opts: SliderOptions): Control {
       const frac0 = frac(readLive(readValue));
 
       const track = (
-        await leaf(
+        await resolveMarkResult(
           rect({
             x: 0,
             cy: HANDLE_R,
@@ -243,7 +245,7 @@ export function slider(opts: SliderOptions): Control {
           ctx
         )
       ).name("track");
-      const handle = await leaf(
+      const handle = await resolveMarkResult(
         ellipse({
           cx: HANDLE_R + frac0 * travel,
           cy: HANDLE_R,
@@ -264,7 +266,7 @@ export function slider(opts: SliderOptions): Control {
       // ANCHOR, and the node's box runs leftward from it — which is the whole
       // bbox-stability trick.
       const readout = (
-        await leaf(
+        await resolveMarkResult(
           text({
             x: w + READOUT_GAP + slotW,
             textAnchor: "end",
@@ -352,7 +354,7 @@ export function button(opts: ButtonOptions): Control {
       // registers the click input with the runtime.
       const label = typeof caption === "function" ? caption() : caption;
       const box = (
-        await leaf(
+        await resolveMarkResult(
           rect({
             w,
             h,
@@ -365,7 +367,10 @@ export function button(opts: ButtonOptions): Control {
         )
       ).name("box");
       const glyph = (
-        await leaf(text({ text: label, fontSize: 12, fill: "#333" }), ctx)
+        await resolveMarkResult(
+          text({ text: label, fontSize: 12, fill: "#333" }),
+          ctx
+        )
       ).name("label");
       const node = await (
         await Layer({}, [box, glyph])

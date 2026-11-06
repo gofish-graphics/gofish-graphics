@@ -19,6 +19,7 @@ import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import {
   LayerContext,
   datumOfInput,
+  markContext,
   resolveMarkResult,
 } from "./marks/markResult";
 import { withRegistrar } from "../interaction/resolveContext";
@@ -239,14 +240,13 @@ export async function reifyChildrenSequentially(
     | LayerBuilder
     | Mark<any>
   )[],
-  layerContext?: LayerContext
+  layerContext: LayerContext
 ): Promise<GoFishAST[]> {
   // A thunked promise must resolve before the next child is resolved.
   const resolved: GoFishAST[] = [];
-  const sharedLayerContext = layerContext ?? new LayerContext();
 
   for (const child of children) {
-    const node = await reifyChild(child, sharedLayerContext);
+    const node = await reifyChild(child, layerContext);
     if (node != null) resolved.push(node);
   }
 
@@ -510,8 +510,9 @@ function buildCreatedMark(
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,
-    _layerContext?: LayerContext
+    given?: LayerContext
   ) => {
+    const _layerContext = markContext(given);
     if (markOpts.debug) {
       console.log("mark", key, d);
     }
@@ -544,7 +545,7 @@ function buildCreatedMark(
     let noValue = false;
     // The one call of a mark's channel functions and of a `createMark` body,
     // after the `await` above, in the scope of the mark's context.
-    const raw = await withRegistrar(_layerContext?.registrar, () => {
+    const raw = await withRegistrar(_layerContext.registrar, () => {
       for (const propName of Object.keys(resolvedOpts)) {
         if (propName === "debug") continue;
         const channelSpec = channels[propName];
@@ -579,12 +580,16 @@ function buildCreatedMark(
       // built node, or a mark such as `layer([...])`), so it is reified
       // through the same `resolveMarkResult` path. The name context is fresh:
       // the component is a naming boundary. An expand mark (its kind,
-      // declared at `createMark`) returns its array of slice nodes, which
-      // pass through as-is.
+      // declared at `createMark`) returns an array of slices, each reified
+      // the same way, in one boundary.
       return shapeFn(shapeProps, kind === "expand" ? d : undefined);
     });
+    // A fresh ROOT registry, a name boundary, for the same chart.
+    const boundary = new LayerContext(undefined, _layerContext.registrar);
     if (kind === "expand") {
-      const result = raw as GoFishNode[];
+      const result = await Promise.all(
+        (raw as MarkChild[]).map((slice) => resolveMarkResult(slice, boundary))
+      );
       const types = getColumnTypes(d);
       // Expand path: stamp each slice with its own datum, a one-row group
       // `[row]` tagged with the column types like any split leaf. A slice
@@ -603,11 +608,7 @@ function buildCreatedMark(
       }
       return result as unknown as GoFishNode;
     }
-    // A fresh ROOT registry, a name boundary, for the same chart.
-    const node = await resolveMarkResult(
-      raw,
-      new LayerContext(undefined, _layerContext?.registrar)
-    );
+    const node = await resolveMarkResult(raw, boundary);
     if (liveChannels) node.__gfLive = liveChannels;
     applyFilter(node, filter);
     // Its whole drawing, not only its own lowering: a component's children

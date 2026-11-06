@@ -23,11 +23,7 @@ import type {
   SvgPoint,
 } from "./types";
 import type { InteractionRuntime } from "./runtime";
-import {
-  inLiveEval,
-  scopedRegistrar,
-  warnUnscopedRead,
-} from "./resolveContext";
+import { inLiveEval, scopedRegistrar } from "./resolveContext";
 import { clamp } from "../util";
 
 /**
@@ -54,10 +50,7 @@ function dependency(input: InputPrimitive): {
   return {
     track() {
       const reg = scopedRegistrar();
-      if (!reg) {
-        warnUnscopedRead();
-        return;
-      }
+      if (!reg) return;
       reg.registerInput(input);
       if (!inLiveEval()) readers.add(reg);
     },

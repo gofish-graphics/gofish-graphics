@@ -302,8 +302,8 @@ absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
 - used as a chart `.mark(...)` → the expand-mark form (`cutMark` /
   `source.cut(opts)`), so a chart flow treats it as an expand mark;
 - used as a **combinator child** (inside a Spread/Stack `children` array) → the
-  deserializer expands it in place into its N slice nodes — the pure
-  `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators accept
+  deserializer expands it in place into its N slices — the pure
+  `cut(source, opts)` returns an array of slice marks that combinators accept
   directly as children (see `mapMarkChildren` in `fromJSON.ts`).
 
 **Refs in a callback's input** (#591, #1046) — a Python callback isn't

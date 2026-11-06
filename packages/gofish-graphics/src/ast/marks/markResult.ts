@@ -73,8 +73,8 @@ export class LayerContext {
    * boundary (a `createMark` body) gets the registrar of the scope it bounds
    * (`new LayerContext(undefined, ctx.registrar)`). A root built with none
    * takes the registrar of the synchronous user call it is built in, if any
-   * (a node operator called in a component thunk), and carries it on from
-   * then on. This is the one fallback to the scope.
+   * (a node operator called in a component thunk, or a mark user code calls
+   * directly, {@link markContext}), and carries it on from then on. This is the one fallback to the scope.
    */
   readonly registrar: Registrar | undefined;
 
@@ -256,6 +256,17 @@ export const datumOfInput = <T>(d: T[]): T[] | undefined =>
   d === NO_ROWS ? undefined : d;
 
 /**
+ * The context a mark resolves in. GoFish calls every mark with one. A mark
+ * that user code calls directly (`rect({...})([box])`, which gives a
+ * component mark a datum) has none: it is a root build, as a node operator
+ * called at the top level is, and gets a root registry, built in the call
+ * (see `LayerContext.registrar` for the registrar a root takes).
+ */
+export const markContext = (
+  layerContext: LayerContext | undefined
+): LayerContext => layerContext ?? new LayerContext();
+
+/**
  * Call a mark: the one place GoFish calls one, user code included (a
  * component thunk, a `createMark` body, the channel functions and `live()`
  * channels a mark reads, a `derive` function), so the synchronous part of the
@@ -266,9 +277,9 @@ export function callMark(
   mark: Mark<any>,
   rows: unknown,
   key: string | number | undefined,
-  layerContext: LayerContext | undefined
+  layerContext: LayerContext
 ): ReturnType<Mark<any>> {
-  return withRegistrar(layerContext?.registrar, () =>
+  return withRegistrar(layerContext.registrar, () =>
     mark(rows as any, key, layerContext)
   );
 }
@@ -285,7 +296,7 @@ export function callMark(
  */
 export async function resolveMarkResult(
   raw: MarkChild,
-  layerContext?: LayerContext,
+  layerContext: LayerContext,
   rows: unknown = NO_ROWS,
   key?: string | number
 ): Promise<GoFishNode> {
@@ -303,13 +314,9 @@ export async function resolveMarkResult(
   // chart elaborates to `.mark(anchor).layer(R)`, i.e. a LayerBuilder — so a
   // chart pipeline handed anywhere a mark is taken (a `.layer(...)` tier, a
   // `layer([...])` child) can be one. Its tiers share the ENCLOSING scope's
-  // layer context (its own, when there is none), so a `.name(...)` inside it
-  // is findable from outside.
+  // layer context, so a `.name(...)` inside it is findable from outside.
   if (isChartPipeline(raw))
-    return raw
-      .inScope(rows)
-      .withLayerContext(layerContext ?? new LayerContext())
-      .resolve();
+    return raw.inScope(rows).withLayerContext(layerContext).resolve();
   if (typeof raw === "function")
     return resolveMarkResult(
       // Pass layerContext through so mark wrappers (e.g. .name(...)) that

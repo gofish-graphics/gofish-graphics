@@ -234,8 +234,14 @@ export const layer = createNodeOperatorSequential(
         filter: _filter,
         ...rest
       } = options;
+      // A coordinate space lays out nodes. A `ref` stand-in's place is its
+      // target's, which only a layer plans (`planPlacement`), so the space
+      // gets the nodes alone.
       return applyFilter(
-        await coord({ ...rest, transform: coordTransform }, children),
+        await coord(
+          { ...rest, transform: coordTransform },
+          children.filter((c): c is GoFishNode => c instanceof GoFishNode)
+        ),
         displayFilter(options.filter, "layer({ filter })")
       );
     }

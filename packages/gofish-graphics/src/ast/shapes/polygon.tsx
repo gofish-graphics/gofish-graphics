@@ -1,5 +1,10 @@
 import { getColumnTypes, setColumnTypes } from "../schema";
-import { datumOfInput } from "../marks/markResult";
+import {
+  callMark,
+  datumOfInput,
+  markContext,
+  type LayerContext,
+} from "../marks/markResult";
 import { GoFishNode, outlineOverhang } from "../_node";
 import {
   boxOfDims,
@@ -207,7 +212,12 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
     return basePolygon(opts as any);
   }
   const field = opts.points;
-  const mark = async (rows: any[]) => {
+  const mark = async (
+    rows: any[],
+    _key?: string | number,
+    given?: LayerContext
+  ) => {
+    const layerContext = markContext(given);
     const types = getColumnTypes(rows);
     const nodes = await Promise.all(
       rows.map(async (row) => {
@@ -225,10 +235,12 @@ export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
         // mark factory resolves `fill`/`stroke` against
         // the row exactly as it does for a literal ring (and as `rect` does),
         // and the `value(...)` ring passes through as the data-bound reading.
-        const node = (await basePolygon({
-          ...opts,
-          points: value(ring as Ring),
-        } as any)(types ? setColumnTypes([row], types) : [row])) as GoFishNode;
+        const node = (await callMark(
+          basePolygon({ ...opts, points: value(ring as Ring) } as any),
+          types ? setColumnTypes([row], types) : [row],
+          undefined,
+          layerContext
+        )) as GoFishNode;
         node.name("");
         return node;
       })

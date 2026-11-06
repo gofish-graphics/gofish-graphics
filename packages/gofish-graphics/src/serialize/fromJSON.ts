@@ -434,16 +434,14 @@ function operatorFromIR(
 
 /**
  * Map an array of combinator-child mark specs to runtime children, expanding
- * any `cut` child into its N slice nodes IN PLACE. The pure `cut(source, opts)`
- * returns a `Promise<GoFishNode>[]`, which combinators (Spread/Stack/…) accept
+ * any `cut` child into its N slices IN PLACE. The pure `cut(source, opts)`
+ * returns an array of slice marks, which combinators (Spread/Stack/…) accept
  * directly as children — so the single source of truth for cut's extent
  * resolution (flexbox sizing, absolute-vs-weight mixing, measure-unit checks)
  * stays in JS and is never reimplemented Python-side. Non-`cut` children map
  * through `mapMark` unchanged.
  *
- * The returned array mixes `Mark` functions and resolved slice-node promises;
- * the combinator factories tolerate both (the pure-JS `Spread(opts, cut(...))`
- * spelling relies on the same tolerance).
+ * Every entry of the returned array is a `Mark`.
  */
 export function mapMarkChildren(specs: MarkSpec[], ctx: IRContext): any[] {
   const out: any[] = [];

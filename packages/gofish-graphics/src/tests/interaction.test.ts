@@ -52,6 +52,8 @@ const {
   intersect,
   image,
   time,
+  cut,
+  datum,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -792,38 +794,50 @@ async function main() {
     view.unmount();
   }
 
-  console.log("\na read after an await in an async callback warns once");
+  console.log("\na cut's source registers its inputs with the chart");
   {
-    // The one limit of the registrar scope: a read after an `await` in an
-    // async user callback is outside the call GoFish made, so it registers
-    // with nothing. GoFish says so, once.
-    const warnings: string[] = [];
-    const warn = console.warn;
-    console.warn = (...args: unknown[]) => void warnings.push(String(args[0]));
-    const late = signal(1);
+    // Each slice of `cut(source, ...)` is a mark, so its source resolves in
+    // the context of the place the slice is a child of: a pointer its paint
+    // reads and a signal it reads register with the render.
+    const p = pointer();
+    const h = signal(40);
+    let sourceRuns = 0;
     const box = makeContainer();
-    const twice = [box, makeContainer()].map((c) =>
-      chart(data, { axes: false })
-        .flow(
-          derive(async (rows: any[]) => {
-            await Promise.resolve();
-            return late() > 0 ? rows : [];
-          }),
-          spread({ by: "cat", dir: "x" })
+    const view = await gofish(box, { w: 240, h: 120 }, () =>
+      spreadX(
+        { spacing: 6 },
+        cut(
+          () => {
+            sourceRuns++;
+            return rect({
+              w: 120,
+              h: h(),
+              fill: live(() => (p.datum() ? "#f00" : "#00f")),
+            });
+          },
+          { dir: "x", size: [datum(1), datum(1), datum(1)] }
         )
-        .mark(rect({ h: "count" }))
-        .render(c, { w: 200, h: 120 })
+      )
     );
-    const views = await Promise.all(twice);
     await settle();
-    console.warn = warn;
-    const ours = warnings.filter((w) => w.includes("after an `await`"));
+    const ids = () => box.querySelectorAll("[data-gf-id]").length;
     ok(
-      "the late read warns, once across both charts",
-      ours.length === 1,
-      String(ours.length)
+      "a cut whose source reads a pointer emits data-gf-id",
+      ids() === 3,
+      String(ids())
     );
-    for (const v of views) v.unmount();
+    const runsBefore = sourceRuns;
+    h.set(60);
+    await settle();
+    const heights = Array.from(box.querySelectorAll("rect")).map((r) =>
+      r.getAttribute("height")
+    );
+    ok(
+      "a signal a cut's source reads re-runs it",
+      sourceRuns > runsBefore && heights.some((v) => v === "60"),
+      `runs ${runsBefore}->${sourceRuns} heights=${heights.join(",")}`
+    );
+    view.unmount();
   }
 
   console.log("\npointer hit-test on a painted composite");

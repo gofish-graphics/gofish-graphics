@@ -17,15 +17,26 @@ export type GroupOptions = {
   h?: SpreadOptions["h"];
 };
 
-export const group = createOperator<any, GroupOptions>(layer as any, {
-  split: ({ by }, d) => {
-    if (!by) throw new Error("group requires opts.by = fieldName");
-    return splitEntries(by, d);
-  },
-  // Its box may be sized from data, as spread's is.
-  channels: { w: "size", h: "size" },
-  // Positions nothing, but its `by` is still eligible to split a relational
-  // mark (see `classifyOperator`).
-  arrangement: { kind: "none" },
-  serialize: "group",
-});
+/** The options `group`'s layout gets, as `layer` takes them. */
+type GroupBox = Omit<GroupOptions, "w" | "h"> & { w?: number; h?: number };
+
+export const group = createOperator<any, GroupOptions>(
+  // TODO: `LayoutFn` types a layout's options as the options the user wrote,
+  // so `w` and `h` read here as a field name or a length. They reach the
+  // layout with their size channels read (a number or a data value, or a
+  // length), which `layer` sizes itself from; `LayerOptions` types them as
+  // pixels. The rest of the box is checked against `LayerOptions`.
+  (opts, children) => layer(opts as GroupBox, children),
+  {
+    split: ({ by }, d) => {
+      if (!by) throw new Error("group requires opts.by = fieldName");
+      return splitEntries(by, d);
+    },
+    // Its box may be sized from data, as spread's is.
+    channels: { w: "size", h: "size" },
+    // Positions nothing, but its `by` is still eligible to split a relational
+    // mark (see `classifyOperator`).
+    arrangement: { kind: "none" },
+    serialize: "group",
+  }
+);

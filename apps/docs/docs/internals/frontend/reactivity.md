@@ -88,13 +88,21 @@ statement of its layout, and `time.transition` reads its playhead in its
 `produce`). A root `LayerContext` built with no registrar of its own takes the
 one in scope (`scopedRegistrar`); that is how a node operator, which builds
 when it is called, finds its chart when it is called in a component thunk.
+`callMark` and `resolveMarkResult` take the context as a required argument,
+so a call site with no context is a type error rather than a read that
+registers with nothing. User code may still call a mark directly
+(`rect({...})([box])`, to give a component mark a datum); that call is a root
+build, and the mark makes itself a root registry (`markContext`). A primitive that
+returns children to drop into a combinator returns marks, not built nodes, for
+the same reason: each slice of `cut(source, ...)` resolves its source in the
+context of the place it is a child of.
 Every library input's accessor,
 when read, runs the `track` half of one of the input's **dependencies**
 (`dependency(input)` in `inputs.ts`):
 
 ```ts
 const reg = scopedRegistrar();
-if (!reg) return warnUnscopedRead(); // no user call in progress: a plain read
+if (!reg) return; // no user call in progress: a plain read
 reg.registerInput(input); // wire this input into event dispatch (idempotent)
 if (!inLiveEval()) readers.add(reg); // a spec read → pipeline dependency
 ```
@@ -135,10 +143,11 @@ tick of the value. If nothing registers during a resolve, the runtime reports
 > (`readLive`) and a live slot that re-runs on a clock tick are outside every
 > call. The one limit is Solid's own: a read after an `await` inside an async
 > user callback (a `derive` that fetches, then reads a signal) is outside the
-> call too, so it registers with nothing. `withRegistrar` counts an async
-> callback it called with a registrar until the callback's promise settles; when
-> a read outside a `live()` channel finds no registrar while one is pending,
-> GoFish warns once to read the input before the `await` (`warnUnscopedRead`).
+> call too, so it registers with nothing, and the chart neither re-runs on it
+> nor wires its events: read the input before the first `await`. GoFish does
+> not warn. Every mark call is async, so a count of pending callbacks is never
+> zero during a resolve, and a promise that never settles (a dead Python
+> kernel, a chart unmounted mid-resolve) would leave it stuck.
 >
 > A node operator (`Layer`, `Spread`, ...) builds when it is called, not when
 > its chart resolves, so one called outside every scope (at the top level of a
