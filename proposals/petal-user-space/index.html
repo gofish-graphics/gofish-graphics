@@ -276,7 +276,7 @@
           Issue #1331 asks whether the flower chart's bespoke
           <code>petal</code> mark can be drawn from general GoFish pieces, now
           that the flower chart is on the front page. It can: today's petal is,
-          within a pixel, a five-point polygon in its slot, bent by the polar
+          within 2 px, a five-point polygon in its slot, bent by the polar
           coord.
         </p>
       </header>
@@ -324,7 +324,7 @@
           <figure>
             <img
               src="head-b-box-ring.png"
-              alt="The same flower head drawn with a warped polygon, visually identical"
+              alt="The same flower head drawn with a warped polygon; outlines within 2 px of today's"
               width="205"
               height="184"
             />
@@ -485,17 +485,18 @@ flower = (
           <figure>
             <img
               src="head-a-data-ring.png"
-              alt="Flower head from data-space rings, visually identical"
-              width="205"
+              alt="Flower head from data-space rings: same petal shapes, slightly smaller head"
+              width="195"
               height="184"
             />
             <figcaption>A: no library change</figcaption>
           </figure>
         </div>
         <p>
-          Works now, but the user re-implements <code>stack</code> with a
-          running sum, and the radius becomes a data value, so a fixed 40 px
-          head has no direct spelling. A stopgap at most.
+          Works now with the same petal shapes, but the head is smaller: the
+          radius comes from the r scale, so a fixed 40 px head has no direct
+          spelling. The user also re-implements <code>stack</code> with a
+          running sum. A stopgap at most.
         </p>
         <div class="codes">
           <pre><code class="language-javascript" data-chg="5,6,7,8,9,10,11,12,13,14,15,16,17">// The petal in its slot: u across, v out from the center.
@@ -545,8 +546,9 @@ const flower = chart(rows, { coord: Coord.polar(), axes: false })
           A path in the unit box, moved, scaled and turned by the coord's
           straight-line approximation at the slot's middle. Curves stay exact,
           but straight sides cannot follow the slot, so wide petals gap and
-          overlap. This is how d3, Plot and Vega draw custom symbols, and fits
-          point glyphs (markers, arrowheads) better than a petal.
+          overlap (4 to 8.7 px from today's on the 80° to 108° slots). This is
+          how d3, Plot and Vega draw custom symbols, and fits point glyphs
+          (markers, arrowheads) better than a petal.
           <code>path</code> is already a <code>lib.ts</code> export, so it needs
           another name.
         </p>
@@ -571,9 +573,11 @@ const flower = chart({ coord: Coord.polar(), axes: false })
             along the slot's side edges to half the radius, then two quadratic
             Béziers to a tip at the full radius, turned to the slot's middle
             angle. The straight lines are rays, which polar draws straight
-            anyway. The quadratics stay within a pixel of what polar does to a
-            straight line from (edge angle, r/2) to (middle angle, r). Largest
-            gap at R = 90 px:
+            anyway. The quadratics stay close to what polar does to a straight
+            line from (edge angle, r/2) to (middle angle, r). Largest computed
+            gap at R = 90 px (on the rendered Lake A head, today vs B measures
+            0.45, 0.45, 0.73, 1.49 and 1.86 px for its 28°, 42°, 80°, 101° and
+            108° slots):
           </p>
           <table>
             <thead>

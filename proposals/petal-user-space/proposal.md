@@ -1,6 +1,6 @@
 # Petal in user space (#1331)
 
-**Summary.** Today's `petal` mark is, to within a pixel, the polar image of a five-point polygon that fills the petal's slot.
+**Summary.** Today's `petal` mark is, to within 2 px at R = 90, the polar image of a five-point polygon that fills the petal's slot (under 1 px for slots up to about 90°).
 So the petal does not need its own mark: `polygon` only needs `w` and `h`, which stretch its points into the box the layout gives it, like a rect.
 **Recommendation:** approach B, `polygon({ w: "count", points: PETAL })`, then delete `petal` from JS, the IR, Python and the docs.
 
@@ -17,11 +17,13 @@ Prototype stories: `packages/gofish-graphics/stories/proposals/PetalUserSpace.st
 
 `src/ast/shapes/petal.tsx` builds a path in pixels pointing along +x, then turns it to the slot's middle angle. The path goes from the center out to the slot's two side edges at half the radius (two straight lines along those edges), then two quadratic Béziers to a tip at the full radius. It is a local-frame glyph, ported from herrstucki's d3 bl.ock (pie layout plus a `rotate` transform).
 
-The surprise: the two straight lines are rays from the center, which polar draws straight anyway, and the two quadratics are within a pixel of what polar does to a straight line from (edge angle, r/2) to (middle angle, r). Measured gap between the quadratic and the warped line, at R = 90 px:
+The surprise: the two straight lines are rays from the center, which polar draws straight anyway, and the two quadratics stay close to what polar does to a straight line from (edge angle, r/2) to (middle angle, r). Computed gap between the quadratic and the warped line, at R = 90 px:
 
 | slot angle   | 20°  | 40°  | 60°  | 90°  | 120° | 180° |
 | ------------ | ---- | ---- | ---- | ---- | ---- | ---- |
 | max gap (px) | 0.06 | 0.09 | 0.26 | 0.98 | 2.6  | 9.9  |
+
+Measured on the rendered SVG paths of the Lake A head (today vs B prototype, largest distance between outlines): 0.45 px (28° slot), 0.45 px (42°), 0.73 px (80°), 1.49 px (101°), 1.86 px (108°).
 
 So the petal is the pentagon `[[0,0],[0,.5],[.5,1],[1,.5],[1,0]]` in its slot (u across the slot, v out from the center), warped by polar.
 
@@ -57,7 +59,7 @@ const flower = chart(rows, { coord: Coord.polar(), axes: false })
   .mark(polygon({ points: "ring", fill: "species" }));
 ```
 
-- Works today: `polygon({ points: "ring" })` reads data-space rings and warps them.
+- Works today: `polygon({ points: "ring" })` reads data-space rings and warps them. Same petal shapes, but the head is smaller (the radius comes from the r scale, not 90 px), so outlines sit 14 to 24 px from today's.
 - The user re-implements `stack` with a running sum, and the radius is a data value, so the fixed 40 px head radius of the flower chart has no direct spelling. This is the large partial overlap with `stack` that api-design.md warns about. Good as a stopgap, not as the answer.
 
 ### B. Box-relative polygon, warped by the coord (recommended)
@@ -118,7 +120,7 @@ const flower = chart({ coord: Coord.polar(), axes: false })
 ```
 
 - A new mark that takes a path in the unit box and maps it through the coord's linearization at the slot's middle. Béziers stay exact. This is how d3 symbols, Plot's `symbol`, Vega's custom `shape` paths and matplotlib's `Path` markers work, and how today's petal works.
-- It does not fill its slot: wide slots leave gaps and overlaps between neighbors, because a tangent frame has straight sides. Matching today's petal needs the angle-dependent corrections the petal hard-codes.
+- It does not fill its slot: wide slots leave gaps and overlaps between neighbors, because a tangent frame has straight sides. Measured against today's Lake A head: 0.5 to 0.7 px on the narrow slots, 4 to 8.7 px on the 80° to 108° slots.
 - The name `path` is taken (`lib.ts` exports the path-segment helpers), so it needs a new name.
 - It is the right tool for a different job: point glyphs placed by a coord (markers, arrowheads), per the "points stay points in polar" rule. The petal is not a point; it sweeps its slot.
 
@@ -155,6 +157,6 @@ Glyph libraries put custom shapes in a local frame because their marks are point
 
 1. Approve B: `polygon` takes `w` / `h`, its literal points stretch into that box, and `petal` is deleted?
 2. Which way does the unit box run: v up from the baseline (data order, so a petal points up in Cartesian and outward in polar) or y down (pixel order, as literal polygon points are today)? This ties to #1038.
-3. Should the flower chart keep the five-point outline (sub-pixel match up to 60° slots) or add a `curve` option on polygon for smoother wide petals? (The prototype says the outline alone is enough.)
+3. Should the flower chart keep the five-point outline (under 1 px up to about 90° slots, 1.9 px at 108°) or add a `curve` option on polygon for smoother wide petals? (The prototype says the outline alone is enough.)
 4. Ship A in the flower story now as a stopgap, or wait for B?
 5. Keep C (a unit-box glyph mark for point glyphs) as a separate future issue, or drop it?
