@@ -276,13 +276,10 @@ export class ScopeRegistry {
   /** Each glyph unit's bounds (`fitGlyphs`), by the unit's key. */
   private glyphs?: ReadonlyMap<string, GlyphUnit>;
 
-  /**
-   * Build the bound each glyph unit's rooms set on its σ (#972), once,
-   * before the claim walk: `rooms` is every glyph's room on each axis where
-   * it is a glyph (`GoFishNode.glyphRooms`), by its unit's key, and
-   * `widthOf` the width of a unit's widest glyph (`KeyedDomains.unitWidth`).
-   * The table is read only after.
-   */
+  /** Build each glyph unit's bounds (#972) from every glyph's room, by
+   *  unit key (`GoFishNode.glyphRooms`), once, before the claim walk.
+   *  `widthOf` is a unit's widest domain (`KeyedDomains.unitWidth`). See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
   fitGlyphs(
     rooms: Iterable<readonly [string, GlyphRoom]>,
     widthOf: (unit: string) => number
@@ -321,29 +318,10 @@ export class ScopeRegistry {
     this.glyphs = glyphs;
   }
 
-  /**
-   * The σ of a glyph unit (#972). Each glyph bounds it by the σ at which its
-   * own domain fills its room, and one unit has one σ, so it is the
-   * smallest bound, as the shared-measure σ of two axes is the smaller of
-   * theirs ({@link equalizeMeasure}). A glyph at a point has the glyph range
-   * for its room ({@link GLYPH_ROOM_PX}), the same for each, so the points
-   * bound σ by the range over the widest glyph, `domain` (the width of the
-   * unit's widest keyed domain, `KeyedDomains.unitWidth`). A glyph in a cell
-   * has the cell for its room, which is data in its axis's unit, so its
-   * pixels are known only at `frame`, the σ of the frame that places it.
-   *
-   * The claim walk asks before any frame's σ is solved, with no `frame`:
-   * the cell bounds are left out, so it gets the point bound, at least the
-   * σ layout draws at (`GoFishNode.glyphClaim`). Layout passes the frame,
-   * and a frame with no σ on an axis its unit's cells are on is an error.
-   * When no room bounds σ, every glyph of the unit is 0 wide (its widest
-   * domain is, and so is every glyph in a cell), and each is drawn 0 wide at
-   * any σ: σ is 0.
-   *
-   * TODO(#1324): a cell is turned into pixels at the asking frame's σ, so
-   * every frame that places one unit's glyphs must map its axis at one σ
-   * (true within one chart; facets with scales of their own are not).
-   */
+  /** The σ of a glyph unit (#972): the smallest bound its rooms set, its
+   *  cells' at `frame` (the σ of the frame placing it) and its points'. With
+   *  no `frame` (the claim walk) only the points' bound. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). TODO(#1324): one σ per frame axis. */
   glyphSigma(
     unit: string,
     frame?: readonly [number | undefined, number | undefined]

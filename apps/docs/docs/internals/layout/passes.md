@@ -604,9 +604,9 @@ They share a DECLARED unit (`spaceUnit(x).unit` and `spaceUnit(y).unit` are
 equal; two unknowns that unified through overlays do not count). Or they are
 in one TIED unit: an aspect-locked mark whose size is data (`circle({ r })`,
 `circle({ h })`, an `ellipse` with `aspectRatio`) draws one value of its unit as
-a length on both axes, so it ties the unit (`ScopeRegistry.tie`, #1087), and the
-axes equalize when each maps that unit and no other (`inOneUnit`, reading
-`KeyedDomains.unitsOf`). An axis that also maps another unit (a marginal
+a length on both axes, so it ties the unit (`tieUnit` in the type walk, #1087), and
+the axes equalize when each maps that unit and no other
+(`KeyedDomains.tiedUnitOf`). An axis that also maps another unit (a marginal
 histogram's count beside the scatter's) is not one measure with the other
 axis, so a tied unit the two merely both contain does not equalize them. The
 binding axis fills, and on the other the box keeps

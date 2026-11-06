@@ -1373,9 +1373,11 @@ size).
 A data size is one of two things, by one rule (#972).
 
 - A **glyph size**. The rule is per axis and belongs to the size's unit. A
-  unit is a glyph unit when, on some axis, the parent places the mark at a
-  datum (at a point or in a cell) and the size the mark is given on that
-  same axis is in the unit while the parent's axis is not. Every size in a
+  unit is a glyph unit when, on some axis, the mark is placed at a datum in
+  another unit, and the size the mark is given on that same axis is in the
+  unit. Its parent places it there (at a point or in a cell, when the
+  parent's axis is in another unit), or its own value position does (a
+  `cx` or `x` in another unit). Every size in a
   glyph unit is a glyph size (`GoFishNode.isGlyph`), so `circle({ area })`
   placed on x only is a glyph on y too: it is given one size, in one unit,
   on both axes, and one unit has one σ. A glyph size is a scale of its own,
@@ -1390,6 +1392,12 @@ A data size is one of two things, by one rule (#972).
   are lengths. The histogram bar sits in a bin cell on x, but its height is
   a size on y, where nothing places it at a datum.
 
+Sizing and embedding ask this one question (`GoFishNode.isGlyph`, decided
+once per node and axis and memoized with the claim walk). The embedding
+pass keeps a glyph flat (`resolveEmbedding`), and layout hands a glyph its
+unit's σ in place of its frame's (`GoFishNode.layout`), so a layer passes
+its children its frame's σ and nothing more.
+
 The litmus test is whether the coordinate system should warp the shape. In
 a bubble chart it should not: the bubble's area measures population, and
 the axes measure GDP and life expectancy. In a spread of circles it should:
@@ -1397,14 +1405,16 @@ the circles are the axis's extent, as the bars of a bar chart are. A
 histogram bar's height should warp too: in polar it becomes a ring
 segment's depth.
 
-A size an aspect lock derives is not given on its axis, so it takes no
-part in the rule: it follows the size it is derived from. `circle({ h:
+A box declares its aspect lock once (`AspectLock`, from
+`elaborateOwnDims`, shared by rect and ellipse). A size the lock derives is
+not given on its axis, so it takes no part in the rule: it follows the size
+it is derived from, and its data size is that size times the ratio. `circle({ h:
 "value" })` placed at a year on x only is given its height on y, where
 nothing places it, so the height is a length of y and reads against the
 value axis, as the histogram bar's does, and in polar it warps. Its width is
 the height's pixels. On x the width sits at a datum in another unit, so its
 pixels are at y's σ, which no claim on x can be written in: it claims
-nothing there (`GoFishNode.followsAcross`), and the circles at the ends may
+nothing there (its size kind is "follows"), and the circles at the ends may
 reach past the plot. `circle({ w: "value" })` there is given its width on x,
 where a year places it, so it is a glyph, and its height is the same glyph
 size.
@@ -1614,16 +1624,19 @@ the one σ its scope solves, which its map shares, and the #582 equal measure
 (equating x and y when they share a declared unit) is a named `equalizeMeasure`
 operation _on_ the registry, so the dump records the FINAL σ. Two axes share
 a unit when both their spaces are in one declared unit, or when each maps
-keyed domains of one unit and no other (`KeyedDomains.unitsOf`) and a mark
-ties that unit (`ScopeRegistry.tie`). An axis that also maps another unit is
+keyed domains of one unit and no other, and a mark ties that unit
+(`KeyedDomains.tiedUnitOf`). An axis that also maps another unit is
 not in one measure with the other axis: a marginal histogram's counts on
 the top (y) and the right (x) sit beside the scatter's beak lengths, so the
 two count scales stay apart. An aspect-locked mark whose size is data,
 such as a circle, ties its unit (#1087): it draws one value as a length on
-both axes, so its unit is one length on x and y even when it is unknown. So
+both axes, so its unit is one length on x and y even when it is unknown.
+The type walk records the tie on the unit's class in the union-find
+(`tieUnit`), so it holds for every occurrence the walk unifies with it. So
 a row of `circle({ h: "value" })` in a spread fits both axes at
 `σ = min(H / max v, W / Σv)`, and the value axis reads that σ. The aspect
-lock gives the other axis the same data length (`Ellipse`'s `dataSize`), so
+lock gives the other axis the same data length (`elaborateOwnDims`'s
+`dataSize`), so
 both axes claim it. The render root
 and a chart with a literal size on both axes both go through it. The chart
 solves its two scopes in the claim walk (`solveFixed`) and equalizes them
@@ -2908,7 +2921,14 @@ above for why a share is a distinct unit (0–1, not the base quantity's own
 units) that must never silently union with it. An area channel (#972,
 `CHANNEL_INFER.area` in `channels.ts`) roots its sum, and the root is in a unit of its
 own too, `√q` (`sqrtQuantity` in `measure.ts`), so a circle sized by
-`area: "count"` never shares a scale with a bar of `h: "count"`.
+`area: "count"` never shares a scale with a bar of `h: "count"`. A declared
+unit stays declared, as `√unit`, with its symbol rooted too, and an unknown
+one stays unknown, the variable `√name`. The root keeps none of the unit's
+traits: a square root does not preserve sums (√(a + b) is not √a + √b), so
+`√unit` has no `CanSum` and a stack of area circles is refused by the sum
+check. It keeps no `difference` or `zone` either (an area channel sums its
+rows first, so amounts of an instant never reach it), and it records no
+column, since its values are not the column's.
 
 ## Axis inference
 

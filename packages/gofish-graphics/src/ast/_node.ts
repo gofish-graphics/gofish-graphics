@@ -1324,26 +1324,10 @@ export class GoFishNode {
     return childRole(p.sharing(), p.indexOfChild(this) ?? -1, dim) === "slot";
   }
 
-  /**
-   * Whether this node's own data size on `dim` is a glyph size (#972,
-   * #1087). Glyph status belongs to a unit, decided per axis: a unit is a
-   * glyph unit when, on some axis, the parent places this node at a datum
-   * (at a point, or in a cell) and the size this node is given on that same
-   * axis is in the unit while the parent's axis is not. A size on `dim` is a
-   * glyph size when its unit is a glyph unit, so `circle({ r })` or
-   * `circle({ area })` placed on x only is a glyph on y too (it is given
-   * one size, in one unit, on both axes, and one unit has one σ). A size an
-   * aspect lock derives from the other axis is not given on its axis
-   * (`givesSize`): it follows the size it is derived from, so
-   * `circle({ h })` placed on x only is a length of y, whose width follows
-   * its height. A glyph size is not a length of the space it sits in: it is
-   * a scale of its own, keyed by its unit (`ScopeRegistry.glyphSigma`), and
-   * a coordinate transform does not warp it (`resolveEmbedding`). Any other
-   * data size is a length of the space: a size whose unit has no datum
-   * position on an axis it is given on (a histogram bar's height over a bin
-   * cell on x, a circle in a spread's slot), or one in the unit of the
-   * parent's axis that places it.
-   */
+  /** Whether this node's own data size on `dim` is a glyph size (#972): its
+   *  unit is placed at a datum in another unit on an axis it is given on.
+   *  Sizing and embedding both read it. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
   public isGlyph(dim: 0 | 1): boolean {
     return this.sizeKind(dim) === "glyph";
   }
@@ -1433,12 +1417,8 @@ export class GoFishNode {
     };
   }
 
-  /**
-   * The σ this glyph is sized at on `dim` (#972): its unit's σ
-   * (`ScopeRegistry.glyphSigma`), at `frame`, the σ of the frame its parent
-   * places it in on each axis. With no `frame` (the claim walk, before any
-   * frame's σ is solved) it is the bound its unit's points set alone.
-   */
+  /** The σ this glyph is sized at on `dim`: its unit's σ at `frame`
+   *  (`ScopeRegistry.glyphSigma`); with no `frame`, its points' bound. */
   public glyphSigma(
     dim: 0 | 1,
     frame?: readonly [number | undefined, number | undefined]
@@ -1458,16 +1438,10 @@ export class GoFishNode {
       .map((dim) => [this.unitKeyAt(dim)!, this.glyphRoom(dim)]);
   }
 
-  /**
-   * A claim with its glyph sizes in pixels (#972): a glyph's size is no
-   * length of the space it sits in, so on an axis where this node is a glyph
-   * (`isGlyph`) it records its room and claims the pixels it draws. A glyph
-   * in a cell fits inside the cell, which the cell's data already claims,
-   * so it claims nothing past it. A glyph at a point claims its size at its
-   * unit's σ as the claim walk knows it (`glyphSigma` with no frame): the
-   * points' bound. A cell of its unit may bound σ lower in layout, so the
-   * claim is at least what is drawn.
-   */
+  /** `claim` with its glyph and follows axes in pixels (#972): a glyph at a
+   *  point claims its size at its points' bound, and a glyph in a cell or a
+   *  following size claims nothing. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
   private glyphClaim(
     claim: Size<Extent | undefined>
   ): Size<Extent | undefined> {

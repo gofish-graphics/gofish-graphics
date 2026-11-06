@@ -132,24 +132,11 @@ const sqrtQuantities = new WeakMap<Quantity, Quantity>();
  *  object, so the occurrences of one root unit meet as the same traits. */
 const ROOT_TRAITS: UnitTraits = Object.freeze({});
 
-/**
- * The quantity of the square root of an amount of `q`: the side of a square
- * whose area is that amount (#972). An area channel hands its mark such a
- * length (`CHANNEL_INFER.area` in channels.ts). It is a unit of its own, `√q`, so a
- * length read from an area never shares a scale with a length read from the
- * column itself (`rect({ h: "count" })` beside `circle({ area: "count" })`).
- * A declared unit stays declared, as `√unit`, with its symbol rooted too.
- *
- * Its traits are known whatever the unit's are: a square root does not
- * preserve sums (√(a + b) is not √a + √b), so `√unit` has no `CanSum`, and a
- * stack of area circles is refused by the sum check ({@link checkSummable}).
- * No other trait of a unit (`UnitTraits`) survives the root, and neither
- * does a `difference` unit or a `zone`: amounts of an instant never reach
- * here, since an area channel sums its rows first. An unknown unit stays
- * unknown, the variable `√name`, so gradual typing passes its sums as it
- * does the column's own. The root records no column: its values are not the
- * column's.
- */
+/** The quantity of the square root of an amount of `q` (#972), the unit
+ *  `√q` an area channel's length is in (`CHANNEL_INFER.area`). It keeps
+ *  `q`'s declaredness and no trait (no `CanSum`: √(a + b) ≠ √a + √b). See
+ *  "Unit implications" under
+ *  [cells of the plane](/internals/core/underlying-space#cells-of-the-plane-a-binned-struct). */
 export const sqrtQuantity = (q: Quantity): Quantity => {
   let root = sqrtQuantities.get(q);
   if (root === undefined) {
