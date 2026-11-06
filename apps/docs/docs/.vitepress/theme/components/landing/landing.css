@@ -378,7 +378,7 @@ html.landing-page .DocSearch-Button {
 .landing .hero-stamp {
   /* stamped on once the hero's cards have settled (the last of the seven
      settles at about 1.56s; see gf-hang) */
-  animation: gf-stamp 0.26s 1.6s backwards;
+  animation: gf-stamp 0.26s 1.5s backwards;
   position: absolute;
   left: 100%;
   top: 50%;
