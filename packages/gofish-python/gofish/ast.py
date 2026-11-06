@@ -2051,9 +2051,8 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     Args:
         by: Field name to group by, or a ``field(...)`` accessor carrying
             domain ops (``field("site").sort("yield")``).
-        **options: The layer's options: ``coord`` (the groups are drawn in
-            that coordinate space), ``axes``, ``padding``, and the box
-            ``x``, ``y``, ``w``, ``h``.
+        **options: The layer's box, as spread's: ``x``, ``y``, ``w``, ``h``
+            (``w`` and ``h`` may be a field name, sizing it from data).
 
     Returns:
         Operator object

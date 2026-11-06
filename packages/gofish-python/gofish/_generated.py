@@ -785,14 +785,11 @@ def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Opt
             opts[_k] = _v
     return opts
 
-def _group_opts(*, by: str | FieldAccessor | ChunkKey, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, padding: Optional[float] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Takes the layer's options: a `coord` makes that layer a coordinate space.
+def _group_opts(*, by: str | FieldAccessor | ChunkKey, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Its box takes spread's `x`, `y`, `w` and `h`.
 
     Args:
         by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.
-        coord: Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
-        axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
-        padding: Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`. Default 30.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -802,9 +799,6 @@ def _group_opts(*, by: str | FieldAccessor | ChunkKey, coord: Optional[Any] = No
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
-        ("coord", coord),
-        ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("padding", padding),
         ("x", _channel(x)),
         ("y", _channel(y)),
         ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),

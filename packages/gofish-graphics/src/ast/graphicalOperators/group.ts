@@ -6,15 +6,16 @@ import { layer, type LayerOptions } from "./layer";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { LengthValue } from "../length";
 
-/** `by`, and the options of the one `layer` the groups are drawn in: its
- *  coordinate space (`coord`, `axes`, `padding`) and its box. */
+/** `by`, and the box of the one `layer` the groups are drawn in, as spread's
+ *  and stack's. A coordinate space is a chart's (`chart({ coord })`), not a
+ *  group's. */
 export type GroupOptions = {
   by?: SplitBy;
   x?: number;
   y?: number;
   w?: number | string | LengthValue;
   h?: number | string | LengthValue;
-} & Pick<LayerOptions, "coord" | "axes" | "padding">;
+};
 
 export const group = createOperator<any, GroupOptions>(
   (opts, children) => layer(opts as LayerOptions, children),

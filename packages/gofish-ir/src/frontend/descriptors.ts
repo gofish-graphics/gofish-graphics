@@ -1474,29 +1474,6 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
  *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
  *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
  *  the old `normalize: true` layout flag. */
-/** The options a `layer` takes for its coordinate space, shared by `layer`
- *  and `group` (whose groups are one layer). A real `layer` option, not a
- *  chart-only one: `layer({ coord }, children)` makes the layer the `coord`
- *  transform's box (layer.tsx's `options.coord !== undefined` branch), and the
- *  deserializer resolves a coord config out of the options (`resolveOptions`
- *  in serialize/fromJSON.ts). `axes` and `padding` go to that space, so they
- *  are options of the coord-bearing form only (a plain layer ignores them). */
-const LAYER_COORD_FIELDS: FieldGroup = group({
-  coord: {
-    type: t.any,
-    doc: "Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
-  },
-  axes: {
-    type: t.ref("AxesOptions"),
-    doc: "Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.",
-  },
-  padding: {
-    type: t.number,
-    default: 30,
-    doc: "Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`.",
-  },
-});
-
 const spreadBoxFields: FieldGroup = group({
   x: ch.pos(
     "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
@@ -1718,13 +1695,12 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   group: operator("group", {
-    doc: "Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Takes the layer's options: a `coord` makes that layer a coordinate space.",
+    doc: "Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Its box takes spread's `x`, `y`, `w` and `h`.",
     fields: {
       by: splitBy(
         "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.",
         true
       ),
-      ...LAYER_COORD_FIELDS,
       x: ch.pos(
         "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
       ),
@@ -2384,7 +2360,25 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     include: [lengthBoxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
-      ...LAYER_COORD_FIELDS,
+      // A real `layer` option, not a chart-only one: `layer({ coord }, children)`
+      // makes the layer the `coord` transform's box (layer.tsx's
+      // `options.coord !== undefined` branch), and the deserializer resolves a
+      // coord config out of the combinator options (`resolveOptions` in
+      // serialize/fromJSON.ts). `axes` and `padding` go to that space, so they
+      // are options of the coord-bearing form only (a plain layer ignores them).
+      coord: {
+        type: t.any,
+        doc: "Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
+      },
+      axes: {
+        type: t.ref("AxesOptions"),
+        doc: "Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.",
+      },
+      padding: {
+        type: t.number,
+        default: 30,
+        doc: "Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`.",
+      },
       transform: {
         type: t.object({
           scale: {

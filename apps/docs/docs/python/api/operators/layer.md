@@ -53,8 +53,6 @@ layer([
 ], coord=Coord.clock(), w=300, h=300)
 ```
 
-[`group`](/python/api/operators/group) takes the same options in a flow.
-
 ## Z-ordering
 
 By default, children are drawn in the order they appear in the list — later

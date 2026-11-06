@@ -4,12 +4,12 @@ order: 50
 
 # group
 
-Partitions data by a field and draws each partition's mark in one [`layer`](/js/api/operators/layer), which places nothing. Useful when you want a per-group enclosure that you can then style or reference, without imposing any spread/stack layout. It takes the layer's options, so a `coord` draws the groups in that coordinate space.
+Partitions data by a field and draws each partition's mark in one [`layer`](/js/api/operators/layer), which places nothing. Useful when you want a per-group enclosure that you can then style or reference, without imposing any spread/stack layout.
 
 ## Signature
 
 ```ts
-group({ by, coord?, axes?, padding?, x?, y?, w?, h? });
+group({ by, x?, y?, w?, h? });
 ```
 
 ## Parameters
@@ -47,15 +47,5 @@ On a ref, a field resolves to a scalar only when every row in the ref's bag
 agrees on that field (homogeneity collapse); otherwise it is `undefined`. See
 [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by) for the full
 explanation.
-
-## Coordinate space
-
-With a `coord`, the layer the groups are drawn in is that coordinate space, as
-[`layer({ coord })`](/js/api/operators/layer#coordinate-space) is. After a
-`spread`, a `group` with a `coord` gives each cell its own space: here, one pie
-per lake.
-
-::: gofish example:small-multiple-pie-charts
-:::
 
 For most cases you'll want [`spread`](/js/api/operators/spread) or [`stack`](/js/api/operators/stack) instead — they group **and** lay out. Reach for `group` when you need named per-partition groups (e.g. for `selectAll` or constraints) but don't want the children placed.

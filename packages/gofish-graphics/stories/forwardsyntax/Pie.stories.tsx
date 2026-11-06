@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { nightingale } from "../../src/data/nightingale";
-import { chart, rect, stack, spread, group, derive } from "../../src/lib";
+import { chart, rect, stack, spread, derive } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
@@ -80,16 +80,16 @@ export const SmallMultiples: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    // One pie per lake: the spread lays the lakes out, and each lake's
-    // `group` is its own polar space, so the species stack around a circle
-    // per lake.
+    // One pie per lake: the spread lays the lakes out, and each lake is a
+    // nested chart of its own, a polar space where its species stack around
+    // a circle.
     chart(seafood, { w: args.w, h: args.h })
-      .flow(
-        spread({ by: "lake", dir: "x", spacing: 20 }),
-        group({ by: "lake", coord: clock(), w: 100, h: 100, padding: 0 }),
-        stack({ by: "species", dir: "x" })
+      .flow(spread({ by: "lake", dir: "x", spacing: 20 }))
+      .mark(
+        chart({ coord: clock(), w: 100, h: 100, padding: 0 })
+          .flow(stack({ by: "species", dir: "x" }))
+          .mark(rect({ w: "count", fill: "species" }))
       )
-      .mark(rect({ w: "count", fill: "species" }))
       .render(container);
 
     return container;

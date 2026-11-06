@@ -6,8 +6,7 @@ order: 50
 
 Partitions the data by a field and draws the partitions in one
 [`layer`](/python/api/operators/layer), without positioning them. Pair it with
-another operator — or a nested mark — to lay the groups out. It takes the
-layer's options, so `coord=` draws the groups in that coordinate space.
+another operator — or a nested mark — to lay the groups out.
 
 ::: gofish example:grouped-bar-chart hidden
 :::
@@ -53,21 +52,6 @@ On a ref, a field resolves to a scalar only when every row in the ref's bag
 agrees on that field (homogeneity collapse); otherwise it is `None`. See
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by) for the
 full explanation.
-
-With `coord=`, the layer the groups are drawn in is that coordinate space, as
-[`layer(..., coord=...)`](/python/api/operators/layer#coordinate-space) is.
-After a `spread`, a `group` with a `coord` gives each cell its own space: here,
-one pie per lake.
-
-```python
-from gofish import chart, spread, group, stack, rect, Coord
-
-chart(seafood, w=700, h=140).flow(
-    spread(by="lake", dir="x", spacing=20),
-    group(by="lake", coord=Coord.clock(), w=100, h=100, padding=0),
-    stack(by="species", dir="x"),
-).mark(rect(w="count", fill="species"))
-```
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
