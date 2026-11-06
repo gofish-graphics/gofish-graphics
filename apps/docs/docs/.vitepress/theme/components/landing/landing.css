@@ -588,7 +588,7 @@ html.landing-page .DocSearch-Button {
     transform: translateY(0);
   }
 }
-/* The hero's cards are taped down as the page loads: each drifts in from
+/* The hero's and the spectrum row's cards are taped down as the page loads: each drifts in from
    just above the sheet with its tape already on and its bottom swung up,
    and the bottom swings down around the tape to its lifted rest
    (--lift-rest), sways past it, back above it and past it once more, less
@@ -597,7 +597,7 @@ html.landing-page .DocSearch-Button {
    shadow read, and fills backwards only, so the resting styles take over
    once it ends. --drop-delay (LandingPage.vue) staggers the cards in list
    order. */
-.landing .hero .pic {
+.landing .pic {
   animation: gf-hang 0.95s var(--drop-delay, 0ms) backwards;
 }
 @keyframes gf-hang {
