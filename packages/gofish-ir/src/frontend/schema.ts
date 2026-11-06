@@ -357,6 +357,12 @@ export interface GroupOperator
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   by: string | FieldAccessor | ChunkKeyIR;
+  /** Position of this operator's box in the parent's space. See `SpreadOperator.x`. */
+  x?: ChannelValue;
+  y?: ChannelValue;
+  /** Data-driven operator extent. See `SpreadOperator.w`. */
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
 }
 
 export interface ScatterOperator

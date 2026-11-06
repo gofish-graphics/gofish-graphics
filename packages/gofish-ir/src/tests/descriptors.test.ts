@@ -105,7 +105,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "h",
     "size",
   ],
-  group: ["by"],
+  group: ["by", "x", "y", "w", "h"],
   scatter: [
     "by",
     "x",
