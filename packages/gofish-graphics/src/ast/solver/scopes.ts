@@ -239,7 +239,7 @@ const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
  * The room a glyph placed at a point is fit to: its unit's largest glyph
  * spans this many pixels.
  *
- * PLACEHOLDER (#972): how a chart sets the range of a non-spatial scale (a
+ * PLACEHOLDER (#1324): how a chart sets the range of a non-spatial scale (a
  * size scale's largest glyph, beside its color scales) is an open API
  * proposal. Until it lands, every glyph unit takes this one internal range,
  * read only here.
@@ -320,7 +320,7 @@ export class ScopeRegistry {
    * `frame`, the σ of the frame that places it. Undefined when no glyph of
    * the unit has a size.
    *
-   * TODO(#972): a cell is turned into pixels at the asking frame's σ, so
+   * TODO(#1324): a cell is turned into pixels at the asking frame's σ, so
    * every frame that places one unit's glyphs must map its axis at one σ
    * (true within one chart; facets with scales of their own are not).
    */
