@@ -521,6 +521,68 @@ console.log("# #972: a glyph size is a scale of its own");
   );
 }
 
+console.log("# #972: an aspect lock's derived size follows the size it is given");
+{
+  const { scatter, Coord } = GoFish as any;
+  const years = [
+    { year: 2000, value: 10 },
+    { year: 2001, value: 40 },
+    { year: 2002, value: 20 },
+  ];
+  const draw = (mark: unknown, opts: object = { axes: false }) =>
+    chart(years, opts)
+      .flow(scatter({ by: "year", x: "year" }))
+      .mark(mark)
+      .toDisplayList({ w: 300, h: 300 });
+  // `h` is given on y, where nothing places the circle at a datum, so it is
+  // a length of y: the tallest circle fills the plot's height, as a
+  // histogram bar does. The width follows it in pixels and claims nothing on
+  // x, where the circle sits at a year: the years span the whole width.
+  const byH = ellipsesOf(await draw(circle({ h: "value" })));
+  check(
+    "circle({ h }) placed on x only is a length of y: the tallest fills the height",
+    Math.abs(Math.max(...byH.map((e) => 2 * e.ry)) - 300) < 1e-6 &&
+      byH.every((e) => Math.abs(e.rx - e.ry) < 1e-9),
+    JSON.stringify(byH)
+  );
+  check(
+    "its derived width claims nothing on x: the years span the width",
+    Math.abs(byH[0].cx - 0) < 1e-6 && Math.abs(byH[2].cx - 300) < 1e-6,
+    JSON.stringify(byH)
+  );
+  // A length of the space warps in polar, as a histogram bar's height does.
+  const kinds = async (mark: unknown) => {
+    const out: string[] = [];
+    const walk = (it: any) => {
+      if (it.kind === "ellipse" || it.kind === "path") out.push(it.kind);
+      (it.children ?? []).forEach(walk);
+    };
+    (await draw(mark, { coord: Coord.polar() })).items.forEach(walk);
+    return out;
+  };
+  const warped = await kinds(circle({ h: "value" }));
+  check(
+    "in polar, circle({ h }) placed on x only warps (a length of r)",
+    warped.length === 3 && warped.every((k) => k === "path"),
+    JSON.stringify(warped)
+  );
+  // `w` is given on x, where the circle sits at a year: a glyph, and its
+  // derived height is the same glyph size.
+  const byW = ellipsesOf(await draw(circle({ w: "value" })));
+  check(
+    "circle({ w }) placed on x is a glyph: the widest is the glyph range",
+    Math.abs(Math.max(...byW.map((e) => 2 * e.rx)) - 30) < 1e-6 &&
+      byW.every((e) => Math.abs(e.rx - e.ry) < 1e-9),
+    JSON.stringify(byW)
+  );
+  const round = await kinds(circle({ w: "value" }));
+  check(
+    "in polar, circle({ w }) placed on x stays round",
+    round.length === 3 && round.every((k) => k === "ellipse"),
+    JSON.stringify(round)
+  );
+}
+
 console.log("# #972: a glyph unit's σ with no room to bound it");
 {
   const { scatter } = GoFish as any;

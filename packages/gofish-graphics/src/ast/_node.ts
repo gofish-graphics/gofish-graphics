@@ -79,6 +79,7 @@ import {
   sameUnitVar,
   unitKey,
   Units,
+  type UnitVar,
   withUnits,
 } from "./measure";
 import { orderByLevels, type HasLevels } from "./schema";
@@ -1321,32 +1322,69 @@ export class GoFishNode {
    * Whether this node's own data size on `dim` is a glyph size (#972,
    * #1087). Glyph status belongs to a unit, decided per axis: a unit is a
    * glyph unit when, on some axis, the parent places this node at a datum
-   * (at a point, or in a cell) and this node's size on that same axis is in
-   * the unit while the parent's axis is not. A size on `dim` is a glyph size
-   * when its unit is a glyph unit, so a circle placed on x only is a glyph
-   * on y too (its aspect lock makes one unit on both axes, and one unit has
-   * one σ). A glyph size is not a length of the space it sits in: it is a
-   * scale of its own, keyed by its unit (`ScopeRegistry.glyphSigma`), and a
-   * coordinate transform does not warp it (`resolveEmbedding`). Any other
+   * (at a point, or in a cell) and the size this node is given on that same
+   * axis is in the unit while the parent's axis is not. A size on `dim` is a
+   * glyph size when its unit is a glyph unit, so `circle({ r })` or
+   * `circle({ area })` placed on x only is a glyph on y too (it is given
+   * one size, in one unit, on both axes, and one unit has one σ). A size an
+   * aspect lock derives from the other axis is not given on its axis
+   * (`givesSize`): it follows the size it is derived from, so
+   * `circle({ h })` placed on x only is a length of y, whose width follows
+   * its height. A glyph size is not a length of the space it sits in: it is
+   * a scale of its own, keyed by its unit (`ScopeRegistry.glyphSigma`), and
+   * a coordinate transform does not warp it (`resolveEmbedding`). Any other
    * data size is a length of the space: a size whose unit has no datum
-   * position on an axis of its own (a histogram bar's height over a bin
+   * position on an axis it is given on (a histogram bar's height over a bin
    * cell on x, a circle in a spread's slot), or one in the unit of the
    * parent's axis that places it.
    */
   public isGlyph(dim: 0 | 1): boolean {
-    const p = this.parent;
-    const i = p?.indexOfChild(this);
-    if (p === undefined || i === undefined) return false;
     const own = unitOf(this._underlyingSpace?.[dim]);
     if (own === undefined) return false;
-    const datumPlaced = (p.sharing() as Partial<LayerSharingPlan>).datumPlaced;
     return ([0, 1] as const).some((axis) => {
-      if (datumPlaced?.[axis].has(i) !== true) return false;
-      const size = unitOf(this._underlyingSpace?.[axis]);
-      if (size === undefined || !sameUnitVar(own, size)) return false;
-      const at = unitOf(p._underlyingSpace?.[axis]);
-      return at === undefined || !sameUnitVar(size, at);
+      const size = this.foreignPlaced(axis);
+      return (
+        size !== undefined && this.givesSize(axis) && sameUnitVar(own, size)
+      );
     });
+  }
+
+  /** The unit of this node's data size on `axis` when its parent places it
+   *  at a datum there (at a point, or in a cell) and the parent's axis is
+   *  not in that unit: a size that is no length of the axis that places it.
+   *  Undefined otherwise. */
+  private foreignPlaced(axis: 0 | 1): UnitVar | undefined {
+    const p = this.parent;
+    const i = p?.indexOfChild(this);
+    if (p === undefined || i === undefined) return undefined;
+    const datumPlaced = (p.sharing() as Partial<LayerSharingPlan>).datumPlaced;
+    if (datumPlaced?.[axis].has(i) !== true) return undefined;
+    const size = unitOf(this._underlyingSpace?.[axis]);
+    if (size === undefined) return undefined;
+    const at = unitOf(p._underlyingSpace?.[axis]);
+    return at === undefined || !sameUnitVar(size, at) ? size : undefined;
+  }
+
+  /** Whether this node's size on `dim` is derived by an aspect lock from a
+   *  length of the other axis, where its parent places it at a datum in
+   *  another unit (`circle({ h })` placed on x only, #972). It is drawn the
+   *  pixels of the size it follows, at the other axis's σ, which no claim on
+   *  `dim` can be written in, so it claims nothing there (`glyphClaim`). */
+  private followsAcross(dim: 0 | 1): boolean {
+    return (
+      !this.givesSize(dim) &&
+      !this.isGlyph(dim) &&
+      this.foreignPlaced(dim) !== undefined
+    );
+  }
+
+  /** Whether this node is given its size on `axis`, rather than deriving
+   *  it from the other axis: a shape with a box of its own (`ownDims`) is
+   *  given the size its box has there, and its aspect lock derives the size
+   *  on an axis its box leaves open (`Ellipse`, #1087). A node with no box
+   *  of its own (a group) has the size of its content. */
+  private givesSize(axis: 0 | 1): boolean {
+    return this.ownDims === undefined || this.ownDims[axis]?.size !== undefined;
   }
 
   /** The key of the unit of this node's glyph size on `dim` (`unitKey`). */
@@ -1414,11 +1452,14 @@ export class GoFishNode {
   private glyphClaim(
     claim: Size<Extent | undefined>
   ): Size<Extent | undefined> {
-    if (!this.isGlyph(0) && !this.isGlyph(1)) return claim;
+    const glyph = [this.isGlyph(0), this.isGlyph(1)] as const;
+    const follows = [this.followsAcross(0), this.followsAcross(1)] as const;
+    if (!glyph[0] && !glyph[1] && !follows[0] && !follows[1]) return claim;
     const scopes = getScopeRegistry(this.getRenderSession());
     return ([0, 1] as const).map((dim) => {
       const e = claim[dim];
-      if (!this.isGlyph(dim)) return e;
+      if (follows[dim]) return e === undefined ? e : Extent(Pwl.ZERO);
+      if (!glyph[dim]) return e;
       const room = this.glyphRoom(dim);
       scopes.fitGlyph(this.glyphUnit(dim), `${this.uid}/${dim}`, room);
       if (e === undefined) return e;

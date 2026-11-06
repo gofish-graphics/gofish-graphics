@@ -1374,16 +1374,17 @@ A data size is one of two things, by one rule (#972).
 
 - A **glyph size**. The rule is per axis and belongs to the size's unit. A
   unit is a glyph unit when, on some axis, the parent places the mark at a
-  datum (at a point or in a cell) and the mark's size on that same axis is
-  in the unit while the parent's axis is not. Every size in a glyph unit is
-  a glyph size (`GoFishNode.isGlyph`), so a circle placed on x only is a
-  glyph on y too: its aspect lock makes one unit on both axes, and one unit
-  has one σ. A glyph size is a scale of its own, keyed by its unit. No
-  axis's σ scales it, and a coordinate transform does not warp it. A bubble
-  in a scatter and a circle in a 2D histogram's cell are glyphs.
+  datum (at a point or in a cell) and the size the mark is given on that
+  same axis is in the unit while the parent's axis is not. Every size in a
+  glyph unit is a glyph size (`GoFishNode.isGlyph`), so `circle({ area })`
+  placed on x only is a glyph on y too: it is given one size, in one unit,
+  on both axes, and one unit has one σ. A glyph size is a scale of its own,
+  keyed by its unit. No axis's σ scales it, and a coordinate transform does
+  not warp it. A bubble in a scatter and a circle in a 2D histogram's cell
+  are glyphs.
 - A **length of the space**. Every other data size is a length along its
-  axis: one whose unit has no datum position on an axis of its own, or one
-  in the unit of the parent's axis that places it. The axis's σ scales it,
+  axis: one whose unit has no datum position on an axis it is given on, or
+  one in the unit of the parent's axis that places it. The axis's σ scales it,
   its claim is part of the axis's claim, and a coordinate transform warps
   it. A bar in a stack, a circle in a spread's slot, and a histogram bar
   are lengths. The histogram bar sits in a bin cell on x, but its height is
@@ -1396,6 +1397,18 @@ the circles are the axis's extent, as the bars of a bar chart are. A
 histogram bar's height should warp too: in polar it becomes a ring
 segment's depth.
 
+A size an aspect lock derives is not given on its axis, so it takes no
+part in the rule: it follows the size it is derived from. `circle({ h:
+"value" })` placed at a year on x only is given its height on y, where
+nothing places it, so the height is a length of y and reads against the
+value axis, as the histogram bar's does, and in polar it warps. Its width is
+the height's pixels. On x the width sits at a datum in another unit, so its
+pixels are at y's σ, which no claim on x can be written in: it claims
+nothing there (`GoFishNode.followsAcross`), and the circles at the ends may
+reach past the plot. `circle({ w: "value" })` there is given its width on x,
+where a year places it, so it is a glyph, and its height is the same glyph
+size.
+
 Each glyph unit has one σ, found as the shared-measure σ is (#582): every
 glyph bounds it, and it is the smallest bound
 (`ScopeRegistry.glyphSigma`). A glyph's bound is the σ at which its own
@@ -1406,15 +1419,27 @@ the largest σ that fits every glyph in its cell is
 room, the same for every glyph, so the points bound σ by the range over the
 widest glyph of the unit (`KeyedDomains.unitWidth`). The range is one
 internal constant (`GLYPH_ROOM_PX`), a placeholder until chart options can
-set the range of a non-spatial scale.
+set the range of a non-spatial scale. When no room bounds σ, every glyph of
+the unit is 0 wide and is drawn 0 wide at any σ, so σ is 0. The registry
+keeps each unit's bounds as the rooms are recorded (whether some glyph is at
+a point, and per axis the smallest `cell_i / d_i`), and each parent's sharing
+plan holds the cell it places each child in (`LayerSharingPlan.cells`), so
+sizing N glyphs takes time linear in N.
 
 A glyph claims pixels, not σ (`GoFishNode.glyphClaim`). A glyph in a cell
 claims nothing past the cell, since the cell's data already claims the
-cell. A glyph at a point claims its size at its unit's σ. So the axes the
-glyphs are placed on fit their positions alone, and the glyphs' sizes do
-not shrink the plot.
+cell. A glyph at a point claims its size at its unit's σ as the claim walk
+knows it. So the axes the glyphs are placed on fit their positions alone,
+and the glyphs' sizes do not shrink the plot.
 
-Two shortcuts remain. A cell is turned into pixels at the σ of the frame
+Three shortcuts remain. The claim walk runs before any frame's σ is solved,
+so it cannot turn a cell into pixels: it sizes a glyph at a point by the
+points' bound alone (`glyphSigma` with no frame). When a cell of the same
+unit binds lower (a circle in a bin on x, unplaced on y, whose cells are
+narrower than the glyph range), layout draws it smaller than it claims on y:
+the claim is an upper bound, never an overflow. Writing the exact claim
+needs a claim on y that reads x's σ, which a claim, a function of its own
+axis's σ, cannot express. A cell is turned into pixels at the σ of the frame
 asking for the glyph's σ, so every frame that places one unit's glyphs must
 map its axis at one σ, which holds within one chart. And a size in the unit
 of one axis its parent places it on is a length on both axes of the mark,

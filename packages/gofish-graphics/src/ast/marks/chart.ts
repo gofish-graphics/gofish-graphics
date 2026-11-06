@@ -423,7 +423,10 @@ const DISC_PER_SQUARE = 2 / Math.sqrt(Math.PI);
  * - `w` or `h` is the diameter along that axis. The aspect lock gives the
  *   other axis the same data length (`Ellipse`, #1087), so a data `w` or `h`
  *   claims both axes and one σ sizes both: `circle({ h: "value" })` in a
- *   spread reads against the value axis, and the row of circles fits.
+ *   spread reads against the value axis, and the row of circles fits. Where
+ *   the parent places the circle at a datum of another unit on the other
+ *   axis (a scatter on x only), the other axis follows in pixels and claims
+ *   nothing there (`GoFishNode.isGlyph`).
  *
  * A circle its parent places at a datum in another unit (a bubble in a
  * scatter, a circle in a 2D histogram's cell) is a glyph
