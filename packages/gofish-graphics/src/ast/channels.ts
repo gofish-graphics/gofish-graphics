@@ -298,11 +298,15 @@ const inferNumeric =
     );
   };
 
+/** A channel that sums the field/function across the data array, missing
+ *  values aside ({@link sumIn}); `channel` names it in the message of a sum
+ *  its unit refuses. */
+const inferSum = (channel: string) =>
+  inferNumeric((values, quantity) => sumIn(values, quantity, channel));
+
 /** Infer a size value (sums the field/function across the data array,
  *  missing values aside; see {@link sumIn}). */
-export const inferSize = inferNumeric((values, quantity) =>
-  sumIn(values, quantity, "A size channel")
-);
+export const inferSize = inferSum("A size channel");
 
 /** Infer a position value (averages the field/function across the data
  *  array, missing values aside). Over no rows, or only missing values, it
@@ -311,9 +315,7 @@ export const inferPos = inferNumeric(meanOf);
 
 /** The sum an area channel encodes: a size channel's sum, since areas add
  *  up (the area of a group is the sum of its rows' areas). */
-const inferAreaSum = inferNumeric((values, quantity) =>
-  sumIn(values, quantity, "An area channel")
-);
+const inferAreaSum = inferSum("An area channel");
 
 /**
  * The square root of an area: the side of the square of that area, in the
