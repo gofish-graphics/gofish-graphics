@@ -50,10 +50,13 @@ installed from CRAN for this run.
 ## Version
 
 The specs follow version 2 of the grammar (`../theory-fragment.html`):
-`sample(data, { n, seed, at })` as a data step that adds `draw` and `level`,
-`blend: "mean"`, summaries of the draws, and the draw key's type. Each entry keeps
+draws made in the flow with `derive(repeat(n, "draw"))` or
+`repeat(n, { level: "p" })` and read in a channel with `value.sample("draw")`
+or `value.quantile("p")`, `blend: "mean"`, summaries of the draws,
+independence as a property of the Dist, and a bare Dist in a channel as
+shorthand for the expected picture. Each entry keeps
 its version 1 class in `v1_fit`. Each entry also has a `verdict` under rules
-3.1 to 3.4. `v1-fits.json` holds the version 1 classes of both catalogs.
+4.1 to 4.4. `v1-fits.json` holds the version 1 classes of both catalogs.
 
 Summary spelling. A summary takes the list of draws in a group and returns
 one value, such as the mean or a quantile, or one curve, such as the density.
@@ -64,9 +67,8 @@ inside a cell made by binning `x`. Slabs, intervals and line ribbons are not
 built-in marks (Josh, 11-04). The specs call `slab`, `interval`,
 `lineribbon`, `gradientinterval` and `ccdf`, which are ordinary user code of a few
 lines each, defined in section 1 of `../theory-fragment.html` and copied in
-the prelude below. On a Dist cell with no `sample` a summary
-is exact, which is the same as `sample(n: Infinity)` followed by the
-summary. On rows of a sample, the density curve is a kernel estimate.
+the prelude below. On a Dist cell a summary
+is exact. On rows of a sample, the density curve is a kernel estimate.
 `as("dist")` reads a column of Dist cells as a Dist expression.
 
 ## Counts
@@ -82,9 +84,9 @@ summary. On rows of a sample, the density curve is a kernel estimate.
 | ok      | 96 |
 
 Every verdict is ok. The only joins across cells are the shared-draw
-spaghetti (69, 81, 82, 85), which rule 3.2 allows because the schema declares
+spaghetti (69, 81, 82, 85), which rule 4.2 allows because the schema declares
 the draws shared, and median lines, which are summaries. No spec stacks draws of
-one cell as parts of a sum, and no spec places single draws at n = Infinity.
+one cell as parts of a sum.
 
 Movement from version 1 to version 2:
 
@@ -103,18 +105,21 @@ come from summaries of the draws, which is a row of the table.
 How the draw key is used up:
 
 - **Summaries per cell.** About 50 entries: every slab (the density curve),
-  interval, point and lineribbon band (quantiles and the median). 15 uses
-  the probability of each bin. The CCDF bars (16, 17, 93 and part of 01)
+  interval, point and lineribbon band (quantiles and the median). 15 reads
+  the pmf at 0 to 20 with `densityCurve`. The CCDF bars (16, 17, 93 and part of 01)
   use the CDF of the draws, through the `ccdf` mark; on a sample (16, 17)
   that is the sample's ECDF.
 - **Partition by a bin, then stack.** About 30 dotplot entries. Over a
-  sample the rows are the draws. Over a Dist, `sample(d, { n, at:
-  "quantiles" })` makes the dots (37, 40, 41, 60 to 63, 94, and part of 01).
-  21 and 38 take quantile dots of a sample with a filter on `level`.
-- **`level`.** No catalog spec spreads by `level`. At n = Infinity that is an
-  error under rule 3.1, because it places one bar of zero width per draw.
-  Sorted bars at finite n tend to the `ccdf` picture, which is a second spec.
-- **`blend: "mean"`.** 22, the CCDF fade.
+  sample the rows are the draws. Over a Dist, `repeat(n, { level: "p" })`
+  and `x.quantile("p")` make the dots (37, 40, 41, 60 to 63, 94, and part of
+  01). 21 and 38 take quantile dots of a sample: `cellsOf` makes one Dist per
+  cell from its rows, then the same `repeat` and `quantile("p")`.
+- **A spread by `p`.** No catalog spec spreads by `p`. It needs a finite
+  `repeat` (rule 4.1). Sorted bars tend to the `ccdf` picture as n grows,
+  which is a second spec.
+- **`blend: "mean"`.** 22, the CCDF fade, over all 1000 rows of each cell.
+  Its shorthand would be `rect({ h: value })` over `cellsOf`, whose limit is
+  exactly this average.
 - **The plain overlay.** 69, 81, 82 and 85 draw shared whole-curve draws with
   `group({ by: ".draw" })`.
 - **A summary per draw.** 83, 84 and 87 score each whole curve and keep the
@@ -133,6 +138,9 @@ const SLAB = "gray65";
 // Data that arrives as draws has no draw column. withDraw adds a row index so
 // the schema can declare it: { schema: { value: { draws: "draw" } } }.
 const withDraw = (rows) => rows.map((r, i) => ({ ...r, draw: i }));
+
+// cellsOf(rows, { by, draws }) (21, 38; a GoFish gap): one row per value of
+// by, whose column draws holds the empirical Dist of that cell's rows.
 
 // Read a column of Dist cells as a Dist expression.
 // as("dist").median(), as("dist").bin(...), ...
@@ -207,8 +215,10 @@ const gradientinterval = (x, o = {}) => slab(x, { density: { normalize: "peak" }
 const ccdf = (x, o = {}) =>
   slab(x, { ...o, curve: (c) => c.map((r) => ({ ...r, density: 1 - r.cdf })) });
 
-// keepDeepest (83, 84, 87): a derive that scores each draw by the mean over
-// its rows of depth(row) and keeps the deepest share of draws.
+// keepDeepest({ by, along, value, share }) (83, 84, 87): a derive that scores
+// each draw (by) by the mean over along of its depth min(F, 1 - F), where F
+// is the CDF of the draws at that value of along, read at the draw's value.
+// It keeps the deepest share of draws.
 ```
 
 A gap is a `// gap:` comment at the place it occurs. A gap that belongs to
@@ -233,19 +243,19 @@ be families of the proposal's `dist` namespace.
 - **65, `stat_mcse_dots` blur.** ggdist blurs each dot sideways by its
   quantile's Monte Carlo standard error, after binning. That is the blur
   channel the limits tab rules out, so ggdist's own picture has no draw
-  spelling. Section 4 says the honest version needs a `Dist<Dist>` made from
-  a sample by resampling. Two pieces are missing. Version 2 names no such
-  constructor. And two levels of draws need two draw keys, but `sample`
-  always writes columns named `draw` and `level`, so a second `sample`
-  overwrites the first.
+  spelling. Section 5 says the honest version needs a `Dist<Dist>` made from
+  a sample by resampling. Version 2 names no such constructor. The two
+  draw keys are no longer a problem: `repeat` names its columns, so the spec
+  writes `repeat(200, "outer")` and `repeat(100, { level: "p" })` and reads
+  `boot.sample("outer").quantile("p")`. Only the constructor is missing.
 - **66, `stat_mcse_dots(blur = "interval")`.** Each dot's interval is a pair
   of quantiles across the outer draws, grouped by the inner level. It
-  needs the same two pieces as 65.
+  needs the same constructor as 65.
 - **88, `curve_interval(.interval = "bd-mbd")`.** Band depth is the share of
   pairs of other curves whose band contains a curve at every x. That needs
   every pair of draws at once, so it is not a summary per draw. The table's
   "summary per draw" row covers mhd (83, 84, 87), which is a mean over x of
-  `min(level, 1 - level)`.
+  `min(F, 1 - F)`, with F the CDF of the draws at each x.
 
 ## gofish-gap (61), by gap
 
@@ -289,23 +299,23 @@ be families of the proposal's `dist` namespace.
 
 ## Where the version 2 text is wrong or incomplete
 
-1. **`at: "quantiles"` applies to a Dist, not to a sample.** ggdist's
+1. **Quantile dots of a sample need a Dist per cell.** ggdist's
    `stat_dots(quantiles = 50)` on 1000 rows (21, 38) thins a sample to 50
-   quantiles. Version 2 has no step for that. The specs filter on `level`,
-   keeping every 20th rank, which has to know the row count.
-2. **The cell of data that arrives as draws is not defined.** The fragment
-   says such data "gets its level from each cell's ranks". In `df` (16, 17,
+   quantiles. `quantile("p")` reads a Dist, so the specs first make one
+   empirical Dist per cell with `cellsOf`, a GoFish gap. (Changed in round 7:
+   the earlier draft filtered on `level`, which had to know the row count.)
+2. **The cell of data that arrives as draws is not defined.** In `df` (16, 17,
    21, 22, 38) the 1000 rows of each group and subgroup are one cell, but
    nothing in the schema says which columns name the cell. The data also has
    no draw column, so the specs still need `withDraw`.
-3. **Fixed column names collide.** `sample` always writes `draw` and
-   `level`. Two levels of draws (65, 66) need two keys. Data with its own
-   `level` column collides too (ggdibbler 60, 61).
+3. **Fixed column names collided.** Resolved in round 7: `repeat` names
+   the columns it writes, so two levels of draws (65, 66) get two keys, and
+   data with its own `level` column (ggdibbler 60, 61) no longer clashes.
 4. **"A summary per draw" covers mhd but not band depth.** mhd and modified
-   band depth are means over x of a function of `level`. Band depth (88)
+   band depth are means over x of a function of each value's CDF among the draws. Band depth (88)
    compares pairs of whole draws.
-5. **"Not a new step" for MCSE fails as stated.** A `Dist<Dist>` constructor
-   alone does not make 65 or 66 writable, because of item 3.
+5. **"Not a new step" for MCSE.** With item 3 resolved, a `Dist<Dist>`
+   constructor alone would make 65 and 66 writable.
 6. **The density curve is a curve.** The fragment lists "the density"
    beside one-number summaries. A slab reads it at every position, and a
    gradient reads it as opacity along the slab. The fragment does not say how
@@ -319,7 +329,7 @@ be families of the proposal's `dist` namespace.
    below the support (93). ggdist uses the axis's lower limit; the specs pass
    it as the curve's range, `density: { range: [lo] }`. A bar from 0 is wrong
    when the distribution crosses 0.
-9. **A spread by `level` at n = Infinity.** Version 2 first allowed it as the
-   CCDF bar. Rule 3.1 now makes it an error, like a spread by `draw`, and the
-   CCDF bar is the `ccdf` mark. Sorted bars tend to it as n grows, which is a
+9. **A spread by `p` has no limit.** Version 2 first allowed a spread by
+   level at n = Infinity as the CCDF bar. Rule 4.1 now says it needs a finite
+   `repeat`, like a spread by `draw`, and the CCDF bar is the `ccdf` mark. Sorted bars tend to it as n grows, which is a
    relation between two specs.

@@ -15,12 +15,13 @@ Sources, chosen by a fixed rule:
 - every `@examples` plot of each exported `geom_*_sample`, `stat_*_sample` and `position_*` function;
 - every paper figure that shows a ggdibbler chart.
 
-Specs follow version 2 of the grammar (`../theory-fragment.html`): `sample(data, { n, seed, at })` as a data step that adds the `draw` and `level` columns, `blend: "mean"`, summaries of the draws, and the draw key's type. Everything else is today's GoFish. Where a piece is missing, the spec writes the call it would most likely be and marks it with a `// gap:` comment. Those calls are not existing syntax. Each entry keeps its version 1 class and verdict in `v1_fit` and `v1_verdict`.
+Specs follow version 2 of the grammar (`../theory-fragment.html`): draws made in the flow with `derive(repeat(n, "draw"))` (or `repeat(n, { level: "p" })` for evenly spaced levels) and read in a channel or a `by` with `field("x").sample("draw")` or `quantile("p")`, `blend: "mean"`, summaries of the draws, independence as a property of the Dist, and a bare Dist in a channel as shorthand for the expected picture. Everything else is today's GoFish. Where a piece is missing, the spec writes the call it would most likely be and marks it with a `// gap:` comment. Those calls are not existing syntax. Each entry keeps its version 1 class and verdict in `v1_fit` and `v1_verdict`.
 
 Two conventions changed from version 1:
 
 - ggdibbler's alpha overlays are the plain overlay, `group({ by: "draw" })`, with the mark's opacity set to ggdibbler's alpha. ggplot paints the draws over each other, which is what the plain overlay does. `blend: "mean"` averages instead, so it is mentioned only where its limit is the point.
-- Layers that share a seed in R share one sample: `const drawn = sample(X, { n, seed })`, read by every chart that needs it.
+- Layers that share a seed in R read draw k of the same rows. `value.sample("draw")` is fixed by the seed, the row and k, so every chart that repeats the same rows and reads the same draw number gets the same values. The specs use one seed for the whole chart, so layers that R draws separately (27, 94, 99) share draws here too; a seed per layer is open question b in section 6.
+- In data where every column is random, every channel and every `by` reads `field("x").sample("draw")`. That is verbose, and it is the cost of saying which columns are drawn.
 
 ## Counts
 
@@ -32,8 +33,8 @@ Two conventions changed from version 1:
 
 | verdict | v1 | v2 |
 | --- | -: | -: |
-| ok | 119 | 106 |
-| warning | 0 | 14 |
+| ok | 119 | 105 |
+| warning | 0 | 15 |
 | error | 3 | 2 |
 
 Movement from version 1 to version 2:
@@ -42,10 +43,10 @@ Movement from version 1 to version 2:
 | --- | -: | --- |
 | fits → fits | 60 | |
 | gofish-gap → gofish-gap | 58 | |
-| does-not-fit → fits | 3 | 62, 63, 100: the layers share one sample |
-| does-not-fit → gofish-gap | 1 | 107: `at: "quantiles"` writes it; abline is missing |
+| does-not-fit → fits | 3 | 62, 63, 100: the layers read draw k of the same rows |
+| does-not-fit → gofish-gap | 1 | 107: `repeat(50, { level: "p" })` and `quantile("p")` write it; abline is missing |
 
-Verdicts moved too. Thirteen entries now get a rule 3.2 warning and one gets a rule 3.3 warning, where version 1 had no rule. 107 moved from an error to ok, which is worse (see below).
+Verdicts moved too. Fourteen entries now get a rule 4.2 warning and one gets a rule 4.3 warning, where version 1 had no rule. Thirteen of the 4.2 warnings join draw k of independent marginals. 107, the paper's anti-example in Fig 6c, reads quantile p of two cells, a lockstep pair, and moved from an error in version 1 to a warning. The earlier draft of version 2 gave it no message.
 
 ## does-not-fit
 
@@ -53,7 +54,7 @@ None. Every ggdibbler example can be written in version 2.
 
 ## Non-ok verdicts
 
-Rule 3.2 warnings. Each mark joins rows of different cells along a per-cell draw key, so it shows one possible world only if the cells are independent:
+Rule 4.2 warnings. Each mark but 107 joins draw k of different cells whose Dists are independent marginals, so it shows one possible world only if the cells are independent. 107 joins quantile p of two cells, which is a lockstep quantile pair, not a draw:
 
 - 38 frequency polygons of price by cut
 - 47 unemployment lines, one per draw
@@ -69,11 +70,11 @@ Rule 3.2 warnings. Each mark joins rows of different cells along a per-cell draw
 - 95 segments to the group mean per draw
 - 100 mean mpg per cyl as a line
 
-Rule 3.3 warning:
+Rule 4.3 warning:
 
 - 109 one smooth over all draws pooled (paper Fig 7a). One smoother is fitted to every car's draws at once, so the band shrinks as n grows.
 
-Rule 3.4 errors:
+Rule 4.4 errors:
 
 - 85 plain stack of groups and draws. `stack({ by: "draw" })` adds the counts of ten draws of one cell, so counts reach about 600.
 - 110 paper Fig 8b, the same as 85. This is the paper's own example of why draws must not stack.
@@ -123,12 +124,12 @@ ggdibbler names a nested position `A_B`: A is the ggplot position for the groups
 | dodge_dodge | `spread({ by: G })` then `spread({ by: "draw", spacing: 0 })` (draw inner) |
 | identity_dodge | `spread({ by: "draw", spacing: 0 })` then `group({ by: G })` |
 | dodge (plain) | `spread({ by: G, spacing: s })` then `spread({ by: "draw", spacing: s })`, a flat dodge of G by draw written as two spreads with equal spacing |
-| stack (plain) | `stack({ by: "draw" })` then `stack({ by: G })`: error under rule 3.4 |
+| stack (plain) | `stack({ by: "draw" })` then `stack({ by: G })`: error under rule 4.4 |
 | position_nest("stack_dodge") | the same as stack_dodge; any nesting is just a step order |
 | subdivide | `subdivide({ by: "draw" })`: gap, no polygon-cutting operator |
 | jitter | `scatter({ overlap: Overlap.jitter() })`: gap for 2D jitter |
 | nudge (text, label) | plain scatter; nudge is a fixed offset with no draw meaning |
-| times = n | `sample(data, { n })` |
+| times = n | `derive(repeat(n, "draw"))` and `.sample("draw")` in the channels |
 
 The A_B name does not fix the order of steps. In stack_dodge the draw step is outside the group step, so each thin bar is one draw's whole stack. In dodge_dodge the draw step is inside it, so each group's bar is cut into draws. In GoFish this is visible because the order is written out.
 
@@ -161,14 +162,14 @@ None. Every entry rendered. The `quantreg` package was installed so that 58 and 
 
 ## Where the version 2 text is wrong or incomplete
 
-1. **`at: "quantiles"` makes Fig 6c writable with no warning.** 107 pairs the k-th quantile of the intercept with the k-th quantile of the slope. Version 1 could not write it, which was the right result for the paper's anti-example. In version 2, `sample(cells, { n: 50, at: "quantiles" })` on two independent cells gives both the same 50 levels, so draw k of one cell has the same level as draw k of the other. The draws are comonotone, which is a joint distribution the data never stated, and no rule flags it. `at: "quantiles"` also has no meaning for a joint cell such as a `dist.mvnormal`. The rule that would catch this: a draw key made with `at: "quantiles"` is a level, not a draw, so rule 3.2 should treat a join along it like a join along `level`.
-2. **Rule 3.2 draws its line in the wrong place.** It warns on marks whose vertices are rows of different cells (lines, areas, polygons, hulls, segments). Its reason, that the picture is one possible world only if the cells are independent, applies just as well to a stat computed per draw over many cells: a contour (01), a density (29), a smooth (67), an ECDF (88), a QQ plot (56), an ellipse (90) or a boxplot (19). Under the text of 3.2 those get no warning, so the catalog gives them none. It also misses one mark that reads several cells of one row, such as a scatter of two Dist columns (24, 51). Either 3.2 is about joins and those are fine, or it is about any picture that combines cells within a draw, and then most of ggdibbler warns.
-3. **"Is not one" is too strong in 3.2.** Under per-cell independent draws, a line through draw 3 of every month is a valid draw of the joint distribution in which the months are independent. It is one possible world under that assumption. The warning should say the chart assumes independence, not that the line is not a world.
-4. **Rule 3.4's claim "GoFish already rejects this with CanSum" is wrong.** The stacked quantity in 85 and 110 is a count, and counts are summable, so CanSum accepts the stack. The error needs a second fact: the draw key is a key that sums are never taken across. That is the entity rule of #1198, not CanSum. Rule 3.4 should also say why a dotplot, which stacks draws in a bin, is fine: each stacked dot is one draw's share of probability, and shares of disjoint draws do sum.
-5. **Eight examples share a seed, not three.** Section 4 says three ggdibbler examples use one seed so two layers read the same draws. The catalog finds eight: 50, 61, 62, 63, 67, 68, 87 and 100. Moving `sample` to the data fixes all eight.
+1. **Fig 6c (resolved in round 7).** 107 pairs the k-th quantile of the intercept with the k-th quantile of the slope. Version 1 could not write it. The earlier draft of version 2 wrote it with `sample(cells, { n: 50, at: "quantiles" })` and no warning. Now it is `repeat(50, { level: "p" })` with both channels reading `quantile("p")`, and rule 4.2 warns that reading quantile p of several cells at once is a lockstep quantile curve, not a draw. A quantile still has no meaning for a joint cell such as a `dist.mvnormal`.
+2. **Rule 4.2 draws its line in the wrong place.** It warns on marks whose vertices are rows of different cells (lines, areas, polygons, hulls, segments). Its reason, that the picture is one possible world only if the cells are independent, applies just as well to a stat computed per draw over many cells: a contour (01), a density (29), a smooth (67), an ECDF (88), a QQ plot (56), an ellipse (90) or a boxplot (19). Under the text of 4.2 those get no warning, so the catalog gives them none. It also misses one mark that reads several cells of one row, such as a scatter of two Dist columns (24, 51). Either 4.2 is about joins and those are fine, or it is about any picture that combines cells within a draw, and then most of ggdibbler warns.
+3. **"Is not one" is too strong in 4.2.** Under independent marginals, a line through draw 3 of every month is a valid draw of the joint distribution in which the months are independent. It is one possible world under that assumption. The warning should say the chart assumes independence, not that the line is not a world.
+4. **Rule 4.4's claim "GoFish already rejects this with CanSum" is wrong.** The stacked quantity in 85 and 110 is a count, and counts are summable, so CanSum accepts the stack. The error needs a second fact: the draw key is a key that sums are never taken across. That is the entity rule of #1198, not CanSum. Rule 4.4 should also say why a dotplot, which stacks draws in a bin, is fine: each stacked dot is one draw's share of probability, and shares of disjoint draws do sum.
+5. **Eight examples share a seed, not three.** Section 5 says three ggdibbler examples use one seed so two layers read the same draws. The catalog finds eight: 50, 61, 62, 63, 67, 68, 87 and 100. Draw k fixed by the seed, the row and k fixes all eight with no seed in the spec.
 6. **The table's blend row lists "ggdibbler (finite)".** No ggdibbler example averages. Every overlay paints the draws over each other at a fixed alpha, which is the plain overlay row. The blend row should list only ggdist's CCDF fade.
-7. **Fixed column names collide with data.** `sample` writes a column named `level`. The `huron` data in 60 and 61 has its own `level` column (the lake level), so the specs rename it to `lake`. The fragment should say what happens on a clash, or let the author name the columns.
-8. **What `sample` does on certain data is still not said.** ggdibbler on plain data draws the plain chart (04, 42). The fragment should say that `sample` on a table with no Dist is the identity, or that it repeats each row n times. Under the second reading, rule 3.4 would reject stacking a certain table after `sample`.
-9. **A channel that reads draw is now covered.** Version 1 missed color by draw (93). Rule 3.1 now names it. The unread draw key (24, 40, 41, 52, 53, 114) is also covered by 3.1's "a draw key that nothing uses up".
+7. **Fixed column names collided with data (resolved in round 7).** The earlier draft's `sample` wrote a column named `level`, which clashed with the `huron` data's own `level` column (60, 61). `repeat` names the columns it writes, so the specs now read `field("level").sample("draw")` with no rename.
+8. **Plain data (resolved in round 7).** ggdibbler on plain data draws the plain chart (04, 42). With no Dist column there is nothing to draw, so the spec has no `repeat` and no `.sample`, and the question of what `sample` does to plain data is gone.
+9. **A channel that reads draw is now covered.** Version 1 missed color by draw (93). Rule 4.1 now says it needs a finite `repeat`. The plain overlays that paint every draw (24, 40, 41, 52, 53, 114) also need a finite `repeat`: they have no bare-Dist form, because painting over is not averaging.
 10. **Nested position names do not map to one order.** The fragment says the two packages differ only in which step uses up the draw key. For ggdibbler the step order also matters, and its names hide it: stack_dodge puts the draw outside the group step, dodge_dodge puts it inside. The mapping table above is needed to apply the claim.
 11. **There is no `dist.*` constructor for a categorical Dist with a probability vector** (113 to 116). This was already known from `ggdibbler.md`.

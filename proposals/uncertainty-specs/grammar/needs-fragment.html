@@ -1,0 +1,122 @@
+<section class="lede">
+  <p>This tab puts ggdist and ggdibbler inside GoFish. The claim is that neither package needs a grammar of its own: once draws are rows, every chart in either package is a GoFish flow over those rows. GoFish needs five additions, listed in section 1. Section 2 compares real ggdist and ggdibbler renders with the GoFish spec for each. Sections 3 and 4 give the theory: the ways a chart can use up the draws, and the rules that check them. This is version 2 of the claim. Version 1 was checked against every example in both packages (the <a href="#catalog">Catalog</a> tab: 96 ggdist vignette charts and 122 ggdibbler examples), and section 5 lists what that check changed.</p>
+</section>
+
+<h2>1. What GoFish needs</h2>
+<p>A cell is one uncertain value, such as one bar's height or one map region's rate. The data holds each cell as a Dist.</p>
+<ol>
+  <li><strong>Draws are rows that a channel reads.</strong> <code>derive(repeat(n, "draw"))</code> makes n copies of each row, numbered 0 to n − 1 in a column named <code>draw</code>. <code>repeat(n, { index: "draw", level: "p" })</code> also writes p = (k + ½) / n, so the n copies get evenly spaced levels between 0 and 1, and <code>repeat(n, { level: "p" })</code> writes only p. Today's <code>repeat(d, field)</code> copies a row by a count field and writes no index; this extends it with a fixed count and named columns. A channel then reads the Dist on each copy. <code>value.sample("draw")</code> is draw k of this row's Dist, where k is the row's <code>draw</code>. It is fixed by the seed, the row and k, so two layers that read draw k of the same rows get the same value. <code>value.quantile("p")</code> is the quantile at the row's level p. A <code>by</code> can read them too, as in <code>spread({ by: field("class").sample("draw") })</code>, and inside a <code>derive</code> a Dist cell has the same method: <code>r.value.sample(r.draw)</code>. Data that already arrives as draws needs no <code>repeat</code>: it declares its draw column in the schema, as in the proposal. The column that <code>repeat</code> writes or the schema declares is the draw key. Its n is always finite; the limit is written as a bare Dist (addition 5).</li>
+  <li><strong><code>blend: "mean"</code></strong> on <code>group</code> puts every draw in one frame and averages them. This is from <a href="#limits">Blur as a limit</a>.</li>
+  <li><strong>Summaries of the draws.</strong> A summary takes the list of draws in a group and returns one value, such as the mean or a quantile, or one curve, such as the density. The summaries are <code>mean</code>, <code>median</code>, <code>quantile(p)</code> (p a number, or a column such as <code>"p"</code>), <code>min</code>, <code>max</code>, the probability of a bin, and the density curve. In a channel they are methods, such as <code>value.median()</code>. Inside a <code>derive</code>, two data helpers turn them into rows: <code>densityCurve</code> gives the density curve as rows, and <code>centralIntervals</code> gives one row per interval level. Some summaries exist today. They are not special to draws, but ggdist is built on them.</li>
+  <li><strong>Which cells are drawn together.</strong> This is a property of the Dist, not of the draw key. When a column holds a separate Dist per cell, those are independent marginals: draw k of one cell says nothing about draw k of another. When the data states a joint, draw k of several cells is one possible world. Data that arrives as draws states a joint (draw 3 is one whole run of a model), and so does one joint Dist over several cells, such as <code>dist.mvnormal</code>. Section 4 gives the rules that read it.</li>
+  <li id="shorthand"><strong>A Dist in a channel is shorthand.</strong> <code>value.draws(n)</code> in a channel stands for a <code>repeat</code> and an averaging <code>group</code> placed right before the mark, so its scope is one mark:
+<pre><code class="language-js">.mark(rect({ h: value.draws(20) }))
+// is exactly
+.flow(derive(repeat(20, "draw")), group({ by: "draw", blend: "mean" }))
+.mark(rect({ h: value.sample("draw") }))</code></pre>
+  The two are equal by definition. They read the same draws, because draw k is fixed by the seed, the row and k. When one mark has several Dist channels, they read the same draw number: draw k of <code>a</code> goes with draw k of <code>b</code>, and whether those are independent is up to their Dists (addition 4).
+  <p>A bare Dist in a channel, as in <code>rect({ h: value })</code>, is the limit of <code>value.draws(n)</code> as n grows: the expected picture of the mark. This is a definition as a limit. It is not equal to the picture at any finite n. It is checked by rendering n = 20, 200 and 2000 and watching the gap to the drawn limit shrink.</p>
+  <p>The limit keeps the mark's geometry. <code>rect({ h: value })</code> is still a rect. It reaches to the top of the Dist's support, or to the axis limit, and only its paint varies: its opacity at height y is P(H &gt; y). The bar whose width is P(H &gt; y) is a different spec, the <code>ccdf</code> mark below.</p>
+  <p>So the meaning has two layers. What a bare Dist means is the same for every mark: the limit of the explicit form. How it is drawn exactly is a rule per channel, not per mark:</p>
+  <div class="tw"><table>
+    <thead><tr><th>Dist in</th><th>Drawn exactly as</th><th>Today</th></tr></thead>
+    <tbody>
+      <tr><td>a size (<code>h</code>, <code>w</code>)</td><td>opacity that varies along that direction</td><td>gap: GoFish has no opacity that varies along one region</td></tr>
+      <tr><td>a color (<code>fill</code>, <code>stroke</code>)</td><td>the average of the draws' colors, taken after the palette</td><td>gap: GoFish does not average colors after the palette</td></tr>
+      <tr><td>a position (<code>x</code>, <code>y</code>, <code>cx</code>, <code>cy</code>)</td><td>a blur along that axis</td><td>gap: GoFish has no blur</td></tr>
+      <tr><td>any other channel</td><td>no exact rule: the renderer samples at a large n of its own choosing, as Monte Carlo rendering does</td><td></td></tr>
+    </tbody>
+  </table></div>
+  <p>The exact rules are faster ways to draw one definition. They add no new meanings.</p>
+  <p>Averaging is per mark. When marks in one cell overlap, averaging each mark and then painting them is not the same as averaging whole pictures, because painting one mark over another does not commute with averaging.</p>
+  <p>The shorthand stops where the draws decide a layout around more than one mark. The blurred dotplot in 2.6 bins and stacks all the dots of one draw together, so it has no shorthand and is written in the explicit form.</p></li>
+</ol>
+<p>Everything else is GoFish as it is today.</p>
+<!-- marks -->
+<h3>Marks defined in GoFish</h3>
+<p>ggdist's slab, interval and line ribbon are not new built-in marks. They are ordinary user code, written below in today's GoFish, and every spec in this tab and in the Catalog uses them. Each one is a function that returns a mark. The interval returns a function of the group's rows, as <code>.mark((rows) =&gt; ...)</code> already allows, because each of its levels gets its own fixed thickness. <code>ccdf</code> is the slab with thickness P(value &gt; v) in place of the density. <code>gradientinterval</code> is a variant of the slab that carries a GoFish gap.</p>
+<p>The definitions use two data helpers. The specs can be read without them.</p>
+<ul>
+  <li><code>densityCurve(rows, x, { n, range, normalize })</code> gives the density curve of the draws as n rows <code>{ v, density, cdf }</code>. <code>range: [lo, hi]</code> sets where the curve starts and ends; an end left out keeps its default. <code>normalize: "peak"</code> divides the density by its peak. On a sample, <code>cdf</code> is the sample's ECDF.</li>
+  <li><code>centralIntervals(rows, x, levels, { by })</code> gives one row per level <code>{ level, center, size, median }</code>: the central interval that holds that share of the draws.</li>
+</ul>
+<p>The core of each mark, without options:</p>
+<pre class="gr-marks"><code class="language-js">// slab: the density curve of the draws, drawn as a ribbon
+const slab = (x) =&gt;
+  chart()
+    .flow(derive((rows) =&gt; densityCurve(rows, x)), scatter({ x: "v" }))
+    .mark(ribbon({ h: "density" }));
+
+// ccdf: like the slab, but its thickness is P(value &gt; v), the chance the value is above v
+const ccdf = (x) =&gt;
+  chart()
+    .flow(derive((rows) =&gt; densityCurve(rows, x).map((r) =&gt; ({ ...r, ccdf: 1 - r.cdf }))),
+          scatter({ x: "v" }))
+    .mark(ribbon({ h: "ccdf" }));
+
+// interval: one rect per central interval (the wider, the thinner), and a circle at the median
+const interval = (x, levels = [0.95, 0.66]) =&gt; (rows) =&gt; {
+  const ints = centralIntervals(rows, x, levels);
+  return layer([
+    ...ints.map((d, i) =&gt; rect({ cx: v(d.center), w: v(d.size), h: 1.5 + 2.5 * i })),
+    circle({ cx: v(ints[0].median), r: 4 }),
+  ]);
+};
+
+// lineribbon: at each value of along, a ribbon per central interval, and a line through the medians
+const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5] }) =&gt; layer([
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, levels, { by: along })),
+               group({ by: "level" }), scatter({ by: along, x: along }))
+    .mark(rect({ w: 0, cy: "center", h: "size" })).layer(ribbon({ fill: "level" })),
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, [0], { by: along })),
+               scatter({ by: along, x: along, y: "median" }))
+    .mark(line()),
+]);</code></pre>
+<details><summary>Full definitions, with the options the catalog uses (sides, direction, highest-density intervals, the gradient and CCDF variants)</summary>
+<pre class="gr-marks"><code class="language-js">// slab: the density curve of the draws, as a ribbon. side "start" hangs it below the line,
+// and "both" mirrors it. density holds densityCurve's options; curve(c, rows) may cut or
+// rewrite the curve's rows.
+const slab = (x, { dir = "x", side = "end", density = {}, curve = (c) =&gt; c, ...o } = {}) =&gt; {
+  const half = (s) =&gt; chart()
+    .flow(derive((rows) =&gt; curve(densityCurve(rows, x, density), rows).map((r) =&gt; ({ ...r, density: s * r.density }))),
+          scatter({ [dir]: "v" }))
+    .mark(ribbon({ dir, [dir === "x" ? "h" : "w"]: "density", fill: SLAB, ...o }));
+  return side === "both" ? layer([half(1), half(-1)]) : half(side === "start" ? -1 : 1);
+};
+
+// interval: one rect per interval of the draws, the widest drawn first and thinnest, and a
+// circle at the median. A rect sits at its interval's center, the midpoint, which is the
+// median only when the distribution is symmetric (not a lognormal, a beta, or most samples).
+const interval = (x, { levels = [0.95, 0.66], dir = "x", intervals = centralIntervals,
+                       point = "median", fill = INK, ...o } = {}) =&gt; (rows) =&gt; {
+  const [c, s, t] = dir === "x" ? ["cx", "w", "h"] : ["cy", "h", "w"];
+  const ints = intervals(rows, x, levels), n = ints.length;
+  return layer([
+    ...ints.map((d, i) =&gt; rect({ [c]: v(d.center), [s]: v(d.size),
+                                 [t]: n === 1 ? 4 : 1.5 + (2.5 * i) / (n - 1), fill, ...o })),
+    ...(point ? [circle({ [c]: v(ints[0][point]), r: 4, fill })] : []),
+  ]);
+};
+
+// lineribbon: at each value of along, one ribbon per central interval of the draws, and a
+// line through their medians.
+const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5], fill = "level", stroke = INK, ...o } = {}) =&gt; layer([
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, levels, { by: along })),
+               group({ by: "level" }), scatter({ by: along, x: along }))
+    .mark(rect({ w: 0, cy: "center", h: "size" })).layer(ribbon({ fill, ...o })),
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, [0], { by: along })),
+               scatter({ by: along, x: along, y: "median" }))
+    .mark(line({ stroke, strokeWidth: 2 })),
+]);
+
+// gradientinterval: the slab divided by its peak, read as opacity over the full height.
+// gap: GoFish has no opacity that varies along one region.
+const gradientinterval = (x, o = {}) =&gt; slab(x, { density: { normalize: "peak" }, opacity: "alpha", ...o,
+  curve: (c) =&gt; c.map((r) =&gt; ({ ...r, alpha: r.density, density: 1 })) });
+
+// ccdf: the slab with thickness P(value &gt; v), the chance the value is above v, instead of the
+// density. ggdist starts the bar at the axis's lower limit: pass it as density: { range: [lo] }.
+const ccdf = (x, o = {}) =&gt;
+  slab(x, { ...o, curve: (c) =&gt; c.map((r) =&gt; ({ ...r, density: 1 - r.cdf })) });</code></pre>
+</details>
+<!-- /marks -->

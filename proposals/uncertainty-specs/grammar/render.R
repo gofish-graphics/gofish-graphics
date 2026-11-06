@@ -74,14 +74,12 @@ p <- bars |>
 save(p, "bars-ccdf")
 
 # ---- bars-sorted ----
-set.seed(1980)
-draws <- bars |>
+# 20 quantiles per bar at the evenly spaced levels p = (k + 0.5) / 20.
+quants <- bars |>
   slice(rep(1:n(), each = 20)) |>
-  mutate(value = rnorm(n(), mean, se)) |>
-  group_by(category) |>
-  mutate(rank = rank(value)) |>
-  ungroup()
-p <- ggplot(draws, aes(x = category, y = value, group = rank)) +
+  mutate(k = rep(0:19, times = nrow(bars)), p = (k + 0.5) / 20,
+    value = qnorm(p, mean, se))
+p <- ggplot(quants, aes(x = category, y = value, group = k)) +
   geom_col(position = position_dodge(width = 0.9), width = 0.9, fill = FILL) +
   bar_y
 save(p, "bars-sorted")
@@ -225,15 +223,12 @@ p <- tiles_sf |>
 save(p, "map-blend")
 
 # ---- map-sorted ----
-# 16 draws per region, sorted and laid into a 4 x 4 grid in reading order.
-set.seed(1980)
+# 16 quantiles per region at p = (i + 0.5) / 16, laid into a 4 x 4 grid in
+# reading order.
 cells <- tiles |>
   slice(rep(1:n(), each = 16)) |>
-  mutate(value = rnorm(n(), mean, sd)) |>
-  group_by(col, row) |>
-  arrange(value, .by_group = TRUE) |>
-  mutate(i = row_number() - 1) |>
-  ungroup() |>
+  mutate(i = rep(0:15, times = nrow(tiles)),
+    value = qnorm((i + 0.5) / 16, mean, sd)) |>
   mutate(
     x0 = col + (i %% 4) / 4,
     y0 = -row - (i %/% 4 + 1) / 4
@@ -274,15 +269,11 @@ p <- heat |>
 save(p, "heat-subdivide")
 
 # ---- heat-sorted ----
-# The same 16 draws per tile, sorted and laid left to right.
-set.seed(1980)
+# 16 quantiles per tile at p = (i + 0.5) / 16, laid left to right.
 strips <- heat |>
   slice(rep(1:n(), each = 16)) |>
-  mutate(value = rnorm(n(), mean, sd)) |>
-  group_by(x, y) |>
-  arrange(value, .by_group = TRUE) |>
-  mutate(i = row_number() - 1) |>
-  ungroup()
+  mutate(i = rep(0:15, times = nrow(heat)),
+    value = qnorm((i + 0.5) / 16, mean, sd))
 p <- ggplot(strips) +
   geom_rect(aes(
     xmin = x - 0.5 + i / 16, xmax = x - 0.5 + (i + 1) / 16,

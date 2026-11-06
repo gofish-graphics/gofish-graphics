@@ -107,10 +107,12 @@ def r_code(entry):
 
 # ---------------------------------------------------------------- specs
 # Each entry: title, gofish (JS), uses_up, fit, verdict, note. Version 2 of
-# the grammar (../theory-fragment.html). slab, interval, lineribbon and
-# gradientinterval are marks defined in ordinary GoFish in section 1 of
-# ../theory-fragment.html. Other names used but not defined in a spec
-# (densityCurve, centralIntervals, as, withDraw, keepDeepest, INK, SLAB)
+# the grammar (../needs-fragment.html, ../theory-fragment.html), with draws
+# made in the flow: derive(repeat(n, "draw")) and value.sample("draw"), or
+# evenly spaced levels with repeat(n, { level: "p" }) and value.quantile("p").
+# slab, interval, lineribbon, gradientinterval and ccdf are marks defined in
+# ordinary GoFish in section 1. Other names used but not defined in a spec
+# (densityCurve, centralIntervals, as, withDraw, cellsOf, keepDeepest, INK, SLAB)
 # are the prelude in ggdist-summary.md: plain JS over today's GoFish
 # plus the version 2 additions. The v1 fit of each entry is in v1-fits.json.
 
@@ -121,7 +123,6 @@ E[1] = dict(
     gofish="""
 const x = dist.normal({ mean: 4, sd: 1 });
 const cell = [{ mean: 4, sd: 1 }];
-const dots = sample(cell, { n: 100, at: "quantiles" });
 // one row per geom
 spread({ dir: "y", spacing: 8 }, [
   // halfeye
@@ -184,18 +185,20 @@ spread({ dir: "y", spacing: 8 }, [
       .mark(rect({ h: field("x").count(), fill: SLAB })),
     chart(cell).mark(interval(x)),
   ]),
-  // dots
-  chart(dots)
+  // dots: 100 evenly spaced quantiles
+  chart(cell)
     .flow(
-      partition({ by: x.bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+      derive(repeat(100, { level: "p" })),
+      partition({ by: x.quantile("p").bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
       stack({ dir: "y" })
     )
     .mark(circle({ r: 2 })),
   // dotsinterval
   layer([
-    chart(dots)
+    chart(cell)
       .flow(
-        partition({ by: x.bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+        derive(repeat(100, { level: "p" })),
+        partition({ by: x.quantile("p").bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
         stack({ dir: "y" })
       )
       .mark(circle({ r: 2 })),
@@ -203,7 +206,7 @@ spread({ dir: "y", spacing: 8 }, [
   ]),
 ]);
 """,
-    uses_up='mixed: ccdf and cdf rows: the CDF of the draws as thickness; gradient row: the density curve of the draws read as opacity; slab and interval rows: summaries per cell; dots rows: sample at quantiles, then partition and stack',
+    uses_up='mixed: ccdf and cdf rows: the CDF of the draws as thickness; gradient row: the density curve of the draws read as opacity; slab and interval rows: summaries per cell; dots rows: 100 evenly spaced quantiles, then partition and stack',
     fit='gofish-gap',
     verdict='ok',
     note="Every row can now be written. Version 1 could not write the gradient row, because a blend has no peak scaling. In version 2 it is the density curve of the draws divided by its peak and read as opacity, and the missing piece is that GoFish has no opacity that varies along one region, so the spec marks it as a gap. The eye row has entry 4's layout gap, and the dots rows have the dot-binning gap of entry 20.",
@@ -245,7 +248,7 @@ chart([{ g: 0 }], { axes: { x: { domain: [-1, 10] } } })
   )
   .layer(chart(arrows).mark(arrow({ fill: "#d95f02" })));
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="The halfeye is the slab and interval marks of section 1. The annotation layer needs bracket-ended segments (arrowheads at 90 degrees) placed in data coordinates, which GoFish's arrow mark does not offer.",
@@ -258,7 +261,7 @@ chart(df)
   .flow(spread({ by: "group", dir: "y" }))
   .mark(layer([slab("value"), interval("value")]));
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note="A half-eye is a layer of the slab and interval marks of section 1. The slab draws the density curve of each group's rows, which ggdist estimates with a kernel. The interval draws the central intervals of the rows as rects by center and size, and a circle at the median. Version 1 computed the distribution by hand in its derives.",
@@ -303,7 +306,7 @@ spread({ dir: "x", spacing: 16 }, [
     ),
 ]);
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="Side start and both need the interval to sit on the slab's zero line, but a GoFish layer aligns its children's boxes, not their origins (elaborations.md, design question 'The line the slab sits on'). Side end works because its origin is its box edge.",
@@ -343,7 +346,7 @@ spread({ dir: "x", spacing: 16 }, [
     .mark(layer([slab("value"), interval("value")])),
 ]);
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The horizontal version of entry 4, with the same layout gap for side start and both.',
@@ -371,7 +374,7 @@ chart(df)
     ])
   );
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="Dodge is a nested spread. The eye is side both, so it has entry 4's gap: the interval must sit on the slab's center line.",
@@ -396,7 +399,7 @@ chart(distDf)
     ])
   );
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='Entry 6 with analytic normals. Same layout gap for the eye.',
@@ -410,7 +413,7 @@ chart(betas)
   .flow(scatter({ by: "alpha", y: "alpha" }))
   .mark(layer({ h: 24 }, [slab(x), interval(x)]));
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note='The halfeyes sit at a continuous y position, which scatter gives. It assumes the dist namespace has a beta family and takes a literal parameter.',
@@ -440,7 +443,7 @@ chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(layer([slab("dist"), interval("dist")]));
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The slabs fit if a column may hold Dist values of different families (foldDist accepts that). Missing: the subguide, a small density axis drawn inside each slab, and a truncated Dist for the half-normal prior.',
@@ -476,7 +479,7 @@ const shared = chart([{}]).mark(
 );
 spread({ dir: "x", spacing: 16 }, [separate, shared]);
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note='GoFish\'s default is ggdist\'s scale_thickness_shared, because both slabs read one size scale. The separate version divides each density curve by its own peak with the slab\'s density option, which is normalize: "group" in elaborations.md.',
@@ -492,7 +495,7 @@ const x = dist.lognormal({
 chart([{}], { axes: { x: { scale: "log" } } }) // no log axis today
   .mark(layer([slab(x), interval(x)]));
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='GoFish has no log scale. ggdist draws the density of log10(X), so the density curve would also need to know the axis transform. The quantiles would not, since quantiles move with a monotone transform.',
@@ -607,26 +610,27 @@ E[15] = dict(
     gofish="""
 const y = dist.poisson({ lambda: "lambda" });
 layer([
-  chart(sample(pois, { n: Infinity }), {
+  // the pmf at 0, 1, ..., 20: on a discrete Dist, densityCurve
+  // gives the probability of each value
+  chart(pois, {
     color: Color.gradient(["#132b43", "#56b1f7"]),
   })
     .flow(
       spread({ by: "group", dir: "x" }),
-      partition({ by: y.bin(Bin.step(1)), dir: "y" })
+      derive((rows) => densityCurve(rows, y, { n: 21, range: [0, 20] })),
+      scatter({ by: "v", y: "v" })
     )
-    .mark(
-      rect({ w: y.probability(), fill: y.probability() })
-    ),
+    .mark(rect({ h: v(1), w: "density", fill: "density" })),
   chart(pois)
     .flow(spread({ by: "group", dir: "x" }))
     .mark(circle({ cy: "lambda", r: 3 }))
     .layer(line({ strokeWidth: 1 })),
 ]);
 """,
-    uses_up='partition by a bin of the drawn value, then the probability of each bin in each bin, n = Infinity',
+    uses_up='the pmf of each cell at 0 to 20, a summary of the Dist (exact)',
     fit='fits',
     verdict='ok',
-    note='A discrete slab is one bar per integer whose width is the pmf. At n = Infinity, partition groups the draws into bins and the probability of each bin uses them up, which rule 3.1 allows. Version 1 had no summary for this and needed a grid derive. The line joins plain lambda values, not draws.',
+    note='A discrete slab is one bar per integer whose width is the pmf. The earlier draft partitioned the draws by a bin of their value at n = Infinity. A partition by a drawn value decides the layout around more than one mark, so a bare Dist cannot stand for it (section 1, addition 5), and a Poisson has infinitely many bins. So the spec reads the pmf as a summary over a fixed range, as ggdist does. Version 1 had no summary for this and needed a grid derive. The line joins plain lambda values, not draws.',
 )
 
 E[16] = dict(
@@ -762,29 +766,26 @@ chart(df)
 E[21] = dict(
     title='stat_dots(quantiles = 50) dodged',
     gofish="""
-// stat_dots(quantiles = 50) of a sample: keep every 20th of
-// each cell's 1000 ranks
-chart(withDraw(df), {
-  schema: { value: { draws: "draw" } },
-})
+// gap: one row per cell, whose value is the Dist of the
+// cell's 1000 draws (their empirical distribution)
+chart(cellsOf(df, { by: ["group", "subgroup"], draws: "value" }))
   .flow(
     spread({ by: "group", dir: "x" }),
     spread({ by: "subgroup", dir: "x" }),
-    filter(
-      (d) => Math.round(d.level * 1000 + 0.5) % 20 === 10
-    ),
+    // stat_dots(quantiles = 50): 50 evenly spaced levels
+    derive(repeat(50, { level: "p" })),
     partition({
-      by: field("value").bin(Bin.step(0.3)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      by: field("value").quantile("p").bin(Bin.step(0.3)), // chosen by hand; ggdist picks the width so the tallest stack fits
       dir: "y",
     }),
     stack({ dir: "x" })
   )
   .mark(circle({ r: 3, fill: "subgroup" }));
 """,
-    uses_up="a filter on level keeps 50 of each cell's 1000 rows, then partition by a bin and stack (finite n)",
+    uses_up="50 evenly spaced quantiles of each cell's 1000 rows, then partition by a bin and stack (finite n)",
     fit='gofish-gap',
     verdict='ok',
-    note='ggdist takes 50 quantiles of each group\'s 1000 rows. at: "quantiles" applies to a Dist cell, not to a sample, so version 2 has no step that thins a sample to n quantiles. The spec keeps every 20th rank with a filter on level, which is exact for 1000 rows but has to know the row count. It also has entry 16\'s caveats about the draw key. GoFish has Bin.step, partition and stack, but not dot-density (Wilkinson) binning or a bin width chosen from the axis scale so the dots touch and the tallest stack fits; the author must match the bin width and r by hand.',
+    note='ggdist takes 50 quantiles of each group\'s 1000 rows. Once a cell\'s draws are one empirical Dist, that is repeat(50, { level: "p" }) and quantile("p"), as for a Dist cell. GoFish has no step that turns a cell\'s rows into that Dist; the spec writes it as cellsOf, marked as a gap. The earlier draft kept every 20th rank with a filter on level, which had to know the row count. GoFish has Bin.step, partition and stack, but not dot-density (Wilkinson) binning or a bin width chosen from the axis scale so the dots touch and the tallest stack fits; the author must match the bin width and r by hand.',
 )
 
 E[22] = dict(
@@ -811,7 +812,7 @@ chart(withDraw(df), {
     uses_up='group({ by: "draw", blend: "mean" }) over the 1000 rows of each cell',
     fit='fits',
     verdict='ok',
-    note="Full-width bars from 0 to each draw, averaged, have opacity P(Y > y) at height y, which is the CCDF fade of the table. It matches ggdist because the CCDF already runs from 0 to 1, so ggdist's alpha rescaling changes nothing. The same chart is also a summary: opacity 1 - cdf along the bar, from the CDF of the draws. Entry 16's caveats about the draw key apply.",
+    note="Full-width bars from 0 to each draw, averaged, have opacity P(Y > y) at height y, which is the CCDF fade of the table. The shorthand of section 1, addition 5 would be rect({ h: value }) over one Dist per cell made from its 1000 rows (cellsOf, a GoFish gap), whose limit is exactly this average, since that Dist has 1000 equal atoms. It matches ggdist because the CCDF already runs from 0 to 1, so ggdist's alpha rescaling changes nothing. The same chart is also a summary: opacity 1 - cdf along the bar, from the CDF of the draws. Entry 16's caveats about the draw key apply.",
 )
 
 E[23] = dict(
@@ -1136,7 +1137,7 @@ const hdci = chart([{}]).mark(
 );
 spread({ dir: "y", spacing: 16 }, [qi, hdci]);
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="The quantile-interval panel fits. The second panel needs the mode and the highest-density continuous interval. Neither is in version 2's list of summaries, so the spec writes them as the helper they would most likely be. They are general summaries, not special to draws, so this is a GoFish gap; on draws an HDI is the shortest window of levels.",
@@ -1267,7 +1268,7 @@ chart(df)
     ])
   );
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note='The geometry fits as nested slabs. Missing: fill_ramp, a color scale on subgroup lightened by a second field (level); Color.mix exists but no scale combines two fields.',
@@ -1423,14 +1424,14 @@ E[37] = dict(
     gofish="""
 const x = dist.normal({ mean: "mean", sd: "sd" });
 const cells = distDf.filter((d) => d.subgroup === "h");
-const dots = sample(cells, { n: 100, at: "quantiles" });
 spread({ dir: "y", spacing: 20 }, [
   // a
   layer([
-    chart(dots.filter((d) => d.group === "a"))
+    chart(cells.filter((d) => d.group === "a"))
       .flow(
+        derive(repeat(100, { level: "p" })),
         partition({
-          by: x.bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+          by: x.quantile("p").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
           dir: "x",
           alignment: "end",
         }),
@@ -1443,10 +1444,11 @@ spread({ dir: "y", spacing: 20 }, [
   ]),
   // b
   layer([
-    chart(dots.filter((d) => d.group === "b"))
+    chart(cells.filter((d) => d.group === "b"))
       .flow(
+        derive(repeat(100, { level: "p" })),
         partition({
-          by: x.bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+          by: x.quantile("p").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
           dir: "x",
           alignment: "middle",
         }),
@@ -1464,10 +1466,11 @@ spread({ dir: "y", spacing: 20 }, [
   ]),
   // c
   layer([
-    chart(dots.filter((d) => d.group === "c"))
+    chart(cells.filter((d) => d.group === "c"))
       .flow(
+        derive(repeat(100, { level: "p" })),
         partition({
-          by: x.bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
+          by: x.quantile("p").bin(Bin.step(0.2)), // chosen by hand; ggdist picks the width so the tallest stack fits
           dir: "x",
           alignment: "start",
         }),
@@ -1485,17 +1488,16 @@ spread({ dir: "y", spacing: 20 }, [
   ]),
 ]);
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws on the Dist',
+    uses_up='100 evenly spaced quantiles (repeat(100, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws on the Dist',
     fit='gofish-gap',
     verdict='ok',
-    note="Quantile dots of a Dist are sample at evenly spaced levels, which version 1 needed a derive for. Side as data (one value per row) is not a channel in GoFish, so each row is its own chart. The both and bottom rows need the interval on the dots' baseline (entry 4's gap), plus the dot-binning gap of entry 20.",
+    note="Quantile dots of a Dist are repeat(100, { level: \"p\" }) and quantile(\"p\"), which version 1 needed a derive for. Side as data (one value per row) is not a channel in GoFish, so each row is its own chart. The both and bottom rows need the interval on the dots' baseline (entry 4's gap), plus the dot-binning gap of entry 20.",
 )
 
 E[38] = dict(
     title="stat_slab(side = 'left') + stat_dotsinterval(quantiles = 100) + labels, dodged",
     gofish="""
 const value = field("value");
-const drawn = withDraw(df);
 layer([
   chart(df)
     .flow(
@@ -1516,16 +1518,15 @@ layer([
         text({ y: value.median(), text: "label" }),
       ])
     ),
-  // 100 quantile dots of each cell's 1000 rows: every 10th rank
-  chart(drawn, { schema: { value: { draws: "draw" } } })
+  // 100 quantile dots of each cell's 1000 rows. gap: cellsOf,
+  // one row per cell whose value is the Dist of its draws
+  chart(cellsOf(df, { by: ["group", "subgroup"], draws: "value" }))
     .flow(
       spread({ by: "group", dir: "x" }),
       spread({ by: "subgroup", dir: "x" }),
-      filter(
-        (d) => Math.round(d.level * 1000 + 0.5) % 10 === 5
-      ),
+      derive(repeat(100, { level: "p" })),
       partition({
-        by: value.bin(Bin.step(0.15)), // chosen by hand; ggdist picks the width so the tallest stack fits
+        by: value.quantile("p").bin(Bin.step(0.15)), // chosen by hand; ggdist picks the width so the tallest stack fits
         dir: "y",
       }),
       stack({ dir: "x" })
@@ -1533,10 +1534,10 @@ layer([
     .mark(circle({ r: 1.5, fill: "subgroup" })),
 ]);
 """,
-    uses_up='slab and label: the density curve and the median of the draws; dots: a filter on level keeps 100 of 1000 rows, then partition and stack',
+    uses_up='slab and label: the density curve and the median of the draws; dots: 100 evenly spaced quantiles of the 1000 rows, then partition and stack',
     fit='gofish-gap',
     verdict='ok',
-    note="A left slab and right dots share one center line, which needs the layer to align children by origin (entry 4's gap), plus the dot-binning gap. The label at the median is a text mark at the median of the draws. The dots thin a sample to 100 quantiles with a filter on level, as in entry 21.",
+    note="A left slab and right dots share one center line, which needs the layer to align children by origin (entry 4's gap), plus the dot-binning gap. The label at the median is a text mark at the median of the draws. The dots take 100 quantiles of each cell's draws, as in entry 21.",
 )
 
 E[39] = dict(
@@ -1558,7 +1559,7 @@ layer([
     .mark(interval("value", { fill: "group" })),
 ]);
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="The overlaid slabs fit. The dodged intervals sit just below the shared baseline, which is the raincloud placement elaborations.md could not express (a layer aligns boxes, not the slab's zero line).",
@@ -1570,9 +1571,10 @@ E[40] = dict(
 const x = dist.normal({ mean: 4, sd: 1.2 });
 const cell = [{}];
 layer([
-  chart(sample(cell, { n: 100, at: "quantiles" }))
+  chart(cell)
     .flow(
-      partition({ by: x.bin(Bin.step(0.25)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+      derive(repeat(100, { level: "p" })),
+      partition({ by: x.quantile("p").bin(Bin.step(0.25)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
       stack({ dir: "y" })
     )
     .mark(
@@ -1597,7 +1599,7 @@ layer([
   )
   .layer(chart(arrows).mark(arrow({ fill: "#d95f02" })));
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
+    uses_up='100 evenly spaced quantiles (repeat(100, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
     fit='gofish-gap',
     verdict='ok',
     note='Quantile dots plus an interval. Missing: the dot-binning gap of entry 20, bracket-ended annotation segments (entry 2), and a square point shape.',
@@ -1607,9 +1609,10 @@ E[41] = dict(
     title='Properties of geom_dots (annotated diagram)',
     gofish="""
 const x = dist.normal({ mean: 4, sd: 1.2 });
-chart(sample([{}], { n: 100, at: "quantiles" }))
+chart([{}])
   .flow(
-    partition({ by: x.bin(Bin.step(0.25)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+    derive(repeat(100, { level: "p" })),
+    partition({ by: x.quantile("p").bin(Bin.step(0.25)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
     stack({ dir: "y" })
   )
   .mark(circle({ r: 3, fill: "gray75", stroke: "gray50" }))
@@ -1625,7 +1628,7 @@ chart(sample([{}], { n: 100, at: "quantiles" }))
   )
   .layer(chart(arrows).mark(arrow({ fill: "#d95f02" })));
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n)',
+    uses_up='100 evenly spaced quantiles (repeat(100, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n)',
     fit='gofish-gap',
     verdict='ok',
     note='As entry 40 without the interval.',
@@ -2022,11 +2025,12 @@ chart(abcdDf)
 E[60] = dict(
     title="stat_dotsinterval(subguide = 'integer') of Normal, Beta and Gamma",
     gofish="""
-chart(sample(distDf2, { n: 100, at: "quantiles" }))
+chart(distDf2)
   .flow(
     spread({ by: "distName", dir: "y" }),
+    derive(repeat(100, { level: "p" })),
     partition({
-      by: as("dist").bin(Bin.step(0.02)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      by: as("dist").quantile("p").bin(Bin.step(0.02)), // chosen by hand; ggdist picks the width so the tallest stack fits
       dir: "x",
     }),
     stack({ dir: "y" })
@@ -2038,7 +2042,7 @@ chart(sample(distDf2, { n: 100, at: "quantiles" }))
       .mark(interval("dist"))
   );
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
+    uses_up='100 evenly spaced quantiles (repeat(100, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
     fit='gofish-gap',
     verdict='ok',
     note='Quantile dots and intervals of three families, from a column of Dist cells. Missing: the dot-binning gap (one bin width cannot suit three different scales) and the integer subguide, a count axis inside each row.',
@@ -2047,20 +2051,21 @@ chart(sample(distDf2, { n: 100, at: "quantiles" }))
 E[61] = dict(
     title="stat_dotsinterval(quantiles = 1000, point_interval = mode_hdci, layout = 'weave'), slab_fill = level",
     gofish="""
-chart(sample(distDf2, { n: 1000, at: "quantiles" }), {
+chart(distDf2, {
   color: Color.palette(["#9ecae1", "#3182bd"]),
 })
   .flow(
     spread({ by: "distName", dir: "y" }),
-    // the interval a dot falls in, from its level: the hdci
+    derive(repeat(1000, { level: "p" })),
+    // the interval a dot falls in, from its level p: the hdci
     // needs a helper that does not exist
     derive((rows) =>
       rows.map((r) => ({
         ...r,
-        band: Math.abs(r.level - 0.5) < 0.33 ? 0.66 : 0.95,
+        band: Math.abs(r.p - 0.5) < 0.33 ? 0.66 : 0.95,
       }))
     ),
-    scatter({ x: "dist", overlap: Overlap.separate() }) // weave: no GoFish layout
+    scatter({ x: as("dist").quantile("p"), overlap: Overlap.separate() }) // weave: no GoFish layout
   )
   .mark(circle({ r: 0.5, fill: "band" }))
   .layer(
@@ -2078,62 +2083,62 @@ chart(sample(distDf2, { n: 1000, at: "quantiles" }), {
       )
   );
 """,
-    uses_up='sample(data, { n: 1000, at: "quantiles" }), then partition by a bin and stack (finite n) by a dot layout; the interval is central intervals of the draws',
+    uses_up='1000 evenly spaced quantiles (repeat(1000, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n) by a dot layout; the interval is central intervals of the draws',
     fit='gofish-gap',
     verdict='ok',
-    note='Coloring each dot by the interval it falls in reads level, which is exact for an equal-tailed interval. Missing: the weave layout, and the mode and HDCI summaries (entry 30); with an HDCI the band is not a function of level alone.',
+    note='Coloring each dot by the interval it falls in reads its level p, which is exact for an equal-tailed interval. Missing: the weave layout, and the mode and HDCI summaries (entry 30); with an HDCI the band is not a function of p alone.',
 )
 
 E[62] = dict(
     title='stat_dotsinterval(slab_shape = 19, quantiles = 500), slab_color = after_stat(x)',
     gofish="""
-chart(sample(distDf2, { n: 500, at: "quantiles" }), {
+chart(distDf2, {
   color: Color.gradient("Blues"),
 })
   .flow(
     spread({ by: "distName", dir: "y" }),
+    derive(repeat(500, { level: "p" })),
     partition({
-      by: as("dist").bin(Bin.step(0.01)), // chosen by hand; ggdist picks the width so the tallest stack fits
+      by: as("dist").quantile("p").bin(Bin.step(0.01)), // chosen by hand; ggdist picks the width so the tallest stack fits
       dir: "x",
     }),
     stack({ dir: "y" })
   )
-  .mark(circle({ r: 0.7, fill: "dist" }))
+  .mark(circle({ r: 0.7, fill: as("dist").quantile("p") }))
   .layer(
     chart(distDf2)
       .flow(spread({ by: "distName", dir: "y" }))
       .mark(interval("dist"))
   );
 """,
-    uses_up='sample(data, { n: 500, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is central intervals of the draws',
+    uses_up='500 evenly spaced quantiles (repeat(500, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n); the interval is central intervals of the draws',
     fit='gofish-gap',
     verdict='ok',
-    note="Color by the dot's value: on a drawn row the Dist column reads the draw. Missing: the dot-binning gap.",
+    note="Color by the dot's value, the quantile at its level p. Missing: the dot-binning gap.",
 )
 
 E[63] = dict(
     title="stat_dots(layout = 'weave'), fill = after_stat(x < 6), with a reference line",
     gofish="""
 const x = dist.normal({ mean: "mean", sd: "sd" });
-chart(sample(abDf, { n: 100, at: "quantiles" }))
+chart(abDf)
   .flow(
     spread({ by: "ab", dir: "y" }),
-    derive((rows) =>
-      rows.map((r) => ({ ...r, flag: r.x < 6 }))
-    ), // x < 6 on the drawn value
-    scatter({ x, overlap: Overlap.separate() }) // weave: no GoFish layout
+    derive(repeat(100, { level: "p" })),
+    scatter({ x: x.quantile("p"), overlap: Overlap.separate() }) // weave: no GoFish layout
   )
-  .mark(circle({ r: 2, fill: "flag" }))
+  // x < 6 at the dot's quantile
+  .mark(circle({ r: 2, fill: x.quantile("p").between(-Infinity, 6) }))
   .layer(
     chart([{ x: 6 }]).mark(
       rect({ x: "x", w: 1, opacity: 0.25 })
     )
   );
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n) by a dot layout',
+    uses_up='100 evenly spaced quantiles (repeat(100, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n) by a dot layout',
     fit='gofish-gap',
     verdict='ok',
-    note='The predicate is a derive on the drawn rows. Missing: the weave layout.',
+    note="The predicate reads the dot's quantile, as filter(field(...).between(...)) does today. Missing: the weave layout.",
 )
 
 E[64] = dict(
@@ -2177,20 +2182,22 @@ chart(halfeyeDotDf, { color: Color.palette("Set2") })
 E[65] = dict(
     title='stat_mcse_dots(quantiles = 100): Monte Carlo standard error of each quantile as blur',
     gofish="""
-// Not writable. The nearest version 2 spelling,
-// with two problems marked.
+// Not writable. The nearest spelling, with the one
+// missing piece marked.
 // missing: no constructor makes a Dist<Dist> from a sample
 const boot = dist.resampled("x");
-// a draw of each sample
-const outer = sample(increasingSamples, { n: 200 });
-// missing: this second sample also writes draw and level
-const inner = sample(outer, { n: 100, at: "quantiles" });
-chart(inner)
+chart(increasingSamples)
   .flow(
     table({ by: { x: "col", y: "row" } }),
-    // the outer draw key, which the inner one has overwritten
-    group({ by: "draw", blend: "mean" }),
-    partition({ by: boot.bin(Bin.step(0.1)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+    // the outer draws: resample k of each sample
+    derive(repeat(200, "outer")),
+    group({ by: "outer", blend: "mean" }),
+    // the inner levels: 100 quantile dots of that resample
+    derive(repeat(100, { level: "p" })),
+    partition({
+      by: boot.sample("outer").quantile("p").bin(Bin.step(0.1)),
+      dir: "x",
+    }), // chosen by hand; ggdist picks the width so the tallest stack fits
     stack({ dir: "y" })
   )
   .mark(circle({ r: 2 }));
@@ -2198,22 +2205,22 @@ chart(inner)
     uses_up='(would be) the outer draws, blended, over the inner quantile dots',
     fit='does-not-fit',
     verdict='ok',
-    note="ggdist blurs each dot sideways by its quantile's Monte Carlo standard error, after binning. That is the blur channel the limits tab rules out (the Figure 14b cliff), so ggdist's own picture has no draw spelling. Section 4 says the honest version needs a Dist<Dist> made from a sample by resampling, a constructor and not a step. The catalog finds two missing pieces. Version 2 names no such constructor. And two levels of draws need two draw keys, but sample always writes columns named draw and level, so the inner sample overwrites the outer one. Its picture would also fade dots across stacks rather than smear them.",
+    note="ggdist blurs each dot sideways by its quantile's Monte Carlo standard error, after binning. That is the blur channel the limits tab rules out (the Figure 14b cliff), so ggdist's own picture has no draw spelling. Section 5 says the honest version needs a Dist<Dist> made from a sample by resampling, a constructor and not a step. Version 2 names no such constructor, and that is now the only missing piece: repeat names its columns, so the outer draws and the inner levels have their own keys (outer and p), where the earlier draft's sample always wrote draw and level and the inner sample overwrote the outer one. The picture would also fade dots across stacks rather than smear them.",
 )
 
 E[66] = dict(
     title="stat_mcse_dots(quantiles = 100, blur = 'interval')",
     gofish="""
-// Not writable, for the reasons of entry 65.
-// With two named draw keys it would be: per inner
-// level, the 95% interval of the dot's value across
-// the outer draws (quantiles per level), drawn
+// Not writable, for the reason of entry 65 (no
+// Dist<Dist> constructor). With one it would be: per
+// inner level p, the 95% interval of the dot's value
+// across the outer draws (quantiles per level), drawn
 // as a rect through each dot.
 """,
     uses_up='(would be) quantiles across the outer draws, per inner level',
     fit='does-not-fit',
     verdict='ok',
-    note="Each dot's interval is the uncertainty of the quantile estimate, an outer level over the sample. In the draw model it is a pair of quantiles across the outer draws, grouped by the inner level. That needs the Dist<Dist> constructor and two draw keys, which entry 65 shows version 2 does not have.",
+    note="Each dot's interval is the uncertainty of the quantile estimate, an outer level over the sample. In the draw model it is a pair of quantiles across the outer draws, grouped by the inner level. That needs the Dist<Dist> constructor that entry 65 lacks. The two keys are no longer a problem, since repeat names them.",
 )
 
 E[67] = dict(
@@ -2297,7 +2304,7 @@ chart(
     uses_up='group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema, 100 draws',
     fit='fits',
     verdict='ok',
-    note="The draws are shared: each .draw is a whole line. The schema says so, and then rule 3.2 has nothing to warn about. This is the plain overlay row of the table, which version 1's table lacked; ggdist's alpha is 0.25, not the 1/100 a blend would give.",
+    note="The draws are shared: each .draw is a whole line. The schema says so, and then rule 4.2 has nothing to warn about. This is the plain overlay row of the table, which version 1's table lacked; ggdist's alpha is 0.25, not the 1/100 a blend would give.",
 )
 
 E[70] = dict(
@@ -2314,7 +2321,7 @@ chart(df).mark(
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note="The band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="The band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 4.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[71] = dict(
@@ -2327,7 +2334,7 @@ chart(df, {
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note="Three nested bands colored by level. Each band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="Three nested bands colored by level. Each band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 4.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[72] = dict(
@@ -2621,7 +2628,7 @@ layer([
     uses_up='band: quantiles and the median of the draws per cell, with one cell per x; curves: group({ by: ".draw" }), the plain overlay, over draws declared shared in the schema',
     fit='fits',
     verdict='ok',
-    note="The pointwise band is narrow in the middle where the curves cross, which is the point of the next entry. The band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="The pointwise band is narrow in the middle where the curves cross, which is the point of the next entry. The band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 4.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[83] = dict(
@@ -2632,14 +2639,16 @@ const kept = (width) =>
   chart(curves, { schema: { y: { draws: ".draw" } } })
     .flow(
       // a summary per draw: the mean over x of the
-      // pointwise depth min(level, 1 - level), then keep
-      // the deepest share of the draws. gap: a summary
-      // whose result a later filter reads; written as a
-      // derive over the rows
+      // pointwise depth min(F, 1 - F), where F is the CDF
+      // of the draws at that x, read at the row's value;
+      // then keep the deepest share of the draws. gap: a
+      // summary whose result a later filter reads; written
+      // as a derive over the rows
       derive(
         keepDeepest({
           by: ".draw",
-          depth: (r) => Math.min(r.level, 1 - r.level),
+          along: "x",
+          value: "y",
           share: width,
         })
       ),
@@ -2662,10 +2671,10 @@ layer([
     .mark(line({ opacity: 0.15 })),
 ]);
 """,
-    uses_up='a summary per draw (mean depth from level), a filter on its rank, then the min and max of the draws per x',
+    uses_up='a summary per draw (mean depth from the CDF of the draws at each x), a filter on its rank, then the min and max of the draws per x',
     fit='gofish-gap',
     verdict='ok',
-    note="curve_interval's default, mhd, scores each whole curve by its mean halfspace depth over x. The pointwise depth is min(level, 1 - level), so the score is a summary per draw of the level column, and the band is the min and max of the kept draws at each x. That is the 'summary per draw' row of the table, and version 1 could not write it. The missing piece is general: a summary whose result a later step reads, written here as a derive (keepDeepest is plain JavaScript over the rows). Because it is a derive, the checker cannot see that it keeps whole draws.",
+    note="curve_interval's default, mhd, scores each whole curve by its mean halfspace depth over x. The pointwise depth is min(F, 1 - F), where F is the CDF of the draws at that x read at the curve's value, so the score is a summary per draw, and the band is the min and max of the kept draws at each x. That is the 'summary per draw' row of the table, and version 1 could not write it. The missing piece is general: a summary whose result a later step reads, written here as a derive (keepDeepest is plain JavaScript over the rows). Because it is a derive, the checker cannot see that it keeps whole draws.",
 )
 
 E[84] = dict(
@@ -2676,14 +2685,16 @@ const kept = (width) =>
   chart(largeCurves, { schema: { y: { draws: ".draw" } } })
     .flow(
       // a summary per draw: the mean over x of the
-      // pointwise depth min(level, 1 - level), then keep
-      // the deepest share of the draws. gap: a summary
-      // whose result a later filter reads; written as a
-      // derive over the rows
+      // pointwise depth min(F, 1 - F), where F is the CDF
+      // of the draws at that x, read at the row's value;
+      // then keep the deepest share of the draws. gap: a
+      // summary whose result a later filter reads; written
+      // as a derive over the rows
       derive(
         keepDeepest({
           by: ".draw",
-          depth: (r) => Math.min(r.level, 1 - r.level),
+          along: "x",
+          value: "y",
           share: width,
         })
       ),
@@ -2757,7 +2768,7 @@ layer([
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
     verdict='ok',
-    note="Pointwise bands over shared draws. Each band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 3.2 treats as a summary. Version 1's rule warned here.",
+    note="Pointwise bands over shared draws. Each band is the central interval of the draws at each x, and the line goes through the median of the draws at each x, which rule 4.2 treats as a summary. Version 1's rule warned here.",
 )
 
 E[87] = dict(
@@ -2767,15 +2778,17 @@ E[87] = dict(
 const kept = (width) =>
   chart(mtcarsBoot, { schema: { hp: { draws: ".draw" } } })
     .flow(
-      // a summary per draw: the mean over x of the
-      // pointwise depth min(level, 1 - level), then keep
-      // the deepest share of the draws. gap: a summary
-      // whose result a later filter reads; written as a
-      // derive over the rows
+      // a summary per draw: the mean over mpg of the
+      // pointwise depth min(F, 1 - F), where F is the CDF
+      // of the draws at that mpg, read at the row's value;
+      // then keep the deepest share of the draws. gap: a
+      // summary whose result a later filter reads; written
+      // as a derive over the rows
       derive(
         keepDeepest({
           by: ".draw",
-          depth: (r) => Math.min(r.level, 1 - r.level),
+          along: "mpg",
+          value: "hp",
           share: width,
         })
       ),
@@ -2810,12 +2823,12 @@ E[88] = dict(
 // draws. keepDeepest's depth would have to be, for
 // each draw, the share of pairs of other draws whose
 // band contains it at every x. That is not a summary of
-// one draw's rows, and not a function of level.
+// one draw's rows, and not a function of each value's CDF.
 """,
     uses_up='(would be) a statistic over pairs of whole draws, a filter on its rank, then the min and max of the draws per x',
     fit='does-not-fit',
     verdict='ok',
-    note="bd-mbd ranks curves by band depth: the share of pairs of other curves whose band contains a curve at every x, with modified band depth to break ties. The table's 'summary per draw' covers mhd and modified band depth, which are means over x of functions of level. Band depth itself needs every pair of draws at once, so it is not a summary per draw.",
+    note="bd-mbd ranks curves by band depth: the share of pairs of other curves whose band contains a curve at every x, with modified band depth to break ties. The table's 'summary per draw' covers mhd and modified band depth, which are means over x of functions of each value's CDF. Band depth itself needs every pair of draws at once, so it is not a summary per draw.",
 )
 
 E[89] = dict(
@@ -2846,7 +2859,7 @@ chart(tidyCoefs)
   .flow(spread({ by: "term", dir: "y" }))
   .mark(layer([slab(x), interval(x)]));
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='fits',
     verdict='ok',
     note='A half-eye of a confidence distribution, with a t family in the dist namespace.',
@@ -2876,7 +2889,7 @@ layer([
     .mark(rect({ w: 1, h: 8 })),
 ]);
 """,
-    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
+    uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
     note="The data ticks sit just below each half-eye's baseline; as with the raincloud in elaborations.md, placing a second chart's rows relative to the slab's zero line is not expressible, so this relies on a hand offset that matches only if both spreads give identical rows.",
@@ -2924,7 +2937,7 @@ chart(fitted)
     uses_up='summaries per cell: the CDF of the draws as thickness (ccdf), and quantiles and the median of the draws',
     fit='fits',
     verdict='ok',
-    note="The ccdf mark of section 1, which is a summary of the draws, so it is exact on a Dist. The bar must start at a fixed point at or below the support; ggdist uses the axis's lower limit, -1.5 here, which the spec sets as the curve's range. A bar from 0 would be wrong, since the distributions cross 0. Bars sorted by level tend to this picture as n grows, but a spread by level at n = Infinity is an error under rule 3.1.",
+    note="The ccdf mark of section 1, which is a summary of the draws, so it is exact on a Dist. The bar must start at a fixed point at or below the support; ggdist uses the axis's lower limit, -1.5 here, which the spec sets as the curve's range. A bar from 0 would be wrong, since the distributions cross 0. Bars sorted by level tend to this picture as n grows, but a spread by level at n = Infinity is an error under rule 4.1.",
 )
 
 E[94] = dict(
@@ -2935,18 +2948,19 @@ const x = dist.studentT({
   mu: ".fitted",
   sigma: ".se.fit",
 });
-chart(sample(fitted, { n: 100, at: "quantiles" }))
+chart(fitted)
   .flow(
     spread({ by: "condition", dir: "y" }),
-    partition({ by: x.bin(Bin.step(0.05)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
+    derive(repeat(100, { level: "p" })),
+    partition({ by: x.quantile("p").bin(Bin.step(0.05)), dir: "x" }), // chosen by hand; ggdist picks the width so the tallest stack fits
     stack({ dir: "y" })
   )
   .mark(circle({ r: 1.5 }));
 """,
-    uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n)',
+    uses_up='100 evenly spaced quantiles (repeat(100, { level: "p" }), quantile("p")), then partition by a bin and stack (finite n)',
     fit='gofish-gap',
     verdict='ok',
-    note='Quantile dots of a t distribution: sample at 100 evenly spaced levels, which version 1 needed a derive for. Missing: the dot-binning gap.',
+    note='Quantile dots of a t distribution: 100 evenly spaced levels from repeat, read with quantile(\"p\"), which version 1 needed a derive for. Missing: the dot-binning gap.',
 )
 
 E[95] = dict(

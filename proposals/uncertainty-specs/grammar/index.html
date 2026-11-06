@@ -5805,8 +5805,11 @@ chart(estimates)
 <script>
 (function () {
   var names = ["summary", "proposal", "signal", "noise", "ggdibbler", "theory", "scales", "limits", "stable", "one-limit", "grammar", "catalog", "papers-a", "papers-b", "types", "elaborations", "y2024", "y2025", "y2026"];
+  // A hash is a tab name, optionally followed by "/" and an anchor inside that
+  // tab: "#grammar/rule-4-2" shows the grammar tab and scrolls to rule 4.2.
   function show() {
-    var h = (location.hash || "").slice(1);
+    var parts = (location.hash || "").slice(1).split("/");
+    var h = parts[0], anchor = parts[1] && document.getElementById(parts[1]);
     if (names.indexOf(h) < 0) h = "summary";
     names.forEach(function (n) {
       document.getElementById("p-" + n).classList.toggle("on", n === h);
@@ -5815,9 +5818,14 @@ chart(estimates)
       if (a.getAttribute("href") === "#" + h) a.setAttribute("aria-current", "page");
       else a.removeAttribute("aria-current");
     });
+    return anchor;
   }
-  window.addEventListener("hashchange", function () { show(); window.scrollTo(0, 0); });
-  show();
+  function go() {
+    var anchor = show();
+    if (anchor) anchor.scrollIntoView(); else window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", go);
+  go();
   if (window.hljs) document.querySelectorAll("pre code[class^=language-]").forEach(function (el) { window.hljs.highlightElement(el); });
 })();
 </script>

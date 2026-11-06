@@ -115,7 +115,7 @@ document.getElementById("p-one-limit").innerHTML = `
 <p><code>Dist</code> is a monad (the Giry monad). U(M(X)) does not mean "uncertainty in aesthetic space". It means: map the chart over the distribution of tables to get a distribution of pictures, then collapse. The uncertainty still lives in data space.</p>
 <pre><code class="language-ts" id="ol-code"></code></pre>
 <p>U(M(U(X))) is the <code>Dist&lt;Dist&lt;T&gt;&gt;</code> case from the jk-plots paper. The inner level is drawn by a ggdist mark, for example a dotplot of a predictive distribution. The outer level, each dot's own uncertainty, is collapsed ggdibbler-style: overlay many dotplots, and the blur appears. Flattening the two levels first with <code>join</code> would mix them into one wider distribution and draw one wider dotplot. The blur is what keeps the two levels apart.</p>
-<p>The <a href="#limits">Blur as a limit</a> tab already explains the cliff in ggdibbler paper Figure 14: the blur is applied after binning and stacking, so it is not tied to where the dot could have landed. Section 3.5 of <a href="#grammar">GoFish over draws</a> compares the real ggdist chart with the two-level version.</p>
+<p>The <a href="#limits">Blur as a limit</a> tab already explains the cliff in ggdibbler paper Figure 14: the blur is applied after binning and stacking, so it is not tied to where the dot could have landed. Section 2.6 of <a href="#grammar">GoFish over draws</a> compares the real ggdist chart with the two-level version.</p>
 
 <h2>8. Smaller points</h2>
 <ul>
