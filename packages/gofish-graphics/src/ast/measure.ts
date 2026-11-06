@@ -319,6 +319,9 @@ export class UnitVar {
   /** @internal at a root: the columns in the class, the keys a schema
    *  declares their unit by. */
   columns: string[];
+  /** @internal at a root: whether some mark draws one value of the class as
+   *  a length on both axes ({@link tieUnit}). */
+  tied?: boolean;
   constructor(
     readonly name: string,
     column?: string
@@ -552,8 +555,23 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   ra.unit = unit ?? ra.unit ?? rb.unit;
   ra.names = unionInOrder(ra.names, rb.names);
   ra.columns = unionInOrder(ra.columns, rb.columns);
+  ra.tied ||= rb.tied;
   return ra;
 }
+
+/**
+ * Record that a mark draws one value of `v`'s unit as a length on both axes
+ * (#1087): an aspect lock that derives one axis's data size from the
+ * other's. The unit is then one length on x and y, as a declared unit is
+ * (#582). The tie is kept on the class, so it holds for every occurrence of
+ * the unit the walk unifies with it.
+ */
+export const tieUnit = (v: UnitVar): void => {
+  findRoot(v).tied = true;
+};
+
+/** Whether some mark ties `v`'s unit ({@link tieUnit}). */
+export const isTiedUnit = (v: UnitVar): boolean => findRoot(v).tied === true;
 
 /**
  * Two declared occurrences of one unit (one name) that meet in a class of

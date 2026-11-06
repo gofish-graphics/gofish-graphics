@@ -165,9 +165,8 @@ const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
  *  screen's left or top, `-1` when it starts at the bottom). */
 export type EqualMeasureAxis = {
   space: UnderlyingSpace | undefined;
-  /** The units whose domains the axis maps (`KeyedDomains.unitsOf`), read
-   *  only when some mark ties a unit (`ScopeRegistry.tie`). */
-  units?: () => ReadonlySet<string>;
+  /** The tied unit the axis maps alone (`KeyedDomains.tiedUnitOf`). */
+  tiedUnit?: () => string | undefined;
   claim: Extent;
   box: number;
   sigma: number;
@@ -229,6 +228,13 @@ export function sharesDeclaredMeasure(
   );
 }
 
+/** Whether two axes map one tied unit alone (#1087,
+ *  `EqualMeasureAxis.tiedUnit`). */
+const inOneTiedUnit = (x: EqualMeasureAxis, y: EqualMeasureAxis): boolean => {
+  const unit = x.tiedUnit?.();
+  return unit !== undefined && unit === y.tiedUnit?.();
+};
+
 /** Whether the scope dump is on. Off (and near-zero-cost) in prod. */
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
 
@@ -267,40 +273,6 @@ export class ScopeRegistry {
   /** The scope each node with a literal size solves on each axis, from the
    *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
   private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
-  /** The units some mark draws one length of on both axes (`tie`). */
-  private tied = new Set<string>();
-
-  /**
-   * Record that a mark draws one value of `unit` as a length on both axes
-   * (#1087): an aspect-locked mark whose size is data, such as a circle. A
-   * data unit is then one length on x and y wherever both axes map it, as
-   * for a declared unit (#582), so {@link equalizeMeasure} gives both axes
-   * the smaller σ. An unknown unit two axes merely share by name does not
-   * count: only a mark that ties the two does.
-   */
-  tie(unit: string): void {
-    this.tied.add(unit);
-  }
-
-  /**
-   * Whether two axes are in one tied unit (`tie`): each axis maps that unit
-   * and no other. An axis that also maps another unit (a marginal
-   * histogram's count beside the scatter's beak length) is not in one
-   * measure with the other axis, so a unit the two merely both contain
-   * does not equalize them.
-   */
-  private inOneUnit(
-    xUnits: (() => ReadonlySet<string>) | undefined,
-    yUnits: (() => ReadonlySet<string>) | undefined
-  ): boolean {
-    if (this.tied.size === 0 || xUnits === undefined || yUnits === undefined)
-      return false;
-    const [x, y] = [xUnits(), yUnits()];
-    if (x.size !== 1 || y.size !== 1) return false;
-    const [u] = x;
-    return y.has(u) && this.tied.has(u);
-  }
-
   /** Each glyph unit's bounds (`fitGlyphs`), by the unit's key. */
   private glyphs?: ReadonlyMap<string, GlyphUnit>;
 
@@ -454,14 +426,14 @@ export class ScopeRegistry {
    * claim walk are equalized, and their claims hold the leftover pixels, so
    * the node still claims its size. `yDirection` is the direction of its
    * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
-   * unless both are in one declared or tied unit (`inOneUnit`). `units`
-   * reads the units an axis maps (`KeyedDomains.unitsOf`).
+   * unless both are in one declared unit, or map one tied unit alone
+   * (`tiedUnit`, `KeyedDomains.tiedUnitOf`).
    */
   equalizeFixed(
     node: object,
     rootKey: string,
     yDirection: 1 | -1,
-    units?: (axis: 0 | 1) => ReadonlySet<string>
+    tiedUnit?: (axis: 0 | 1) => string | undefined
   ): void {
     const solves = this.fixed.get(node);
     const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
@@ -469,7 +441,7 @@ export class ScopeRegistry {
       return (
         s && {
           space: s.space,
-          units: units && (() => units(axis)),
+          tiedUnit: tiedUnit && (() => tiedUnit(axis)),
           claim: s.claim,
           box: s.box,
           sigma: s.solution.sigma,
@@ -678,7 +650,7 @@ export class ScopeRegistry {
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a
    * `recenter` entry per axis). Returns the equalized axes; a no-op
    * (undefined) unless both axes are given and are in one declared unit, or
-   * in one tied unit and no other (`inOneUnit`).
+   * map one tied unit alone (`EqualMeasureAxis.tiedUnit`).
    */
   equalizeMeasure(
     rootKey: string,
@@ -688,10 +660,7 @@ export class ScopeRegistry {
     if (
       ax === undefined ||
       ay === undefined ||
-      !(
-        sharesDeclaredMeasure(ax.space, ay.space) ||
-        this.inOneUnit(ax.units, ay.units)
-      )
+      !(sharesDeclaredMeasure(ax.space, ay.space) || inOneTiedUnit(ax, ay))
     )
       return undefined;
     // Only an axis with a data width binds: a one-value axis (`isOneValue`)

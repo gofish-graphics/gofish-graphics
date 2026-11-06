@@ -18,6 +18,7 @@
 import * as Interval from "../util/interval";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import { unionChildSpaces } from "./graphicalOperators/alignment";
+import { isTiedUnit } from "./measure";
 import {
   isCONTINUOUS,
   originIs,
@@ -58,8 +59,9 @@ type Seat = { spaceRoot: KeyedNode; top: KeyedNode; topType?: UnderlyingSpace };
  *  one, and whether it holds data positions or only widths. */
 type DomainId = { unit?: string; kind: "position" | "width" };
 
-/** A keyed domain: its interval, and what it is ({@link DomainId}). */
-type KeyedDomain = DomainId & { interval: Interval.Interval };
+/** A keyed domain: its interval, what it is ({@link DomainId}), and
+ *  whether some mark ties its unit (`tieUnit`, #1087). */
+type KeyedDomain = DomainId & { interval: Interval.Interval; tied: boolean };
 
 /** What the domain of a space is ({@link DomainId}), and its key: its
  *  unit's representative, or, for values with no unit (literals), the top
@@ -130,8 +132,12 @@ export class KeyedDomains {
     const { key, ...id } = domainId(space, seat.top);
     const domains = KeyedDomains.entry(this.domains, seat.spaceRoot);
     const prior = domains[axis].get(key);
+    const tied =
+      space.measure?.unit !== undefined && isTiedUnit(space.measure.unit);
+    this.anyTied ||= tied;
     domains[axis].set(key, {
       ...id,
+      tied,
       interval: prior === undefined ? iv : Interval.union(prior.interval, iv),
     });
   }
@@ -237,16 +243,25 @@ export class KeyedDomains {
     return this.domains.get(key.spaceRoot)?.[axis].get(key.key)?.interval;
   }
 
-  /** The units whose domains a node's space maps on `axis` (`unitKeyOf`):
-   *  the units of its space root's keyed domains there, whether they hold
-   *  positions or only widths. */
-  unitsOf(node: KeyedNode, axis: 0 | 1): Set<string> {
-    const units = new Set<string>();
+  /** Whether some keyed domain's unit is tied (`tieUnit`). */
+  private anyTied = false;
+
+  /** The tied unit a node's space maps alone on `axis` (#1087): its space
+   *  root's keyed domains there, positions and widths, are all in one unit,
+   *  and some mark ties it (`tieUnit`). Undefined otherwise. An axis that
+   *  also maps another unit (a marginal histogram's count beside the
+   *  scatter's beak length) is not in one measure with the other axis. */
+  tiedUnitOf(node: KeyedNode, axis: 0 | 1): string | undefined {
+    if (!this.anyTied) return undefined;
     const seat = this.seatOf(node, axis);
-    if (seat === undefined) return units;
-    for (const d of this.domains.get(seat.spaceRoot)?.[axis].values() ?? [])
-      if (d.unit !== undefined) units.add(d.unit);
-    return units;
+    const domains = seat && this.domains.get(seat.spaceRoot)?.[axis];
+    let one: KeyedDomain | undefined;
+    for (const d of domains?.values() ?? []) {
+      if (d.unit === undefined) continue;
+      if (one !== undefined && one.unit !== d.unit) return undefined;
+      one = d;
+    }
+    return one?.tied === true ? one.unit : undefined;
   }
 
   /** The width of the widest keyed domain of `unit` (`unitKey`), in any

@@ -613,7 +613,7 @@ export const layer = createNodeOperatorSequential(
               node,
               node.key ?? node.type,
               node.yFrame.direction,
-              keyed && ((axis) => keyed.unitsOf(node, axis))
+              keyed && ((axis) => keyed.tiedUnitOf(node, axis))
             );
           const fixedClaim = (axis: 0 | 1, px: number): Extent => {
             const solved = scopes.fixedSolve(node, axis);

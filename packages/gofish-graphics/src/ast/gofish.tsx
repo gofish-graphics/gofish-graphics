@@ -712,7 +712,7 @@ export async function layout(
         ? undefined
         : {
             space: rootSpaces[axis],
-            units: () => keyedDomains.unitsOf(root, axis),
+            tiedUnit: () => keyedDomains.tiedUnitOf(root, axis),
             claim,
             box: canvas[axis],
             sigma: scope.sigma,

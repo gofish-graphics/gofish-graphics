@@ -399,6 +399,63 @@ console.log("# #1087: an aspect lock ties its data unit's σ on both axes");
   }
 }
 
+console.log("# #1087: rect's aspect lock follows the same rules as circle's");
+{
+  const { rect, scatter } = GoFish as any;
+  // A rect's aspect lock is the circle's (`elaborateOwnDims`): the derived
+  // axis takes the given data size, so a row of locked rects lays out as a
+  // row of circles of the same sizes does.
+  const boxesOf = (dl: any) =>
+    kindsOf(dl, ["rect", "ellipse"]).map((it) =>
+      it.kind === "rect"
+        ? [it.x, it.y, it.w ?? it.width, it.h ?? it.height]
+        : [it.cx - it.rx, it.cy - it.ry, 2 * it.rx, 2 * it.ry]
+    );
+  const same = (a: number[][], b: number[][]) =>
+    a.length === b.length &&
+    a.every((r, i) => r.every((v, j) => Math.abs(v - b[i][j]) < 1e-6));
+  const spreadData = [
+    { k: "A", v: 30 },
+    { k: "B", v: 80 },
+    { k: "C", v: 45 },
+  ];
+  const inSpread = (mark: unknown) =>
+    chart(spreadData, { axes: false })
+      .flow(spread({ by: "k", dir: "x", spacing: 0 }))
+      .mark(mark)
+      .toDisplayList({ w: 400, h: 300 })
+      .then(boxesOf);
+  for (const key of ["w", "h"]) {
+    const boxes = await inSpread(rect({ [key]: "v", aspectRatio: 1 }));
+    const circles = await inSpread(circle({ [key]: "v" }));
+    check(
+      `rect({ ${key}, aspectRatio: 1 }) in a spread lays out as circle({ ${key} })`,
+      same(boxes, circles),
+      JSON.stringify({ boxes, circles })
+    );
+  }
+  const years = [
+    { year: 2000, value: 10 },
+    { year: 2001, value: 40 },
+    { year: 2002, value: 20 },
+  ];
+  const atYears = (mark: unknown) =>
+    chart(years, { axes: false })
+      .flow(scatter({ by: "year", x: "year" }))
+      .mark(mark)
+      .toDisplayList({ w: 300, h: 300 })
+      .then(boxesOf);
+  for (const key of ["w", "h"]) {
+    const boxes = await atYears(rect({ [key]: "value", aspectRatio: 1 }));
+    const circles = await atYears(circle({ [key]: "value" }));
+    check(
+      `rect({ ${key}, aspectRatio: 1 }) placed on x only lays out as circle({ ${key} })`,
+      same(boxes, circles),
+      JSON.stringify({ boxes, circles })
+    );
+  }
+}
+
 console.log("# #972: a glyph size is a scale of its own");
 {
   const { scatter, partition, Bin, Coord } = GoFish as any;
