@@ -383,8 +383,13 @@ html.landing-page .DocSearch-Button {
   left: 100%;
   top: 50%;
   z-index: 6;
-  /* rest the stamp against the "h" at the wordmark's end, shallow tilt */
-  transform: translate(-16%, -64%) rotate(27deg);
+  /* stamped over the end of the "h": x and y are offsets from the
+     wordmark's right end, as a share of the stamp's own size */
+  --stamp-x: -34%;
+  --stamp-y: -60%;
+  --stamp-angle: 27deg;
+  transform: translate(var(--stamp-x), var(--stamp-y))
+    rotate(var(--stamp-angle));
   font-family: "Spline Sans", sans-serif;
   font-weight: 800;
   font-size: clamp(0.8rem, 1.4vw, 1.05rem);
