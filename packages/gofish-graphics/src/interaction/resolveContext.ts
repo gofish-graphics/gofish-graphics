@@ -21,12 +21,21 @@
  * reader set of the READABLE it read (one of the input's `specReaders`), so
  * writes to that readable schedule a full re-run of every chart that read it.
  *
- * Caveat: the context is a module variable, so two charts resolving
- * CONCURRENTLY (interleaving at await points, e.g. a Python derive RPC) could
- * cross-register. Registration sites are synchronous spec-evaluation code in
- * practice; a scoped-storage mechanism can replace this if async marks make
- * the race real.
+ * The context is a module variable, so it is right only while one resolve
+ * runs at a time: two charts resolving CONCURRENTLY (a page that renders
+ * several at once, interleaving at await points) would register each other's
+ * inputs. So resolves take turns: `withInteractiveResolve` queues each one
+ * behind the resolve before it, and the registrar a read sees is always the
+ * chart resolving. Only the resolve waits its turn; layout and paint run
+ * outside the queue.
+ *
+ * A chart's lowering and paint can still run while another chart resolves,
+ * and a read there (a paint-time value read once to have something to lower,
+ * or a `live()` channel re-run by Solid) is not part of that resolve. Both run
+ * under the chart's Solid root, and a resolve never does (it runs from a
+ * promise callback), so a read with a Solid owner has no registrar.
  */
+import { getOwner } from "solid-js";
 import type { InputPrimitive, SpecInvalidator } from "./types";
 
 /** The registration surface library inputs see. It is also a
@@ -40,22 +49,32 @@ export interface AmbientRegistrar extends SpecInvalidator {
 
 let current: AmbientRegistrar | undefined;
 
-/** Install `registrar` as the ambient context for the duration of `fn`. */
-export async function withInteractiveResolve<T>(
+/** The last resolve queued: the next one starts after it. */
+let turn: Promise<unknown> = Promise.resolve();
+
+/** Install `registrar` as the ambient context for the duration of `fn`, once
+ *  every resolve queued before it has finished. */
+export function withInteractiveResolve<T>(
   registrar: AmbientRegistrar,
   fn: () => Promise<T>
 ): Promise<T> {
-  const prev = current;
-  current = registrar;
-  try {
-    return await fn();
-  } finally {
-    current = prev;
-  }
+  const run = async (): Promise<T> => {
+    current = registrar;
+    try {
+      return await fn();
+    } finally {
+      current = undefined;
+    }
+  };
+  const result = turn.then(run, run);
+  turn = result.catch(() => undefined);
+  return result;
 }
 
-/** The active registrar, if a resolve is in progress. */
-export const ambientRegistrar = (): AmbientRegistrar | undefined => current;
+/** The registrar of the resolve in progress, if this read is part of it: a
+ *  read under a Solid owner is a chart's lowering or paint, not a resolve. */
+export const ambientRegistrar = (): AmbientRegistrar | undefined =>
+  getOwner() === null ? current : undefined;
 
 let liveEvalDepth = 0;
 

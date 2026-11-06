@@ -63,8 +63,8 @@ themselves on read.
 `resolveContext.ts` holds a single module-level variable (the current
 `AmbientRegistrar`). The **render terminal** (`renderTerminal.ts`,
 `renderWithInteraction`) wraps resolution in `withInteractiveResolve(runtime,
-fn)`, which sets the variable for the duration of the resolve and restores it
-after. Every library input's accessor, when read, runs the `track` half of one
+fn)`, which sets the variable for the duration of the resolve and clears it
+after (resolves take turns, see below). Every library input's accessor, when read, runs the `track` half of one
 of the input's **dependencies** (`dependency(input)` in `inputs.ts`):
 
 ```ts
@@ -100,16 +100,21 @@ tick of the value. If nothing registers during a resolve, the runtime reports
 `hasWork() === false` and the chart renders down the static path untouched — no
 `data-gf-id`, output identical to a non-interactive build.
 
-> **Concurrency caveat.** The ambient context is a module variable, so two
-> charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
-> `derive` RPC) could cross-register. Registration sites are synchronous
-> spec-evaluation code in practice; a scoped-storage mechanism can replace the
-> module var if async marks ever make the race real. Paint is the exception
-> that showed up: a live slot re-runs on a clock tick, and the tick can land
-> while another chart's resolve is suspended at an `await`. So every slot
-> `setLiveSlots` stores reads under `runInLiveEval`, and a paint read never
-> becomes a pipeline dependency of whatever chart is resolving. (It can still
-> register the input with that chart's runtime, which only wires events.)
+> **Concurrent charts.** The ambient context is a module variable, so it is
+> right only while one resolve runs at a time. A page that renders several
+> charts at once interleaves their resolves at `await` points, and a read in one
+> chart's spec would register with whichever chart set the variable last: a
+> `pointer()` chart could lose its hit-test hooks to the static chart beside it.
+> So resolves take turns. `withInteractiveResolve` queues each resolve behind the
+> one before it, and only the resolve waits; layout and paint run outside the
+> queue. A chart's lowering and paint are the other way a read lands in a
+> resolve: a node reads a paint-time value once to have something to lower
+> (`readLive`), and a live slot re-runs on a clock tick or a pointer move, and
+> either can happen while another chart is resolving. Both run under the
+> chart's Solid root and a resolve never does (it starts from a promise
+> callback), so `ambientRegistrar()` returns no registrar to a read with a
+> Solid owner. Every slot `setLiveSlots` stores also reads under
+> `runInLiveEval`, so a paint read is never a pipeline dependency either way.
 
 ## One terminal, three callers — including components
 

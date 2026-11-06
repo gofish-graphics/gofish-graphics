@@ -51,6 +51,7 @@ const {
   Coord,
   intersect,
   image,
+  time,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -581,6 +582,65 @@ async function main() {
         .join(",")
     );
     ok("hover caused zero re-runs", resolves === 1, `resolves=${resolves}`);
+  }
+
+  console.log("\nconcurrent renders: each chart's inputs register with it");
+  {
+    // Charts on one page render at once (nothing awaits between their
+    // `.render` calls), so their resolves interleave. An input read in one
+    // chart's spec must register with THAT chart's runtime, wherever the other
+    // resolves are: a pointer chart keeps its hit-test hooks, a static chart
+    // next to it gets none, and a `time.sequence` chart (whose clock registers
+    // at resolve, below a `layer` of its keyframes) keeps its own.
+    const pointerBox = makeContainer();
+    const staticBox = makeContainer();
+    const sequenceBox = makeContainer();
+    const p = pointer();
+    const renders = [
+      chart(data, { axes: false })
+        .flow(spread({ by: "cat", dir: "x" }))
+        .mark(
+          rect({
+            h: "count",
+            fill: live(() => (p.datum() ? "#f00" : "#00f")),
+          })
+        )
+        .render(pointerBox, { w: 200, h: 120 }),
+      chart(data, { axes: false })
+        .flow(spread({ by: "cat", dir: "x" }))
+        .mark(rect({ h: "count" }))
+        .render(staticBox, { w: 200, h: 120 }),
+      chart(
+        [1, 2, 3].flatMap((t) => data.map((d) => ({ ...d, t }))),
+        { axes: false }
+      )
+        .flow(
+          time.sequence({ by: "t", duration: 300, playing: false }),
+          spread({ by: "cat", dir: "x" })
+        )
+        .mark(rect({ h: "count" }))
+        .render(sequenceBox, { w: 200, h: 120 }),
+    ];
+    const views = await Promise.all(renders);
+    await settle();
+    const ids = (box: HTMLElement) =>
+      box.querySelectorAll("[data-gf-id]").length;
+    ok(
+      "pointer chart keeps its data-gf-id",
+      ids(pointerBox) === 3,
+      String(ids(pointerBox))
+    );
+    ok(
+      "static chart beside it emits none",
+      ids(staticBox) === 0,
+      String(ids(staticBox))
+    );
+    ok(
+      "sequence chart keeps its data-gf-id",
+      ids(sequenceBox) > 0,
+      String(ids(sequenceBox))
+    );
+    for (const v of views) v.unmount();
   }
 
   console.log("\npointer hit-test on a painted composite");
