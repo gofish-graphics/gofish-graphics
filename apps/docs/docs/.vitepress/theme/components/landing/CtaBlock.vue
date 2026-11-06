@@ -2,19 +2,11 @@
 import { computed, onBeforeUnmount, ref } from "vue";
 import { withBase } from "vitepress";
 import { docsLang, examplesHref as examplesHrefOf } from "../../docsLang";
-import { data as pkgData } from "../../../data/version.data.js";
 
 // Shared call-to-action: the three nav buttons + the copy-to-clipboard install
 // chip. Rendered twice on the landing page (hero and closing band). Each
 // instance owns its own `copied` flash so clicking one chip never lights up the
 // other.
-//
-// `version` renders the taped release-line tag centered under the install chip
-// (hero instance only). The version is read from
-// packages/gofish-graphics/package.json at build time (see version.data.js), so
-// it tracks the real version with no manual bump.
-const props = defineProps<{ version?: boolean }>();
-const VERSION = pkgData.version;
 //
 // All links follow the reader's language preference (the toggle lives in the
 // real navbar). VitePress intercepts internal <a href> for SPA navigation, but
@@ -101,12 +93,4 @@ onBeforeUnmount(() => clearTimeout(copiedTimer));
       </svg>
     </span>
   </button>
-  <span v-if="props.version" class="hero-version">
-    <span
-      class="tape"
-      style="left: calc(50% - 30px); top: -12px; --tape-angle: -4deg"
-      aria-hidden="true"
-    ></span>
-    v{{ VERSION }}
-  </span>
 </template>

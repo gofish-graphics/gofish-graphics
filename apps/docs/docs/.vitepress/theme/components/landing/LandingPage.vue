@@ -347,8 +347,7 @@ onBeforeUnmount(() => {
         <div class="inner">
           <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
                its right end at an angle. Kept as real text so it is announced to
-               screen readers. The release-line tag lives under the install chip
-               (CtaBlock, version prop). -->
+               screen readers. -->
           <h1 id="hero-h" class="wordmark rise" style="animation-delay: 0ms">
             GoFish<span class="hero-stamp" style="animation-delay: 240ms"
               >alpha</span
@@ -359,7 +358,7 @@ onBeforeUnmount(() => {
             JavaScript&nbsp;and&nbsp;Python
           </p>
           <div class="rise" style="animation-delay: 180ms">
-            <CtaBlock version />
+            <CtaBlock />
           </div>
         </div>
 

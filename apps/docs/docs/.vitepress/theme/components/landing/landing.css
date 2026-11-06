@@ -329,7 +329,7 @@ html.landing-page .DocSearch-Button {
   margin: 26px auto 0;
 }
 
-/* ---- alpha stamp (on the wordmark) + version tag (under the install chip) ---- */
+/* ---- alpha stamp (on the wordmark) ---- */
 /* The wordmark shrinks to its text so the stamp can anchor to its right end. */
 .landing .hero h1.wordmark {
   display: inline-block;
@@ -365,27 +365,6 @@ html.landing-page .DocSearch-Button {
   mask: var(--stamp-erode);
   /* chew the edges/fill with two noise scales so the ink looks pressed, not printed */
   --stamp-erode: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='e'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.45 0.5' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.1 0.98'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='1 1 1 1 1 0 1 0 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23e)'/%3E%3C/svg%3E");
-}
-
-/* Release line on a small paper tag, centered under the install chip and held
-   by a strip of the same masking tape as the specimen cards. */
-.landing .hero-version {
-  display: block;
-  width: fit-content;
-  margin: 18px auto 0;
-  position: relative;
-  z-index: 6;
-  font-family: "Spline Sans Mono", monospace;
-  font-size: clamp(0.68rem, 1.15vw, 0.88rem);
-  color: var(--ink);
-  background: #fffdf7;
-  padding: 7px 12px 6px;
-  border-radius: 4px;
-  transform: rotate(-2.5deg);
-  box-shadow:
-    0 1px 2px var(--shadow-warm),
-    2px 4px 12px var(--shadow-warm);
-  pointer-events: none;
 }
 
 @media (max-width: 560px) {

@@ -115,9 +115,16 @@ jobs:
           # gofish-graphics's package.json is the canonical version source;
           # gofish-ir is kept in lockstep by being bumped to the same value.
           if [ "$MODE" = "nightly" ]; then
+            # Prerelease of the NEXT patch version, dated. A prerelease sorts
+            # BEFORE the final release of the same X.Y.Z (in semver and in
+            # PEP 440 alike), so `0.1.0-nightly.N` would rank below a published
+            # `0.1.0`. Bumping the patch makes `0.1.1-nightly.N` sort after
+            # `0.1.0`, while any future final release still wins over its own
+            # nightlies. The Python dev release reuses this number below.
             BASE=$(node -p "require('./packages/gofish-graphics/package.json').version")
+            NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
             DATE=$(date +'%Y%m%d')
-            NEW="${BASE}-nightly.${DATE}"
+            NEW="${NEXT}-nightly.${DATE}"
             ( cd packages/gofish-graphics && npm version --no-git-tag-version "$NEW" )
             ( cd packages/gofish-ir && npm version --no-git-tag-version "$NEW" )
             echo "version=$NEW" >> "$GITHUB_OUTPUT"
@@ -180,17 +187,9 @@ jobs:
         run: |
           MODE="${{ steps.plan.outputs.mode }}"
           if [ "$MODE" = "nightly" ]; then
-            # Dev release of the NEXT patch version, dated. It must target the
-            # next version, not the current one: a PEP 440 dev release sorts
-            # BEFORE the final release of the same X.Y.Z, so `0.1.0.devN` loses
-            # to a published `0.1.0` and `pip install --pre` would never pick
-            # it. Bumping the patch makes `0.1.1.devN` sort after `0.1.0`, so
-            # `--pre` resolves to the latest nightly, while any future final
-            # release still wins over its own dev builds.
-            BASE=$(node -p "require('./packages/gofish-graphics/package.json').version" | sed 's/-nightly.*//')
-            NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
-            DATE=$(date +'%Y%m%d')
-            PY_VERSION="${NEXT}.dev${DATE}"
+            # The npm nightly number in PEP 440 spelling:
+            # `0.1.1-nightly.20261106` -> `0.1.1.dev20261106`.
+            PY_VERSION=$(echo "${{ steps.version.outputs.version }}" | sed 's/-nightly\./.dev/')
           else
             # Lockstep with the npm release version computed above (e.g. 0.2.0).
             PY_VERSION="${{ steps.version.outputs.version }}"
