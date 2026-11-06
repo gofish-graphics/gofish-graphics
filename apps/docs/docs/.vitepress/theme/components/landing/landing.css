@@ -376,9 +376,9 @@ html.landing-page .DocSearch-Button {
 /* Inked rubber stamp slapped over the right end of "GoFish" at 45°: oxblood,
    edges eroded by a noise mask so it reads as pressed ink rather than printed. */
 .landing .hero-stamp {
-  /* stamped on as the hero's last cards settle (the last of the seven
+  /* stamped on once the hero's cards have settled (the last of the seven
      settles at about 1.56s; see gf-hang) */
-  animation: gf-stamp 0.22s 1.3s backwards;
+  animation: gf-stamp 0.32s 1.6s backwards;
   position: absolute;
   left: 100%;
   top: 50%;
