@@ -210,15 +210,15 @@ function checkItem(
       !(
         isObject(f) &&
         ((f.kind === "css" && isStr(f.value)) ||
-          (f.kind === "grayscale" &&
-            (f.amount === undefined || typeof f.amount === "number")) ||
-          f.kind === "luminanceToAlpha")
+          (f.kind === "colorMatrix" &&
+            (f.type === "matrix" || f.type === "luminanceToAlpha") &&
+            (f.values === undefined || isStr(f.values))))
       )
     )
       errors.push({
         path: `${path}.filter`,
         message:
-          'filter must be { kind: "css", value: string }, { kind: "grayscale", amount?: number } or { kind: "luminanceToAlpha" }',
+          'filter must be { kind: "css", value: string } or { kind: "colorMatrix", type: "matrix" | "luminanceToAlpha", values?: string }',
       });
     if (!Array.isArray(item.children))
       errors.push({

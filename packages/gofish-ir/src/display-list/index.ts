@@ -11,10 +11,8 @@ export { displayListToSVG } from "./render.js";
 export {
   compositeLayers,
   compositePlan,
-  defFilters,
-  filterDef,
-  filterKey,
-  type DefFilter,
+  filterPlan,
+  type FilterPlan,
   type CompositeLayer,
   type CompositeMask,
   type CompositePlan,

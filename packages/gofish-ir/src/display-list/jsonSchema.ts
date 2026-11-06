@@ -104,18 +104,13 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
             },
             {
               type: "object",
-              required: ["kind"],
+              required: ["kind", "type"],
               additionalProperties: false,
               properties: {
-                kind: { const: "grayscale" },
-                amount: { type: "number" },
+                kind: { const: "colorMatrix" },
+                type: { enum: ["matrix", "luminanceToAlpha"] },
+                values: { type: "string" },
               },
-            },
-            {
-              type: "object",
-              required: ["kind"],
-              additionalProperties: false,
-              properties: { kind: { const: "luminanceToAlpha" } },
             },
           ],
         },

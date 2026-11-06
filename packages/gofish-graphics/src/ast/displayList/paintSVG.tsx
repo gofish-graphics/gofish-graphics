@@ -57,37 +57,26 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
  *  reset, so ids are unique across every visualization on a page. */
 let compositeIdCounter = 0;
 
-/** The ids of a render's filter defs, by `DisplayList.filterKey`. */
-type FilterIds = ReadonlyMap<string, string>;
-
-/** A render's display list painted, with a `<filter>` def written once
- *  ahead of it for each distinct filter an item uses
- *  (`DisplayList.defFilters`), under ids of this render's own; gofish-ir's
- *  string backend writes the same defs. */
+/** A render's display list painted, with its `<filter>` defs
+ *  (`DisplayList.filterPlan`) written once ahead of it, under ids of this
+ *  render's own; gofish-ir's string backend writes the same defs. */
 export function paintDocument(
   items: readonly DisplayList.DisplayItem[],
   interactive?: boolean
 ): JSX.Element[] {
-  const prefix = `gf-filter-${compositeIdCounter++}`;
-  const filters = DisplayList.defFilters(items);
-  const filterIds: FilterIds = new Map(
-    filters.map((f, i) => [DisplayList.filterKey(f), `${prefix}-${i}`])
+  const filters = DisplayList.filterPlan(
+    items,
+    `gf-filter-${compositeIdCounter++}`
   );
-  const painted = items.map((item) => paintSVG(item, filterIds, interactive));
-  if (!filters.length) return painted;
+  const painted = items.map((item) => paintSVG(item, filters, interactive));
+  if (!filters.defs.length) return painted;
   return [
     <defs>
-      {filters.map((filter, i) => {
-        const f = DisplayList.filterDef(filter);
-        return (
-          <filter
-            id={`${prefix}-${i}`}
-            color-interpolation-filters={f.colorInterpolationFilters}
-          >
-            <feColorMatrix type={f.matrixType} values={f.values} />
-          </filter>
-        );
-      })}
+      {filters.defs.map((d) => (
+        <filter id={d.id} color-interpolation-filters="sRGB">
+          <feColorMatrix type={d.type} values={d.values} />
+        </filter>
+      ))}
     </defs>,
     ...painted,
   ];
@@ -113,11 +102,11 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
-/** `item` painted. `filterIds` names its render's filter defs
+/** `item` painted. `filters` is its render's filter plan
  *  ({@link paintDocument}). */
 function paintSVG(
   item: DisplayList.DisplayItem,
-  filterIds: FilterIds,
+  filters: DisplayList.FilterPlan,
   interactive?: boolean
 ): JSX.Element {
   // Live channels (a `live()` value baked at lower time): per-attribute
@@ -219,20 +208,10 @@ function paintSVG(
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const transform = parts.length ? parts.join(" ") : undefined;
       const children = item.children.map((c) =>
-        paintSVG(c, filterIds, interactive)
+        paintSVG(c, filters, interactive)
       );
-      const f = item.filter;
-      // A `Filter` strategy is an SVG `<filter>` def the render writes once
-      // ({@link paintDocument}), not a CSS function: WebKit ignores CSS
-      // filter functions on SVG elements (#1330).
-      const filter =
-        f === undefined
-          ? undefined
-          : f.kind === "css"
-            ? f.value
-            : `url(#${filterIds.get(DisplayList.filterKey(f))})`;
       return (
-        <g transform={transform} filter={filter}>
+        <g transform={transform} filter={filters.attr(item.filter)}>
           {children}
         </g>
       );
@@ -281,9 +260,7 @@ function paintSVG(
         >
           <defs>
             {plan.defs.map((d) => (
-              <g id={d.id}>
-                {d.items.map((c) => paintSVG(c, filterIds, false))}
-              </g>
+              <g id={d.id}>{d.items.map((c) => paintSVG(c, filters, false))}</g>
             ))}
             {plan.masks.map((m) =>
               "outside" in m ? (

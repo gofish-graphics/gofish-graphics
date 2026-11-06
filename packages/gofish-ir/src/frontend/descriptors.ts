@@ -1446,7 +1446,7 @@ export const paint: FieldGroup = group({
 export const filtered: FieldGroup = group({
   filter: {
     type: t.union(t.ref("Filter"), t.string),
-    doc: 'A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).',
+    doc: 'A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.',
   },
 });
 

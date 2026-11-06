@@ -42,14 +42,13 @@ console.log("# a mark's filter wraps its drawing");
   ]).toDisplayList({ w: 100, h: 100 });
   const g = groups(dl);
   check(
-    "one filtered group, grayscale",
+    "one filtered group, grayscale as a color matrix",
     g.length === 1 &&
-      g[0].filter.kind === "grayscale" &&
+      g[0].filter.kind === "colorMatrix" &&
+      g[0].filter.type === "matrix" &&
       g[0].children[0].kind === "rect",
     dl.items
   );
-  // WebKit ignores CSS filter functions on SVG elements (#1330), so a
-  // strategy is drawn as an SVG `<filter>` def, never `filter="grayscale(1)"`.
   const svg = DisplayList.displayListToSVG(dl);
   const id = /<filter id="([^"]+)"/.exec(svg)?.[1];
   check(
@@ -67,22 +66,22 @@ console.log("# a mark's filter wraps its drawing");
 console.log("# a raw CSS string and an amount");
 {
   const dl = await layer([
-    rect({ w: 10, h: 10, fill: "red", filter: "blur(2px)" }),
+    rect({ w: 10, h: 10, fill: "red", filter: "url(#shadow)" }),
     rect({ w: 10, h: 10, fill: "red", filter: Filter.grayscale({ amount: 0.5 }) }),
   ]).toDisplayList({ w: 100, h: 100 });
   const filters = groups(dl).map((g: any) => g.filter);
   check(
-    "blur(2px) and grayscale(0.5)",
+    "url(#shadow) and grayscale(0.5)",
     filters[0].kind === "css" &&
-      filters[0].value === "blur(2px)" &&
-      filters[1].kind === "grayscale" &&
-      filters[1].amount === 0.5,
+      filters[0].value === "url(#shadow)" &&
+      filters[1].kind === "colorMatrix" &&
+      filters[1].values.startsWith("0.6063 0.3576 0.0361 0 0 "),
     filters
   );
   const svg = DisplayList.displayListToSVG(dl);
   check(
     "the raw string stays CSS; the amount sets the matrix",
-    svg.includes('filter="blur(2px)"') &&
+    svg.includes('filter="url(#shadow)"') &&
       svg.includes('values="0.6063 0.3576 0.0361 0 0 '),
     svg
   );
@@ -115,7 +114,8 @@ console.log("# a layer's filter wraps its whole subtree");
   check(
     "one luminanceToAlpha group holding both rects",
     g.length === 1 &&
-      g[0].filter.kind === "luminanceToAlpha" &&
+      g[0].filter.kind === "colorMatrix" &&
+      g[0].filter.type === "luminanceToAlpha" &&
       g[0].children.length === 2,
     dl.items
   );
@@ -144,16 +144,16 @@ console.log("# a mark built from an operator takes a filter");
       rect({ w: 10, h: 10, fill: "blue" }),
     ])
   );
-  const dl = await layer([pair({ filter: "blur(2px)" })]).toDisplayList({
+  const dl = await layer([pair({ filter: "url(#shadow)" })]).toDisplayList({
     w: 100,
     h: 100,
   });
   const g = groups(dl);
   const xs = g[0]?.children.map((c: any) => c.x);
   check(
-    "one blur group holding both rects, side by side",
+    "one filtered group holding both rects, side by side",
     g.length === 1 &&
-      g[0].filter.value === "blur(2px)" &&
+      g[0].filter.value === "url(#shadow)" &&
       g[0].children.length === 2 &&
       xs[1] - xs[0] === 10,
     dl.items
@@ -166,7 +166,7 @@ console.log("# a filter inside a coordinate space");
   // filtered node, which filters its subtree as one picture.
   const dl = await chart([{ v: 1 }], { coord: Coord.polar() })
     .mark(() =>
-      layer({ filter: "blur(2px)" }, [
+      layer({ filter: "url(#shadow)" }, [
         rect({ w: 10, h: 10, fill: "red" }),
         rect({ x: 20, w: 10, h: 10, fill: "blue" }),
       ])
@@ -174,8 +174,8 @@ console.log("# a filter inside a coordinate space");
     .toDisplayList({ w: 100, h: 100 });
   const g = all(dl.items).filter((i: any) => i.filter !== undefined);
   check(
-    "one blur group holding both shapes, under polar",
-    g.length === 1 && g[0].filter.value === "blur(2px)" && g[0].children.length === 2,
+    "one filtered group holding both shapes, under polar",
+    g.length === 1 && g[0].filter.value === "url(#shadow)" && g[0].children.length === 2,
     dl.items
   );
 }

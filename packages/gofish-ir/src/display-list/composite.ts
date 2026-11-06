@@ -116,9 +116,7 @@ const maskKey = (m: CompositeMask): string =>
  * mask in `masks` is a `<mask>`: with `alpha`, an alpha mask
  * (`mask-type:alpha`) of `<use>`s of those defs' shapes; with `outside`, a
  * white rect over the item's bbox with a black rect over it, clipped by the
- * alpha mask `outside` names, so it is one minus that mask. It draws the
- * shapes black with a mask, not with a CSS `brightness(0)` filter: WebKit
- * ignores CSS filter functions on SVG elements (#1330). Each layer is a
+ * alpha mask `outside` names, so it is one minus that mask. Each layer is a
  * `<use>` of a def, wrapped in a `<g mask>` per mask (the first mask
  * outermost), and, with a `blendMode`, in a group that mixes by it. The
  * layers sit in a group `isolate`d, so a blend mixes the layers only.
@@ -190,64 +188,47 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
   return { defs, masks: [...masks.values()], layers };
 }
 
-/** A display filter a backend draws as an SVG `<filter>` def: every kind
- *  but a raw CSS string. */
-export type DefFilter = Exclude<DisplayFilter, { kind: "css" }>;
+/** A display filter a backend draws as an SVG `<filter>` def. */
+type ColorMatrix = Extract<DisplayFilter, { kind: "colorMatrix" }>;
 
-/** The `<filter>` def of `filter`: one `feColorMatrix`, computed in sRGB
- *  as CSS filters are. `grayscale` is the CSS `grayscale(amount)` matrix of
- *  the Filter Effects spec; `luminanceToAlpha` makes each pixel black with
- *  an alpha of its luminance, as a CSS mask reads it. A backend draws a
- *  filter as a def, not as a CSS function in the `filter` attribute,
- *  because WebKit ignores CSS filter functions on SVG elements (#1330). */
-export function filterDef(filter: DefFilter): {
-  colorInterpolationFilters: "sRGB";
-  matrixType: "matrix" | "luminanceToAlpha";
-  values?: string;
-} {
-  switch (filter.kind) {
-    case "grayscale": {
-      const g = 1 - (filter.amount ?? 1);
-      const [r, gr, b] = [0.2126, 0.7152, 0.0722];
-      const n = (x: number) => +x.toFixed(6);
-      const values = [
-        [n(r + (1 - r) * g), n(gr - gr * g), n(b - b * g), 0, 0],
-        [n(r - r * g), n(gr + (1 - gr) * g), n(b - b * g), 0, 0],
-        [n(r - r * g), n(gr - gr * g), n(b + (1 - b) * g), 0, 0],
-        [0, 0, 0, 1, 0],
-      ];
-      return {
-        colorInterpolationFilters: "sRGB",
-        matrixType: "matrix",
-        values: values.map((row) => row.join(" ")).join(" "),
-      };
-    }
-    case "luminanceToAlpha":
-      return {
-        colorInterpolationFilters: "sRGB",
-        matrixType: "luminanceToAlpha",
-      };
-  }
+/**
+ * The filters of a render as SVG draws them: the one plan both SVG backends
+ * write out, as {@link compositePlan} is for composites. `defs` are the
+ * distinct `colorMatrix` filters `items` use, looking inside groups and
+ * composites, in the order they are first used, each under an id made from
+ * `prefix`. A backend writes each as a `<filter>` of one `feColorMatrix`, in
+ * sRGB as CSS filters are. `attr` is the `filter` attribute of a group drawn
+ * under `filter`: a `css` value as it is, a `colorMatrix` as a `url(#id)` of
+ * its def. A backend draws `prefix` from the counter its composite ids come
+ * from, so two visualizations on one page do not share ids.
+ */
+export interface FilterPlan {
+  defs: ({ id: string } & Omit<ColorMatrix, "kind">)[];
+  attr(filter: DisplayFilter | undefined): string | undefined;
 }
 
-/** A key that names a def filter, so a render writes each distinct one
- *  once. */
-export const filterKey = (filter: DefFilter): string =>
-  filter.kind === "grayscale" ? `grayscale-${filter.amount ?? 1}` : filter.kind;
-
-/** The distinct def filters `items` are drawn under, looking inside groups
- *  and composites, by {@link filterKey}, in the order they are first used.
- *  A backend writes one `<filter>` def for each, once per render, under an
- *  id it draws from the counter its composite ids come from, so two
- *  visualizations on one page do not share them. */
-export function defFilters(items: readonly DisplayItem[]): DefFilter[] {
-  const found = new Map<string, DefFilter>();
+/** The {@link FilterPlan} of `items`. */
+export function filterPlan(
+  items: readonly DisplayItem[],
+  prefix: string
+): FilterPlan {
+  const defs: FilterPlan["defs"] = [];
+  const idByKey = new Map<string, string>();
+  const idOf = new Map<DisplayFilter, string>();
   const walk = (items: readonly DisplayItem[]): void => {
     for (const item of items) {
       if (item.kind === "group") {
         const f = item.filter;
-        if (f !== undefined && f.kind !== "css" && !found.has(filterKey(f)))
-          found.set(filterKey(f), f);
+        if (f?.kind === "colorMatrix" && !idOf.has(f)) {
+          const key = `${f.type} ${f.values ?? ""}`;
+          let id = idByKey.get(key);
+          if (id === undefined) {
+            id = `${prefix}-${defs.length}`;
+            idByKey.set(key, id);
+            defs.push({ id, type: f.type, values: f.values });
+          }
+          idOf.set(f, id);
+        }
         walk(item.children);
       } else if (item.kind === "composite") {
         for (const o of item.operands) {
@@ -259,5 +240,13 @@ export function defFilters(items: readonly DisplayItem[]): DefFilter[] {
     }
   };
   walk(items);
-  return [...found.values()];
+  return {
+    defs,
+    attr: (filter) =>
+      filter === undefined
+        ? undefined
+        : filter.kind === "css"
+          ? filter.value
+          : `url(#${idOf.get(filter)})`,
+  };
 }

@@ -144,7 +144,7 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         key: Internal per-node key override.
         rx: Corner radius, x. Default: `ry`, or 0 when neither is given.
         ry: Corner radius, y. Default: `rx`, or 0 when neither is given.
@@ -196,7 +196,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         r: Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h.
         area: Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h.
         fill: Fill color, or a field name for a color scale.
@@ -248,7 +248,7 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -298,7 +298,7 @@ def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -342,7 +342,7 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         key: Internal per-node key override.
         text: Text content (raw channel — a literal, field name, or accessor).
         fill: Fill color, or a field name for a color scale. Default "black".
@@ -404,7 +404,7 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         key: Internal per-node key override.
         href: Image URL or data URI.
         opacity: Opacity, 0 to 1.
@@ -439,7 +439,7 @@ def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
         fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
@@ -493,7 +493,7 @@ def region(*, debug: Optional[bool] = None, fill: Optional[str] = None, stroke: 
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
         opacity: Opacity, 0 to 1. Default 1.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         inset: Pixels drawn in from each side of the cell it is in, on each axis where it is in a cell. Paint only: layout still reads the whole cell. A cell thinner than twice the inset draws nothing. Default 0.
     """
     _kw: Dict[str, Any] = {}
@@ -1233,7 +1233,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
-        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"url(#shadow)"`). WebKit ignores CSS filter functions such as `"blur(2px)"` on SVG; a `url(#…)` reference works.
         key: Internal per-node key override.
         coord: Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
         axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.

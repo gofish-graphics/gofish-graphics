@@ -135,16 +135,18 @@ export interface GroupItem extends BaseDisplayItem {
 
 /**
  * A filter over a group's drawing. `css` is a CSS `filter` value
- * (`url(#shadow)`, `blur(2px)`), which SVG takes as the `filter` attribute.
- * The other kinds are the `Filter` strategies; an SVG backend draws each as
- * an SVG `<filter>` def of one `feColorMatrix` (`filterDef`): `grayscale`
- * as CSS `grayscale(amount)` does, and `luminanceToAlpha` making each pixel
- * black with an alpha of its luminance, both in sRGB.
+ * (`url(#shadow)`), which SVG takes as the `filter` attribute. `colorMatrix`
+ * is one SVG `feColorMatrix` in sRGB, with its `type` and `values`
+ * attributes; the `Filter` strategies lower to it (`drawFilter.ts` in
+ * gofish-graphics).
  */
 export type DisplayFilter =
   | { kind: "css"; value: string }
-  | { kind: "grayscale"; amount?: number }
-  | { kind: "luminanceToAlpha" };
+  | {
+      kind: "colorMatrix";
+      type: "matrix" | "luminanceToAlpha";
+      values?: string;
+    };
 
 /**
  * A region composite: a set operation over its operands' regions (#1267).

@@ -1467,11 +1467,12 @@ render's `padding` option.
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
-<svg width={canvasW} height={canvasH} viewBox={`0 0 ${canvasW} ${canvasH}`} xmlns="http://www.w3.org/2000/svg">
+<svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} xmlns="http://www.w3.org/2000/svg">
 ```
 
 The SVG is the render's `w`/`h`, or, on a dimension the render does not give, the
-root's laid-out box plus its ink, rounded up to whole pixels, with a `viewBox` of
+root's laid-out box plus its ink, rounded up to whole pixels (`svgDim` in
+`runLayout`), with a `viewBox` of
 the same size (see [Rendering](/internals/core/rendering#how-the-live-render-wires-it-together)). There is **no inner flip `<g>`**:
 layout is already in y-down pixels, so the display-list items paint directly under
 the `<svg>`.

@@ -87,10 +87,4 @@ onMounted(() => {
   padding-bottom: 1rem;
   transform-origin: center center;
 }
-/* A chart wider than the column shrinks to fit it through its viewBox, and
-   never grows past its own size (#1330). */
-.gofish-vue :deep(svg) {
-  max-width: 100%;
-  height: auto;
-}
 </style>

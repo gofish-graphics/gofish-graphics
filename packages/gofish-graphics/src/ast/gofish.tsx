@@ -886,16 +886,19 @@ export async function layout(
     return (v: number) => origin + direction * pxOf(map, v);
   }) as PixelPosScales;
 
-  // The SVG is the render's size, exactly (#493): the root, its chrome
-  // included, was fitted to it. A dimension the render does not give is the
-  // root's whole box, its chrome included, plus its ink.
+  // The SVG is the render's size (#493): the root, its chrome included, was
+  // fitted to it. A dimension the render does not give is the root's whole
+  // box, its chrome included, plus its ink. Either is rounded up to whole
+  // pixels, the canvas every backend draws on (Rendering wiki essay, #1330);
+  // a size a float's error past a whole pixel stays that pixel.
+  const wholePx = (x: number): number => Math.ceil(x - 1e-6);
   const svgDim = (axis: 0 | 1, given: number | undefined): number => {
-    if (given !== undefined) return given;
+    if (given !== undefined) return wholePx(given);
     const s = root.dims[axis]?.size;
-    return (
+    return wholePx(
       (s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE) +
-      ink[axis][0] +
-      ink[axis][1]
+        ink[axis][0] +
+        ink[axis][1]
     );
   };
 
@@ -1572,23 +1575,14 @@ export const render = (
     perfAdd("paint", perfNow() - __tPaint);
     return painted;
   };
-  // The viewBox matches the size, so at its own size the drawing is one CSS
-  // px per user unit, and a page can shrink it to fit a narrow column with
-  // CSS (`max-width: 100%; height: auto`) (#1330). The interaction runtime
-  // maps the pointer through the screen CTM, so a scaled chart still reads
-  // the pointer in user units. The canvas is a whole number of pixels, the
-  // layout's size rounded up: a browser lays a box out in fractions of a
-  // pixel (1/64 in Blink and WebKit, 1/60 in Gecko), so a fractional size
-  // gets a box a little smaller than its viewBox, and the viewBox would
-  // shrink the whole drawing by that much. The layout itself is unchanged.
-  const canvasW = Math.ceil(width);
-  const canvasH = Math.ceil(height);
+  // The viewBox matches the size, so CSS can shrink the chart to fit a
+  // narrow column (Rendering wiki essay, #1330).
   return (
     <svg
       ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
-      width={canvasW}
-      height={canvasH}
-      viewBox={`0 0 ${canvasW} ${canvasH}`}
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>

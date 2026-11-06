@@ -1,7 +1,7 @@
 /**
  * The `Filter` family: the strategies of the `filter` option every mark and
  * `layer` take (#1267). The option filters the node's whole drawing as one
- * picture, and also takes a raw CSS filter string (`"blur(2px)"`).
+ * picture, and also takes a raw CSS filter string (`"url(#shadow)"`).
  *
  * `lib.ts` binds this module as `Filter` (`Filter.grayscale()`), and
  * `gofish-graphics/filter` exports the same module. No strategy has a

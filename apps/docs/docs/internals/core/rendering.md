@@ -232,18 +232,21 @@ flat-absolute fold cannot express on its own:
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
   list can't fold away, and the group a node with a `filter` option draws its whole
   drawing in (`drawFilter.ts`). Its `filter` is a raw CSS filter value
-  (`{ kind: "css", value: "blur(2px)" }`), written as the `filter` attribute, or
-  a `Filter` strategy as itself (`{ kind: "grayscale", amount? }`,
-  `{ kind: "luminanceToAlpha" }`). A backend draws a strategy as an SVG
-  `<filter>` def of one `feColorMatrix` in sRGB (`filterDef` in `composite.ts`,
-  which both backends write from): `grayscale` as the Filter Effects spec's
-  `grayscale(amount)` matrix, `luminanceToAlpha` as `type="luminanceToAlpha"`.
-  It does not write `filter="grayscale(1)"`, because WebKit ignores CSS filter
-  functions on SVG elements (#1330). A render writes one def per distinct
-  filter it uses (`defFilters`, keyed by `filterKey`), under ids of its own,
-  drawn from the counter the composite ids come from (`paintDocument` in
-  `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
-  share them. A
+  (`{ kind: "css", value: "url(#shadow)" }`), written as the `filter`
+  attribute, or one SVG `feColorMatrix`
+  (`{ kind: "colorMatrix", type, values? }`). `displayFilter` lowers each
+  `Filter` strategy to the matrix it is: `grayscale` to `type: "matrix"` with
+  the Filter Effects spec's `grayscale(amount)` values, `luminanceToAlpha` to
+  `type: "luminanceToAlpha"`. A strategy is not written as a CSS function
+  (`filter="grayscale(1)"`), because WebKit ignores CSS filter functions on SVG
+  elements (#1330). For the same reason a raw CSS function such as
+  `"blur(2px)"` draws unfiltered in WebKit; a `url(#…)` reference works. Both
+  backends write out one `filterPlan(items, prefix)` (`composite.ts`): its
+  `defs`, one per distinct matrix (by `type` and `values`), each written as a
+  `<filter>` in sRGB, and its `attr`, the `filter` attribute of a group (the
+  `css` value, or a `url(#id)` of the def). The `prefix` is drawn from the
+  counter the composite ids come from (`paintDocument` in `paintSVG.tsx`,
+  `displayListToSVG`), so two visualizations on one page do not share ids. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its
@@ -293,8 +296,7 @@ flat-absolute fold cannot express on its own:
   group of items written once; the masks, each distinct one once; and the
   layers, each a `<use>` of a def in its masks and blend. An inverse mask is a
   white rect over the bbox with a black rect on it, clipped by the alpha mask
-  of the same operands, not the shapes drawn black with a CSS `brightness(0)`
-  filter, which WebKit ignores on SVG elements (#1330). The plan drops a
+  of the same operands. The plan drops a
   layer that would draw an operand with no paint, and writes a def only where
   a layer or a mask uses it, so a hidden operand's shape is written only for
   the masks that read it. A Canvas/WebGPU backend would map the plan to its
@@ -361,13 +363,11 @@ canvas, so `render()` reserves no margins: it lowers the tree through the identi
 
 ```ts
 const paintBaked = () => paintDocument(lowerToDisplayList(child)); // identity toPixel
-const canvasW = Math.ceil(width);
-const canvasH = Math.ceil(height);
 return (
   <svg
-    width={canvasW}
-    height={canvasH}
-    viewBox={`0 0 ${canvasW} ${canvasH}`}
+    width={width}
+    height={height}
+    viewBox={`0 0 ${width} ${height}`}
     xmlns="http://www.w3.org/2000/svg"
   >
     <Show when={defs}><defs>{defs}</defs></Show>
@@ -380,10 +380,12 @@ The `viewBox` matches the size, so at its own size the drawing is one CSS px per
 user unit, and a page can shrink a chart to fit a narrow column with CSS alone
 (`max-width: 100%; height: auto`, which the docs' `GoFishExample` and `GoFishVue`
 set, #1330). The canvas is the layout's size rounded up to whole pixels, and the
-layout itself is unchanged. A browser lays a box out in fractions of a pixel
-(1/64 in Blink and WebKit, 1/60 in Gecko), so a fractional size would get a box a
-little smaller than its `viewBox`, and the `viewBox` would shrink the whole drawing
-by that much. The interaction runtime maps the pointer to user units through the
+layout itself is unchanged. `runLayout` rounds it once, where it makes it
+(`svgDim`), so the live render, `toDisplayList`'s `viewport` and
+`displayListToSVG` all draw on the same whole-pixel canvas. A browser lays a box
+out in fractions of a pixel (1/64 in Blink and WebKit, 1/60 in Gecko), so a
+fractional size would get a box a little smaller than its `viewBox`, and the
+`viewBox` would shrink the whole drawing by that much. The interaction runtime maps the pointer to user units through the
 inverse screen CTM (`localPoint` in `interaction/runtime.ts`), so a shrunk chart
 reads the pointer as it does at its own size.
 

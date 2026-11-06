@@ -117,6 +117,22 @@ const empty: DisplayListDocument = {
 };
 check("empty document accepts", validate(empty).valid);
 
+// A group filter is a CSS value or one `feColorMatrix`; a `Filter`
+// strategy's own kind is not a display filter.
+const filtered = (filter: unknown) => ({
+  ...empty,
+  items: [{ kind: "group", transform: {}, filter, children: [] }],
+});
+check(
+  "colorMatrix filter accepts",
+  validate(filtered({ kind: "colorMatrix", type: "luminanceToAlpha" })).valid
+);
+reject("strategy kind as a filter", filtered({ kind: "grayscale" }));
+reject(
+  "colorMatrix with an unknown type",
+  filtered({ kind: "colorMatrix", type: "saturate" })
+);
+
 // ---------------------------------------------------------------------------
 // JSON Schema artifact shape
 // ---------------------------------------------------------------------------

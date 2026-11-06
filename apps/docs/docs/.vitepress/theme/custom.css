@@ -2,11 +2,20 @@
 
 /* Make cheatsheet pages use a wider content column */
 .cheatsheet-page .VPDoc .container .VPContent {
-    max-width: 1200px !important; /* or 100%, or whatever you want */
-  }
-  
-  /* Optional: also relax padding if you want more horizontal space */
+  max-width: 1200px !important; /* or 100%, or whatever you want */
+}
+
+/* Optional: also relax padding if you want more horizontal space */
 .cheatsheet-page .VPDoc .container .VPContent {
-padding-left: 2rem !important;
-padding-right: 2rem !important;
+  padding-left: 2rem !important;
+  padding-right: 2rem !important;
+}
+
+/* A chart is drawn at its own pixel size. One wider than the column (on a
+   phone) shrinks to fit it through its viewBox, as a GoFishImage picture
+   does, and never grows past its own size (#1330). */
+.gofish-example-canvas svg,
+.gofish-vue svg {
+  max-width: 100%;
+  height: auto;
 }

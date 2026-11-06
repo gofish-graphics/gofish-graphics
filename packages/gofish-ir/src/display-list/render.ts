@@ -20,13 +20,7 @@ import type {
   DisplayListDocument,
   Style,
 } from "./schema.js";
-import {
-  compositePlan,
-  defFilters,
-  filterDef,
-  filterKey,
-  type DefFilter,
-} from "./composite.js";
+import { compositePlan, filterPlan, type FilterPlan } from "./composite.js";
 
 const esc = (s: string): string =>
   s
@@ -56,11 +50,8 @@ const styleAttrs = (style: Style | undefined): string => {
   return parts.length ? " " + parts.join(" ") : "";
 };
 
-/** The ids of a document's filter defs, by {@link filterKey}. */
-type FilterIds = ReadonlyMap<string, string>;
-
-/** `item` as SVG. `filterIds` names the document's filter defs. */
-const itemToSVG = (item: DisplayItem, filterIds: FilterIds): string => {
+/** `item` as SVG. `filters` is the document's {@link FilterPlan}. */
+const itemToSVG = (item: DisplayItem, filters: FilterPlan): string => {
   const s = styleAttrs(item.style);
   switch (item.kind) {
     case "rect": {
@@ -116,17 +107,12 @@ const itemToSVG = (item: DisplayItem, filterIds: FilterIds): string => {
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
-      const f = item.filter;
-      const fa =
-        f === undefined
-          ? ""
-          : f.kind === "css"
-            ? ` filter="${esc(f.value)}"`
-            : ` filter="url(#${filterIds.get(filterKey(f))})"`;
-      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterIds)).join("")}</g>`;
+      const f = filters.attr(item.filter);
+      const fa = f !== undefined ? ` filter="${esc(f)}"` : "";
+      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filters)).join("")}</g>`;
     }
     case "composite":
-      return compositeToSVG(item, filterIds);
+      return compositeToSVG(item, filters);
   }
 };
 
@@ -136,24 +122,23 @@ const itemToSVG = (item: DisplayItem, filterIds: FilterIds): string => {
  *  agree on id shape. */
 let compositeIdCounter = 0;
 
-/** The `<filter>` def of `filter` ({@link filterDef}), under `id`. */
-const filterSVG = (filter: DefFilter, id: string): string => {
-  const f = filterDef(filter);
-  const values = f.values !== undefined ? ` values="${f.values}"` : "";
-  return `<filter id="${id}" color-interpolation-filters="${f.colorInterpolationFilters}"><feColorMatrix type="${f.matrixType}"${values}/></filter>`;
+/** A def of a {@link FilterPlan} as an SVG `<filter>`. */
+const filterSVG = (d: FilterPlan["defs"][number]): string => {
+  const values = d.values !== undefined ? ` values="${esc(d.values)}"` : "";
+  return `<filter id="${d.id}" color-interpolation-filters="sRGB"><feColorMatrix type="${d.type}"${values}/></filter>`;
 };
 
 /** Draw a composite item as SVG masks and `mix-blend-mode` (no
  *  `<feImage>`: see `paintSVG.tsx` in gofish-graphics for why, issue #795):
  *  its `compositePlan` (composite.ts), which that backend writes too. */
-const compositeToSVG = (item: CompositeItem, filterIds: FilterIds): string => {
+const compositeToSVG = (item: CompositeItem, filters: FilterPlan): string => {
   const { x, y, w, h } = item.bbox;
   const plan = compositePlan(item, `gf-comp-${compositeIdCounter++}`);
   const defs =
     plan.defs
       .map(
         (d) =>
-          `<g id="${d.id}">${d.items.map((c) => itemToSVG(c, filterIds)).join("")}</g>`
+          `<g id="${d.id}">${d.items.map((c) => itemToSVG(c, filters)).join("")}</g>`
       )
       .join("") +
     plan.masks
@@ -184,14 +169,10 @@ const compositeToSVG = (item: CompositeItem, filterIds: FilterIds): string => {
 export function displayListToSVG(doc: DisplayListDocument): string {
   compositeIdCounter = 0;
   const { w, h } = doc.viewport;
-  const prefix = `gf-filter-${compositeIdCounter++}`;
-  const filters = defFilters(doc.items);
-  const filterIds: FilterIds = new Map(
-    filters.map((f, i) => [filterKey(f), `${prefix}-${i}`])
-  );
-  const defs = filters.length
-    ? `<defs>${filters.map((f, i) => filterSVG(f, `${prefix}-${i}`)).join("")}</defs>`
+  const filters = filterPlan(doc.items, `gf-filter-${compositeIdCounter++}`);
+  const defs = filters.defs.length
+    ? `<defs>${filters.defs.map(filterSVG).join("")}</defs>`
     : "";
-  const body = defs + doc.items.map((i) => itemToSVG(i, filterIds)).join("");
+  const body = defs + doc.items.map((i) => itemToSVG(i, filters)).join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 }
