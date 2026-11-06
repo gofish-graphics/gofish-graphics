@@ -305,7 +305,7 @@ export const refOfSelect = (spec: { layer: string; mode?: string }) =>
 
 /**
  * The options of a construct with each field whose declared type names nodes
- * (`Frontend.NodeSelectionIR`, a blob's `avoiding` inside `shape`) rebuilt as
+ * (`Frontend.NodeSelectionIR`, `enclose`'s `avoiding`) rebuilt as
  * the refs it stands for: a list of `{ type: "ref", selection }` becomes a
  * list of `ref(selection)`, and a `{ type: "select", layer, mode: "all" }`
  * becomes `selectAll(layer)`. The walk follows the descriptor table

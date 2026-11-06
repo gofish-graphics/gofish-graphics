@@ -5,7 +5,7 @@
 import { evalFieldValues, FieldExpr, FieldExprWire } from "../fieldExpr";
 import { resolveColumn } from "../channels";
 import type { Place } from "../../families/place";
-import type { Nodes } from "../../families/shape";
+import type { Nodes } from "../nodeSelection";
 import type { LabelBackground, LabelHalo } from "./labelNode";
 
 export type LabelAccessor<D = any> =

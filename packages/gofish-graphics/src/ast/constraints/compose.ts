@@ -455,7 +455,11 @@ export function planSharing(
         const idx = idxOf(c.children);
         for (const axis of [0, 1] as const) {
           const coords = axisCoordinates(c, axis);
-          const kind = positionCoordKind(coords[0]);
+          // A datum read in another node's frame (`in`) places the child
+          // by that frame, not this layer's: elsewhere, as a pixel does.
+          const coordKind = positionCoordKind(coords[0]);
+          const kind =
+            c.in !== undefined && coordKind !== undefined ? "pixel" : coordKind;
           if (kind === "pixel") detach(axis, idx);
           if (kind === "datum") {
             idx.forEach((i) => datumPlaced[axis].add(i));

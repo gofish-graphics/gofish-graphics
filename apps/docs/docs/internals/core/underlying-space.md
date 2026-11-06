@@ -275,7 +275,12 @@ measure?)`:
   carries the datum's measure.
 - **none**: there is no origin at all, only a width, so the interval is
   `[0, width]` and only differences along it mean anything. A middle-aligned
-  overlay is one.
+  overlay is one. An overlay of an origin-less child and a free one seated
+  on its baseline keeps the free child's interval, so it can start below 0
+  (`none [−20, 7]` for a bar of −20 beside an origin-less bar of 7). Only
+  its width means anything, so what reads one reads its width: a
+  difference axis spans its niced width from the content's start
+  (`differenceSpan`).
 
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
@@ -302,7 +307,7 @@ is a nonnegative magnitude). Most extents sit wholly above their data 0 and
 never spell the descent. Every claim is measured from data 0, whatever its
 origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
 `50σ` and descent `−30σ` (its low edge lies `30σ` above its 0), and its width
-is `20σ`. An origin-less interval starts at 0, so its descent is 0. The
+is `20σ`. A middle-aligned overlay's origin-less interval starts at 0, so its descent is 0. The
 claim's `width` is `ascent + descent`, computed once by the `Extent`
 constructor, and it is what a scope solves σ against. The places that read
 the two sides:
@@ -578,20 +583,97 @@ each inherent to what the origin states are:
   chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts
   larger than a sized layer warn `fixed-overflow`.
 - **A plot claim beside the claim**: a layer's plan also computes the
-  claim of the plot, which leaves out dressing (a label placed beside a
-  `ref` stand-in for its mark), a shape's outline (half its stroke past its
-  box, which its claim reaches and its plot leaves out; a node a `nest`
-  derives reaches its own outline past the padded inner's plot,
+  claim of the plot, the part of the layer its axes visualize. A layer's
+  space is a **collection** of its children's spaces, not one space. The
+  type pass gives each child, on each axis, the space it is in in the
+  layer (`ClaimWalk.parts`, `composeLayerTypes` in `layer`):
+  - a child the layer nests in its own space (at a datum a `position`
+    places it at, in a distribute's slot, in a grid's track) is in the
+    space the layer reports there;
+  - a child a literal pixel `position` places elsewhere is in none;
+  - a box placed whole (a chart's box, or a node with a size of its own,
+    `GoFishNode.plotIsBox`) is in none either: it solves its own σ, so to
+    the layer it is a box of pixels;
+  - any other child is in its own type, which a `nest` has unified with
+    the inner it pads (`applyNestSpacePlan`), so the outer box of a nest
+    is in the inner's space;
+  - a `ref` stand-in is in the part its target is in, in its target's
+    layer (`refHome` in `layer`). Reading that layer's parts types it,
+    and where it is being typed already (`GoFishNode.beingTyped`) that
+    would be a cycle: a layer that encloses this one, which the
+    bottom-up type pass types after this one, or a sibling layer whose
+    own ref names a node of this one. A ref into a layer being typed
+    takes its own part in this layer during the type pass, and its
+    target's in the claim walk, when every layer is typed. This is a
+    declared shortcut around evaluation order (#1318). Two layers that
+    each place a node by a ref into the other are a cycle in the claim
+    walk too, which reports it (`resolveExtent`);
+  - a child that is in no continuous or ordinal part by the rules above,
+    and that a point or `"span"` `align` places at a partner that is in
+    one, is in its partner's part on that axis (`alignedParts` in
+    `layer`). An align has no offset or gap, so the child's anchor is at the partner's anchor,
+    which is a datum there: the child is at a datum, as a circle is, with a
+    size of its own in pixels. A polar chart aligned to the end of its
+    stem (`Forward Syntax/Flower Chart`) is in the stem's y part, though
+    it is placed whole. A `"span"` align ties both endpoints of the child
+    to its partner's, so both are at data and the child joins its
+    partner's part the same way. A `"size"` align ties only a length and
+    leaves the child's position free, so no endpoint is at a datum and
+    the child joins nothing. Aligns chain, and a `ref` operand counts as
+    its target's part. A gap is a `distribute`'s `spacing`, not an align,
+    and a node an `enclose` draws around refs is aligned to nothing, so
+    neither joins a part this way.
+
+  This is a shortcut tied to the deferred pixel offset semantics (#1053,
+  #1054). A pixel `.translate()` on an aligned child would put its anchor
+  at a datum plus pixels, which is in no data space. Today the align's
+  solve overrides that translate, so the child sits at the datum and
+  joins. Once pixel offsets have semantics of their own, a child an align
+  places at a pixel offset should stay out of its partner's part.
+
+  The layer's axes attach to the children whose part is continuous or
+  ordinal (`isVisualized` in `underlyingSpace.ts`; the claim walk hands
+  `placeByClaims` the answer as `ClaimChild.visualized`). Every other child of a layer that has such a part is
+  **dressing** (`placeByClaims`): it is beside the part or over it. An
+  `enclose` drawn around refs, a `line` or `ribbon` connecting refs, a
+  `.label()` text a gap sets past its mark's ref (on the axis of the gap;
+  on the axis an align centers it, it is in the mark's part, and a label
+  at `"center"` is in it on both), and a chart of those layered over
+  a scatter (`.layer(chart(selectAll("points")).mark(enclose()))`) all
+  have type `undefined` on both axes, so they are dressing of the layer
+  that holds them, while the layer's own type stays the scatter's
+  continuous one. A layer with no such part (a layer of literal shapes,
+  or a chart placed whole with a caption at a literal pixel beside it)
+  has no dressing. This is a deliberate shortcut until data types and
+  space types are aligned: pixels are no space here, so a text at a
+  literal pixel beside a scatter whose marks the layer holds is dressing,
+  while beside a chart placed whole it is plot.
+
+  The plot also leaves out a shape's outline (half its stroke
+  past its box, which its claim reaches and its plot leaves out; a node a
+  `nest` derives reaches its own outline past the padded inner's plot,
   `applyNestExtentPlan`) and the chrome rings of a nested node, short of
   a node whose plot is its whole box (a node with a size of its own, or
   the outermost ring of a `chart()`: a parent lays a chart out whole,
-  `GoFishNode.plotIsBox`). A chain of parts of the plot lays them by their plots, so dressing never
+  `GoFishNode.plotIsBox`). Chrome is laid beside a third claim, the box
+  without its dressing (`ChildForms.bare`, `GoFishNode.resolveBareExtent`
+  and `GoFishNode.localSpan("bare", …)`; each is undefined where it is
+  the box). Neither of the other two is it. The box holds the
+  dressing, so ovals that reach past a scatter would push its axes out.
+  The plot of a node with a size of its own is its whole box, dressing
+  included, since a parent lays it out whole (#1210); and the plot of a
+  ring leaves out its chrome, so a title laid beside it would cover the
+  tick labels. The box without its dressing keeps inner chrome and leaves
+  the dressing out, and a node with a size of its own has its content's
+  at the σ it solved. So the axes attach to the part of the layer whose
+  space is continuous, and dressing draws over them. A chain of parts of the plot lays them by their plots, so dressing never
   moves the parts it dresses: it reaches past the chain, or sits in the gaps
   (`ClaimChild.plot` in `placeByClaims`). The plot leaves out what is
   placed beside a stand-in, so a chain with a stand-in reaches, in its
   plot, only as far as its stand-ins. A chart with a size of its own maps its plot
   into that size (see
-  [Chrome gutters](/internals/layout/passes#chrome-gutters)).
+  [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)).
+
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
@@ -797,6 +879,19 @@ composes its targets' spaces into the layer's claim on that axis:
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
+
+- A `Constraint.position` may read its datums in **another node's frame**
+  (`in: ref`, #1257): `datum(v)` is then the point `v` in the frame of the
+  node `ref` names, wherever that node sits below the layer, not in the
+  layer's own frame. Chrome uses it: an axis's ticks sit on the plot's
+  scale even when the plot is a scope of its own that the ticks are outside
+  of. Such a datum is no part of the layer's domain and does not join its
+  target to the layer's set (`planSharing` treats it as a pixel). The claim
+  walk reads the frame as two points of the named node's plan, its data 0
+  and its data 1, carried up the plans to the layer (`frameIn` in
+  `solver/plan.ts`); layout measures the same two points off the laid-out
+  node (`GoFishNode.layoutFrames`) and the translates between. It is
+  internal for now (#1289).
 
 - `align`'s `"span"`/`"size"` values (#726, `constraints/align.ts`) are the
   **third** size-setting mechanism — ships the unbound-target case from the
@@ -1066,7 +1161,9 @@ the targets are boxes read off claims and a datum maps through a symbolic σ, an
 results are formulas that layout evaluates at the solved σ with what it measured: the
 laid boxes, the pixel of data 0, and the place of each child that places itself (a
 shape at a literal pixel or a data position, an axis span or a `connect`, which set
-`placedByLayout`). A datum that is not a number has no pixel, so it emits no fact.
+`placedByLayout`). On an axis with no position scale a datum that is not a number
+has no pixel, so it emits no fact; against a real position scale it is an error
+(`compilePlacementCoordinate`).
 Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
@@ -1505,8 +1602,9 @@ axis's claim is measured from data 0 and is the hull of what the content
 draws, so each side reaches the farther of the claim and the domain's niced
 end: pixels drawn past the data (a mark's size at its datum, a tick label
 past the last tick) take room only where the domain does not already reach
-past them. A delta axis centers its content in the niced width, so it widens
-by `σ·(nicedWidth − dataWidth)`, half on each side.
+past them. A delta axis centers its content in the niced width, so each
+side reaches at least `σ·nicedWidth/2` from the middle of its claim. Widening
+twice to one width changes nothing.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1767,15 +1865,15 @@ reads one: a ring or a label wrapper added later reads the seat of the content
 it wraps. Chrome does take room, as pixels: every chrome shape claims its size,
 and a ring's claim is the hull of what it wraps and of its shapes where its
 constraints place them (`placeByClaims`). A layer that wears chrome hands its
-content its slot less its gutters (never less than 0), forms of those claims in σ evaluated where it is laid out, and a node with a
+content what its chrome leaves of its room (never less than 0), and a node with a
 size of its own, a chart or a plain layer, takes that size as its plot and
-adds the gutters its content's claims give around it (#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
+adds what its content's dressing reaches past it (#1032; see [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)). A child
 placed beside a node inside another child (a label on its mark's ref) takes
 room where the claim walk knows that node lands (`planPlacement`), a band of
 a category axis included (a share is a claim), and is ink where it does not
 (inside a coordinate space, or beside a band in a scope that mixes data and
-bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a chart's
-content, seated past its chrome's start gutter) shares the layer's frame from
+bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a ring's
+content, seated at the ring's origin, `wrapRing`) shares the layer's frame from
 that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
 the pin. The axes drawn over each domain are recorded once `resolveAxes` has
 assigned them (`refreshDemand`, which `layout()` calls once, after the axes

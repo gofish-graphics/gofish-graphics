@@ -32,10 +32,10 @@ import {
 } from "../underlyingSpace";
 import { Extent, mapsDomain } from "../extent";
 import type { AxisMap } from "../domain";
-import { envFlag } from "../../util";
+import { envFlag, room } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
-import { reachAt, type ChromeForms } from "../chromeGutters";
+import { reachPast, type PlotForms } from "./plotForms";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
 export type ScopeKind = "root" | "sized" | "coord" | "recenter";
@@ -270,9 +270,16 @@ type GlyphUnit = { pointSigma: number; cellFit: [number, number] };
  */
 export class ScopeRegistry {
   private entries: ScopeEntry[] = [];
-  /** The scope each node with a literal size solves on each axis, from the
-   *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
-  private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
+  /** What each node with a literal size solves on each axis in the claim
+   *  walk ({@link solveFixed}): the box it lays out at, and the scope it
+   *  solved, with the keyed domain it maps, where its content maps one. */
+  private fixed = new Map<
+    object,
+    [
+      { box: number; solve: FixedSolve | undefined }?,
+      { box: number; solve: FixedSolve | undefined }?,
+    ]
+  >();
   /** Each glyph unit's bounds (`fitGlyphs`), by the unit's key. */
   private glyphs?: ReadonlyMap<string, GlyphUnit>;
 
@@ -351,12 +358,13 @@ export class ScopeRegistry {
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
-   * content's type and chrome forms (`chromeForms`: what it draws and its
-   * plot, widened to the keyed domain it maps and niced), with its size as
-   * its plot (#1032). σ fits the plot to the size ({@link fit}), and the
-   * scope's box is the whole at that σ: the size and what the content's
-   * chrome and dressing reach past it (`reachAt`), with data 0 that far
-   * further from the box's start. A literal size does not depend on σ, so
+   * content's type and its claim's forms (`PlotForms`: what it draws and
+   * its plot, widened to the keyed domain it maps and niced), with its size
+   * as its plot (#1032). σ fits the plot to the size ({@link fit}), and the
+   * node's box is the whole at that σ: the size and what the content's
+   * dressing reaches past it (`reachPast`), with data 0 that far further
+   * from the box's start. Where no σ solves (content that maps no domain),
+   * the box is the whole where the plot fills the size ({@link fixedBox}). A literal size does not depend on σ, so
    * the claim walk solves it once, here, to compute the pixels the node
    * claims upward, and its layout reuses the solution ({@link fixedSolve}).
    * `key` names the keyed domain the node maps (`KeyedDomains.axisKey`), so
@@ -368,33 +376,40 @@ export class ScopeRegistry {
     key: string | undefined,
     meta: ScopeMeta,
     space: UnderlyingSpace | undefined,
-    forms: ChromeForms | undefined,
+    forms: PlotForms | undefined,
     plot: number
   ): ScopeSolution | undefined {
     const fitted =
       forms &&
       this.fit(meta, node, space, forms.plot, { px: plot, limit: true });
     const scope = fitted?.scope;
-    const reach = scope && reachAt(forms!, scope.sigma);
+    // The σ the box is read at: the scope's, else the σ at which the plot
+    // fills the size (`Pwl.fill`), 0 where none does, and where a slot of
+    // no finite size gives none.
+    const sigma =
+      scope?.sigma ?? (forms ? room(Pwl.fill(forms.plot.width, plot) ?? 0) : 0);
+    const [start, end] = forms ? reachPast(forms, sigma) : [0, 0];
+    // Its own size, whatever its content claims (`fit`), and what its
+    // content's dressing reaches past it.
+    const box = plot + start + end;
     const solution: ScopeSolution | undefined =
       scope === undefined
         ? undefined
         : scope.originPx === undefined
           ? scope
-          : { sigma: scope.sigma, originPx: scope.originPx + reach![0] };
+          : { sigma: scope.sigma, originPx: scope.originPx + start };
     let solves = this.fixed.get(node);
     if (solves === undefined) this.fixed.set(node, (solves = []));
-    solves[meta.axis] =
-      solution === undefined
-        ? undefined
-        : {
-            key,
-            solution,
-            claim: forms!.whole,
-            space,
-            // Its own size, whatever its content claims (`fit`).
-            box: plot + reach![0] + reach![1],
-          };
+    solves[meta.axis] = {
+      box,
+      solve: solution && {
+        key,
+        solution,
+        claim: forms!.whole,
+        space,
+        box,
+      },
+    };
     return solution;
   }
 
@@ -415,7 +430,7 @@ export class ScopeRegistry {
   ): void {
     const solves = this.fixed.get(node);
     const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
-      const s = solves?.[axis];
+      const s = solves?.[axis]?.solve;
       return (
         s && {
           space: s.space,
@@ -429,14 +444,23 @@ export class ScopeRegistry {
     };
     const equalized = this.equalizeMeasure(rootKey, [axisOf(0), axisOf(1)]);
     if (equalized === undefined) return;
-    for (const axis of [0, 1] as const)
-      solves![axis] = { ...solves![axis]!, ...equalized[axis] };
+    for (const axis of [0, 1] as const) {
+      const entry = solves![axis]!;
+      entry.solve = { ...entry.solve!, ...equalized[axis] };
+    }
   }
 
   /** The scope a node with a literal size solved on `axis` in the claim walk
    *  ({@link solveFixed}), or undefined when it solved none. */
   fixedSolve(node: object, axis: 0 | 1): FixedSolve | undefined {
-    return this.fixed.get(node)?.[axis];
+    return this.fixed.get(node)?.[axis]?.solve;
+  }
+
+  /** The box a node with a literal size lays out at on `axis`: its size and
+   *  what its content's dressing reaches past it ({@link solveFixed}), the
+   *  pixels it claims. Undefined where it was not solved there. */
+  fixedBox(node: object, axis: 0 | 1): number | undefined {
+    return this.fixed.get(node)?.[axis]?.box;
   }
 
   /** The σ the nodes with a literal size solve the keyed domain `key` at on
@@ -445,7 +469,7 @@ export class ScopeRegistry {
   keyedSigma(key: string, axis: 0 | 1): number | undefined {
     let sigma: number | undefined;
     for (const solves of this.fixed.values()) {
-      const s = solves[axis];
+      const s = solves[axis]?.solve;
       if (s === undefined || s.key !== key) continue;
       const next = s.solution.sigma;
       if (sigma === undefined) sigma = next;

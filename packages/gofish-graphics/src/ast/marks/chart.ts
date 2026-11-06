@@ -1128,7 +1128,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
 /**
  * Draw an outline around nodes, under them: their padded bounding box
  * (`Shape.box()`, the default), the smallest ellipse around them
- * (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or
+ * (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or
  * a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). The node
  * is built in `graphicalOperators/enclose.tsx`.
  *

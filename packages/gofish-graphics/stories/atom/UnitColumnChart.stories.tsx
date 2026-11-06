@@ -24,18 +24,16 @@ import { titanicPassengers } from "../../src/data/titanicPassengers";
 const meta: Meta = {
   title: "atom/UnitColumnChart",
   argTypes: {
-    w: { control: { type: "number", min: 200, max: 900, step: 10 } },
-    h: { control: { type: "number", min: 200, max: 900, step: 10 } },
     cols: { control: { type: "number", min: 4, max: 30, step: 1 } },
   },
 };
 
 export default meta;
 
-type Args = { w: number; h: number; cols: number };
+type Args = { cols: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 520, h: 580, cols: 14 },
+  args: { cols: 14 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -52,8 +50,6 @@ export const Default: StoryObj<Args> = {
       // x = pclass (the columns) at the bottom (y-end), under the upward-filling
       // columns; y is the dot-row index, so suppress it.
       axes: { x: { side: "end" }, y: false },
-      w: args.w,
-      h: args.h,
     })
       // Bottom-align the columns (y-down free space: "end" = bottom) so the
       // unit stacks share a baseline and grow upward. (The pclass tick labels

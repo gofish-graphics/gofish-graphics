@@ -23,8 +23,6 @@ def story_default():
         chart(
             titanic_passengers,
             color=Color.palette(["#2b8cbe", "#ff8408"]),
-            w=720,
-            h=480,
         )
         .flow(
             table(

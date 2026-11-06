@@ -106,7 +106,7 @@ def story_inline_sloped_labels():
 
 def story_streamgraph_interior_labels():
     return (
-        chart(SEAFOOD, w=520, h=360)
+        chart(SEAFOOD, h=360)
         .flow(
             spread(by="lake", dir="x", spacing=64, alignment="middle"),
             stack(by="species", dir="y"),

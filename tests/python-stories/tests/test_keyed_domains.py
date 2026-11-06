@@ -48,10 +48,10 @@ def story_grouped_bars_inner_height():
 
 
 def story_chart_own_size():
-    # A chart with its own size keeps its axes: it maps its keyed domains
-    # into its own w and h, and the render gives it no other size.
+    # A chart with its own size keeps its axes: it maps its keyed domain
+    # into its own h, and the render gives it no other size.
     return (
-        chart(_GROUP_B, w=240, h=160)
+        chart(_GROUP_B, h=160)
         .flow(spread(by="item", dir="x", spacing=12))
         .mark(rect(w=40, h="value", fill="item")),
         {},
@@ -61,7 +61,7 @@ def story_chart_own_size():
 def story_layered_chart_own_size():
     # A `.layer()` chart whose root tier has a size of its own, rendered on a
     # larger canvas. The bars, their value labels and the y axis all map with
-    # the σ the 240 x 160 box solves: the 1.1 bar's top meets the axis at 1.1.
+    # the σ its 160 px height solves: the 1.1 bar's top meets the axis at 1.1.
     def label_mark(d):
         return spread(
             [text(text=str(d[0].datum[0]["value"])), d[0]],
@@ -71,7 +71,7 @@ def story_layered_chart_own_size():
         )
 
     return (
-        chart(_GROUP_B, w=240, h=160)
+        chart(_GROUP_B, h=160)
         .flow(spread(by="item", dir="x", spacing=12))
         .mark(rect(w=40, h="value", fill="item").name("bars"))
         .layer(chart(select_all("bars")).flow(group(by="item")).mark(label_mark)),

@@ -13,6 +13,8 @@ import {
   percent,
   fr,
   Color,
+  scatter,
+  circle,
 } from "../../src/lib";
 
 // Lengths (#1176 step 6): a size or a gap given as `percent(n)` of the room
@@ -244,6 +246,44 @@ export const PercentOfBand: StoryObj = {
           rect({ y: value(d[0].sales), w: percent(40), h: 4, fill: "#08519c" }),
         ])
       )
+      .render(container);
+    return container;
+  },
+};
+
+// Room versus box (#1257, #1292). A rect with no height is a filler: it is
+// as tall as the room its parent gives it. The layer around it has no size
+// of its own, so its room is the spread's, which is the plot's.
+export const RoomBarBackdrop: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart([
+      { c: "a", v: 3 },
+      { c: "b", v: 5 },
+    ])
+      .flow(spread({ by: "c", dir: "x" }))
+      .mark(layer([rect({ fill: "#ddd" }), rect({ h: "v" })]))
+      .render(container, { w: 200, h: 150 });
+    return container;
+  },
+};
+
+// One row of labeled dots: the label layer's room is the whole plot, so the
+// chooser can put each label above its dot, although the dots' hull is one
+// dot tall.
+export const RoomOneRowScatterLabels: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(
+      [
+        { n: "alpha", x: 1, y: 1 },
+        { n: "beta", x: 2, y: 1 },
+        { n: "gamma", x: 3, y: 1 },
+      ],
+      { w: 300, h: 120 }
+    )
+      .flow(scatter({ by: "n", x: "x", y: "y" }))
+      .mark(circle({ r: 5 }).label("n"))
       .render(container);
     return container;
   },

@@ -131,9 +131,9 @@ The fixed 120px `LEGEND_MARGIN` is gone, and so is the measured right overhang
 that replaced it. The legend is a ring of the root's chrome, so it takes room
 like the axes do (#1032): its swatches and labels claim their sizes, its ring
 claims the hull of the box inside and the legend where it is seated, and the
-content gets what the gutters leave of the canvas. The render's `w`/`h` is the whole graphic, legend included,
+content gets what the chrome leaves of the canvas. The render's `w`/`h` is the whole graphic, legend included,
 and when they are omitted the canvas is the root's whole box. See
-[Layout & Render Passes](/internals/layout/passes#chrome-gutters).
+[Layout & Render Passes](/internals/layout/passes#chrome-around-a-chart).
 
 ## Interplay with axis titles
 

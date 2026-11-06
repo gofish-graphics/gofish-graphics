@@ -20,7 +20,6 @@ def story_gender_pay_gap():
                 "75-Percentile": pay,
                 "Max": pay,
             },
-            w=560,
             h=320,
         )
         .flow(

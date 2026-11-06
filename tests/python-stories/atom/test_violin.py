@@ -31,8 +31,6 @@ def story_default():
             aged_passengers,
             color=Color.palette(["#2b8cbe", "#ff8408"]),
             axes={"x": {"side": "end"}, "y": False},
-            w=680,
-            h=260,
         )
         .flow(
             spread(by="pclass", dir="x", spacing=48, alignment="middle"),

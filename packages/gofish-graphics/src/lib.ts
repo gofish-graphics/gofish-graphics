@@ -218,6 +218,7 @@ export * as Overlap from "./families/overlap";
 export * as Filter from "./families/filter";
 export type { BlendMode } from "./ast/blendMode";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
+export type { Nodes } from "./ast/nodeSelection";
 export * as Shape from "./families/shape";
 export * as Place from "./families/place";
 export { Frame as frame } from "./ast/graphicalOperators/frame";

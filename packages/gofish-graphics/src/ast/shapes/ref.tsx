@@ -41,7 +41,7 @@ const PLACEABLE_OPTIONAL_KEYS: readonly (keyof Placeable)[] = [
   "transform",
   "projectedTranslate",
   "localAnchor",
-  "localPlotSpan",
+  "localSpan",
   "setExtent",
   "pinAnchor",
   "setSizeOnly",

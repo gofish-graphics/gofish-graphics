@@ -171,7 +171,7 @@ export const IntersectInCells: StoryObj = {
   render: () => {
     const container = initializeContainer();
     container.innerHTML = "";
-    chart([{ v: 5 }, { v: 15 }, { v: 25 }], { w: 480, h: 120 })
+    chart([{ v: 5 }, { v: 15 }, { v: 25 }], { w: 480 })
       .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
       .mark(
         intersect([

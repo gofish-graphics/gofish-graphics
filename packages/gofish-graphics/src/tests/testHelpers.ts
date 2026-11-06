@@ -29,6 +29,11 @@ export const items = (dl: any): Item[] => {
   return out;
 };
 
+/** A seeded random source (a linear congruential generator) on [0, 1), so a
+ *  run is the same every time. */
+export const seeded = (seed: number) => () =>
+  (seed = (seed * 1664525 + 1013904223) % 4294967296) / 4294967296;
+
 let passed = 0;
 let failed = 0;
 

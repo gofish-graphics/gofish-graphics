@@ -14,18 +14,11 @@ import {
 
 const meta: Meta = {
   title: "atom/TitanicFacet",
-  argTypes: {
-    w: { control: { type: "number", min: 200, max: 900, step: 10 } },
-    h: { control: { type: "number", min: 200, max: 900, step: 10 } },
-  },
 };
 
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const Default: StoryObj<Args> = {
-  args: { w: 720, h: 480 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -33,13 +26,11 @@ export const Default: StoryObj<Args> = {
       description: "A faceted grid of unit dots showing each Titanic passenger colored by survival, broken out by passenger class and sex.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
     
      chart(titanicPassengers, {
        color: Color.palette(["#2b8cbe", "#ff8408"]),
-       w: args.w,
-       h: args.h,
      })
         .flow(table({
                 by: {x: "pclass", y: "sex"},

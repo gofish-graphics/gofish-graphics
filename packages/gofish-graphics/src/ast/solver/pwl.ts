@@ -211,7 +211,7 @@ export const negate = (v: Value): Value => scale(-1, v);
  * `f` read through `g`: the value `h` of `t` with `h(g(σ)) = f(σ)`, for a
  * `g` that never decreases. It reads a claim in a scope of its own in the
  * σ of the scope around it, where `g` is how long that scope's room is at
- * its own σ (a facet panel's plot, `chromeGutters.ts`). Below `g(0)` no σ
+ * its own σ (a facet panel's plot, `aroundShare`). Below `g(0)` no σ
  * makes `g` that short, so `h` is `f(0)` there; where `g` is flat, `h`
  * takes `f` past the flat stretch, as {@link solve} takes the largest σ.
  */
@@ -400,7 +400,7 @@ export const overflows = (needed: number, px: number): boolean =>
 
 /**
  * The σ ≥ 0 at which a claim `v` fills a slot of `target` pixels: the one
- * rule for a claim in its slot, which `ScopeRegistry.fit` and `aroundPlot`
+ * rule for a claim in its slot, which `ScopeRegistry.fit` and `ScopeRegistry.solveFixed`
  * both take.
  *
  *   1. The σ at which `v` is `target` ({@link solve}).

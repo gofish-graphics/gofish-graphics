@@ -9,6 +9,7 @@ import {
   isValue,
   type PositionValue,
 } from "../data";
+import { unplaceableValue } from "../../util";
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
@@ -29,12 +30,20 @@ import {
   axisName,
   placementKey,
   type Axis,
-  type ConstraintPosScales,
   type KeyOf,
 } from "./shared";
 import type { AxisMap } from "../domain";
 import type { AnchorProgram } from "./placementFacts";
 import type { Arith } from "../solver/arith";
+
+/** The frame the datums of a `position` constraint map through on one
+ *  axis: the layer's own, or, for one with `in`, the map of the node it
+ *  names into the layer's frame (`PositionOptions.in`). Undefined where
+ *  there is none, so its datums place nothing there. */
+export type ScaleOf<T> = (
+  c: PositionConstraint,
+  axis: 0 | 1
+) => AxisMap<T> | undefined;
 
 export type PlacementConstraint =
   | AlignConstraint
@@ -68,11 +77,13 @@ export function compilePlacementCoordinate<T>(
     return A.scale(coordinate.index / coordinate.count, axisSize);
   }
   if (!isValue(coordinate)) return A.constant(coordinate);
+  // On an axis with no scale the datum is not solved there.
+  if (scale === undefined) return undefined;
   // A map takes only a number to a pixel: a datum that is not one (a value
   // of a field whose values are not numbers) has no place on the axis.
   const value = getValue(coordinate);
-  if (scale === undefined || typeof value !== "number" || Number.isNaN(value))
-    return undefined;
+  if (typeof value !== "number" || Number.isNaN(value))
+    throw unplaceableValue(coordinate);
   // `pxOf`, in `A`.
   return A.add(
     A.scale(value, scale.sigma),
@@ -93,7 +104,7 @@ class PlacementOwnershipPlan<T> {
     targets: Map<string, SolvePlaceable<T>>,
     constraints: PlacementConstraint[],
     private readonly keyOf: KeyOf,
-    posScales: ConstraintPosScales<T> | undefined,
+    scaleOf: ScaleOf<T>,
     sizes: readonly [T, T],
     dataPositioned?: [Set<string>, Set<string>]
   ) {
@@ -108,7 +119,9 @@ class PlacementOwnershipPlan<T> {
 
     for (const constraint of constraints) {
       if (constraint.type !== "position") continue;
-      this.notePositionConstraint(constraint, posScales);
+      this.notePositionConstraint(constraint, (idx) =>
+        scaleOf(constraint, idx)
+      );
     }
   }
 
@@ -139,7 +152,7 @@ class PlacementOwnershipPlan<T> {
 
   private notePositionConstraint(
     constraint: PositionConstraint,
-    posScales: ConstraintPosScales<T> | undefined
+    scale: (axis: 0 | 1) => AxisMap<T> | undefined
   ): void {
     const keys = constraint.children.map(this.keyOf);
     if (constraint.override)
@@ -164,19 +177,19 @@ class PlacementOwnershipPlan<T> {
         const min = compilePlacementCoordinate(
           this.A,
           coordinate[0],
-          posScales?.[idx]
+          scale(idx)
         );
         const max = compilePlacementCoordinate(
           this.A,
           coordinate[1],
-          posScales?.[idx]
+          scale(idx)
         );
         if (min === undefined || max === undefined) continue;
       } else {
         const value = compilePlacementCoordinate(
           this.A,
           coordinate,
-          posScales?.[idx],
+          scale(idx),
           this.sizes[idx]
         );
         if (value === undefined) continue;
@@ -194,7 +207,7 @@ export function lowerPlacementConstraints<T>(
   sizes: readonly [T, T],
   // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
   gapOf: GapOf,
-  posScales?: ConstraintPosScales<T>,
+  scaleOf: ScaleOf<T> = () => undefined,
   // Per axis, the grid's resolved tracks, where the grid places its cells.
   gridTracks: GridTracks<T> = [undefined, undefined],
   dataPositioned?: [Set<string>, Set<string>]
@@ -219,21 +232,22 @@ export function lowerPlacementConstraints<T>(
     targets,
     constraints,
     keyOf,
-    posScales,
+    scaleOf,
     sizes,
     dataPositioned
   );
 
   const lowerer = new PlacementProgramLowerer(targets);
-  const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
-    const idx = axisIndex(axis);
-    return compilePlacementCoordinate(
-      A,
-      coordinate,
-      posScales?.[idx],
-      sizes[idx]
-    );
-  };
+  const resolveIn =
+    (c: PositionConstraint) => (axis: Axis, coordinate: PositionValue) => {
+      const idx = axisIndex(axis);
+      return compilePlacementCoordinate(
+        A,
+        coordinate,
+        scaleOf(c, idx),
+        sizes[idx]
+      );
+    };
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
   const isDataPositioned = ownership.isDataPositioned.bind(ownership);
@@ -268,7 +282,7 @@ export function lowerPlacementConstraints<T>(
           keyOf,
           isInitiallyPlaced,
           isDataPositioned,
-          resolveCoordinate: resolveAxisCoordinate,
+          resolveCoordinate: resolveIn(constraint),
         });
         return;
       case "align":

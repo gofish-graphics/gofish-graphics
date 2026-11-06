@@ -4,7 +4,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import { color6, resolveColorChannel } from "../../color";
-import { getValue, isValue, type MaybeValue } from "../data";
+import { isValue, type MaybeValue } from "../data";
 import { displayTranslate, type Dimensions } from "../dims";
 import {
   boxOfDims,
@@ -143,9 +143,7 @@ export const Region = ({
                 `to pixels: ${
                   scales[axis]?.map === undefined
                     ? `the region's parent gives it no map for its cell's data on ${axisName(axis)}`
-                    : p === undefined
-                      ? `its datum ${getValue(v as MaybeValue<number>)} is not a number`
-                      : `it maps to ${p}`
+                    : `it maps to ${p}`
                 }. A region is placed by its cell's data, so it must share ` +
                 `the frame of the partition that gives it the cell (an ` +
                 `operator between them that places its children on ` +

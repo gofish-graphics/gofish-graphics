@@ -300,6 +300,22 @@ export const placeBaseline = <T extends UnderlyingSpace | undefined>(
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
+/** Where a difference axis over `content` (a space with no data 0) spans
+ *  its niced width `niced` in the content's frame. That frame measures
+ *  widths from the content's start, wherever its interval starts (an
+ *  overlay of a free bar below 0 and an origin-less one has a negative
+ *  min), and the content sits centered in the niced width, as centering
+ *  makes a difference axis: `[−slack, width − slack]`. The axis is drawn
+ *  there (`elaborateDifferenceAxis`) and the plot covers it
+ *  (`GoFishNode.domainSpan`). */
+export const differenceSpan = (
+  content: CONTINUOUS_TYPE,
+  niced: CONTINUOUS_TYPE
+): [number, number] => {
+  const slack = (dataWidth(niced) - dataWidth(content)) / 2;
+  return [-slack, dataWidth(niced) - slack];
+};
+
 /** What an axis ticks at, which is what a scope that draws the axis nices
  *  its domain to (#659, #1057): about `count` ticks, or, on a time axis, the
  *  cells of its `rows`, whose inner row (`rows[0]`) sets the nicing. A time
@@ -487,6 +503,12 @@ export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
 export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
+
+/** Whether an axis visualizes `space`: it is continuous or ordinal. A
+ *  layer's axes attach to the parts of its space that are
+ *  (`ClaimWalk.parts`), and any other child is dressing. */
+export const isVisualized = (space: UnderlyingSpace | undefined): boolean =>
+  space?.kind === "continuous" || space?.kind === "ordinal";
 
 /** The space of a datum point: a pinned zero-width interval at `pos`, with
  *  the datum's units (on a calendar when the datum is a time). */
