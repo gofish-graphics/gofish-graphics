@@ -35,8 +35,8 @@ import { text } from "../ast/shapes/text";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { nameableMark, type NameableMark } from "../ast/marks/createOperator";
-import { resolveMarkResult } from "../ast/marks/markResult";
-import type { Mark } from "../ast/types";
+import { resolveMarkResult, type LayerContext } from "../ast/marks/markResult";
+import type { Mark, MarkChild } from "../ast/types";
 import { clamp, mod } from "../util";
 import { click, drag } from "./inputs";
 import { live, readLive } from "./live";
@@ -62,12 +62,12 @@ export type Control = NameableMark<unknown> & { dispose(): void };
 function control<I>(spec: {
   input: (hitTest: (pt: SvgPoint, hit: Hit | undefined) => boolean) => I;
   write: (input: I, primaryId: () => string | undefined) => void;
-  /** Build the picture. `leaf` resolves one of its marks in the context the
-   *  control is applied in, so the inputs its marks read register with that
+  /** Build the picture in `ctx`, the context the control is applied in: its
+   *  marks resolve in it (`leaf`), so the inputs they read register with that
    *  chart. */
   build: (
     input: I,
-    leaf: (mark: unknown) => Promise<GoFishNode>
+    ctx: LayerContext | undefined
   ) => Promise<{ node: GoFishNode; targets: [GoFishNode, GoFishNode] }>;
 }): Control {
   // The uids of the two nodes the latest build produced. Refreshed per build,
@@ -85,12 +85,7 @@ function control<I>(spec: {
   });
 
   const mark: Mark<unknown> = async (_d, _key, layerContext) => {
-    const { node, targets } = await spec.build(input, (child) =>
-      resolveMarkResult(
-        child as Parameters<typeof resolveMarkResult>[0],
-        layerContext
-      )
-    );
+    const { node, targets } = await spec.build(input, layerContext);
     primary = targets[0].uid;
     secondary = targets[1].uid;
     return node;
@@ -99,6 +94,11 @@ function control<I>(spec: {
   result.dispose = dispose;
   return result;
 }
+
+/** Invoke a leaf mark with no datum in `ctx`, what an operator does to a mark
+ *  child. */
+const leaf = (mark: MarkChild, ctx: LayerContext | undefined) =>
+  resolveMarkResult(mark, ctx);
 
 /* -------------------------------- slider -------------------------------- */
 
@@ -221,7 +221,7 @@ export function slider(opts: SliderOptions): Control {
         const next = valueAt((pt.x - (box.x + HANDLE_R)) / px);
         if (next !== untrack(readValue)) onInput(next);
       }),
-    build: async (scrub, leaf) => {
+    build: async (scrub, ctx) => {
       // Every read of the value or the drag state is a PAINT-time read. This
       // one is the value the handle is laid out at: `readLive` reads it without
       // making the input a pipeline dependency, and still registers it with
@@ -239,7 +239,8 @@ export function slider(opts: SliderOptions): Control {
             h: TRACK_H,
             rx: TRACK_H / 2,
             fill: "#e5e5e5",
-          })
+          }),
+          ctx
         )
       ).name("track");
       const handle = await leaf(
@@ -249,7 +250,8 @@ export function slider(opts: SliderOptions): Control {
           w: 2 * HANDLE_R,
           h: 2 * HANDLE_R,
           fill: live(() => (scrub.isActive() ? "#111" : "#333")),
-        })
+        }),
+        ctx
       );
       // The handle follows the value at paint. Lowered items are in pixels, so
       // the slot moves the lowered `cx` by the value's change of fraction times
@@ -269,7 +271,8 @@ export function slider(opts: SliderOptions): Control {
             text: live(() => format(readValue())),
             fontSize: READOUT_FONT,
             fill: "#333",
-          })
+          }),
+          ctx
         )
       ).name("readout");
       const node = await (
@@ -342,7 +345,7 @@ export function button(opts: ButtonOptions): Control {
         onClick();
       });
     },
-    build: async (press, leaf) => {
+    build: async (press, ctx) => {
       // The caption changes the text's box, so it is read at resolve and
       // re-measures. The pressed shading changes no box, so it is a paint-time
       // read; evaluating that `live()` channel at resolve is also what
@@ -357,11 +360,12 @@ export function button(opts: ButtonOptions): Control {
             fill: live(() => (press.isArmed() ? "#e0e0e0" : "#f2f2f2")),
             stroke: "#ccc",
             strokeWidth: 1,
-          })
+          }),
+          ctx
         )
       ).name("box");
       const glyph = (
-        await leaf(text({ text: label, fontSize: 12, fill: "#333" }))
+        await leaf(text({ text: label, fontSize: 12, fill: "#333" }), ctx)
       ).name("label");
       const node = await (
         await Layer({}, [box, glyph])

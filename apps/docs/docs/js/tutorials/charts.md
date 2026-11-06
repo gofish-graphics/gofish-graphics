@@ -550,34 +550,6 @@ gf.layer({ axes: true }, [
 
 :::
 
-<!-- :::gofish
-
-```ts
-frame([
-  stackX(
-    { spacing: 64 },
-    map(_.groupBy(seafood, "lake"), (lake, key) =>
-      stackY(
-        { key, spacing: 1 },
-        map(_.orderBy(lake, "count", "desc"), (d) =>
-          rect({ w: 16, h: v(d.count), fill: v(d.species) }).name(
-            `${d.lake}-${d.species}`
-          )
-        )
-      )
-    )
-  ),
-  map(_.groupBy(seafood, "species"), (items) =>
-    ConnectX(
-      { opacity: 0.8 },
-      map(items, (d) => ref(`${d.lake}-${d.species}`))
-    )
-  ),
-]).render(root, { w: 500, h: 300 });
-```
-
-::: -->
-
 ## Polar Ribbon Chart
 
 Finally it's time to make our polar ribbon chart! To do so, we'll add a `clock` coordinate transform

@@ -317,14 +317,16 @@ function modifierMethod(
       key?: string | number,
       layerContext?: LayerContext
     ) => {
-      const raw = await (base as any)(d, key, layerContext);
+      const raw = await callMark(base, d, key, layerContext);
       // Resolved once per input, however many nodes it produces.
       const applied = resolveArgs ? await resolveArgs([d]) : args;
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
       if (getMarkKind(base) === "expand") {
         const nodes = await Promise.all(
-          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
+          (raw as unknown as GoFishNode[]).map((r) =>
+            resolveMarkResult(r, layerContext)
+          )
         );
         for (const node of nodes)
           await cfg.apply(node, layerContext, d, ...applied);
@@ -381,7 +383,7 @@ export function translateMark<T>(
     key?: string | number,
     layerContext?: LayerContext
   ) => {
-    const raw = await (base as any)(d, key, layerContext);
+    const raw = await callMark(base, d, key, layerContext);
     const node = await resolveMarkResult(raw, layerContext);
     return positionNode(opts, [node]);
   };
@@ -580,9 +582,15 @@ function datumValueModifier<V extends number | boolean>(
   const valueOf = (value: Arg | undefined) => (value ?? fallback) as Arg;
   return {
     name,
-    apply: (node, _layerContext, datum, value) => {
+    apply: (node, layerContext, datum, value) => {
       const v = valueOf(value);
-      set(node, typeof v === "function" ? v(datum) : v);
+      // The one call of the callback, after the mark's own `await`.
+      set(
+        node,
+        typeof v === "function"
+          ? withRegistrar(layerContext?.registrar, () => v(datum))
+          : v
+      );
     },
     resolveArgs: (value) =>
       isBatchAccessor(value)
@@ -795,11 +803,7 @@ export type DeriveOperatorOptions<LayoutProps, Channels, Datum> = {
 /** The low-level layout function passed as createOperator's first arg. */
 export type LayoutFn<Options> = (
   opts: Options,
-  children: GoFishAST[],
-  /** The context the operator is applied in: its names, and the registrar
-   *  a read the layout itself makes registers with (`time.sequence`'s
-   *  clock). */
-  layerContext?: LayerContext
+  children: GoFishAST[]
 ) => GoFishAST | PromiseLike<GoFishAST | PromiseLike<GoFishAST>>;
 
 /**
@@ -1268,10 +1272,10 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             undefined,
             layerContext
           );
-          const node = (await layout(
-            lowOpts,
-            nodes,
-            layerContext
+          // The one call of the layout function, in the scope of the context
+          // the operator is applied in (`time.sequence` reads its clock in it).
+          const node = (await withRegistrar(layerContext?.registrar, () =>
+            layout(lowOpts, nodes)
           )) as GoFishNode;
           node.datum = datumOfInput(d);
           return node;
@@ -1461,10 +1465,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         ) {
           (lowOpts as any).axisMeasures = groupMeasures;
         }
-        const built = (await layout(
-          lowOpts,
-          nodes,
-          layerContext
+        // The one call of the layout function, as in the combinator form.
+        const built = (await withRegistrar(layerContext?.registrar, () =>
+          layout(lowOpts, nodes)
         )) as unknown as GoFishNode;
         if (transitionState !== undefined) {
           recordOperatorTransition(built, transitionState);

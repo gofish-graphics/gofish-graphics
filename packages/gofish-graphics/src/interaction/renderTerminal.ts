@@ -39,7 +39,7 @@
  * coupling is the `.render(container, options)` call, kept as a type-only import.
  */
 import { InteractionRuntime } from "./runtime";
-import { countingResolve, type AmbientRegistrar } from "./resolveContext";
+import type { Registrar } from "./resolveContext";
 import type { GoFishNode } from "../ast/_node";
 import type { View } from "../ast/gofish";
 
@@ -53,7 +53,7 @@ export type RenderPass = {
   /** The chart's interaction runtime, which the inputs its resolve reads
    *  register with. The resolve puts it on its root `LayerContext`, which
    *  carries it to every call into user code (see `resolveContext.ts`). */
-  registrar: AmbientRegistrar;
+  registrar: Registrar;
 };
 
 export async function renderWithInteraction<O extends Record<string, unknown>>(
@@ -77,9 +77,7 @@ export async function renderWithInteraction<O extends Record<string, unknown>>(
     rerender = true;
     // Reset per-resolve dependency flags before reads re-register inputs.
     runtime.beginResolve();
-    const { node, options } = await countingResolve(() =>
-      resolveForRender(pass)
-    );
+    const { node, options } = await resolveForRender(pass);
     // A re-render that was still resolving when its chart was unmounted must
     // not mount the chart again.
     if (runtime.isDisposed()) return undefined;

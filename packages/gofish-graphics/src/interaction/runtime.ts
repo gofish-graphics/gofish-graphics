@@ -31,7 +31,7 @@ import type {
   SvgBox,
   SvgPoint,
 } from "./types";
-import type { AmbientRegistrar } from "./resolveContext";
+import type { Registrar } from "./resolveContext";
 import { frameConversions, type FrameConversions } from "./frameScales";
 
 /** Set equality by membership (small sets of event-type strings). */
@@ -118,7 +118,7 @@ function itemBox(
   }
 }
 
-export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
+export class InteractionRuntime implements Registrar, SpecInvalidator {
   private inputs: InputPrimitive[] = [];
   private registered = new Set<InputPrimitive>();
   /** node uid → first lowered item with that id, rebuilt each frame. */

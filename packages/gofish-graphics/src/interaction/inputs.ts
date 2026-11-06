@@ -14,13 +14,7 @@
  *     schedule a full, rAF-coalesced re-render.
  * Reads outside resolve (an external readout) just read.
  */
-import {
-  createSignal,
-  getListener,
-  getOwner,
-  onCleanup,
-  untrack,
-} from "solid-js";
+import { createSignal, getListener, onCleanup, untrack } from "solid-js";
 import type {
   Hit,
   InputPrimitive,
@@ -61,11 +55,7 @@ function dependency(input: InputPrimitive): {
     track() {
       const reg = scopedRegistrar();
       if (!reg) {
-        // Only a SPEC read is a user's: GoFish makes every `live()` read at
-        // resolve in a scope, and its own unscoped reads (a node's value to
-        // lower) are meant to register nothing; so is a paint read (under a
-        // Solid owner).
-        if (!inLiveEval()) warnUnscopedRead(getOwner() !== null);
+        warnUnscopedRead();
         return;
       }
       reg.registerInput(input);

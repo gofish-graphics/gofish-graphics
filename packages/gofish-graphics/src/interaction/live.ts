@@ -32,11 +32,7 @@ import {
   type Owner,
   type Setter,
 } from "solid-js";
-import {
-  runInLiveEval,
-  withRegistrar,
-  type AmbientRegistrar,
-} from "./resolveContext";
+import { runInLiveEval } from "./resolveContext";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
 
@@ -155,24 +151,21 @@ export type StripLive<O> = { [K in keyof O]: Exclude<O[K], LiveValue> };
 /**
  * `opts` with each live channel replaced by its resolve-time value at `datum`.
  * Reading a live channel here is also what REGISTERS its input with the
- * interaction runtime, the registrar of `registrar` (the context the mark is
- * applied in; see `resolveContext.ts`), so this is the single point where
- * that happens for a mark's channels — and the single point where the
- * `LiveValue` arm is discharged from the type.
+ * interaction runtime, the registrar in scope (its caller makes the call in
+ * the scope of the context the mark is applied in; see `resolveContext.ts`),
+ * so this is the single point where that happens for a mark's channels — and
+ * the single point where the `LiveValue` arm is discharged from the type.
  */
 export const withLiveStatics = <O extends Record<string, unknown>>(
   opts: O,
   live: Record<string, LiveValue> | undefined,
-  datum: unknown,
-  registrar: AmbientRegistrar | undefined
+  datum: unknown
 ): StripLive<O> =>
   (live
     ? {
         ...opts,
-        ...withRegistrar(registrar, () =>
-          Object.fromEntries(
-            Object.entries(live).map(([k, v]) => [k, evalLiveStatic(v, datum)])
-          )
+        ...Object.fromEntries(
+          Object.entries(live).map(([k, v]) => [k, evalLiveStatic(v, datum)])
         ),
       }
     : opts) as StripLive<O>;
@@ -185,9 +178,8 @@ export const withLiveStatics = <O extends Record<string, unknown>>(
  */
 export const splitLiveChannels = <O extends Record<string, unknown>>(
   opts: O,
-  datum: unknown,
-  registrar: AmbientRegistrar | undefined
+  datum: unknown
 ): { static: StripLive<O>; live: Record<string, LiveValue> | undefined } => {
   const live = liveChannelsOf(opts);
-  return { static: withLiveStatics(opts, live, datum, registrar), live };
+  return { static: withLiveStatics(opts, live, datum), live };
 };

@@ -1466,15 +1466,12 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
   { label: "Paint", fields: paint },
 ];
 
-/** The box fields `spread` and `stack` (a re-tagged `spread({glue: true})`)
- *  share. `x`/`y` place the operator's box in the parent's space: `Spread`
- *  spreads its `FancyDims` into the box, like treemap's. `w`/`h` are the
- *  data-driven operator extent (#4/#20, field/datum-driven cross-axis
- *  sizing), and `size` the per-entry stack-axis extent (#700 Phase 2);
- *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
- *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
- *  the old `normalize: true` layout flag. */
-const spreadBoxFields: FieldGroup = group({
+/** The box fields `spread`, `stack` (a re-tagged `spread({glue: true})`) and
+ *  `group` share. `x`/`y` place the operator's box in the parent's space:
+ *  `Spread` spreads its `FancyDims` into the box, like treemap's. `w`/`h` are
+ *  the data-driven operator extent (#4/#20, field/datum-driven cross-axis
+ *  sizing). */
+const operatorBoxFields: FieldGroup = group({
   x: ch.pos(
     "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
@@ -1489,6 +1486,13 @@ const spreadBoxFields: FieldGroup = group({
     "Height of this operator's box: pixels, or a field name sizing it from data." +
       PERCENT_FR
   ),
+});
+
+/** `spread`'s and `stack`'s per-entry stack-axis extent (#700 Phase 2):
+ *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
+ *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
+ *  the old `normalize: true` layout flag. */
+const spreadSizeField: FieldGroup = group({
   size: ch.size(
     "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
   ),
@@ -1647,7 +1651,8 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      ...spreadBoxFields,
+      ...operatorBoxFields,
+      ...spreadSizeField,
     },
   }),
 
@@ -1690,7 +1695,8 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Reverse the children's order along dir.",
       },
       axes: { type: t.ref("AxesOptions") },
-      ...spreadBoxFields,
+      ...operatorBoxFields,
+      ...spreadSizeField,
     },
   }),
 
@@ -1701,20 +1707,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.",
         true
       ),
-      x: ch.pos(
-        "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
-      ),
-      y: ch.pos(
-        "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
-      ),
-      w: lengthSize(
-        "Width of this operator's box: pixels, or a field name sizing it from data." +
-          PERCENT_FR
-      ),
-      h: lengthSize(
-        "Height of this operator's box: pixels, or a field name sizing it from data." +
-          PERCENT_FR
-      ),
+      ...operatorBoxFields,
     },
   }),
 

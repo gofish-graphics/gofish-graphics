@@ -45,9 +45,9 @@
  * there are, where layout placed each of them, and therefore the whole curve
  * the mark will travel. The playhead is a PAINT-time fact: which point of that
  * curve is showing right now. So the two are split by the reactivity rule
- * (`src/interaction/live.ts`): the node reads the clock once as it is built,
- * through `readLive`, for a value to lower and to register the clock for
- * events, and the paint tier re-reads it per frame inside `live()` slots,
+ * (`src/interaction/live.ts`): the clock is read once as the node is built
+ * (`now`, read by `time.transition()` through `readLive`), for a value to
+ * lower and to register the clock for events, and the paint tier re-reads it per frame inside `live()` slots,
  * patching the moving items' attributes and nothing else.
  *
  * That split is sound because a tween is the LEAF case of subtree containment
@@ -78,7 +78,6 @@ import { axisScale } from "../domain";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
-import { readLive } from "../../interaction/live";
 import { GEOMETRY_CHANNELS, setLiveItems } from "../../interaction/liveSlots";
 import {
   channelReader,
@@ -100,10 +99,14 @@ import {
 export type TweenOptions = {
   /** The playhead, in the time field's own units (a year, not a fraction).
    *  A signal (a `timer`, or anything that reads one) makes the mark move: it
-   *  is read once as the node is built, for a value to lower, and then per
-   *  frame in paint position. A plain number is a chart held still, and lowers to exactly the
+   *  is read once as the node is built (`now`), and then per frame in paint
+   *  position. A plain number is a chart held still, and lowers to exactly the
    *  static item it would have lowered before. */
   at: (() => number) | number;
+  /** The playhead as the node is built: the value it lowers to. Its builder
+   *  reads it, once, where the read registers the clock with the chart
+   *  (`time.transition()`, whose `produce` is called in its chart's scope). */
+  now: number;
   /** The run the mark travels (`unrollOrder`): `knots[j]` is the time of its
    *  `j`-th point, in time order, and `operand[j]` the operand that stands
    *  there. On a cyclic axis the run is unrolled over the cycle before and
@@ -315,6 +318,7 @@ export const tween = createNodeOperator(
   (
     {
       at: playhead,
+      now: t,
       run: { knots, operand },
       sequence,
       method,
@@ -333,13 +337,6 @@ export const tween = createNodeOperator(
      *  lowers to a static item and nothing reactive is wired up. */
     const live = typeof playhead === "function";
     const readPlayhead = live ? playhead : () => playhead;
-
-    // The playhead, read ONCE, HERE: the value the node lowers to. It
-    // registers nothing: the node has no context, so `time.transition()`
-    // registers the clock with its chart before building it. `readLive` is
-    // what keeps the read paint-time — untracked, and flagged so it is no
-    // pipeline dependency of this chart (see `src/interaction/live.ts`).
-    const t = readLive(readPlayhead);
     /** Where the run is read at a playhead and how opaque it is there. */
     const life = lifecycle(knots, sequence, ease);
 

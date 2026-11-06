@@ -1334,14 +1334,11 @@ export function gofish(
   // the empty list `[]` (a root has no rows; a thunk ignores it) and reifies
   // whatever it returns.
   if (typeof child === "function") {
-    return renderWithInteraction(async (pass) => {
+    return renderWithInteraction(async ({ registrar }) => {
       // The thunk is resolved into a registry of its own, whose registrar is
       // the render's (see `resolveContext.ts`).
       const build = () =>
-        resolveMarkResult(
-          child as any,
-          new LayerContext(undefined, pass.registrar)
-        );
+        resolveMarkResult(child as any, new LayerContext(undefined, registrar));
       const node = await build();
       // A thunk can build the chart again, which `label.angle: "auto"` needs
       // (see `GoFishNode.rebuild`); the rebuild is for the same render.

@@ -726,6 +726,72 @@ async function main() {
     for (const v of views) v.unmount();
   }
 
+  console.log("\na .hidden(fn) callback reads in its chart's scope");
+  {
+    // `.hidden(fn)` is called after the mark's own `await`, so it is wrapped
+    // where it is called: a signal it reads re-runs the chart.
+    const toggle = signal(false);
+    let runs = 0;
+    const box = makeContainer();
+    const view = await chart(data, { axes: false })
+      .flow(
+        derive((rows: any[]) => {
+          runs++;
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count" }).hidden(() => toggle()))
+      .render(box, { w: 200, h: 120 });
+    await settle();
+    const shown = () => box.querySelectorAll("rect").length;
+    ok("bars drawn while not hidden", shown() === 3, String(shown()));
+    toggle.set(true);
+    await settle();
+    ok(
+      "a write to the signal .hidden reads re-runs the chart",
+      runs === 2 && shown() === 0,
+      `runs=${runs} rects=${shown()}`
+    );
+    view.unmount();
+  }
+
+  console.log("\na chart inside a top-level layer([...]) registers its inputs");
+  {
+    // `layer([...])` is a mark, so it resolves when it is rendered, in the
+    // render's context: a chart inside it registers with that render.
+    const p = pointer();
+    const n = signal(3);
+    const box = makeContainer();
+    const view = await layer([
+      chart(data, { axes: false })
+        .flow(
+          derive((rows: any[]) => rows.slice(0, n())),
+          spread({ by: "cat", dir: "x" })
+        )
+        .mark(
+          rect({
+            h: "count",
+            fill: live(() => (p.datum() ? "#f00" : "#00f")),
+          })
+        ),
+    ]).render(box, { w: 200, h: 120 });
+    await settle();
+    ok(
+      "the pointer chart inside the layer emits data-gf-id",
+      box.querySelectorAll("[data-gf-id]").length === 3,
+      String(box.querySelectorAll("[data-gf-id]").length)
+    );
+    n.set(2);
+    await settle();
+    ok(
+      "a signal read inside the layer's chart re-runs it",
+      box.querySelectorAll("rect").length === 2,
+      String(box.querySelectorAll("rect").length)
+    );
+    view.unmount();
+  }
+
   console.log("\na read after an await in an async callback warns once");
   {
     // The one limit of the registrar scope: a read after an `await` in an

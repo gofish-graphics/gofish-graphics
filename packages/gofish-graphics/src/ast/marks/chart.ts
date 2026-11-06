@@ -826,12 +826,8 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     /** The opts `produce` is built from: each `live(...)` channel replaced by
      *  its value at the connector's datum (the same substitution a leaf mark's
      *  channels get — see `withLiveStatics`). */
-    const resolveLive = (
-      o: O,
-      datum: unknown,
-      layerContext: LayerContext | undefined
-    ): StripLive<O> =>
-      withLiveStatics(o, liveChannels, datum, layerContext?.registrar);
+    const resolveLive = (o: O, datum: unknown): StripLive<O> =>
+      withLiveStatics(o, liveChannels, datum);
     /** Tag a produced connector with its operands, the datum it carries, and
      *  the paint-time thunks for its live channels. */
     const finish = (
@@ -863,22 +859,21 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       datum: unknown,
       key?: string,
       layerContext?: LayerContext
-    ): Promise<GoFishNode> =>
-      finish(
-        (await produce(
-          resolveLive(
-            await resolveGroupPaint(type, o, group),
-            datum,
-            layerContext
-          ),
+    ): Promise<GoFishNode> => {
+      const paint = await resolveGroupPaint(type, o, group);
+      // The one call of its `produce`, with its `live()` channels evaluated
+      // at resolve, in the scope of the context it is applied in.
+      const node = await withRegistrar(layerContext?.registrar, () =>
+        produce(
+          resolveLive(paint, datum),
           operands,
           inferred,
           key,
           layerContext
-        )) as GoFishNode,
-        operands,
-        datum
+        )
       );
+      return finish(node as GoFishNode, operands, datum);
+    };
     /** The rows a bag of operands reaches: each operand's datum (a ref's is
      *  its node's, a node's its own). */
     const rowsOf = (operands: GoFishAST[]): unknown[] =>

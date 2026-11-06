@@ -282,10 +282,25 @@ export interface FieldPredicateIR {
   closed?: "both" | "left" | "right" | "none";
 }
 
+/** The box `spread`, `stack` and `group` take (`operatorBoxFields` in
+ *  descriptors.ts). */
+interface OperatorBoxIR {
+  /** Position of this operator's box in the parent's space (pixels): the JS
+   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+  x?: ChannelValue;
+  y?: ChannelValue;
+  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
+   *  this operator's box, reported as a SIZE claim to the enclosing scale,
+   *  or a length (`percent(n)`, `fr(k)`). */
+  w?: ChannelValue | LengthIR;
+  h?: ChannelValue | LengthIR;
+}
+
 export interface SpreadOperator
   extends BaseIRNode,
     TranslatableIR,
-    OperatorFlagsIR {
+    OperatorFlagsIR,
+    OperatorBoxIR {
   type: "spread";
   /** Set via `.label(accessor, options?)` chained on the operator: each
    *  split leaf's produced node(s) get a deferred label over the leaf's own
@@ -303,15 +318,6 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
-  /** Position of this operator's box in the parent's space (pixels): the JS
-   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
-  x?: ChannelValue;
-  y?: ChannelValue;
-  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
-   *  this operator's box, reported as a SIZE claim to the enclosing scale,
-   *  or a length (`percent(n)`, `fr(k)`). */
-  w?: ChannelValue | LengthIR;
-  h?: ChannelValue | LengthIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -324,7 +330,8 @@ export interface SpreadOperator
 export interface StackOperator
   extends BaseIRNode,
     TranslatableIR,
-    OperatorFlagsIR {
+    OperatorFlagsIR,
+    OperatorBoxIR {
   type: "stack";
   /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
   label?: LabelIR;
@@ -340,11 +347,7 @@ export interface StackOperator
   alignment?: string;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
-  /** Box position, extent, and per-entry size — see `SpreadOperator`. */
-  x?: ChannelValue;
-  y?: ChannelValue;
-  w?: ChannelValue | LengthIR;
-  h?: ChannelValue | LengthIR;
+  /** Per-entry size — see `SpreadOperator`. */
   size?: ChannelValue;
   axes?: AxesOptions;
 }
@@ -352,17 +355,12 @@ export interface StackOperator
 export interface GroupOperator
   extends BaseIRNode,
     TranslatableIR,
-    OperatorFlagsIR {
+    OperatorFlagsIR,
+    OperatorBoxIR {
   type: "group";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   by: string | FieldAccessor | ChunkKeyIR;
-  /** Position of this operator's box in the parent's space. See `SpreadOperator.x`. */
-  x?: ChannelValue;
-  y?: ChannelValue;
-  /** Data-driven operator extent. See `SpreadOperator.w`. */
-  w?: ChannelValue | LengthIR;
-  h?: ChannelValue | LengthIR;
 }
 
 export interface ScatterOperator

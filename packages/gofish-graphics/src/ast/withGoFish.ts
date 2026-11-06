@@ -527,11 +527,11 @@ function buildCreatedMark(
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
     // via the datum-bound thunk baked at lower time. One split, shared with
-    // every other mark factory — see `splitLiveChannels`.
+    // every other mark factory — see `splitLiveChannels`. It is evaluated
+    // before the first `await`, in the scope `callMark` sets.
     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
       channelOpts,
-      d,
-      _layerContext?.registrar
+      d
     );
     const pending = resolveChannelAccessors(staticOpts, channels, () => d);
     const resolvedOpts = isThenable(pending) ? await pending : pending;
@@ -542,8 +542,9 @@ function buildCreatedMark(
     // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
     // layout. A sum or a count of no rows is 0, a value, and draws.
     let noValue = false;
-    // The one call of a mark's channel functions.
-    withRegistrar(_layerContext?.registrar, () => {
+    // The one call of a mark's channel functions and of a `createMark` body,
+    // after the `await` above, in the scope of the mark's context.
+    const raw = await withRegistrar(_layerContext?.registrar, () => {
       for (const propName of Object.keys(resolvedOpts)) {
         if (propName === "debug") continue;
         const channelSpec = channels[propName];
@@ -572,19 +573,16 @@ function buildCreatedMark(
           shapeProps[propName] = markValue;
         }
       }
+      // For expand-kind marks, hand the data array to shapeFn so it can
+      // build N output nodes 1:1 with input rows. shapeFn may be async.
+      // A component body may return anything a combinator child may be (a
+      // built node, or a mark such as `layer([...])`), so it is reified
+      // through the same `resolveMarkResult` path. The name context is fresh:
+      // the component is a naming boundary. An expand mark (its kind,
+      // declared at `createMark`) returns its array of slice nodes, which
+      // pass through as-is.
+      return shapeFn(shapeProps, kind === "expand" ? d : undefined);
     });
-
-    // For expand-kind marks, hand the data array to shapeFn so it can
-    // build N output nodes 1:1 with input rows. shapeFn may be async.
-    // A component body may return anything a combinator child may be (a
-    // built node, or a mark such as `layer([...])`), so it is reified through
-    // the same `resolveMarkResult` path. The name context is fresh: the
-    // component is a naming boundary. An expand mark (its kind, declared at
-    // `createMark`) returns its array of slice nodes, which pass through as-is.
-    // The one call of a `createMark` body.
-    const raw = await withRegistrar(_layerContext?.registrar, () =>
-      shapeFn(shapeProps, kind === "expand" ? d : undefined)
-    );
     if (kind === "expand") {
       const result = raw as GoFishNode[];
       const types = getColumnTypes(d);
@@ -605,9 +603,10 @@ function buildCreatedMark(
       }
       return result as unknown as GoFishNode;
     }
+    // A fresh ROOT registry, a name boundary, for the same chart.
     const node = await resolveMarkResult(
       raw,
-      _layerContext?.boundary() ?? new LayerContext()
+      new LayerContext(undefined, _layerContext?.registrar)
     );
     if (liveChannels) node.__gfLive = liveChannels;
     applyFilter(node, filter);

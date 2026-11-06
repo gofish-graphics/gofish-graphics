@@ -98,25 +98,21 @@ datum, and hands the resulting nodes to the same `combine` step.
 From `src/ast/graphicalOperators/spread.tsx:430`:
 
 ```ts
-export const spread = createOperator<any, SpreadOptions>(
-  (opts, children) => Spread(opts, children),
-  {
-    split: ({ by }, d) => splitEntries(by, d),
-    channels: { w: "size", h: "size", size: { type: "size", entry: true } },
-  }
-);
+export const spread = createOperator<any, SpreadOptions>(Spread, {
+  split: ({ by }, d) => splitEntries(by, d),
+  channels: { w: "size", h: "size", size: { type: "size", entry: true } },
+});
 ```
 
 Three pieces:
 
-1. **The low-level layout function** — a call of `Spread`, the existing
+1. **The low-level layout function** — `Spread`, the existing
    `createNodeOperator`-built node builder that already knows how to position
    children along an axis. This is the **combine** step. It is called as
-   `layout(opts, children, layerContext)`, so a layout that reads an input
-   itself (`time.sequence`'s clock) registers it with the context's registrar
-   (see [Reactivity](/internals/frontend/reactivity)). A node builder takes
-   only `(opts, children)`, so it is wrapped in a function rather than passed
-   as the layout.
+   `layout(opts, children)` in the registrar scope of the context the operator
+   is applied in, so a layout that reads an input itself, in its synchronous
+   part (`time.sequence`'s clock), registers it with that chart (see
+   [Reactivity](/internals/frontend/reactivity)).
 2. **`split(opts, d)`** — partition `d` into an ordered `Map<key, subdata>`.
    Insertion order matters (it determines layout order). Every piece is a
    list of the items the split was given, and a split never looks inside an

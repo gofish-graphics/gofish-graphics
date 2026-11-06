@@ -29,12 +29,21 @@
  *
  * The one limit is Solid's: a read after an `await` inside an async user
  * callback is outside the call, so it registers with nothing. GoFish warns
- * once when that happens during a resolve ({@link warnUnscopedRead}; GoFish
- * has no separate development build, so it warns in every build): read the
- * input before the `await`.
+ * once when that happens while such a callback is pending
+ * ({@link warnUnscopedRead}; GoFish has no separate development build, so it
+ * warns in every build): read the input before the `await`.
  *
- * GoFish's own reads (a `time.sequence`'s clock) register explicitly with the
- * registrar they were handed. Paint-time reads (a live slot re-run by Solid, a
+ * One rule says where the scope is set: `callMark` scopes the synchronous
+ * part of every mark call, and every user callback GoFish calls after an
+ * `await` (a channel function, a `derive`, a `.hidden(fn)`, a `createMark`
+ * body, an operator's layout function) is wrapped where it is called. A root
+ * `LayerContext` built with no registrar of its own takes the one in scope
+ * (`scopedRegistrar`): that is how a node operator, which builds when it is
+ * called, finds its chart when it is called in a component thunk.
+ *
+ * GoFish's own resolve-time reads (a `time.sequence`'s clock, read as the
+ * first statement of its layout function) are made in that same scope.
+ * Paint-time reads (a live slot re-run by Solid, a
  * value read once while lowering) register nothing: a paint is not a resolve.
  *
  * The `inLiveEval` flag distinguishes the two read regimes: a read while a
@@ -51,69 +60,67 @@ import type { InputPrimitive, SpecInvalidator } from "./types";
  *  to the read readable's set in `specReaders`, so the input can invalidate every chart
  *  that depends on it — not just the last one attached. The runtime is the
  *  registrar, so `registerInput` and `invalidate` are the same object. */
-export interface AmbientRegistrar extends SpecInvalidator {
+export interface Registrar extends SpecInvalidator {
   registerInput(input: InputPrimitive): void;
 }
 
 /** The registrar of the synchronous user call in progress, if any. Set only by
  *  {@link withRegistrar}, for the length of one synchronous call. */
-let scoped: AmbientRegistrar | undefined;
+let scoped: Registrar | undefined;
+
+/** How many async user callbacks called with a registrar have not settled
+ *  yet: while any has not, a read with no registrar in scope is likely a read
+ *  after an `await` in one of them. For {@link warnUnscopedRead} only. */
+let pendingCallbacks = 0;
 
 /**
  * Call `fn`, user code reached from a resolve, with `registrar` as the scope
- * its input reads register with. Synchronous: the scope ends when `fn`
- * returns, so a promise `fn` returns is not in it (see the module header).
- * Call it at the one place GoFish calls each kind of user code, with the
- * registrar of the context that call is made in.
+ * its input reads register with: the registrar of the context the call is
+ * made in, or none. Synchronous: the scope ends when `fn` returns, so a
+ * promise `fn` returns is not in it (see the module header). Call it at the
+ * one place GoFish calls each kind of user code.
  */
 export function withRegistrar<T>(
-  registrar: AmbientRegistrar | undefined,
+  registrar: Registrar | undefined,
   fn: () => T
 ): T {
+  if (registrar === scoped) return fn();
   const prev = scoped;
-  // A context with no registrar of its own (one built outside every render,
-  // a headless export) leaves the scope it is called in as it is.
-  scoped = registrar ?? prev;
+  scoped = registrar;
+  let out: T;
   try {
-    return fn();
+    out = fn();
   } finally {
     scoped = prev;
   }
+  // An async callback goes on after its first `await`, outside the scope.
+  if (registrar !== undefined && isThenable(out)) {
+    pendingCallbacks++;
+    const settle = () => void pendingCallbacks--;
+    out.then(settle, settle);
+  }
+  return out;
 }
+
+const isThenable = (v: unknown): v is PromiseLike<unknown> =>
+  typeof (v as PromiseLike<unknown> | null)?.then === "function";
 
 /** The registrar of the synchronous user call in progress, if any. A root
- *  `LayerContext` built inside one (a combinator called in a component
- *  thunk) takes it from here, and carries it on from then on. */
-export const scopedRegistrar = (): AmbientRegistrar | undefined => scoped;
-
-/** How many interactive resolves are in progress, for the development
- *  warning only: a read with no scope while one is running is likely a read
- *  after an `await` in an async callback. It decides nothing else. */
-let resolvesInFlight = 0;
-
-/** Count `resolve` as an interactive resolve in progress while it runs. */
-export async function countingResolve<T>(
-  resolve: () => Promise<T>
-): Promise<T> {
-  resolvesInFlight++;
-  try {
-    return await resolve();
-  } finally {
-    resolvesInFlight--;
-  }
-}
+ *  `LayerContext` built with no registrar of its own (a node operator called
+ *  in a component thunk) takes it from here, and carries it on from then on. */
+export const scopedRegistrar = (): Registrar | undefined => scoped;
 
 let warned = false;
 
 /**
- * Warn once when an input is read with no registrar
- * in scope while a resolve is running and no paint is (`painting`): the read
- * is in a resolve's code but outside a synchronous user call, which is what a
- * read after an `await` in an async callback looks like. It registers with
- * nothing, so the chart neither re-runs on it nor wires its events.
+ * Warn once when an input is read, outside a `live()` channel, with no
+ * registrar in scope while an async user callback that was called with one
+ * has not settled: that is what a read after an `await` in an async callback
+ * looks like. It registers with nothing, so the chart neither re-runs on it
+ * nor wires its events.
  */
-export function warnUnscopedRead(painting: boolean): void {
-  if (warned || painting || resolvesInFlight === 0) return;
+export function warnUnscopedRead(): void {
+  if (warned || pendingCallbacks === 0 || inLiveEval()) return;
   warned = true;
   console.warn(
     "[gofish] An input was read during a chart's resolve but outside the " +

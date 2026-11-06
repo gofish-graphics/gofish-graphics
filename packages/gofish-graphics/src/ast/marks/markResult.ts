@@ -19,7 +19,7 @@ import type { Mark, MarkChild } from "../types";
 import {
   scopedRegistrar,
   withRegistrar,
-  type AmbientRegistrar,
+  type Registrar,
 } from "../../interaction/resolveContext";
 
 /** The marks one name stands for in a registry: the nodes, and the datum of
@@ -70,16 +70,17 @@ export class LayerContext {
    * the inputs read in its scope register with (see `resolveContext.ts`). A
    * nested registry has its parent's. A root has the one it was given: a
    * render's root gets its chart's (`RenderPass.registrar`), and a name
-   * boundary (a `createMark` body) gets the registrar of the scope it bounds.
-   * A root built with none takes the registrar of the synchronous user call
-   * it is built in, if any (a combinator called in a component thunk), and
-   * carries it on from then on.
+   * boundary (a `createMark` body) gets the registrar of the scope it bounds
+   * (`new LayerContext(undefined, ctx.registrar)`). A root built with none
+   * takes the registrar of the synchronous user call it is built in, if any
+   * (a node operator called in a component thunk), and carries it on from
+   * then on. This is the one fallback to the scope.
    */
-  readonly registrar: AmbientRegistrar | undefined;
+  readonly registrar: Registrar | undefined;
 
   constructor(
     readonly parent?: LayerContext,
-    registrar?: AmbientRegistrar
+    registrar?: Registrar
   ) {
     this.depth = parent ? parent.depth + 1 : 0;
     this.registrar = parent
@@ -91,12 +92,6 @@ export class LayerContext {
   /** A fresh registry nested in this one. */
   child(): LayerContext {
     return new LayerContext(this);
-  }
-
-  /** A fresh ROOT registry, a name boundary, for the same chart: it shares
-   *  no names with this one, and keeps its registrar. */
-  boundary(): LayerContext {
-    return new LayerContext(undefined, this.registrar);
   }
 
   /** The marks filed under `key` in this registry itself, not widened. */
@@ -261,20 +256,11 @@ export const datumOfInput = <T>(d: T[]): T[] | undefined =>
   d === NO_ROWS ? undefined : d;
 
 /**
- * Resolve what a mark position holds into a GoFishNode, against the rows of
- * the partition it sits in (`rows`, keyed `key`). This is the one rule for
- * every mark position: a chart's `.mark(...)`, each child of a combinator
- * (`spread`, `stack`, `layer`, ...), a tier of a `.layer(...)` chain. A mark
- * function is called with the rows; a chart or chain (`ChartPipeline`) binds
- * them when it is an empty scope (`RenderableBuilder.inScope`); a node is
- * itself. What a mark function returns is resolved as a root: with
- * {@link NO_ROWS}, the rows of no partition.
- */
-/**
  * Call a mark: the one place GoFish calls one, user code included (a
  * component thunk, a `createMark` body, the channel functions and `live()`
- * channels a mark reads, a `derive` function), so the call is made in the
- * registrar scope of the context it is made in (see `resolveContext.ts`).
+ * channels a mark reads, a `derive` function), so the synchronous part of the
+ * call is made in the registrar scope of the context it is made in (see
+ * `resolveContext.ts`).
  */
 export function callMark(
   mark: Mark<any>,
@@ -287,6 +273,16 @@ export function callMark(
   );
 }
 
+/**
+ * Resolve what a mark position holds into a GoFishNode, against the rows of
+ * the partition it sits in (`rows`, keyed `key`). This is the one rule for
+ * every mark position: a chart's `.mark(...)`, each child of a combinator
+ * (`spread`, `stack`, `layer`, ...), a tier of a `.layer(...)` chain. A mark
+ * function is called with the rows; a chart or chain (`ChartPipeline`) binds
+ * them when it is an empty scope (`RenderableBuilder.inScope`); a node is
+ * itself. What a mark function returns is resolved as a root: with
+ * {@link NO_ROWS}, the rows of no partition.
+ */
 export async function resolveMarkResult(
   raw: MarkChild,
   layerContext?: LayerContext,

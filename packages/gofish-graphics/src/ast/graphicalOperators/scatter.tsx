@@ -344,35 +344,32 @@ export type ScatterOptions = {
   h?: MaybeValue<number>;
 };
 
-export const scatter = createOperator<any, ScatterOptions>(
-  (opts: any, children) => Scatter(opts, children),
-  {
-    split: ({ by }, d) => splitEntries(by, d),
-    channels: {
-      x: { type: "pos", entry: true, discrete: true },
-      y: { type: "pos", entry: true, discrete: true },
-      xMin: { type: "pos", entry: true },
-      xMax: { type: "pos", entry: true },
-      yMin: { type: "pos", entry: true },
-      yMax: { type: "pos", entry: true },
-      // Each `dims` slot infers exactly as its top-level counterpart above.
-      dims: { type: "dims", form: SCATTER_DIMS },
-    },
-    axisFields: ({ x, y, xMin, xMax, yMin, yMax }) => {
-      const fields: { x?: string; y?: string } = {};
-      if (typeof x === "string") fields.x = x;
-      else if (typeof xMin === "string") fields.x = xMin;
-      else if (typeof xMax === "string") fields.x = xMax;
-      if (typeof y === "string") fields.y = y;
-      else if (typeof yMin === "string") fields.y = yMin;
-      else if (typeof yMax === "string") fields.y = yMax;
-      return fields;
-    },
-    // `x`/`y` are literal per-item coordinates — a continuous value channel.
-    // `dims` is read only once the enclosing coordinate space is known, so the
-    // travel-axis rule, which runs at build time, does not see it.
-    // TODO(#838 follow-up): resolve the travel axis by name too.
-    arrangement: { kind: "value", positions: scatterPositions },
-    serialize: "scatter",
-  }
-);
+export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
+  split: ({ by }, d) => splitEntries(by, d),
+  channels: {
+    x: { type: "pos", entry: true, discrete: true },
+    y: { type: "pos", entry: true, discrete: true },
+    xMin: { type: "pos", entry: true },
+    xMax: { type: "pos", entry: true },
+    yMin: { type: "pos", entry: true },
+    yMax: { type: "pos", entry: true },
+    // Each `dims` slot infers exactly as its top-level counterpart above.
+    dims: { type: "dims", form: SCATTER_DIMS },
+  },
+  axisFields: ({ x, y, xMin, xMax, yMin, yMax }) => {
+    const fields: { x?: string; y?: string } = {};
+    if (typeof x === "string") fields.x = x;
+    else if (typeof xMin === "string") fields.x = xMin;
+    else if (typeof xMax === "string") fields.x = xMax;
+    if (typeof y === "string") fields.y = y;
+    else if (typeof yMin === "string") fields.y = yMin;
+    else if (typeof yMax === "string") fields.y = yMax;
+    return fields;
+  },
+  // `x`/`y` are literal per-item coordinates — a continuous value channel.
+  // `dims` is read only once the enclosing coordinate space is known, so the
+  // travel-axis rule, which runs at build time, does not see it.
+  // TODO(#838 follow-up): resolve the travel axis by name too.
+  arrangement: { kind: "value", positions: scatterPositions },
+  serialize: "scatter",
+});

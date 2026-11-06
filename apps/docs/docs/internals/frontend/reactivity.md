@@ -66,9 +66,8 @@ resolve builds its root `LayerContext` with it (`resolveForRender` in
 `chartBuilder.ts`, a mark's terminal in `createOperator.ts`, a component thunk
 in `gofish()`), and every `LayerContext` below carries it on
 (`LayerContext.registrar`): a nested registry has its parent's, and a name
-boundary (a `createMark` body, `LayerContext.boundary`) keeps it. A layout
-function is handed the context too, which is how `time.sequence` registers its
-clock, and `GoFishNode.rebuild` resolves again with the same `RenderPass`, so a
+boundary (a `createMark` body) is a root built with the registrar of the scope
+it bounds. `GoFishNode.rebuild` resolves again with the same registrar, so a
 rebuild for `label.angle: "auto"` registers with the same chart.
 
 The last hop cannot be explicit. A user callback reads an input through a
@@ -76,17 +75,26 @@ zero-argument accessor (`n()`, `p.datum()`), so there is no argument to hand the
 registrar in. This is the one special case, and it is the one Solid has for its
 tracked reads (its `Listener`): a dynamic scope. `resolveContext.ts` holds one
 module variable, and `withRegistrar(registrar, fn)` sets it for one
-SYNCHRONOUS call and restores it after. GoFish calls user code through it in
-one place per kind: a mark call (`callMark`, which covers a component thunk and
-a widget), a `derive` function or `filter` predicate (`mapOperator`), a mark's
-and an operator's channel functions, the resolve-time `live()` evaluation
-(`withLiveStatics`), and a `createMark` body. Every library input's accessor,
+SYNCHRONOUS call and restores it after (it calls `fn` straight through when
+`registrar` is already the one in scope). One rule says where: `callMark`
+scopes the synchronous part of every mark call (a component thunk, a widget,
+a mark's resolve-time `live()` evaluation, which comes before its first
+`await`), and every user callback GoFish calls after an `await` is wrapped
+where it is called: a `derive` function or `filter` predicate (`mapOperator`),
+a mark's and an operator's channel functions, a `createMark` body, a
+`.hidden(fn)` or `.zOrder(fn)` callback, a relational mark's `produce`, and an
+operator's layout function (`time.sequence` reads its clock as the first
+statement of its layout, and `time.transition` reads its playhead in its
+`produce`). A root `LayerContext` built with no registrar of its own takes the
+one in scope (`scopedRegistrar`); that is how a node operator, which builds
+when it is called, finds its chart when it is called in a component thunk.
+Every library input's accessor,
 when read, runs the `track` half of one of the input's **dependencies**
 (`dependency(input)` in `inputs.ts`):
 
 ```ts
 const reg = scopedRegistrar();
-if (!reg) return; // no user call in progress: just a plain read
+if (!reg) return warnUnscopedRead(); // no user call in progress: a plain read
 reg.registerInput(input); // wire this input into event dispatch (idempotent)
 if (!inLiveEval()) readers.add(reg); // a spec read → pipeline dependency
 ```
@@ -127,9 +135,17 @@ tick of the value. If nothing registers during a resolve, the runtime reports
 > (`readLive`) and a live slot that re-runs on a clock tick are outside every
 > call. The one limit is Solid's own: a read after an `await` inside an async
 > user callback (a `derive` that fetches, then reads a signal) is outside the
-> call too, so it registers with nothing. When a spec read finds no registrar
-> while a resolve is running, GoFish warns once to read the input before the
-> `await` (`warnUnscopedRead`).
+> call too, so it registers with nothing. `withRegistrar` counts an async
+> callback it called with a registrar until the callback's promise settles; when
+> a read outside a `live()` channel finds no registrar while one is pending,
+> GoFish warns once to read the input before the `await` (`warnUnscopedRead`).
+>
+> A node operator (`Layer`, `Spread`, ...) builds when it is called, not when
+> its chart resolves, so one called outside every scope (at the top level of a
+> module) has no chart to register with. The public combinators (`layer([...])`,
+> `spread(opts, [...])`) are marks, which resolve in their caller's context, so
+> this reaches only the internal node operators. Making those lazy too would
+> let the constructor fallback above go.
 
 ## One terminal, three callers — including components
 

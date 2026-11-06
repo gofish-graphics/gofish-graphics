@@ -254,7 +254,7 @@ Walking `withGoFish.ts:431-477`:
    instead return a mark, such as `layer([...])` or `spread(opts, [...])`, or
    a chart builder. That result goes through `resolveMarkResult`, the same
    path a combinator uses for each child, with a fresh name context because the
-   component is a naming boundary (`LayerContext.boundary`, which keeps the
+   component is a naming boundary (a root `LayerContext` that keeps the
    chart's registrar). The body, like the channel functions, is called in the
    registrar scope of the mark's context (`withRegistrar`, see
    [Reactivity](/internals/frontend/reactivity)). So a component is written with the same
