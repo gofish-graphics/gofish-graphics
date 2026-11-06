@@ -72,7 +72,7 @@ def _big_comma():
 def _with_min_width(width, content):
     return layer(
         [
-            rect(w=width, h=0, fill="transparent").name("filler"),
+            rect(w=width, h=0).hidden().name("filler"),
             content.name("content"),
         ]
     ).relate(
@@ -134,7 +134,7 @@ def _boxed_align(width, content):
     (Bluefish's <BoxedAlign alignment="centerRight">)."""
     return layer(
         [
-            rect(w=width, h=0, fill="transparent").name("slot"),
+            rect(w=width, h=0).hidden().name("slot"),
             content.name("content"),
         ]
     ).relate(
@@ -220,7 +220,7 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
         layer(
             [
                 ref(top_anchor).name("a"),
-                rect(w=1, h=1, fill="transparent").name(top_stub),
+                rect(w=1, h=1).hidden().name(top_stub),
             ]
         ).relate(
             lambda **kw: [
@@ -233,7 +233,7 @@ def _funnel_side(top_anchor, top_edge, bottom_anchor, bottom_edge, id_prefix):
         # Short vertical entry above the bottom anchor's edge.
         layer(
             [
-                rect(w=1, h=1, fill="transparent").name(bottom_stub),
+                rect(w=1, h=1).hidden().name(bottom_stub),
                 ref(bottom_anchor).name("b"),
             ]
         ).relate(
@@ -409,7 +409,7 @@ def story_dfscq():
         [
             mem_row,
             rect(h=3, fill="black").name("line"),
-            rect(w=1, h=1, fill="transparent").name("labelSpace"),
+            rect(w=1, h=1).hidden().name("labelSpace"),
         ]
     ).relate(
         lambda mem, line, labelSpace: [
@@ -424,7 +424,7 @@ def story_dfscq():
 
     disk_log_row = spread(
         [
-            rect(w=LEFT_COLUMN_WIDTH, h=0, fill="transparent").name(disklogleft),
+            rect(w=LEFT_COLUMN_WIDTH, h=0).hidden().name(disklogleft),
             disk_log_inner,
         ],
         dir="x",
@@ -482,7 +482,7 @@ def story_dfscq():
 
     applier_row = spread(
         [
-            rect(w=LEFT_COLUMN_WIDTH, h=0, fill="transparent").name(applierleft),
+            rect(w=LEFT_COLUMN_WIDTH, h=0).hidden().name(applierleft),
             applier_inner,
         ],
         dir="x",
@@ -496,11 +496,11 @@ def story_dfscq():
     pipeline_head = spread(
         [
             _titled_background("LogAPI", log_api_row).name(log_api_box),
-            rect(w=1, h=24, fill="transparent").name(commit_slot),
+            rect(w=1, h=24).hidden().name(commit_slot),
             _titled_background("GroupLog", group_log_row).name(group_log_box),
-            rect(w=1, h=24, fill="transparent").name(flush_slot),
+            rect(w=1, h=24).hidden().name(flush_slot),
             _titled_background("DiskLog", disk_log_row).name(disk_log_box),
-            rect(w=1, h=24, fill="transparent").name(apply_slot),
+            rect(w=1, h=24).hidden().name(apply_slot),
             _titled_background("Applier", applier_row).name(applier_box),
         ],
         dir="y",
@@ -522,7 +522,7 @@ def story_dfscq():
     # trailing "flush" callout arrow.
     fanout_anchor_layer = layer(
         [
-            rect(w=80, h=1, fill="transparent").name(fanout_anchor_name),
+            rect(w=80, h=1).hidden().name(fanout_anchor_name),
             ref(diskdata_stack).name("target"),
         ]
     ).relate(
@@ -533,7 +533,7 @@ def story_dfscq():
     )
     blocks1_arrow_layer = layer(
         [
-            rect(w=10, h=10, fill="transparent").name(blocks1_arrow_anchor_name),
+            rect(w=10, h=10).hidden().name(blocks1_arrow_anchor_name),
             ref(blocks1).name("target"),
         ]
     ).relate(
@@ -559,7 +559,7 @@ def story_dfscq():
     log_data_anchor_layer = layer(
         [
             ref(rect2).name("a"),
-            rect(w=LOG_DATA_WIDTH, h=BLOCK_H, fill="transparent").name(
+            rect(w=LOG_DATA_WIDTH, h=BLOCK_H).hidden().name(
                 log_data_anchor
             ),
         ]

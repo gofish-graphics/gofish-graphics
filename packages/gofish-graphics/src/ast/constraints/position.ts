@@ -77,7 +77,8 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * of its column, so they carry the column's measure and type as any datum
  * read from it does, and they make the layer's position domain on that axis.
  * `outline` is the cell's outline in datums, `[x, y]` per corner, when the
- * cell has one and is placed along both axes.
+ * cell has one and is placed along both axes. The layer hands it to the
+ * child as its shape with its span (`buildChildSpans`, `geometry/ring.ts`).
  *
  * A partition inside another partition's cell divides that cell. On each
  * axis its key does not place, the region's span is the span of the cell
@@ -87,7 +88,9 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * enclosing cell is the outer partition's, and its axis draws it.
  * TODO(#1059): the outline is the key's own, so a 1D partition inside a
  * hexagon gives its children the hexagon's box, cut down to their cells,
- * and not the hexagon clipped to them.
+ * and not the hexagon clipped to them. The fix is to clip the shape the
+ * inner layer is handed (the hexagon) to each cell's box with
+ * `intersectRings`, the way `enclose` cuts its oval to a treemap cell.
  */
 export class PositionRegion {
   readonly spans: readonly [
@@ -202,6 +205,17 @@ export interface PositionOptions {
    *  own the position anchor, and a second writer would be a named conflict
    *  rather than a silent no-op needing a per-call opt-out. */
   override?: boolean;
+  /**
+   * The node whose frame a datum coordinate is read in (#1257): `datum(v)`
+   * is the point `v` in that node's frame, wherever the node sits below the
+   * layer, instead of in the layer's own frame. So a tick beside a plot sits
+   * on the plot's scale whether or not it shares the plot's frame (chrome
+   * around a sized plot). It names a node by handle, as any operand does,
+   * and its datums take no part in the layer's own domain or type.
+   * TODO(#1289): internal for now, used by chrome elaboration; making it
+   * public needs a syntax proposal.
+   */
+  in?: ConstraintRef;
 }
 
 export interface PositionConstraint {
@@ -209,6 +223,8 @@ export interface PositionConstraint {
   x?: PositionCoordinate;
   y?: PositionCoordinate;
   region?: PositionRegion;
+  /** See {@link PositionOptions.in}. */
+  in?: ConstraintRef;
   anchor: AlignAnchor;
   override: boolean;
   children: ConstraintRef[];
@@ -226,7 +242,7 @@ const validateInterval = (axis: Axis, interval: PositionInterval): void => {
 };
 
 export const createPositionConstraint = (
-  { x, y, region, anchor, override }: PositionOptions,
+  { x, y, region, anchor, override, in: frame }: PositionOptions,
   children: ConstraintRef[]
 ): PositionConstraint => {
   if (x === undefined && y === undefined && region === undefined) {
@@ -261,6 +277,7 @@ export const createPositionConstraint = (
     x,
     y,
     ...(region !== undefined ? { region } : {}),
+    ...(frame !== undefined ? { in: frame } : {}),
     anchor: anchor ?? "middle",
     override: override ?? false,
     children,

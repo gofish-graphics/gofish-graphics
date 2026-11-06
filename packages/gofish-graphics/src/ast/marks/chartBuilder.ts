@@ -1,6 +1,6 @@
 import { Frontend } from "gofish-ir";
 import { GoFishNode } from "../_node";
-import { checkLengths, isFr, isLength, type LengthValue } from "../length";
+import { checkLengths, type LengthValue } from "../length";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import { applySchema, type SchemaEntry } from "../schema";
@@ -83,8 +83,8 @@ export type ChartOptions = {
   /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
   padding?: number;
   /**
-   * Column types, keyed by column name: the classes each column has (#984),
-   * e.g. `{ response: Unit({ domain: Domain.ordered(LEVELS), traits: [Trait.diverging()] }) }`.
+   * Column types, keyed by column name: the traits each column has (#984),
+   * e.g. `{ response: Unit({ domain: Domain.discrete(LEVELS), traits: [Trait.diverging()] }) }`.
    * A column with levels (`HasLevels`, a unit's `domain`) splits in the
    * order of its levels, and a value outside them is an error where the
    * levels are used; a stack over a column with `HasMidpoint` puts its 0 at the
@@ -578,6 +578,7 @@ type ChartBuilderState<TInput, TOutput> = {
   finalMark?: Mark<TOutput> | RenderableBuilder;
   layerContext: LayerContext;
   nodeZOrder?: number;
+  nodeHidden?: boolean;
   nodeName?: string;
 };
 
@@ -1052,6 +1053,9 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
     if (this.state.nodeZOrder !== undefined) {
       result.zOrder(this.state.nodeZOrder);
     }
+    if (this.state.nodeHidden !== undefined) {
+      result.hidden(this.state.nodeHidden);
+    }
 
     // A user-chained `.name(...)` names the resolved node so it's a valid
     // `.relate(...)` target on an enclosing layer (looked up by `_name`)
@@ -1100,6 +1104,12 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
 
   zOrder(value: number): ChartBuilder<TInput, TOutput> {
     return this.with({ nodeZOrder: value });
+  }
+
+  /** Lay the whole chart out, axes and legend included, and paint none of
+   *  it (`GoFishNode.hidden`). Its marks can still be read by name. */
+  hidden(value = true): ChartBuilder<TInput, TOutput> {
+    return this.with({ nodeHidden: value });
   }
 }
 
@@ -1169,11 +1179,11 @@ function isChartOptions(x: unknown): x is ChartOptions {
  * A chart's node: a `layer` with the chart's options over one layer of
  * `children`, its content. The layer picks out what it needs (`coord`, `axes`,
  * `padding`, and the dims, which size it), so this is the whole bag rather
- * than a key list. A chart is where its axes are drawn (#1114 step 6): on an
- * axis it has a size of its own, it solves σ there and draws them around its
- * content. Every node the chart draws (its marks, their transitions, the
- * tiers of a `.layer()` chain) is in that one content layer, so they all
- * share the axes it draws. The chart's own `axes` option (default `true`) is
+ * than a key list. A chart is where its axes are drawn (#1114 step 6): they
+ * go around it, sized or not, and read their datums in its frame (#1257).
+ * Every node the chart draws (its marks, their transitions, the tiers of a
+ * `.layer()` chain) is in that one content layer, so they all share the axes
+ * it draws. The chart's own `axes` option (default `true`) is
  * stamped next to its box (`_chartAxes`), and applies at the chart.
  *
  * DECLARED SHORTCUT (#1110): a coord's own axes (the polar rings) read the
@@ -1188,10 +1198,6 @@ async function frameChart(
   const content = await Layer({}, children);
   content._chartContent = true;
   const node = await Layer(options, [content]);
-  // A chart with a size of its own draws its axes inside its box. An `fr`
-  // size is a share of the scope around it, which it is given from
-  // outside, so it draws them around itself, as a facet panel does.
-  const box = (v: unknown) => v !== undefined && !(isLength(v) && isFr(v));
   // A percent or fr length only where the chart's options take one.
   // TODO(#852, #1238): a percent padding around a polar or geo drawing
   // needs the room of the coordinate space's box, in its own units.
@@ -1202,7 +1208,7 @@ async function frameChart(
     "chart",
     options as Record<string, unknown>
   );
-  node._chartBox = [box(options.w), box(options.h)];
+  node._chartBox = true;
   node._chartAxes = options.axes ?? true;
   return node;
 }

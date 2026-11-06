@@ -165,7 +165,7 @@ export const StreamgraphInteriorLabels: StoryObj = {
   },
   render: () => {
     const container = initializeContainer();
-    chart(seafood, { w: 520, h: 360 })
+    chart(seafood, { h: 360 })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
         stack({ by: "species", dir: "y" })

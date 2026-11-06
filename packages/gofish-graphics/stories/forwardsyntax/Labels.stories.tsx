@@ -318,10 +318,10 @@ export const LabelOnSpread: StoryObj<Args> = {
 
 export const LabelOnStackOperator: StoryObj<Args> = {
   name: "Label on Stack operator (per-group)",
-  args: { w: 260, h: 300 },
+  args: { h: 300 },
   render: (args) => {
     const container = initializeContainer();
-    chart(titanicPassengers, { axes: false, w: args.w, h: args.h })
+    chart(titanicPassengers, { axes: false, h: args.h })
       .flow(
         stack({ by: "pclass", dir: "y" }).label("pclass", {
           position: "center",
@@ -344,10 +344,10 @@ export const LabelOnStackOperator: StoryObj<Args> = {
 
 export const LabelOnStackAggregate: StoryObj<Args> = {
   name: "Label on Stack operator (group total)",
-  args: { w: 260, h: 300 },
+  args: { h: 300 },
   render: (args) => {
     const container = initializeContainer();
-    chart(titanicPassengers, { axes: false, w: args.w, h: args.h })
+    chart(titanicPassengers, { axes: false, h: args.h })
       .flow(
         stack({ by: "pclass", dir: "y" }).label(field("survived").count(), {
           position: "center",

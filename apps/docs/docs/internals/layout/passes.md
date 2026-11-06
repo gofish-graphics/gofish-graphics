@@ -6,7 +6,7 @@ group: Layout
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
-  - packages/gofish-graphics/src/ast/chromeGutters.ts
+  - packages/gofish-graphics/src/ast/solver/plotForms.ts
   - packages/gofish-graphics/src/ast/constraints/claimPlacement.ts
   - packages/gofish-graphics/src/ast/solver/plan.ts
   - packages/gofish-graphics/src/ast/solver/formula.ts
@@ -17,6 +17,9 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/geometry/clip.ts
+  - packages/gofish-graphics/src/ast/geometry/ring.ts
+  - packages/gofish-graphics/src/ast/geometry/voronoiTiling.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -378,12 +381,12 @@ The chart's options describe the chrome of the chart root. `layout()` passes
 
 Each title is a ring seated past the root's axes and centered on the axis line
 it describes. The legend is the ring outside that, so it is seated past the
-titles. The outermost ring records the boxes inside it as `GoFishNode.chrome`:
-`content` (the root without chrome), `withAxes` (the root with its axis
-gutters and category label rows) and its `rings`. `layout()` reads the root's
-axis direction off `withAxes`. The chrome takes room: every chrome shape claims
+titles. Each ring is marked `GoFishNode._chromeRing`, and nothing records the
+boxes inside it: `layout()` reads the root's axis direction off the content,
+which `GoFishNode.dressedBox` finds by walking the rings' first children.
+The chrome takes room: every chrome shape claims
 its size, and each ring claims it where it places it (see
-[Chrome gutters](#chrome-gutters) under Pass 9). See
+[Chrome around a chart](#chrome-around-a-chart) under Pass 9). See
 [Axes](/internals/frontend/axes) and [Legends](/internals/frontend/legends).
 
 ### Pass 8: Position Scale Computation
@@ -405,13 +408,13 @@ const scope =
 
 For every continuous root axis, the one scope fit (`ScopeRegistry.fit`)
 solves σ from the axis's size claim against the canvas (`claim.width(σ) =
-canvas`), so pixel overhead such as spacing, and the chrome's gutters, keeps
+canvas`), so pixel overhead such as spacing, and the chrome, keeps
 its pixels, and, when the axis has an origin, the pixel of data 0
 (`originPx`). The canvas is the render's `w`/`h`: the render size is the
 whole graphic (#493). A claim with no σ in it maps no domain and is not
 solved. When no σ ≥ 0 fits, the rest of the one rule for a claim in its
-slot (`Pwl.fill`, which `aroundPlot` also uses to lay a plot out in a node's
-own size) picks σ: 0 where the claim's fixed parts fill the canvas up to
+slot (`Pwl.fill`, which `ScopeRegistry.solveFixed` also uses to lay a plot
+out in a node's own size) picks σ: 0 where the claim's fixed parts fill the canvas up to
 rounding (`Pwl.overflows`), else, where they are larger than the canvas, the
 σ solved from the part of the claim that grows with σ (`Pwl.rising`), so the
 data fills the canvas as if the fixed parts took no room, the fixed parts
@@ -448,19 +451,17 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND — the **Route B** unit gate, only inside a coordinate space — its size
-is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
-`sameValueUnit` reads both through the render's union-find, which
-`resolveEmbedding` installs as the type walk does, so two unknowns
-are one unit only when they are one column or met on a shared axis). A size
-in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
-position) stays ink: a flat point at the mapped center, not a swept wedge.
-The discriminator is mark-local because a polar coord forgets its axis
-measure; a positioned mark's own position unit is the axis unit it sits on. This consumes the quantity provenance #534
-carried to mark channels. The revocation is
-coord-scoped, so Cartesian behavior matches the former construction-time
-inference. (Route A — relational, measure-free embedding — is not yet
-implemented; tracked under #618.)
+AND, only inside a coordinate space, it is no glyph size (`GoFishNode.isGlyph`,
+#972): a size placed at a datum in another unit, by its parent's position or
+by the mark's own `min`/`center`/`max`, stays ink, a flat point at the mapped
+center (a scatter bubble), not a swept wedge. Units are read through the
+render's union-find, which `resolveEmbedding` installs as the type walk does.
+Embedding and sizing ask this one question, so a glyph is never warped and a
+length of the space always is (see
+[Glyph sizes and lengths of the space](../core/underlying-space.md#glyph-sizes-and-lengths-of-the-space)).
+The revocation is coord-scoped, so Cartesian behavior matches the former
+construction-time inference. (Route A, relational, measure-free embedding, is
+not yet implemented; tracked under #618.)
 
 ### Pass 9: Layout Calculation
 
@@ -594,12 +595,21 @@ the equal-measure step and the root's frame in Pass 10 all read, and
 distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
 (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceUnit(x).unit` and
-`spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
-through overlays do not count), each axis's pixels-per-data-unit — a POSITION
+are built and before `child.layout`: when the two axes are in one measure,
+each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
-maps stay undistorted); the binding axis fills, and on the other the box keeps
+maps stay undistorted). Two axes are in one measure in either of two cases.
+They share a DECLARED unit (`spaceUnit(x).unit` and `spaceUnit(y).unit` are
+equal; two unknowns that unified through overlays do not count). Or they are
+in one TIED unit: an aspect-locked mark whose size is data (`circle({ r })`,
+`circle({ h })`, an `ellipse` with `aspectRatio`) draws one value of its unit as
+a length on both axes, so it ties the unit (`tieUnit` in the type walk, #1087), and
+the axes equalize when each maps that unit and no other
+(`KeyedDomains.tiedUnitOf`). An axis that also maps another unit (a marginal
+histogram's count beside the scatter's) is not one measure with the other
+axis, so a tied unit the two merely both contain does not equalize them. The
+binding axis fills, and on the other the box keeps
 its size and the content sits at its top-left, the leftover empty after it in
 screen terms (its claim takes the leftover at its far end, or at its start for a
 y that grows upward). Stage 6c makes this a named `equalizeMeasure` operation
@@ -728,15 +738,65 @@ See
 A cell of a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
 an outline, the cell's polygon; every other cell is a box.
 
-#### Chrome gutters
+#### The shape a parent gives a child
+
+Beside a size, a parent may hand a child a shape: `layout(size, scales,
+shape)`, where `shape` is a convex ring (`Ring`, `src/ast/geometry/ring.ts`)
+in the child's own frame, inside the box `[0, w] × [0, h]`. No shape means
+the box itself. `GoFishNode.layout` flips the ring with the scales when the
+child's y runs the other way, so every `Layout` reads it in its own axis
+order. Three parents make one, and two nodes read it:
+
+- A `partition`'s layer maps each cell's outline to pixels through the
+  child's scales, in the walk that gives the child its span
+  (`buildChildSpans`, `src/ast/constraints/proposalPlan.ts`), and hands it
+  to the child in that cell. The cell's span and placement
+  still go through the data position above; only the outline goes through
+  the shape.
+- A `treemap` hands each child its tile: a box for a rectangular tiling
+  (`boxRing`), a convex polygon for `Tile.voronoi`
+  (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
+  clipped half-plane by half-plane with `clipToHalfPlane`. Each round
+  moves every site to its cell's centroid, then fits the weights with a
+  damped Newton step, until each cell's area is within 2% of its share
+  and the sites have settled). Every
+  `Tile` strategy is one function, a `Tiling` in `treemap.tsx`, from the
+  region and the weights to one ring per child, so the treemap has one
+  placement loop. The child's size is the ring's box, and the ring is
+  shifted into it (`inItsBox`). On an axis where the child fills its room
+  (`fillsRoom`) it is centered on that box; on an axis where it does not (a
+  text, a circle) it is centered on the ring's centroid, which is inside a
+  convex cell, where a polygon's box center may not be. A ring with no area
+  (`hasArea`: a tile rounded to no width, a cell its `spacing` ate, or a
+  Voronoi region with no area, whose cells are all empty) gets a child laid
+  out at size zero with no shape, at the cell's center. `Tile.voronoi`
+  checks that its region is convex whatever the padding, and does not
+  `round` its cells. The treemap's own box is always the region it was
+  given, `[0, w] × [0, h]`, so its `padding` stays inside it.
+- An `enclose` around a member with no size of its own (`fillingLayout`,
+  see [Enclose](/internals/frontend/enclose)) hands down its outline.
+
+The shape travels with the room a layer proposes a child
+(`childLayoutSizeProposal`): the layer's own shape with the layer's box, so
+a `layer([region, text])` in a cell still finds the cell; a cell's outline
+with the cell's span; and no shape with any other room (a grid cell, a
+share of a scope, a span with no outline, a size a `nest` derives, or what
+a ring's chrome leaves). A
+`treemap` with no size of its own reads its shape as the region it tiles
+(a rectangular tiling there is an error unless the shape is the whole
+box), and a `region` draws it. Every other node ignores it.
+
+#### Chrome around a chart
 
 Chrome sits outside its chart (#1032). A chart's own `w`/`h` is its plot, and
 the slot a parent gives it (a share of a chain, a grid cell, or the canvas at the
-root) is its whole graphic, its chrome included. The chrome's **gutters** are
-how far it reaches past the plot on each side, `chrome.gutters`, per axis
-`[start, end]` in the chart's axis order. They come from the claim walk, so
-one layout fits a chart and its chrome to its slot (#493: fixed-size nodes
-report their size).
+root) is its whole graphic, its chrome included. Each ring of chrome is an
+ordinary layer of what it dresses and its chrome shapes (#1257): it seats its
+content at its data 0, claims the hull of its children where its constraints
+place them, and hands its content what its chrome leaves of its room. There
+is no separate channel for how far the chrome reaches: it is in the ring's
+claim, so one layout fits a chart and its chrome to its slot (#493:
+fixed-size nodes report their size).
 
 - **Fixed-size nodes claim their size.** A text is measured when the claims
   are resolved, and a rect or ellipse of literal size claims that size
@@ -750,6 +810,14 @@ report their size).
   runs once in formulas (`Tape`), so each box's edges are piecewise-linear
   in σ, and the hull is their envelope (`buildPlan` in `solver/plan.ts`). A ring is such a layer, so its claim holds its axis, titles or
   legend around what it wraps, and so does a scatter's around its marks.
+- **Frames read across layers.** A `position` with `in: ref` places a
+  datum in the frame of the node `ref` names (#1257). The claim walk reads
+  that frame's data 0 and one data unit up the plans from the node to the
+  layer (`frameIn` in `solver/plan.ts`), crossing each scope at the σ it
+  solved (`leaving`), and layout measures them (`in0:`, `in1:`). Where a
+  scope between cannot be read out of, or where the child of the layer that
+  holds the node is placed by the solve (its frame would move with it, which
+  needs a relation, not a pin), what the datum places is ink.
 - **Placement claims.** A `ref` stand-in, or an operand nested in a child,
   stands where its node lands in the layer's frame. The claim walk knows
   that (`planPlacement` in `solver/plan.ts`): it takes the node's box and
@@ -773,7 +841,11 @@ report their size).
   cell is the room it takes (`ClaimPlacement.rooms`). A child with no
   claim (a filler) takes no room: the solve places it as a point, so what
   a relation ties to it stays placed, and the hull holds that point only
-  where a datum position puts it. A child its own data places
+  where a position puts it, at a datum or a pixel (a ring seats what it
+  dresses at its origin, so its chrome's reach past a plot that fills is
+  measured from there). A ring's chrome along a chain is a legend that
+  reads no room, so it takes only its need and the slack goes to the plot
+  that fills it (the room rule below, which names no chrome). A child its own data places
   (`placedByOwnData`, `ClaimChild.dataPositioned`) is placed before the
   solve, where its frame seats it, so no constraint but a `position`
   (which gives it a frame of its own) moves it, as layout does not move it. An `enclose` around placed
@@ -803,7 +875,7 @@ report their size).
   slot or inside a node in a slot, with no room given between. A scope that
   fills solves its content in its own room and claims one σ in the scope
   above, and what dresses its content reaches past that σ (`aroundShare` in
-  `chromeGutters.ts`): its whole past its plot, read as a function of the
+  `solver/plotForms.ts`): its whole past its plot, read as a function of the
   share through the content's plot (`through` in `solver/pwl.ts`). So facet
   panels are shares of the chain that holds them, and their axes take room
   in its claim. A node in no slot (a rule laid over a bar chart) claims
@@ -812,9 +884,7 @@ report their size).
   `n·σ + (n − 1)·g`, so the claim walk knows where each band lands, and a
   value label beside a band, or the half of a category label past the last
   band, takes room. Solving the scope against its slot narrows the bands to
-  make it. In a share scope a layer lays each child out at its claim at σ,
-  so the bands are the σ the scope solved, and so is a share in a scope that
-  carries data (`GoFishNode.flexes`). On an axis the render gives no
+  make it. On an axis the render gives no
   size there is no slot to share, and the bands keep their default size. A
   node that fills (`GoFishNode.fillsRoom`: a leaf with no size of its own, or
   a node with no size of its own whose children all fill) and that a `nest`
@@ -822,6 +892,40 @@ report their size).
   that fills in a slot of a scope that carries data is a share too: it is
   one σ, one data unit, and the layout warns that its chain mixes
   data-driven and flexible sizes (`mixed-sizes`, below).
+- **Room versus box (#1257, #1292).** A layer lays each child out in a
+  room, and the child's box is the hull of what it draws, which may be
+  smaller. In an overlay a child's room is the layer's room. Along a chain
+  (a `distribute` on the axis), a member with no size of its own
+  (`GoFishNode.sizedOn`: no literal, data or percent size, and no claim of
+  its own as a leaf; a ring of chrome is sized where the box it dresses
+  is, so a chart's `w`/`h` hold for its outermost ring) gets its need,
+  its claim at the σ the layer hands its
+  children, plus its share of the slack: what the layer's room leaves past
+  the hull of the needs, split among the members of its own chain that
+  read their room by `GoFishNode.flexWeight` (`k` for `fr(k)`, else 1). A
+  member reads its room (`GoFishNode.readsRoom`) where the room reaches
+  something that fills it: a filler, a share of a scope, or a node with no
+  scope of its own that holds one. Any other member (a legend of fixed
+  swatches and text, which a ring's chrome usually is) takes only its
+  need, because a larger room would change nothing it draws; and where no
+  member of a chain reads its room, the slack is left over and each
+  member's room is its need. Nothing in this rule names chrome. Each chain splits the
+  slack on its own (`chainsOf` in `layer`), so two chains of one width side
+  by side each fill the room; a chain narrower than the hull gets only the
+  hull's slack. This is CSS's `flex: 1 1 auto`. σ is solved from the
+  needs alone, so where a scope fits its needs to its room the slack is 0
+  and the members get their needs, the σ the scope solved. A filler (a rect
+  with no height) is its room, so a backdrop behind a bar fills the band,
+  and a stack's filler takes what the stack's other parts leave. The
+  children that are part of the layer's plot are proposed the layer's room
+  less how far the rest (dressing, a ring's chrome) reaches past what they
+  draw (`LayerPlan.plotWhole`), so a ring's content gets what its chrome
+  leaves. A percent is laid out at the length its claim reads
+  (`GoFishNode.ownLength`), so the claim walk and layout agree (#1300): a
+  part of the nearest room with a size (`roomFor`), in pixels, or `ρσ` for
+  a percent of a band, at the σ its parent hands it. So `[percent(100), 40]`
+  in a stack overflows by 40 px, and a percent inside a chain member with
+  no size of its own is of the chain's room, not the member's.
 - **Category labels overdraw their neighbors (#1115).** A category label is
   centered on its slot's ref, and only its overhang past the ends of its
   axis takes room: the claim of a ring is the hull of its labels, so labels
@@ -837,106 +941,127 @@ report their size).
   a run of several slots is centered on, or an `enclose` with a member the
   claim walk cannot place).
 - **Nicing holds the domain.** A claim is the hull of what the content draws,
-  so widening it to a keyed or niced domain (`widenTo`) takes the farther of
+  so widening it to a keyed or niced domain (`widenTo`, which
+  `GoFishNode.widenToDomain` applies for every reader) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
-  already reach past it.
-- **The layout.** A layer's gutters are forms of the claim walk
-  (`chromeForms` in `chromeGutters.ts`): its claim and its plot's, both
-  widened to the keyed domain, memoized with its claim, so their difference
-  at each end is a PWL in σ. A layer with chrome evaluates them at the σ it
-  is laid out at (`guttersAt`). A plot that fills a share claims one σ, so
-  its forms are PWLs in σ like any other. A plot with no claim on an axis
-  (one in a coordinate space, or one that fills a room no σ divides) is a
-  point at its 0, so its chrome reaches past it by the layer's whole claim.
-  It hands its content (its first child) its slot less its gutters, or no
-  room when the gutters are larger than the slot (the scope that solved the
-  slot warns that its fixed parts overflow), and seats it past its start
-  gutter: the ring pins the ring inside it at a literal pixel (`wrapRing`),
-  and layout reads that pin as the start gutter (`contentSeat`), except on
-  an axis where the content is free (its baseline is its origin, and the
-  start gutter is part of its claim's descent). The constraint is not
-  rewritten: the seat is read in the plan's `lit:` input, in the frame
-  handed to the content, and in the pin, one value for all three. A layer
-  hands a child it pins at a literal pixel the frame from there
-  (`childPosScalesFor`), so the content's frame starts where its plot
-  does, and what it places with no data (an empty cell) lands in the plot,
-  not in the gutter. A literal pin of a child's origin places it as soon as
-  it is laid out, so a `ref` into it laid out later reads it where it ends
-  up, and another constraint on the axis (an align) moves only the others.
-  The claim walk keeps the pin, the content's data 0 at the ring's, and
-  agrees with layout on every box, since the frame handed down moves with
-  the seat. They differ only for a constant of the content's own frame (a
-  noise offset, a label slot), which the claim walk reads from the
-  content's data 0 and layout from its plot's start, `wide(plot).descent`
-  apart; which of the two a pinned node's constants are about is open
-  (TODO(#1239) at `contentSeat`).
+  already reach past it. On a difference axis the claim is centered in the
+  niced width, by the same farther-end rule, so widening twice is widening
+  once. The plot an axis is seated beside covers its whole niced domain
+  (`_axesBeside`), a difference axis's centered width included: its plan
+  (`domainPlan` in `layer`) and its layout box (`GoFishNode.domainSpan`)
+  both reach the domain's ends, so its axes frame the domain's corner, and
+  the room handed to it counts the domain as plot, not as dressing.
+- **The layout.** A ring lays its content out in the room its chrome leaves
+  (`plotRooms` in `layer`), and seats it at its origin on both axes, as any
+  layer seats a child it pins at a literal pixel. A chart is placed whole, its chrome
+  with it: on an axis with no data 0 (a spread of bands) it has no baseline
+  to share, so a baseline alignment seats it by its start in reading order
+  (`GoFishNode.baselineIsStart`: the chart's box reports its start as its
+  baseline through `localAnchor`, and the claim walk's stand-in through
+  `ClaimChild.startBaseline`, #1241), and a caption above a bar chart starts where the
+  chart's tick labels do. On an axis with a data 0 it keeps that baseline.
+  Every other box keeps its own origin (a layer of literal positions, a
+  rotated label's pivot). Which origin a pinned content's own constants are
+  about (a noise offset, a label slot) is still open (#1239): the claim walk
+  and layout both read it from the content's data 0.
 - **A node with a size of its own.** Its own `w`/`h` is its plot, for a
-  chart and a plain layer alike. Its chrome forms are its content's claim
-  and plot, widened to its keyed domain (`setChromeForms`), and the size
-  is solved as the plot: σ fits the plot to the size, and the node claims
-  its size and the reach of what dresses it at that σ
-  (`ScopeRegistry.solveFixed`), its data 0 past the start reach, whether
-  the content fits or overflows the size. Content that maps no domain is
-  fitted by the same fit, which solves no scope there, and claims the size
-  and the reach of what dresses it from its start edge (`aroundPlot`), and
-  layout lays the node out in the same whole. A chart's chrome dresses its content inside the chart's frame
-  (`frameChart`), so the chrome is in those forms; its content need not
-  wear chrome of its own: a label hanging off the first bar is dressing, so
-  it too adds around the plot. Labels beside a plain layer's content (and
+  chart and a plain layer alike. Its forms are its content's claim and
+  plot, widened to its keyed domain (`plotForms` in `solver/plotForms.ts`),
+  and the size is solved as the plot: σ fits the plot to the size, and the
+  node claims its size and the reach of what dresses it at that σ
+  (`ScopeRegistry.solveFixed`, `reachPast`), its data 0 past the start
+  reach, whether the content fits or overflows the size. Content that maps
+  no domain is fitted by the same fit, which solves no scope there, and
+  claims the size and the reach of what dresses it where its plot fills
+  the size. Layout lays the node out at the box its claim solved
+  (`ScopeRegistry.fixedBox`), and its box covers that size from the
+  start of what it holds, as its claim does, whether or not its content
+  fills it (#1320): a
+  scatter that maps x only is still `h` tall, and its x axis sits below
+  that. A chart's chrome goes around
+  the chart's frame (`frameChart`, #1257), so it is no part of those forms:
+  the ticks read their datums in the frame (`position`'s `in`), and the size
+  is the plot alone. What dresses the content inside the frame still is: a
+  label hanging off the first bar is dressing, so it adds around the plot. Labels beside a plain layer's content (and
   the outlines of its shapes) add around it the same way.
-- **The plot leaves out dressing.** Dressing is what is placed beside a node
-  the claim walk places elsewhere: a value label beside its bar's `ref`, a
-  tier of texts seated beside the bars of another tier, an `enclose` drawn
-  around placed members, and a ring's axes, seated beside the stand-in for
-  its content. Each node has a plot claim
+- **The plot leaves out dressing.** A layer's space is a collection of
+  its children's spaces (see
+  [Underlying Space](/internals/core/underlying-space)): the type pass
+  gives each child the space it is in in the layer (`ClaimWalk.parts`),
+  and the layer's axes attach to the children whose space there is
+  continuous or ordinal. Dressing is any other child of a layer that has
+  such a part: its geometry is read off other nodes' pixels, not placed by
+  data on that axis. That is a value label beside its bar's `ref`, a tier of texts
+  seated beside the bars of another tier, an `enclose` drawn around placed
+  members, and a chart of outlines or a line layered over a scatter
+  (`.layer(chart(selectAll(…)))`), whose type is `undefined` on both axes. A
+  layer with no such part has no dressing: all of it is plot. A ring's
+  chrome is chrome, not dressing (`ClaimChild.chrome`). Each node has a plot claim
   next to its claim (`GoFishNode.resolvePlotExtent`): a layer composes its
   children's plot claims the way it composes their claims, its hull of what
   its constraints place leaves out the dressing (`buildPlan`'s plot
   envelope). A child may also hand `placeByClaims` a plot apart from its box
   (`ClaimChild.plot`), which a chain lays it by as layout does
-  (`localPlotSpan`), say that it places itself at a literal pixel and stays
+  (`localSpan("plot", …)`), say that it places itself at a literal pixel and stays
   there (`placesItself`), or that it is a ring's chrome (`chrome`), which
   a chain lays past its whole box; the plan in `solver/plan.ts` sets
   them (#1176 step 3). A node that wears chrome has its content's plot as its plot: its
   rings are never plot, so a grouped bar chart's inner row of category
   labels adds around the outer chart's plot, as its own axes do. A chart's
-  outer box is the exception (`GoFishNode.isChartBox`): the outermost ring
+  outer box is the exception (`_chartRing`, which chrome elaboration sets
+  on the ring it wraps a `chart()` in): the outermost ring
   around a `chart()` with no size of its own is its parent's plot whole,
   axes included, since a parent lays a chart out by its outer box. So a
   chart in a spread beside a caption or another chart keeps its axes
-  clear of them.
+  clear of them. Each child also has a third claim, its box without its
+  dressing (`ChildForms.bare` in the plan, `GoFishNode.resolveBareExtent`
+  in the claim, `localSpan("bare", …)` in layout, inputs `bare0`/`bare1`
+  beside the plot's `plot0`/`plot1`, each undefined where it is the box;
+  one `spanHull` computes both local spans): the hull
+  of its children that are no dressing and no ink, a ring's chrome
+  included. It is what chrome is laid beside.
 - **Dressing never moves the parts it dresses.** Labels are a layer applied
   after the spread: they take room in the chart, but do not change how the
   spread lays out its parts. A chain of parts of the plot lays them by their
   plots, in its claim (the plan lays each dressed part by its plot, and
   the whole part only reaches) and in its layout (a chain edge
-  reads each part's anchors off `GoFishNode.localPlotSpan`, which is a
-  ring's box less its gutters, or the hull of a layer's children that are
-  no dressing, in the node's own pixels; a chain that reads y the other way
+  reads each part's anchors off `GoFishNode.localSpan("plot", …)`, the hull of a
+  layer's children that are no dressing and no chrome, in the node's own
+  pixels; a chain that reads y the other way
   reads it reflected, as it reads the part's box). So the spacing is between plots, and σ and the parts' sizes
   ignore the dressing. A label between two rows sits in the gap, and
   overlaps where it does not fit (#1171); a label past the first or last
   row reaches past the chain, into the chart's margin. A part that is a
   share and a scope of its own (a facet panel) has its share as its plot,
-  and its chrome adds around it (`aroundShare`). A chain edge to a
-  part that is no part of the plot (dressing, ink, a ring's chrome, a
-  stand-in) clears that part's whole box, so a ring still seats its title
-  past its tick labels. The plot of a chain with a stand-in reaches only as
+  and its chrome adds around it (`aroundShare` in `solver/plotForms.ts`). A chain edge
+  between two parts of the plot lays them by their plots. An edge to a
+  part that is no part of the plot (dressing, ink, a ring's chrome) lays
+  that part by its whole box and the other end by its box without its
+  dressing. So an axis line sits past its own box, beside what it dresses
+  less the outlines and labels that dress it: the ovals around a
+  scatter's groups, which are dressing, draw over the axes rather than
+  push them out. Inner chrome is no dressing, so a ring still seats its
+  title past its tick labels. The plot of a chain with a stand-in reaches only as
   far as its stand-ins. A child that reads y the other
   way has its plot read reflected with its box, at the one place a
   child's claim meets its parent (`formsOf` in `solver/plan.ts`), which a
-  `nest`'s padding reads too (`plotIn`). The gutters of a chart
-  are its claim past the plot claim of its content (`chromeForms` in
-  `chromeGutters.ts`), so a chart with a size of its own maps that plot into
-  its size, and its labels, like its chrome, add around it (#1032). A node
+  `nest`'s padding reads too (`plotIn`). A chart with a size of its own
+  maps the plot of its content into its size, and its labels, like its
+  chrome, add around it (#1032). A node
   with a size of its own, and a chart's outer box, are a part of their
   parent's plot, chrome and labels included (`GoFishNode.plotIsBox`), in
   the claim and in the layout alike: a chain lays such a part by its whole
-  box, and an align that places it by its plot aligns that box. So a row of
+  box, and an align that places it by its plot aligns that box. The axes
+  around a node with a size of its own still sit beside its box without
+  its dressing, its content's at the σ it solved (the `layer` claim hook
+  sets `_bareExtent`), so outlines that reach past its size draw over
+  them. So a row of
   charts aligned at their tops lines up the tops of their outer boxes, and
   a chart whose labels reach above its plot sits lower than one whose
-  labels do not.
+  labels do not. The `spacing` between charts is measured between their
+  whole boxes, labels included: this is a declared choice, and spacing or
+  aligning by a plot's edge is deferred (see #1210).
 - **An outline takes room as dressing does.** A shape's box is its geometry,
   which data places and sizes and a chain lays out. Its stroke is centered
   on that geometry, so it is drawn half its width past the box on every side
@@ -962,7 +1087,7 @@ what it draws, except a layer's ink children, which its box leaves out, and
 a shape's outline, drawn past its box: the drawing is the hull of the root's
 box, of every ink child's box, and of every node's box grown by its outline.
 A coordinate space's box stands for its interior, and a node that clips its
-content to its box (a `mask`, a `paint` composite: `GoFishNode.clipsToBox`)
+content to its box (an `intersect`, `subtract` or `atop` composite: `GoFishNode.clipsToBox`)
 draws nothing past it. The claim walk records the layers that found ink
 children on the render session, and layout records whether a shape draws an
 outline, so a render with neither skips the walk. A literal start or
@@ -1239,8 +1364,8 @@ y). _Which_ anchor depends on whether data places the root:
 - **A scope solved against the render's slot that has a data 0** (a given
   dimension that maps a domain with an origin) → pin the **baseline** (local `0`)
   at the scope's seat from the start edge of the root's own frame. The root fills
-  the slot, so its frame is the slot, and the scope's `originPx` already counts the
-  chrome's start gutter, so the root's box, chrome included, starts at the frame's
+  the slot, so its frame is the slot, and the scope's `originPx` already counts how
+  far the root's claim reaches before its data 0 (the chrome before its plot), so the root's box, chrome included, starts at the frame's
   start.
 - **Anywhere else** (a shrink-to-fit dimension, a given dimension whose scope has
   no data 0, such as a spread of magnitudes whose rows reach past its origin on
@@ -1332,7 +1457,7 @@ was elaborated into ordinary nodes during layout (see Pass 7: Chrome Elaboration
 and renders as part of the node tree like any other shape.
 
 It reserves no room either. The render's `w`/`h` is the whole graphic (#493): the
-root's chrome takes room inside it (see [Chrome gutters](#chrome-gutters)), so
+root's chrome takes room inside it (see [Chrome around a chart](#chrome-around-a-chart)), so
 there is nothing left to reserve around it. The former per-side overhang
 measurements and the `PADDING`/`EDGE_GAP` reserves of `svgFrame` are deleted, and so is the
 render's `padding` option.
@@ -1396,22 +1521,28 @@ to pick its color (see [Labels](/internals/frontend/labels#auto-color)).
 
 **Nodes that draw nothing.** A node can take part in layout without contributing any
 pixels: it keeps its dims, its datum and its role as a `selectAll` anchor, and emits
-an empty fragment. `GoFishRef` (a placement stand-in) has always lowered this way, and
-`blank()` now does too — `Blank` in `src/ast/shapes/rect.tsx` builds a `rect` node,
-renames its type to `blank` and calls `INTERNAL_emitNothing()` (`_node.ts`), which
-replaces the node's lowering with one that returns `[]`. Because every draw path — the
-SVG paint pass, the `toDisplayList` export, and a bake boundary's re-walk of its
-subtree — goes through `INTERNAL_lower`, one rule makes the node invisible everywhere,
-with no "visible" flag for paint to consult and no option that can turn drawing back
-on. For the same reason `blank()` takes no paint-only options (stroke, corner radius):
-its `fill` survives only because it seeds the color scale. This matters at scale: the [blank-fusion
+an empty fragment. There are two ways. A **hidden** node (`isHidden()` on
+`_node.ts`: `.hidden()` set `_hidden`, or it never paints) draws nothing unless a compositor reads its shape: the root bake and
+`bakeSubtree` stop at it, so it makes no draw entry at all, and under a compositor it
+lowers as its shape only (see [Rendering](/internals/core/rendering)). `blank()` is
+one: `Blank` in `src/ast/shapes/rect.tsx` builds a `rect` node, renames its type to
+`blank` and builds it as one that never paints (`_neverPaints`), so `.hidden()`
+has no effect on it. `INTERNAL_emitNothing()` (`_node.ts`) is the other: it replaces
+the node's lowering with one that returns `[]`, so the node gives no shape either. A
+mark with no value is built this way, and `GoFishRef` (a placement stand-in) has
+always lowered the same way. Because every draw path — the SVG paint pass, the
+`toDisplayList` export, and a bake boundary's re-walk of its subtree — goes through
+the bake and `INTERNAL_lower`, each rule holds everywhere. `blank()` takes no
+paint-only options (stroke, corner radius): its `fill` survives only because it seeds
+the color scale. This matters at scale: the [blank-fusion
 rewrite](/internals/frontend/mark-factory) synthesizes one anchor `blank` per row, so a
 26,000-row line chart used to emit 26,000 zero-size `<rect>` elements (and 26,000
 entries in the interaction hit-test map) that nobody could see or click.
 
 Its sibling is **`INTERNAL_visibleWhile(owner, visible)`**, and the pair is worth reading
-together because the difference is which tier decides. `INTERNAL_emitNothing` is
-for a node that must never draw, and it answers at resolve. `INTERNAL_visibleWhile`
+together because the difference is which tier decides. `.hidden()` and
+`INTERNAL_emitNothing` are for a node that must never draw, and they answer at
+resolve. `INTERNAL_visibleWhile`
 is for a node whose drawing comes and goes with a signal — a `time.sequence`'s
 keyframe groups, where the clock picks which band is showing — and it answers at
 paint: the items are lowered either way and their opacity is patched through
@@ -1483,7 +1614,7 @@ pure-string sibling `displayListToSVG` (in `gofish-ir`) emits markup with no DOM
 consume the **same** list and a cross-check test keeps them in lockstep. Because items
 are in final absolute pixels, painting is verbatim — a `rect` item becomes
 `<rect x y width height …/>`. See [Rendering](/internals/core/rendering) for the IR's
-item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`/`mask`) and the
+item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`) and the
 `toDisplayList({ w, h })` terminal that stops at the IR for non-SVG consumers.
 
 ### Render Pass 5.5: Interaction hooks (when reactive)

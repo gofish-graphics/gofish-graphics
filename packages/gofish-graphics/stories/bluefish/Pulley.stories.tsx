@@ -35,7 +35,7 @@ const w2jut = 10;
 const rope = {
   stroke: "#774e32",
   strokeWidth: 3,
-  mixBlendMode: "normal",
+  blendMode: "normal",
 } as const;
 
 const PulleyCircle = createMark(({ r = 25 }: { r?: number }) =>

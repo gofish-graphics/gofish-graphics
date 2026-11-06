@@ -32,7 +32,7 @@ export const testRidgeline = () =>
           {
             dir: "x",
             opacity: 0.7,
-            mixBlendMode: "multiply",
+            blendMode: "multiply",
           },
           map(items, (d) => ref(`${d.c}-${d.x}`))
         ),

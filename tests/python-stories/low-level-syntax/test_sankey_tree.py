@@ -145,7 +145,7 @@ def story_default():
                 fill=_CLASS_COLOR[cls],
                 curve=Curve.bezier(),
                 opacity=0.7,
-                mix_blend_mode="multiply",
+                blend_mode="multiply",
             )
         )
         for sex, s_items in group_by(items, "sex").items():
@@ -156,7 +156,7 @@ def story_default():
                     fill=_sex_color(sex),
                     curve=Curve.bezier(),
                     opacity=0.7,
-                    mix_blend_mode="multiply",
+                    blend_mode="multiply",
                 )
             )
             for survived, sv_items in group_by(s_items, "survived").items():
@@ -170,7 +170,7 @@ def story_default():
                         fill=_tgt_color(sex, survived),
                         curve=Curve.bezier(),
                         opacity=0.7,
-                        mix_blend_mode="multiply",
+                        blend_mode="multiply",
                     )
                 )
 

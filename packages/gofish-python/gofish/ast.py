@@ -388,7 +388,7 @@ def _select_ref(proxy: "_RefProxy") -> Dict[str, Any]:
 
 
 def _mark_in_option(m: "Mark", payload: "_Payload") -> Any:
-    """A mark named inside an option (a blob's `avoiding`), as the wire names
+    """A mark named inside an option (`enclose`'s `avoiding`), as the wire names
     it (`NodeSelectionIR`): `select_all(name)` is every node of the layer, the
     `SelectRefIR` chart data takes; any other mark (a `ref(...)`, a
     `.relate()` operand) is its IR, and ``payload`` collects what ships
@@ -528,12 +528,15 @@ class Mark(_Root):
         # Default z-order hint (sorted within siblings inside `layer`'s
         # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
         self._z_order: Optional[float] = None
+        # Set by `.hidden()`: laid out, paints nothing. Mirrors JS
+        # `node._hidden` (`.hidden(value)`).
+        self._hidden: Any = None
         self._translate: Optional[dict] = None
 
     def _write_meta(self, d: dict, payload: "_Payload") -> dict:
         """Write the modifiers every mark IR carries into ``d``: its
-        ``name``, ``zOrder`` (a function crosses as an accessor) and
-        ``translate``. The JS side applies them after building the mark
+        ``name``, ``zOrder`` and ``hidden`` (a function crosses as an
+        accessor) and ``translate``. The JS side applies them after building the mark
         (``withMarkMeta`` in fromJSON.ts). Parallel to ``_copy_meta``."""
         if self._name is not None:
             d["name"] = (
@@ -541,6 +544,8 @@ class Mark(_Root):
             )
         if self._z_order is not None:
             d["zOrder"] = _wire_accessors(self._z_order, payload)
+        if self._hidden is not None:
+            d["hidden"] = _wire_accessors(self._hidden, payload)
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -554,6 +559,7 @@ class Mark(_Root):
         target._datum_set = self._datum_set
         target._key = self._key
         target._z_order = self._z_order
+        target._hidden = self._hidden
         target._translate = self._translate
         return target
 
@@ -640,6 +646,26 @@ class Mark(_Root):
         new_mark._z_order = _PendingAccessor(value) if _is_function(value) else value
         return new_mark
 
+    def hidden(self, value: Union[bool, Callable[[Any], bool]] = True) -> "Mark":
+        """Lay this mark out and paint nothing. Mirrors JS ``mark.hidden(value)``.
+
+        A hidden mark still feeds scales, axes, legends and refs, and a
+        compositing operator still reads its shape. ``value`` is a bool, or a
+        function of the input a mark instance is bound to, which returns one.
+        An ancestor's ``hidden()`` wins over a descendant's ``hidden(False)``::
+
+            circle(r=3).hidden(lambda d: d["year"] != year)
+
+        Returns:
+            New Mark (same subclass as self) with the flag set.
+        """
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._hidden = _PendingAccessor(value) if _is_function(value) else value
+        return new_mark
+
     def translate(
         self,
         *,
@@ -709,7 +735,7 @@ class Mark(_Root):
         the IR (see ``_Payload``)."""
         # Each `_PendingAccessor` (at any depth) becomes its lambda-id
         # sentinel, and the payload records its callback.
-        # A mark named inside an option (a blob's `avoiding`) is its IR.
+        # A mark named inside an option (`enclose`'s `avoiding`) is its IR.
         serialized_kwargs = _marks_in_options(
             _wire_options(self.kwargs, self._accessors, payload), payload
         )
@@ -800,6 +826,13 @@ _REF_HAS_NO_Z_ORDER = (
     "Constraint.z_above / Constraint.z_below."
 )
 
+# Nor does a ref hide: it reads a node another mark drew, and only the value
+# you hold can change its paint (JS `GoFishRef` has no `.hidden()`).
+_REF_HAS_NO_HIDDEN = (
+    "A ref names a node that another mark drew, so it cannot hide it: call "
+    ".hidden() on the mark that draws the node."
+)
+
 
 class _InputRef(Mark):
     """A `GoFishRef` handed into a mark-fn lambda, reconstructed Python-side
@@ -853,6 +886,9 @@ class _InputRef(Mark):
     def z_order(self, value: Any) -> "Mark":
         raise TypeError(_REF_HAS_NO_Z_ORDER)
 
+    def hidden(self, value: Any = True) -> "Mark":
+        raise TypeError(_REF_HAS_NO_HIDDEN)
+
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
         if self._name is not None:
@@ -880,12 +916,11 @@ from ._generated import (  # noqa: E402
     polygon,
     blank,
     region,
-    over,
+    union,
     intersect,
-    exclude,
     subtract,
-    paint,
-    mask,
+    exclude,
+    atop,
     position,
     arrow,
     _spread_opts,
@@ -1418,6 +1453,7 @@ class ChartBuilder(_Root):
         options: Optional[dict] = None,
         operators: Optional[List[Operator]] = None,
         z_order: Optional[float] = None,
+        hidden: Optional[bool] = None,
     ):
         """
         Initialize a ChartBuilder.
@@ -1433,7 +1469,17 @@ class ChartBuilder(_Root):
         self.operators: List[Operator] = operators or []
         self._mark: Optional[Mark] = None
         self._z_order = z_order
+        self._hidden = hidden
         self._name: Optional[Union[str, "Token"]] = None
+
+    def _with(self, **changes: Any) -> "ChartBuilder":
+        """A copy of this builder with `changes` set (attribute names, such
+        as ``_mark``). Every builder method returns one, so a builder is
+        never changed in place."""
+        new_builder = copy.copy(self)
+        for field, value in changes.items():
+            setattr(new_builder, field, value)
+        return new_builder
 
     def flow(self, *ops: Union[Operator, Composed]) -> "ChartBuilder":
         """
@@ -1446,14 +1492,13 @@ class ChartBuilder(_Root):
         Returns:
             New ChartBuilder with operators added
         """
-        return ChartBuilder(
-            self.data,
-            self.options,
+        return self._with(
             operators=[
                 *self.operators,
                 *(o for op in ops for o in _expand_composed(op)),
             ],
-            z_order=self._z_order,
+            _mark=None,
+            _name=None,
         )
 
     def mark(self, mark) -> "ChartBuilder":
@@ -1474,11 +1519,7 @@ class ChartBuilder(_Root):
         Returns:
             New ChartBuilder with mark set
         """
-        new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=self._z_order
-        )
-        new_builder._mark = _as_mark(mark)
-        return new_builder
+        return self._with(_mark=_as_mark(mark), _name=None)
 
     def layer(self, child: Any) -> "LayerBuilder":
         """Stack another tier over this one. A tier is a mark position: it
@@ -1513,22 +1554,18 @@ class ChartBuilder(_Root):
         Returns:
             New ChartBuilder carrying the name.
         """
-        new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=self._z_order
-        )
-        new_builder._mark = self._mark
-        new_builder._name = name_or_token
-        return new_builder
+        return self._with(_name=name_or_token)
 
     def z_order(self, value: float) -> "ChartBuilder":
         """Set z-order for this chart when rendered inside a Layer. Mirrors
         JS ``chart(...).zOrder(n)``."""
-        new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=value
-        )
-        new_builder._mark = self._mark
-        new_builder._name = self._name
-        return new_builder
+        return self._with(_z_order=value)
+
+    def hidden(self, value: bool = True) -> "ChartBuilder":
+        """Lay the whole chart out, axes and legend included, and paint none
+        of it. Its marks can still be read by name. Mirrors JS
+        ``chart(...).hidden()``."""
+        return self._with(_hidden=value)
 
     def facet(self, *, by: str, **kwargs: Any) -> "ChartBuilder":
         """
@@ -1600,6 +1637,8 @@ class ChartBuilder(_Root):
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
+        if self._hidden is not None:
+            result["hidden"] = self._hidden
         # `.name(...)` lets a `layer([...]).relate(...)` callback refer to
         # this chart; JS names the resolved tier with it.
         if self._name is not None:
@@ -1854,6 +1893,9 @@ class _RefProxy(Mark):
     def z_order(self, value: Any) -> "Mark":
         raise TypeError(_REF_HAS_NO_Z_ORDER)
 
+    def hidden(self, value: Any = True) -> "Mark":
+        raise TypeError(_REF_HAS_NO_HIDDEN)
+
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no
         # meaning in a mark position. As chart data it is written by
@@ -1912,14 +1954,10 @@ def ref(target: Union[str, Token]) -> _RefProxy:
     return _RefProxy([target])
 
 
-# `arrow` and the region-compositing quartet (Porter-Duff-style
-# inside/xor/out/atop, renamed intersect/exclude/subtract/paint per #196/#202,
-# plus `over`/`mask`) are generated (packages/gofish-python/gofish/_generated.py)
-# — pure kwargs-collection + the `pyName` rename table, imported above. Wire
-# `type` strings stay the OLD Porter-Duff spellings ("inside"/"xor"/"out"/
-# "atop") per the descriptor's `pyName` — the IR serializer never renamed them
-# (FACTORIES in packages/gofish-graphics/src/serialize/registry.ts is still
-# keyed by the old wire types).
+# `arrow` and the region-compositing operators (union/intersect/subtract/
+# exclude/atop) are generated (packages/gofish-python/gofish/_generated.py)
+# — pure kwargs-collection, imported above. Each one's wire `type` is its
+# name (FACTORIES in packages/gofish-graphics/src/serialize/registry.ts).
 
 
 def stack(
@@ -1992,7 +2030,7 @@ def derive(fn: Callable, *, schema: Optional[dict] = None) -> DeriveOperator:
             ``chart(data, schema={...})``: a ``Unit`` (``Unit.time(zone=...)``
             for a time), a unit's name, a column record
             ``{"name": ..., "unit": ...}``, e.g.
-            ``Unit(domain=Domain.ordered(levels))``.
+            ``Unit(domain=Domain.discrete(levels), traits=[Trait.ordered()])``.
             Without it, a result column keeps the
             type it had in the input while its values still fit it, a
             datetime column is a time, and any other column has no type. A
@@ -2275,7 +2313,7 @@ def treemap(
             options table. ``size`` sizes each leaf's tile area, one value
             per split entry. ``tile`` takes a strategy from the ``Tile``
             family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
-            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.slice_dice()``.
+            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.voronoi()``.
 
     The largest tile (under the default sort) lands at the top left.
 
@@ -2401,12 +2439,12 @@ def _require_str(value: Any, what: str) -> str:
 
 # The unit of a difference of two instants, ``Unit.duration``: JS
 # ``DURATION`` in measure.ts. Durations add up.
-_DURATION = {"unit": "duration", "classes": {"CanAdd": {}}}
+_DURATION = {"unit": "duration", "traits": {"CanSum": {}}}
 
 # The unit of a time column without its zone, which ``Unit.time(zone=...)``
-# adds: JS ``INSTANT`` in measure.ts. Its classes are known: it has none,
+# adds: JS ``INSTANT`` in measure.ts. Its traits are known: it has none,
 # since two instants do not add up. Its difference is a duration.
-_INSTANT = {"unit": "instant", "classes": {}, "difference": _DURATION}
+_INSTANT = {"unit": "instant", "traits": {}, "difference": _DURATION}
 
 
 def _is_number(v: Any) -> bool:
@@ -2424,7 +2462,7 @@ def _accepts_amount(v: Any, unit: Dict[str, Any]) -> bool:
     return _is_number(v)
 
 
-# Which values each class accepts, given the class's own record: JS
+# Which values each trait accepts, given the trait's own record: JS
 # ``ACCEPTS`` in schema.ts.
 _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
     "HasLevels": lambda v, c: v is None or isinstance(v, str) or _is_number(v),
@@ -2437,7 +2475,7 @@ _ACCEPTS: Dict[str, Callable[[Any, Any], bool]] = {
 
 def _check_levels_fit(who: str, column_type: Dict[str, Any]) -> None:
     """Raise when one of a column's levels is not a value one of the
-    column's classes accepts, with the message of JS ``checkLevelsFit`` in
+    column's traits accepts, with the message of JS ``checkLevelsFit`` in
     schema.ts, which explains the rule."""
     for level in column_type.get("HasLevels", {}).get("levels", []):
         for cls, accepts in _ACCEPTS.items():
@@ -2469,8 +2507,8 @@ def _js_number(x: Union[int, float]) -> str:
 
 def _check_midpoint_on_order(levels: List[Any], at: Any) -> None:
     """Raise when ``at`` is not a midpoint on the order ``levels``: JS
-    ``checkMidpointOnOrder`` in schema.ts, with the same two messages, word
-    for word."""
+    ``checkMidpointOnOrder`` in schema.ts, with the same two messages (they
+    hold no code to spell in Python)."""
     n = len(levels)
     order = (
         "the edges of the order ["
@@ -2487,40 +2525,33 @@ def _check_midpoint_on_order(levels: List[Any], at: Any) -> None:
         )
 
 
-def _json(value: Any) -> str:
-    """``value`` as JS ``JSON.stringify`` writes it, for a message."""
-    try:
-        return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-    except (TypeError, ValueError):
-        return repr(value)
-
-
-_TRAIT_KINDS = ("diverging", "summable")
+_TRAIT_KINDS = ("ordered", "diverging", "summable")
 
 
 def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, Any]:
-    """The classes of the unit ``name`` with ``domain`` and ``traits``,
-    checked: JS ``unitTypeOf`` in schema.ts, with the same messages."""
+    """The traits of the unit ``name`` with ``domain`` and ``traits``,
+    checked: JS ``unitTypeOf`` in schema.ts, with the same messages, code
+    spelled in Python."""
     who = "Unit" if name is None else f"Unit({json.dumps(name, ensure_ascii=False)})"
     if domain is not None and not (
         isinstance(domain, dict)
-        and domain.get("kind") in ("discrete", "ordered")
+        and domain.get("kind") == "discrete"
         and isinstance(domain.get("levels"), list)
     ):
         raise TypeError(
-            f"{who}: domain must be a Domain: Domain.discrete(levels) or "
-            f"Domain.ordered(levels), got {_json(domain)}. A domain that is "
-            "an interval is not supported yet."
+            f"{who}: domain must be a Domain: Domain.discrete(levels), got "
+            f"{domain!r}. A domain that is an interval is not supported "
+            "yet."
         )
     # A domain written as a dict, not with ``Domain``, gets the same checks.
     if domain is not None:
-        from .domain import _levels_domain
+        from .domain import discrete
 
-        _levels_domain(domain["kind"], domain["levels"])
+        discrete(domain["levels"])
     if name is None and domain is None:
         raise TypeError(
             'Unit needs a name, a domain, or both: Unit("USD"), '
-            'Unit({ domain: Domain.discrete(["low", "high"]) }).'
+            'Unit(domain=Domain.discrete(["low", "high"])).'
         )
     if traits is None:
         traits = []
@@ -2532,44 +2563,45 @@ def _unit_type_of(name: Optional[str], domain: Any, traits: Any) -> Dict[str, An
         kind = trait.get("kind") if isinstance(trait, dict) else None
         if kind not in _TRAIT_KINDS:
             raise TypeError(
-                f"{who} has the trait {_json(trait)}. A unit's traits are "
-                "Trait.diverging() and Trait.summable()."
+                f"{who} has the trait {trait!r}. A unit's traits are "
+                "Trait.ordered(), Trait.diverging() and Trait.summable()."
             )
         if kind in kinds:
             raise TypeError(f"{who} lists Trait.{kind}() twice.")
         kinds.append(kind)
         if kind == "diverging":
             midpoint = trait.get("midpoint")
-    if "diverging" in kinds and (domain is None or domain["kind"] != "ordered"):
-        if domain is None:
-            raise TypeError(
-                f"{who}: Trait.diverging() needs an ordered domain: a midpoint "
-                "is a point along an order, so list the levels in "
-                "Domain.ordered(levels). A midpoint on a unit's amounts is not "
-                "supported yet."
-            )
+    # Trait.diverging() implies Trait.ordered(): a midpoint is a point along
+    # an order. Listing both is allowed.
+    ordered = "ordered" in kinds or "diverging" in kinds
+    # TODO(Domain.continuous): an order over numbers comes with
+    # Domain.continuous. Until then, an order is an order of listed levels.
+    if ordered and domain is None:
+        listed = "diverging" if "diverging" in kinds else "ordered"
+        named = "" if name is None else '"' + name + '", '
         raise TypeError(
-            f"{who}: Trait.diverging() needs an ordered domain, but "
-            "Domain.discrete(levels) is unordered. A midpoint is a point "
-            "along an order: use Domain.ordered(levels)."
+            f"{who}: Trait.{listed}() needs a domain of levels to order: "
+            f"Unit({named}domain=Domain.discrete(levels), traits=[Trait.{listed}()]). "
+            "A unit's amounts are numbers, which are already ordered; an order "
+            "over them comes with Domain.continuous, which is not supported yet."
         )
     if "summable" in kinds and name is None:
         raise TypeError(
             "Unit: Trait.summable() needs a name. Whether amounts add up "
             "belongs to their unit, which is known by its name: "
-            'Unit("USD", { traits: [Trait.summable()] }).'
+            'Unit("USD", traits=[Trait.summable()]).'
         )
     type_: Dict[str, Any] = {}
     if name is not None:
         type_["HasUnit"] = {
             "unit": name,
             "symbol": name,
-            "classes": {"CanAdd": {}} if "summable" in kinds else {},
+            "traits": {"CanSum": {}} if "summable" in kinds else {},
         }
     if domain is not None:
         type_["HasLevels"] = {"levels": list(domain["levels"])}
-        if domain["kind"] == "ordered":
-            type_["HasOrder"] = {}
+    if ordered:
+        type_["HasOrder"] = {}
     if "diverging" in kinds:
         levels = domain["levels"]
         at = len(levels) / 2 if midpoint is None else midpoint
@@ -2584,13 +2616,13 @@ class Unit:
     ``Unit(domain=..., traits=[...])`` with no name. Mirrors JS ``Unit``::
 
         USD = Unit("USD", traits=[Trait.summable()])
-        Likert = Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])
+        Likert = Unit(domain=Domain.discrete(LEVELS), traits=[Trait.diverging()])
         chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 
     Its name is its identity: two units are the same when their names are
-    equal. Its ``domain`` (``Domain.discrete(levels)``,
-    ``Domain.ordered(levels)``) is what its values are, and its ``traits``
-    (the ``Trait`` family) the capabilities they have. It is immutable.
+    equal. Its ``domain`` (``Domain.discrete(levels)``) is which values it
+    has, and its ``traits`` (the ``Trait`` family) the traits they have. It
+    is immutable.
     Declare a unit once and use it for every column in it. The built-in
     units are ``Unit.time(zone=...)``, for instants, and ``Unit.duration``,
     for spans of time.
@@ -2598,7 +2630,7 @@ class Unit:
 
     __slots__ = ("_type",)
 
-    # The classes every column in the unit has: JS ``UnitDefinition.type``.
+    # The traits every column in the unit has: JS ``UnitDefinition.type``.
     _type: Dict[str, Any]
 
     # ``Unit.duration``, set below the class.
@@ -2617,7 +2649,7 @@ class Unit:
 
     @classmethod
     def _of(cls, type_: Dict[str, Any]) -> "Unit":
-        """The definition whose classes are ``type_``."""
+        """The definition whose traits are ``type_``."""
         unit = object.__new__(cls)
         object.__setattr__(unit, "_type", copy.deepcopy(type_))
         return unit
@@ -2630,7 +2662,7 @@ class Unit:
 
     @property
     def type(self) -> Dict[str, Any]:
-        """The classes every column in the unit has, as the wire writes
+        """The traits every column in the unit has, as the wire writes
         them: JS ``UnitDefinition.type``."""
         return copy.deepcopy(self._type)
 
@@ -2679,15 +2711,17 @@ class Unit:
         args = [] if unit is None else [repr(unit["unit"])]
         levels = self._type.get("HasLevels")
         if levels is not None:
-            kind = "ordered" if "HasOrder" in self._type else "discrete"
-            args.append(f"domain=Domain.{kind}({levels['levels']!r})")
+            args.append(f"domain=Domain.discrete({levels['levels']!r})")
         traits = []
         midpoint = self._type.get("HasMidpoint")
+        # Trait.diverging() implies Trait.ordered(), so it is written alone.
         if midpoint is not None:
             default = len(levels["levels"]) / 2 if levels is not None else None
             at = "" if midpoint["at"] == default else repr(midpoint["at"])
             traits.append(f"Trait.diverging({at})")
-        if unit is not None and "CanAdd" in (unit.get("classes") or {}):
+        elif "HasOrder" in self._type:
+            traits.append("Trait.ordered()")
+        if unit is not None and "CanSum" in (unit.get("traits") or {}):
             traits.append("Trait.summable()")
         if traits:
             args.append(f"traits=[{', '.join(traits)}]")
@@ -2697,9 +2731,9 @@ class Unit:
 Unit.duration = Unit._of({"HasUnit": _DURATION})
 
 
-# The class names of a column type, the keys of its wire record: JS
+# The trait names of a column type, the keys of its wire record: JS
 # ``ColumnType`` in schema.ts.
-_CLASS_NAMES = (
+_TRAIT_NAMES = (
     "HasLevels",
     "HasOrder",
     "HasMidpoint",
@@ -2714,8 +2748,8 @@ _RECORD_KEYS = ("name", "unit")
 
 
 def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
-    """The classes of a column in ``unit``: a definition's, or a name alone,
-    whose classes are unknown (no ``classes``). JS ``unitType`` in
+    """The traits of a column in ``unit``: a definition's, or a name alone,
+    whose traits are unknown (no ``traits``). JS ``unitType`` in
     schema.ts."""
     if isinstance(unit, str):
         return {"HasUnit": {"unit": unit, "symbol": unit}}
@@ -2723,26 +2757,27 @@ def _unit_type(unit: Union[Unit, str]) -> Dict[str, Any]:
 
 
 def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
-    """The record of classes a schema entry stands for, the wire form: a
+    """The record of traits a schema entry stands for, the wire form: a
     unit's, a column record's, or a wire record as is.
-    JS ``classesOf`` in schema.ts, with the same messages."""
+    JS ``traitsOf`` in schema.ts, with the same messages, code spelled in
+    Python."""
     who = f'schema: column "{column}"'
     if isinstance(entry, (Unit, str)):
         return _unit_type(entry)
     if not isinstance(entry, dict):
         raise TypeError(
             f"{who} has the entry {entry!r}. A column's entry is a Unit, a "
-            "unit's name, or a column record { name, unit }."
+            "unit's name, or a column record {\"name\": ..., \"unit\": ...}."
         )
-    if all(k in _CLASS_NAMES for k in entry):
+    if all(k in _TRAIT_NAMES for k in entry):
         return dict(entry)
     unknown = [k for k in entry if k not in _RECORD_KEYS]
     if unknown:
         keys = ", ".join(json.dumps(k, ensure_ascii=False) for k in unknown)
         raise TypeError(
             f"{who} has the unknown {'key' if len(unknown) == 1 else 'keys'} "
-            f'{keys}. A column record takes name and unit: {{ name: "Pay", '
-            'unit: Unit("USD") }.'
+            f'{keys}. A column record takes name and unit: {{"name": "Pay", '
+            '"unit": Unit("USD")}.'
         )
     name = entry.get("name")
     unit = entry.get("unit")
@@ -2761,7 +2796,7 @@ def _column_type_of(column: str, entry: Any) -> Dict[str, Any]:
 
 def _schema_wire(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """A chart's (or a derive's) ``schema`` as the wire carries it: each
-    entry's record of classes (``_column_type_of``), as JS ``schemaToWire``
+    entry's record of traits (``_column_type_of``), as JS ``schemaToWire``
     writes it."""
     if not isinstance(schema, dict):
         raise TypeError(f"schema must be a dict of column types, got {schema!r}")
@@ -3650,8 +3685,9 @@ def enclose(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
     a ``shape`` from the ``Shape`` family: the padded bounding box
     (``Shape.box(rx=..., ry=...)``, the default), the smallest ellipse around
     the members (``Shape.oval()``), the padded members with arc corners
-    (``Shape.arcs(radius=...)``), or a smooth region (``Shape.blob(...)``,
-    ``Shape.hull(...)``, ``Shape.spine(...)``).
+    (``Shape.fillet(radius=...)``), or a smooth region (``Shape.blob(...)``,
+    ``Shape.hull(...)``, ``Shape.spine(...)``). ``avoiding`` keeps every
+    shape out of the nodes it names, ``clearance`` away.
 
     Three forms: combinator form ``enclose([a, c], ...)`` (fresh children are
     laid out as ``layer`` lays them out; ``ref(...)`` children and
@@ -3844,7 +3880,7 @@ def chart(
     ``schema`` declares column types, keyed by column name (see ``Unit``,
     ``Domain`` and ``Trait``):
 
-        Likert = Unit(domain=Domain.ordered(LEVELS), traits=[Trait.diverging()])
+        Likert = Unit(domain=Domain.discrete(LEVELS), traits=[Trait.diverging()])
         chart(survey, schema={"response": Likert})
         chart(ledger, schema={"balance": {"name": "Balance", "unit": USD}})
 

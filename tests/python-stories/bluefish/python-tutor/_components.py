@@ -40,8 +40,8 @@ def stack_slot(variable: str, value=None):
         )
     else:
         val_text = text(
-            text="", font_size=24, font_family=FONT_FAMILY, fill="none"
-        ).name(value_tag)
+            text="", font_size=24, font_family=FONT_FAMILY
+        ).name(value_tag).hidden()
     return spread(
         [
             text(text=variable, font_size=24, font_family=FONT_FAMILY).name(
@@ -82,8 +82,8 @@ def elm_tuple(tuple_index: str, tuple_data=None):
         ).name(val_tag)
     else:
         val_text = text(
-            text="", font_size=24, font_family=FONT_FAMILY, fill="none"
-        ).name(val_tag)
+            text="", font_size=24, font_family=FONT_FAMILY
+        ).name(val_tag).hidden()
     return layer(
         [
             rect(

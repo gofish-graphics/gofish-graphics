@@ -275,7 +275,12 @@ measure?)`:
   carries the datum's measure.
 - **none**: there is no origin at all, only a width, so the interval is
   `[0, width]` and only differences along it mean anything. A middle-aligned
-  overlay is one.
+  overlay is one. An overlay of an origin-less child and a free one seated
+  on its baseline keeps the free child's interval, so it can start below 0
+  (`none [−20, 7]` for a bar of −20 beside an origin-less bar of 7). Only
+  its width means anything, so what reads one reads its width: a
+  difference axis spans its niced width from the content's start
+  (`differenceSpan`).
 
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
@@ -302,7 +307,7 @@ is a nonnegative magnitude). Most extents sit wholly above their data 0 and
 never spell the descent. Every claim is measured from data 0, whatever its
 origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
 `50σ` and descent `−30σ` (its low edge lies `30σ` above its 0), and its width
-is `20σ`. An origin-less interval starts at 0, so its descent is 0. The
+is `20σ`. A middle-aligned overlay's origin-less interval starts at 0, so its descent is 0. The
 claim's `width` is `ascent + descent`, computed once by the `Extent`
 constructor, and it is what a scope solves σ against. The places that read
 the two sides:
@@ -578,20 +583,97 @@ each inherent to what the origin states are:
   chain (`warnFlexibleSizes`). A length has no content minimum: fixed parts
   larger than a sized layer warn `fixed-overflow`.
 - **A plot claim beside the claim**: a layer's plan also computes the
-  claim of the plot, which leaves out dressing (a label placed beside a
-  `ref` stand-in for its mark), a shape's outline (half its stroke past its
-  box, which its claim reaches and its plot leaves out; a node a `nest`
-  derives reaches its own outline past the padded inner's plot,
+  claim of the plot, the part of the layer its axes visualize. A layer's
+  space is a **collection** of its children's spaces, not one space. The
+  type pass gives each child, on each axis, the space it is in in the
+  layer (`ClaimWalk.parts`, `composeLayerTypes` in `layer`):
+  - a child the layer nests in its own space (at a datum a `position`
+    places it at, in a distribute's slot, in a grid's track) is in the
+    space the layer reports there;
+  - a child a literal pixel `position` places elsewhere is in none;
+  - a box placed whole (a chart's box, or a node with a size of its own,
+    `GoFishNode.plotIsBox`) is in none either: it solves its own σ, so to
+    the layer it is a box of pixels;
+  - any other child is in its own type, which a `nest` has unified with
+    the inner it pads (`applyNestSpacePlan`), so the outer box of a nest
+    is in the inner's space;
+  - a `ref` stand-in is in the part its target is in, in its target's
+    layer (`refHome` in `layer`). Reading that layer's parts types it,
+    and where it is being typed already (`GoFishNode.beingTyped`) that
+    would be a cycle: a layer that encloses this one, which the
+    bottom-up type pass types after this one, or a sibling layer whose
+    own ref names a node of this one. A ref into a layer being typed
+    takes its own part in this layer during the type pass, and its
+    target's in the claim walk, when every layer is typed. This is a
+    declared shortcut around evaluation order (#1318). Two layers that
+    each place a node by a ref into the other are a cycle in the claim
+    walk too, which reports it (`resolveExtent`);
+  - a child that is in no continuous or ordinal part by the rules above,
+    and that a point or `"span"` `align` places at a partner that is in
+    one, is in its partner's part on that axis (`alignedParts` in
+    `layer`). An align has no offset or gap, so the child's anchor is at the partner's anchor,
+    which is a datum there: the child is at a datum, as a circle is, with a
+    size of its own in pixels. A polar chart aligned to the end of its
+    stem (`Forward Syntax/Flower Chart`) is in the stem's y part, though
+    it is placed whole. A `"span"` align ties both endpoints of the child
+    to its partner's, so both are at data and the child joins its
+    partner's part the same way. A `"size"` align ties only a length and
+    leaves the child's position free, so no endpoint is at a datum and
+    the child joins nothing. Aligns chain, and a `ref` operand counts as
+    its target's part. A gap is a `distribute`'s `spacing`, not an align,
+    and a node an `enclose` draws around refs is aligned to nothing, so
+    neither joins a part this way.
+
+  This is a shortcut tied to the deferred pixel offset semantics (#1053,
+  #1054). A pixel `.translate()` on an aligned child would put its anchor
+  at a datum plus pixels, which is in no data space. Today the align's
+  solve overrides that translate, so the child sits at the datum and
+  joins. Once pixel offsets have semantics of their own, a child an align
+  places at a pixel offset should stay out of its partner's part.
+
+  The layer's axes attach to the children whose part is continuous or
+  ordinal (`isVisualized` in `underlyingSpace.ts`; the claim walk hands
+  `placeByClaims` the answer as `ClaimChild.visualized`). Every other child of a layer that has such a part is
+  **dressing** (`placeByClaims`): it is beside the part or over it. An
+  `enclose` drawn around refs, a `line` or `ribbon` connecting refs, a
+  `.label()` text a gap sets past its mark's ref (on the axis of the gap;
+  on the axis an align centers it, it is in the mark's part, and a label
+  at `"center"` is in it on both), and a chart of those layered over
+  a scatter (`.layer(chart(selectAll("points")).mark(enclose()))`) all
+  have type `undefined` on both axes, so they are dressing of the layer
+  that holds them, while the layer's own type stays the scatter's
+  continuous one. A layer with no such part (a layer of literal shapes,
+  or a chart placed whole with a caption at a literal pixel beside it)
+  has no dressing. This is a deliberate shortcut until data types and
+  space types are aligned: pixels are no space here, so a text at a
+  literal pixel beside a scatter whose marks the layer holds is dressing,
+  while beside a chart placed whole it is plot.
+
+  The plot also leaves out a shape's outline (half its stroke
+  past its box, which its claim reaches and its plot leaves out; a node a
+  `nest` derives reaches its own outline past the padded inner's plot,
   `applyNestExtentPlan`) and the chrome rings of a nested node, short of
   a node whose plot is its whole box (a node with a size of its own, or
   the outermost ring of a `chart()`: a parent lays a chart out whole,
-  `GoFishNode.plotIsBox`). A chain of parts of the plot lays them by their plots, so dressing never
+  `GoFishNode.plotIsBox`). Chrome is laid beside a third claim, the box
+  without its dressing (`ChildForms.bare`, `GoFishNode.resolveBareExtent`
+  and `GoFishNode.localSpan("bare", …)`; each is undefined where it is
+  the box). Neither of the other two is it. The box holds the
+  dressing, so ovals that reach past a scatter would push its axes out.
+  The plot of a node with a size of its own is its whole box, dressing
+  included, since a parent lays it out whole (#1210); and the plot of a
+  ring leaves out its chrome, so a title laid beside it would cover the
+  tick labels. The box without its dressing keeps inner chrome and leaves
+  the dressing out, and a node with a size of its own has its content's
+  at the σ it solved. So the axes attach to the part of the layer whose
+  space is continuous, and dressing draws over them. A chain of parts of the plot lays them by their plots, so dressing never
   moves the parts it dresses: it reaches past the chain, or sits in the gaps
   (`ClaimChild.plot` in `placeByClaims`). The plot leaves out what is
   placed beside a stand-in, so a chain with a stand-in reaches, in its
   plot, only as far as its stand-ins. A chart with a size of its own maps its plot
   into that size (see
-  [Chrome gutters](/internals/layout/passes#chrome-gutters)).
+  [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)).
+
 - **Alignment establishes a baseline; it does not pin**: aligning or
   overlaying free children gives a free result with one shared baseline
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
@@ -797,6 +879,19 @@ composes its targets' spaces into the layer's claim on that axis:
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
+
+- A `Constraint.position` may read its datums in **another node's frame**
+  (`in: ref`, #1257): `datum(v)` is then the point `v` in the frame of the
+  node `ref` names, wherever that node sits below the layer, not in the
+  layer's own frame. Chrome uses it: an axis's ticks sit on the plot's
+  scale even when the plot is a scope of its own that the ticks are outside
+  of. Such a datum is no part of the layer's domain and does not join its
+  target to the layer's set (`planSharing` treats it as a pixel). The claim
+  walk reads the frame as two points of the named node's plan, its data 0
+  and its data 1, carried up the plans to the layer (`frameIn` in
+  `solver/plan.ts`); layout measures the same two points off the laid-out
+  node (`GoFishNode.layoutFrames`) and the translates between. It is
+  internal for now (#1289).
 
 - `align`'s `"span"`/`"size"` values (#726, `constraints/align.ts`) are the
   **third** size-setting mechanism — ships the unbound-target case from the
@@ -1066,7 +1161,9 @@ the targets are boxes read off claims and a datum maps through a symbolic σ, an
 results are formulas that layout evaluates at the solved σ with what it measured: the
 laid boxes, the pixel of data 0, and the place of each child that places itself (a
 shape at a literal pixel or a data position, an axis span or a `connect`, which set
-`placedByLayout`). A datum that is not a number has no pixel, so it emits no fact.
+`placedByLayout`). On an axis with no position scale a datum that is not a number
+has no pixel, so it emits no fact; against a real position scale it is an error
+(`compilePlacementCoordinate`).
 Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
 `min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
@@ -1368,6 +1465,95 @@ have a minimum size, such as a spread operator where even if the shapes
 have 0 size, the spacing between the shapes yields some minimum overall
 size).
 
+### Glyph sizes and lengths of the space
+
+A data size is one of two things, by one rule (#972).
+
+- A **glyph size**. The rule is per axis and belongs to the size's unit. A
+  unit is a glyph unit when, on some axis, the mark is placed at a datum in
+  another unit, and the size the mark is given on that same axis is in the
+  unit. Its parent places it there (at a point or in a cell, when the
+  parent's axis is in another unit), or its own value position does (a
+  `cx` or `x` in another unit). Every size in a
+  glyph unit is a glyph size (`GoFishNode.isGlyph`), so `circle({ area })`
+  placed on x only is a glyph on y too: it is given one size, in one unit,
+  on both axes, and one unit has one σ. A glyph size is a scale of its own,
+  keyed by its unit. No axis's σ scales it, and a coordinate transform does
+  not warp it. A bubble in a scatter and a circle in a 2D histogram's cell
+  are glyphs.
+- A **length of the space**. Every other data size is a length along its
+  axis: one whose unit has no datum position on an axis it is given on, or
+  one in the unit of the parent's axis that places it. The axis's σ scales it,
+  its claim is part of the axis's claim, and a coordinate transform warps
+  it. A bar in a stack, a circle in a spread's slot, and a histogram bar
+  are lengths. The histogram bar sits in a bin cell on x, but its height is
+  a size on y, where nothing places it at a datum.
+
+Sizing and embedding ask this one question (`GoFishNode.isGlyph`, decided
+once per node and axis and memoized with the claim walk). The embedding
+pass keeps a glyph flat (`resolveEmbedding`), and layout hands a glyph its
+unit's σ in place of its frame's (`GoFishNode.layout`), so a layer passes
+its children its frame's σ and nothing more.
+
+The litmus test is whether the coordinate system should warp the shape. In
+a bubble chart it should not: the bubble's area measures population, and
+the axes measure GDP and life expectancy. In a spread of circles it should:
+the circles are the axis's extent, as the bars of a bar chart are. A
+histogram bar's height should warp too: in polar it becomes a ring
+segment's depth.
+
+A box declares its aspect lock once (`AspectLock`, from
+`elaborateOwnDims`, shared by rect and ellipse). A size the lock derives is
+not given on its axis, so it takes no part in the rule: it follows the size
+it is derived from, and its data size is that size times the ratio. `circle({ h:
+"value" })` placed at a year on x only is given its height on y, where
+nothing places it, so the height is a length of y and reads against the
+value axis, as the histogram bar's does, and in polar it warps. Its width is
+the height's pixels. On x the width sits at a datum in another unit, so its
+pixels are at y's σ, which no claim on x can be written in: it claims
+nothing there (its size kind is "follows"), and the circles at the ends may
+reach past the plot. `circle({ w: "value" })` there is given its width on x,
+where a year places it, so it is a glyph, and its height is the same glyph
+size.
+
+Each glyph unit has one σ, found as the shared-measure σ is (#582): every
+glyph bounds it, and it is the smallest bound
+(`ScopeRegistry.glyphSigma`). A glyph's bound is the σ at which its own
+domain fills its room. A glyph in a cell has the cell for its room, which is
+data on the axis that places it, so its pixels are known at its frame's σ;
+the largest σ that fits every glyph in its cell is
+`k = min_i(cell_i / d_i)`. A glyph at a point has the glyph range for its
+room, the same for every glyph, so the points bound σ by the range over the
+widest glyph of the unit (`KeyedDomains.unitWidth`). The range is one
+internal constant (`GLYPH_ROOM_PX`), a placeholder until chart options can
+set the range of a non-spatial scale. When no room bounds σ, every glyph of
+the unit is 0 wide and is drawn 0 wide at any σ, so σ is 0. The registry
+builds each unit's bounds once, before the claim walk, from every glyph's
+room in the final tree (`ScopeRegistry.fitGlyphs`: the points' bound, and per
+axis the smallest `cell_i / d_i`), and each parent's sharing plan holds the
+cell it places each child in (`SharingPlan.cells`), so sizing N glyphs takes
+time linear in N.
+
+A glyph claims pixels, not σ (`GoFishNode.glyphClaim`). A glyph in a cell
+claims nothing past the cell, since the cell's data already claims the
+cell. A glyph at a point claims its size at its unit's σ as the claim walk
+knows it. So the axes the glyphs are placed on fit their positions alone,
+and the glyphs' sizes do not shrink the plot.
+
+Three shortcuts remain. The claim walk runs before any frame's σ is solved,
+so it cannot turn a cell into pixels: it sizes a glyph at a point by the
+points' bound alone (`glyphSigma` with no frame). When a cell of the same
+unit binds lower (a circle in a bin on x, unplaced on y, whose cells are
+narrower than the glyph range), layout draws it smaller than it claims on y:
+the claim is an upper bound, never an overflow. Writing the exact claim
+needs a claim on y that reads x's σ, which a claim, a function of its own
+axis's σ, cannot express. A cell is turned into pixels at the σ of the frame
+asking for the glyph's σ, so every frame that places one unit's glyphs must
+map its axis at one σ, which holds within one chart. And a size in the unit
+of one axis its parent places it on is a length on both axes of the mark,
+so `circle({ r: "a" })` at `x: "a", y: "b"` is a length of x drawn at the
+x and y σs, which the aspect lock reconciles by the smaller.
+
 ## Layout dispatch
 
 After both walks, layout proceeds on a single principle:
@@ -1416,8 +1602,9 @@ axis's claim is measured from data 0 and is the hull of what the content
 draws, so each side reaches the farther of the claim and the domain's niced
 end: pixels drawn past the data (a mark's size at its datum, a tick label
 past the last tick) take room only where the domain does not already reach
-past them. A delta axis centers its content in the niced width, so it widens
-by `σ·(nicedWidth − dataWidth)`, half on each side.
+past them. A delta axis centers its content in the niced width, so each
+side reaches at least `σ·nicedWidth/2` from the middle of its claim. Widening
+twice to one width changes nothing.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1533,7 +1720,22 @@ The marginal histogram's layer prints as:
 The registry is the sole producer of every slope. A coord boundary hands down
 the one σ its scope solves, which its map shares, and the #582 equal measure
 (equating x and y when they share a declared unit) is a named `equalizeMeasure`
-operation _on_ the registry, so the dump records the FINAL σ. The render root
+operation _on_ the registry, so the dump records the FINAL σ. Two axes share
+a unit when both their spaces are in one declared unit, or when each maps
+keyed domains of one unit and no other, and a mark ties that unit
+(`KeyedDomains.tiedUnitOf`). An axis that also maps another unit is
+not in one measure with the other axis: a marginal histogram's counts on
+the top (y) and the right (x) sit beside the scatter's beak lengths, so the
+two count scales stay apart. An aspect-locked mark whose size is data,
+such as a circle, ties its unit (#1087): it draws one value as a length on
+both axes, so its unit is one length on x and y even when it is unknown.
+The type walk records the tie on the unit's class in the union-find
+(`tieUnit`), so it holds for every occurrence the walk unifies with it. So
+a row of `circle({ h: "value" })` in a spread fits both axes at
+`σ = min(H / max v, W / Σv)`, and the value axis reads that σ. The aspect
+lock gives the other axis the same data length (`elaborateOwnDims`'s
+`dataSize`), so
+both axes claim it. The render root
 and a chart with a literal size on both axes both go through it. The chart
 solves its two scopes in the claim walk (`solveFixed`) and equalizes them
 there (`equalizeFixed`) before either claim is read. Both take the smaller σ,
@@ -1663,15 +1865,15 @@ reads one: a ring or a label wrapper added later reads the seat of the content
 it wraps. Chrome does take room, as pixels: every chrome shape claims its size,
 and a ring's claim is the hull of what it wraps and of its shapes where its
 constraints place them (`placeByClaims`). A layer that wears chrome hands its
-content its slot less its gutters (never less than 0), forms of those claims in σ evaluated where it is laid out, and a node with a
+content what its chrome leaves of its room (never less than 0), and a node with a
 size of its own, a chart or a plain layer, takes that size as its plot and
-adds the gutters its content's claims give around it (#1032; see [Chrome gutters](/internals/layout/passes#chrome-gutters)). A child
+adds what its content's dressing reaches past it (#1032; see [Chrome around a chart](/internals/layout/passes#chrome-around-a-chart)). A child
 placed beside a node inside another child (a label on its mark's ref) takes
 room where the claim walk knows that node lands (`planPlacement`), a band of
 a category axis included (a share is a claim), and is ink where it does not
 (inside a coordinate space, or beside a band in a scope that mixes data and
-bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a chart's
-content, seated past its chrome's start gutter) shares the layer's frame from
+bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a ring's
+content, seated at the ring's origin, `wrapRing`) shares the layer's frame from
 that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
 the pin. The axes drawn over each domain are recorded once `resolveAxes` has
 assigned them (`refreshDemand`, which `layout()` calls once, after the axes
@@ -1794,21 +1996,21 @@ concrete units on one axis are a type error. The concrete units are:
 
 Each declared unit is a `HasUnit` (the column type, `schema.ts`): a `unit`
 name, which says which units are the same, an optional **symbol**, which
-an axis title shows, and the unit's **classes**, what its amounts can do,
+an axis title shows, and the unit's **traits**, what its amounts can do,
 when they are known. A user's unit `u` has the symbol `u`. A `Unit(u)`
-definition writes its classes; a unit declared by its name alone writes
-none, so its classes are unknown. The engine's own units (`INSTANT`,
+definition writes its traits; a unit declared by its name alone writes
+none, so its traits are unknown. The engine's own units (`INSTANT`,
 `DURATION`, `COUNT` in `measure.ts`, a share) have no symbol, since a count
 or a share is a plain number and a time axis's ticks already read as
-dates, and their classes are known: a duration, a count and a share add
+dates, and their traits are known: a duration, a count and a share add
 up, and an instant does not.
 
-**Which amounts add up.** `CanAdd` (#1197) is a class of the unit, not of a
+**Which amounts add up.** `CanSum` (#1197) is a trait of the unit, not of a
 column: `Unit(name, { traits: [Trait.summable()] })` defines it, and it rides on the unit
-(`HasUnit.classes`) into the `Quantity` read from a column. A unit is its
+(`HasUnit.traits`) into the `Quantity` read from a column. A unit is its
 name, so every occurrence of one name is one unit, and where two
-occurrences meet their classes meet by one rule, `meetUnitClasses`
-(`measure.ts`): unknown classes and known ones are the known ones, and two
+occurrences meet their traits meet by one rule, `meetUnitTraits`
+(`measure.ts`): unknown traits and known ones are the known ones, and two
 known definitions that disagree throw an error naming both columns. They
 meet in two places. When a chart's schema is applied, its columns of one
 unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
@@ -1816,8 +2018,8 @@ unit name meet (`meetChartUnits`, `schema.ts`), so a column declared
 declared unit read (`unitOf`) meets the figure's other occurrences of its
 name in the walk's `Units`, wherever they are, so two charts that define
 one unit differently throw. `addsUp` (`measure.ts`) is the rule for one
-quantity: it adds up when its unit has `CanAdd`, when it has no declared
-unit, or when its unit's classes are unknown. Every place that adds values
+quantity: it adds up when its unit has `CanSum`, when it has no declared
+unit, or when its unit's traits are unknown. Every place that adds values
 while a chart is built sums them with `sumIn` (`fieldExpr.ts`), which
 checks it with `checkSummable`: a size channel's sum over its rows
 (`inferNumeric`; when an aggregate op already folded the rows, the channel
@@ -1832,14 +2034,14 @@ chart knows it. A stack adds spaces, not values, in the type walk, so a
 space's `UnitRecord` carries `summands`, the quantities of its values in a
 declared unit (`quantityUnits`; a shared `joinUnits` unions them, each once),
 and `distributeSpaceFold` sums each free part's own list with `Units.sum`,
-which reads the unit's classes as the figure knows them. While they are
+which reads the unit's traits as the figure knows them. While they are
 unknown the sum waits, and it is checked when an occurrence that knows
 them is met, so a stack of `"USD"` in one chart throws beside a
 `Unit("USD")` in another, whichever the walk meets first. The stack reads
 the parts, not the unit class they joined, so a `start` point beside a
 stacked width is checked only for the width; a pinned part is not summed,
 since the stack adds only its width. Summing a declared unit without
-`CanAdd` throws an error that names the column and says to declare
+`CanSum` throws an error that names the column and says to declare
 `Unit(name, { traits: [Trait.summable()] })`; for a unit whose difference unit adds up (a
 time), it says to subtract a reference first (`date - start` gives a
 duration, which adds up). That message reads the unit's `difference`, not
@@ -2007,8 +2209,10 @@ extent only when it is in the same unit as the dim's own position — a size in
 a foreign unit (a bubble's area) stays a flat point. It reads the units
 through the render's union-find (`sameValueUnit`, which compares the
 variables with `sameUnitVar`), after the walk: two unknowns are the same unit only when
-they are one column or met on a shared axis. See
-the embedding-resolution pass under
+they are one column or met on a shared axis. A mark its parent places is
+compared the same way: a glyph (`isGlyph`, see
+[Glyph sizes](#glyph-sizes-and-lengths-of-the-space)) stays a flat point.
+See the embedding-resolution pass under
 [layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
 
 **Constraint-domain measures.** A `position` constraint's datum coordinate
@@ -2088,49 +2292,56 @@ keyed by `spaceUnit` (cf. issues #452, #386).
 ## Column types: the chart schema
 
 `chart(data, { schema })` (`schema.ts`, #984) declares, per column, the
-classes the column's values have, in the style of typeclasses. A column's
+traits the column's values have (`HasLevels`, `HasUnit`, ...). A column's
 entry is a unit definition, a unit's name, or a column record
 `{ name, unit }`:
 
 ```ts
 const Likert = Unit({
-  domain: Domain.ordered(LEVELS),
+  domain: Domain.discrete(LEVELS),
   traits: [Trait.diverging()],
 });
 chart(survey, { schema: { response: Likert } });
 ```
 
 A unit definition (`Unit(name?, { domain?, traits? })`, #1197) separates
-what its values are, its `domain`, from the capabilities they have, its
-`traits`, as Rust separates a type from the traits it implements. `Domain`
+which values exist, its `domain`, from everything else about them, its
+`traits` (an order, a midpoint, summing), as Rust separates a type from the
+traits it implements. `Domain`
 and `Trait` are strategy families (`families/domain.ts`,
 `families/trait.ts`), but they are not in `STRATEGIES`: a domain and the
 traits are read when the `Unit` is made (`unitTypeOf`) and never reach the
-wire, which carries only the classes they expand into
+wire, which carries only the traits they expand into
 (`UnitDefinition.type`, a `UnitType`):
 
-| Definition                   | Classes                                   |
-| ---------------------------- | ----------------------------------------- |
-| a name `u`                   | `HasUnit { unit: u, symbol: u, classes }` |
-| `Domain.discrete(levels)`    | `HasLevels { levels }`                    |
-| `Domain.ordered(levels)`     | `HasLevels { levels }`, `HasOrder {}`     |
-| `Trait.diverging(midpoint?)` | `HasMidpoint { at }`                      |
-| `Trait.summable()`           | `CanAdd` in `HasUnit.classes`             |
+| Definition                   | Traits                                   |
+| ---------------------------- | ---------------------------------------- |
+| a name `u`                   | `HasUnit { unit: u, symbol: u, traits }` |
+| `Domain.discrete(levels)`    | `HasLevels { levels }`                   |
+| `Trait.ordered()`            | `HasOrder {}`                            |
+| `Trait.diverging(midpoint?)` | `HasOrder {}`, `HasMidpoint { at }`      |
+| `Trait.summable()`           | `CanSum` in `HasUnit.traits`             |
+
+`Trait.diverging` implies `Trait.ordered`, as a Swift protocol or a Lean
+class implies its parents: a midpoint is a point along an order, so it
+writes `HasOrder` too, and listing both is the same unit.
 
 `unitTypeOf` checks the definition: a unit needs a name or a domain; a
-domain is a `Domain` value (a bare list or an interval is an error: an
-interval domain, `Domain.continuous`, is a follow-up); a domain lists at
-least one level and no level twice (`levelsDomain`, which the `Domain`
-factories call and `unitTypeOf` calls again on a domain written as a
+domain is a `Domain` value (a bare list, an interval or any kind but
+`discrete` is an error: an interval domain, `Domain.continuous`, is a
+follow-up); a domain lists at least one level and no level twice
+(`Domain.discrete`, which `unitTypeOf` calls again on a domain written as a
 record); a trait appears once;
-`Trait.diverging` needs `Domain.ordered` (no domain, the reals, is "not
-supported yet"); `Trait.summable` needs a name, since adding up is a class
+`Trait.ordered` and `Trait.diverging` need a domain of levels (an order
+over the reals waits for `Domain.continuous`, so no domain is "not
+supported yet"); `Trait.summable` needs a name, since adding up is a trait
 of a unit and a unit is known by its name. A unit with no name writes no
 `HasUnit`, so its columns are typed one by one, as before the unit existed.
 Two units of one name with different domains are not compared yet.
 
-A column type is a record keyed by class name (`ColumnType`), and the engine
-reads only the classes, never the definition. Nine classes exist:
+A column type is a record keyed by trait name (`ColumnType`), and the engine
+reads only the traits, never the definition. Seven column traits exist, and
+a unit has one trait of its own (`CanSum`):
 
 - `HasLevels` (`{ levels }`, from a domain): the values are the levels of a
   fixed list. `splitEntries` groups a `by` over the column in that order
@@ -2142,11 +2353,12 @@ reads only the classes, never the definition. Nine classes exist:
   are used (`orderByLevels`, at a split or a color scale), not when the
   chart types its data, so a `filter` in the flow can drop the stray rows
   first.
-- `HasOrder` (`{}`, from `Domain.ordered`): the levels are ordered. It is a
+- `HasOrder` (`{}`, from `Trait.ordered`, or implied by `Trait.diverging`):
+  the levels are ordered. It is a
   marker over `HasLevels`, which `columnTypeOf` requires. A split over the
   column says its groups are ordered (`SplitGroups.hasOrder`), so an
   ordinal axis starts an outer level's labels at their runs; over
-  `Domain.discrete` levels, which have no order, it centers them.
+  levels without it, which have no order, it centers them.
 - `HasMidpoint` (`{ at }`, from `Trait.diverging(midpoint)`): the order has a midpoint, the
   point `{ at }` along it in edge coordinates. Level `i` spans `[i, i + 1]`,
   so 0 is the first level's leading edge, `n` the last level's trailing
@@ -2154,12 +2366,12 @@ reads only the classes, never the definition. Nine classes exist:
   ggstats' `gglikert`). `Unit` writes the default `n / 2` into the
   record, so the wire form always carries a number: the middle of the
   middle level when the count is odd, the boundary between the two middle
-  levels when it is even. It requires `HasOrder`: `unitTypeOf` rejects
-  `Trait.diverging` without `Domain.ordered`, and `columnTypeOf`
-  rejects a wire record that has one without the other. A midpoint that is
+  levels when it is even. It requires `HasOrder`: `Trait.diverging`
+  writes both, and `columnTypeOf` rejects a wire record that has a
+  midpoint without an order. A midpoint that is
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
   which `Unit` calls at once and `columnTypeOf` calls on a wire
-  record; Python's `Unit` raises the same messages, word for word. A stack over the column takes the
+  record; Python's `Unit` raises the same messages, with code spelled in Python. A stack over the column takes the
   midpoint as its origin (`stackOrigin`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the
@@ -2174,7 +2386,7 @@ reads only the classes, never the definition. Nine classes exist:
   is neither the order nor its reverse is an error.
 - A time (`Unit.time({ zone })`, #1057) is a `HasUnit` with a `zone`: the
   values are instants, read on the calendar of the IANA zone `zone` (UTC by
-  default). There is no separate calendar class: the zone is a parameter of
+  default). There is no separate calendar trait: the zone is a parameter of
   the unit, and nothing needs a calendar without a unit. It is the one unit
   that changes the data: `applySchema` (now async, because it
   loads Temporal; see `calendar.ts`) copies the rows and turns each value
@@ -2223,21 +2435,21 @@ reads only the classes, never the definition. Nine classes exist:
   The values a user writes are the `Calendar` strategy family
   (`families/calendar.ts`): each kind is a `CalendarPartition` used bare or
   called with its options (`Calendar.month({ every: 3 })`, #1133).
-- `HasUnit` (`{ unit, symbol?, classes?, zone?, difference? }`, #994, #955,
+- `HasUnit` (`{ unit, symbol?, traits?, zone?, difference? }`, #994, #955,
   #1197): the values
   are amounts in the declared unit `unit`. A column's entry declares it with
-  a `Unit(u)` definition, which writes the unit's `classes` (`{ CanAdd: {} }`
+  a `Unit(u)` definition, which writes the unit's `traits` (`{ CanSum: {} }`
   with `Trait.summable()`, else `{}`), or with the name `u` alone, which writes
-  no `classes`: what the unit can do is unknown. Either writes the symbol
+  no `traits`: what the unit can do is unknown. Either writes the symbol
   `u`. The engine's units are definitions too, with no symbol:
   `Unit.time({ zone })` (the instant, with its `zone` and its `difference`,
   a duration) and `Unit.duration`. A column
   without it has an unknown unit, a unit variable (see
   [measures](#measures-units-are-types)). A column's levels must fit its
-  other classes, so a text-level column takes no unit (`checkLevelsFit` in
+  other traits, so a text-level column takes no unit (`checkLevelsFit` in
   `schema.ts`, which only a wire record can break).
-- `CanAdd` (`{}`, #1197) is not a column class: it is a class of the unit,
-  in `HasUnit.classes`. See [which units add up](#measures-units-are-types).
+- `CanSum` (`{}`, #1197) is not a column trait: it is a trait of the unit,
+  in `HasUnit.traits`. See [which units add up](#measures-units-are-types).
 - `HasQuantity` (`{ name }`, #955): the values are amounts of the quantity
   `name` (a column record's `name`, `{ name, unit }`), when it is not the
   column's own name. It titles the axis and
@@ -2248,7 +2460,7 @@ reads only the classes, never the definition. Nine classes exist:
   from the least to the greatest, in the data it was typed with. Nothing
   declares it: `applySchema` computes it for every column whose
   values are all finite numbers (missing values aside; a time's values are
-  epoch milliseconds by then), after the other classes. It is what a binned
+  epoch milliseconds by then), after the other traits. It is what a binned
   key's cells cover (see [Cells](#cells-a-binned-key)). `sorted()` gives
   the same values in order, for the cells of `Bin.quantiles`: it reads them
   off the typed rows on its first call only and keeps them, so a column no
@@ -2271,11 +2483,11 @@ split leaf, and each data-transform operator (`mapOperator` in
 (`typeLikeChartData`, also `resolve` and `join`) types its result with
 `applySchema` too, passing the input's types as `applySchema`'s `inherited`
 types, whether or not the function returned its input array. It keeps only
-those that still fit the result's values: each class has one predicate for
+those that still fit the result's values: each trait has one predicate for
 the values it accepts as they stand (`ACCEPTS` in `schema.ts`: a time holds
 instants, epoch milliseconds or `Date`s, an order holds text or numbers,
 and a unit holds numbers, plus `Date`s in the instant unit), and a type
-fits a value when every class it has accepts it. A `Date` is an instant, so a time column
+fits a value when every trait it has accepts it. A `Date` is an instant, so a time column
 of `Date`s keeps its inherited type, zone included, and its Dates become
 epoch milliseconds; a string needs a zone to read, so it does not fit. The
 inherited types never reinterpret or check values, so a date rewritten to
@@ -2301,24 +2513,28 @@ otherwise it tags a shallow copy of the array. So the stack's split reads
 its `by` column's type off the data it splits, and a color channel's
 `DatumValueImpl` records the type of the field it read (`fieldType`), which
 lets the categorical color scale list its domain in the column's order. A
-later class (`HasZero`, `HasCycle`, ...) is one more key on the record.
+later trait (`HasZero`, `HasCycle`, ...) is one more key on the record.
 
-A column's unit is one of these classes, `HasUnit`, so a unit moves with
+A column's unit is one of these traits, `HasUnit`, so a unit moves with
 the rest of the column's type, by the same rules: it survives a split, a
 `filter`, and a `derive` whose column still holds numbers, and a `schema`
 entry that names the column replaces it with the rest of the type (#994).
 `chart(data, { schema })` and `derive(fn, { schema })` declare it with a
 `Unit(u)` or the name `u`. `columnTypeOf` turns every entry (a builder, a
 column record `{ name, unit }`, a `Unit`, a unit's name) into its record of
-classes, the wire form, in one place (`classesOf`), which Python's `chart`
-mirrors before it serializes.
+traits, the wire form, in one place (`traitsOf`), which Python's `chart`
+mirrors before it serializes. A wire record may have only the keys of the
+types: each trait's record has only its own keys, and a `HasUnit`'s
+`traits` is a record keyed by unit trait name. Both key lists are tables
+the compiler holds to the types (`TRAIT_KEYS`, `UNIT_TRAIT_KEYS`), so a
+misspelled key throws instead of being dropped.
 
 A column's **domain** (`HasDomain`) moves with the rest of its type, by the
 rules above, with one difference: it is of the rows it was computed over.
 `applySchema` computes it for the chart's data and for each `derive`'s
 result over the rows it types, and drops the domains it inherits or finds on
 the array, so a `derive` never keeps its input's. `copyColumnTypes` hands it
-to each split leaf and to a `filter`'s result with the other classes, the
+to each split leaf and to a `filter`'s result with the other traits, the
 same record, so a split leaf holds one group's rows and its column still has
 the domain of the whole data. A chart over a selection
 (`chart(selectAll(...))`) types a list of refs, so `ChartBuilder` passes
@@ -2383,8 +2599,7 @@ error rather than silently doing the wrong thing:
   `floor(i / size)` (an operator with no `by` splits by `chunk(1)`, row
   identity), and the groups come in
   order of first appearance, or in the order of the column's levels when the
-  data declares them (`HasLevels`, from `Domain.discrete` or
-  `Domain.ordered`, see [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
+  data declares them (`HasLevels`, from `Domain.discrete`, see [Column types](#column-types-the-chart-schema)). A binned key (`bin`, or a
   binned struct) instead keys each row by its **cell**, and its groups are the
   cells of its partition, in order, one entry per cell, empty cells included
   (`binEntries`; see [Cells](#cells-a-binned-key)). The same key function
@@ -2609,8 +2824,9 @@ Its type on each axis its cell spans is the cell's interval, `CONTINUOUS`
 and `pinned`, so it shares the frame of the layer it is in, as a rect with a
 data `x` and `x2` does, and the partition hands it the map of its scale
 through the one seating rule (`childPosScalesFor`, `seatInScope`,
-`frameOf`). It maps the cell's edges, and the outline of a cell of the
-plane, through that map. Since its type claimed the cell, its parent
+`frameOf`). It maps the cell's edges through that map, and draws the
+outline of a cell of the plane as the shape its parent hands it (see
+below). Since its type claimed the cell, its parent
 leaves it where its data puts it (`placedByOwnData`, `_node.ts`, the one
 rule for a child its own data places: its cell is not its room, and no
 constraint in its parent but a `position` moves it, a `middle` align
@@ -2693,8 +2909,17 @@ count over one is 0 and is drawn.
 **Regions with an outline.** A region may also hold an outline, the same
 shape the `boundary` geometry query (#974) returns, but given from parent to
 child: a `PositionRegion` holds the cell's outline in datums (`outline`,
-`[x, y]` per corner) when the cell has one and is placed along both axes,
-and the `region` mark maps it through both scales and draws it as a path
+`[x, y]` per corner) when the cell has one and is placed along both axes.
+The layer of the partition maps it through both of the child's scales into
+the child's frame, in the same walk that gives the child its span
+(`buildChildSpans`, `constraints/proposalPlan.ts`), and hands it to the
+child as its shape, the same channel a `treemap` hands its
+tiles down and an `enclose` its outline (see
+[The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)).
+A layer passes its shape on to a child it proposes its own box
+(`childLayoutSizeProposal`), so a `region` in a layer in a cell gets it
+too. A corner that does not map is an
+error that names the axis. The `region` mark draws its shape as a path
 when it has one, and its box otherwise (under a
 nonlinear coordinate space, resampled, so a hexagon in polar coordinates
 draws curved). The cells of a binned struct, below, are what make outlines.
@@ -2772,7 +2997,7 @@ called a sum or a mean over the raw per-row values; it now instead calls
 the pipeline already folded them to a singleton (`evalFieldValues` reports
 `folded`, the one place that decides it), the channel takes that value
 as it is and applies no aggregation of its own (so a size channel sums
-nothing and checks no `CanAdd`); otherwise it applies its own sum or mean
+nothing and checks no `CanSum`); otherwise it applies its own sum or mean
 to the per-row values. So `rect({ h: field("weight").mean() })` reports the
 mean, not
 `mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
@@ -2791,7 +3016,17 @@ reports no quantity of its own, leaving
 get their own declared unit, `shareQuantity(base, byName)` — see
 [Space-filling spines](#space-filling-spines-normalize-nests-each-part)
 above for why a share is a distinct unit (0–1, not the base quantity's own
-units) that must never silently union with it.
+units) that must never silently union with it. An area channel (#972,
+`CHANNEL_INFER.area` in `channels.ts`) roots its sum, and the root is in a unit of its
+own too, `√q` (`sqrtQuantity` in `measure.ts`), so a circle sized by
+`area: "count"` never shares a scale with a bar of `h: "count"`. A declared
+unit stays declared, as `√unit`, with its symbol rooted too, and an unknown
+one stays unknown, the variable `√name`. The root keeps none of the unit's
+traits: a square root does not preserve sums (√(a + b) is not √a + √b), so
+`√unit` has no `CanSum` and a stack of area circles is refused by the sum
+check. It keeps no `difference` or `zone` either (an area channel sums its
+rows first, so amounts of an instant never reach it), and it records no
+column, since its values are not the column's.
 
 ## Axis inference
 

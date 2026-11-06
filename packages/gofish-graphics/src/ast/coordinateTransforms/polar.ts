@@ -51,7 +51,7 @@ export const polarPreset = (type: "polar" | "clock") => {
     return {
       type,
       polar: true,
-      axisClasses: [{ HasCycle: { period: 2 * Math.PI } }, { HasZero: {} }],
+      axisTraits: [{ HasCycle: { period: 2 * Math.PI } }, { HasZero: {} }],
       transform: ([theta, r]: [number, number]) => [
         center[0] + r * Math.cos(baselineAngle + direction * theta),
         center[1] + r * Math.sin(baselineAngle + direction * theta),

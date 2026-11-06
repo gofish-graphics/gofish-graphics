@@ -38,7 +38,7 @@ export const elmTuple = createMark(
             fill: "black",
             text: tupleData,
           }).name(valTag)
-        : text({ fontSize: 24, fontFamily, fill: "none", text: "" }).name(
+        : text({ fontSize: 24, fontFamily, text: "" }).hidden().name(
             valTag
           ),
     ]).relate(({ box, label, val }) => [

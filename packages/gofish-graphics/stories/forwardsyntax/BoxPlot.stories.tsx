@@ -1,6 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, layer, rect, spread, Domain, Unit } from "../../src/lib";
+import {
+  chart,
+  layer,
+  rect,
+  spread,
+  Domain,
+  Trait,
+  Unit,
+} from "../../src/lib";
 import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 
 /**
@@ -14,30 +22,28 @@ import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
 const meta: Meta = {
   title: "Forward Syntax/Box Plot",
   argTypes: {
-    w: { control: { type: "number", min: 200, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 200, max: 1000, step: 10 } },
   },
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { h: number };
 
 export const GenderPayGap: StoryObj<Args> = {
-  args: { w: 560, h: 320 },
+  args: { h: 320 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     const pay = { name: "Pay", unit: Unit("USD") };
     chart(genderPayGap, {
       schema: {
-        "Pay Grade": Unit({ domain: Domain.ordered(payGrade) }),
+        "Pay Grade": Unit({ domain: Domain.discrete(payGrade), traits: [Trait.ordered()] }),
         Min: pay,
         "25-Percentile": pay,
         Median: pay,
         "75-Percentile": pay,
         Max: pay,
       },
-      w: args.w,
       h: args.h,
     })
       .flow(

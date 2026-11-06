@@ -90,7 +90,7 @@ class TestOperators:
         op = derive(
             lambda d: d,
             schema={
-                "month": Unit(domain=Domain.ordered(["Jan", "Feb"])),
+                "month": Unit(domain=Domain.discrete(["Jan", "Feb"]), traits=[Trait.ordered()]),
                 "at": Unit.time(zone="America/New_York"),
             },
         )
@@ -99,8 +99,8 @@ class TestOperators:
             "at": {
                 "HasUnit": {
                     "unit": "instant",
-                    "classes": {},
-                    "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                    "traits": {},
+                    "difference": {"unit": "duration", "traits": {"CanSum": {}}},
                     "zone": "America/New_York",
                 },
             },
@@ -1038,7 +1038,7 @@ class TestSchema:
     JS reads as is (#984, #1197)."""
 
     def test_domains_are_levels(self):
-        assert Unit(domain=Domain.ordered(["a", "b"])).type == {
+        assert Unit(domain=Domain.discrete(["a", "b"]), traits=[Trait.ordered()]).type == {
             "HasLevels": {"levels": ["a", "b"]},
             "HasOrder": {},
         }
@@ -1047,13 +1047,13 @@ class TestSchema:
         assert party.type == {"HasLevels": {"levels": ["Dem", "Rep", "Ind"]}}
         assert party.name is None
         assert repr(party) == "Unit(domain=Domain.discrete(['Dem', 'Rep', 'Ind']))"
-        stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+        stars = Unit("stars", domain=Domain.discrete([1, 2, 3, 4, 5]), traits=[Trait.ordered()])
         assert stars.type == {
-            "HasUnit": {"unit": "stars", "symbol": "stars", "classes": {}},
+            "HasUnit": {"unit": "stars", "symbol": "stars", "traits": {}},
             "HasLevels": {"levels": [1, 2, 3, 4, 5]},
             "HasOrder": {},
         }
-        assert repr(stars) == "Unit('stars', domain=Domain.ordered([1, 2, 3, 4, 5]))"
+        assert repr(stars) == "Unit('stars', domain=Domain.discrete([1, 2, 3, 4, 5]), traits=[Trait.ordered()])"
 
     def test_unit_is_a_definition(self):
         usd = Unit("USD")
@@ -1061,10 +1061,10 @@ class TestSchema:
         summable = Unit("USD", traits=[Trait.summable()])
         assert summable != usd
         assert repr(summable) == "Unit('USD', traits=[Trait.summable()])"
-        likert = Unit(domain=Domain.ordered(["a", "b"]), traits=[Trait.diverging()])
+        likert = Unit(domain=Domain.discrete(["a", "b"]), traits=[Trait.diverging()])
         assert (
             repr(likert)
-            == "Unit(domain=Domain.ordered(['a', 'b']), traits=[Trait.diverging()])"
+            == "Unit(domain=Domain.discrete(['a', 'b']), traits=[Trait.diverging()])"
         )
         # Immutable, and `.type` is a copy.
         with pytest.raises(AttributeError):
@@ -1075,44 +1075,56 @@ class TestSchema:
             Unit(3)  # type: ignore[arg-type]
         # Equal units hash the same, so a set or dict keeps one of them.
         assert Unit(
-            domain=Domain.ordered([1, 2, 3]), traits=[Trait.diverging(2)]
-        ) == Unit(domain=Domain.ordered([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
+            domain=Domain.discrete([1, 2, 3]), traits=[Trait.diverging(2)]
+        ) == Unit(domain=Domain.discrete([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
         assert hash(
-            Unit(domain=Domain.ordered([1, 2, 3]), traits=[Trait.diverging(2)])
+            Unit(domain=Domain.discrete([1, 2, 3]), traits=[Trait.diverging(2)])
         ) == hash(
-            Unit(domain=Domain.ordered([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
+            Unit(domain=Domain.discrete([1.0, 2.0, 3.0]), traits=[Trait.diverging(2.0)])
         )
 
-    # The same literals as `errors` in the JS schema.test.ts.
+    # The same messages as `errors` in the JS schema.test.ts, with code
+    # spelled in Python.
     @pytest.mark.parametrize(
         "make, message",
         [
             (
                 lambda: Unit(traits=[Trait.diverging()]),
                 'Unit needs a name, a domain, or both: Unit("USD"), '
-                'Unit({ domain: Domain.discrete(["low", "high"]) }).',
+                'Unit(domain=Domain.discrete(["low", "high"])).',
             ),
             (
                 lambda: Unit("pp", traits=[Trait.summable(), Trait.diverging(0)]),
-                'Unit("pp"): Trait.diverging() needs an ordered domain: a '
-                "midpoint is a point along an order, so list the levels in "
-                "Domain.ordered(levels). A midpoint on a unit's amounts is not "
-                "supported yet.",
+                'Unit("pp"): Trait.diverging() needs a domain of levels to order: '
+                'Unit("pp", domain=Domain.discrete(levels), traits=[Trait.diverging()]). '
+                "A unit's amounts are numbers, which are already ordered; an order "
+                "over them comes with Domain.continuous, which is not supported yet.",
+            ),
+            (
+                lambda: Unit("pts", traits=[Trait.ordered()]),
+                'Unit("pts"): Trait.ordered() needs a domain of levels to order: '
+                'Unit("pts", domain=Domain.discrete(levels), traits=[Trait.ordered()]). '
+                "A unit's amounts are numbers, which are already ordered; an order "
+                "over them comes with Domain.continuous, which is not supported yet.",
             ),
             (
                 lambda: Unit(
                     domain=Domain.discrete(["SD", "D", "N", "A", "SA"]),
-                    traits=[Trait.diverging()],
+                    traits=[Trait.ordered(), Trait.ordered()],
                 ),
-                "Unit: Trait.diverging() needs an ordered domain, but "
-                "Domain.discrete(levels) is unordered. A midpoint is a point "
-                "along an order: use Domain.ordered(levels).",
+                "Unit lists Trait.ordered() twice.",
+            ),
+            (
+                lambda: Unit(domain={"kind": "ordered", "levels": ["a", "b"]}),
+                "Unit: domain must be a Domain: Domain.discrete(levels), got "
+                "{'kind': 'ordered', 'levels': ['a', 'b']}. A domain that is an "
+                "interval is not supported yet.",
             ),
             (
                 lambda: Unit(domain=Domain.discrete([1, 2]), traits=[Trait.summable()]),
                 "Unit: Trait.summable() needs a name. Whether amounts add up "
                 "belongs to their unit, which is known by its name: "
-                'Unit("USD", { traits: [Trait.summable()] }).',
+                'Unit("USD", traits=[Trait.summable()]).',
             ),
             (
                 lambda: Unit("USD", traits=[Trait.summable(), Trait.summable()]),
@@ -1120,27 +1132,26 @@ class TestSchema:
             ),
             (
                 lambda: Unit(
-                    domain=Domain.ordered(["SD", "D", "N", "A", "SA"]),
+                    domain=Domain.discrete(["SD", "D", "N", "A", "SA"]),
                     traits=[Trait.diverging(1), Trait.diverging(2)],
                 ),
                 "Unit lists Trait.diverging() twice.",
             ),
             (
                 lambda: Unit("pp", domain=[1, 2]),  # type: ignore[arg-type]
-                'Unit("pp"): domain must be a Domain: Domain.discrete(levels) '
-                "or Domain.ordered(levels), got [1,2]. A domain that is an "
-                "interval is not supported yet.",
+                'Unit("pp"): domain must be a Domain: Domain.discrete(levels), '
+                "got [1, 2]. A domain that is an interval is not supported yet.",
             ),
             (
                 lambda: Unit("pp", domain={"lo": 0, "hi": 1}),
-                'Unit("pp"): domain must be a Domain: Domain.discrete(levels) '
-                'or Domain.ordered(levels), got {"lo":0,"hi":1}. A domain '
-                "that is an interval is not supported yet.",
+                'Unit("pp"): domain must be a Domain: Domain.discrete(levels), '
+                "got {'lo': 0, 'hi': 1}. A domain that is an interval is not "
+                "supported yet.",
             ),
             (
                 lambda: Unit("USD", traits=["summable"]),  # type: ignore[list-item]
-                'Unit("USD") has the trait "summable". A unit\'s traits are '
-                "Trait.diverging() and Trait.summable().",
+                'Unit("USD") has the trait \'summable\'. A unit\'s traits are '
+                "Trait.ordered(), Trait.diverging() and Trait.summable().",
             ),
             (
                 lambda: Unit("pts", domain=Domain.discrete(["low", "high"])),
@@ -1148,8 +1159,8 @@ class TestSchema:
                 "accepts.",
             ),
             (
-                lambda: Domain.ordered(["a", "b", "a"]),
-                'Domain.ordered: the level "a" is listed twice. Each level is '
+                lambda: Domain.discrete(["a", "b", "a"]),
+                'Domain.discrete: the level "a" is listed twice. Each level is '
                 "listed once, in its place.",
             ),
             (
@@ -1158,9 +1169,9 @@ class TestSchema:
                 "listed once, in its place.",
             ),
             (
-                lambda: Domain.ordered([]),
-                "Domain.ordered: levels must list at least one level, e.g. "
-                'Domain.ordered(["low", "mid", "high"]).',
+                lambda: Domain.discrete([]),
+                "Domain.discrete: levels must list at least one level, e.g. "
+                'Domain.discrete(["low", "mid", "high"]).',
             ),
             (
                 lambda: Unit(42),  # type: ignore[arg-type]
@@ -1178,10 +1189,10 @@ class TestSchema:
         schema_of = lambda **schema: ir(chart([], schema=schema).mark(rect()))[
             "options"
         ]["schema"]
-        # A Unit is `{ unit }` with the unit's classes, a name alone is a
-        # unit whose classes are unknown (no `classes`), and a record adds
+        # A Unit is `{ unit }` with the unit's traits, a name alone is a
+        # unit whose traits are unknown (no `traits`), and a record adds
         # the quantity.
-        summable_usd = {"unit": "USD", "symbol": "USD", "classes": {"CanAdd": {}}}
+        summable_usd = {"unit": "USD", "symbol": "USD", "traits": {"CanSum": {}}}
         assert schema_of(revenue=usd) == {"revenue": {"HasUnit": summable_usd}}
         assert schema_of(area="km²") == {
             "area": {"HasUnit": {"unit": "km²", "symbol": "km²"}}
@@ -1189,7 +1200,7 @@ class TestSchema:
         assert schema_of(temp={"name": "Temperature", "unit": Unit("°C")}) == {
             "temp": {
                 "HasQuantity": {"name": "Temperature"},
-                "HasUnit": {"unit": "°C", "symbol": "°C", "classes": {}},
+                "HasUnit": {"unit": "°C", "symbol": "°C", "traits": {}},
             }
         }
         assert schema_of(q1={"name": "Pay"}) == {"q1": {"HasQuantity": {"name": "Pay"}}}
@@ -1206,7 +1217,7 @@ class TestSchema:
         )
         USD = Unit("USD", traits=[Trait.summable()])
         Celsius = Unit("°C")
-        Stars = Unit("stars", domain=Domain.ordered([1, 2, 3, 4, 5]))
+        Stars = Unit("stars", domain=Domain.discrete([1, 2, 3, 4, 5]), traits=[Trait.ordered()])
         schema = ir(
             chart(
                 [{"balance": 1}],
@@ -1215,7 +1226,7 @@ class TestSchema:
                     "revenue": USD,
                     "area": "km²",
                     "temp": {"unit": Celsius},
-                    "region": Unit(domain=Domain.ordered(["n", "s"]), traits=[Trait.diverging()]),
+                    "region": Unit(domain=Domain.discrete(["n", "s"]), traits=[Trait.diverging()]),
                     "party": Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"])),
                     "rating": {"name": "Rating", "unit": Stars},
                     "day": Unit.time(zone="UTC"),
@@ -1234,7 +1245,7 @@ class TestSchema:
                     "revenue": USD,
                     "area": "km²",
                     "temp": {"unit": Celsius},
-                    "region": Unit(domain=Domain.ordered(["n", "s"]), traits=[Trait.diverging()]),
+                    "region": Unit(domain=Domain.discrete(["n", "s"]), traits=[Trait.diverging()]),
                     "party": Unit(domain=Domain.discrete(["Dem", "Rep", "Ind"])),
                     "rating": {"name": "Rating", "unit": Stars},
                     "day": Unit.time(zone="UTC"),
@@ -1246,18 +1257,22 @@ class TestSchema:
         assert derive_schema == schema
 
     def test_a_column_record_rejects_unknown_keys(self):
-        with pytest.raises(
-            TypeError,
-            match=r'^schema: column "pay" has the unknown key "entity"\. A column '
-            r"record takes name and unit",
-        ):
+        with pytest.raises(TypeError) as error:
             chart([], schema={"pay": {"name": "Pay", "entity": "grade"}})
+        assert str(error.value) == (
+            'schema: column "pay" has the unknown key "entity". A column '
+            'record takes name and unit: {"name": "Pay", "unit": Unit("USD")}.'
+        )
         with pytest.raises(TypeError, match=r"which is neither a Unit nor"):
             chart([], schema={"pay": {"unit": 3}})
         with pytest.raises(TypeError, match=r"which is not text"):
             chart([], schema={"pay": {"name": 3}})
-        with pytest.raises(TypeError, match=r"A column's entry is a Unit"):
+        with pytest.raises(TypeError) as error:
             chart([], schema={"pay": 3})
+        assert str(error.value) == (
+            'schema: column "pay" has the entry 3. A column\'s entry is a Unit, '
+            'a unit\'s name, or a column record {"name": ..., "unit": ...}.'
+        )
 
     def test_old_spellings_are_gone(self):
         import gofish
@@ -1265,8 +1280,8 @@ class TestSchema:
         for name in ("Schema", "ColumnSchema"):
             assert not hasattr(gofish, name)
         for method in ("unit", "quantity", "summable", "diverging"):
-            assert not hasattr(Unit(domain=Domain.ordered([1])), method)
-        assert not hasattr(Trait, "ordered")
+            assert not hasattr(Unit(domain=Domain.discrete([1]), traits=[Trait.ordered()]), method)
+        assert not hasattr(Domain, "ordered")
 
     def test_field_takes_no_unit(self):
         # A column's unit lives in the schema, not on a channel.
@@ -1275,19 +1290,24 @@ class TestSchema:
             field("x", "plane")  # type: ignore[call-arg]
 
     def test_diverging_defaults_the_midpoint_to_half_the_levels(self):
-        assert Unit(domain=Domain.ordered(["a", "b"]), traits=[Trait.diverging()]).type == {
+        assert Unit(domain=Domain.discrete(["a", "b"]), traits=[Trait.diverging()]).type == {
             "HasLevels": {"levels": ["a", "b"]},
             "HasOrder": {},
             "HasMidpoint": {"at": 1},
         }
+        # Trait.diverging() implies Trait.ordered(): listing both is the same
+        # unit, written in the short form.
+        both = Unit(domain=Domain.discrete(["a", "b"]), traits=[Trait.ordered(), Trait.diverging()])
+        assert both == Unit(domain=Domain.discrete(["a", "b"]), traits=[Trait.diverging()])
+        assert repr(both) == "Unit(domain=Domain.discrete(['a', 'b']), traits=[Trait.diverging()])"
         assert Unit(
-            domain=Domain.ordered(["a", "b", "c"]), traits=[Trait.diverging()]
+            domain=Domain.discrete(["a", "b", "c"]), traits=[Trait.diverging()]
         ).type["HasMidpoint"] == {"at": 1.5}
 
     def test_diverging_midpoint(self):
         levels = ["SD", "D", "N", "A", "SA"]
         midpoint = lambda m: Unit(  # noqa: E731
-            domain=Domain.ordered(levels), traits=[Trait.diverging(m)]
+            domain=Domain.discrete(levels), traits=[Trait.diverging(m)]
         ).type["HasMidpoint"]
         assert midpoint(2) == {"at": 2}
         assert midpoint(2.25) == {"at": 2.25}
@@ -1316,12 +1336,12 @@ class TestSchema:
     )
     def test_diverging_midpoint_off_the_order(self, midpoint, message):
         with pytest.raises(ValueError) as error:
-            Unit(domain=Domain.ordered(["SD", "D", "N", "A", "SA"]), traits=[Trait.diverging(midpoint)])
+            Unit(domain=Domain.discrete(["SD", "D", "N", "A", "SA"]), traits=[Trait.diverging(midpoint)])
         assert str(error.value) == message
 
     def test_schema_rides_chart_options(self):
         node = (
-            chart([{"r": "a"}], schema={"r": Unit(domain=Domain.ordered(["a"]), traits=[Trait.diverging()])})
+            chart([{"r": "a"}], schema={"r": Unit(domain=Domain.discrete(["a"]), traits=[Trait.diverging()])})
             .mark(rect(w=1))
             .to_ir()["root"]
         )
@@ -1342,15 +1362,15 @@ class TestTime:
 
         assert schema_of(Unit.time()) == {"HasUnit": {
             "unit": "instant",
-            "classes": {},
-            "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+            "traits": {},
+            "difference": {"unit": "duration", "traits": {"CanSum": {}}},
             "zone": "UTC",
         }}
         assert schema_of(Unit.time(zone="America/New_York")) == {
             "HasUnit": {
                 "unit": "instant",
-                "classes": {},
-                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "traits": {},
+                "difference": {"unit": "duration", "traits": {"CanSum": {}}},
                 "zone": "America/New_York",
             }
         }
@@ -1358,7 +1378,7 @@ class TestTime:
             "name": "Sold"
         }
         assert schema_of(Unit.duration) == {
-            "HasUnit": {"unit": "duration", "classes": {"CanAdd": {}}}
+            "HasUnit": {"unit": "duration", "traits": {"CanSum": {}}}
         }
         assert Unit.duration.name == "duration"
         assert repr(Unit.time(zone="Asia/Tokyo")) == "Unit.time(zone='Asia/Tokyo')"
@@ -1495,8 +1515,8 @@ class TestTime:
         assert node["options"]["schema"] == {
             "t": {"HasUnit": {
                 "unit": "instant",
-                "classes": {},
-                "difference": {"unit": "duration", "classes": {"CanAdd": {}}},
+                "traits": {},
+                "difference": {"unit": "duration", "traits": {"CanSum": {}}},
                 "zone": "Asia/Tokyo",
             }}
         }
@@ -1594,7 +1614,7 @@ class TestEncloseFlowStep:
         from gofish import Shape, enclose, pack
 
         step = (
-            enclose(shape=Shape.arcs(), padding=4)
+            enclose(shape=Shape.fillet(), padding=4)
             .name("region")
             .label("g")
             .z_order(-1)

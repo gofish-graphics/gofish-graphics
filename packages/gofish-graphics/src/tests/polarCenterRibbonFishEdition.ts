@@ -95,7 +95,7 @@ export const testPolarCenterRibbonFishEdition = (size: { width: number; height: 
                 fill: colorScale[FishType as keyof typeof colorScale],
                 curve: Curve.bezier(),
                 opacity: 0.8,
-                mixBlendMode: "multiply",
+                blendMode: "multiply",
               },
               items.map((d) => ref(`${d.Lake}-${d["Fish Type"]}`))
             )

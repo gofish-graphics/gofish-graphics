@@ -29,11 +29,11 @@ import {
   isORDINAL,
   isCONTINUOUS,
   dataWidth,
+  differenceSpan,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
   axisOver,
   niceContinuous,
-  originIs,
   spaceTitle,
   spaceZone,
   axisTickPartition,
@@ -124,7 +124,8 @@ export type AxisElaboration = {
   /** Shapes to add as siblings of the content inside the wrapping layer. */
   nodes: GoFishNode[];
   /** Builds this axis's constraints: `at` is the handle on one of its
-   *  `nodes`, and `inner` the handle on the box inside the ring. */
+   *  `nodes`, and `inner` the handle on the box inside the ring, whose frame
+   *  its datums are read in (`position`'s `in`). */
   constraints: RingConstraints;
   /** The node the axis's title centers on: the axis's own span. A
    *  position-like axis (continuous/difference) sets its line; an ordinal
@@ -133,11 +134,6 @@ export type AxisElaboration = {
    *  ordinal axis with no slots leaves it unset, and the title centers on
    *  the owner's content box. */
   anchor?: GoFishNode;
-  /** Where the content's baseline sits along this axis, in the axis's own
-   *  data frame: a delta axis has no data 0, so its frame is its own, and it
-   *  centers the content in its niced width. Unset: the content sits as its
-   *  type says (see the axis gutters in `elaborateChrome`). */
-  contentAt?: { dim: 0 | 1; at: number };
 };
 
 /** One row of axis labels: an axis, what kind of labels it carries, and its
@@ -289,39 +285,29 @@ function tickMark(
   ) as GoFishNode;
 }
 
-/** The axis line: a 1px rect auto-spanning [min,max] via datum endpoints. */
-function axisLine(dim: 0 | 1, min: number, max: number): GoFishNode {
+/** The axis line: a 1px rect, which `positionAxis` spans across
+ *  [min, max] of the plot's frame. */
+function axisLine(dim: 0 | 1): GoFishNode {
   return Rect(
-    dim === 1
-      ? { w: 1, y: datum(min), y2: datum(max), fill: AXIS_COLOR }
-      : { h: 1, x: datum(min), x2: datum(max), fill: AXIS_COLOR }
+    dim === 1 ? { w: 1, fill: AXIS_COLOR } : { h: 1, fill: AXIS_COLOR }
   );
 }
 
 /**
- * Seat the axis in the gutter beside the content, growing into NEGATIVE cross
- * space (into the SVG padding) rather than shifting the content. Keeping the
- * content pinned at the origin (see the orchestrator) is what lets the *other*
- * axis's posScale-positioned ticks stay aligned with it — otherwise a y-axis
- * gutter would push the content off the x-axis's tick grid (and vice versa).
+ * Seat the axis beside the plot, on the chart's chain like every other piece
+ * of chrome: the line is distributed `AXIS_CONTENT_GAP` past the plot's box
+ * on the cross axis, growing into negative cross space rather than shifting
+ * the content.
  *   [tick labels] ← tick marks ← axis line ← | content (at origin)
- *
- * The LINE seats one of two ways:
- *  - `crossFloor` given (the other dim is position-like, whichever node draws
- *    its axis): the line
- *    sits flush at the PLOT edge — `position({[cross]: datum(crossFloor)})`,
- *    the other axis's scale minimum. The two lines then meet at the domain
- *    corner even when no datum reaches it (a scatter whose y domain starts
- *    below the lowest point must not draw its x axis at the lowest point).
- *  - otherwise: distribute just past the content's bbox edge (a bar chart's
- *    y axis sits beside the bars).
+ * A chart's plot covers its whole niced domain (`GoFishNode.domainSpan`),
+ * so the lines of a scatter meet at the domain corner even when no datum
+ * reaches it.
  */
 function gutterConstraints(
   dim: 0 | 1,
   inner: ConstraintRef,
   line: ConstraintRef,
   ticks: ConstraintRef[],
-  crossFloor?: number,
   side: "start" | "end" = "start"
 ): any[] {
   // A degenerate domain can yield zero ticks; emit no gutter rather than
@@ -336,26 +322,10 @@ function gutterConstraints(
   // outward into the gutter.
   const innerEdge = atEnd ? "start" : "end";
   const innerAlign = cross(dim) === 0 ? { x: innerEdge } : { y: innerEdge };
-  const seat =
-    crossFloor !== undefined
-      ? // Standoff: the line sits AXIS_CONTENT_GAP outside the plot edge, so
-        // marks at the domain floor (a y=0 histogram bin) don't straddle it.
-        // Both lines get the same outward offset, so they still frame the
-        // corner. `datum(v).offset(px)` = "this data position, plus pixels".
-        // `side` flips which way "outward" is.
-        Constraint.position(
-          {
-            [d]: datum(crossFloor).offset(
-              atEnd ? AXIS_CONTENT_GAP : -AXIS_CONTENT_GAP
-            ),
-            anchor: innerEdge,
-          } as any,
-          [line]
-        )
-      : Constraint.distribute(
-          { dir: d, spacing: AXIS_CONTENT_GAP },
-          atEnd ? [inner, line] : [line, inner]
-        );
+  const seat = Constraint.distribute(
+    { dir: d, spacing: AXIS_CONTENT_GAP },
+    atEnd ? [inner, line] : [line, inner]
+  );
   return [
     seat,
     // Tick marks' inner edge flush with the line; labels extend into the gutter.
@@ -405,18 +375,13 @@ function positionAxis(opts: {
    *  them, so they carry no `axisLabel` tag and `label.angle: "auto"` does
    *  not score them. */
   extraLabels?: ExtraLabel[];
-  /** The other dim's scale floor, when it also carries a position-like axis —
-   *  seats this line at the plot corner instead of the content edge. */
-  crossFloor?: number;
   /** Which frame edge to seat the axis on (default near/origin = "start"). */
   side?: "start" | "end";
 }): AxisElaboration {
   const { dim, lineMin, lineMax, tickValues } = opts;
   const side = opts.side ?? "start";
-  const pos = (v: number) =>
-    (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any;
 
-  const line = axisLine(dim, lineMin, lineMax);
+  const line = axisLine(dim);
   const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i));
   const tickLabelNodes = opts.tickLabel
     ? tickValues.map((v, i) => opts.tickLabel!(v, i))
@@ -428,24 +393,28 @@ function positionAxis(opts: {
     Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR })
   );
 
-  const constraints: RingConstraints = (at, inner) => {
-    const lineRef = at(line);
-    const ticks = tickNodes.map(at);
+  const constraints: RingConstraints = (slot, inner) => {
+    const lineRef = slot(line);
+    const ticks = tickNodes.map(slot);
+    // A point or span of the frame of the box inside the ring: ticks sit on
+    // its scale wherever it is (a sized plot is a scope of its own, outside
+    // of which the ring sits).
+    const at = (v: unknown) => ({ [axisName(dim)]: v, in: inner }) as any;
+    const pos = (v: number) => at(datum(v));
     // Data pin: always the bare tick's own bbox (its "middle" anchor is its
     // TRUE center regardless of what a sibling `tickLabel` does — see
     // `tickMark`'s doc comment for why an oblique label can't be nested
     // inside the pinned node).
-    const cs: any[] = tickValues.map((v, i) =>
-      Constraint.position(pos(v), [ticks[i]])
-    );
+    const cs: any[] = [
+      Constraint.position(at([datum(lineMin), datum(lineMax)]), [lineRef]),
+      ...tickValues.map((v, i) => Constraint.position(pos(v), [ticks[i]])),
+    ];
     // Seat the gutter FIRST: constraints apply in order and placement is
     // first-write-wins, so the line must be placed before anything
     // distributes off it — an unplaced-anchor distribute would walk from 0
     // and drag the line into the plot. Tick marks align flush with the line
     // (their inner edge IS the tick).
-    cs.push(
-      ...gutterConstraints(dim, inner, lineRef, ticks, opts.crossFloor, side)
-    );
+    cs.push(...gutterConstraints(dim, inner, lineRef, ticks, side));
     if (opts.tickLabel) {
       const trackAxis = axisName(dim);
       const gutterDir = crossName(dim);
@@ -457,7 +426,7 @@ function positionAxis(opts: {
           ? ["baseline", "middle"]
           : ["middle", "middle"];
       tickValues.forEach((_, i) => {
-        const label = at(tickLabelNodes[i]);
+        const label = slot(tickLabelNodes[i]);
         const tick = ticks[i];
         cs.push(
           Constraint.align({ [trackAxis]: anchors } as any, [label, tick])
@@ -475,7 +444,7 @@ function positionAxis(opts: {
     // (now seated) line, by default at the same outer offset as the
     // continuous labels (tick + gap).
     extra.forEach((e, i) => {
-      const label = at(labelNodes[i]);
+      const label = slot(labelNodes[i]);
       cs.push(Constraint.position(pos(e.value), [label]));
       cs.push(
         Constraint.distribute(
@@ -504,8 +473,7 @@ function positionAxis(opts: {
 
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis.
  *  `nice` is the d3-niced [min, max] of the domain, computed once by
- *  `elaborationsFor` (the same pair feeds the other axis's `crossFloor`, so
- *  computing it in one place keeps the corner consistent).
+ *  `elaborationsFor`.
  *
  *  `labelRotation`'s `trackAlign` picks how each tick's label is built (see
  *  `tickMark`'s and `positionAxis`'s `tickLabel` doc comments for why): the
@@ -522,7 +490,6 @@ function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   ticks: AxisTicks,
-  crossFloor: number | undefined,
   side: "start" | "end",
   crossDirection: AxisDirection,
   labelRotation: LabelRotation | undefined,
@@ -563,7 +530,6 @@ function elaborateContinuousAxis(
         }
       : undefined,
     labelRotation,
-    crossFloor,
     side,
   });
 }
@@ -600,7 +566,6 @@ function elaborateTimeAxis(
   space: CONTINUOUS_TYPE,
   nice: [number, number],
   levels: readonly { level: CalendarPartition; hidden: boolean }[],
-  crossFloor: number | undefined,
   side: "start" | "end"
 ): AxisElaboration {
   const [lo, hi] = nice;
@@ -661,47 +626,44 @@ function elaborateTimeAxis(
     extraLabels: labels.flatMap((row, k) =>
       row.map((l) => ({ value: l.at, text: l.text, offset: rowOffset[k] }))
     ),
-    crossFloor,
     side,
   });
 }
 
 /** One difference axis: bare tick marks at tick values, delta labels at
  *  midpoints. `space` is the content's space; the axis spans its niced width
- *  from 0, and the content sits centered in it (`contentAt`): a delta axis
- *  comes from centering (`middle` alignment), so its slack splits evenly. */
+ *  from 0, and the content sits centered in it: a delta axis comes from
+ *  centering (`middle` alignment), so its slack splits evenly. Its plot has
+ *  no data 0, so its frame measures from the plot's own 0 (`frameOf`), where
+ *  the plot's data starts: the axis's 0 is the slack before it. */
 function elaborateDifferenceAxis(
   dim: 0 | 1,
   content: CONTINUOUS_TYPE,
   ticks: AxisTicks,
-  crossFloor?: number,
   side: "start" | "end" = "start"
 ): AxisElaboration {
   const space = niceContinuous(content, ticks);
   // `space` is the axis's niced space (`niceContinuous`), so its width is a
   // nice value from 0 and the ticks step evenly up to it: the scope that sizes
   // the content solves against the same niced width (`niceScope`), so ticks
-  // line up with the marks they annotate. The axis line spans [0, width].
+  // line up with the marks they annotate. The axis counts [0, width], and
+  // it lies at `differenceSpan` in the content's frame, as the plot covers.
   const width = dataWidth(space);
   const tickValues = d3Ticks(0, width, ticks.count);
-  const contentAt = (width - dataWidth(content)) / 2;
+  const [lineMin, lineMax] = differenceSpan(content, space);
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
-    value: (v + tickValues[i + 1]) / 2,
+    value: (v + tickValues[i + 1]) / 2 + lineMin,
     text: fmtNum(tickValues[i + 1] - v),
   }));
-  return {
-    ...positionAxis({
-      dim,
-      lineMin: 0,
-      lineMax: width,
-      tickValues,
-      tickNode: () => tickRect(dim),
-      extraLabels,
-      crossFloor,
-      side,
-    }),
-    contentAt: { dim, at: contentAt },
-  };
+  return positionAxis({
+    dim,
+    lineMin,
+    lineMax,
+    tickValues: tickValues.map((v) => v + lineMin),
+    tickNode: () => tickRect(dim),
+    extraLabels,
+    side,
+  });
 }
 
 /** How one level of an ordinal axis is drawn, as its depth's settings say:
@@ -1411,15 +1373,10 @@ function elaborationsFor(
         keyed.domainOf(node, dim, placed[dim], true)
       )[0]
   );
-  // Niced [min, max] per POSITION dim, computed ONCE: it feeds both that
-  // dim's own axis line/ticks (when the node owns it) and the other axis's
-  // `crossFloor` (the plot corner), so a nicing change can't skew the corner.
-  // A DIFFERENCE dim's floor is 0. An owned dim reads its own nice and the
-  // other dim's floor, so a node that owns any axis computes both dims,
-  // owned or not: a facet panel that owns only its y axis still seats that
-  // axis at the floor of the shared x domain an ancestor draws (#753), since
-  // the keyed scope is the same widen-then-nice whichever node draws the
-  // axis.
+  // Niced [min, max] per POSITION dim, computed ONCE for its axis line and
+  // ticks. The plot's box covers the same niced domain
+  // (`GoFishNode.domainSpan`), so the line seated beside it meets the other
+  // axis at the domain corner (#753).
   // The `levels` entries an axis on `dim` reads, from its first level on.
   const entriesFor = (dim: 0 | 1) =>
     (perLevel[dim].levels ?? []).slice(fold.dims[dim].names.length);
@@ -1439,7 +1396,6 @@ function elaborationsFor(
     undefined,
   ];
   const nices: ([number, number] | undefined)[] = [undefined, undefined];
-  const floors: (number | undefined)[] = [undefined, undefined];
   // What each owned axis ticks at, as `resolveAxes` stamped it: the same
   // ticks its scope's solve nices the domain to. A numeric axis is drawn
   // from its tick count; a time axis stamps its rows here first.
@@ -1463,9 +1419,6 @@ function elaborationsFor(
         undefined
       )[0] as CONTINUOUS_TYPE;
       nices[dim] = [niced.dataInterval.min, niced.dataInterval.max];
-      floors[dim] = nices[dim]![0];
-    } else if (axisOver(s) === "delta") {
-      floors[dim] = 0;
     }
   }
   let keyMap: Record<string, GoFishNode> | undefined;
@@ -1534,7 +1487,6 @@ function elaborationsFor(
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = wide[dim];
-    const crossFloor = floors[cross(dim)];
     const kind = axisOver(s);
     const ticks = ticksFor(dim);
     const d = fold.dims[dim];
@@ -1552,7 +1504,7 @@ function elaborationsFor(
       );
       continuousAxis(
         dim,
-        elaborateTimeAxis(dim, s, nices[dim]!, rows, crossFloor, axisSide(dim)),
+        elaborateTimeAxis(dim, s, nices[dim]!, rows, axisSide(dim)),
         rows.map((r) => String(r.level))
       );
     } else if (kind === "absolute" && isCONTINUOUS(s)) {
@@ -1562,7 +1514,6 @@ function elaborationsFor(
           dim,
           nices[dim]!,
           ticks,
-          crossFloor,
           axisSide(dim),
           crossDirection(dim),
           resolvedLabelRotation({ dim, kind: "continuous", depth: depth0 }),
@@ -1574,7 +1525,7 @@ function elaborationsFor(
     } else if (kind === "delta" && isCONTINUOUS(s)) {
       continuousAxis(
         dim,
-        elaborateDifferenceAxis(dim, s, ticks, crossFloor, axisSide(dim)),
+        elaborateDifferenceAxis(dim, s, ticks, axisSide(dim)),
         numericNames(dim)
       );
     } else if (isORDINAL(s)) {
@@ -1649,7 +1600,28 @@ function elaborationsFor(
 //   ↳ legend                 beside all of the above
 //
 // The node's identity (name, key, visibility) moves onto the outermost ring,
-// which records the boxes inside it as `chrome` (see `GoFishNode.chrome`).
+// which a chart's elaboration marks `_chartRing`. Each ring is marked
+// `_chromeRing`; nothing records the boxes inside it: code that needs what a
+// ring dresses walks its first child (`GoFishNode.dressedBox`).
+
+/** Wrap `inner` in one ring of chrome (`wrapRing`), marked as one
+ *  (`GoFishNode._chromeRing`). */
+async function wrapChromeRing(
+  inner: GoFishNode,
+  ring: ChromeRing
+): Promise<GoFishNode> {
+  const root = await wrapRing(inner, ring);
+  root._chromeRing = true;
+  return root;
+}
+
+/** One ring of the axes `elaborations` draw: their shapes, and their
+ *  constraints against the box inside the ring. */
+const axesRing = (elaborations: AxisElaboration[]): ChromeRing => ({
+  nodes: elaborations.flatMap((e) => e.nodes),
+  constraints: (at, inner) =>
+    elaborations.flatMap((e) => e.constraints(at, inner)),
+});
 
 /** How the chrome a chart asks for is drawn, beyond the axes `resolveAxes`
  *  assigned and the requests stamped on nodes (`GoFishNode._chromeRequest`). */
@@ -1745,42 +1717,27 @@ export async function elaborateChrome(
     return { node, changed, fold };
   }
 
-  let withAxes: GoFishNode = node;
-  const rings: GoFishNode[] = [];
   const root = await wrapPreservingIdentity(node, async (content) => {
     let ring: GoFishNode = content;
+    // The box its axes (continuous ones and category label rows) are
+    // seated beside is a plot: it covers the whole niced domain they draw.
+    if (constrained.length > 0 || refBased.length > 0)
+      content._axesBeside = true;
 
-    // Axis gutters: continuous/difference axes seat a gutter via constraints
-    // that would SHIFT the content, so the content is seated first and each
-    // axis grows into negative gutter space; this keeps the content on the
-    // posScale grid both axes' ticks use. Where the content sits on each
-    // axis: a delta axis says where in its own frame. Otherwise this is the
-    // one seating rule (`seatInScope`): a free content (a bar chart's bars)
-    // is a magnitude whose baseline the axis's frame places, so it is left
-    // unpinned and the layer seats it at data 0 of the frame's map, so value
-    // 0 sits at the 0 tick; a pinned content shares the frame, so its
-    // baseline is the frame's 0 (a literal pixel pin). The anchor is
-    // `baseline`, not `start`: nested content (facets carrying their own
-    // ordinal labels) has a bbox extending past its origin, and pinning
-    // bbox-min would slide the marks off the tick grid by that overhang.
-    if (constrained.length > 0) {
-      const contentSpace = content._underlyingSpace;
-      const contentAt = (dim: 0 | 1) => {
-        const at = constrained.find((e) => e.contentAt?.dim === dim)?.contentAt;
-        if (at !== undefined) return datum(at.at);
-        return originIs(contentSpace?.[dim], "free") ? undefined : 0;
-      };
-      ring = await wrapRing(
-        ring,
-        {
-          nodes: constrained.flatMap((e) => e.nodes),
-          constraints: (at, inner) =>
-            constrained.flatMap((e) => e.constraints(at, inner)),
-        },
-        { x: contentAt(0), y: contentAt(1) }
-      );
-      rings.push(ring);
-    }
+    // Axis gutters: each axis line sits on a chain with the content, past
+    // its box, and grows into negative gutter space rather than shifting it.
+    // So the content is seated first, at the ring's origin by its baseline
+    // (`wrapRing`), on both axes: a chain can then only move the axis, and
+    // the ticks, which read their datums in the content's frame, find it
+    // placed. A free content (a bar chart's bars) is seated there too: its
+    // ticks read its own frame, so value 0 sits at the 0 tick wherever the
+    // ring puts it. The anchor is `baseline`, not `start`: nested content
+    // (facets carrying their own ordinal labels) has a bbox extending past
+    // its origin, and pinning bbox-min would slide the marks off the tick
+    // grid by that overhang.
+    if (constrained.length > 0)
+      // Ticks read their datums in the content's frame.
+      ring = await wrapChromeRing(ring, axesRing(constrained));
 
     // Category label rows: ordinal labels track their keys via `ref(...)`, so
     // they must be laid out AFTER the gutters have shifted the content (the
@@ -1788,19 +1745,12 @@ export async function elaborateChrome(
     // their own. They `distribute` against the ring inside, whose bbox
     // includes any nested inner-facet labels, so an outer label row stacks
     // below the inner row.
-    if (refBased.length > 0) {
-      ring = await wrapRing(ring, {
-        nodes: refBased.flatMap((e) => e.nodes),
-        constraints: (at, inner) =>
-          refBased.flatMap((e) => e.constraints(at, inner)),
-      });
-      rings.push(ring);
-    }
-    withAxes = ring;
+    if (refBased.length > 0)
+      ring = await wrapChromeRing(ring, axesRing(refBased));
 
     // Axis titles, seated past the axes so they clear the tick and label rows.
-    if (titles[0] !== undefined || titles[1] !== undefined) {
-      ring = await wrapRing(
+    if (titles[0] !== undefined || titles[1] !== undefined)
+      ring = await wrapChromeRing(
         ring,
         axisTitles(
           titles,
@@ -1808,17 +1758,14 @@ export async function elaborateChrome(
           sides
         )
       );
-      rings.push(ring);
-    }
 
     // The legend, beside everything inside it, titles included.
-    if (legend !== undefined) {
-      ring = await wrapRing(ring, legend);
-      rings.push(ring);
-    }
+    if (legend !== undefined) ring = await wrapChromeRing(ring, legend);
     return ring;
   });
-  root.chrome = { content: node, withAxes, rings };
+  // A chart is placed whole, its chrome with it (#1241): its outermost ring
+  // is its box (`GoFishNode._chartRing`).
+  if (node._chartBox !== undefined) root._chartRing = true;
 
   return { node: root, changed: true, fold };
 }

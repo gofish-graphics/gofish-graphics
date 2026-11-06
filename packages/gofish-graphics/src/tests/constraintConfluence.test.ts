@@ -88,7 +88,7 @@ function solveAndSeat(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: Parameters<typeof solvePlacementCells<number>>[5],
+  posScales?: readonly [unknown, unknown],
   gridTracks?: [TrackLayout, TrackLayout],
   dataPositioned?: [Set<string>, Set<string>]
 ): void {
@@ -98,7 +98,7 @@ function solveAndSeat(
     targets,
     sizes,
     pixelGaps,
-    posScales,
+    posScales && ((_, axis) => posScales[axis] as AxisMap | undefined),
     gridTracks,
     dataPositioned
   );
@@ -237,7 +237,9 @@ const byName: KeyOf = (ref) => ref.name;
 /** The operands of `children`, each resolved to the child of its name. */
 const byNameIn = (children: readonly { uid: string }[]): ResolvedOperands => ({
   keyOf: byName,
-  operands: new Map(children.map((c, i) => [c.uid, { child: i, direct: true }])),
+  operands: new Map(
+    children.map((c, i) => [c.uid, { child: i, direct: true }])
+  ),
 });
 // The solve, with each operand keyed by its name.
 function lowerPlacementConstraints<T>(
@@ -845,14 +847,14 @@ console.log("# constraint confluence: child size proposals");
     gridCellByName,
     undefined,
     [100, undefined]
-  );
+  ).size;
   ok(
     "a grid cell is proposed its track extent, whatever its own room",
     cell[0] === 90 && cell[1] === 40
   );
   // A track with no extent (an unsized axis no claim sizes) proposes
   // nothing there: the cell is laid out in the layer's size, its default.
-  const unsized = childLayoutSizeProposal("U", [300, NaN], gridCellByName);
+  const unsized = childLayoutSizeProposal("U", [300, NaN], gridCellByName).size;
   ok(
     "a grid cell whose track has no extent is proposed the layer's size there",
     unsized[0] === 90 && Number.isNaN(unsized[1])
@@ -863,14 +865,14 @@ console.log("# constraint confluence: child size proposals");
     gridCellByName,
     undefined,
     [100, undefined]
-  );
+  ).size;
   ok(
     "a child is proposed its own room in a share scope, and the layer's size elsewhere",
     shared[0] === 100 && shared[1] === 200
   );
   ok(
     "an unnamed child with no room of its own is proposed the layer's size",
-    childLayoutSizeProposal(undefined, layerSize, undefined) === layerSize
+    childLayoutSizeProposal(undefined, layerSize, undefined).size === layerSize
   );
 }
 
@@ -1368,7 +1370,11 @@ console.log("# constraint confluence: interval vs point compose bail");
   };
   ok(
     "pure-interval position composes with a distribute (span-like)",
-    planConstraintComposition([distAB, pureInterval], childNodes, byNameIn(childNodes)) !== undefined
+    planConstraintComposition(
+      [distAB, pureInterval],
+      childNodes,
+      byNameIn(childNodes)
+    ) !== undefined
   );
   ok(
     "point+interval position bails composition (conservatively point-form)",
@@ -1376,8 +1382,7 @@ console.log("# constraint confluence: interval vs point compose bail");
       [distAB, pointPlusInterval],
       childNodes,
       byNameIn(childNodes)
-    ) ===
-      undefined
+    ) === undefined
   );
 }
 

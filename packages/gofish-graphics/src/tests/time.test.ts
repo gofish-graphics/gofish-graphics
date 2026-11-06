@@ -58,6 +58,7 @@ const {
   line,
   circle,
   Domain,
+  Trait,
   Unit,
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
@@ -85,7 +86,7 @@ async function errorOf(fn: () => unknown): Promise<string | undefined> {
 }
 const iso = (t: number) => new Date(t).toISOString();
 /** `types` without the domains (`HasDomain`) applySchema computes, for a
- *  check about the other classes. */
+ *  check about the other traits. */
 const withoutDomains = (types: Record<string, any> | undefined) =>
   types === undefined
     ? undefined
@@ -468,7 +469,7 @@ async function main() {
         { m: "Feb", n: 2 },
       ],
       {
-        m: SrcUnit({ domain: Domain.ordered(["Jan", "Feb", "Mar"]) }),
+        m: SrcUnit({ domain: Domain.discrete(["Jan", "Feb", "Mar"]), traits: [Trait.ordered()] }),
       }
     );
     const kept = await derived((rows) => rows.slice(1), undefined, months);
@@ -481,7 +482,7 @@ async function main() {
       (rows) => rows.map((r) => ({ ...r, m: "Q1" })),
       {
         schema: {
-          m: Unit({ domain: Domain.ordered(["Q1", "Q2"]) }),
+          m: Unit({ domain: Domain.discrete(["Q1", "Q2"]), traits: [Trait.ordered()] }),
         },
       },
       months
@@ -541,7 +542,7 @@ async function main() {
         getColumnTypes(asDates)?.t?.HasUnit?.zone === "America/New_York",
       JSON.stringify([asDates[0], getColumnTypes(asDates)])
     );
-    // A missing value fits every class, a time's included: a derive whose
+    // A missing value fits every trait, a time's included: a derive whose
     // result has a null time keeps the column's type, as Python's does.
     const withNull = await derived(
       (rows) => [

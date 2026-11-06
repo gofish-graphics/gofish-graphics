@@ -105,7 +105,7 @@ A label's text comes from `resolveLabelText` (`labelPlacement.ts`). A field
 expression is evaluated over the target's rows with `evalFieldValues`, given
 the column's quantity (`resolveColumn`), so `field(name).sum()` in a label
 checks that the column adds up, as it does in any channel: a column in a unit
-without `CanAdd` throws (#1197, see
+without `CanSum` throws (#1197, see
 [Underlying Space](/internals/core/underlying-space)).
 
 ## A label is a layer on its chart
@@ -356,7 +356,7 @@ key (`wrapPreservingIdentity`), since it orders the content among its own siblin
 and the label's nodes have no names, so no z constraint can reach them. Each lowering
 records, as `GoFishNode.paintedStyle`, the style of the node's first own item that
 puts down paint (a fill or a stroke). An own item with no paint of its own, such as a
-scaled box's `group` or a compositor's `composite` or `mask`, is skipped, so a label
+scaled box's `group` or a compositor's `composite`, is skipped, so a label
 on a compositor gets the plain fallback below. Every `layout()` clears it, so it is
 never left over from an earlier render. The label reads the drawn style (a
 categorical swatch, a gradient's `scaleFn(value)`, a literal, at the opacity it was

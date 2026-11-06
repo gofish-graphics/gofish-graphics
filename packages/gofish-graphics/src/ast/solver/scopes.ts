@@ -26,15 +26,16 @@ import {
   isCONTINUOUS,
   isOneValue,
   originIs,
+  spaceUnit,
+  unitKeyOf,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { Extent, mapsDomain } from "../extent";
 import type { AxisMap } from "../domain";
-import { envFlag } from "../../util";
+import { envFlag, room } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
-import { resolveUnit, sameUnitVar } from "../measure";
-import { reachAt, type ChromeForms } from "../chromeGutters";
+import { reachPast, type PlotForms } from "./plotForms";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
 export type ScopeKind = "root" | "sized" | "coord" | "recenter";
@@ -114,7 +115,7 @@ export type Seat = { px: number; anchor: "baseline" | "min" };
  *
  *  TODO(#1051): data 0 is the additive identity of the measure's algebraic
  *  structure (an ordered additive group's 0). Sums are checked now: a unit
- *  without `CanAdd` (dates, temperatures) cannot be summed or stacked
+ *  without `CanSum` (dates, temperatures) cannot be summed or stacked
  *  (#1197, `checkSummable` in measure.ts). What is left is the zero itself
  *  (`HasZero`): every measure is still seated as if it had one, so a bar of
  *  a single date or temperature (`.mean()`, which sums nothing) still hangs
@@ -164,6 +165,8 @@ const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
  *  screen's left or top, `-1` when it starts at the bottom). */
 export type EqualMeasureAxis = {
   space: UnderlyingSpace | undefined;
+  /** The tied unit the axis maps alone (`KeyedDomains.tiedUnitOf`). */
+  tiedUnit?: () => string | undefined;
   claim: Extent;
   box: number;
   sigma: number;
@@ -185,7 +188,7 @@ export interface ScopeMeta {
    * claim puts it, `claim.descent(σ)` above the box's low edge, as the root
    * does; "start" at the box's low edge, whatever the claim, so data 0 is
    * the start of the budget (the angular axis of the polar family, whose
-   * data 0 is its baseline angle; see `AxisClasses.HasCycle`).
+   * data 0 is its baseline angle; see `AxisTraits.HasCycle`).
    */
   dataZero?: "claim" | "start";
 }
@@ -220,18 +223,45 @@ export function sharesDeclaredMeasure(
   x: UnderlyingSpace | undefined,
   y: UnderlyingSpace | undefined
 ): boolean {
-  const unitX = x && isCONTINUOUS(x) ? x.measure?.unit : undefined;
-  const unitY = y && isCONTINUOUS(y) ? y.measure?.unit : undefined;
   return (
-    unitX !== undefined &&
-    unitY !== undefined &&
-    resolveUnit(unitX).kind === "declared" &&
-    sameUnitVar(unitX, unitY)
+    spaceUnit(x)?.unit?.kind === "declared" && unitKeyOf(x) === unitKeyOf(y)
   );
 }
 
+/** Whether two axes map one tied unit alone (#1087,
+ *  `EqualMeasureAxis.tiedUnit`). */
+const inOneTiedUnit = (x: EqualMeasureAxis, y: EqualMeasureAxis): boolean => {
+  const unit = x.tiedUnit?.();
+  return unit !== undefined && unit === y.tiedUnit?.();
+};
+
 /** Whether the scope dump is on. Off (and near-zero-cost) in prod. */
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
+
+/**
+ * The room a glyph placed at a point is fit to: its unit's largest glyph
+ * spans this many pixels.
+ *
+ * PLACEHOLDER (#1324): how a chart sets the range of a non-spatial scale (a
+ * size scale's largest glyph, beside its color scales) is an open API
+ * proposal. Until it lands, every glyph unit takes this one internal range,
+ * read only here.
+ */
+const GLYPH_ROOM_PX = 30;
+
+/** One glyph's room on one axis ({@link ScopeRegistry.fitGlyphs}): the
+ *  point it is placed at, or the cell it is placed in, which is `span` data
+ *  wide on `axis`, with `width` the width of the glyph's own domain. */
+export type GlyphRoom =
+  | { kind: "point" }
+  | { kind: "cell"; axis: 0 | 1; span: number; width: number };
+
+/** The bounds a glyph unit's rooms set on its σ ({@link
+ *  ScopeRegistry.fitGlyphs}): the bound its points set (`Infinity`: none
+ *  does), and, per axis, the smallest ratio of a cell to the glyph in it
+ *  (`span / width`), so the cells there bound σ by the frame's σ times it
+ *  (`Infinity`: no cell there bounds it, none or only glyphs 0 wide). */
+type GlyphUnit = { pointSigma: number; cellFit: [number, number] };
 
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
@@ -240,18 +270,101 @@ const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
  */
 export class ScopeRegistry {
   private entries: ScopeEntry[] = [];
-  /** The scope each node with a literal size solves on each axis, from the
-   *  claim walk ({@link solveFixed}), with the keyed domain it maps. */
-  private fixed = new Map<object, [FixedSolve?, FixedSolve?]>();
+  /** What each node with a literal size solves on each axis in the claim
+   *  walk ({@link solveFixed}): the box it lays out at, and the scope it
+   *  solved, with the keyed domain it maps, where its content maps one. */
+  private fixed = new Map<
+    object,
+    [
+      { box: number; solve: FixedSolve | undefined }?,
+      { box: number; solve: FixedSolve | undefined }?,
+    ]
+  >();
+  /** Each glyph unit's bounds (`fitGlyphs`), by the unit's key. */
+  private glyphs?: ReadonlyMap<string, GlyphUnit>;
+
+  /** Build each glyph unit's bounds (#972) from every glyph's room, by
+   *  unit key (`GoFishNode.glyphRooms`), once, before the claim walk.
+   *  `widthOf` is a unit's widest domain (`KeyedDomains.unitWidth`). See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
+  fitGlyphs(
+    rooms: Iterable<readonly [string, GlyphRoom]>,
+    widthOf: (unit: string) => number
+  ): void {
+    const atPoint = new Set<string>();
+    const glyphs = new Map<string, GlyphUnit>();
+    for (const [unit, room] of rooms) {
+      let g = glyphs.get(unit);
+      if (g === undefined)
+        glyphs.set(
+          unit,
+          (g = { pointSigma: Infinity, cellFit: [Infinity, Infinity] })
+        );
+      if (room.kind === "point") atPoint.add(unit);
+      else if (!(room.span >= 0 && room.width >= 0))
+        throw new Error(
+          `[gofish:layout] a glyph of the unit "${unit}" is placed in a ` +
+            `cell ${room.span} wide with a size ${room.width} wide: both ` +
+            `must be finite and at least 0.`
+        );
+      else if (room.width > 0)
+        g.cellFit[room.axis] = Math.min(
+          g.cellFit[room.axis],
+          room.span / room.width
+        );
+    }
+    for (const unit of atPoint) {
+      const domain = widthOf(unit);
+      if (!(domain >= 0))
+        throw new Error(
+          `[gofish:layout] the glyph unit "${unit}" has a domain ${domain} ` +
+            `wide: it must be finite and at least 0.`
+        );
+      if (domain > 0) glyphs.get(unit)!.pointSigma = GLYPH_ROOM_PX / domain;
+    }
+    this.glyphs = glyphs;
+  }
+
+  /** The σ of a glyph unit (#972): the smallest bound its rooms set, its
+   *  cells' at `frame` (the σ of the frame placing it) and its points'. With
+   *  no `frame` (the claim walk) only the points' bound. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). TODO(#1324): one σ per frame axis. */
+  glyphSigma(
+    unit: string,
+    frame?: readonly [number | undefined, number | undefined]
+  ): number {
+    const g = this.glyphs?.get(unit);
+    if (g === undefined)
+      throw new Error(
+        `[gofish:layout] the glyph unit "${unit}" is sized before its ` +
+          `glyphs' rooms were fit (fitGlyphs).`
+      );
+    let sigma = g.pointSigma;
+    if (frame !== undefined)
+      for (const axis of [0, 1] as const) {
+        const fit = g.cellFit[axis];
+        if (fit === Infinity) continue;
+        const frameSigma = frame[axis];
+        if (frameSigma === undefined)
+          throw new Error(
+            `[gofish:layout] the glyphs of the unit "${unit}" are placed in ` +
+              `cells on ${axis === 0 ? "x" : "y"}, but the frame that places ` +
+              `them has no scale there to turn a cell into pixels.`
+          );
+        sigma = Math.min(sigma, frameSigma * fit);
+      }
+    return sigma === Infinity ? 0 : sigma;
+  }
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
-   * content's type and chrome forms (`chromeForms`: what it draws and its
-   * plot, widened to the keyed domain it maps and niced), with its size as
-   * its plot (#1032). σ fits the plot to the size ({@link fit}), and the
-   * scope's box is the whole at that σ: the size and what the content's
-   * chrome and dressing reach past it (`reachAt`), with data 0 that far
-   * further from the box's start. A literal size does not depend on σ, so
+   * content's type and its claim's forms (`PlotForms`: what it draws and
+   * its plot, widened to the keyed domain it maps and niced), with its size
+   * as its plot (#1032). σ fits the plot to the size ({@link fit}), and the
+   * node's box is the whole at that σ: the size and what the content's
+   * dressing reaches past it (`reachPast`), with data 0 that far further
+   * from the box's start. Where no σ solves (content that maps no domain),
+   * the box is the whole where the plot fills the size ({@link fixedBox}). A literal size does not depend on σ, so
    * the claim walk solves it once, here, to compute the pixels the node
    * claims upward, and its layout reuses the solution ({@link fixedSolve}).
    * `key` names the keyed domain the node maps (`KeyedDomains.axisKey`), so
@@ -263,33 +376,40 @@ export class ScopeRegistry {
     key: string | undefined,
     meta: ScopeMeta,
     space: UnderlyingSpace | undefined,
-    forms: ChromeForms | undefined,
+    forms: PlotForms | undefined,
     plot: number
   ): ScopeSolution | undefined {
     const fitted =
       forms &&
       this.fit(meta, node, space, forms.plot, { px: plot, limit: true });
     const scope = fitted?.scope;
-    const reach = scope && reachAt(forms!, scope.sigma);
+    // The σ the box is read at: the scope's, else the σ at which the plot
+    // fills the size (`Pwl.fill`), 0 where none does, and where a slot of
+    // no finite size gives none.
+    const sigma =
+      scope?.sigma ?? (forms ? room(Pwl.fill(forms.plot.width, plot) ?? 0) : 0);
+    const [start, end] = forms ? reachPast(forms, sigma) : [0, 0];
+    // Its own size, whatever its content claims (`fit`), and what its
+    // content's dressing reaches past it.
+    const box = plot + start + end;
     const solution: ScopeSolution | undefined =
       scope === undefined
         ? undefined
         : scope.originPx === undefined
           ? scope
-          : { sigma: scope.sigma, originPx: scope.originPx + reach![0] };
+          : { sigma: scope.sigma, originPx: scope.originPx + start };
     let solves = this.fixed.get(node);
     if (solves === undefined) this.fixed.set(node, (solves = []));
-    solves[meta.axis] =
-      solution === undefined
-        ? undefined
-        : {
-            key,
-            solution,
-            claim: forms!.whole,
-            space,
-            // Its own size, whatever its content claims (`fit`).
-            box: plot + reach![0] + reach![1],
-          };
+    solves[meta.axis] = {
+      box,
+      solve: solution && {
+        key,
+        solution,
+        claim: forms!.whole,
+        space,
+        box,
+      },
+    };
     return solution;
   }
 
@@ -299,15 +419,22 @@ export class ScopeRegistry {
    * claim walk are equalized, and their claims hold the leftover pixels, so
    * the node still claims its size. `yDirection` is the direction of its
    * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
-   * unless both share a declared unit.
+   * unless both are in one declared unit, or map one tied unit alone
+   * (`tiedUnit`, `KeyedDomains.tiedUnitOf`).
    */
-  equalizeFixed(node: object, rootKey: string, yDirection: 1 | -1): void {
+  equalizeFixed(
+    node: object,
+    rootKey: string,
+    yDirection: 1 | -1,
+    tiedUnit?: (axis: 0 | 1) => string | undefined
+  ): void {
     const solves = this.fixed.get(node);
     const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
-      const s = solves?.[axis];
+      const s = solves?.[axis]?.solve;
       return (
         s && {
           space: s.space,
+          tiedUnit: tiedUnit && (() => tiedUnit(axis)),
           claim: s.claim,
           box: s.box,
           sigma: s.solution.sigma,
@@ -317,14 +444,23 @@ export class ScopeRegistry {
     };
     const equalized = this.equalizeMeasure(rootKey, [axisOf(0), axisOf(1)]);
     if (equalized === undefined) return;
-    for (const axis of [0, 1] as const)
-      solves![axis] = { ...solves![axis]!, ...equalized[axis] };
+    for (const axis of [0, 1] as const) {
+      const entry = solves![axis]!;
+      entry.solve = { ...entry.solve!, ...equalized[axis] };
+    }
   }
 
   /** The scope a node with a literal size solved on `axis` in the claim walk
    *  ({@link solveFixed}), or undefined when it solved none. */
   fixedSolve(node: object, axis: 0 | 1): FixedSolve | undefined {
-    return this.fixed.get(node)?.[axis];
+    return this.fixed.get(node)?.[axis]?.solve;
+  }
+
+  /** The box a node with a literal size lays out at on `axis`: its size and
+   *  what its content's dressing reaches past it ({@link solveFixed}), the
+   *  pixels it claims. Undefined where it was not solved there. */
+  fixedBox(node: object, axis: 0 | 1): number | undefined {
+    return this.fixed.get(node)?.[axis]?.box;
   }
 
   /** The σ the nodes with a literal size solve the keyed domain `key` at on
@@ -333,7 +469,7 @@ export class ScopeRegistry {
   keyedSigma(key: string, axis: 0 | 1): number | undefined {
     let sigma: number | undefined;
     for (const solves of this.fixed.values()) {
-      const s = solves[axis];
+      const s = solves[axis]?.solve;
       if (s === undefined || s.key !== key) continue;
       const next = s.solution.sigma;
       if (sigma === undefined) sigma = next;
@@ -515,7 +651,8 @@ export class ScopeRegistry {
    * It lives on the registry, so every slope a render produces is
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a
    * `recenter` entry per axis). Returns the equalized axes; a no-op
-   * (undefined) unless both axes are given and share a declared unit.
+   * (undefined) unless both axes are given and are in one declared unit, or
+   * map one tied unit alone (`EqualMeasureAxis.tiedUnit`).
    */
   equalizeMeasure(
     rootKey: string,
@@ -525,7 +662,7 @@ export class ScopeRegistry {
     if (
       ax === undefined ||
       ay === undefined ||
-      !sharesDeclaredMeasure(ax.space, ay.space)
+      !(sharesDeclaredMeasure(ax.space, ay.space) || inOneTiedUnit(ax, ay))
     )
       return undefined;
     // Only an axis with a data width binds: a one-value axis (`isOneValue`)

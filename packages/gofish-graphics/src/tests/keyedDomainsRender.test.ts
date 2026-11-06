@@ -492,9 +492,15 @@ async function main() {
       faceted.y.length === 2 && faceted.x.length === 1,
       faceted
     );
+    // Each panel's plot covers the shared domain (#1257), and its axis sits
+    // beside its box, which also holds its marks: panel "a"'s mark at x = 0
+    // reaches 1 px (half its width) past the floor, as in the plain
+    // scatter, so its line sits as far out as there. Panel "b" has no mark
+    // past the floor, so its line sits that 1 px closer, at the floor.
     check(
-      "every panel's y axis line sits at the shared x floor",
-      faceted.y.every((x) => near(faceted.x[0] - x, corner)),
+      "every panel's y axis line sits at the shared x floor, past its own marks",
+      near(faceted.x[0] - faceted.y[0], corner) &&
+        near(faceted.x[0] - faceted.y[1], corner - 1),
       { faceted, corner }
     );
   }

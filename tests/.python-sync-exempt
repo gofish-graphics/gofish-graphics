@@ -155,11 +155,6 @@ packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
 # rows take Calendar values only. The other Time stories are ported. Port: #1105.
 packages/gofish-graphics/stories/forwardsyntax/Time.stories.tsx::QuarterlyBars
 
-# Time benchmark ports: CircleTimeline sizes each circle in a JS function mark
-# (a literal pixel radius per row), which cannot cross the bridge. StackedArea
-# and SurplusDeficitLine are ported. Port: #1105.
-packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::CircleTimeline
-
 # Enclose shapes: PenguinsFourShapes lays four charts out in a DOM grid (one
 # story renders four containers), and ChartAccentSubSaharanAfrica filters a
 # selectAll bag with a JS lambda over refs (project(ref, "Region")), which
@@ -174,3 +169,10 @@ packages/gofish-graphics/stories/EncloseShapes.stories.tsx::ChartAccentSubSahara
 packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsLeft
 packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsOnBackground
 packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::ArrowLabelsAbove
+
+# Stack Needs CanSum: CelsiusRefused is a spec GoFish refuses (°C has no
+# CanSum), and the JS story catches the rejected render and prints the error
+# message in place of the chart. A Python spec renders through the same JS
+# path, so it would only throw: there is no chart to byte-match. NoSchema and
+# UsdStacks are ported.
+packages/gofish-graphics/stories/forwardsyntax/Bar/StackNeedsCanSum.stories.tsx::CelsiusRefused

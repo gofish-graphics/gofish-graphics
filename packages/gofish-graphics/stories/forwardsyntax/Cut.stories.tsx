@@ -43,12 +43,11 @@ export default meta;
 type Args = { w: number; h: number };
 
 /** Bottle sliced horizontally by `amount`, arranged vertically by spread. */
-export const ImageCut: StoryObj<Args> = {
-  args: { w: 400, h: 700 },
-  render: (args: Args) => {
+export const ImageCut: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
-    chart(bottleData, { w: args.w, h: args.h })
+    chart(bottleData)
       .flow(spread({ dir: "y", spacing: 4, reverse: true }))
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({
@@ -143,9 +142,8 @@ export const ImageCutWithLabels: StoryObj<Args> = {
  *  splits 55/30/15 (a dominant bottom band) — the differing proportions are the
  *  point. This is the canonical way to combine `by`-grouping with an expand
  *  mark: interpose a layout operator between the grouping and the cut. */
-export const GroupedCut: StoryObj<Args> = {
-  args: { w: 600, h: 760 },
-  render: (args: Args) => {
+export const GroupedCut: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
     const data = [
@@ -157,7 +155,7 @@ export const GroupedCut: StoryObj<Args> = {
       { vintage: "2021", category: "Other", amount: 15 },
     ];
 
-    chart(data, { w: args.w, h: args.h })
+    chart(data)
       .flow(
         spread({ by: "vintage", dir: "x", spacing: 40 }),
         spread({ dir: "y", spacing: 14, reverse: true })
@@ -177,12 +175,11 @@ export const GroupedCut: StoryObj<Args> = {
 
 /** Solid rect cut into 4 equal slices along x with 4px gaps (one slice per
  *  abcd row, sizes defaulted to equal). */
-export const RectEqualSlices: StoryObj<Args> = {
-  args: { w: 600, h: 200 },
-  render: (args: Args) => {
+export const RectEqualSlices: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
-    chart(abcdData, { w: args.w, h: args.h })
+    chart(abcdData)
       .flow(spread({ dir: "x", spacing: 4 }))
       .mark(rect({ w: 400, h: 80, fill: "steelblue" }).cut({ dir: "x" }))
       .render(container, { axes: false });
@@ -202,12 +199,11 @@ export const RectEqualSlices: StoryObj<Args> = {
  *  meet. The continuous border is the falsifiable witness. This story exists
  *  purely to pin that flush-recompose behavior; do not use flush `stack` as the
  *  collapse operator in stories that demonstrate other features. */
-export const RectFlushStack: StoryObj<Args> = {
-  args: { w: 600, h: 200 },
-  render: (args: Args) => {
+export const RectFlushStack: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
-    chart(abcdData, { w: args.w, h: args.h })
+    chart(abcdData)
       .flow(stack({ dir: "x" }))
       .mark(
         rect({
@@ -227,12 +223,11 @@ export const RectFlushStack: StoryObj<Args> = {
 /** Image cut into 3 equal slices along y, then exploded vertically with a 14px
  *  gap between bands — so the bottle reads as three separated horizontal slabs
  *  (top / middle / bottom) rather than one intact image. */
-export const ImageEqualSlices: StoryObj<Args> = {
-  args: { w: 600, h: 700 },
-  render: (args: Args) => {
+export const ImageEqualSlices: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
-    chart([{ k: "top" }, { k: "mid" }, { k: "bot" }], { w: args.w, h: args.h })
+    chart([{ k: "top" }, { k: "mid" }, { k: "bot" }])
       .flow(spread({ dir: "y", spacing: 14, reverse: true }))
       .mark(image({ href: bottlePng, w: 193, h: 600 }).cut({ dir: "y" }))
       .render(container, { axes: false });
@@ -325,9 +320,8 @@ export const MixedSizes: StoryObj<Args> = {
  *  centered upright figure, so most dir-x slice windows masked empty
  *  whitespace and the story looked like one tiny intact bottle. Keep the
  *  intrinsic aspect (as here), or pass preserveAspectRatio "none" to stretch. */
-export const ImageHorizontalCut: StoryObj<Args> = {
-  args: { w: 700, h: 700 },
-  render: (args: Args) => {
+export const ImageHorizontalCut: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
     const data = [
@@ -338,7 +332,7 @@ export const ImageHorizontalCut: StoryObj<Args> = {
       { label: "V", weight: 1 },
     ];
 
-    chart(data, { w: args.w, h: args.h })
+    chart(data)
       .flow(spread({ dir: "x", spacing: 12 }))
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({

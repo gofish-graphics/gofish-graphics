@@ -128,6 +128,9 @@ for the API.
         "zOrder": {
           "$ref": "#/$defs/Number"
         },
+        "hidden": {
+          "type": "boolean"
+        },
         "name": {
           "type": "string",
           "description": "Chart-level name so a sibling Layer relate callback can reference this chart."
@@ -551,12 +554,11 @@ for the API.
             "line",
             "ribbon",
             "treemap",
-            "over",
-            "inside",
-            "xor",
-            "out",
-            "atop",
-            "mask"
+            "union",
+            "intersect",
+            "subtract",
+            "exclude",
+            "atop"
           ]
         },
         "__combinator": {
@@ -584,6 +586,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -787,7 +799,7 @@ for the API.
       ]
     },
     "NodeSelectionIR": {
-      "description": "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+      "description": "Nodes named inside an option (`enclose`'s `avoiding`): a list of refs, or every node of a named layer (selectAll).",
       "oneOf": [
         {
           "type": "array",
@@ -971,7 +983,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.ordered(levels) }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
+          "description": "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant)."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"
@@ -1693,12 +1705,12 @@ for the API.
         },
         "round": {
           "type": "boolean",
-          "description": "Round pixel positions and sizes.",
+          "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
           "default": true
         },
         "tile": {
           "$ref": "#/$defs/Tile",
-          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
           "default": {
             "kind": "squarify"
           }
@@ -1960,8 +1972,15 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -2013,13 +2032,23 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
       }
     },
     "CircleMark": {
-      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2074,9 +2103,24 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "r": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
+          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h."
+        },
+        "area": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2122,13 +2166,23 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2197,6 +2251,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Fill color, or a field name for a color scale."
@@ -2239,6 +2304,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2306,6 +2381,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Fill color, or a field name for a color scale."
@@ -2335,6 +2421,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2402,6 +2498,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "key": {
           "type": "string",
           "description": "Internal per-node key override."
@@ -2423,10 +2530,6 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Stroke width in pixels.",
           "default": 0
-        },
-        "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
         },
         "fontSize": {
           "$ref": "#/$defs/Number",
@@ -2481,6 +2584,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2565,6 +2678,17 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "key": {
           "type": "string",
           "description": "Internal per-node key override."
@@ -2572,10 +2696,6 @@ for the API.
         "href": {
           "type": "string",
           "description": "Image URL or data URI."
-        },
-        "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
         },
         "opacity": {
           "$ref": "#/$defs/Number",
@@ -2608,6 +2728,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2621,6 +2751,17 @@ for the API.
       "properties": {
         "type": {
           "const": "polygon"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "points": {
           "anyOf": [
@@ -2681,6 +2822,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -2759,6 +2910,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2792,8 +2953,15 @@ for the API.
           "default": 1
         },
         "filter": {
-          "type": "string",
-          "description": "Raw SVG filter attribute."
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "inset": {
           "$ref": "#/$defs/Number",
@@ -2822,6 +2990,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2835,6 +3013,17 @@ for the API.
       "properties": {
         "type": {
           "const": "line"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2857,9 +3046,17 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
-        "mixBlendMode": {
-          "enum": ["normal", "multiply"],
-          "description": "Blend mode where connectors overlap."
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "color",
+            "luminosity"
+          ],
+          "description": "How connectors mix where they overlap (CSS `mix-blend-mode`).",
+          "default": "normal"
         },
         "curve": {
           "$ref": "#/$defs/Curve",
@@ -2922,6 +3119,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -2938,6 +3145,17 @@ for the API.
       "properties": {
         "type": {
           "const": "ribbon"
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2956,9 +3174,16 @@ for the API.
           "$ref": "#/$defs/Number",
           "description": "Opacity, 0 to 1."
         },
-        "mixBlendMode": {
-          "enum": ["normal", "multiply"],
-          "description": "Blend mode where bands overlap.",
+        "blendMode": {
+          "enum": [
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "color",
+            "luminosity"
+          ],
+          "description": "How bands mix where they overlap (CSS `mix-blend-mode`).",
           "default": "normal"
         },
         "dir": {
@@ -3014,6 +3239,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3023,7 +3258,7 @@ for the API.
       }
     },
     "EncloseMark": {
-      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
+      "description": "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`), kept out of the nodes in `avoiding`. Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -3031,14 +3266,34 @@ for the API.
         "type": {
           "const": "enclose"
         },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
         "padding": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length).",
+          "description": "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or fillet, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is.",
           "default": 2
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there."
+        },
+        "avoiding": {
+          "$ref": "#/$defs/NodeSelectionIR",
+          "description": "Nodes the outline stays out of, whatever its shape: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. The outline is cut around each avoided node grown by `clearance`, never into the padded members, and a blob's or fillet's links route around them."
+        },
+        "clearance": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Pixels kept between the outline and each avoided node, and between a piece of a blob with `separate` and the other pieces' padded members and links. Default: `padding`."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3085,6 +3340,16 @@ for the API.
             }
           ]
         },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
         "debug": {
           "type": "boolean"
         },
@@ -3118,6 +3383,16 @@ for the API.
           "anyOf": [
             {
               "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
             },
             {
               "$ref": "#/$defs/BridgeLambdaSentinel"
@@ -3429,7 +3704,7 @@ for the API.
         "schema": {
           "type": "object",
           "additionalProperties": {},
-          "description": "Column types, keyed by column name: a Unit (Unit(\"USD\", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit's name (\"km²\"), or a column record { name, unit }."
+          "description": "Column types, keyed by column name: a Unit (Unit(\"USD\", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit's name (\"km²\"), or a column record { name, unit }."
         }
       },
       "description": "Chart-level options: chart(data, {...}) in JS, chart(data, **options) in Python."
@@ -3712,6 +3987,36 @@ for the API.
       ],
       "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
     },
+    "Filter": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "grayscale"
+            },
+            "amount": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "How far to gray, from 0 (unchanged) to 1 (all gray).",
+              "default": 1
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "luminanceToAlpha"
+            }
+          },
+          "required": ["kind"]
+        }
+      ],
+      "description": "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape."
+    },
     "Tile": {
       "anyOf": [
         {
@@ -3759,13 +4064,18 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
-              "const": "sliceDice"
+              "const": "voronoi"
+            },
+            "seed": {
+              "type": "number",
+              "description": "Seed for the random starting positions of the sites, so a render is the same every time. Another seed draws other cells with the same areas.",
+              "default": 0
             }
           },
           "required": ["kind"]
         }
       ],
-      "description": "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods."
+      "description": "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
     },
     "Overlap": {
       "anyOf": [
@@ -4261,13 +4571,24 @@ for the API.
           "type": "object",
           "properties": {
             "kind": {
-              "const": "arcs"
+              "const": "fillet"
             },
             "radius": {
               "type": "number",
               "minimum": 0,
-              "description": "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull.",
-              "default": 12
+              "description": "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default: `padding`, so an inside corner is as round as an outside one."
+            },
+            "neck": {
+              "$ref": "#/$defs/Number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "The width of each link between two pieces, as a share of the padded members it joins, from 0 (no links: pieces nearer than 2 · `radius` stay apart) to 1 (a link as wide as the members).",
+              "default": 0.5
+            },
+            "holes": {
+              "type": "boolean",
+              "description": "Whether a gap the outline closes around stays a hole. Off, every hole is filled.",
+              "default": false
             }
           },
           "required": ["kind"]
@@ -4281,36 +4602,33 @@ for the API.
             "convexity": {
               "$ref": "#/$defs/Number",
               "minimum": 0,
-              "maximum": 1,
-              "description": "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+              "maximum": 2,
+              "description": "How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval.",
               "default": 0.5
             },
-            "holes": {
-              "type": "boolean",
-              "description": "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
-              "default": false
-            },
-            "roundness": {
-              "type": "number",
+            "connection": {
+              "$ref": "#/$defs/Number",
               "minimum": 0,
-              "description": "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`."
+              "maximum": 1,
+              "description": "The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link.",
+              "default": 1
             },
             "neck": {
               "$ref": "#/$defs/Number",
               "exclusiveMinimum": 0,
               "maximum": 1,
-              "description": "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
+              "description": "The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width.",
               "default": 1
             },
-            "avoiding": {
-              "$ref": "#/$defs/NodeSelectionIR",
-              "description": "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others."
+            "holes": {
+              "type": "boolean",
+              "description": "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely.",
+              "default": false
             },
-            "clearance": {
-              "type": "number",
-              "minimum": 0,
-              "description": "Pixels kept between the outline and each avoided node.",
-              "default": 4
+            "separate": {
+              "type": "boolean",
+              "description": "With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them).",
+              "default": false
             }
           },
           "required": ["kind"]

@@ -499,7 +499,17 @@ wrapped mark a form that resolves every link of its modifier chain over a
 list of inputs at once. The split path calls it through `inputsResolver`
 with the split's groups, right before it applies the mark to each group, so
 a Python `zOrder` makes one bridge call per operator call, as the operator's
-own channel accessors do. A mark that wraps marks forwards the same form by
+own channel accessors do. `hiddenModifier` (`.hidden(value = true)`, #1267)
+works the same way: `value` is a boolean or a callback on the datum, resolved
+per instance and through `resolveArgs`, and only a constant crosses the IR.
+The two are made by one maker, `datumValueModifier(name, set, isConstant)`.
+`.hidden()` sets the node's hidden flag and nothing else, so it has no
+function form.
+`nameableMark` attaches one list of modifiers, `NAMEABLE_MODIFIERS` (`name`,
+`label`, `zOrder`, `hidden`, `transition`), and exports their method names as
+`NAMEABLE_METHODS`, so a wrapper around a mark that must forward its chain
+(the `image` mark's dimension-awaiting wrapper) forwards every one of them
+from the same list. A mark that wraps marks forwards the same form by
 one rule, `forwardInputsResolver`: a combinator over its children (`layer`,
 the dual operators' combinator form, the compositing marks), a `.translate`,
 the deserializer's scoped mark and its mark applied to a fixed input each

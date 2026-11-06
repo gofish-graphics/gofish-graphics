@@ -1,5 +1,5 @@
 import { GoFishNode } from "./_node";
-import { type LayerSharingPlan } from "./constraints/compose";
+import { type SharingPlan } from "./constraints/compose";
 import { round12 } from "./cells";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
@@ -15,24 +15,35 @@ import type { GoFishAST } from "./_ast";
  * axis's ticks) shows and hides with it. Its `.zOrder()` moves with it too:
  * the hint orders the node among its siblings, which are now the wrapper's,
  * and left on the node it would instead reorder the node against the
- * chrome beside it (a label would paint under its mark, and before it). Shared
+ * chrome beside it (a label would paint under its mark, and before it). Its
+ * `.hidden()` moves with it the same way, so a hidden mark's label, and a
+ * hidden chart's axes and legend, are hidden with it. Shared
  * by the axis, legend and label elaboration passes. */
 export async function wrapPreservingIdentity(
   node: GoFishNode,
   build: (node: GoFishNode) => GoFishNode | Promise<GoFishNode>
 ): Promise<GoFishNode> {
   const origKey = node.key;
-  const origVisible = node.__gfVisible;
-  const origZOrder = node._zOrder;
   node.key = undefined;
-  node.__gfVisible = undefined;
-  node._zOrder = undefined;
+  const moved = MOVED_FIELDS.map(([field, unset]) => {
+    const value = node[field];
+    (node as any)[field] = unset;
+    return [field, unset, value] as const;
+  });
   const root = await build(node);
   if (origKey !== undefined) root.setKey(origKey);
-  if (origVisible !== undefined) root.__gfVisible = origVisible;
-  if (origZOrder !== undefined) root._zOrder = origZOrder;
+  for (const [field, unset, value] of moved)
+    if (value !== unset) (root as any)[field] = value;
   return root;
 }
+
+/** The fields `wrapPreservingIdentity` moves from the node onto its
+ *  wrapper, each with its unset value. */
+const MOVED_FIELDS = [
+  ["__gfVisible", undefined],
+  ["_zOrder", undefined],
+  ["_hidden", false],
+] as const satisfies readonly (readonly [keyof GoFishNode, unknown])[];
 
 /** Builds a ring's constraints from handles: `at(node)` is the handle on
  *  one of the ring's shapes, and `inner` the handle on the box inside the
@@ -56,12 +67,11 @@ export type ChromeRing = {
  *  `inner` is seated first
  *  (constraints apply in order and
  *  placement is first-write-wins, so the box the ring reads is placed before
- *  anything seats off it): at `seat`, by its baseline. A seat with neither
- *  axis given leaves `inner` to the layer. */
+ *  anything seats off it): at the ring's origin, by its baseline, so a
+ *  chain of chrome against it moves only the chrome. */
 export async function wrapRing(
   inner: GoFishNode,
-  ring: ChromeRing,
-  seat: { x?: any; y?: any } = { x: 0, y: 0 }
+  ring: ChromeRing
 ): Promise<GoFishNode> {
   const root = (await (layer as any)([inner, ...ring.nodes])) as GoFishNode;
   root._transparent = true;
@@ -71,21 +81,16 @@ export async function wrapRing(
   // domains seat the ring where its content was (`KeyedDomains`, built
   // before chrome, #1114). The ring's shapes (an axis's ticks and line, a
   // legend, a title) are each a set of their own: none joins the content's
-  // type, whatever constraint seats it. Ticks still sit at data positions in
-  // the ring's frame, through their position constraints. Its sets read no
-  // constraint: whatever seats the content (a literal pin, or a delta axis's
-  // datum `contentAt`), the content is neither nested nor datum-placed. The
+  // type, whatever constraint seats it. Ticks sit at data positions in the
+  // content's frame (`position`'s `in`), which is no part of the ring's. Its sets read no
+  // constraint: the literal pin that seats the content leaves it neither
+  // nested nor datum-placed. The
   // content is the ring's first child, by construction, and the rule reads
   // it by that slot, not by identity: a later pass (label elaboration) may
   // wrap the content and put its wrapper in the content's place.
-  root.INTERNAL_setSharing((childNodes): LayerSharingPlan => {
+  root.INTERNAL_setSharing((childNodes): SharingPlan => {
     const sets = childNodes.map((_, k) => (k === 0 ? 0 : k + 1));
-    const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
-    return {
-      sets: [sets, [...sets]],
-      nested: none(),
-      datumPlaced: none(),
-    };
+    return { sets: [sets, [...sets]], nested: [new Set(), new Set()] };
   });
   // Every handle is a slot: the content is slot 0, and each of the ring's
   // shapes is the slot of the child `layer` made of it. A shape may be
@@ -112,9 +117,7 @@ export async function wrapRing(
   };
   const content = new SlotOperand(root, 0);
   await root.INTERNAL_relate([
-    ...(seat.x === undefined && seat.y === undefined
-      ? []
-      : [Constraint.position({ ...seat, anchor: "baseline" }, [content])]),
+    Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [content]),
     ...ring.constraints(at, content),
   ]);
   return root;

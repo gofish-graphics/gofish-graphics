@@ -7,6 +7,7 @@ import type { Arith } from "../solver/arith";
 import {
   lowerPlacementConstraints,
   type PlacementConstraint,
+  type ScaleOf,
 } from "./placementLowering";
 import type { GridTracks } from "./grid";
 import type { GapOf } from "./gap";
@@ -14,7 +15,6 @@ import {
   axisIndex,
   axisName,
   type Axis,
-  type ConstraintPosScales,
   type FreeOrigin,
   type KeyOf,
 } from "./shared";
@@ -31,6 +31,7 @@ import {
   freeBaselineOffset,
   strongAnchorOffset,
   type SolvePlaceable,
+  type SpanOf,
 } from "./placementProgramLowerer";
 import {
   solveAxisProblem,
@@ -159,12 +160,12 @@ function nodeAnchorOffset<T>(
   axis: Axis,
   strongSizes: Map<NodeId, T>,
   targets: Map<string, SolvePlaceable<T>>,
-  plot = false
+  span: SpanOf = "box"
 ): T | undefined {
   const strong = strongSizes.get(node);
   if (strong !== undefined) return strongAnchorOffset(A, strong, anchor);
   const target = targets.get(node);
-  return target && anchorOffset(A, target, axis, anchor, plot);
+  return target && anchorOffset(A, target, axis, anchor, span);
 }
 
 /** The offset from its `min` of the point `fraction` of the way from a stack
@@ -199,9 +200,20 @@ function reduceToAxisProblem<T>(
   const participants = new Set<NodeId>();
   const chainAnchors = new Map<NodeId, T>();
 
-  // A chain lays its parts by their plots (`anchorOffset`'s `plot`).
-  const resolveOffset = (node: NodeId, anchor: RelationAnchor, plot = false) =>
-    nodeAnchorOffset(A, node, anchor, axis, strongSizes, targets, plot);
+  // A chain lays its parts by their plots (`anchorOffset`'s `span`).
+  const resolveOffset = (
+    node: NodeId,
+    anchor: RelationAnchor,
+    span: SpanOf = "box"
+  ) => nodeAnchorOffset(A, node, anchor, axis, strongSizes, targets, span);
+  // A chain edge between two parts of the plot lays them by their plots.
+  // One to a part that is no part of the plot (dressing, chrome) lays that
+  // part by its whole box and the other by its box without its dressing:
+  // an axis line sits past its own box, beside what it dresses less the
+  // outlines and labels that dress it, which draw over it. Inner chrome is
+  // no dressing, so a title sits past the tick labels.
+  const chainSpan = (isApart: boolean, otherApart: boolean): SpanOf =>
+    isApart ? "box" : otherApart ? "bare" : "plot";
 
   for (const fact of facts) {
     // A size-pin only feeds `closeSizes`'s box closure (above) — it has no
@@ -222,14 +234,19 @@ function reduceToAxisProblem<T>(
       continue;
     }
     if (fact.type === "anchor-relation") {
-      // A chain edge between two parts of the plot lays them by their
-      // plots; one to dressing or chrome places it past the whole box.
-      const chain =
-        fact.chain !== undefined &&
-        apart?.has(fact.from.node) !== true &&
-        apart?.has(fact.to.node) !== true;
-      const fromOffset = resolveOffset(fact.from.node, fact.from.anchor, chain);
-      const toOffset = resolveOffset(fact.to.node, fact.to.anchor, chain);
+      const chain = fact.chain !== undefined;
+      const fromApart = apart?.has(fact.from.node) === true;
+      const toApart = apart?.has(fact.to.node) === true;
+      const fromOffset = resolveOffset(
+        fact.from.node,
+        fact.from.anchor,
+        chain ? chainSpan(fromApart, toApart) : "box"
+      );
+      const toOffset = resolveOffset(
+        fact.to.node,
+        fact.to.anchor,
+        chain ? chainSpan(toApart, fromApart) : "box"
+      );
       if (fromOffset === undefined || toOffset === undefined) continue;
       participants.add(fact.from.node);
       participants.add(fact.to.node);
@@ -376,7 +393,8 @@ export function solvePlacementCells<T>(
   sizes: readonly [T, T],
   // The gap a chain or table lays out between its parts (`GoFishNode.gapOf`).
   gapOf: GapOf,
-  posScales?: ConstraintPosScales<T>,
+  // The frame each `position` maps its datums through (`ScaleOf`).
+  scaleOf?: ScaleOf<T>,
   gridTracks?: GridTracks<T>,
   dataPositioned?: [Set<string>, Set<string>],
   rigid?: Map<string, RigidAttachment<T>>,
@@ -392,7 +410,7 @@ export function solvePlacementCells<T>(
     targets,
     sizes,
     gapOf,
-    posScales,
+    scaleOf,
     gridTracks,
     dataPositioned
   );

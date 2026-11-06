@@ -229,7 +229,7 @@ export const testFishPolarRibbonChartTextured = (
         .groupBy("species")
         .map((items, species) =>
           ribbon(
-            { dir: "x", opacity: 0.8, stroke: "black", strokeWidth: 3, mixBlendMode: "multiply" },
+            { dir: "x", opacity: 0.8, stroke: "black", strokeWidth: 3, blendMode: "multiply" },
             items.map((d) => ref(`${d.lake}-${d.species}`))
           )
         )

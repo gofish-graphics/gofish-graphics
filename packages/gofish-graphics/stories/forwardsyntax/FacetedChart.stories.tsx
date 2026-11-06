@@ -20,11 +20,11 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 1000, h: 400 },
+  args: { h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { w: args.w, h: args.h })
+    chart(seafood, { h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
         spread({ by: "species", dir: "x", spacing: 2, axes: { x: true, y: false } })

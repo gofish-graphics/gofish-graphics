@@ -9,6 +9,7 @@ import {
   derive,
   spread,
   Domain,
+  Trait,
   Unit,
   Calendar,
 } from "../../src/lib";
@@ -152,14 +153,13 @@ const releases = [
 ].map(([name, date]) => ({ name, date }));
 
 export const EventTimeline: StoryObj<Args> = {
-  args: { w: 560, h: 80 },
+  args: { w: 560 },
   render: (args: Args) => {
     const container = initializeContainer();
     chart(releases, {
       schema: { date: Unit.time() },
       axes: { x: true, y: false },
       w: args.w,
-      h: args.h,
     })
       .flow(scatter({ by: "name", x: "date" }))
       .mark(circle({ r: 5, fill: "steelblue" }))
@@ -295,7 +295,7 @@ export const MonthlyHighs: StoryObj<Args> = {
           },
           {
             schema: {
-              month: Unit({ domain: Domain.ordered(MONTHS) }),
+              month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.ordered()] }),
             },
           }
         ),

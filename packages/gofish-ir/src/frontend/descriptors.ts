@@ -29,6 +29,8 @@
  * keep authored.
  */
 
+import { BLEND_MODES } from "./schema.js";
+
 // ---------------------------------------------------------------------------
 // Field-type DSL
 // ---------------------------------------------------------------------------
@@ -41,11 +43,14 @@ export type ChannelInner = "number" | "string" | "boolean" | "color";
 
 /** How a mark or operator infers a channel's value from its rows: a `size`
  *  sums them, a `pos` averages them, a `color` reads the first row through
- *  the color scale, and a `raw` reads the first row as is. The JS mark
+ *  the color scale, and a `raw` reads the first row as is. An `area` sums
+ *  them as a `size` does (areas add up) and encodes the sum as an area: the
+ *  length it hands the mark is the square root of the sum, so the mark's
+ *  area, not its width, is proportional to the value. The JS mark
  *  factories' channel maps are generated from it
  *  (gofish-graphics' `markChannels.generated.ts`); the wire, the validator,
  *  the JSON Schema, and Python treat every kind alike. */
-export type ChannelInfer = "size" | "pos" | "color" | "raw";
+export type ChannelInfer = "size" | "area" | "pos" | "color" | "raw";
 
 /** The value a `literal` type admits: exactly one string, number, or boolean
  *  (`false` in `title: string | false`). */
@@ -231,11 +236,15 @@ export const t = {
 };
 
 /** Shorthand for a bare `ChannelValue` slot, one per inference kind
- *  ({@link ChannelInfer}): `ch.size(doc?)` and `ch.pos(doc?)` take a number,
+ *  ({@link ChannelInfer}): `ch.size(doc?)`, `ch.area(doc?)` and `ch.pos(doc?)` take a number,
  *  `ch.color(doc?)` a color, and `ch.raw(inner, doc?)` a literal of `inner`. */
 export const ch = {
   size: (doc?: string): FieldSpec => ({
     type: t.channel("number", "size"),
+    doc,
+  }),
+  area: (doc?: string): FieldSpec => ({
+    type: t.channel("number", "area"),
     doc,
   }),
   pos: (doc?: string): FieldSpec => ({ type: t.channel("number", "pos"), doc }),
@@ -281,10 +290,6 @@ export interface ConstructDescriptor {
   /** The wire discriminator (the node's `type` tag). */
   type: string;
   kind: ConstructKind;
-  /** Python-facing factory name, when it differs from the wire `type` — the
-   *  Porter-Duff-style compositing renames (inside→intersect, xor→exclude,
-   *  out→subtract, atop→paint). The wire `type` is unchanged either way. */
-  pyName?: string;
   doc?: string;
   /** The field the factory takes as its first argument, before an options
    *  object of the rest: `Coord.geo("mercator", { lon })`. In Python it is
@@ -340,6 +345,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
     type: t.union(t.number, t.ref("BridgeLambdaSentinel")),
     doc: "Paint-order hint, from `.zOrder(value)`: a number, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to.",
   },
+  hidden: {
+    type: t.union(t.boolean, t.ref("BridgeLambdaSentinel")),
+    doc: "From `.hidden(value)`: the mark is laid out and feeds scales, axes, legends and refs, and paints nothing. A boolean, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to. An ancestor's `hidden` wins over a descendant's `false`.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -362,7 +371,7 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
 });
 
 /** The base fields the Python generator exposes as leaf-mark kwargs (the
- *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`,
+ *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`, `.hidden()`,
  *  `.translate()`, `.relate()`, `.label()`). Labeling a leaf mark is done
  *  exclusively via the `.label(accessor, options?)` chain — there is no
  *  leaf-mark `label` kwarg. */
@@ -398,7 +407,7 @@ export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
 });
 
 /** The base fields that ride inside a combinator mark's `options` on the
- *  wire. The rest of MARK_BASE_FIELDS (`name`, `label`, `relate`, `zOrder`,
+ *  wire. The rest of MARK_BASE_FIELDS (`name`, `label`, `relate`, `zOrder`, `hidden`,
  *  `translate`) sit beside `options` on the node, set by Mark methods; only
  *  `debug` is a factory option (the Python combinator cores send it there). */
 export const COMBINATOR_OPTIONS_BASE_FIELDS: FieldGroup = group({
@@ -555,7 +564,7 @@ export interface StrategyPreset {
 export interface StrategyFamily {
   doc: string;
   /** The kinds, by their wire `kind`. Each also has a factory of the same
-   *  name (`pyKwarg` spelling in Python: `sliceDice` → `slice_dice`). */
+   *  name (`pyKwarg` spelling in Python: `catmullRom` → `catmull_rom`). */
   kinds: Record<string, StrategyKind>;
   /** Further factories, each a kind with some params preset. */
   presets?: Record<string, StrategyPreset>;
@@ -636,8 +645,27 @@ const placeOffset = (fallback: number): FieldSpec => ({
  * `_tag` and takes its one argument by position.
  */
 export const STRATEGIES = {
+  Filter: {
+    doc: "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape.",
+    kinds: {
+      grayscale: {
+        doc: "Draw in grays: CSS `grayscale(amount)`.",
+        params: {
+          amount: {
+            type: t.num({ min: 0, max: 1 }),
+            default: 1,
+            doc: "How far to gray, from 0 (unchanged) to 1 (all gray).",
+          },
+        },
+      },
+      luminanceToAlpha: {
+        doc: 'Make each pixel black, with an alpha of its luminance: white is opaque and black is clear. A compositing operator that reads the drawing as a shape then reads its luminance, as a luminance mask does (SVG `feColorMatrix type="luminanceToAlpha"`, in sRGB).',
+        params: {},
+      },
+    },
+  },
   Tile: {
-    doc: "How `treemap` tiles its box: the value of its `tile` option. Each kind is one of d3-hierarchy's tiling methods.",
+    doc: "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
     kinds: {
       squarify: {
         doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
@@ -660,9 +688,15 @@ export const STRATEGIES = {
         doc: "Split the tiles into two halves of near-equal weight, recursively (d3's `treemapBinary`).",
         params: {},
       },
-      sliceDice: {
-        doc: "Alternate slice and dice by depth (d3's `treemapSliceDice`).",
-        params: {},
+      voronoi: {
+        doc: "Voronoi tiling: cut the region into convex cells with rounded, irregular shapes, each with an area proportional to its weight, by a weighted Voronoi diagram whose sites and weights are adjusted until the areas match (Nocaj and Brandes 2012). It tiles any convex region, such as a Voronoi cell of the treemap around it or the oval of an `enclose` around it, so its cells can hold another Voronoi level.",
+        params: {
+          seed: {
+            type: t.num({ finite: true }),
+            default: 0,
+            doc: "Seed for the random starting positions of the sites, so a render is the same every time. Another seed draws other cells with the same areas.",
+          },
+        },
       },
     },
   },
@@ -927,46 +961,52 @@ export const STRATEGIES = {
         doc: "The smallest-area ellipse that holds every member grown by `padding`. It may be rotated: it follows the members, not the axes.",
         params: {},
       },
-      arcs: {
-        doc: "The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, every concave corner is a circular arc of `radius`, and holes are always filled. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two discs of radius a with a gap g between their padded edges join only when 2·a·radius ≥ a·g + g²/4; otherwise they stay separate pieces.",
+      fillet: {
+        doc: "The members grown by `padding`, closed by a disc of `radius`: every gap the disc cannot pass through is filled, and every concave corner is a circular arc of `radius`. Around circles it is made of circular arcs only, the contour of a bubble treemap (Görtler et al. 2018). Two pieces of the padded members nearer than 2 · `radius` are joined by a link `neck` times as wide as the members it joins; farther pieces stay apart, and each piece is closed on its own. It is not smoothed.",
         params: {
           radius: {
             type: t.num({ min: 0, finite: true }),
-            default: 12,
-            doc: "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull.",
+            doc: "The radius of the closing disc, in pixels: the radius of every concave arc. 0 is the padded union; a large radius nears the padded convex hull. Default: `padding`, so an inside corner is as round as an outside one.",
           },
-        },
-      },
-      blob: {
-        doc: "A smooth region around the members: each member grown by `padding`, the links of a spanning tree between them (routed around avoided nodes, so the set stays in one piece), and the Delaunay triangles of their points, filled smallest gaps first up to `convexity` of their convex hull. The outline is rounded so its curvature never jumps.",
-        params: {
-          convexity: {
+          neck: {
             type: t.num({ min: 0, max: 1 }),
             default: 0.5,
-            doc: "The share of the members' convex hull that is filled, smallest gaps first, from 0 (the spanning tree alone) to 1 (the whole hull). It is the only option that fills gaps between members, so it decides the pieces and the filled area.",
+            doc: "The width of each link between two pieces, as a share of the padded members it joins, from 0 (no links: pieces nearer than 2 · `radius` stay apart) to 1 (a link as wide as the members).",
           },
           holes: {
             type: t.boolean,
             default: false,
-            doc: "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled and each avoided node it held is cut back out as its clearance circle, as `allow_holes` in PostGIS and Shapely.",
+            doc: "Whether a gap the outline closes around stays a hole. Off, every hole is filled.",
           },
-          roundness: {
-            type: t.num({ min: 0, finite: true }),
-            doc: "How far the outline's corners are rounded, in pixels. It changes how sharply the outline bends and nothing else: no gap fills, no hole opens, no two pieces join. Default: `padding`.",
+        },
+      },
+      blob: {
+        doc: "A smooth region around the members: the members are split into pieces by `connection`, each piece's members grown by `padding` and joined by the links of a spanning tree between them (routed around avoided nodes), and the gaps between them filled up to `convexity`. The outline is smoothed, then moved out just enough to hold every padded member again.",
+        params: {
+          convexity: {
+            type: t.num({ min: 0, max: 2 }),
+            default: 0.5,
+            doc: "How much of each gap between members is filled, from 0 (the spanning tree of tubes alone) to 1 (the padded convex hull) to 2 (the oval, as `Shape.oval()`). Between 0 and 1, every pocket between the tree and the hull fills that share of its own area; between 1 and 2, the hull rounds toward the oval.",
+          },
+          connection: {
+            type: t.num({ min: 0, max: 1 }),
+            default: 1,
+            doc: "The share of the links between members that are kept, the strongest first, from 0 (only members whose padding touches are one piece) to 1 (one piece). The links come from a minimum spanning tree in HDBSCAN's mutual reachability, so a dense group stays one piece longest. Each piece is filled on its own; the outline changes only where `connection` keeps or cuts a link.",
           },
           neck: {
             type: t.num({ exclusiveMin: 0, max: 1 }),
             default: 1,
-            doc: "How far the outline is NOT pulled in between members, above 0 and at most 1: a lone link becomes a tube `neck` times the bulge, and the edge of a filled region sinks in between its members. 1 does not pull in. 0 is not allowed: a link `neck` times the bulge would have no width, and its two sides would meet. It never changes the pieces or holes.",
+            doc: "The width of each link between members, as a share of the padded members it joins, above 0 and at most 1. 1 is a link as wide as the members (no neck). 0 is not allowed: a link would have no width.",
           },
-          avoiding: {
-            type: t.ref("NodeSelectionIR"),
-            doc: "Nodes to keep out: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. Each avoided node inside the region becomes a round hole, and links route around the others.",
+          holes: {
+            type: t.boolean,
+            default: false,
+            doc: "Whether a gap left open inside the silhouette stays a hole. Off, every hole is filled, as `allow_holes` in PostGIS and Shapely.",
           },
-          clearance: {
-            type: t.num({ min: 0, finite: true }),
-            default: 4,
-            doc: "Pixels kept between the outline and each avoided node.",
+          separate: {
+            type: t.boolean,
+            default: false,
+            doc: "With `connection` below 1, whether the pieces keep apart. Off, each piece is filled on its own and two may overlap (a piece wholly inside another is dropped). On, each piece avoids the set's other pieces as it avoids `avoiding`: its outline stays `clearance` away from their padded members and links (not from their fill, so at `convexity` above 0 two outlines may still meet in a bay between them).",
           },
         },
       },
@@ -1139,7 +1179,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   schema: {
     type: t.record(t.any),
-    doc: 'Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.ordered(levels) }), Unit.time() for a time), a unit\'s name ("km²"), or a column record { name, unit }.',
+    doc: 'Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit\'s name ("km²"), or a column record { name, unit }.',
   },
 });
 
@@ -1391,17 +1431,28 @@ export const lengthBoxDims: FieldGroup = group({
   h: lengthSize("Height." + PERCENT_FR),
 });
 
-/** `rect`'s full paint group (the only leaf mark that supports all five —
- *  ellipse/petal/circle support a different set (no filter; ellipse and
- *  circle add fillOpacity) and declare their paint fields directly rather
- *  than including this group). */
+/** `rect`'s and `region`'s paint group. ellipse/petal/circle support a
+ *  different set (ellipse and circle add fillOpacity) and declare their
+ *  paint fields directly rather than including this group. */
 export const paint: FieldGroup = group({
   fill: ch.color("Fill color, or a field name for a color scale."),
   stroke: ch.color("Stroke color. Defaults to `fill`."),
   strokeWidth: { type: t.number, default: 0, doc: "Stroke width in pixels." },
   opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
-  filter: { type: t.string, doc: "Raw SVG filter attribute." },
 });
+
+/** The `filter` option every mark and `layer` take: the node's whole drawing
+ *  is filtered as one picture (#1267). */
+export const filtered: FieldGroup = group({
+  filter: {
+    type: t.union(t.ref("Filter"), t.string),
+    doc: 'A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).',
+  },
+});
+
+/** How a paint mixes with what is under it: the CSS `mix-blend-mode` values
+ *  GoFish takes (`BLEND_MODES`). One type for every `blendMode` option. */
+export const BLEND_MODE = t.enum(...BLEND_MODES);
 
 /** The shared groups above, with the heading a docs consumer shows them under.
  *  Membership is tested by FieldSpec identity (`resolveFields` copies the same
@@ -1472,13 +1523,21 @@ const ENCLOSE_FIELDS: FieldGroup = group({
   padding: {
     ...ch.raw(
       "number",
-      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or arcs, the distance from each member's own outline (around a line's whole length)."
+      "Pixels between the members and the outline: a number, or a field name or accessor read once per enclosed group (constant within the group). For a blob or fillet, the distance from each member's own outline (around a line's whole length). Around a member with no size of its own, how far inside the outline the member's shape is."
     ),
     default: 2,
   },
   shape: {
     type: t.ref("Shape"),
-    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.arcs({radius}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, holes, roundness, neck, avoiding, clearance}) draws a smooth region: discs around the members, the links of a spanning tree between them, and the Delaunay triangles that fill `convexity` of their convex hull, smallest gaps first. Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset.",
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
+  },
+  avoiding: {
+    type: t.ref("NodeSelectionIR"),
+    doc: "Nodes the outline stays out of, whatever its shape: a list of nodes or refs, or a `selectAll(name)` selection. A listed node that is also a member is ignored. The outline is cut around each avoided node grown by `clearance`, never into the padded members, and a blob's or fillet's links route around them.",
+  },
+  clearance: {
+    type: t.num({ min: 0, finite: true }),
+    doc: "Pixels kept between the outline and each avoided node, and between a piece of a blob with `separate` and the other pieces' padded members and links. Default: `padding`.",
   },
   fill: ch.color(
     "Fill color of the outline, or a field name or accessor for a color scale (constant within the enclosed group)."
@@ -1522,7 +1581,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       schema: {
         type: t.record(t.any),
-        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.ordered(levels) }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
+        doc: "Column types of the result, keyed by column name, as in a chart's schema, e.g. Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }) or Unit.time(). They override the types the result keeps from its input or infers, and convert values (an ISO string in a time column becomes an instant).",
       },
     },
   }),
@@ -1810,12 +1869,12 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       round: {
         type: t.boolean,
         default: true,
-        doc: "Round pixel positions and sizes.",
+        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
       },
       tile: {
         type: t.ref("Tile"),
         default: { kind: "squarify" },
-        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.sliceDice(). Each is one of d3-hierarchy's tiling methods.",
+        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),
@@ -1869,10 +1928,39 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
 // bridge + chart.ts's circle/blank/line/ribbon factories.
 // ---------------------------------------------------------------------------
 
+/** `blendMode` on `union`, `intersect` and `atop`: how kept paint mixes
+ *  where two operands overlap. */
+const COMPOSITE_BLEND: FieldSpec = {
+  type: BLEND_MODE,
+  default: "normal",
+  doc: "How a later operand's paint mixes with an earlier one's where they overlap (CSS `mix-blend-mode`). Unused when the result has a `fill` or `stroke`.",
+};
+
+/** The paint of a compositing operator's result: given a `fill` or a
+ *  `stroke`, the result is one new shape in it. */
+const COMPOSITE_PAINT = {
+  fill: ch.color(
+    "Fill color of the result, or a field name or accessor for a color scale. Given, the result is one new shape in this paint, and the operands give shape only. Default none when `stroke` is given."
+  ),
+  stroke: ch.color(
+    "Stroke color of the result's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline, which only `intersect` has: both operands must trace their shape in opaque paint (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error."
+  ),
+  strokeWidth: {
+    type: t.number,
+    default: 1,
+    doc: "Stroke width in pixels. Without `stroke` it draws nothing.",
+  },
+  opacity: {
+    type: t.number,
+    default: 1,
+    doc: "Opacity of the whole result, 0 to 1.",
+  },
+} satisfies FieldGroup;
+
 export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   rect: leafMark("rect", {
     doc: "A rectangle. Box geometry via the shared dims channels.",
-    include: [lengthBoxDims, paint],
+    include: [lengthBoxDims, paint, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       rx: {
@@ -1907,11 +1995,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
-    include: [boxDims],
+    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+    include: [boxDims, filtered],
     fields: {
       r: ch.size(
-        "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
+        "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h."
+      ),
+      area: ch.area(
+        "Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h."
       ),
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -1939,8 +2030,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   ellipse: leafMark("ellipse", {
-    doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` without filter, plus fillOpacity.",
-    include: [lengthBoxDims],
+    doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.",
+    include: [lengthBoxDims, filtered],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -1967,7 +2058,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   petal: leafMark("petal", {
     doc: "A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.",
-    include: [boxDims],
+    include: [boxDims, filtered],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -1985,7 +2076,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   text: leafMark("text", {
     doc: "A text label. Box geometry via the shared dims channels positions the text anchor.",
-    include: [boxDims],
+    include: [boxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       text: {
@@ -2003,7 +2094,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         default: 0,
         doc: "Stroke width in pixels.",
       },
-      filter: { type: t.string, doc: "Raw SVG filter attribute." },
       fontSize: { type: t.number, default: 12, doc: "Font size in pixels." },
       fontFamily: {
         type: t.string,
@@ -2038,11 +2128,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   image: leafMark("image", {
     doc: "An embedded raster/SVG image. Box geometry via the shared dims channels.",
-    include: [lengthBoxDims],
+    include: [lengthBoxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       href: { type: t.string, required: true, doc: "Image URL or data URI." },
-      filter: { type: t.string, doc: "Raw SVG filter attribute." },
       opacity: { type: t.number, doc: "Opacity, 0 to 1." },
       preserveAspectRatio: {
         type: t.string,
@@ -2058,6 +2147,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   polygon: leafMark("polygon", {
     doc: "A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
+    include: [filtered],
     fields: {
       points: {
         type: t.union(t.array(t.tuple(t.number, t.number)), t.string),
@@ -2105,7 +2195,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   region: leafMark("region", {
     doc: "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
-    include: [paint],
+    include: [paint, filtered],
     fields: {
       inset: {
         type: t.number,
@@ -2121,6 +2211,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   line: leafMark("line", {
     doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
+    include: [filtered],
     fields: {
       // Center mode paints `fill: "none"` on the path (connect.tsx's
       // `mode === "center" ? "none" : ...`), but `fill` is still the channel the
@@ -2142,9 +2233,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: 'Raw SVG stroke-dasharray (e.g. "12") for a dashed line.',
       },
       opacity: { type: t.number, doc: "Opacity, 0 to 1." },
-      mixBlendMode: {
-        type: t.enum("normal", "multiply"),
-        doc: "Blend mode where connectors overlap.",
+      blendMode: {
+        type: BLEND_MODE,
+        default: "normal",
+        doc: "How connectors mix where they overlap (CSS `mix-blend-mode`).",
       },
       curve: {
         type: t.ref("Curve"),
@@ -2189,6 +2281,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   ribbon: leafMark("ribbon", {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
+    include: [filtered],
     fields: {
       fill: ch.color(
         "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
@@ -2202,10 +2295,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         doc: "Stroke width in pixels.",
       },
       opacity: { type: t.number, doc: "Opacity, 0 to 1." },
-      mixBlendMode: {
-        type: t.enum("normal", "multiply"),
+      blendMode: {
+        type: BLEND_MODE,
         default: "normal",
-        doc: "Blend mode where bands overlap.",
+        doc: "How bands mix where they overlap (CSS `mix-blend-mode`).",
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
@@ -2238,7 +2331,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   enclose: leafMark("enclose", {
-    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
+    doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`), kept out of the nodes in `avoiding`. Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
+    include: [filtered],
     fields: ENCLOSE_FIELDS,
     flowStep: true,
   }),
@@ -2287,7 +2381,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 
   layer: combinatorMark("layer", {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
-    include: [lengthBoxDims],
+    include: [lengthBoxDims, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       ...LAYER_COORD_FIELDS,
@@ -2402,82 +2496,37 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     fields: resolveFields(OPERATORS.pack),
   }),
 
-  // Porter-Duff-style compositing quartet + `over`/`mask`. Wire `type` stays
-  // the original Porter-Duff string; `pyName` carries the Figma-inspired
-  // JS/Python-facing rename (#196/#202).
-  over: combinatorMark("over", {
-    doc: "Internal-only A ∪ B union compositing (not exported from lib.ts — use `layer`). Kept only so the deserializer can dispatch the wire type.",
+  // Region compositing (#1267): the five set operations. The wire `type` is
+  // the public name. Each reads its operands and draws its result: never an
+  // operand as itself.
+  union: combinatorMark("union", {
+    doc: "Draw the union of the regions: A ∪ B ∪ .... With no `fill` or `stroke`, each operand draws its own paint, and where two overlap the later one is drawn over the earlier with `blendMode`. With either, the union is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).",
     fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
+      blendMode: COMPOSITE_BLEND,
+      ...COMPOSITE_PAINT,
     },
   }),
-  inside: combinatorMark("inside", {
-    pyName: "intersect",
-    doc: "Draw only where both regions overlap: A ∩ B. Binary only. With no `fill` or `stroke`, it draws the operands' own paint where they overlap. With either, it draws the overlap as one shape in its own paint: an exact path when both operands trace their outlines and one of them is convex, and with no exact path a fill of the overlapping ink, while a stroke is then an error.",
+  intersect: combinatorMark("intersect", {
+    doc: "Draw only where every region overlaps: A ∩ B ∩ .... With no `fill` or `stroke`, each operand draws its own paint inside the overlap, the later over the earlier with `blendMode`; a hidden operand gives its shape and no paint, so it clips the others. With either, the overlap is one new shape in that paint: an exact path when both operands trace their outlines in opaque paint and one of them is convex, else a fill of the overlapping ink, while a stroke is then an error.",
     fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine. Unused when the result is painted.",
-      },
-      fill: ch.color(
-        "Fill color of the overlap, or a field name or accessor for a color scale. Default none when `stroke` is given."
-      ),
-      stroke: ch.color(
-        "Stroke color of the overlap's outline, or a field name or accessor for a color scale. Default none. It needs an exact outline: both operands must trace their shape (a rect, ellipse, polygon, ribbon, area or region, or a ref to one; not an image, a text or a group), and at least one of them must be convex. Otherwise it is an error."
-      ),
-      strokeWidth: {
-        type: t.number,
-        default: 1,
-        doc: "Stroke width in pixels. Without `stroke` it draws nothing.",
-      },
-      opacity: {
-        type: t.number,
-        default: 1,
-        doc: "Opacity of the result, 0 to 1: of the painted overlap, fill and stroke, or with no `fill` or `stroke`, of the operands as drawn where they overlap.",
-      },
+      blendMode: COMPOSITE_BLEND,
+      ...COMPOSITE_PAINT,
     },
   }),
-  xor: combinatorMark("xor", {
-    pyName: "exclude",
-    doc: "Symmetric difference (odd-overlap parity): A ^ B. Binary only.",
-    fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
-    },
+  exclude: combinatorMark("exclude", {
+    doc: "Draw where exactly one of two regions is: A − B and B − A. Two operands. With no `fill` or `stroke`, each operand draws its own paint where the other is not. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201).",
+    fields: COMPOSITE_PAINT,
   }),
-  out: combinatorMark("out", {
-    pyName: "subtract",
-    doc: "Draw A with B removed: A − B. Binary only.",
-    fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
-    },
+  subtract: combinatorMark("subtract", {
+    doc: "Draw the first region with the others removed: A − B − .... With no `fill` or `stroke`, A draws its own paint where no other operand is. With either, the result is one new shape in that paint. A stroke is an error for now: the result has no exact outline yet (#1201). The result is sized to A.",
+    fields: COMPOSITE_PAINT,
   }),
   atop: combinatorMark("atop", {
-    pyName: "paint",
-    doc: "A is a base surface B is painted onto, clipped to A: A ∪ (B ∩ A). Result sized to A. Binary only.",
+    doc: "Draw A, and each later operand over it, clipped to A: A, then B ∩ A, .... The later operands mix with A by `blendMode`. The result is sized to A. It takes no `fill`: it draws its operands' own paint.",
     fields: {
-      blendMode: {
-        type: t.enum("color", "multiply", "screen", "overlay", "luminosity"),
-        default: "color",
-        doc: "Blend used where the two regions combine.",
-      },
+      blendMode: COMPOSITE_BLEND,
+      opacity: COMPOSITE_PAINT.opacity,
     },
-  }),
-  mask: combinatorMark("mask", {
-    doc: "Use A's region as a clip and paint B inside it without drawing A itself: B ∩ A, reporting A's bounds. Binary only. No options.",
-    fields: {},
   }),
 };
 
@@ -2731,7 +2780,7 @@ export function taggedBranches(
 
 /**
  * `value`, read as a value of `type`, with each part whose type holds nodes
- * (a `holdsNodes` ref, such as a blob's `avoiding`) replaced by `fn(part)`.
+ * (a `holdsNodes` ref, such as `enclose`'s `avoiding`) replaced by `fn(part)`.
  * The walk follows the declared type, not the value: object fields, array
  * and tuple items, record values, named option types, and the branch of a
  * union that the value's tag names (`taggedBranches`, the rule validation

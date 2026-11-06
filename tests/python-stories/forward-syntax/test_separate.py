@@ -24,7 +24,7 @@ def story_penguin_mass():
 
 def story_one_sided():
     return (
-        chart(WEIGHED, w=560, h=200)
+        chart(WEIGHED, w=560)
         .flow(
             scatter(
                 x="Body Mass (g)",
@@ -39,7 +39,7 @@ def story_one_sided():
 
 def story_mixed_radii():
     return (
-        chart(WEIGHED[:120], w=480, h=200)
+        chart(WEIGHED[:120], w=480)
         .flow(
             scatter(
                 x="Flipper Length (mm)",

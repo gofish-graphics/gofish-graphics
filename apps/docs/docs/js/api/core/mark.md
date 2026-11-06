@@ -133,6 +133,26 @@ round-trips through the [IR](/internals/python/bridge); a callback can't be
 serialized, so it is applied at render time and omitted from the emitted IR (the
 same as a function [`.label`](#modifiers) accessor).
 
+### `.hidden(value?)` — laid out, not drawn {#hidden}
+
+`.hidden()` lays the mark out and draws nothing. A hidden mark still feeds
+scales, axes and legends, can be read by [`ref` / `selectAll`](/js/api/selection/ref),
+and takes no pointer events. `value` is a boolean (default `true`) or a
+callback resolved per instance against the datum the mark is bound to:
+
+```ts
+// A guide shape other marks are placed against.
+ribbon({ h: "pdf" }).name("density").hidden();
+
+// Data-driven: draw only the emphasized categories.
+rect({ h: "count" }).hidden((d) => project(d, "lake") !== "Lake Michigan");
+```
+
+An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`. A
+[region compositing](/js/api/operators/region-compositing) operator reads a
+hidden child's region and draws none of its paint. `chart(...)` and
+`layer([...])` take `.hidden()` too.
+
 ### `.translate({ x?, y? })` — pixel offset
 
 `.translate({ x?, y? })` applies a structural pixel translation around the

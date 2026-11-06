@@ -1,15 +1,17 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// </gofish-wiki>
+
 import {
   hierarchy,
   treemap as d3Treemap,
   treemapDice,
   treemapSlice,
   treemapBinary,
-  treemapSliceDice,
   treemapSquarify,
 } from "d3-hierarchy";
-import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
-import { GoFishNode, Placeable, nestEach } from "../_node";
+import { GoFishNode, nestEach } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import {
@@ -19,7 +21,13 @@ import {
   MARK_DIMS,
   elaborateOwnDims,
 } from "../dims";
-import { getQuantity, getValue, isValue, MaybeValue } from "../data";
+import {
+  fieldNameOf,
+  getQuantity,
+  getValue,
+  isValue,
+  MaybeValue,
+} from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
@@ -32,24 +40,139 @@ import type { FieldExpr } from "../fieldExpr";
 import { checkSummable } from "../measure";
 import { squarify, type Tile } from "../../families/tile";
 import { Frontend } from "gofish-ir";
+import { insetConvex, isConvex } from "../geometry/clip";
+import {
+  boxRing,
+  hasArea,
+  inItsBox,
+  isWholeBox,
+  ringCentroid,
+  type Ring,
+} from "../geometry/ring";
+import { voronoiTiling } from "../geometry/voronoiTiling";
+
+/** What a tiling reads from the treemap: its options, the size of its box,
+ *  and how an error message names it (`where`). */
+type TilingOptions = {
+  spacing: number;
+  padding: number;
+  round: boolean;
+  size: Size;
+  where: string;
+};
+
+/**
+ * A tiling: the cells of a region, one per weight, each with its weight's
+ * share of the region's area, in weight order and in the treemap's frame.
+ * `region` is the shape the treemap fills, or `undefined` for its whole box
+ * `[0, size[0]] × [0, size[1]]`. Every `Tile` strategy names one
+ * (`tiling`), and the treemap lays its children out in the cells the same
+ * way whatever the strategy.
+ */
+type Tiling = (
+  region: Ring | undefined,
+  weights: readonly number[],
+  options: TilingOptions
+) => Ring[];
+
+/** A rectangular tiling: one of d3-hierarchy's methods, which tile a box. */
+type RectTile = Exclude<Tile, { kind: "voronoi" }>;
 
 const D3_TILES = {
   squarify: treemapSquarify,
   slice: treemapSlice,
   dice: treemapDice,
   binary: treemapBinary,
-  sliceDice: treemapSliceDice,
-} satisfies Record<Tile["kind"], unknown>;
+} satisfies Record<RectTile["kind"], unknown>;
 
-/** The d3 tiling method of a `Tile` strategy, checked against its family
- *  (a known kind; a squarify ratio of at least 1, which d3 would clamp
+/** The d3 tiling method of a rectangular `Tile` strategy (a squarify ratio
+ *  of at least 1 is checked with its family, since d3 would clamp it
  *  silently). */
-function d3Tile(tile: Tile) {
-  Frontend.checkStrategy("Tile", tile, "treemap({ tile })");
-  return tile.kind === "squarify" && tile.ratio !== undefined
+const d3Tile = (tile: RectTile) =>
+  tile.kind === "squarify" && tile.ratio !== undefined
     ? treemapSquarify.ratio(tile.ratio)
     : D3_TILES[tile.kind];
-}
+
+/** `Tile.voronoi()`'s seed when it is given none, as the `Tile` family
+ *  declares it. */
+const VORONOI_SEED = Frontend.STRATEGIES.Tile.kinds.voronoi.params.seed
+  .default as number;
+
+/** The spelling of a tiling in an error message: `Tile.squarify`. */
+const tileName = (tile: Tile) => `Tile.${tile.kind}`;
+
+/** A rectangular tiling: d3 tiles the box, `padding` in from its edge and
+ *  `spacing` between siblings, and each tile is a box ring. It tiles only a
+ *  box: in any other shape its tiles would not have the areas their weights
+ *  give them. */
+const d3Tiling =
+  (tile: RectTile): Tiling =>
+  (region, weights, { spacing, padding, round, size, where }) => {
+    if (!isWholeBox(region, size[0], size[1]))
+      throw new Error(
+        `${where}: ${tileName(tile)} needs a rectangular region, but this ` +
+          `treemap sits in a shape that is not a box (a Voronoi cell, an ` +
+          `oval, or a polygon cell of a partition). Use Tile.voronoi here.`
+      );
+    // d3 keeps its children in the order given (there is no `.sort`), so
+    // leaf `k` is weight `k`. Its tiles are in the treemap's own axis
+    // order, like any operator's: top-down in free space, upward in a chart.
+    type Datum = { k: number; children?: Datum[] };
+    const root = hierarchy<Datum>({
+      k: -1,
+      children: weights.map((_, k) => ({ k })),
+    }).sum((d) => (d.k >= 0 ? weights[d.k] : 0));
+    const leaves = d3Treemap<Datum>()
+      .size([size[0], size[1]])
+      .paddingInner(spacing)
+      .paddingOuter(padding)
+      .round(round)
+      .tile(d3Tile(tile))(root)
+      .leaves();
+    const rings: Ring[] = new Array(weights.length);
+    for (const { x0, y0, x1, y1, data } of leaves) {
+      const right = Math.max(x0, x1);
+      const bottom = Math.max(y0, y1);
+      rings[data.k] = [
+        [x0, y0],
+        [right, y0],
+        [right, bottom],
+        [x0, bottom],
+      ];
+    }
+    return rings;
+  };
+
+/** The Voronoi tiling: one convex cell per weight (`voronoiTiling`), in the
+ *  region drawn in by the padding, with siblings `spacing` apart; the
+ *  spacing leaves the region's own edges alone, as d3's paddingInner does.
+ *  A region with no area holds only empty cells. Its cells are not
+ *  rounded: `round` snaps a box's edges to whole pixels, and a cell's
+ *  slanted edges have no pixel to snap to. */
+const voronoiTilingOf =
+  (seed: number): Tiling =>
+  (region, weights, { spacing, padding, size, where }) => {
+    const whole = region ?? boxRing(size[0], size[1]);
+    if (!hasArea(whole)) return weights.map(() => []);
+    if (!isConvex(whole))
+      throw new Error(
+        `${where}: Tile.voronoi needs a convex region, and the shape this ` +
+          `treemap is in is not convex.`
+      );
+    return voronoiTiling(insetConvex(whole, padding)!, weights, seed, spacing);
+  };
+
+/** The center of the box that holds a ring. */
+const boxCenter = (ring: Ring): [number, number] => {
+  const { at, size } = inItsBox(ring);
+  return [at[0] + size[0] / 2, at[1] + size[1] / 2];
+};
+
+/** The tiling a `Tile` strategy names. */
+const tiling = (tile: Tile): Tiling =>
+  tile.kind === "voronoi"
+    ? voronoiTilingOf(tile.seed ?? VORONOI_SEED)
+    : d3Tiling(tile);
 
 type TreemapSort = "asc" | "desc" | "none";
 
@@ -83,6 +206,13 @@ function resolveWeight(
   const num = isValue(v) ? Number(getValue(v)) : Number(v);
   return Number.isFinite(num) && num > 0 ? num : 0;
 }
+
+/** A treemap as an error message names it: by the field its children are
+ *  split by, which each child records (`keyBy`). */
+const where = (children: readonly GoFishAST[]): string => {
+  const by = fieldNameOf((children[0] as GoFishNode | undefined)?.keyBy);
+  return by === undefined ? "treemap" : `treemap (by "${by}")`;
+};
 
 const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
@@ -146,7 +276,7 @@ const Treemap = createNodeOperator(
           };
           return [axisSpace(0), axisSpace(1)];
         },
-        layout: (size, scales, childAsts, node) => {
+        layout: (size, scales, childAsts, node, shape) => {
           const xPos = computeAesthetic(
             dims[0].min,
             posFn(scales?.[0]?.map),
@@ -198,58 +328,7 @@ const Treemap = createNodeOperator(
 
           const resolvedSize: Size = [resolveAxisSize(0), resolveAxisSize(1)];
 
-          const sfX = scales?.[0]?.sigma ?? localScaleFactor(0) ?? 1;
-          const sfY = scales?.[1]?.sigma ?? localScaleFactor(1) ?? 1;
-
-          const session = node.getRenderSession();
-          const scaleContext = session.scaleContext;
-          scaleContext.x = {
-            domain: [0, resolvedSize[0] / sfX],
-            scaleFactor: sfX,
-          };
-          scaleContext.y = {
-            domain: [0, resolvedSize[1] / sfY],
-            scaleFactor: sfY,
-          };
-
-          // Build weights and hierarchy (single level: the passed-in children).
-          const leafData: LeafDatum[] = childAsts.map((_child, i) => ({
-            i,
-            weight: resolveWeight(sizeChannel, i),
-          }));
-
-          // Ensure total > 0 so d3 doesn't produce NaNs.
-          const total = leafData.reduce((acc, d) => acc + d.weight, 0);
-          if (total <= 0) {
-            for (const d of leafData) d.weight = 1;
-          }
-
-          type TreemapDatum = { children?: LeafDatum[] } | LeafDatum;
-          const root = hierarchy<TreemapDatum>(
-            { children: leafData } as TreemapDatum,
-            (d) => ("children" in d ? d.children : undefined)
-          ).sum((d: any) =>
-            typeof d.weight === "number" ? d.weight : 0
-          ) as HierarchyNode<any>;
-
-          if (sort !== "none") {
-            root.sort((a, b) =>
-              sort === "asc"
-                ? (a.value ?? 0) - (b.value ?? 0)
-                : (b.value ?? 0) - (a.value ?? 0)
-            );
-          }
-
-          const treemapLayout = d3Treemap<any>()
-            .size([resolvedSize[0], resolvedSize[1]])
-            .paddingInner(spacing)
-            .paddingOuter(padding)
-            .round(round)
-            .tile(d3Tile(tile));
-
-          const rectRoot = treemapLayout(root) as HierarchyRectangularNode<any>;
-          const leaves = rectRoot.leaves();
-
+          Frontend.checkStrategy("Tile", tile, "treemap({ tile })");
           if (childAsts.length === 0) {
             return {
               intrinsicDims: {
@@ -260,47 +339,93 @@ const Treemap = createNodeOperator(
             };
           }
 
-          const placed: Placeable[] = new Array(childAsts.length);
-          for (const leaf of leaves) {
-            const data = leaf.data as LeafDatum;
-            const i = data.i;
-            const x0 = leaf.x0 ?? 0;
-            const y0 = leaf.y0 ?? 0;
-            const x1 = leaf.x1 ?? x0;
-            const y1 = leaf.y1 ?? y0;
-            const w = Math.max(0, x1 - x0);
-            const h = Math.max(0, y1 - y0);
+          // Build weights (single level: the passed-in children).
+          const leafData: LeafDatum[] = childAsts.map((_child, i) => ({
+            i,
+            weight: resolveWeight(sizeChannel, i),
+          }));
 
-            const placeable = childAsts[i].layout([w, h], scales);
-            // d3's tiles are placed in the treemap's own axis order, like
-            // any operator's: top-down in free space, upward in a chart.
-            placeable.place(0, x0 + w / 2, "center");
-            placeable.place(1, y0 + h / 2, "center");
-            placed[i] = placeable;
+          // Ensure total > 0 so the tiling doesn't produce NaNs.
+          const total = leafData.reduce((acc, d) => acc + d.weight, 0);
+          if (total <= 0) {
+            for (const d of leafData) d.weight = 1;
           }
 
-          const xMin = Math.min(...placed.map((c) => c.dims[0].min!));
-          const xMax = Math.max(...placed.map((c) => c.dims[0].max!));
-          const yMin = Math.min(...placed.map((c) => c.dims[1].min!));
-          const yMax = Math.max(...placed.map((c) => c.dims[1].max!));
+          // The shape it fills (#1222, `geometry/ring.ts`): the shape it is
+          // handed, when it has no size of its own and so fills its space,
+          // else its box.
+          const fills =
+            node.fixedSize(0) === undefined && node.fixedSize(1) === undefined;
+          const region = fills ? shape : undefined;
 
+          // The order the tiling lays the children out in. The sort is
+          // stable, so equal weights keep their child order.
+          if (sort !== "none")
+            leafData.sort((a, b) =>
+              sort === "asc" ? a.weight - b.weight : b.weight - a.weight
+            );
+
+          // One cell per child, in the treemap's frame, in weight order.
+          const cells = tiling(tile)(
+            region,
+            leafData.map((d) => d.weight),
+            {
+              spacing,
+              padding,
+              round,
+              size: resolvedSize,
+              where: where(childAsts),
+            }
+          );
+
+          // Each child is laid out in its cell's box, with its cell as its
+          // shape. On an axis where it fills that room it spans the box, so
+          // it is centered on the box; on an axis where it does not (a text,
+          // a circle, a sized rect) it is centered on the cell's centroid,
+          // which is inside the cell. For a box cell the two are one point.
+          leafData.forEach(({ i }, k) => {
+            const ring = cells[k];
+            const child = childAsts[i];
+            const fills = (axis: Direction) =>
+              child instanceof GoFishNode && child.fillsRoom(axis);
+            if (!hasArea(ring)) {
+              // A cell with no area (a tile rounded to no width, a cell its
+              // spacing ate, or no cell at all) holds a child of no size, at
+              // the cell's center, or the region's center when it has none.
+              const center =
+                ring.length > 0
+                  ? boxCenter(ring)
+                  : ringCentroid(
+                      region ?? boxRing(resolvedSize[0], resolvedSize[1])
+                    );
+              const placeable = child.layout([0, 0], scales);
+              placeable.place(0, center[0], "center");
+              placeable.place(1, center[1], "center");
+              return;
+            }
+            const box = inItsBox(ring);
+            const centroid = ringCentroid(ring);
+            const placeable = child.layout(box.size, scales, box.ring);
+            for (const axis of [0, 1] as const)
+              placeable.place(
+                axis,
+                fills(axis)
+                  ? box.at[axis] + box.size[axis] / 2
+                  : centroid[axis],
+                "center"
+              );
+          });
+
+          // Its box is the region it was given, `[0, w] × [0, h]`, whatever
+          // the tiling. The padding is an inset at the treemap's own edge,
+          // inside that box, and the box is the frame its shape is in, so a
+          // parent that centers it there centers its shape.
           return {
             intrinsicDims: {
-              0: {
-                min: xMin,
-                size: xMax - xMin,
-              },
-              1: {
-                min: yMin,
-                size: yMax - yMin,
-              },
+              0: { min: 0, size: resolvedSize[0] },
+              1: { min: 0, size: resolvedSize[1] },
             },
-            transform: {
-              translate: {
-                0: xPos !== undefined ? xPos - xMin : undefined,
-                1: yPos !== undefined ? yPos - yMin : undefined,
-              },
-            },
+            transform: { translate: { 0: xPos, 1: yPos } },
           };
         },
       },

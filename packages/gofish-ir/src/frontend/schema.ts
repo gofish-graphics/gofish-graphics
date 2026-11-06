@@ -108,6 +108,8 @@ export interface ChartIR extends BaseIRNode {
   mark: MarkIR;
   options?: Record<string, unknown>;
   zOrder?: number;
+  /** `chart(...).hidden(b)`: the chart is laid out and paints nothing. */
+  hidden?: boolean;
   /**
    * Chart-level name (from `chart(...).name("scatter")` in Python /
    * `node.name(...)` on a resolved chart in JS) so a sibling
@@ -569,15 +571,36 @@ export interface PartitionOperator
 // type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
 // these kinds and params agree with the table.
 
-/** How `treemap` tiles its box, made by a call in the `Tile` family
+/** How `treemap` tiles its region, made by a call in the `Tile` family
  *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
- *  `Tile.sliceDice()`). */
+ *  `Tile.voronoi()`). */
 export type TileIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
   | { kind: "dice" }
   | { kind: "binary" }
-  | { kind: "sliceDice" };
+  | { kind: "voronoi"; seed?: number };
+
+/** How a mark's or a layer's drawing is filtered, made by a call in the
+ *  `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`). The
+ *  `filter` option also takes a raw CSS filter string. */
+export type FilterIR =
+  | { kind: "grayscale"; amount?: number }
+  | { kind: "luminanceToAlpha" };
+
+/** How a paint mixes with what is under it where they overlap: the CSS
+ *  `mix-blend-mode` values a `blendMode` option takes. `"normal"` draws the
+ *  later paint over the earlier one. The one list: `BLEND_MODE` in
+ *  descriptors.ts and gofish-graphics' `BlendMode` are made from it. */
+export const BLEND_MODES = [
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "color",
+  "luminosity",
+] as const;
+export type BlendModeIR = (typeof BLEND_MODES)[number];
 
 /** How `scatter` keeps its children clear of each other, made by a call in
  *  the `Overlap` family (`Overlap.separate()`, `Overlap.noise()`;
@@ -644,26 +667,26 @@ export type SelectRefIR = {
   mode?: "one" | "all";
 };
 
-/** Nodes named on the wire inside an option (a blob's `avoiding`): a list of
+/** Nodes named on the wire inside an option (`enclose`'s `avoiding`): a list of
  *  by-name references (`ref(...)` / a `.relate()` operand), or every node of
  *  a named layer (`selectAll(name)`, the plural form a chart's data takes). */
 export type NodeSelectionIR = RefMarkIR[] | (SelectRefIR & { mode: "all" });
 
 /** The outline `enclose` draws, made by a call in the `Shape` family
- *  (`Shape.box()`, `Shape.oval()`, `Shape.blob()`; `Shape.hull()` and
- *  `Shape.spine()` make kind `"blob"` with other params preset). */
+ *  (`Shape.box()`, `Shape.oval()`, `Shape.fillet()`, `Shape.blob()`;
+ *  `Shape.hull()` and `Shape.spine()` make kind `"blob"` with other params
+ *  preset). */
 export type ShapeIR =
   | { kind: "box"; rx?: number; ry?: number }
   | { kind: "oval" }
-  | { kind: "arcs"; radius?: number }
+  | { kind: "fillet"; radius?: number; neck?: number; holes?: boolean }
   | {
       kind: "blob";
       convexity?: number;
-      holes?: boolean;
-      roundness?: number;
+      connection?: number;
       neck?: number;
-      avoiding?: NodeSelectionIR;
-      clearance?: number;
+      holes?: boolean;
+      separate?: boolean;
     };
 
 /** A screen direction from a mark, for `Place.around`. */
@@ -773,12 +796,11 @@ export type CombinatorMarkType =
   | "ribbon"
   | "treemap"
   | "pack"
-  | "over"
-  | "inside"
-  | "xor"
-  | "out"
-  | "atop"
-  | "mask";
+  | "union"
+  | "intersect"
+  | "subtract"
+  | "exclude"
+  | "atop";
 
 /**
  * A leaf shape mark. Channel-valued props (`h`, `w`, `fill`, `x`, `y`, …)
@@ -804,6 +826,7 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   label?: LabelIR;
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
+  hidden?: boolean | BridgeLambdaSentinel;
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -822,6 +845,7 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   label?: LabelIR;
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
+  hidden?: boolean | BridgeLambdaSentinel;
   translate?: TranslateIR;
 }
 
@@ -1221,10 +1245,9 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "ribbon",
   "treemap",
   "pack",
-  "over",
-  "inside",
-  "xor",
-  "out",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
-  "mask",
 ];

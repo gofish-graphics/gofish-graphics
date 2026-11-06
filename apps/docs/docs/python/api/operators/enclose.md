@@ -7,7 +7,7 @@ order: 75
 Draws an outline around a set of nodes, under them. The outline is a member of
 the [`Shape`](/python/api/shape) family: the padded bounding box
 (`Shape.box()`, the default), the smallest ellipse around them
-(`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or a
+(`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a
 smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). Like
 [`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon), it
 reads geometry from nodes that are already placed, and it has a combinator form
@@ -66,7 +66,7 @@ from gofish import Shape, chart, circle, enclose, pack
 
 chart(seafood).flow(
     pack(by="lake", spacing=6),
-    enclose(shape=Shape.arcs(), padding=4, fill="none"),
+    enclose(shape=Shape.fillet(), padding=4, fill="none"),
     pack(spacing=2),
 ).mark(circle(r=12, fill="species")).render(w=420, h=420)
 ```
@@ -80,13 +80,38 @@ enclose(
 
 # Operands of .relate(): a set that holds a and c but not b.
 layer([a, b, c]).relate(lambda a, b, c: [
-    enclose([a, c], shape=Shape.spine(avoiding=[b], clearance=6), padding=22),
+    enclose([a, c], shape=Shape.spine(), avoiding=[b], clearance=6, padding=22),
 ])
 ```
 
 A member is read by its shape: a circle is a disc, a `line` is its segments at
 its stroke width, and any other node is its bounding box. The outline paints
 under the members.
+
+`avoiding` lists the nodes the outline keeps out of, for every shape: a list
+of marks (`ref(...)`, a `.relate()` operand), or one `select_all(name)`. The
+outline is cut so that it stays `clearance` (by default, the `padding`) from
+each of them. A box that avoids nodes is drawn as its cut outline, not as a
+rectangle.
+
+A fresh member with no size of its own, such as a `treemap` or a `region`,
+fills the space it is given, so there is nothing to hug. Then `enclose` works
+the other way round: the outline is the space itself (`Shape.box()`) or the
+oval inscribed in it (`Shape.oval()`), and it hands the outline, drawn in by
+`padding`, down to the member as the shape to fill. Inside a Voronoi cell of
+a [`treemap`](/python/api/operators/treemap), the space is that cell, so
+`Shape.box()` draws the cell and `Shape.oval()` the part of the oval inside
+it. `Shape.fillet()` and `Shape.blob()` hug the members, so around a member
+with no size they are an error that names `Shape.box()` and `Shape.oval()`.
+
+```python
+# A Voronoi treemap in a circle: the treemap fills the oval.
+chart(country_populations, axes=False, w=480, h=480).flow(
+    enclose(shape=Shape.oval, fill="none"),
+    treemap(by="continent", size="pop", spacing=5, tile=Tile.voronoi),
+    treemap(size="pop", spacing=1, tile=Tile.voronoi),
+).mark(region(fill="continent"))
+```
 
 ## Parameters
 

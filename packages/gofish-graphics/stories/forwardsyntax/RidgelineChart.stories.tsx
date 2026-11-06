@@ -120,7 +120,7 @@ export const Default: StoryObj<Args> = {
           stroke: "white",
           strokeWidth: 1,
           opacity: 0.85,
-          mixBlendMode: "normal",
+          blendMode: "normal",
         })
       )
       // Per-row baseline labeling, in the style of a ggridges ridgeline: a

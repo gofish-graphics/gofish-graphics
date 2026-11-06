@@ -64,6 +64,18 @@ export const foldFinite = (
   return finite.length ? f(...finite) : 0;
 };
 
+/** The error for a data value placed on an axis with no numeric interval
+ *  to map it through, as when its values are not numbers. */
+export const unplaceableValue = (input: MaybeValue<unknown>): Error => {
+  const field = getValueField(input as any);
+  return new Error(
+    `[gofish] the value ${String(getValue(input as any))}` +
+      (field === undefined ? "" : ` of field "${field}"`) +
+      " was placed on an axis with no position scale: the axis has no " +
+      "numeric interval to map, as when its values are not numbers."
+  );
+};
+
 // input is a value, an aesthetic literal, or undefined. behavior differs based on this
 export const computeAesthetic = (
   input: MaybeValue<number> | undefined,
@@ -72,15 +84,7 @@ export const computeAesthetic = (
 ): number | undefined => {
   // Every axis a data value is placed on has a position scale: a scope
   // solves one for any domain, a one-value domain included (#1107).
-  if (isValue(input) && scale === undefined) {
-    const field = getValueField(input);
-    throw new Error(
-      `[gofish] the value ${String(getValue(input))}` +
-        (field === undefined ? "" : ` of field "${field}"`) +
-        " was placed on an axis with no position scale: the axis has no " +
-        "numeric interval to map, as when its values are not numbers."
-    );
-  }
+  if (isValue(input) && scale === undefined) throw unplaceableValue(input);
   // A datum's pixel offset applies AFTER the scale mapping — "this data
   // position, plus pixels" (`datum(v).offset(px)`).
   return isValue(input)

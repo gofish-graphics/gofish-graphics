@@ -209,6 +209,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         label: { $ref: "#/$defs/LabelIR" },
         relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
+        hidden: fieldTypeToSchema(MARK_BASE_FIELDS.hidden.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -310,6 +311,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         mark: { $ref: "#/$defs/MarkIR" },
         options: { $ref: "#/$defs/ChartOptions" },
         zOrder: { $ref: "#/$defs/Number" },
+        hidden: { type: "boolean" },
         name: {
           type: "string",
           description:
@@ -591,12 +593,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             "line",
             "ribbon",
             "treemap",
-            "over",
-            "inside",
-            "xor",
-            "out",
+            "union",
+            "intersect",
+            "subtract",
+            "exclude",
             "atop",
-            "mask",
           ],
         },
         __combinator: { const: true },
@@ -606,6 +607,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         label: { $ref: "#/$defs/LabelIR" },
         relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
+        hidden: fieldTypeToSchema(MARK_BASE_FIELDS.hidden.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -672,7 +674,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     NodeSelectionIR: {
       description:
-        "Nodes named inside an option (a blob's `avoiding`): a list of refs, or every node of a named layer (selectAll).",
+        "Nodes named inside an option (`enclose`'s `avoiding`): a list of refs, or every node of a named layer (selectAll).",
       oneOf: [
         { type: "array", items: { $ref: "#/$defs/RefMarkIR" } },
         {

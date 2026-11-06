@@ -300,7 +300,7 @@ def story_label_on_stack_operator():
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
     return (
-        chart(titanic_passengers, axes=False, w=260, h=300)
+        chart(titanic_passengers, axes=False, h=300)
         .flow(
             stack(by="pclass", dir="y").label(
                 "pclass", position="center", font_size=14, color="white"
@@ -318,7 +318,7 @@ def story_label_on_stack_aggregate():
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
     return (
-        chart(titanic_passengers, axes=False, w=260, h=300)
+        chart(titanic_passengers, axes=False, h=300)
         .flow(
             stack(by="pclass", dir="y").label(
                 field("survived").count(),

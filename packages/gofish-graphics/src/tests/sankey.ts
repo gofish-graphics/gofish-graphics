@@ -73,7 +73,7 @@ export const testSankey = (size: { width: number; height: number }) =>
             fill: colorScale[group as keyof typeof colorScale],
             curve: Curve.bezier(),
             opacity: 0.8,
-            mixBlendMode: "multiply",
+            blendMode: "multiply",
           },
           items.map((d) => ref(`${d.category}-${d.group}`))
         )

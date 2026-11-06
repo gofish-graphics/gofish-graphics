@@ -48,6 +48,34 @@ a nearby broken case too (see `pluck` and `project` in
 that breaks one or two old examples is better than a dispatch tree that keeps
 them all; check what moved by rendering it, since an old render can be wrong.
 
+**A default is sugar, not a branch.** When an option is left out, the engine
+should act as if the user had written some ordinary value, and that value
+should be one the user can write. An internal conditional ("if a rect has no
+height, fill") is behavior users still have to reason about, but they cannot
+read it, write it, or change it, because it has no spelling in their code. A
+rect with no height takes its room: all of it in an overlay, and along a
+chain what it needs plus a share of the slack. That rule has no spelling a
+user can write yet, which is this smell, still open (#1292). The same rule is why chrome elaborates into nodes and constraints a
+user could write (#1257). If no writable value matches a default, treat that
+as a design smell to fix, not a feature.
+
+**An operator reads its operands and never draws them as themselves.** A
+region-compositing operator (`union`, `intersect`, `subtract`, `exclude`,
+`atop`) reads each child's paint and region and draws one result. It has no
+mode in which a child is drawn whole, untouched, beside the result, so
+`paint` and `mask`, which drew one child as a surface or used it as a
+stencil, are not operators: `atop` and an `intersect` with a hidden child say
+the same (#1267).
+
+**Alpha is shape.** A child's region is its alpha as drawn, with its fill, its
+stroke and its opacity. There is no separate shape channel. `.hidden()` drops
+a node's paint and keeps its shape, so a hidden child of a compositing
+operator is a mask, and a filter that writes alpha
+(`Filter.luminanceToAlpha`) makes a luminance mask (#1267).
+
+**A node's box is as tight as the visible result allows, while staying cheap
+to compute.** An intersect's box is the overlap (#1267).
+
 **Data always flows as lists.** Every step takes a list and gives back a list.
 A split turns a list into a list of groups and never looks inside an item, so
 an item may itself be an array. With no `by`, a split puts each item in its own
@@ -74,7 +102,7 @@ expressiveness principle: the picture should say exactly what the data says. A
 signed bar grows both ways from its measure's zero, not from an axis default of
 zero with an override knob (#773). Data types declare what they can do, marks
 and operators declare what they need, and a mismatch is a loud error that
-names the missing capability (#984). See
+names the missing trait (#984). See
 [Column types](/internals/core/underlying-space#column-types-the-chart-schema).
 
 **Units are types.** A unit of measure on a value is a type, not a preference.
@@ -84,31 +112,34 @@ not an override (#452). A bare field name with no annotation is a weak default
 and yields to either real source. See
 [Measures: units are types](/internals/core/underlying-space#measures-units-are-types).
 
-**Capabilities get plain names.** A capability is named `Has<Thing>` for a
+**Traits get plain names.** A trait is named `Has<Thing>` for a
 property and `Can<Verb>` for an operation: `HasZero`, `HasOrder`, `HasCycle`,
-`CanAdd`, `CanNegate`. These read at a glance for someone who is not a
+`CanSum`, `CanNegate`. These read at a glance for someone who is not a
 mathematician. Math names like monoid or torsor appear only in the docs, as
-analogies. The word that declares a capability names what the user gets,
-not the class: `Trait.summable()` declares `CanAdd`, as `Trait.diverging()`
-declares `HasMidpoint`. A capability of amounts sits on the unit, which is
+analogies. The builder word that declares a trait names what the user gets,
+not the trait itself: `Trait.summable()` declares `CanSum`, as `Trait.diverging()`
+declares `HasMidpoint`. A trait of amounts sits on the unit, which is
 declared once and shared by its columns, so one unit cannot both add up and
 not.
 
 **A unit is a domain plus traits.** A unit definition,
-`Unit(name?, { domain?, traits? })`, keeps what its values are apart from
-what they can do. The `domain` says what the values are:
-`Domain.discrete(levels)` for levels with no order (nominal),
-`Domain.ordered(levels)` for levels in order (ordinal). Order is part of
-the domain, not a trait, because it says which values exist and how they
-line up; it has one spelling. The `traits` say what the values can do, as a
-list: `Trait.summable()`, `Trait.diverging(midpoint?)`. The word follows
-Rust, where a type declares the traits it implements. A trait may need a
-domain (a midpoint is a point along an order, so `Trait.diverging` needs
-`Domain.ordered`) or a name (`Trait.summable` belongs to a unit, and a unit
-is known by its name); a definition that breaks that is an error when it is
-made, not when it is drawn. `Domain` and `Trait` are families, but never
-reach the wire: the wire carries the classes they expand into. Named types such as `Price` or `Revenue` are sugar over the
-capabilities, like chart templates over operators, so design the capabilities
+`Unit(name?, { domain?, traits? })`, keeps which values exist apart from
+everything else about them. The `domain` says only which values exist:
+`Domain.discrete(levels)` lists them. The `traits` say everything else, as a
+list: an order (`Trait.ordered()`), a midpoint the values diverge from
+(`Trait.diverging(midpoint?)`), summing (`Trait.summable()`). So levels in
+order (ordinal) are `Domain.discrete(levels)` with `Trait.ordered()`, and
+without it they are nominal. The word follows Rust, where a type declares
+the traits it implements. A trait may imply another, as a Swift protocol or
+a Lean class implies its parents: `Trait.diverging()` implies
+`Trait.ordered()`, since a midpoint is a point along an order, so it can be
+written alone. Listing both means the same unit. A trait may need a domain (an order here is an order of
+listed levels, so `Trait.ordered` needs `Domain.discrete`) or a name
+(`Trait.summable` belongs to a unit, and a unit is known by its name); a
+definition that breaks that is an error when it is made, not when it is
+drawn. `Domain` and `Trait` are families, but never
+reach the wire: the wire carries the traits they expand into. Named types such as `Price` or `Revenue` are sugar over the
+traits, like chart templates over operators, so design the traits
 first.
 
 **Add a type only where a real example forces it.** A type earns its place by
@@ -148,9 +179,10 @@ baseline is `ascent` and `descent`, the font-metrics names, not height and
 depth, which read as the y and z axes (#773).
 
 **Designers' names over specialist names.** The region-compositing operators use
-Figma's boolean-operation names, not the Porter-Duff names: `intersect`,
-`subtract`, `exclude`, `paint` and `mask`, never `in`, `out`, `xor` or `atop`
-(#196, #404). See [Region compositing](/js/api/operators/region-compositing).
+Figma's boolean-operation names, not the Porter-Duff names: `union`,
+`intersect`, `subtract` and `exclude`, never `over`, `in`, `out` or `xor`
+(#196, #404). `atop` keeps its Porter-Duff name, which Figma has no word for
+(#1267). The frontend IR and the display list use the same names. See [Region compositing](/js/api/operators/region-compositing).
 
 **A name says the shape of its value.** A singular noun gives one thing and a
 plural verb gives a collection: `ref` and `selectAll`, never `refAll` (#510).
@@ -191,6 +223,12 @@ local adjective of one thing, usually specific to its kind, such as
 everywhere. So `every` is an option, because it describes the month
 partition and reads nothing from a parent, while `.format(fn)` is a method
 (#1133).
+
+**A method has a function twin only for a one-child operator.** When an
+operator takes one child, a method on the child may spell the same call, and
+both build the same node: `image(...).cut(opts)` is `cut(image(...), opts)`.
+A method that sets a field of the node (`.name`, `.zOrder`, `.hidden`) or
+reaches outward from it (`.label`, `.relate`) has no function twin (#1267).
 
 **Strategy families are uppercase namespaces.** When an option's value is one of
 several named strategies, the family is a capitalized namespace such as

@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { ColumnType, HasUnit, UnitClasses } from "./schema";
+import type { ColumnType, HasUnit, UnitTraits } from "./schema";
 
 /**
  * Measures: what the values along an axis are amounts of, and in what unit.
@@ -33,13 +33,13 @@ import type { ColumnType, HasUnit, UnitClasses } from "./schema";
  * the axis, followed by the unit's symbol when it has one: "Pay (USD)"
  * (`spaceTitle` in underlyingSpace.ts).
  *
- * A unit also says what its amounts can do, its classes: whether they add
- * up (`CanAdd`, #1197). The classes belong to the unit, not to a column
- * (`HasUnit.classes`): `Unit(name, { traits: [Trait.summable()] })` defines
+ * A unit also says what its amounts can do, its traits: whether they add
+ * up (`CanSum`, #1197). The traits belong to the unit, not to a column
+ * (`HasUnit.traits`): `Unit(name, { traits: [Trait.summable()] })` defines
  * them, and a unit's name alone (`"USD"`) leaves them unknown. A unit is
  * its name, so every occurrence of one name is one unit, and where two
  * occurrences meet their
- * classes meet by one rule ({@link meetUnitClasses}): unknown and known is
+ * traits meet by one rule ({@link meetUnitTraits}): unknown and known is
  * known, and two known definitions that disagree are a loud error. They
  * meet in two places: among the columns of one chart, when its schema is
  * applied (`applySchema` in schema.ts), and across the whole figure, in the
@@ -52,12 +52,15 @@ import type { ColumnType, HasUnit, UnitClasses } from "./schema";
 export type Quantity = {
   /** Titles the axis and names the unit variable. */
   name: string;
-  /** The declared unit, if any, with its classes when they are known.
+  /** The declared unit, if any, with its traits when they are known.
    *  Absent: unknown, the variable `name`. */
   unit?: HasUnit;
   /** The column the values were read from, when they were read from one (a
    *  count or a share was not): what a schema declares a unit for. */
   column?: string;
+  /** Set on the square root of an amount of a quantity, which an area
+   *  channel hands its mark ({@link sqrtQuantity}): that quantity. */
+  rootOf?: Quantity;
 };
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
@@ -65,14 +68,14 @@ export type Quantity = {
 // (USD)". A unit the user declares (`Unit(u)`, or `u`) has the symbol `u`.
 // The engine's own units (INSTANT, DURATION, COUNT, a normalize share) have
 // none: a count or a share is a plain number, and a time axis's ticks
-// already read as dates. The engine's units are definitions: their classes
+// already read as dates. The engine's units are definitions: their traits
 // are known.
 
 /** The unit of a difference of two instants, `Unit.duration`: a duration,
  *  which adds up. */
 export const DURATION = {
   unit: "duration",
-  classes: { CanAdd: {} },
+  traits: { CanSum: {} },
 } satisfies HasUnit;
 
 /** The unit of a time column, an instant, without its zone: `Unit.time({
@@ -81,14 +84,14 @@ export const DURATION = {
  *  `differenceUnits` in underlyingSpace.ts reads). */
 export const INSTANT = {
   unit: "instant",
-  classes: {},
+  traits: {},
   difference: DURATION,
 } satisfies HasUnit;
 
 /** The unit `.count()` and `.distinct()` declare. Counts add up. */
 export const COUNT = {
   unit: "count",
-  classes: { CanAdd: {} },
+  traits: { CanSum: {} },
 } satisfies HasUnit;
 
 /** The quantities {@link columnQuantity} has made, by column type and
@@ -121,30 +124,77 @@ export const columnQuantity = (
   return q;
 };
 
+/** The square roots made by {@link sqrtQuantity}: one object per quantity,
+ *  as {@link columnQuantity} makes one per column. */
+const sqrtQuantities = new WeakMap<Quantity, Quantity>();
+
+/** The traits of every root unit (`√unit`, {@link sqrtQuantity}): none. One
+ *  object, so the occurrences of one root unit meet as the same traits. */
+const ROOT_TRAITS: UnitTraits = Object.freeze({});
+
+/** The quantity of the square root of an amount of `q` (#972), the unit
+ *  `√q` an area channel's length is in (`CHANNEL_INFER.area`). It keeps
+ *  `q`'s declaredness and no trait (no `CanSum`: √(a + b) ≠ √a + √b). See
+ *  "Unit implications" under
+ *  [cells of the plane](/internals/core/underlying-space#cells-of-the-plane-a-binned-struct). */
+export const sqrtQuantity = (q: Quantity): Quantity => {
+  let root = sqrtQuantities.get(q);
+  if (root === undefined) {
+    root = {
+      name: `√${q.name}`,
+      rootOf: q,
+      ...(q.unit !== undefined
+        ? {
+            unit: {
+              unit: `√${q.unit.unit}`,
+              traits: ROOT_TRAITS,
+              ...(q.unit.symbol !== undefined
+                ? { symbol: `√${q.unit.symbol}` }
+                : {}),
+            },
+          }
+        : {}),
+    };
+    sqrtQuantities.set(q, root);
+  }
+  return root;
+};
+
 /** `xs` quoted and joined, for a message: `"a", "b"`. */
 const quoteList = (xs: readonly string[]): string =>
   xs.map((x) => `"${x}"`).join(", ");
 
 /** Whether values of quantity `q` may be summed (#1197): its unit has
- *  `CanAdd`, or it has no declared unit, or its unit's classes are unknown
+ *  `CanSum`, or it has no declared unit, or its unit's traits are unknown
  *  (a unit's name alone): gradual typing (#1125), what its unit can do is
  *  unknown, so it passes. */
 export const addsUp = (q: Quantity): boolean =>
-  q.unit?.classes === undefined || q.unit.classes.CanAdd !== undefined;
+  q.unit?.traits === undefined || q.unit.traits.CanSum !== undefined;
 
 /**
  * Check that `where` may sum values of quantity `q` ({@link addsUp}). Else
  * the loud error names the column (or, for values read from none, the
  * quantity) and the unit, and says how to fix it. A unit whose difference
  * is in a unit of its own that adds up (an instant's, a duration) is summed
- * by its differences: the error says to subtract a reference first.
+ * by its differences: the error says to subtract a reference first. A
+ * square root's unit (`Quantity.rootOf`, {@link sqrtQuantity}) is no unit a
+ * user can define, so its error says what to do with the marks instead.
  */
 export function checkSummable(q: Quantity | undefined, where: string): void {
   if (q === undefined || addsUp(q)) return;
   const what = whoOf(q);
   const unit = q.unit!.unit; // declared, or it would add up
+  if (q.rootOf !== undefined)
+    throw new Error(
+      `${where} sums ${what}, in the unit "${unit}", the square root of ` +
+        `"${q.rootOf.unit?.unit}" that an area channel gives its mark. Square roots ` +
+        `do not add up (√(a + b) is not √a + √b), so lengths read from areas ` +
+        `cannot be summed. Place the marks side by side (spread) instead of ` +
+        `stacking them, or size them by a length (r, w or h) if their sizes ` +
+        `should add up.`
+    );
   const difference = q.unit!.difference;
-  if (difference?.classes?.CanAdd !== undefined)
+  if (difference?.traits?.CanSum !== undefined)
     throw new Error(
       `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
         `summed: two amounts in it do not add up, but their difference, in ` +
@@ -154,7 +204,7 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
     );
   throw new Error(
     `${where} sums ${what}, in the unit "${unit}", which cannot be ` +
-      `summed: it has no CanAdd. If its amounts add up (money, counts, ` +
+      `summed: it has no CanSum. If its amounts add up (money, counts, ` +
       `lengths), declare it with ` +
       `Unit("${unit}", { traits: [Trait.summable()] }). If ` +
       `they do not (temperatures, prices, rates), average them instead, ` +
@@ -162,11 +212,11 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
   );
 }
 
-/** One occurrence of a unit's definition, as {@link meetUnitClasses} reads
- *  it: the unit's classes there (undefined when they are unknown, a unit's
+/** One occurrence of a unit's definition, as {@link meetUnitTraits} reads
+ *  it: the unit's traits there (undefined when they are unknown, a unit's
  *  name alone) and the values it is the unit of, which a message names
  *  ({@link whoOf}) only when it throws. */
-export type UnitOccurrence = { classes?: UnitClasses; who: Quantity };
+export type UnitOccurrence = { traits?: UnitTraits; who: Quantity };
 
 /** Who the values of quantity `q` are, for a message: its column, or, for
  *  values read from none (a count, a share), its name. */
@@ -175,14 +225,14 @@ export const whoOf = (q: Quantity): string =>
     ? `the column "${q.column}"`
     : `the values of "${q.name}"`;
 
-/** How a definition of unit `name` with `classes` is written. */
-const definitionOf = (name: string, classes: UnitClasses): string =>
-  classes.CanAdd !== undefined
+/** How a definition of unit `name` with `traits` is written. */
+const definitionOf = (name: string, traits: UnitTraits): string =>
+  traits.CanSum !== undefined
     ? `Unit(${JSON.stringify(name)}, { traits: [Trait.summable()] })`
     : `Unit(${JSON.stringify(name)})`;
 
-/** Whether two known sets of classes are the same. */
-const sameClasses = (a: UnitClasses, b: UnitClasses): boolean => {
+/** Whether two known sets of traits are the same. */
+const sameTraits = (a: UnitTraits, b: UnitTraits): boolean => {
   const ka = Object.keys(a).sort();
   const kb = Object.keys(b).sort();
   return ka.length === kb.length && ka.every((k, i) => k === kb[i]);
@@ -190,36 +240,36 @@ const sameClasses = (a: UnitClasses, b: UnitClasses): boolean => {
 
 /**
  * THE rule for two occurrences of the unit `name` that meet: a unit is its
- * name, so they are one unit, and its classes are what either knows.
- * Unknown classes (a unit's name alone) and known ones are the known ones;
+ * name, so they are one unit, and its traits are what either knows.
+ * Unknown traits (a unit's name alone) and known ones are the known ones;
  * two known definitions that disagree are a loud error naming both, since
  * one unit cannot both add up and not. It runs wherever occurrences meet:
  * among one chart's columns (`applySchema` in schema.ts) and across the
  * figure ({@link Units}).
  */
-export function meetUnitClasses(
+export function meetUnitTraits(
   name: string,
   a: UnitOccurrence,
   b: UnitOccurrence
 ): UnitOccurrence {
-  if (b.classes === undefined) return a;
-  if (a.classes === undefined) return b;
-  if (sameClasses(a.classes, b.classes)) return a;
-  const [yes, no] = a.classes.CanAdd !== undefined ? [a, b] : [b, a];
+  if (b.traits === undefined) return a;
+  if (a.traits === undefined) return b;
+  if (sameTraits(a.traits, b.traits)) return a;
+  const [yes, no] = a.traits.CanSum !== undefined ? [a, b] : [b, a];
   throw new Error(
     `${capitalize(whoOf(yes.who))} and ${whoOf(no.who)} are both in the unit ` +
       `${JSON.stringify(name)}, but they define it differently: ` +
-      `${definitionOf(name, yes.classes!)} and ` +
-      `${definitionOf(name, no.classes!)}. A unit either adds up or does ` +
+      `${definitionOf(name, yes.traits!)} and ` +
+      `${definitionOf(name, no.traits!)}. A unit either adds up or does ` +
       `not: define it once and use it for both, e.g. const ` +
-      `${identifierFor(name)} = ${definitionOf(name, yes.classes!)}.`
+      `${identifierFor(name)} = ${definitionOf(name, yes.traits!)}.`
   );
 }
 
 const capitalize = (s: string): string => s[0].toUpperCase() + s.slice(1);
 
 /** Meet `occurrence` with the occurrences of unit `name` in `met`
- *  ({@link meetUnitClasses}), and store what they meet to: the one
+ *  ({@link meetUnitTraits}), and store what they meet to: the one
  *  store-or-meet over a map of a unit's occurrences by name. Returns the
  *  met occurrence. */
 export function meetInto(
@@ -231,7 +281,7 @@ export function meetInto(
   const after =
     before === undefined
       ? occurrence
-      : meetUnitClasses(name, before, occurrence);
+      : meetUnitTraits(name, before, occurrence);
   if (after !== before) met.set(name, after);
   return after;
 }
@@ -256,6 +306,9 @@ export class UnitVar {
   /** @internal at a root: the columns in the class, the keys a schema
    *  declares their unit by. */
   columns: string[];
+  /** @internal at a root: whether some mark draws one value of the class as
+   *  a length on both axes ({@link tieUnit}). */
+  tied?: boolean;
   constructor(
     readonly name: string,
     column?: string
@@ -341,60 +394,60 @@ export const unitKey = (unit: UnitTerm): string =>
  *
  * It is also where the figure's units meet: every declared unit the walk
  * reads ({@link unitOf}) meets the other occurrences of its name
- * ({@link meetUnitClasses}), wherever in the figure they are, and a sum the
- * walk takes ({@link Units.sum}) checks the unit's classes as the figure
- * knows them. A sum of a unit whose classes are still unknown waits, and is
+ * ({@link meetUnitTraits}), wherever in the figure they are, and a sum the
+ * walk takes ({@link Units.sum}) checks the unit's traits as the figure
+ * knows them. A sum of a unit whose traits are still unknown waits, and is
  * checked when an occurrence that knows them is met, so the order in which
  * the walk meets them does not matter.
  */
 export class Units {
   private readonly vars = new Map<string, UnitVar>();
-  /** Each unit's classes as its occurrences have met so far, by name. */
+  /** Each unit's traits as its occurrences have met so far, by name. */
   private readonly definitions = new Map<string, UnitOccurrence>();
-  /** The sums of each unit, by name, that wait on its classes. */
+  /** The sums of each unit, by name, that wait on its traits. */
   private readonly waiting = new Map<
     string,
     { q: Quantity; where: string }[]
   >();
 
   /** Meet the declared unit of quantity `q` with the figure's other
-   *  occurrences of its name ({@link meetUnitClasses}), and check the sums
-   *  that waited on its classes once they are known. */
+   *  occurrences of its name ({@link meetUnitTraits}), and check the sums
+   *  that waited on its traits once they are known. */
   meet(q: Quantity): void {
     const unit = q.unit;
     if (unit === undefined) return;
     const name = unit.unit;
     const known = this.definitions.get(name);
-    // Unknown classes, or the very classes already met, change nothing.
+    // Unknown traits, or the very traits already met, change nothing.
     if (
       known !== undefined &&
-      (unit.classes === undefined || unit.classes === known.classes)
+      (unit.traits === undefined || unit.traits === known.traits)
     )
       return;
-    const { classes } = meetInto(this.definitions, name, {
-      classes: unit.classes,
+    const { traits } = meetInto(this.definitions, name, {
+      traits: unit.traits,
       who: q,
     });
-    if (classes === undefined) return;
+    if (traits === undefined) return;
     const waiting = this.waiting.get(name);
     if (waiting === undefined) return;
     this.waiting.delete(name);
-    if (classes.CanAdd !== undefined) return;
-    for (const s of waiting) checkSummable(withClasses(s.q, classes), s.where);
+    if (traits.CanSum !== undefined) return;
+    for (const s of waiting) checkSummable(withTraits(s.q, traits), s.where);
   }
 
   /** Check that `where` may sum values of quantity `q`
-   *  ({@link checkSummable}), with its unit's classes as the figure knows
+   *  ({@link checkSummable}), with its unit's traits as the figure knows
    *  them. While they are unknown the check waits for an occurrence that
    *  knows them ({@link Units.meet}). */
   sum(q: Quantity, where: string): void {
     if (q.unit === undefined) return;
     this.meet(q);
     const name = q.unit.unit;
-    const { classes } = this.definitions.get(name)!;
-    if (classes !== undefined) {
-      if (classes.CanAdd === undefined)
-        checkSummable(withClasses(q, classes), where);
+    const { traits } = this.definitions.get(name)!;
+    if (traits !== undefined) {
+      if (traits.CanSum === undefined)
+        checkSummable(withTraits(q, traits), where);
       return;
     }
     const waiting = this.waiting.get(name);
@@ -419,10 +472,10 @@ export class Units {
   }
 }
 
-/** `q` with its unit's classes set to `classes`. */
-const withClasses = (q: Quantity, classes: UnitClasses): Quantity => ({
+/** `q` with its unit's traits set to `traits`. */
+const withTraits = (q: Quantity, traits: UnitTraits): Quantity => ({
   ...q,
-  unit: { ...q.unit!, classes },
+  unit: { ...q.unit!, traits },
 });
 
 /** The unit of quantity `q`: its declared unit, a fresh concrete term that
@@ -489,8 +542,23 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   ra.unit = unit ?? ra.unit ?? rb.unit;
   ra.names = unionInOrder(ra.names, rb.names);
   ra.columns = unionInOrder(ra.columns, rb.columns);
+  ra.tied ||= rb.tied;
   return ra;
 }
+
+/**
+ * Record that a mark draws one value of `v`'s unit as a length on both axes
+ * (#1087): an aspect lock that derives one axis's data size from the
+ * other's. The unit is then one length on x and y, as a declared unit is
+ * (#582). The tie is kept on the class, so it holds for every occurrence of
+ * the unit the walk unifies with it.
+ */
+export const tieUnit = (v: UnitVar): void => {
+  findRoot(v).tied = true;
+};
+
+/** Whether some mark ties `v`'s unit ({@link tieUnit}). */
+export const isTiedUnit = (v: UnitVar): boolean => findRoot(v).tied === true;
 
 /**
  * Two declared occurrences of one unit (one name) that meet in a class of

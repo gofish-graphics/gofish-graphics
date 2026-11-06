@@ -91,7 +91,7 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
               // stroke: i == 3 ? "black" : "none",
               curve: Curve.linear(),
               opacity: 0.7,
-              mixBlendMode: "multiply",
+              blendMode: "multiply",
             },
             items.map((d) => ref(`${d.category}-${d.group}`))
           )

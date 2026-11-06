@@ -51,7 +51,7 @@ gf.stackY(
   [
     lbl("Before — nested operator tree", "#333", 13),
     before,
-    lbl("↓  flattenLayout", "#999"),
+    lbl("↓  bakeChildren", "#999"),
     lbl("After — flat list, transforms baked in", "#333", 13),
     after,
   ]

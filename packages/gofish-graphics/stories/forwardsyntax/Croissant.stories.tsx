@@ -27,10 +27,11 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * own with a small gap, with one dot per slice at the slice's median.
  *
  * Each chart is two layers over one table, the curve's grid rows `{ x, pdf }`.
- * The first draws the curve (`fill: "none"`, so it is not seen). The second
+ * The first lays the curve out hidden (`.hidden()`): it sets the scale and is
+ * read, and paints nothing. The second
  * turns the grid into quantile rows of the drawn curve (`quantileRows`),
- * partitions them into `Bin.quantiles(n)` cells (ten, or five a month in the
- * ridgeline), and in each cell draws the curve's area intersected with the
+ * partitions them into `Bin.quantiles(n)` cells (five for the standard normal,
+ * ten for the penguins, five a month in the ridgeline), and in each cell draws the curve's area intersected with the
  * cell's region, drawn in by a few pixels, plus a dot at the cell's median.
  * The second layer is a `.relate()` clause of the first, so `density` names
  * the curve drawn beside it. The last story cuts an area into calendar months
@@ -43,6 +44,9 @@ type Args = { w: number; h: number };
 
 const FILL = "#D1E4F6";
 const STROKE = "#467DA8";
+// The colors of the paper's "Anatomy of a Croissant Chart" figure.
+const PAPER_FILL = "#CBA45F";
+const PAPER_STROKE = "#745931";
 
 const normPdf = (x: number, mu = 0, sd = 1) =>
   Math.exp(-0.5 * ((x - mu) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
@@ -71,30 +75,33 @@ const kde = (values: number[]) => {
 
 /**
  * The croissant chart of one density's grid rows `{ x, pdf }`: the curve,
- * unseen, then in each of its ten equal-probability cells the curve's area
+ * unseen, then in each of its `n` equal-probability cells the curve's area
  * intersected with the cell's region, drawn in by 3 pixels, and a dot at the
  * cell's median.
  */
-const croissant = (grid: { x: number; pdf: number }[]) =>
+const croissant = (
+  grid: { x: number; pdf: number }[],
+  { n = 10, fill = FILL, stroke = STROKE } = {}
+) =>
   layer([
     chart(grid)
       .flow(scatter({ x: "x" }))
-      .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+      .mark(ribbon({ h: "pdf" }).name("density").hidden()),
   ]).relate(({ density }) => [
     chart(grid)
       .flow(
         derive((rows) =>
           quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
         ),
-        partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+        partition({ by: field("x").bin(Bin.quantiles(n)), dir: "x" })
       )
       .mark(
         layer([
-          intersect({ fill: FILL, stroke: STROKE, strokeWidth: 2 }, [
+          intersect({ fill, stroke, strokeWidth: 2 }, [
             density,
             region({ inset: 3 }),
           ]),
-          circle({ cx: field("x").median(), cy: 6, r: 3, fill: STROKE }),
+          circle({ cx: field("x").median(), cy: 6, r: 3, fill: stroke }),
         ])
       ),
   ]);
@@ -110,12 +117,16 @@ export const Croissant: StoryObj<Args> = {
     gallery: {
       title: "Croissant",
       description:
-        "A croissant chart of the standard normal distribution: the density curve cut at its deciles into ten slices of equal probability, each with a dot at its median.",
+        "A croissant chart of the standard normal distribution: the density curve cut at its quintiles into five slices of equal probability, each with a dot at its median, in the colors of the paper's anatomy figure.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    croissant(normalGrid).render(container, {
+    croissant(normalGrid, {
+      n: 5,
+      fill: PAPER_FILL,
+      stroke: PAPER_STROKE,
+    }).render(container, {
       w: args.w,
       h: args.h,
       axes: { x: true, y: false },
@@ -214,7 +225,7 @@ export const Ridgeline: StoryObj<Args> = {
         layer({ h: 34 }, [
           chart()
             .flow(scatter({ x: "temp_max" }))
-            .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
+            .mark(ribbon({ h: "pdf" }).name("density").hidden()),
         ]).relate(({ density }) => [
           chart()
             .flow(
@@ -275,7 +286,7 @@ export const SeattleHighsByMonth: StoryObj<Args> = {
     layer([
       chart(highs2012, { schema: schema2012 })
         .flow(scatter({ x: "date" }))
-        .mark(ribbon({ h: "temp_smooth", fill: "none" }).name("temps")),
+        .mark(ribbon({ h: "temp_smooth" }).name("temps").hidden()),
     ])
       .relate(({ temps }) => [
         chart(highs2012, { schema: schema2012 })

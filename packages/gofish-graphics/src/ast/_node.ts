@@ -9,6 +9,7 @@
 // Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
 // RenderSession from here.
 import type { ScopeRegistry } from "./solver/scopes";
+import type { LocalSpan } from "./constraints/placementProgramLowerer";
 import { LayerContext } from "./marks/markResult";
 import type { SplitBy } from "./datumProjection";
 import {
@@ -37,6 +38,7 @@ import {
   type SpaceDeclaration,
   type AxisScopeHook,
   type OwnDims,
+  type AspectLock,
   type Interval,
 } from "./dims";
 import {
@@ -48,12 +50,19 @@ import {
 } from "./gofish";
 import type { GoFishExportOptions, GoFishRenderOptions } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
+import { markShapeOnly } from "./displayList/shapeOnly";
+import { lowerChildrenOffset } from "./displayList/lowerHelpers";
+import {
+  BAKE_BOUNDARY_TYPES,
+  COMPOSITE_TYPES,
+} from "./coordinateTransforms/bake";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
 import { GoFishRef } from "./_ref";
+import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import {
@@ -63,27 +72,33 @@ import {
   isValue,
   MaybeValue,
   baseEmbedded,
-  sameValueUnit,
+  valueUnitKey,
 } from "./data";
 import { color6 } from "../color";
-import { hasUnits, Units, withUnits } from "./measure";
+import { hasUnits, tieUnit, Units, withUnits } from "./measure";
 import { orderByLevels, type HasLevels } from "./schema";
 import {
+  hasOrigin,
   isCONTINUOUS,
   isORDINAL,
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  differenceSpan,
   originIs,
   placeBaseline,
   MeasureClash,
   DEFAULT_AXIS_TICKS,
   type AxisTicks,
+  type CONTINUOUS_TYPE,
+  unitKeyOf,
 } from "./underlyingSpace";
 import { impliedExtents, Extent, padExtent } from "./extent";
 import * as Pwl from "./solver/pwl";
 import {
   DEFAULT_CANVAS_SIZE,
+  frWeight,
+  isFr,
   isLength,
   lengthIn,
   printLength,
@@ -92,12 +107,13 @@ import {
 } from "./length";
 import type { Placement } from "./constraints/claimPlacement";
 import type { LayerPlan } from "./solver/plan";
-import { aroundShare, setChromeForms, type ChromeForms } from "./chromeGutters";
-import { toJSON } from "../util/interval";
-import type { AxisScale } from "./domain";
+import { aroundShare, plotForms } from "./solver/plotForms";
+import { toJSON, width as intervalWidth } from "../util/interval";
+import type { AxisMap, AxisScale } from "./domain";
 import { envFlag } from "../util";
 import type { AxesOptions, AxisOptions, ScaleContext } from "./gofish";
 import type { LabelRow } from "./axes/elaborate";
+import type { Ring } from "./geometry/ring";
 import type { ChromeRing } from "./elaborationUtils";
 import type { TokenContext } from "./tokenContext";
 import {
@@ -209,6 +225,12 @@ export const outlineOverhang = (
     ? strokeWidth / 2
     : 0;
 
+/** What a node's own data size is on one axis (#972): a length of the
+ *  space, a glyph size (`GoFishNode.isGlyph`), or a size an aspect lock
+ *  derives from a length of the other axis where the node is placed at a
+ *  datum in another unit, which claims nothing there. */
+type SizeKind = "length" | "glyph" | "follows";
+
 /** The claim walk's memos of a node (`GoFishNode._claimMemo`), cleared with
  *  its claims. */
 type ClaimMemo = {
@@ -219,30 +241,44 @@ type ClaimMemo = {
   /** Per axis, whether the node fills the room it is given
    *  ({@link GoFishNode.fillsRoom}); set with its claim. */
   fills?: [boolean, boolean];
+  /** Per axis, whether a room it is given reaches something that fills
+   *  it ({@link GoFishNode.readsRoom}); set with its claim. */
+  reads?: [boolean, boolean];
   /** Per axis, whether its claim is one share of the scope around it, a σ
    *  weight ({@link GoFishNode.isShare}); set with its claim. */
   shares?: [boolean, boolean];
   /** A layer's plan per axis ({@link ClaimWalk.plan}); set with its
    *  claim. */
   plans: [LayerPlan | undefined, LayerPlan | undefined];
-  /** Per axis, its chrome forms (`chromeForms` in chromeGutters.ts; `null`:
-   *  none, it has no claim there). */
-  chrome: [ChromeForms | null | undefined, ChromeForms | null | undefined];
   /** Per axis, its own size as a length laid out in its room
    *  ({@link GoFishNode.ownLength}), once read. */
   lengths: [Pwl.Value | undefined, Pwl.Value | undefined];
   /** Per constraint and axis, the gap it lays out between its parts
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
+  /** Per axis, its chains with members that have no size of their own
+   *  (`chainsOf` in `layer`), once read. */
+  chains: [ChainMembers[] | undefined, ChainMembers[] | undefined];
+  /** Per axis, the key of its unit ({@link GoFishNode.unitKeyAt}), once
+   *  read. */
+  unitKeys?: [string | undefined, string | undefined];
+  /** Per axis, what its own size is ({@link GoFishNode.sizeKind}), once
+   *  read. */
+  sizeKinds?: [SizeKind, SizeKind];
 };
+
+/** One chain of a layer along an axis (a `distribute` there): its members
+ *  with no size of their own, each with its weight in the slack
+ *  (`chainsOf` in `layer`). */
+export type ChainMembers = { child: number; weight: number }[];
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
   sharesRoom: [undefined, undefined],
   plans: [undefined, undefined],
-  chrome: [undefined, undefined],
   lengths: [undefined, undefined],
   gaps: new Map(),
+  chains: [undefined, undefined],
 });
 
 /** What the claim walk reads of a layer (`GoFishNode.claimWalk`). */
@@ -273,6 +309,11 @@ export type ClaimWalk = {
   /** Per axis, its own size there: pixels, a data value, or undefined. A
    *  size of its own makes it a σ-scope of its own there. */
   ownSize: (axis: 0 | 1) => MaybeValue<number> | undefined;
+  /** Per axis, by child index, the space each child is in in this layer,
+   *  as its type pass infers it: the layer's space is the collection of
+   *  them, and its axes attach to the parts that are continuous or
+   *  ordinal (`ClaimChild.part`). */
+  parts: (axis: 0 | 1) => readonly UnderlyingSpace[] | undefined;
 };
 
 export type Placeable = {
@@ -292,9 +333,11 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  /** Where its plot lies in its local frame, when that is not its whole box
-   *  (see `GoFishNode.localPlotSpan`). A chain lays its parts by it. */
-  localPlotSpan?: (axis: 0 | 1) => [number, number] | undefined;
+  /** Where one of its spans lies in its local frame, when that is not its
+   *  whole box (see `GoFishNode.localSpan`): its plot, which a chain lays
+   *  its parts by, or its box without its dressing, which chrome is laid
+   *  beside. */
+  localSpan?: (span: LocalSpan, axis: 0 | 1) => [number, number] | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  — `span` and an authoritative `position` pin go through it). Optional
@@ -361,11 +404,18 @@ export function placeUnplacedChild(child: Placeable): void {
 // applied; `transform.translate` is its offset in the parent's frame. `dims`
 // composes the two exactly once (`combineDims`), so a layout must never fold
 // its translate into `intrinsicDims.min` too (#755).
+//
+// `shape` is the shape of the space proposed (#1222, `geometry/ring.ts`): a
+// convex ring inside the box `[0, w] × [0, h]` of `size`, in the node's axis
+// order, or undefined for the box itself. A node that fills its space (a
+// `treemap`, a `region`) fills it, and hands its children the shapes it cuts
+// it into; any other node reads only `size`.
 export type Layout = (
   size: Size,
   scales: Size<AxisScale | undefined>,
   children: readonly GoFishAST[],
-  node: GoFishNode
+  node: GoFishNode,
+  shape?: Ring
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 /** Map a layout pixel (y-down, layout origin) to a final absolute canvas
@@ -686,6 +736,10 @@ export class GoFishNode {
   /** Set by a node's claim hook when its plot claim differs from its claim
    *  (see {@link resolvePlotExtent}); cleared with the claims. */
   public _plotExtent?: Size<Extent | undefined> = undefined;
+  /** Set by a layer with a size of its own whose dressing reaches past it:
+   *  per axis, its box without its dressing, undefined where that is its
+   *  box (see {@link resolveBareExtent}); cleared with the claims. */
+  public _bareExtent?: Size<Extent | undefined> = undefined;
   /** {@link resolvePlotExtent}'s answer where the plot is the box on one
    *  axis only, a new array, with the claim and plot it was read from, so
    *  every read returns the same array while those stay the same. */
@@ -798,6 +852,15 @@ export class GoFishNode {
   // order key apply `?? 0` at the comparison site so unset behaves exactly
   // like an explicit 0 for sorting purposes.
   public _zOrder: number | undefined = undefined;
+  /** Set by `.hidden()`: the node is laid out, read and counted like any
+   *  other, and paints nothing (see {@link hidden}). */
+  public _hidden = false;
+  /** Set when a node is built as one that never paints (`blank()`): it is
+   *  hidden whatever `.hidden()` says ({@link isHidden}). */
+  public _neverPaints = false;
+  /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
+   *  whole drawing is drawn under. A filtered node is a bake boundary. */
+  public _filter: DisplayList.DisplayFilter | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateChrome`), which wraps owning nodes in a Layer of
@@ -822,16 +885,30 @@ export class GoFishNode {
     undefined,
   ];
   public _axisOverride?: { x?: boolean; y?: boolean };
-  /** Set on the node a `chart()` resolves to: per axis, whether the chart
-   *  has a size of its own (`w`/`h`). A chart is where its axes are drawn
-   *  (`isAxisBoundary`). Undefined on every other node. */
-  public _chartBox?: [boolean, boolean];
+  /** Set on the node a `chart()` resolves to. A chart is where its axes are
+   *  drawn (`isAxisBoundary`), around it, sized or not (#1257). Undefined on
+   *  every other node. */
+  public _chartBox?: true;
   /** Set on what holds a `chart()`'s marks: the node its mark resolves to,
    *  apart from the transitions it draws over them, and the layer its frame
    *  holds, every tier of a `.layer()` chain included (`frameChart`). A
    *  label is a layer of text on the nearest one around its mark
    *  (`elaborateLabels`). */
   public _chartContent?: true;
+  /** Set by chrome elaboration on the box a node's axes are seated beside,
+   *  continuous axes and category label rows alike, the content of its
+   *  innermost ring (`elaborateChrome`): a plot, which covers the whole
+   *  niced domain its axes draw ({@link domainSpan}). For a chart, sized or
+   *  not, that box is the chart's own node ({@link _chartBox}). */
+  public _axesBeside?: true;
+  /** The frame a layer lays its children out in on each axis, once laid
+   *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
+   *  local origin. On an axis with no data 0 it measures lengths of its σ
+   *  from that origin (`originPx` 0), as the claim walk reads its plan (a
+   *  difference axis). Undefined where it has no σ, and on a node that is
+   *  no layer. A `position` with `in` reads a datum through it
+   *  (`PositionOptions.in`). */
+  public layoutFrames?: [AxisMap | undefined, AxisMap | undefined];
   /** Set on the node a `chart()` resolves to, next to {@link _chartBox}: the
    *  chart's own `axes` option (default `true`). It applies at the chart and
    *  below it, down to the next chart (`resolveAxes`). The render root's
@@ -839,32 +916,27 @@ export class GoFishNode {
    *  gives its own. Undefined on every other node. */
   public _chartAxes?: AxesOptions;
   /**
-   * Set on the outermost ring of chrome that chrome elaboration
-   * (`elaborateChrome` in axes/elaborate.tsx) wraps around a node: the boxes
-   * inside it. This node's own box is the box WITH chrome (axes, titles,
-   * legend); `content` is the node it dresses, the box WITHOUT chrome;
-   * `withAxes` is the content with its axis gutters and category label rows,
-   * the box its titles and legend are seated around. Tick and category labels
-   * are chrome, not ink of the content: they sit outside `content`.
-   *
-   * `gutters` is how far the chrome reaches past `content` on each side, in
-   * pixels, per axis `[start, end]` in this node's axis order (#1032). Chrome
-   * sits outside its chart, so this node's box is its content's box plus
-   * these: its claim is the hull of its rings (each places its shapes in the
-   * claim walk, `placeByClaims`), and it hands its content what is left of
-   * its slot. Its layout evaluates them at the σ it is laid out at, from its
-   * chrome forms (`chromeForms` and `guttersAt` in chromeGutters.ts,
-   * memoized with its claim); until then they are 0.
+   * Set by chrome elaboration (`elaborateChrome` in axes/elaborate.tsx) on
+   * each ring of chrome it wraps around a node: a layer whose first child
+   * is what it dresses (the ring inside it, or the content) and whose other
+   * children are its chrome (axes, titles, a legend). Each ring is an
+   * ordinary layer of what it dresses and its chrome (#1257): its claim is
+   * the hull of its children where its constraints place them
+   * (`placeByClaims`), its plot is its first child's, and it seats that
+   * child at its origin. Its first child's room is what the chrome leaves
+   * of the ring's room (`plotRooms` in `layer`). Tick and category labels
+   * are chrome, not ink of the content: they sit outside it.
    */
-  public chrome?: {
-    content: GoFishNode;
-    withAxes: GoFishNode;
-    /** The rings, innermost first; the last is this node. Each ring's first
-     *  child is the ring inside it (or the content), and its other children
-     *  are its chrome. */
-    rings: GoFishNode[];
-    gutters?: [[number, number], [number, number]];
-  };
+  public _chromeRing?: true;
+  /**
+   * Set by chrome elaboration on the outermost ring of chrome around a
+   * chart's node ({@link _chartBox}): the chart's box. The chart's chrome
+   * adds around its plot, but its parent lays the chart out whole, plot and
+   * chrome, so to its parent all of it is plot ({@link plotIsBox}). On an
+   * axis with no data 0 it has no baseline to share, so its baseline is its
+   * start (#1241, {@link localAnchor}).
+   */
+  public _chartRing?: true;
   /**
    * The chrome this node is asked to carry beyond the axes `resolveAxes`
    * assigned it: a title on each axis it draws (from the `axes` options) and
@@ -894,6 +966,8 @@ export class GoFishNode {
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */
   public ownDims?: OwnDims<unknown>;
+  /** Its aspect lock, when it has one (`elaborateOwnDims`, #1087). */
+  public aspectLock?: AspectLock;
   /** Per axis, whether its own layout places it there, from the refs it
    *  reads (an ordinal axis's label span): its parent's plan takes it where
    *  layout put it, as it takes a node that places itself at a literal
@@ -1203,29 +1277,48 @@ export class GoFishNode {
     if (!hasUnits()) {
       return withUnits(this.walkUnits(), () => this.resolveUnderlyingSpace());
     }
-    const childSpaces = this.children.map((child) =>
-      child.resolveUnderlyingSpace()
-    );
-    typeWalkDepth++;
+    this._beingTyped = true;
     try {
-      this._underlyingSpace = elaborateSize(
-        this._resolveUnderlyingSpace(
-          childSpaces,
-          this.children,
-          this.constraints
-        )
+      const childSpaces = this.children.map((child) =>
+        child.resolveUnderlyingSpace()
       );
-    } catch (e) {
-      // A measure clash knows its axis index; this node knows what that axis
-      // is called here (`x`, `y`, or a coordinate space's own name).
-      throw e instanceof MeasureClash
-        ? e.named((axis) => this.axisName(axis))
-        : e;
+      typeWalkDepth++;
+      try {
+        this._underlyingSpace = elaborateSize(
+          this._resolveUnderlyingSpace(
+            childSpaces,
+            this.children,
+            this.constraints
+          )
+        );
+        // An aspect lock draws one value of its data size's unit as a
+        // length on both axes, so it ties the unit (#1087).
+        if (this.aspectLock !== undefined)
+          for (const space of this._underlyingSpace)
+            if (isCONTINUOUS(space) && space.measure?.unit !== undefined)
+              tieUnit(space.measure.unit);
+      } catch (e) {
+        // A measure clash knows its axis index; this node knows what that
+        // axis is called here (`x`, `y`, or a coordinate space's own name).
+        throw e instanceof MeasureClash
+          ? e.named((axis) => this.axisName(axis))
+          : e;
+      } finally {
+        typeWalkDepth--;
+      }
     } finally {
-      typeWalkDepth--;
+      this._beingTyped = false;
     }
     return this._underlyingSpace;
   }
+
+  /** Whether this node's type is being resolved: {@link
+   *  resolveUnderlyingSpace} is running on it, so reading its type now
+   *  would resolve it again (a cycle). */
+  public get beingTyped(): boolean {
+    return this._beingTyped;
+  }
+  private _beingTyped = false;
 
   /**
    * This node's y frame (see `axisDirection.ts`): its y direction and whether
@@ -1277,36 +1370,161 @@ export class GoFishNode {
     return childRole(p.sharing(), p.indexOfChild(this) ?? -1, dim) === "slot";
   }
 
+  /** Whether this node's own data size on `dim` is a glyph size (#972): its
+   *  unit is placed at a datum in another unit on an axis it is given on.
+   *  Sizing and embedding both read it. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
+  public isGlyph(dim: 0 | 1): boolean {
+    return this.sizeKind(dim) === "glyph";
+  }
+
+  /** What this node's own data size is on `dim` ({@link SizeKind}), decided
+   *  once per claim walk. */
+  private sizeKind(dim: 0 | 1): SizeKind {
+    const memo = this._claimMemo.sizeKinds;
+    if (memo !== undefined) return memo[dim];
+    // An own value position's unit reads the type walk's union-find.
+    if (!hasUnits())
+      return withUnits(this.walkUnits(), () => this.sizeKind(dim));
+    const placed = [this.foreignPlaced(0), this.foreignPlaced(1)] as const;
+    const kindOn = (axis: 0 | 1): SizeKind => {
+      const own = this.unitKeyAt(axis);
+      if (
+        own !== undefined &&
+        ([0, 1] as const).some(
+          (a) => !this.aspectLock?.derived(a) && placed[a] === own
+        )
+      )
+        return "glyph";
+      return this.aspectLock?.derived(axis) === true &&
+        placed[axis] !== undefined
+        ? "follows"
+        : "length";
+    };
+    return (this._claimMemo.sizeKinds = [kindOn(0), kindOn(1)])[dim];
+  }
+
+  /** The key of this node's unit on `dim` (`unitKeyOf`), or undefined when
+   *  its space there has none. Read after the type walk, and kept with the
+   *  claim walk's memos, which are cleared with its space. */
+  public unitKeyAt(dim: 0 | 1): string | undefined {
+    const spaces = this._underlyingSpace;
+    if (spaces === undefined) return undefined;
+    return (this._claimMemo.unitKeys ??= [
+      unitKeyOf(spaces[0]),
+      unitKeyOf(spaces[1]),
+    ])[dim];
+  }
+
+  /** The unit of this node's data size on `axis` when it is placed at a
+   *  datum in another unit there: by its parent (at a point, or in a cell),
+   *  or by its own value position (its `min`, `center` or `max`). It is a
+   *  size that is no length of the axis that places it. Undefined
+   *  otherwise. */
+  private foreignPlaced(axis: 0 | 1): string | undefined {
+    const size = this.unitKeyAt(axis);
+    if (size === undefined) return undefined;
+    const p = this.parent;
+    const i = p?.indexOfChild(this);
+    if (
+      p !== undefined &&
+      i !== undefined &&
+      p.sharing().datumPlaced?.[axis].has(i) === true &&
+      p.unitKeyAt(axis) !== size
+    )
+      return size;
+    const d = this.ownDims?.[axis];
+    if (d === undefined) return undefined;
+    return [d.min, d.center, d.max].some(
+      (pos) => isValue(pos) && valueUnitKey(pos) !== size
+    )
+      ? size
+      : undefined;
+  }
+
+  /** The room this glyph is placed in on `dim` (#972): the cell its
+   *  parent's position places it across there (`SharingPlan.cells`),
+   *  else the point it is placed at. */
+  private glyphRoom(dim: 0 | 1): GlyphRoom {
+    const p = this.parent;
+    const i = p?.indexOfChild(this);
+    const span = i === undefined ? undefined : p!.sharing().cells?.[dim].get(i);
+    if (span === undefined) return { kind: "point" };
+    return {
+      kind: "cell",
+      axis: dim,
+      span,
+      width: intervalWidth(
+        (this._underlyingSpace![dim] as CONTINUOUS_TYPE).dataInterval ?? {
+          min: 0,
+          max: 0,
+        }
+      ),
+    };
+  }
+
+  /** The σ this glyph is sized at on `dim`: its unit's σ at `frame`
+   *  (`ScopeRegistry.glyphSigma`); with no `frame`, its points' bound. */
+  public glyphSigma(
+    dim: 0 | 1,
+    frame?: readonly [number | undefined, number | undefined]
+  ): number {
+    return getScopeRegistry(this.getRenderSession()).glyphSigma(
+      this.unitKeyAt(dim)!,
+      frame
+    );
+  }
+
+  /** This node's glyph rooms (#972): on each axis where it is a glyph
+   *  (`isGlyph`), its unit's key and the room it is placed in there
+   *  (`ScopeRegistry.fitGlyphs`). */
+  public glyphRooms(): [string, GlyphRoom][] {
+    return ([0, 1] as const)
+      .filter((dim) => this.isGlyph(dim))
+      .map((dim) => [this.unitKeyAt(dim)!, this.glyphRoom(dim)]);
+  }
+
+  /** `claim` with its glyph and follows axes in pixels (#972): a glyph at a
+   *  point claims its size at its points' bound, and a glyph in a cell or a
+   *  following size claims nothing. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
+  private glyphClaim(
+    claim: Size<Extent | undefined>
+  ): Size<Extent | undefined> {
+    const kinds = [this.sizeKind(0), this.sizeKind(1)] as const;
+    if (kinds[0] === "length" && kinds[1] === "length") return claim;
+    return ([0, 1] as const).map((dim) => {
+      const e = claim[dim];
+      if (e === undefined || kinds[dim] === "length") return e;
+      if (kinds[dim] === "follows") return Extent(Pwl.ZERO);
+      if (this.glyphRoom(dim).kind === "cell") return Extent(Pwl.ZERO);
+      const sigma = this.glyphSigma(dim);
+      return Extent(
+        Pwl.constant(Pwl.at(e.ascent, sigma)),
+        Pwl.constant(Pwl.at(e.descent, sigma))
+      );
+    }) as Size<Extent | undefined>;
+  }
+
   /** One of this node's axis spaces on `dim` as the axis machinery sees it:
-   *  placed ({@link placeBaseline}) when this node is seated by a sized scope
-   *  that places a free baseline at the scope's `originPx` — the render root,
-   *  or the content of a chart with a size of its own on `dim` — so the root
-   *  of a bar chart renders an absolute value axis over its free bars. A
-   *  chart is placed whole, its baseline with it, so it does too: a bar
-   *  chart beside a caption draws the axis it draws on its own (#1170).
-   *  Anywhere else a free space is still waiting for its parent to place it. */
+   *  placed ({@link placeBaseline}) when this node is the render root, whose
+   *  scope places a free baseline at its `originPx`, so the root of a bar
+   *  chart renders an absolute value axis over its free bars, or a chart: a
+   *  chart is placed whole, its baseline with it, so a bar chart beside a
+   *  caption draws the axis it draws on its own (#1170). Anywhere else a
+   *  free space is still waiting for its parent to place it. */
   public placedSpace(space: UnderlyingSpace, dim: 0 | 1): UnderlyingSpace {
-    return this.parent === undefined ||
-      this._chartBox !== undefined ||
-      this.isSizedChartContent(dim)
+    return this.parent === undefined || this._chartBox !== undefined
       ? placeBaseline(space)
       : space;
   }
 
-  /** This node is the content of a `chart()` with a size of its own on
-   *  `dim`: the chart solves σ there, and seats this content in its frame. A
-   *  chart's frame has one child, its content (`frameChart`). */
-  private isSizedChartContent(dim: 0 | 1): boolean {
-    return this.parent?._chartBox?.[dim] === true;
-  }
-
   /**
-   * Whether this node draws its continuous axes on `dim` (#1114 step 6):
-   * axes are drawn at `chart()` boundaries, inside the chart's own sized
-   * scope, so the ticks map with the σ the marks map with. A chart with no
-   * size of its own on `dim` draws them around itself (its σ is solved above
-   * it, at the sized node that contains it); a chart with a size of its own
-   * draws them around its content, inside the box it solves σ in. The render
+   * Whether this node draws its continuous axes (#1114 step 6):
+   * axes are drawn around `chart()` boundaries, sized or not (#1257). The
+   * ticks read their datums in the chart's frame (`position`'s `in`), so
+   * they map with the σ the marks map with wherever it is solved: inside a
+   * chart with a size of its own, or above one without. The render
    * root is an implicit chart and nothing more: it draws the axes of the
    * domains its own type covers, a bare low-level render's included. A piece
    * placed apart from it (detached, so the root's type does not cover it)
@@ -1318,9 +1536,8 @@ export class GoFishNode {
    * each axis its type covers first, and a continuous axis has one owner.
    * A nested chart draws only an axis no node above it claimed.
    */
-  private isAxisBoundary(dim: 0 | 1): boolean {
-    if (this._chartBox !== undefined) return !this._chartBox[dim];
-    return this.parent === undefined || this.isSizedChartContent(dim);
+  private isAxisBoundary(): boolean {
+    return this._chartBox !== undefined || this.parent === undefined;
   }
 
   /**
@@ -1337,16 +1554,40 @@ export class GoFishNode {
         `[gofish] ${this.type}: a size claim was read during type inference. ` +
           `Types never read claims; compute this from the types instead.`
       );
+    // A claim that reads itself has no answer: refs that place each
+    // other's targets (two layers whose aligns each name a ref into the
+    // other) are a cycle.
+    if (this._beingClaimed)
+      throw new Error(
+        `[gofish] ${this.type}: its size claim depends on itself. Refs ` +
+          `that place each other's targets (two layers that each align to ` +
+          `a ref into the other) are a cycle; place one of them first.`
+      );
+    this._beingClaimed = true;
+    try {
+      return this.claimOnce();
+    } finally {
+      this._beingClaimed = false;
+    }
+  }
+  private _beingClaimed = false;
+
+  /** One run of {@link resolveExtent}. */
+  private claimOnce(): Size<Extent | undefined> {
     const spaces = this.resolveUnderlyingSpace();
     const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
     const childExtents = this.children.map((c) => c.resolveExtent());
-    const extent = this._resolveExtent(
+    const own = this._resolveExtent(
       childExtents,
       childSpaces,
       spaces,
       this.children,
       this.constraints
     );
+    const extent = this.glyphClaim(own);
+    if (this._plotExtent !== undefined)
+      this._plotExtent =
+        this._plotExtent === own ? extent : this.glyphClaim(this._plotExtent);
     // A node fills the room it is given when it has no size of its own: a
     // leaf with no claim, a node whose room is given to it from outside
     // its content (`isScope`), or a node with no size of its own whose
@@ -1374,13 +1615,8 @@ export class GoFishNode {
           : extent[dim] === undefined && this.inkOn?.[dim] !== true;
       const forms =
         scope && extent[dim] !== undefined
-          ? setChromeForms(
-              this,
-              dim,
-              extent[dim],
-              (this.chrome !== undefined
-                ? this.chrome.content.resolvePlotExtent()
-                : (this._plotExtent ?? extent))[dim]
+          ? plotForms(extent[dim], (this._plotExtent ?? extent)[dim], (claim) =>
+              this.widenToDomain(dim, this._underlyingSpace?.[dim], claim)
             )
           : undefined;
       if (scope) extent[dim] = undefined;
@@ -1406,6 +1642,20 @@ export class GoFishNode {
       return fills;
     }) as [boolean, boolean];
     this._claimMemo.shares = shares;
+    // A node reads the room it is given where something in it fills that
+    // room: it fills, or it has no scope of its own and some child reads
+    // the room it hands that child.
+    this._claimMemo.reads = ([0, 1] as const).map((dim) => {
+      if (this.children.length === 0) return this._claimMemo.fills![dim];
+      const own = this.ownsScope(dim);
+      return (
+        !own &&
+        (this.isScope(dim) ||
+          this.children.some(
+            (c) => c instanceof GoFishNode && c._claimMemo.reads?.[dim] === true
+          ))
+      );
+    }) as [boolean, boolean];
     // Its flexible parts and gaps, checked once per axis it lays out
     // (`warnFlexibleSizes`).
     warnFlexibleSizes(this, 0);
@@ -1551,16 +1801,6 @@ export class GoFishNode {
         ? this.canvasRoom(axis)
         : this.parent.roomFor(axis, `${this.type}'s ${printLength(len)}`)
     );
-    // A chart with a percent size draws its axes inside its box, which it
-    // decides when it is built (`frameChart`): a percent that turns out to be
-    // a share of a band has no box to draw them in.
-    // TODO(#1176): read a chart's box from its resolved length instead.
-    if (this._chartBox?.[axis] === true && !Pwl.isConstant(v))
-      throw new Error(
-        `chart's ${printLength(len)}: its room is a band, a share of the ` +
-          `scope around it, so the chart has no box of its own to draw its ` +
-          `axes in. Use fr for a chart sized by a share.`
-      );
     this._claimMemo.lengths[axis] = v;
     return v;
   }
@@ -1632,6 +1872,35 @@ export class GoFishNode {
     return isLength(size)
       ? this.lengthPx(axis)
       : (size as MaybeValue<number> | undefined);
+  }
+
+  /**
+   * Whether this node has a size of its own on `axis` (#1257): a literal or
+   * data size, a percent, or a leaf that claims a size (a measured text, a
+   * rect with a height). Anything else (a rect with no height, a layer with
+   * no size of its own, an `fr` weight) is laid out in the room its parent
+   * gives it: its whole room in an overlay, and along a chain its need,
+   * plus its share of the slack where its room reaches something that
+   * fills it ({@link readsRoom}; `chainRooms` in `layer`).
+   *
+   * A ring of chrome ({@link _chromeRing}) is sized where the box it
+   * dresses is ({@link dressedBox}): a chart's `w`/`h` are on its plot.
+   */
+  public sizedOn(axis: 0 | 1): boolean {
+    const box = this.dressedBox();
+    const len = box.lengthOn(axis);
+    if (len !== undefined) return !isFr(len);
+    if (box.children.length === 0)
+      return box.resolveExtent()[axis] !== undefined && !box.isShare(axis);
+    return box.claimWalk?.ownSize(axis) !== undefined || box.ownsScope(axis);
+  }
+
+  /** The weight of this node's share of a chain's slack on `axis`: `k` for
+   *  `fr(k)`, and 1 for a node with no size of its own. A ring of chrome
+   *  has the weight of the box it dresses ({@link sizedOn}). */
+  public flexWeight(axis: 0 | 1): number {
+    const len = this.dressedBox().lengthOn(axis);
+    return (len === undefined ? undefined : frWeight(len)) ?? 1;
   }
 
   /** Its own box on `axis` ({@link ownDims}) with the size it fixes for
@@ -1754,6 +2023,16 @@ export class GoFishNode {
     );
   }
 
+  /** Whether the room this node is given on `axis` reaches something that
+   *  fills it: it fills ({@link fillsRoom}), or it has no scope of its own
+   *  and some child reads its room. A part of a chain that reads no room
+   *  takes only its need of the chain's slack (`chainsOf` in `layer`): a
+   *  room larger than its box would change nothing it draws. */
+  public readsRoom(axis: 0 | 1): boolean {
+    this.resolveExtent();
+    return this._claimMemo.reads?.[axis] === true;
+  }
+
   /** Whether this node solves σ for its content against a room it claims
    *  itself on `axis`, as its construct declares ({@link ownsScopeOn}): a
    *  size of its own, or a coordinate space, whose room is its own
@@ -1770,16 +2049,6 @@ export class GoFishNode {
   public fillsRoom(axis: 0 | 1): boolean {
     this.resolveExtent();
     return this._claimMemo.fills?.[axis] === true;
-  }
-
-  /** Whether this node's size on `axis` is flexible: it fills the room it
-   *  is given ({@link fillsRoom}) and brings no data into the scope around
-   *  it (its own data, if any, is in a scope of its own). Its claim, where
-   *  it has one, is shares of that scope's σ alone. */
-  public flexes(axis: 0 | 1): boolean {
-    return (
-      this.fillsRoom(axis) && (this.isScope(axis) || !this.carriesData(axis))
-    );
   }
 
   /**
@@ -1815,24 +2084,58 @@ export class GoFishNode {
   }
 
   /**
-   * Whether this node is a chart's outer box (#1032): the outermost ring of
-   * chrome around a `chart()` with no size of its own. The chart's chrome
-   * adds around its plot, but its parent lays the chart out whole, plot and
-   * chrome, so to its parent all of it is plot. (A chart with a size of its
-   * own wears its chrome inside its frame, which claims the total.)
+   * The claim of this node's box without its dressing: what the chrome
+   * around it is laid beside, so an axis sits beside the part of it that
+   * carries its type and the dressing (an outline, a value label) draws
+   * over the axis. Inner chrome is part of it. A layer's is its plan's
+   * (`ChildForms.bare`, read there); a node with a size of its own has its
+   * content's at the σ it solved (`layer`); any other node is all box, as
+   * is a chart's box ({@link plotIsBox}). Undefined where it is its box.
    */
-  public isChartBox(): boolean {
-    return this.chrome?.content._chartBox !== undefined;
+  public resolveBareExtent(axis: 0 | 1): Extent | undefined {
+    this.resolveExtent();
+    return this._chartRing === true ? undefined : this._bareExtent?.[axis];
+  }
+
+  /**
+   * Whether this node's baseline on `axis` is its start, not its data 0:
+   * it is a chart's box ({@link _chartRing}), placed whole, its chrome with
+   * it (#1257), and it has no data 0 there to share, so it sits by its
+   * start in reading order (#1241). On an axis with a data 0 it keeps that
+   * baseline. Every other box keeps its own origin (a layer of literal
+   * positions, a rotated label's pivot). Read by {@link localAnchor} and by
+   * the claim walk's stand-in for the node (`ClaimChild.startBaseline`).
+   */
+  public baselineIsStart(axis: 0 | 1): boolean {
+    return (
+      this._chartRing === true && !hasOrigin(this._underlyingSpace?.[axis])
+    );
+  }
+
+  /**
+   * The box this node's rings of chrome dress: down its first child through
+   * each ring to the node they wrap. This node itself when it is no ring.
+   */
+  public dressedBox(): GoFishNode {
+    let n: GoFishNode = this;
+    while (n._chromeRing === true) {
+      const c = n.children[0];
+      if (!(c instanceof GoFishNode)) break;
+      n = c;
+    }
+    return n;
   }
 
   /**
    * Whether this node's plot on `axis` is its whole box: it is a part of
    * its parent's plot with its chrome and dressing included. That is a
-   * chart's outer box ({@link isChartBox}), and a node with a size of its
-   * own there, which maps its plot into that size and claims the total.
+   * chart's box ({@link _chartRing}), and a node with a size of its own
+   * there, which maps its plot into that size and claims the total.
    */
   public plotIsBox(axis: 0 | 1): boolean {
-    return this.isChartBox() || this.claimWalk?.ownSize(axis) !== undefined;
+    return (
+      this._chartRing === true || this.claimWalk?.ownSize(axis) !== undefined
+    );
   }
 
   /**
@@ -1896,13 +2199,6 @@ export class GoFishNode {
     );
   }
 
-  /** The pixels this node's chrome reaches past its content on `axis`,
-   *  `[start, end]` in its axis order (see {@link chrome}); `[0, 0]` for a
-   *  node with no chrome, or before its layout reads them. */
-  public chromeGutters(axis: 0 | 1): [number, number] {
-    return this.chrome?.gutters?.[axis] ?? [0, 0];
-  }
-
   /**
    * Drop the memoized underlying space for this node and its whole subtree, so a
    * later `resolveUnderlyingSpace()` recomputes from scratch. Used after the axis
@@ -1915,6 +2211,7 @@ export class GoFishNode {
     this._yFrame = undefined;
     this._extent = undefined;
     this._plotExtent = undefined;
+    this._bareExtent = undefined;
     this._claimMemo = freshClaimMemo();
     this._sharing = undefined;
     this.children.forEach((c) => {
@@ -1989,27 +2286,14 @@ export class GoFishNode {
    * `emX`/`emY` (or `connect`'s `embed()`), which lock the flag to `true` and are
    * never recomputed here.
    *
-   * Two routes by which a dim's edges become coordinate-space positions (so a
-   * coord warps the extent):
+   * A dim embeds iff {@link baseEmbedded} holds (its size is a data value
+   * or unsized) and, inside a coordinate space, it is no glyph size
+   * ({@link isGlyph}): a size placed at a datum in another unit, by its
+   * parent or by its own `min`/`center`/`max`, stays ink, drawn flat at the
+   * mapped point (a scatter bubble). Embedding and sizing ask the one
+   * question, so a glyph is never warped and never a length of the space.
    *
-   * - **Route B (intrinsic, measure-gated)** — implemented here. A dim embeds iff
-   *   {@link baseEmbedded} holds (its size is a data value or unsized) AND, when
-   *   inside a coordinate space, the size's own measure matches the dim's
-   *   *position* measure — the measure of wherever the box sits in coord space
-   *   (its `min`/`center`/`max`, whichever is a data value). A *foreign*-measure
-   *   size (a scatter bubble's area at a positioned center, area ≠ position
-   *   measure) stays ink — drawn flat at the mapped center.
-   *
-   *   The discriminator is mark-LOCAL (size-vs-position on the same dim), not
-   *   read from the coord: a polar coord *forgets* its axis measure (its
-   *   underlying space is measureless), but a positioned mark's own position
-   *   measure IS the axis measure it sits on. A pure-size mark (a bar: size, no
-   *   position) has no position measure to clash with → embeds.
-   * - **Route A (relational, measure-free)** — deferred (no corpus oracle yet).
-   *
-   * The extra revocation only fires INSIDE a coord, so Cartesian behavior is
-   * byte-identical to the old construction-time `inferEmbedded` (which gated on
-   * `min` alone). Runs AFTER `resolveUnderlyingSpace`, BEFORE `layout`/render;
+   * The glyph revocation only fires INSIDE a coord. Runs AFTER `resolveUnderlyingSpace`, BEFORE `layout`/render;
    * like {@link resolveAliases} it mutates the shared `args.dims` element so the
    * captured render closure observes it.
    */
@@ -2032,18 +2316,11 @@ export class GoFishNode {
         // A length embeds as the size it fixes (`fixedSize`): its pixels
         // never do, and a share of its scope does, as a box with no size.
         const box = isLength(dim.size) ? this.fixedBox(dir) : dim;
-        const size = box.size;
-        let embedded = baseEmbedded(box as Dimensions[number]);
-        // Route B gate (coord-scoped): a value-sized dim positioned in a unit
-        // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
-        if (embedded && within) {
-          for (const pos of [dim.min, dim.center, dim.max]) {
-            if (isValue(pos) && !sameValueUnit(pos, size)) {
-              embedded = false;
-              break;
-            }
-          }
-        }
+        // Inside a coord, a glyph size (`isGlyph`: placed at a datum in
+        // another unit, by its parent or by its own position) is ink.
+        const embedded =
+          baseEmbedded(box as Dimensions[number]) &&
+          !(within && this.isGlyph(dir));
         dims[dir] = { ...dim, embedded };
       }
     }
@@ -2219,7 +2496,7 @@ export class GoFishNode {
         } else if (axisOver(this.placedSpace(s, dim)) !== undefined) {
           // Continuous: single-owner — only the root-most unclaimed chart
           // boundary claims (`isAxisBoundary`).
-          if (prior === undefined && this.isAxisBoundary(dim))
+          if (prior === undefined && this.isAxisBoundary())
             sig = continuousSig(dim) ?? AXIS_CLAIM_OPAQUE;
         }
         // A node owns the axis whether or not its chart draws it: an axis
@@ -2257,18 +2534,53 @@ export class GoFishNode {
    * own direction. Here that result is stored in pixels (`orientDims`,
    * `orientTransform`), and the node is handed back to its parent as a view in
    * the PARENT's axis order (`orientView`). The y scale is reflected on the
-   * way in when the two directions differ (`orientScales`).
+   * way in when the two directions differ (`orientScales`), and so is the
+   * proposed `shape` (see {@link Layout}), about the middle of its box.
    */
-  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
+  public layout(
+    size: Size,
+    scales: Size<AxisScale | undefined>,
+    shape?: Ring
+  ): Placeable {
     // Layout re-joins a layer's position measures (`collectPositionDomains`),
     // so it reads the type walk's union-find of units, whose bindings it
     // must see. The outermost call installs it, as the walk's root does.
     if (!hasUnits()) {
-      return withUnits(this.walkUnits(), () => this.layout(size, scales));
+      return withUnits(this.walkUnits(), () =>
+        this.layout(size, scales, shape)
+      );
+    }
+    // A percent is laid out at the length its claim reads (`ownLength`), so
+    // the claim walk and layout agree (#1300): a constant where its room is
+    // known before the layer solve (`fixedSize`), and a share of its scope
+    // (`ρσ` for a percent of a band) at the σ its parent hands it, which is
+    // the room it fills.
+    for (const axis of [0, 1] as const) {
+      const len = this.lengthOn(axis);
+      const share =
+        len === undefined || isFr(len) ? undefined : this.shareOf(axis);
+      const sigma = scales[axis]?.sigma;
+      if (share === undefined || sigma === undefined) continue;
+      size = (
+        axis === 0
+          ? [Pwl.at(share, sigma), size[1]]
+          : [size[0], Pwl.at(share, sigma)]
+      ) as Size;
+    }
+    // A glyph is sized at its unit's σ (#972), at the σ of the frame its
+    // parent places it in.
+    if (this.isGlyph(0) || this.isGlyph(1)) {
+      const frame = [scales[0]?.sigma, scales[1]?.sigma] as const;
+      scales = ([0, 1] as const).map((dim) =>
+        this.isGlyph(dim)
+          ? { ...scales[dim], sigma: this.glyphSigma(dim, frame) }
+          : scales[dim]
+      ) as Size<AxisScale | undefined>;
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
-    this._plotSpan = [undefined, undefined];
+    this._spans.plot.fill(undefined);
+    this._spans.bare.fill(undefined);
     if (this.strokeOverhang > 0) {
       const session = this.tryGetRenderSession();
       if (session !== undefined) session.outlined = true;
@@ -2277,7 +2589,10 @@ export class GoFishNode {
       size,
       orientScales(scales, direction, parentDirection),
       this.children,
-      this
+      this,
+      shape === undefined || direction === parentDirection
+        ? shape
+        : shape.map(([x, y]) => [x, size[1] - y] as const)
     );
 
     this.intrinsicDims = orientDims(elaborateDims(intrinsicDims), direction);
@@ -2434,79 +2749,168 @@ export class GoFishNode {
     return this._projectTranslate(dir);
   }
 
-  /** {@link localPlotSpan}'s memo, per axis, cleared when it is laid out
-   *  (`null`: its plot is its box). */
-  private _plotSpan: [
-    [number, number] | null | undefined,
-    [number, number] | null | undefined,
-  ] = [undefined, undefined];
+  /** {@link localSpan}'s memo, per span and axis, cleared when it is laid
+   *  out (`null`: the span is its box). */
+  private readonly _spans: Record<
+    LocalSpan,
+    [[number, number] | null | undefined, [number, number] | null | undefined]
+  > = { plot: [undefined, undefined], bare: [undefined, undefined] };
 
   /**
-   * Where its plot lies on `axis` in its local frame, once laid out: its
-   * box without its dressing and chrome (see {@link resolvePlotExtent}), or
-   * undefined when that is its whole box ({@link plotIsBox}). Any other
-   * node that wears chrome has its content's; a layer has the hull of its
-   * children that are no dressing there, each at its own plot. A chain lays its parts by their plots
-   * (`anchorOffset`), so dressing never moves the parts it dresses (#1032).
+   * Where one of its spans lies on `axis` in its local frame, once laid
+   * out, or undefined when that is its whole box: its plot, its box without
+   * its dressing and chrome (see {@link resolvePlotExtent}), which a chain
+   * lays its parts by (`anchorOffset`), so dressing never moves the parts
+   * it dresses (#1032); or its box without its dressing (see
+   * {@link resolveBareExtent}), which chrome is laid beside. A layer's is
+   * the hull of its children that are no dressing and no ink there, each at
+   * its own, a ring's chrome included, and its niced domain where its axes
+   * sit beside it ({@link domainSpan}).
+   *
+   * Where a span is its whole box differs by span, as the claims of each
+   * say. A plot is a box placed whole ({@link plotIsBox}: a chart's box, a
+   * node with a size of its own, which maps its plot into that size), and
+   * any other node that wears chrome has its content's. A box without its
+   * dressing is a chart's box, whose dressing is its own, and any node that
+   * is no layer: only a layer sets dressing apart (`placeByClaims`), and a
+   * node with a size of its own still has its content's, since its
+   * dressing reaches past that size.
    */
-  public localPlotSpan(axis: 0 | 1): [number, number] | undefined {
-    const memo = this._plotSpan[axis];
-    if (memo !== undefined) return memo ?? undefined;
-    const value = this.computePlotSpan(axis);
-    this._plotSpan[axis] = value ?? null;
+  public localSpan(span: LocalSpan, axis: 0 | 1): [number, number] | undefined {
+    const memo = this._spans[span];
+    if (memo[axis] !== undefined) return memo[axis] ?? undefined;
+    const value = this.spanHull(span, axis);
+    memo[axis] = value ?? null;
     return value;
   }
 
-  private computePlotSpan(axis: 0 | 1): [number, number] | undefined {
-    if (this.plotIsBox(axis)) return undefined;
-    // A child's plot in its parent's frame, or its box when that is its
-    // plot. Both are in pixels, as the child stores its box, whichever way
-    // the parent reads y: a parent that reads y the other way sees the span
-    // through its view of the child (`orientView`), which reflects it.
-    const inFrame = (
-      c: Placeable,
-      plot: [number, number] | undefined
-    ): [number, number] | undefined => {
-      const { min, max } = c.dims[axis];
-      if (min === undefined || max === undefined) return undefined;
-      if (plot === undefined) return [Math.min(min, max), Math.max(min, max)];
-      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
-      return [plot[0] + shift, plot[1] + shift];
-    };
-    if (this.chrome !== undefined) {
-      // Its box less its chrome's gutters, which its layout read off its
-      // claims (`chromeGutters`), in its axis order.
-      const min = this.localAnchor(axis, "min");
-      const max = this.localAnchor(axis, "max");
-      if (min === undefined || max === undefined) return undefined;
-      const [start, end] = this.chromeGutters(axis);
-      const up = axis === 1 && this.yFrame.direction !== 1;
-      return up ? [min + end, max - start] : [min + start, max - end];
-    }
+  private spanHull(span: LocalSpan, axis: 0 | 1): [number, number] | undefined {
     const walk = this.claimWalk;
+    if (
+      span === "plot"
+        ? this.plotIsBox(axis)
+        : walk === undefined || this._chartRing === true
+    )
+      return undefined;
     const out = (i: number) =>
       walk?.dressing[axis].has(i) === true || walk?.ink[axis].has(i) === true;
-    const own = this.children.map((c) =>
-      c instanceof GoFishNode ? c.localPlotSpan(axis) : undefined
+    const own = this.children.map((c, i) =>
+      c instanceof GoFishNode && !out(i) ? c.localSpan(span, axis) : undefined
     );
     if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
       return undefined;
-    let lo = Infinity;
-    let hi = -Infinity;
+    // The domain's span is in this node's axis order, as its layout reads
+    // it; its box is stored in pixels, `direction × order` (`frameAt` in
+    // `layer`), so a y-up node reflects it.
+    const ordered = this.domainSpan(axis);
+    const dir = axis === 0 ? 1 : this.yFrame.direction;
+    const domain: [number, number] | undefined =
+      ordered === undefined || dir === 1 ? ordered : [-ordered[1], -ordered[0]];
+    let lo = domain?.[0] ?? Infinity;
+    let hi = domain?.[1] ?? -Infinity;
+    // A child's span in its parent's frame, or its box when that is its
+    // span. Both are in pixels, as the child stores its box, whichever way
+    // the parent reads y: a parent that reads y the other way sees the span
+    // through its view of the child (`orientView`), which reflects it.
     this.children.forEach((c, i) => {
       if (out(i) || !(c instanceof GoFishNode)) return;
-      const span = inFrame(c, own[i]);
-      if (span === undefined) return;
-      lo = Math.min(lo, span[0]);
-      hi = Math.max(hi, span[1]);
+      const { min, max } = c.dims[axis];
+      if (min === undefined || max === undefined) return;
+      const s = own[i];
+      const shift = min - (c.localAnchor?.(axis, "min") ?? 0);
+      lo = Math.min(lo, s === undefined ? Math.min(min, max) : s[0] + shift);
+      hi = Math.max(hi, s === undefined ? Math.max(min, max) : s[1] + shift);
     });
     return lo <= hi ? [lo, hi] : undefined;
   }
 
+  /**
+   * `claim` widened to the keyed domain this node maps on `axis`, its type
+   * there being `space`, and niced as every axis over that domain is
+   * (`KeyedDomains.scope`, `viaSet` as it reads it). `claim` itself outside
+   * a render, or where it maps no domain.
+   */
+  public widenToDomain(
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined,
+    claim: Extent,
+    viaSet = true
+  ): Extent {
+    return (
+      this.tryGetRenderSession()?.keyedDomains?.scope(
+        this,
+        axis,
+        space,
+        claim,
+        viaSet
+      )[1] ?? claim
+    );
+  }
+
+  /**
+   * On the box a chart's axes are seated beside ({@link _axesBeside}), whose
+   * type on `axis` is `space`, the type its whole niced domain is read in
+   * there: `space` placed ({@link placedSpace}). A plot covers that domain,
+   * in its claim (`domainPlan` in `layer`) and in its layout
+   * ({@link domainSpan}). On a difference axis (no data 0, an axis over
+   * widths) the domain is a width, which its content sits centered in, as
+   * the axis draws it (`elaborateDifferenceAxis`) and as the claim widens
+   * (`widenTo`). Undefined on any other node, on an axis with no axis over
+   * it, and outside a render.
+   */
+  public coveredDomain(
+    axis: 0 | 1,
+    space: UnderlyingSpace | undefined
+  ): UnderlyingSpace | undefined {
+    return this._axesBeside === true &&
+      (hasOrigin(space) || axisOver(space) === "delta") &&
+      this.tryGetRenderSession()?.keyedDomains !== undefined
+      ? this.placedSpace(space!, axis)
+      : undefined;
+  }
+
+  /**
+   * On the box a chart's axes are seated beside ({@link _axesBeside}), the
+   * pixels its whole domain spans on `axis` in its local frame and its own
+   * axis order (as its layout reads its box), once laid out: the keyed
+   * domain it maps, widened and niced as every axis over it
+   * is (`KeyedDomains.scope`). That box is a plot, and a plot covers its
+   * niced domain, not only the hull of its marks, so an axis seated beside
+   * it sits at the domain's floor, on both axes (a facet panel that draws
+   * only its y axis still covers the shared x domain). On a difference
+   * axis the niced width is centered on the content's. Undefined on any
+   * other node, and on an axis with no axis over it.
+   */
+  public domainSpan(axis: 0 | 1): [number, number] | undefined {
+    const frame = this.layoutFrames?.[axis];
+    const space = this.coveredDomain(axis, this._underlyingSpace?.[axis]);
+    if (frame === undefined || space === undefined) return undefined;
+    const niced = this.tryGetRenderSession()!.keyedDomains!.scope(
+      this,
+      axis,
+      space,
+      undefined
+    )[0];
+    if (!isCONTINUOUS(niced) || !isCONTINUOUS(space)) return undefined;
+    // A difference axis's niced width, centered on the content's, in the
+    // content's frame (`differenceSpan`), as the axis draws it.
+    const [min, max] =
+      axisOver(space) === "delta"
+        ? differenceSpan(space, niced)
+        : [niced.dataInterval.min, niced.dataInterval.max];
+    if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;
+    const a = frame.sigma * min + frame.originPx;
+    const b = frame.sigma * max + frame.originPx;
+    return [Math.min(a, b), Math.max(a, b)];
+  }
+
+  /** Where its `anchor` sits in its local frame on `axis`. Its baseline is
+   *  its start where it has no data 0 to share ({@link baselineIsStart}). */
   public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
+    const dir = elaborateDirection(axis);
     return localAnchorOf(
-      this.intrinsicDims?.[elaborateDirection(axis)],
-      anchor
+      this.intrinsicDims?.[dir],
+      anchor === "baseline" && this.baselineIsStart(dir) ? "min" : anchor
     );
   }
 
@@ -2724,8 +3128,9 @@ export class GoFishNode {
    * its ref-anchoring role, but contributes no display items. Every lower path
    * goes through {@link INTERNAL_lower}, so replacing the lowering — rather than
    * consulting a "visible" flag at paint — makes the node invisible everywhere by
-   * construction. `blank()` is built this way (`shapes/rect.tsx`); `GoFishRef`
-   * draws nothing for the same reason.
+   * construction. A mark with no value is built this way (`withGoFish.ts`);
+   * `GoFishRef` draws nothing for the same reason. Unlike {@link hidden}, it
+   * gives no shape to a compositor either.
    */
   public INTERNAL_emitNothing(): void {
     this._lower = () => [];
@@ -2750,7 +3155,11 @@ export class GoFishNode {
     // but without the visibility rule: the node painting the copy owns when
     // it shows.
     return (transform, toPixel) =>
-      own ? this.lowerWith(own, transform, toPixel, undefined, false) : [];
+      own
+        ? this.filtered(
+            this.lowerWith(own, transform, toPixel, undefined, false)
+          )
+        : [];
   }
 
   /**
@@ -2760,7 +3169,7 @@ export class GoFishNode {
    *
    * This is the other half of the pair with {@link INTERNAL_emitNothing}, and
    * the difference is which tier decides. A node that must not draw AT ALL
-   * (`blank()`, a `ref`, a keyframe a transition moves when its sequence
+   * (a mark with no value, a `ref`, a keyframe a transition moves when its sequence
    * keeps no history) is hidden by construction, at resolve. A node whose
    * drawing comes and goes with a signal — a `time.sequence`'s keyframe
    * groups, where the clock picks which band is showing, or the keyframe marks
@@ -2821,7 +3230,9 @@ export class GoFishNode {
    *  set on a node covers its whole subtree, including nodes a later
    *  elaboration pass adds under it (a label's `Text`, an axis's ticks), so
    *  nothing has to be stamped node by node. Undefined when no rule is set
-   *  anywhere up the chain, which is the static path. */
+   *  anywhere up the chain, which is the static path. TODO(#1267): it reads
+   *  the parent chain only, so a label does not follow its mark's rule as it
+   *  follows its `.hidden()` (`paintAncestors`); should it? */
   private effectiveVisibility(): (() => boolean) | undefined {
     const owners = new Set<object>();
     const rules: (() => boolean)[] = [];
@@ -2856,30 +3267,56 @@ export class GoFishNode {
     // INTERNAL_lower is either a leaf (no children) or a bake boundary (coord,
     // box, connect, arrow, enclose, …) that carries its own absolute transform —
     // a boundary must re-walk its subtree with that transform composed in (via
-    // `flattenLayout`) so descendants land in absolute coordinates before
+    // `bakeChildren`) so descendants land in absolute coordinates before
     // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
-    if (!this._lower) {
-      // A node with no lowering of its own draws only its children (the bake
-      // lowers them directly), so with no children it draws nothing: an
-      // operator over a group with no rows, such as an empty cell's.
-      if (this.children.length === 0) return [];
-      throw new Error(
-        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
-          `emit the display list.`
-      );
-    }
-    const toPixel = this.getRenderSession().toPixel;
+    // A node with no lowering of its own draws only its children, so with
+    // no children it draws nothing: an operator over a group with no rows,
+    // such as an empty cell's.
+    if (!this._lower && this.children.length === 0) return [];
+    const session = this.getRenderSession();
+    // A hidden node draws nothing, or, under a compositor, its shape only.
+    const visibility = this.visibility();
+    if (visibility === "none") return [];
+    const toPixel = session.toPixel;
     if (!toPixel) {
       throw new Error("[gofish] toPixel not set on the render session");
     }
 
-    return this.lowerWith(
-      this._lower,
-      transformOverride ?? this._displayTransform,
-      toPixel,
-      coordinateTransform,
-      true
-    );
+    const transform = transformOverride ?? this._displayTransform;
+    // The bake lowers the children of a node with no lowering of its own
+    // directly, unless the node is filtered: then it lowers them here, where
+    // it put them, to filter them as one picture.
+    let items: DisplayList.DisplayItem[];
+    if (this._lower)
+      items = this.lowerWith(
+        this._lower,
+        transform,
+        toPixel,
+        coordinateTransform,
+        true
+      );
+    else if (this._filter !== undefined)
+      items = lowerChildrenOffset(this, transform, coordinateTransform);
+    else
+      throw new Error(
+        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
+          `emit the display list.`
+      );
+    const drawn = this.filtered(items);
+    if (visibility === "shape") markShapeOnly(drawn);
+    return drawn;
+  }
+
+  /** The node's drawing under its `filter` option, which filters the whole
+   *  drawing as one picture. Both {@link INTERNAL_lower} and a lent drawing
+   *  ({@link INTERNAL_lendDrawing}) draw through it. */
+  private filtered(
+    items: DisplayList.DisplayItem[]
+  ): DisplayList.DisplayItem[] {
+    if (this._filter === undefined || items.length === 0) return items;
+    return [
+      { kind: "group", transform: {}, filter: this._filter, children: items },
+    ];
   }
 
   /**
@@ -3188,6 +3625,77 @@ export class GoFishNode {
   public zOrder(value: number): this {
     this._zOrder = value;
     return this;
+  }
+
+  /**
+   * `.hidden(value = true)`: the node keeps its layout, its datum, its name
+   * and everything it feeds (scales, axes, legends, refs), and paints
+   * nothing, so it takes no pointer either. An ancestor's hidden wins over a
+   * descendant's `.hidden(false)`: a node paints only when no node on its
+   * path to the root is hidden ({@link visibility}). On one node the last call
+   * wins.
+   *
+   * Hidden drops paint, not shape: under a compositor, which reads its
+   * operands' shapes, a hidden node lowers as it would draw, and its items
+   * are recorded as shape only (`displayList/shapeOnly.ts`), so a hidden
+   * operand still gives its alpha (porterDuff.tsx). A label hides with its
+   * mark, though it lives out of the mark's subtree ({@link INTERNAL_attach}).
+   */
+  public hidden(value = true): this {
+    this._hidden = value;
+    return this;
+  }
+
+  /**
+   * How this node draws ({@link hidden}): `"shown"`; `"shape"`, hidden below
+   * the nearest compositor, which reads its shape; or `"none"`, hidden with
+   * no compositor reading it. A node is hidden when it never paints
+   * (`_neverPaints`, a `blank()`), or when `.hidden()` is set on it, an
+   * ancestor up to the nearest compositor, or the mark one of them is
+   * attached to (a label's). Never painting is the node's own: a blank's
+   * label shows unless the blank is `.hidden()`. A hidden flag at or above
+   * the compositor is the compositor's own to answer for: the compositor
+   * draws nothing, or is itself a shape.
+   */
+  public visibility(): "shown" | "shape" | "none" {
+    if (this._neverPaints) return this.underComposite() ? "shape" : "none";
+    for (const n of this.paintAncestors())
+      if (n._hidden) return this.underComposite() ? "shape" : "none";
+    return "shown";
+  }
+
+  /** Whether this node itself draws nothing of its own: `.hidden()` set it,
+   *  or it is built as one that never paints (`_neverPaints`, a `blank()`),
+   *  which no `.hidden()` call turns back on. */
+  public isHidden(): boolean {
+    return this._hidden || this._neverPaints;
+  }
+
+  /**
+   * The nodes whose paint this node's paint follows: itself, its ancestors
+   * up to the nearest compositor, and, for each of them attached to a mark
+   * (a label), that mark's own paint ancestors.
+   */
+  private *paintAncestors(): Generator<GoFishNode> {
+    for (let n: GoFishNode | undefined = this; n; n = n.parent) {
+      yield n;
+      if (n._attachedTo) yield* n._attachedTo.paintAncestors();
+      if (n.parent && COMPOSITE_TYPES.has(n.parent.type)) return;
+    }
+  }
+
+  /** Whether a compositor is above this node, reading its shape. */
+  private underComposite(): boolean {
+    for (let n = this.parent; n; n = n.parent)
+      if (COMPOSITE_TYPES.has(n.type)) return true;
+    return false;
+  }
+
+  /** Whether the bake stops at this node, which lowers its own subtree
+   *  (`coordinateTransforms/bake.ts`): a boundary type, or a node with a
+   *  `filter`, which draws its subtree as one filtered picture. */
+  public isBakeBoundary(): boolean {
+    return BAKE_BOUNDARY_TYPES.has(this.type) || this._filter !== undefined;
   }
 
   /** The raw author-set z-order hint, or `undefined` if never set (distinct

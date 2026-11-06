@@ -15,14 +15,15 @@
  * What gets generated, and what stays hand-written in `gofish/ast.py`:
  *  - Closed-signature **leaf mark** factories (rect, circle, ellipse, petal,
  *    text, image, polygon, blank) — pure kwargs-collection + wire rename.
- *  - Compositing-quartet + over/mask + enclose/arrow **combinator-only**
- *    marks — pure kwargs-collection, `pyName` supplies the Python-facing
- *    rename (wire `type` stays the descriptor's `type`).
+ *  - The five compositing operators + enclose/arrow **combinator-only**
+ *    marks — pure kwargs-collection, named by their wire `type`.
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
  *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
  *    mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
- *    hand-written in `ast.py`, calling these cores. `_chart_opts` is the
+ *    hand-written in `ast.py`, calling these cores (every generated
+ *    function checks its bounded number fields at the call: `fieldChecks`).
+ *    `_chart_opts` is the
  *    same kind of core for `chart(data, **options)` (CHART_OPTIONS), and
  *    `_label_opts` for `.label(accessor, **options)` (LABEL_OPTIONS).
  *  - `_OPTION_TYPES` + `_to_wire`: the key structure of each named option
@@ -276,6 +277,37 @@ function renderPairs(ents: Array<[string, string, FieldSpec]>): string {
     .join("\n");
 }
 
+/** Whether a construct field's type is a number with bounds
+ *  (`t.num({ min: 0, finite: true })`, a pixel clearance): a constraint the
+ *  Python annotation does not state, so the generated function checks it at
+ *  the call. */
+const isBoundedNumber = (type: FieldType): boolean =>
+  type.kind === "number" &&
+  (type.min !== undefined ||
+    type.exclusiveMin !== undefined ||
+    type.max !== undefined ||
+    type.exclusiveMax !== undefined ||
+    type.finite === true ||
+    type.integer === true);
+
+/** The checks a construct's generated function runs on its bounded number
+ *  fields when they are given (`pyParamChecks`, as a strategy factory runs on
+ *  its params), so `enclose(clearance=-1)` fails at the Python call, as JS's
+ *  `enclose({ clearance: -1 })` does at render. */
+function fieldChecks(
+  ents: Array<[string, string, FieldSpec]>,
+  construct: string
+): string[] {
+  return ents
+    .filter(([, , spec]) => isBoundedNumber(spec.type))
+    .flatMap(([py, , spec]) => [
+      `    if ${py} is not None:`,
+      ...pyParamChecks(spec.type, py, `${construct}(${py}=...)`).map(
+        (l) => `        ${l}`
+      ),
+    ]);
+}
+
 /** Render an `_xxx_opts(...) -> dict` core: same kwargs-collection body as a
  *  leaf factory, but returns the dict instead of wrapping it in a Mark/Operator
  *  — used by hand-written dual-form dispatch in ast.py. */
@@ -284,6 +316,10 @@ function renderOptsCore(
   fields: FieldGroup,
   doc?: string
 ): string {
+  // `_pack_combinator_opts` checks its fields as `pack(...)`
+  const construct = fnName
+    .replace(/^_/, "")
+    .replace(/(_combinator)?_opts$/, "");
   const ents = entries(fields);
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
@@ -296,6 +332,7 @@ function renderOptsCore(
   ].join("\n");
   const pairs = renderPairs(ents);
   const body = [
+    ...fieldChecks(ents, construct),
     `    opts: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
     pairs,
@@ -310,7 +347,7 @@ function renderOptsCore(
 }
 
 /** Combinator-only mark that always takes children + a small options set
- *  (compositing quartet, over, mask, enclose, arrow). */
+ *  (the five compositing operators, enclose, arrow). */
 function renderCombinatorFactory(opts: {
   pyName: string;
   wireType: string;
@@ -337,6 +374,7 @@ function renderCombinatorFactory(opts: {
   } else {
     const pairs = renderPairs(ents);
     body = [
+      ...fieldChecks(ents, pyName),
       `    kwargs: Dict[str, Any] = {}`,
       `    for _k, _v in [`,
       pairs,
@@ -369,6 +407,7 @@ lambda/RPC bridge) stays hand-written there.
 
 from __future__ import annotations
 
+import math
 from typing import TYPE_CHECKING, Any, Dict, List, Literal, Optional
 
 from . import ast as _ast
@@ -519,6 +558,7 @@ for (const name of GENERATED_LEAF_MARKS) {
   ].join("\n");
   const pairs = renderPairs(ents);
   const bodyLines = [
+    ...fieldChecks(ents, name),
     `    _kw: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
     pairs,
@@ -539,21 +579,19 @@ parts.push(
   "\n# --- Combinator-only marks ---------------------------------------------------\n"
 );
 const COMBINATOR_ONLY = [
-  "over",
-  "inside",
-  "xor",
-  "out",
+  "union",
+  "intersect",
+  "subtract",
+  "exclude",
   "atop",
-  "mask",
   "position",
   "arrow",
 ];
 for (const wireType of COMBINATOR_ONLY) {
   const d = COMBINATOR_MARKS[wireType];
-  const pyName = d.pyName ?? wireType;
   parts.push(
     renderCombinatorFactory({
-      pyName,
+      pyName: wireType,
       wireType: d.type,
       doc: d.doc,
       fields: resolveFields(d),
@@ -845,7 +883,7 @@ function pyValueChecks(
  *  `checkStrategy`, which reads the same STRATEGIES table. The branches of a
  *  union are told apart by Python type. */
 function pyParamChecks(type: FieldType, v: string, label: string): string[] {
-  // A param that holds marks (a blob's `avoiding`) is checked where JS
+  // A param that holds marks (enclose's `avoiding`) is checked where JS
   // reads it: its marks have no Python type test.
   if (type.kind === "ref" && AUTHORED_REFS[type.name]?.holdsNodes) return [];
   const branches = type.kind === "union" ? [...type.options] : [type];
@@ -1020,7 +1058,13 @@ function writeFamilyModule(opts: {
   factories: FamilyFactory[];
 }): void {
   const { family, doc, table, wire, factories } = opts;
-  const module = family.toLowerCase();
+  // The module is the family's name in lowercase. A Python package's
+  // submodule and its attribute share one name, so importing
+  // `gofish.filter` would replace the `filter` operator: a module whose
+  // name is also an operator's takes a trailing `_` (`gofish.filter_`), as
+  // a kwarg that is a Python keyword does (`from_=`).
+  const lower = family.toLowerCase();
+  const module = Object.hasOwn(OPERATORS, lower) ? `${lower}_` : lower;
   const example = factories[0].name;
   const bareExample = wire.bare
     ? factories.find((f) =>
@@ -1049,7 +1093,7 @@ function writeFamilyModule(opts: {
     `\`\`from gofish.${module} import ${example}\`\` reach the same member. Each member`,
     `returns a plain dict, \`\`{"${wire.tag}": ..., **params}\`\`, with`,
     ...keys,
-    `Mirrors JS \`\`gofish-graphics/${module}\`\`.`,
+    `Mirrors JS \`\`gofish-graphics/${lower}\`\`.`,
     ...(bareExample !== undefined
       ? [
           ``,
@@ -1117,7 +1161,7 @@ writeFamilyModule({
   wire: { tag: "type", keys: "wire", bare: false },
   factories: Object.entries(COORDS).map(([type, d]) => ({
     family: "Coord",
-    name: pyKwarg(d.pyName ?? type),
+    name: pyKwarg(type),
     tag: type,
     params: resolveFields(d),
     preset: {},

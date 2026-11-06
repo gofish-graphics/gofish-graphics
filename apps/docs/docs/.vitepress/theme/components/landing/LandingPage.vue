@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { docsLang } from "../../docsLang";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { docsLang, examplesHref } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
+import PictureCard from "./PictureCard.vue";
+import { COLLAGE, FLOATING, SPECTRUM } from "./landingCards";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
-// strings and rendered with v-html, so the 400KB of inline chart art never goes
-// through the Vue template compiler.
-import heroCards from "./fragments/hero-cards.html?raw";
-import spectrumCards from "./fragments/spectrum-cards.html?raw";
+// strings and rendered with v-html, so the inline chart art never goes through
+// the Vue template compiler.
 import demoSvg from "./fragments/demo-svg.html?raw";
 import codeStrip from "./fragments/code-strip.html?raw";
 
@@ -16,7 +16,14 @@ import "./landing.css";
 const rootEl = ref<HTMLElement | null>(null);
 const demoEl = ref<HTMLButtonElement | null>(null);
 const pulltabEl = ref<HTMLElement | null>(null);
+const railEl = ref<HTMLElement | null>(null);
+const axisEl = ref<HTMLElement | null>(null);
+const knobEl = ref<HTMLElement | null>(null);
+// Whether the spectrum row overflows, so it scrolls (narrow screens only). Only
+// then is it a tab stop with a label, so keyboard users can scroll it.
+const railScrolls = ref(false);
 const jsReady = ref(false);
+const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -65,6 +72,13 @@ function wireDemo(): void {
   };
   demo.addEventListener("click", onClick);
   cleanups.push(() => demo.removeEventListener("click", onClick));
+  // A mouse drag is followed by a click, a touch drag is not: forget the drag
+  // when the next press starts, so it never swallows that press's own click.
+  const onPress = () => {
+    justDragged = false;
+  };
+  demo.addEventListener("pointerdown", onPress);
+  cleanups.push(() => demo.removeEventListener("pointerdown", onPress));
 
   if (tab) {
     let dragging = false;
@@ -236,6 +250,39 @@ function wireBrackets(): void {
   cleanups.push(stopLang);
 }
 
+// ---- spectrum swipe row (narrow screens): a dot on the pencil line under the
+// row tracks how far it has been swiped, from 4% to 92% of the line. The
+// sizes are measured on mount and resize, so a scroll only sets a transform.
+// The same measure says whether the row scrolls at all (railScrolls).
+function wireRail(): void {
+  const rail = railEl.value;
+  const axis = axisEl.value;
+  const knob = knobEl.value;
+  if (!rail || !axis || !knob) return;
+  let axisW = 0;
+  let max = 0;
+  const update = () => {
+    const f = max > 0 ? rail.scrollLeft / max : 0;
+    knob.style.transform = `translateX(${(0.04 + 0.88 * f) * axisW}px)`;
+  };
+  const measure = () => {
+    axisW = axis.clientWidth;
+    max = rail.scrollWidth - rail.clientWidth;
+    // On wide screens the row does not clip (overflow visible), though its
+    // tilted cards still overflow it by a few pixels.
+    railScrolls.value =
+      max > 0 && getComputedStyle(rail).overflowX !== "visible";
+    update();
+  };
+  rail.addEventListener("scroll", update, { passive: true });
+  window.addEventListener("resize", measure);
+  cleanups.push(() => {
+    rail.removeEventListener("scroll", update);
+    window.removeEventListener("resize", measure);
+  });
+  measure();
+}
+
 // ---- scroll reveal.
 function wireReveals(): void {
   const root = rootEl.value;
@@ -266,6 +313,7 @@ onMounted(() => {
   document.documentElement.classList.add("landing-page");
   injectFonts();
   jsReady.value = true;
+  wireRail();
   wireDemo();
   wireBrackets();
   wireReveals();
@@ -283,8 +331,18 @@ onBeforeUnmount(() => {
     <div class="sheet">
       <!-- ===================== HERO ===================== -->
       <section class="hero" aria-labelledby="hero-h">
-        <!-- floating taped specimen cards -->
-        <div class="hero-cards" v-html="heroCards"></div>
+        <!-- wide screens: taped specimen cards floating around the title,
+             each linking to its example page. The container is display:none
+             at 1100px and below, so phones never fetch their lazy pictures. -->
+        <div class="hero-cards">
+          <PictureCard
+            v-for="card in FLOATING"
+            :key="card.id"
+            :card="card"
+            :class="['float-card', `fc-${card.corner}`]"
+            :style="{ width: `${card.width}px` }"
+          />
+        </div>
 
         <div class="inner">
           <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
@@ -304,6 +362,23 @@ onBeforeUnmount(() => {
             <CtaBlock version />
           </div>
         </div>
+
+        <!-- phones and tablets, where the floating cards are hidden: a pile
+             of taped specimen cards, each linking to its example page -->
+        <div class="collage-wrap">
+          <div class="collage">
+            <PictureCard
+              v-for="card in COLLAGE"
+              :key="card.id"
+              :card="card"
+              :class="{ wide: card.wide, tall: card.tall }"
+              :style="{ marginTop: card.drop ? `${card.drop}px` : undefined }"
+            />
+          </div>
+          <p class="collage-more">
+            <a :href="allExamplesHref">see all examples →</a>
+          </p>
+        </div>
       </section>
 
       <!-- ===================== SPECTRUM ===================== -->
@@ -316,36 +391,45 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="track reveal">
-          <div v-html="spectrumCards"></div>
-
-          <!-- pencil axis line -->
-          <svg
-            class="track-line"
-            viewBox="0 0 1080 60"
-            preserveAspectRatio="none"
-            aria-hidden="true"
+          <!-- a row on wide screens; a swipe row on narrow ones -->
+          <div
+            ref="railEl"
+            class="specimens"
+            :tabindex="railScrolls ? 0 : undefined"
+            :aria-label="
+              railScrolls ? 'Four charts, from simple to complex' : undefined
+            "
           >
-            <path
-              d="M6 40 Q270 32 540 38 T1066 30"
-              fill="none"
-              stroke="var(--graphite)"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              vector-effect="non-scaling-stroke"
+            <PictureCard
+              v-for="(card, i) in SPECTRUM"
+              :key="card.id"
+              :card="card"
+              lift
+              class="specimen"
+              role="group"
+              :aria-label="`${i + 1} of ${SPECTRUM.length}`"
             />
-            <path
-              d="M1057 22 L1068 30 L1056 38"
-              fill="none"
-              stroke="var(--graphite)"
-              stroke-width="2.2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              vector-effect="non-scaling-stroke"
-            />
-          </svg>
-          <div class="track-labels">
-            <span>simple</span>
-            <span>complex</span>
+          </div>
+
+          <!-- the pencil axis under the row, simple to complex; on narrow
+               screens a dot moves along it as the row is swiped (wireRail).
+               The line stretches with the row; its arrowhead keeps its shape. -->
+          <div class="spec-axis" aria-hidden="true">
+            <div ref="axisEl" class="axis-line">
+              <svg
+                class="axis-stroke"
+                viewBox="0 0 1080 60"
+                preserveAspectRatio="none"
+              >
+                <path d="M6 40 Q270 32 540 38 T1066 30" />
+              </svg>
+              <svg class="axis-head" viewBox="0 0 12 16">
+                <path d="M1 0.5 L11.5 8 L0.5 15.5" />
+              </svg>
+              <span ref="knobEl" class="knob"></span>
+            </div>
+            <span class="lbl l">simple</span>
+            <span class="lbl r">complex</span>
           </div>
         </div>
       </section>

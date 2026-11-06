@@ -3,7 +3,9 @@
 // </gofish-wiki>
 
 import { type Size } from "../dims";
-import { isValue } from "../data";
+import { getValue, isValue } from "../data";
+import type { Point } from "../geometry/outline";
+import { inItsBox, type Ring } from "../geometry/ring";
 import { isPositionInterval, type PositionRegion } from "./position";
 import { compilePlacementCoordinate } from "./placementLowering";
 import { numbers } from "../solver/arith";
@@ -91,12 +93,21 @@ export function buildLayerConstraintLayoutPlan(
   };
 }
 
+/** The room a layer's `position` constraints give one child: its span per
+ *  axis, and the shape of its cell when the cell has an outline. */
+export type ChildSpan = {
+  span: Size<number | undefined>;
+  shape?: Ring;
+};
+
 /**
- * The span each child is laid out in, per axis, from a layer's `position`
- * constraints, in one walk of them: the pixel length of each interval that
- * pins it there, and of the cell a `region` gives it there (a
- * {@link PositionRegion}: a `partition`'s cell). `posScales` are the scales
- * the layer resolves its position constraints against; a datum edge with no
+ * The room each child is laid out in, from a layer's `position`
+ * constraints, in one walk of them: per axis, the pixel length of each
+ * interval that pins it there, and of the cell a `region` gives it there (a
+ * {@link PositionRegion}: a `partition`'s cell); and the cell's outline as
+ * its shape (#1222, `geometry/ring.ts`), when the cell has one (a hexagon
+ * of `Bin.hex`, a cell of `Bin.voronoi`). `posScales` are the scales the
+ * layer resolves its position constraints against; a datum edge with no
  * scale gives nothing.
  *
  * An interval coordinate `[min, max]` pins both edges of its target, so it
@@ -108,15 +119,28 @@ export function buildLayerConstraintLayoutPlan(
  * length and then centered in it (`lowerPositionPlacement`), so a mark with
  * no size of its own there fills it and one with a size of its own sits in
  * its middle.
+ *
+ * The outline maps through `posScales` as the cell's span does, and is
+ * given in the frame of its own box, with its corner at `[0, 0]`.
  */
 export function buildChildSpans(
   constraints: readonly ConstraintSpec[],
   keyOf: KeyOf,
   posScales: ConstraintPosScales
-): Map<string, Size<number | undefined>> | undefined {
-  const spanByKey = new Map<string, Size<number | undefined>>();
+): Map<string, ChildSpan> | undefined {
+  const byKey = new Map<string, ChildSpan>();
+  const entry = (key: string): ChildSpan => {
+    let cur = byKey.get(key);
+    if (cur === undefined) {
+      cur = { span: [undefined, undefined] };
+      byKey.set(key, cur);
+    }
+    return cur;
+  };
   for (const c of constraints) {
-    if (c.type !== "position") continue;
+    // A span read in another node's frame (`in`) is not this layer's to
+    // size: its pins set the child's extent once that frame is laid out.
+    if (c.type !== "position" || c.in !== undefined) continue;
     for (const axis of [0, 1] as const) {
       const coord = axis === 0 ? c.x : c.y;
       const edges = isPositionInterval(coord) ? coord : c.region?.spans[axis];
@@ -124,16 +148,39 @@ export function buildChildSpans(
       const a = compilePlacementCoordinate(numbers, edges[0], posScales[axis]);
       const b = compilePlacementCoordinate(numbers, edges[1], posScales[axis]);
       if (a === undefined || b === undefined) continue;
-      for (const ref of c.children) {
-        if (!ref) continue;
-        const key = keyOf(ref);
-        const cur = spanByKey.get(key) ?? [undefined, undefined];
-        cur[axis] = Math.abs(b - a);
-        spanByKey.set(key, cur);
-      }
+      for (const ref of c.children)
+        if (ref) entry(keyOf(ref)).span[axis] = Math.abs(b - a);
     }
+    // With no frame on an axis, the cell has no place: its span gives no
+    // room there either.
+    const outline = c.region?.outline;
+    if (
+      outline === undefined ||
+      posScales[0] === undefined ||
+      posScales[1] === undefined
+    )
+      continue;
+    const ring: Point[] = outline.map(([vx, vy]) => {
+      const x = compilePlacementCoordinate(numbers, vx, posScales[0]);
+      const y = compilePlacementCoordinate(numbers, vy, posScales[1]);
+      // A corner that is not a number throws as it maps; one that maps off
+      // the plane (an infinite value) would put it in what the child draws,
+      // so it is an error, not a guess.
+      const bad = [x, y].findIndex(
+        (p) => p === undefined || !Number.isFinite(p)
+      );
+      if (bad >= 0)
+        throw new Error(
+          `a cell's outline on ${bad === 0 ? "x" : "y"} does not map to ` +
+            `pixels: its corner [${getValue(vx)}, ${getValue(vy)}] maps to ` +
+            `[${x}, ${y}].`
+        );
+      return [x!, y!] as const;
+    });
+    const shape = inItsBox(ring).ring;
+    for (const ref of c.children) if (ref) entry(keyOf(ref)).shape = shape;
   }
-  return spanByKey.size === 0 ? undefined : spanByKey;
+  return byKey.size === 0 ? undefined : byKey;
 }
 
 /** Choose the concrete size proposed to one child in a layer.
@@ -143,15 +190,22 @@ export function buildChildSpans(
  *      boxes at the layer's σ, `gridCellSizesAt`), keyed by the child's key
  *      (its uid, `keyOf`), on each
  *      axis where its track has one, and the layer's box on any other;
- *   2. the child's own room in a share scope (`own`, where defined): its
- *      claim at the layer's σ, when σ is the size of a share
- *      (`GoFishNode.sharesRoom`), so a band is one σ and what hangs off it
- *      keeps the room the scope solved for it;
- *   3. default layer box: any other child is proposed the full layer size.
+ *   2. its room in a chain (`own`, where defined): a member of a chain with
+ *      no size of its own is proposed its need (its claim at the layer's σ)
+ *      plus its share of its chain's slack (`chainRooms` in `layer`, #1257);
+ *   3. default layer box: any other child is proposed the layer's room, or
+ *      what dressing leaves of it for a part of its plot (`plotRooms` in
+ *      `layer`). A child with a size of its own keeps it, and one without
+ *      fills the room.
  *
  * A span (`spanByKey`, {@link buildChildSpans}) then owns the axes it
  * spans: an interval's pins set the child's extent there, and a cell is the
  * room the child is laid out in, whatever else proposed one.
+ *
+ * The shape the child is laid out in (see `Layout` in `_node.ts`) travels
+ * with its room: the layer's own shape with the layer's box, its cell's
+ * outline with its cell's span, and none with any other room (a grid cell,
+ * its own share, a span with no outline).
  *
  * Nest proposals apply after this, because they derive a child from an already
  * laid-out source and therefore override only the derived axes. */
@@ -159,24 +213,30 @@ export function childLayoutSizeProposal(
   childKey: string | undefined,
   layerSize: Size,
   gridCellByKey: Map<string, Size<number | undefined>> | undefined,
-  spanByKey?: Map<string, Size<number | undefined>>,
-  own: Size<number | undefined> = [undefined, undefined]
-): Size {
-  let proposal: Size = layerSize;
+  spanByKey?: Map<string, ChildSpan>,
+  own: Size<number | undefined> = [undefined, undefined],
+  layerShape?: Ring
+): { size: Size; shape?: Ring } {
+  let size: Size = layerSize;
+  let shape: Ring | undefined = layerShape;
   if (
     gridCellByKey !== undefined &&
     childKey !== undefined &&
     gridCellByKey.has(childKey)
   ) {
     const cell = gridCellByKey.get(childKey)!;
-    proposal = [cell[0] ?? layerSize[0], cell[1] ?? layerSize[1]];
+    size = [cell[0] ?? layerSize[0], cell[1] ?? layerSize[1]];
+    shape = undefined;
   } else if (own[0] !== undefined || own[1] !== undefined) {
-    proposal = [own[0] ?? proposal[0], own[1] ?? proposal[1]];
+    size = [own[0] ?? size[0], own[1] ?? size[1]];
+    shape = undefined;
   }
-  const span = childKey !== undefined ? spanByKey?.get(childKey) : undefined;
-  if (span !== undefined)
-    proposal = [span[0] ?? proposal[0], span[1] ?? proposal[1]];
-  return proposal;
+  const room = childKey !== undefined ? spanByKey?.get(childKey) : undefined;
+  if (room !== undefined) {
+    size = [room.span[0] ?? size[0], room.span[1] ?? size[1]];
+    shape = room.shape;
+  }
+  return { size, shape };
 }
 
 export type LayerScales = {

@@ -12,7 +12,10 @@
  */
 import { Constraint, type ConstraintSpec } from "../ast/constraints";
 import { solvePlacementCells } from "../ast/constraints/placementSolver";
-import type { PlacementConstraint } from "../ast/constraints/placementLowering";
+import {
+  compilePlacementCoordinate,
+  type PlacementConstraint,
+} from "../ast/constraints/placementLowering";
 import type { SolvePlaceable } from "../ast/constraints/placementProgramLowerer";
 import { numbers, values, type Arith } from "../ast/solver/arith";
 import * as Pwl from "../ast/solver/pwl";
@@ -109,7 +112,7 @@ const solveIn = <T>(
     // Pixel spacings, as a layer reads them (`GoFishNode.gapOf`).
     (c, axis) =>
       Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number),
-    axis === 0 ? [map, undefined] : [undefined, map],
+    (_, a) => (a === axis ? map : undefined),
     undefined,
     [new Set(), new Set()],
     undefined,
@@ -238,9 +241,33 @@ async function main() {
         ref("label"),
       ]),
     ]);
-    agree("x: a box across a data span", 0, [fixed("band", 0)], [
-      Constraint.position({ x: [datum(2), datum(9)] }, [ref("band")]),
-    ]);
+    agree(
+      "x: a box across a data span",
+      0,
+      [fixed("band", 0)],
+      [Constraint.position({ x: [datum(2), datum(9)] }, [ref("band")])]
+    );
+  }
+
+  console.log("\n# a datum that is not a number throws only against a scale");
+  {
+    // On an axis with no scale the coordinate is not solved there, so it
+    // compiles to nothing; a real position scale takes only numbers.
+    const label = datum("a" as any);
+    let unscaled: unknown = "threw";
+    try {
+      unscaled = compilePlacementCoordinate(numbers, label, undefined);
+    } catch {
+      // left as "threw"
+    }
+    check("with no scale it is undefined", unscaled === undefined, unscaled);
+    let threw = false;
+    try {
+      compilePlacementCoordinate(numbers, label, { sigma: 2, originPx: 0 });
+    } catch {
+      threw = true;
+    }
+    check("with a scale it throws", threw);
   }
 
   report();

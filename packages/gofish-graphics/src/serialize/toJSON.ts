@@ -60,6 +60,8 @@ interface SerializeTag {
    *  its wrapper and stamps this field so the structural pixel offset
    *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
   translate?: { x?: number; y?: number };
+  /** Set when a constant `.hidden(value)` is chained on a mark. */
+  hidden?: boolean;
 }
 
 /**
@@ -92,8 +94,8 @@ function wireOpts(
 }
 
 /** Of `opts`, the keys `accepted` declares, as the wire carries them: a
- *  function value is dropped, and a field whose declared type holds nodes (a
- *  blob's `avoiding`, inside `shape`) carries their references. */
+ *  function value is dropped, and a field whose declared type holds nodes
+ *  (`enclose`'s `avoiding`) carries their references. */
 function wireFields(
   accepted: Readonly<Record<string, { type: Frontend.FieldType }>>,
   opts: AnyObject
@@ -125,7 +127,7 @@ function wireLabels(
 }
 
 /**
- * Nodes named inside an option (a blob's `avoiding`), written as their IR
+ * Nodes named inside an option (`enclose`'s `avoiding`), written as their IR
  * (`Frontend.NodeSelectionIR`), at any depth: a ref becomes
  * `{ type: "ref", selection }`, and a `selectAll(name)` becomes
  * `{ type: "select", layer: name, mode: "all" }`, the form chart data
@@ -134,7 +136,7 @@ function wireLabels(
 function nodesToIR(nodes: unknown): Frontend.NodeSelectionIR {
   const selection = nodeSelectionOf(
     nodes,
-    "toJSON: a value that names nodes (a blob's avoiding)"
+    "toJSON: a value that names nodes (enclose's avoiding)"
   );
   return "all" in selection
     ? (selectRefIR(selection.all) as Frontend.NodeSelectionIR)
@@ -162,13 +164,13 @@ function nodeRefIR(item: unknown): Frontend.RefMarkIR {
     if (typeof node._name === "string")
       return { type: "ref", selection: node._name };
     throw new Error(
-      `toJSON: a ${node.type} node in a node list (a blob's avoiding) has no ` +
+      `toJSON: a ${node.type} node in a node list (enclose's avoiding) has no ` +
         'name, so it cannot cross the wire. Name it with .name("...") and ' +
         'list it (or ref("...")) by that name.'
     );
   }
   throw new Error(
-    "toJSON: a node list (a blob's avoiding) holds nodes, refs or .relate() " +
+    "toJSON: a node list (enclose's avoiding) holds nodes, refs or .relate() " +
       `operands, got ${typeof item}.`
   );
 }
@@ -276,6 +278,7 @@ interface ChartBuilderInternals {
   operators: Operator<any, any>[];
   finalMark?: Mark<any> | RenderableBuilder;
   nodeZOrder?: number;
+  nodeHidden?: boolean;
   nodeName?: string;
 }
 
@@ -289,6 +292,7 @@ function chartBuilderInternals(
     operators: c.operators ?? [],
     finalMark: c.finalMark,
     nodeZOrder: c.nodeZOrder,
+    nodeHidden: c.nodeHidden,
     nodeName: c.nodeName,
   };
 }
@@ -297,8 +301,15 @@ async function chartBuilderToChartIR(
   chart: ChartBuilder<any>,
   tables: TableIds
 ): Promise<Frontend.ChartIR> {
-  const { data, options, operators, finalMark, nodeZOrder, nodeName } =
-    chartBuilderInternals(chart);
+  const {
+    data,
+    options,
+    operators,
+    finalMark,
+    nodeZOrder,
+    nodeHidden,
+    nodeName,
+  } = chartBuilderInternals(chart);
 
   const ir: Frontend.ChartIR = {
     type: "chart",
@@ -324,7 +335,7 @@ async function chartBuilderToChartIR(
     }
   }
   if (options && Object.keys(options).length > 0) {
-    // A schema crosses the wire as its records of classes, as Python writes
+    // A schema crosses the wire as its records of traits, as Python writes
     // it (`schemaToWire`).
     ir.options = (
       options.schema === undefined
@@ -334,6 +345,9 @@ async function chartBuilderToChartIR(
   }
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;
+  }
+  if (nodeHidden !== undefined) {
+    ir.hidden = nodeHidden;
   }
   // `chart(...).name(n)`, which a sibling `layer([...]).relate(...)` reads.
   if (nodeName !== undefined) {
@@ -438,6 +452,7 @@ async function markToIR(
   const chained: AnyObject = {};
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = wireLabels(tag.label);
+  if (tag.hidden !== undefined) chained.hidden = tag.hidden;
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

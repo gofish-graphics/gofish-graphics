@@ -803,7 +803,7 @@ Two alternatives inform the open questions.
   [#994](https://github.com/gofish-graphics/gofish-graphics/issues/994), measure
   inference and units in the column type
 - [#984](https://github.com/gofish-graphics/gofish-graphics/issues/984), space
-  kinds from capabilities
+  kinds from traits
 - [#528](https://github.com/gofish-graphics/gofish-graphics/issues/528), dual
   axes
 - [#582](https://github.com/gofish-graphics/gofish-graphics/issues/582),

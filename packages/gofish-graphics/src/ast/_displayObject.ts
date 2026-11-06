@@ -4,7 +4,7 @@ import type { Transform } from "./dims";
 /**
  * A node in GoFish's rendering IR.
  *
- * The bake pass ({@link flattenLayout} in `coordinateTransforms/bake.ts`)
+ * The bake pass (`bake` in `coordinateTransforms/bake.ts`)
  * collapses a resolved scenegraph into a flat list of these — each one a
  * child-less *draw entry* pairing a mark with the absolute (already-composed)
  * transform at which to draw it. The nested, parent-relative `<g transform>`

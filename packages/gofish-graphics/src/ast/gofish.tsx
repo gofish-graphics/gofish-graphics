@@ -18,7 +18,7 @@ import type { GoFishAST } from "./_ast";
 import { resolveReferences } from "./_ref";
 import { axisScale, pxOf, type AxisMap, type AxisScale } from "./domain";
 import { lowerToDisplayList } from "./displayList/lower";
-import { paintSVG } from "./displayList/paintSVG";
+import { paintDocument } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
 import { resolveMarkResult } from "./marks/markResult";
@@ -484,16 +484,11 @@ export async function layout(
         )
       : undefined,
   };
-  // A chart with a size of its own draws its axes around its content, its
-  // frame's one child (`isAxisBoundary`), so the content carries the
-  // request for their titles too; each node titles only the axes it draws.
+  // Each node titles only the axes it draws.
   for (const n of breadthFirst(child)) {
     if (n !== child && n._chartAxes === undefined) continue;
     const chartAxes = n === child ? axes : n._chartAxes;
     n._chromeRequest = { ...n._chromeRequest, axes: chartAxes };
-    const content = n.children[0];
-    if (n._chartBox?.some((sized) => sized) && content instanceof GoFishNode)
-      content._chromeRequest = { axes: chartAxes };
   }
   const elaborated = await elaborateChrome(child, {
     sides: [read[0].side, read[1].side],
@@ -535,9 +530,16 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
+  // Each glyph unit's bounds on its σ (#972), from every glyph's room in the
+  // final tree, before the claim walk reads them.
+  scopes.fitGlyphs(
+    [...breadthFirst(child)].flatMap((n) => n.glyphRooms()),
+    (unit) => keyedDomains.unitWidth(unit)
+  );
+
   // Author each dim's `embedded` flag (point/line/area) now that underlying
-  // space has resolved each coord axis's measure — Route B reads it to keep a
-  // foreign-measure size flat. Runs on the final (axis/title/legend-elaborated)
+  // space has resolved each coord axis's measure: inside a coord a glyph size
+  // stays flat (`isGlyph`). Runs on the final (axis/title/legend-elaborated)
   // tree, before layout/render consume the flag. See _node.resolveEmbedding.
   const __tEmbed = perfNow();
   child.resolveEmbedding();
@@ -557,7 +559,7 @@ export async function layout(
 
   // `render({ w, h })` is the whole graphic (#493, #1032): the canvas is the
   // slot the root is given, its chrome included. Chrome sits outside its
-  // chart, so the root's content gets the slot less its chrome's gutters,
+  // chart, so the root's content gets what its chrome leaves of the slot,
   // as every node does with the slot its parent gives it. Every chrome
   // shape claims its size, so the root's claim already holds its chrome
   // (`placeByClaims`), and the layout fits it to the slot.
@@ -683,7 +685,7 @@ export async function layout(
   // reflected (and `layout()` reads them back in its own order). The root's
   // order is its frame's: the chrome rings seat what they wrap at their own
   // origin and only add chrome around it.
-  const rootYDirection = yDirection(root.chrome?.withAxes ?? root);
+  const rootYDirection = yDirection(root.dressedBox());
 
   // Shared-measure scale equality (#582): when x and y carry the SAME unit
   // of measure, "1 unit on x" and "1 unit on y" are the same quantity, so
@@ -705,6 +707,7 @@ export async function layout(
         ? undefined
         : {
             space: rootSpaces[axis],
+            tiedUnit: () => keyedDomains.tiedUnitOf(root, axis),
             claim,
             box: canvas[axis],
             sigma: scope.sigma,
@@ -773,7 +776,7 @@ export async function layout(
   // given dimension that maps a domain), the root sits at its seat by the
   // one seating rule (`seatInScope`): a free (baseline-magnitude) root's
   // baseline at the scope's `originPx` (#773: `descent·σ` from the frame's
-  // start edge, plus any overhead, the chrome's start gutter included), a
+  // start edge, plus any overhead, the chrome before the plot included), a
   // pinned root's at 0, and, where the scope has no data 0 (a spread of
   // magnitudes, whose rows may reach past its origin on either side), its
   // box at the frame's start. The frame is the root's own size
@@ -1572,7 +1575,7 @@ export const render = (
       size: { width, height },
     });
     const __tPaint = perfNow();
-    const painted = items.map((item) => paintSVG(item, interactive));
+    const painted = paintDocument(items, interactive);
     perfAdd("paint", perfNow() - __tPaint);
     return painted;
   };

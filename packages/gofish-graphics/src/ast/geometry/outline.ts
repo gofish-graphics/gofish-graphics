@@ -273,17 +273,39 @@ export const pathOutline = (
   filled: closed && paint.filled,
 });
 
+/** The widest angle a chord of a circle of radius `r` may span and stay
+ *  within `tolerance` of its arc: the sagitta `r (1 − cos(θ/2))` at most the
+ *  tolerance. A whole turn when the circle is no wider than the tolerance. */
+export const arcStep = (r: number, tolerance: number): number =>
+  r > tolerance / 2 ? 2 * Math.acos(1 - tolerance / r) : 2 * Math.PI;
+
 /** How many equal steps of angle keep a circle of radius `r` within
- *  `tolerance` of its chords: the sagitta `r (1 − cos(θ/2))` at most the
- *  tolerance. At least 8. */
+ *  `tolerance` of its chords (arcStep). At least 8. */
 const circleSteps = (r: number, tolerance: number): number => {
   if (!(r > tolerance)) return 8;
-  const theta = 2 * Math.acos(1 - tolerance / r);
+  const theta = arcStep(r, tolerance);
   return Math.max(8, Math.min(1024, Math.ceil((2 * Math.PI) / theta)));
 };
 
-/** A closed ellipse, sampled, clockwise on the screen from its rightmost
- *  point, painted as `paint`. */
+/** An ellipse sampled as a ring, within `tolerance` of the ellipse:
+ *  clockwise on the screen from its rightmost point. */
+export function ellipseRing(
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  tolerance: number
+): OutlinePoint[] {
+  const n = circleSteps(Math.max(rx, ry), tolerance);
+  const points: OutlinePoint[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = (2 * Math.PI * i) / n;
+    points.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
+  }
+  return points;
+}
+
+/** A closed ellipse, sampled ({@link ellipseRing}), painted as `paint`. */
 export function ellipseOutline(
   cx: number,
   cy: number,
@@ -292,13 +314,12 @@ export function ellipseOutline(
   tolerance: number,
   paint: OutlinePaint
 ): Outline {
-  const n = circleSteps(Math.max(rx, ry), tolerance);
-  const points: OutlinePoint[] = [];
-  for (let i = 0; i < n; i++) {
-    const t = (2 * Math.PI * i) / n;
-    points.push([cx + rx * Math.cos(t), cy + ry * Math.sin(t)]);
-  }
-  return { points, closed: true, ...paint, ellipse: { cx, cy, rx, ry } };
+  return {
+    points: ellipseRing(cx, cy, rx, ry, tolerance),
+    closed: true,
+    ...paint,
+    ellipse: { cx, cy, rx, ry },
+  };
 }
 
 /**

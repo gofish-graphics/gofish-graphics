@@ -206,7 +206,7 @@ export const testSankeyIcicle = () =>
             fill: classColor[cls as keyof typeof classColor],
             curve: Curve.bezier(),
             opacity: 0.7,
-            mixBlendMode: "multiply",
+            blendMode: "multiply",
           },
           [ref(`${cls}-src`), ref(`${cls}-tgt`)]
         ),
@@ -232,7 +232,7 @@ export const testSankeyIcicle = () =>
                 //   ),
                 curve: Curve.bezier(),
                 opacity: 0.7,
-                mixBlendMode: "multiply",
+                blendMode: "multiply",
               },
               [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
             ),
@@ -262,7 +262,7 @@ export const testSankeyIcicle = () =>
                     //   ),
                     curve: Curve.bezier(),
                     opacity: 0.7,
-                    mixBlendMode: "multiply",
+                    blendMode: "multiply",
                   },
                   [
                     ref(`${cls}-${sex}-${survived}-src`),
@@ -367,7 +367,7 @@ export const testSankeyIcicleWithFor = () =>
           fill: classColor[cls as keyof typeof classColor],
           curve: Curve.bezier(),
           opacity: 0.7,
-          mixBlendMode: "multiply",
+          blendMode: "multiply",
         },
         [ref(`${cls}-src`), ref(`${cls}-tgt`)]
       ),
@@ -378,7 +378,7 @@ export const testSankeyIcicleWithFor = () =>
             fill: sex === "Female" ? color6_old[2] : color6_old[3],
             curve: Curve.bezier(),
             opacity: 0.7,
-            mixBlendMode: "multiply",
+            blendMode: "multiply",
           },
           [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
         ),
@@ -396,7 +396,7 @@ export const testSankeyIcicleWithFor = () =>
                     : mix(color6_old[3], white, 0.5),
               curve: Curve.bezier(),
               opacity: 0.7,
-              mixBlendMode: "multiply",
+              blendMode: "multiply",
             },
             [
               ref(`${cls}-${sex}-${survived}-src`),

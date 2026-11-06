@@ -9,10 +9,9 @@ import {
 } from "../graphicalOperators/connect";
 import { GoFishNode } from "../_node";
 import {
-  DatumValueImpl,
-  getQuantity,
   getValue,
   isValue,
+  scaleValue,
   value,
   type MaybeValue,
   type Value,
@@ -54,24 +53,37 @@ import {
   nameModifier,
   labelModifier,
   zOrderModifier,
+  hiddenModifier,
 } from "./createOperator";
-import type { ModifierConfig, ZOrderValue } from "./createOperator";
+import type {
+  HiddenValue,
+  ModifierConfig,
+  ZOrderValue,
+} from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
+import type { BlendMode } from "../blendMode";
+import {
+  applyFilter,
+  displayFilter,
+  type FilterOption,
+  type FilterOptions,
+} from "../drawFilter";
 import {
   encloseNode,
   type EncloseOptions,
   type Resolved as EncloseResolved,
 } from "../graphicalOperators/enclose";
 import {
-  // `over` stays internal (not re-exported from lib) — it backs the
-  // deserializer's `"over"` wire type only; user code should use `layer`.
-  over as Over,
+  union as Union,
   intersect as Intersect,
   exclude as Exclude,
   subtract as Subtract,
-  paint as Paint,
-  mask as Mask,
-  type CompositePaint,
+  atop as Atop,
+  type UnionOptions,
+  type IntersectOptions,
+  type SubtractOptions,
+  type ExcludeOptions,
+  type AtopOptions,
 } from "../graphicalOperators/porterDuff";
 import type { RelateFn } from "../constraints";
 import { splitByTiers, type InferredRelational } from "../datumProjection";
@@ -373,6 +385,10 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
   /** Radius. The diameter is `2r`, whether `r` is a number, a field, or an
    *  accessor. */
   r?: MaybeValue<number>;
+  /** Area. An area channel hands the circle the side of the square of that
+   *  area (its square root, `CHANNEL_INFER.area` in channels.ts), and the circle
+   *  takes the diameter of the disc of that area, `2/√π` times the side. */
+  area?: MaybeValue<number>;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -381,43 +397,56 @@ type CircleProps = XYWHDims<MaybeValue<number>> & {
   fillOpacity?: number;
 };
 
-/** Twice a size channel's value, in the same measure: a radius as a diameter. */
-const twice = (r: MaybeValue<number>): MaybeValue<number> =>
-  isValue(r) ? new DatumValueImpl(2 * getValue(r), getQuantity(r)) : 2 * r;
+/** The diameter of a disc over the side of the square of the same area. */
+const DISC_PER_SQUARE = 2 / Math.sqrt(Math.PI);
 
 /**
  * A circle: an ellipse locked to a 1:1 aspect ratio. It takes the same box
  * dimensions as `ellipse`. Its one size is the diameter, set by at most one of
- * `r`, `w`, or `h`. All three are size channels: a number is pixels, and a
- * field name, `field(...)`, or accessor is data.
+ * `r`, `area`, `w`, or `h`. A number is pixels (square pixels for `area`), and
+ * a field name, `field(...)`, or accessor is data.
  *
  * - `r` is the radius, so the diameter is `2r` for every kind of value. It has
  *   no axis, so it sizes both axes, and a data `r` claims the same data size
  *   on both (a circle in data space).
- * - `w` or `h` is the diameter along that axis. A data `w` or `h` claims only
- *   its own axis; the other axis follows it through the aspect lock, in
- *   pixels. So `circle({ h: "value" })` in a bar chart reads against the value
- *   axis and takes no data space along the category axis.
+ * - `area` is an area channel (#972): the circle's area is proportional to
+ *   the value. The channel, not the circle, takes the square root, so the
+ *   length it hands the circle is linear in the scale that sizes it. Like
+ *   `r`, it sizes both axes. A number is an exact area in square pixels.
+ * - `w` or `h` is the diameter along that axis. The aspect lock gives the
+ *   other axis the same data length (`Ellipse`, #1087), so a data `w` or `h`
+ *   claims both axes and one σ sizes both: `circle({ h: "value" })` in a
+ *   spread reads against the value axis, and the row of circles fits. Where
+ *   the parent places the circle at a datum of another unit on the other
+ *   axis (a scatter on x only), the other axis follows in pixels and claims
+ *   nothing there (`GoFishNode.isGlyph`).
+ *
+ * A circle its parent places at a datum in another unit (a bubble in a
+ * scatter, a circle in a 2D histogram's cell) is a glyph
+ * (`GoFishNode.isGlyph`): its size is a scale of its own, fit to its room.
  *
  * With none of them, the circle fills the space it is given.
  */
 export const circle = createMark(
-  ({ r, w, h, opacity, ...rest }: CircleProps) => {
-    const given = [r, w, h].filter((v) => v !== undefined).length;
+  ({ r, area, w, h, opacity, ...rest }: CircleProps) => {
+    const given = [r, area, w, h].filter((v) => v !== undefined).length;
     if (given > 1) {
       throw new Error(
-        "circle: pass one of r, w, or h. Each one sets the diameter."
+        "circle: pass one of r, area, w, or h. Each one sets the diameter."
       );
     }
     // The other axis copies a pixel diameter and follows a data one.
     const follow = (d: MaybeValue<number> | undefined) =>
       d !== undefined && isValue(d) ? undefined : d;
+    const both = (d: MaybeValue<number>) => ({ w: d, h: d });
     const diameter =
       r !== undefined
-        ? { w: twice(r), h: twice(r) }
-        : w !== undefined
-          ? { w, h: follow(w) }
-          : { w: follow(h), h };
+        ? both(scaleValue(2, r))
+        : area !== undefined
+          ? both(scaleValue(DISC_PER_SQUARE, area))
+          : w !== undefined
+            ? { w, h: follow(w) }
+            : { w: follow(h), h };
     return Ellipse({
       ...rest,
       ...diameter,
@@ -512,7 +541,7 @@ function tagRelationalOperands<T extends GoFishAST>(
 // Anchor-tier keys the blank-fusion rewrite rule (see the doc-comment above
 // and `ChartBuilder.mark`) carves off a relational mark's opts: purely
 // spatial, nothing paint- or path-related. Everything else (fill, stroke,
-// strokeWidth, strokeDasharray, opacity, curve, dir, mixBlendMode, along,
+// strokeWidth, strokeDasharray, opacity, curve, dir, blendMode, along,
 // source, target) stays with the connector.
 const ANCHOR_KEYS = ["w", "h", "emX", "emY"] as const;
 
@@ -588,7 +617,7 @@ function tagRelationalFusable(
 }
 
 /**
- * The channels a relational mark or `intersect` reads once per group: the
+ * The channels a relational mark or a compositor reads once per group: the
  * color channels of its channel map (`fill`, `stroke`) and its raw ones
  * (`enclose`'s `padding`), generated from its descriptor. They are the keys
  * the connector reads per group, so the only ones resolved.
@@ -675,16 +704,20 @@ declare const relationalMarkBrand: unique symbol;
  * it may fuse: `ChartBuilder.mark()` gives a relational mark a
  * `ChartBuilder | LayerBuilder` result (it rewrites to a two-tier layer when
  * the chart has its own flow), and every other mark a plain `ChartBuilder`.
- * `.name()`, `.label()`, `.zOrder()` and `.transition()` carry the fusion tag
+ * `.name()`, `.label()`, `.zOrder()`, `.hidden()` and `.transition()` carry the fusion tag
  * forward, so they keep the brand; `.translate()` wraps the mark in a fresh
  * one without the tag, so it returns a plain `NameableMark`.
  */
 export type RelationalMark = Mark<any> &
-  Omit<NameableMark<any>, "name" | "label" | "zOrder" | "transition"> & {
+  Omit<
+    NameableMark<any>,
+    "name" | "label" | "zOrder" | "hidden" | "transition"
+  > & {
     readonly [relationalMarkBrand]: true;
     name(...args: Parameters<NameableMark<any>["name"]>): RelationalMark;
     label(...args: Parameters<NameableMark<any>["label"]>): RelationalMark;
     zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): RelationalMark;
+    hidden(...args: Parameters<NameableMark<any>["hidden"]>): RelationalMark;
     transition(
       ...args: Parameters<NameableMark<any>["transition"]>
     ): RelationalMark;
@@ -697,10 +730,14 @@ export type RelationalMark = Mark<any> &
  */
 export type FlowStepMark = Mark<any> &
   Operator<any, any> &
-  Omit<RelationalMark, "name" | "label" | "zOrder" | "transition"> & {
+  Omit<
+    RelationalMark,
+    "name" | "label" | "zOrder" | "hidden" | "transition"
+  > & {
     name(...args: Parameters<NameableMark<any>["name"]>): FlowStepMark;
     label(...args: Parameters<NameableMark<any>["label"]>): FlowStepMark;
     zOrder(...args: Parameters<NameableMark<any>["zOrder"]>): FlowStepMark;
+    hidden(...args: Parameters<NameableMark<any>["hidden"]>): FlowStepMark;
     transition(
       ...args: Parameters<NameableMark<any>["transition"]>
     ): FlowStepMark;
@@ -756,6 +793,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // A strategy kind used bare is read as its value from here on.
     const opts = withKindValues((options ?? {}) as O);
     const liveChannels = liveChannelsOf(opts);
+    // Its `filter` filters each connector's whole drawing; checked once.
+    const filter = displayFilter(
+      opts.filter as FilterOption | undefined,
+      `${type}({ filter })`
+    );
     /** The cell `ChartBuilder` writes the computed split / travel direction /
      *  time tier into — see `tagRelationalFusable`'s doc comment. Declared
      *  here, not inside the bag branch below, because `produce` reads it on
@@ -801,7 +843,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
         (node as any).datum = datum;
       if (liveChannels)
         (node as any).__gfLive = { ...(node as any).__gfLive, ...liveChannels };
-      return node;
+      return applyFilter(node, filter);
     };
     /** Build one connector over `operands` from `o`: its paint (and other
      *  per-group channels) read off the rows `group` reaches, its live
@@ -964,13 +1006,13 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   return relational;
 }
 
-export type LineOptions = {
+export type LineOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
   strokeDasharray?: string;
   opacity?: number | LiveValue;
-  mixBlendMode?: "normal" | "multiply";
+  blendMode?: BlendMode;
   // Screen-space path shape, made by a call in the Curve family
   // (`Curve.bezier()`, `Curve.orthogonal()`, `Curve.arc({ direction })`,
   // `Curve.perfectArrows({ bow })`, …). The single path-shaping key.
@@ -1016,7 +1058,7 @@ export const line = createRelationalMark<LineOptions>(
         strokeWidth: o.strokeWidth ?? 1,
         strokeDasharray: o.strokeDasharray,
         opacity: o.opacity,
-        mixBlendMode: o.mixBlendMode,
+        blendMode: o.blendMode,
         // Omitted ⇒ "auto": connect smooths (monotone) when the connected
         // points share a continuous connection axis, else a straight line.
         curve: o.curve,
@@ -1029,12 +1071,12 @@ export const line = createRelationalMark<LineOptions>(
     )
 );
 
-export type RibbonOptions = {
+export type RibbonOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
   opacity?: number | LiveValue;
-  mixBlendMode?: "normal" | "multiply";
+  blendMode?: BlendMode;
   dir?: "x" | "y";
   // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
   // Edge mode honors linear (linear band) vs bezier (S-curve band).
@@ -1068,7 +1110,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
       {
         direction: o.dir ?? "x",
         mode: "edge",
-        mixBlendMode: o.mixBlendMode ?? "normal",
+        blendMode: o.blendMode ?? "normal",
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
@@ -1086,7 +1128,7 @@ export const ribbon = createRelationalMark<RibbonOptions>(
 /**
  * Draw an outline around nodes, under them: their padded bounding box
  * (`Shape.box()`, the default), the smallest ellipse around them
- * (`Shape.oval()`), the padded members with arc corners (`Shape.arcs()`), or
+ * (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or
  * a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`). The node
  * is built in `graphicalOperators/enclose.tsx`.
  *
@@ -1120,13 +1162,13 @@ export function enclose(
 }
 
 /**
- * `blank()` — an invisible positioning guide. It takes part in layout, carries
- * a datum, anchors refs (`selectAll`) and seeds the color scale exactly as a
- * `rect` does, and it emits NOTHING to the display list: no SVG element, no
- * hit-test entry. That is unconditional — `fill` reaches the color scale only,
- * there is no option that makes a blank paint, and so it takes no paint-only
- * options (stroke, corner radius). See `Blank` in `shapes/rect.tsx` for how
- * the rule is enforced.
+ * `blank()` — an invisible positioning guide: a hidden `rect`. It takes part
+ * in layout, carries a datum, anchors refs (`selectAll`) and seeds the color
+ * scale exactly as a `rect` does, and it never paints: `.hidden()` has no
+ * effect on it, `fill` reaches the color scale only, and it takes no
+ * paint-only options (stroke, corner radius). Like any hidden mark it keeps
+ * its shape, so under a compositor a blank operand gives its box. See `Blank`
+ * in `shapes/rect.tsx`.
  */
 export function blank<T extends Record<string, any>>({
   emX,
@@ -1159,10 +1201,7 @@ export function blank<T extends Record<string, any>>({
   });
 }
 
-/* ---- mark-combinator forms for layer and Porter-Duff operators ---- */
-
-type BlendMode = "color" | "multiply" | "screen" | "overlay";
-type PdOptions = { blendMode?: BlendMode };
+/* ---- mark-combinator forms for layer and the compositing operators ---- */
 
 /**
  * A mark with chainable .name, .label, .relate, and a top-level .render()
@@ -1177,6 +1216,7 @@ export type RelatableMark<T> = Mark<T> & {
   name(layerName: string | Token): RelatableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): RelatableMark<T>;
   zOrder(value: ZOrderValue<T>): RelatableMark<T>;
+  hidden(value?: HiddenValue<T>): RelatableMark<T>;
   relate(fn: RelateFn): RelatableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -1211,6 +1251,7 @@ function makeRelatableMark<T>(base: Mark<T>): RelatableMark<T> {
     labelModifier,
     relateModifier,
     zOrderModifier,
+    hiddenModifier,
   ]) as unknown as RelatableMark<T>;
 }
 
@@ -1266,31 +1307,31 @@ export function layer<T>(
   return tagCombinator(makeRelatableMark(base), "layer", opts, marks);
 }
 
-function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
+/** The mark-combinator form of a compositing operator (porterDuff.tsx):
+ *  `union([a, b])` or `union(opts, [a, b, ...])`. `irType` is its wire
+ *  type, the same name. */
+function makeCompositeCombinator<O extends object>(
   lowLevel: (opts: any, children: any) => any,
   irType: string
 ) {
-  function fn<T>(marks: [MarkChild, MarkChild]): NameableMark<T>;
-  function fn<T>(opts: O, marks: [MarkChild, MarkChild]): NameableMark<T>;
+  function fn<T>(marks: MarkChild[]): NameableMark<T>;
+  function fn<T>(opts: O, marks: MarkChild[]): NameableMark<T>;
   function fn<T>(
-    optsOrMarks: O | [MarkChild, MarkChild],
-    maybeMarks?: [MarkChild, MarkChild]
+    optsOrMarks: O | MarkChild[],
+    maybeMarks?: MarkChild[]
   ): NameableMark<T> {
     const opts = Array.isArray(optsOrMarks) ? {} : optsOrMarks;
-    const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) as [
-      MarkChild,
-      MarkChild,
-    ];
+    const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) ?? [];
     const withChildren =
       (children: readonly MarkChild[]): Mark<T> =>
       async (d, key, layerContext) => {
-        const [child0, child1] = await Promise.all(
+        const operands = await Promise.all(
           children.map((m) => resolveMarkResult(m, layerContext, d, key))
         );
-        // Its paint (`intersect`'s fill and stroke) is read off its input,
-        // as a connector's is off the group it threads.
+        // Its paint (`fill` and `stroke`) is read off its input, as a
+        // connector's is off the group it threads.
         const paintOpts = await resolveGroupPaint(irType, opts, d);
-        const node = await lowLevel(paintOpts, [child0, child1]);
+        const node = await lowLevel(paintOpts, operands);
         node.datum = datumOfInput(d as unknown[]);
         return node;
       };
@@ -1303,17 +1344,18 @@ function makePorterDuffCombinator<O extends PdOptions = PdOptions>(
   return fn;
 }
 
-// The second arg is the IR/serialize *wire* type: the Porter-Duff strings
-// ("atop"/"over"/"inside"/"xor"/"out"/"mask"), which the serialize bridge and
-// IR schema use. Only the JS-facing names are Figma-style.
-export const paint = makePorterDuffCombinator(Paint, "atop");
-// `over` combinator is internal (deserializer only) — not exported from lib.
-export const over = makePorterDuffCombinator(Over, "over");
-// Only `intersect` paints its result (fill, stroke): see `compositeNode`.
-export const intersect = makePorterDuffCombinator<PdOptions & CompositePaint>(
+// The second arg is the IR/serialize wire type, which is the public name.
+export const union = makeCompositeCombinator<UnionOptions>(Union, "union");
+export const intersect = makeCompositeCombinator<IntersectOptions>(
   Intersect,
-  "inside"
+  "intersect"
 );
-export const exclude = makePorterDuffCombinator(Exclude, "xor");
-export const subtract = makePorterDuffCombinator(Subtract, "out");
-export const mask = makePorterDuffCombinator(Mask, "mask");
+export const subtract = makeCompositeCombinator<SubtractOptions>(
+  Subtract,
+  "subtract"
+);
+export const exclude = makeCompositeCombinator<ExcludeOptions>(
+  Exclude,
+  "exclude"
+);
+export const atop = makeCompositeCombinator<AtopOptions>(Atop, "atop");

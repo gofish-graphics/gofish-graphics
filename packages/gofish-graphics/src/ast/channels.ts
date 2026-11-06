@@ -13,10 +13,17 @@ import {
   fieldNameOf,
   isLiteral,
   isValue,
+  getQuantity,
+  getValue,
   type FieldAccessor,
   type LiteralValue,
 } from "./data";
-import { checkSummable, columnQuantity, type Quantity } from "./measure";
+import {
+  checkSummable,
+  columnQuantity,
+  sqrtQuantity,
+  type Quantity,
+} from "./measure";
 import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
@@ -43,7 +50,7 @@ import type { LiveValue } from "../interaction/live";
  * structure ({@link axisSlotKind}); a {@link DimsChannelSpec} makes each slot
  * the channel of its top-level counterpart instead.
  */
-export type ChannelType = "size" | "pos" | "color" | "raw" | "dims";
+export type ChannelType = "size" | "area" | "pos" | "color" | "raw" | "dims";
 
 /**
  * Channel spec. The plain string form is the default (aggregate over all data
@@ -101,7 +108,11 @@ export type DeriveMarkProps<
       // per-row array (used by expand-kind marks like `cut`).
       Channels[K] extends { type: "size"; entry: true }
       ? (keyof T & string) | MaybeValue<number>[] | undefined
-      : Channels[K] extends "size" | { type: "size" }
+      : Channels[K] extends
+            | "size"
+            | { type: "size" }
+            | "area"
+            | { type: "area" }
         ?
             | number
             | (keyof T & string)
@@ -287,16 +298,54 @@ const inferNumeric =
     );
   };
 
+/** A channel that sums the field/function across the data array, missing
+ *  values aside ({@link sumIn}); `channel` names it in the message of a sum
+ *  its unit refuses. */
+const inferSum = (channel: string) =>
+  inferNumeric((values, quantity) => sumIn(values, quantity, channel));
+
 /** Infer a size value (sums the field/function across the data array,
  *  missing values aside; see {@link sumIn}). */
-export const inferSize = inferNumeric((values, quantity) =>
-  sumIn(values, quantity, "A size channel")
-);
+export const inferSize = inferSum("A size channel");
 
 /** Infer a position value (averages the field/function across the data
  *  array, missing values aside). Over no rows, or only missing values, it
  *  has no value: undefined (see {@link meanOf}). */
 export const inferPos = inferNumeric(meanOf);
+
+/** The sum an area channel encodes: a size channel's sum, since areas add
+ *  up (the area of a group is the sum of its rows' areas). */
+const inferAreaSum = inferSum("An area channel");
+
+/**
+ * The square root of an area: the side of the square of that area, in the
+ * same kind of value. A number is square pixels, so its root is pixels; a
+ * data value of quantity `q` has a root in `√q` ({@link sqrtQuantity}), a
+ * length its mark's σ scales like any data size. An area has no length form
+ * (`percent`, `fr`) and is never negative.
+ */
+const sqrtArea = (
+  area: MaybeValue<number> | undefined
+): MaybeValue<number> | undefined => {
+  if (area === undefined) return undefined;
+  if (isLength(area))
+    throw new Error(
+      "An area channel takes a number (square pixels) or data, not a " +
+        "length such as percent(...) or fr(...)."
+    );
+  const amount = getValue(area);
+  if (!(amount >= 0))
+    throw new Error(
+      `An area channel's value must be a number of at least 0, but it is ` +
+        `${amount}.`
+    );
+  if (!isValue(area)) return Math.sqrt(amount);
+  const quantity = getQuantity(area);
+  return new DatumValueImpl(
+    Math.sqrt(amount),
+    quantity === undefined ? undefined : sqrtQuantity(quantity)
+  );
+};
 
 /**
  * Shared core of the non-aggregating channels ({@link inferColor} /
@@ -370,6 +419,7 @@ export const inferColor = <T extends Record<string, any>>(
   data: T[]
 ): MaybeValue<string> | undefined => {
   if (accessor === undefined) return undefined;
+  if (isValue(accessor)) return accessor as MaybeValue<string>;
   const resolved = firstRowValue(accessor, data);
   if (resolved.kind === "none") return undefined;
   return resolved.kind === "literal"
@@ -413,6 +463,7 @@ export const inferRaw = <T extends Record<string, any>>(
 ): MaybeValue<string | number> | undefined => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
+  if (isValue(accessor)) return accessor as MaybeValue<string | number>;
   const resolved = firstRowValue(accessor, data);
   if (resolved.kind === "none") return undefined;
   return resolved.kind === "literal"
@@ -511,7 +562,10 @@ export function resolveChannelAccessors<O extends Record<string, any>>(
 /**
  * The one channel-type → inference dispatch table, shared by the mark factory
  * (`buildCreatedMark` in withGoFish.ts) and the operator factory
- * (`applyChannels` in marks/createOperator.ts).
+ * (`applyChannels` in marks/createOperator.ts). Each kind says what an
+ * already-wrapped value (`datum(...)`) means to it: every kind passes it
+ * through as it is, except an area, which roots it ({@link sqrtArea}), and
+ * a `dims` bag, which takes one only in a slot.
  *
  * `column` is the channel's resolved {@link ColumnInfo}, computed once per
  * channel from the whole input array (which carries the column types even
@@ -524,13 +578,27 @@ export const CHANNEL_INFER: Record<
   (val: any, data: any[], column?: ColumnInfo) => any
 > = {
   size: (val, data, column) => inferSize(val, data, column),
+  // An area (#972) sums its rows as a size does and hands the mark the
+  // square root of the sum, a length linear in the σ that scales it.
+  area: (val, data, column) => sqrtArea(inferAreaSum(val, data, column)),
   pos: (val, data, column) => inferPos(val, data, column),
   color: (val, data) => inferColor(val, data),
   raw: (val, data) => inferRaw(val, data),
   // Each slot resolves its own column from `data`: the slots are separate
   // channels that happen to share one option.
-  dims: (val: AxisDims<any>, data) =>
-    mapAxisDims(val, (v, slot) => CHANNEL_INFER[axisSlotKind(slot)](v, data)),
+  // A wrapped value (`datum(...)`) is one value, not a bag of axis names: it
+  // goes in a slot (`dims: { x: datum(5) }`).
+  dims: (val: AxisDims<any>, data) => {
+    if (isValue(val as any))
+      throw new Error(
+        "A dims option takes axis names, each with a value or an interval " +
+          "({ x: datum(5) }, { r: { size: 'value' } }), not one value " +
+          "(datum(...))."
+      );
+    return mapAxisDims(val, (v, slot) =>
+      CHANNEL_INFER[axisSlotKind(slot)](v, data)
+    );
+  },
 };
 
 /**

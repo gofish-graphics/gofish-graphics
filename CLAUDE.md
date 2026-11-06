@@ -13,8 +13,12 @@ GoFish Graphics is a TypeScript/SolidJS library for creating charts and visualiz
 **This is a monorepo** with the following structure:
 
 - `packages/gofish-graphics/` - Main TypeScript/SolidJS library
+- `packages/gofish-ir/` - The serialized IR: schema, validator, and the construct descriptor table (`src/frontend/descriptors.ts`)
 - `packages/gofish-python/` - Python bindings (in development)
+- `packages/gofish-python-shim/` - The deprecated `gofish-python` PyPI name, which points to `gofish-graphics`
+- `packages/gofish-gotree/` - GoTree, a grammar for tree visualizations, embedded in GoFish
 - `apps/docs/` - VitePress documentation site
+- `tests/` - Capture, visual-regression, and Python parity harness (`capture-one`, `capture-diff`, `python-stories/`)
 
 ## Development Commands
 
@@ -29,7 +33,7 @@ pnpm dev
 pnpm build
 
 # Preview the library build
-pnpm serve
+pnpm --filter gofish-graphics serve
 
 # Run Storybook for visual development and testing
 pnpm storybook
@@ -66,7 +70,7 @@ All paths are relative to `packages/gofish-graphics/`:
 - `src/ast/graphicalOperators/` - Composition operators (stack, stackX, stackY, spread, spreadX, spreadY, layer, connect, wrap, arrow, enclose, frame, position)
 - `src/ast/coordinateTransforms/` - Coordinate system transformations (polar, clock, wavy, geo; plus the internal identity `linear`)
 - `src/ast/marks/` - Fluent chart builder (`chart(data).flow(...).mark(...)`) and the mark factories
-- `src/tests/` - Example charts and visual test cases (not automated unit tests)
+- `src/tests/` - Example charts, visual test cases, and the `*.test.ts` unit tests
 - `src/data/` - Sample datasets used in examples
 - `src/templates/` - Reusable chart templates
 - `stories/` - Storybook stories for visual development
@@ -161,7 +165,7 @@ Key coordinate systems available, all in the `Coord` family (`Coord.polar()`):
   curation. Pass a substring to scope to one story or a group (`pnpm capture-diff main bar`).
   Exits non-zero when anything moved; report at `tests/tmp/capture-diff/report.html`.
 - **Documentation**: VitePress site in `apps/docs/` with live chart examples
-- **Testing**: The `src/tests/` directory contains visual chart examples for development, not automated unit tests
+- **Testing**: `src/tests/` holds visual chart examples and the `*.test.ts` unit tests (`pnpm --filter gofish-graphics test`)
 - **Development Server**: `pnpm dev` runs Vite dev server on port 3000
 - **Key Dependencies**:
   - SolidJS for reactive rendering and JSX
@@ -194,7 +198,6 @@ the top of every covered source file. Therefore:
 ## Additional Resources
 
 - **Internal architecture wiki**: `apps/docs/docs/internals/` — the consolidated home
-  for architecture and design docs (see the section above). This replaced the former
-  scattered repo-root `docs/` and `notes/` files.
+  for architecture and design docs (see the section above).
 - **Package-specific CLAUDE.md files**:
   - `apps/docs/CLAUDE.md` - Documentation site specific guidance
