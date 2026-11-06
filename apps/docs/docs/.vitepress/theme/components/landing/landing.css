@@ -591,13 +591,14 @@ html.landing-page .DocSearch-Button {
 /* The hero's cards are taped down as the page loads: each drifts in from
    just above the sheet with its bottom swung up, the tape is pressed on at
    its top, and the bottom swings down around the tape to its lifted rest
-   (--lift-rest), passing it once by a little. The animation runs the
-   individual translate property and the --lift / --rise properties that the
-   card's hinge and shadow read, and fills backwards only, so the resting
-   styles take over once it ends. --drop-delay (LandingPage.vue) staggers the
-   cards in list order. */
+   (--lift-rest), sways past it, back above it and past it once more, less
+   each time, and settles. The animation runs the individual translate
+   property and the --lift / --rise properties that the card's hinge and
+   shadow read, and fills backwards only, so the resting styles take over
+   once it ends. --drop-delay (LandingPage.vue) staggers the cards in list
+   order. */
 .landing .hero .pic {
-  animation: gf-hang 0.75s var(--drop-delay, 0ms) backwards;
+  animation: gf-hang 0.95s var(--drop-delay, 0ms) backwards;
 }
 .landing .hero .pic .tape {
   animation: gf-tape 0.18s calc(var(--drop-delay, 0ms) + 0.22s) ease-out
@@ -611,21 +612,25 @@ html.landing-page .DocSearch-Button {
     --lift: calc(var(--lift-rest) + 11deg);
     animation-timing-function: cubic-bezier(0.2, 0.6, 0.4, 1);
   }
-  15% {
+  12% {
     opacity: 1;
   }
-  32% {
+  25% {
     translate: 0 0;
     --rise: 0;
     --lift: calc(var(--lift-rest) + 10deg);
     animation-timing-function: cubic-bezier(0.45, 0, 0.55, 1);
   }
-  72% {
-    --lift: calc(var(--lift-rest) - 1deg);
+  56% {
+    --lift: calc(var(--lift-rest) - 1.2deg);
     animation-timing-function: ease-in-out;
   }
-  88% {
-    --lift: calc(var(--lift-rest) + 0.3deg);
+  71% {
+    --lift: calc(var(--lift-rest) + 0.7deg);
+    animation-timing-function: ease-in-out;
+  }
+  85% {
+    --lift: calc(var(--lift-rest) - 0.3deg);
     animation-timing-function: ease-in-out;
   }
   100% {
@@ -1129,21 +1134,6 @@ html.landing-page .VPNavBarSocialLinks {
   z-index: 1;
 }
 
-/* ---------- REVEAL ---------- */
-.landing .reveal {
-  transition:
-    opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
-    transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.landing.landing--js .reveal {
-  opacity: 0;
-  transform: translateY(26px);
-}
-.landing.landing--js .reveal.visible {
-  opacity: 1;
-  transform: translateY(0);
-}
-
 @media (max-width: 700px) {
   .landing .sheet {
     width: calc(100% - 20px);
@@ -1216,10 +1206,6 @@ html.landing-page .VPNavBarSocialLinks {
   .landing .pic .tape {
     animation: none !important;
     opacity: 1 !important;
-  }
-  .landing .reveal {
-    opacity: 1 !important;
-    transform: none !important;
   }
 }
 

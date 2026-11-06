@@ -22,7 +22,6 @@ const knobEl = ref<HTMLElement | null>(null);
 // Whether the spectrum row overflows, so it scrolls (narrow screens only). Only
 // then is it a tab stop with a label, so keyboard users can scroll it.
 const railScrolls = ref(false);
-const jsReady = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // The hero's cards are taped down one after another (landing.css, gf-hang),
@@ -317,40 +316,13 @@ function wireRail(): void {
   measure();
 }
 
-// ---- scroll reveal.
-function wireReveals(): void {
-  const root = rootEl.value;
-  if (!root) return;
-  const reveals = root.querySelectorAll(".reveal");
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  if (reduce || !("IntersectionObserver" in window)) {
-    reveals.forEach((el) => el.classList.add("visible"));
-    return;
-  }
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting) {
-          e.target.classList.add("visible");
-          io.unobserve(e.target);
-        }
-      });
-    },
-    { threshold: 0.12 }
-  );
-  reveals.forEach((el) => io.observe(el));
-  cleanups.push(() => io.disconnect());
-}
-
 onMounted(() => {
   // Route-scoped desk: drives all html.landing-page body / navbar styling.
   document.documentElement.classList.add("landing-page");
   injectFonts();
-  jsReady.value = true;
   wireRail();
   wireDemo();
   wireBrackets();
-  wireReveals();
 });
 
 onBeforeUnmount(() => {
@@ -361,7 +333,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="rootEl" class="landing" :class="{ 'landing--js': jsReady }">
+  <div ref="rootEl" class="landing">
     <div class="sheet">
       <!-- ===================== HERO ===================== -->
       <section class="hero" aria-labelledby="hero-h">
@@ -430,14 +402,14 @@ onBeforeUnmount(() => {
 
       <!-- ===================== SPECTRUM ===================== -->
       <section class="section spectrum" aria-labelledby="spec-h">
-        <div class="head reveal">
+        <div class="head">
           <h2 id="spec-h" class="spec-title">
             <span class="nowrap">Simple when you want,</span>{{ " " }}
             <span class="nowrap">complex when you need</span>
           </h2>
         </div>
 
-        <div class="track reveal">
+        <div class="track">
           <!-- a row on wide screens; a swipe row on narrow ones -->
           <div
             ref="railEl"
@@ -483,14 +455,14 @@ onBeforeUnmount(() => {
 
       <!-- ===================== COMPOSITION BAND ===================== -->
       <section class="band" aria-labelledby="comp-h">
-        <div class="head reveal">
+        <div class="head">
           <h2 id="comp-h" class="band-title">
             Because graphics are all made of the same stuff
           </h2>
         </div>
 
         <!-- PULL-APART DEMO -->
-        <div class="demo-wrap reveal">
+        <div class="demo-wrap">
           <button
             ref="demoEl"
             class="demo"
@@ -515,12 +487,12 @@ onBeforeUnmount(() => {
         </div>
 
         <!-- CODE STRIP -->
-        <div class="codestrip reveal">
+        <div class="codestrip">
           <div v-html="codeStrip"></div>
         </div>
 
         <!-- closing CTA: easy to get started after reading the whole page -->
-        <div class="band-cta reveal">
+        <div class="band-cta">
           <CtaBlock />
         </div>
 
