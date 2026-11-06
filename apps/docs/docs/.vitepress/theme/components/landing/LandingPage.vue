@@ -26,7 +26,8 @@ const jsReady = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // Place a hero card floating around the title (wide screens); the cards
-// settle in one after another, in list order. landing.css scales the width.
+// settle in one after another, in list order. landing.css scales the width
+// and centers a "center" card (left: 0; right: 0; margin-inline: auto).
 function floatStyle(card: HeroCard, i: number): Record<string, string> {
   const f = card.float;
   const style: Record<string, string> = {
@@ -34,11 +35,19 @@ function floatStyle(card: HeroCard, i: number): Record<string, string> {
     "--fc-w": `${f.width}px`,
     animationDelay: `${400 + 80 * i}ms`,
   };
-  if (f.side === "center")
-    style.left = `calc(50% - var(--fc-w) * var(--fc-scale) / 2)`;
-  else style[f.side] = `${f.x}px`;
+  if (f.side === "center") {
+    style.left = "0";
+    style.right = "0";
+    style.marginInline = "auto";
+  } else style[f.side] = `${f.x}px`;
   return style;
 }
+// The hero list never changes, so place and group its cards once.
+const FLOAT_STYLES = HERO.map(floatStyle);
+const COLLAGE_COLUMNS = (["left", "right"] as const).map((column) =>
+  HERO.filter((c) => c.column === column)
+);
+const COLLAGE_WIDE = HERO.filter((c) => c.column === "wide");
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -355,7 +364,7 @@ onBeforeUnmount(() => {
             :key="card.id"
             :card="card"
             class="float-card"
-            :style="floatStyle(card, i)"
+            :style="FLOAT_STYLES[i]"
           />
         </div>
 
@@ -384,18 +393,14 @@ onBeforeUnmount(() => {
             <!-- two columns that stack on their own, then the wide cards
                  across both -->
             <div
-              v-for="column in ['left', 'right'] as const"
+              v-for="(cards, column) in COLLAGE_COLUMNS"
               :key="column"
-              :class="['collage-col', `collage-${column}`]"
+              class="collage-col"
             >
-              <PictureCard
-                v-for="card in HERO.filter((c) => c.column === column)"
-                :key="card.id"
-                :card="card"
-              />
+              <PictureCard v-for="card in cards" :key="card.id" :card="card" />
             </div>
             <PictureCard
-              v-for="card in HERO.filter((c) => c.column === 'wide')"
+              v-for="card in COLLAGE_WIDE"
               :key="card.id"
               :card="card"
               class="wide"

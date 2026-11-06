@@ -54,12 +54,10 @@ export interface HeroCard extends LandingCard {
  * The hero's cards. Phones and tablets show them as a collage under the
  * buttons; wide screens float the same cards around the title.
  *
- * The collage shows each column's cards in list order: on the left the
- * croissant chart, the bubble treemap and the bottle fill chart; on the right
- * the flower chart and the pulley diagram; then two full-width cards. The
- * order is picked so the two columns' card edges fall far apart: the tall
- * pulley diagram spans the place where a phone or tablet screen ends, so the
- * first screen always cuts through a card.
+ * The collage shows each column's cards in list order, then the full-width
+ * cards. The order is picked so the two columns' card edges fall far apart:
+ * the tall pulley diagram spans the place where a phone or tablet screen
+ * ends, so the first screen always cuts through a card.
  */
 export const HERO: HeroCard[] = [
   {

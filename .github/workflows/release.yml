@@ -121,8 +121,8 @@ jobs:
             # `0.1.0`. Bumping the patch makes `0.1.1-nightly.N` sort after
             # `0.1.0`, while any future final release still wins over its own
             # nightlies. The Python dev release reuses this number below.
-            BASE=$(node -p "require('./packages/gofish-graphics/package.json').version")
-            NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
+            ( cd packages/gofish-graphics && npm version --no-git-tag-version patch >/dev/null )
+            NEXT=$(node -p "require('./packages/gofish-graphics/package.json').version")
             DATE=$(date +'%Y%m%d')
             NEW="${NEXT}-nightly.${DATE}"
             ( cd packages/gofish-graphics && npm version --no-git-tag-version "$NEW" )
