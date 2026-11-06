@@ -43,11 +43,14 @@ export type ChannelInner = "number" | "string" | "boolean" | "color";
 
 /** How a mark or operator infers a channel's value from its rows: a `size`
  *  sums them, a `pos` averages them, a `color` reads the first row through
- *  the color scale, and a `raw` reads the first row as is. The JS mark
+ *  the color scale, and a `raw` reads the first row as is. An `area` sums
+ *  them as a `size` does (areas add up) and encodes the sum as an area: the
+ *  length it hands the mark is the square root of the sum, so the mark's
+ *  area, not its width, is proportional to the value. The JS mark
  *  factories' channel maps are generated from it
  *  (gofish-graphics' `markChannels.generated.ts`); the wire, the validator,
  *  the JSON Schema, and Python treat every kind alike. */
-export type ChannelInfer = "size" | "pos" | "color" | "raw";
+export type ChannelInfer = "size" | "area" | "pos" | "color" | "raw";
 
 /** The value a `literal` type admits: exactly one string, number, or boolean
  *  (`false` in `title: string | false`). */
@@ -233,11 +236,15 @@ export const t = {
 };
 
 /** Shorthand for a bare `ChannelValue` slot, one per inference kind
- *  ({@link ChannelInfer}): `ch.size(doc?)` and `ch.pos(doc?)` take a number,
+ *  ({@link ChannelInfer}): `ch.size(doc?)`, `ch.area(doc?)` and `ch.pos(doc?)` take a number,
  *  `ch.color(doc?)` a color, and `ch.raw(inner, doc?)` a literal of `inner`. */
 export const ch = {
   size: (doc?: string): FieldSpec => ({
     type: t.channel("number", "size"),
+    doc,
+  }),
+  area: (doc?: string): FieldSpec => ({
+    type: t.channel("number", "area"),
     doc,
   }),
   pos: (doc?: string): FieldSpec => ({ type: t.channel("number", "pos"), doc }),
@@ -1950,11 +1957,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+    doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.",
     include: [boxDims, filtered],
     fields: {
       r: ch.size(
-        "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
+        "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h."
+      ),
+      area: ch.area(
+        "Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h."
       ),
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),

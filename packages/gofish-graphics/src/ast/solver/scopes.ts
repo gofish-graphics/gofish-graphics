@@ -26,6 +26,8 @@ import {
   isCONTINUOUS,
   isOneValue,
   originIs,
+  spaceUnit,
+  unitKeyOf,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { Extent, mapsDomain } from "../extent";
@@ -33,7 +35,6 @@ import type { AxisMap } from "../domain";
 import { envFlag, room } from "../../util";
 import type { GoFishNode, RenderSession } from "../_node";
 import { fixedOverflow, warnLayout } from "../layoutWarnings";
-import { resolveUnit, sameUnitVar } from "../measure";
 import { reachPast, type PlotForms } from "./plotForms";
 import { fromFrameStart, type AxisDirection } from "../axisDirection";
 
@@ -164,6 +165,8 @@ const originPxAt = (claim: Extent, sigma: number, offset = 0): number =>
  *  screen's left or top, `-1` when it starts at the bottom). */
 export type EqualMeasureAxis = {
   space: UnderlyingSpace | undefined;
+  /** The tied unit the axis maps alone (`KeyedDomains.tiedUnitOf`). */
+  tiedUnit?: () => string | undefined;
   claim: Extent;
   box: number;
   sigma: number;
@@ -220,18 +223,45 @@ export function sharesDeclaredMeasure(
   x: UnderlyingSpace | undefined,
   y: UnderlyingSpace | undefined
 ): boolean {
-  const unitX = x && isCONTINUOUS(x) ? x.measure?.unit : undefined;
-  const unitY = y && isCONTINUOUS(y) ? y.measure?.unit : undefined;
   return (
-    unitX !== undefined &&
-    unitY !== undefined &&
-    resolveUnit(unitX).kind === "declared" &&
-    sameUnitVar(unitX, unitY)
+    spaceUnit(x)?.unit?.kind === "declared" && unitKeyOf(x) === unitKeyOf(y)
   );
 }
 
+/** Whether two axes map one tied unit alone (#1087,
+ *  `EqualMeasureAxis.tiedUnit`). */
+const inOneTiedUnit = (x: EqualMeasureAxis, y: EqualMeasureAxis): boolean => {
+  const unit = x.tiedUnit?.();
+  return unit !== undefined && unit === y.tiedUnit?.();
+};
+
 /** Whether the scope dump is on. Off (and near-zero-cost) in prod. */
 const DUMP_SCOPES = envFlag("GOFISH_DUMP_SCOPES");
+
+/**
+ * The room a glyph placed at a point is fit to: its unit's largest glyph
+ * spans this many pixels.
+ *
+ * PLACEHOLDER (#1324): how a chart sets the range of a non-spatial scale (a
+ * size scale's largest glyph, beside its color scales) is an open API
+ * proposal. Until it lands, every glyph unit takes this one internal range,
+ * read only here.
+ */
+const GLYPH_ROOM_PX = 30;
+
+/** One glyph's room on one axis ({@link ScopeRegistry.fitGlyphs}): the
+ *  point it is placed at, or the cell it is placed in, which is `span` data
+ *  wide on `axis`, with `width` the width of the glyph's own domain. */
+export type GlyphRoom =
+  | { kind: "point" }
+  | { kind: "cell"; axis: 0 | 1; span: number; width: number };
+
+/** The bounds a glyph unit's rooms set on its σ ({@link
+ *  ScopeRegistry.fitGlyphs}): the bound its points set (`Infinity`: none
+ *  does), and, per axis, the smallest ratio of a cell to the glyph in it
+ *  (`span / width`), so the cells there bound σ by the frame's σ times it
+ *  (`Infinity`: no cell there bounds it, none or only glyphs 0 wide). */
+type GlyphUnit = { pointSigma: number; cellFit: [number, number] };
 
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
@@ -250,6 +280,81 @@ export class ScopeRegistry {
       { box: number; solve: FixedSolve | undefined }?,
     ]
   >();
+  /** Each glyph unit's bounds (`fitGlyphs`), by the unit's key. */
+  private glyphs?: ReadonlyMap<string, GlyphUnit>;
+
+  /** Build each glyph unit's bounds (#972) from every glyph's room, by
+   *  unit key (`GoFishNode.glyphRooms`), once, before the claim walk.
+   *  `widthOf` is a unit's widest domain (`KeyedDomains.unitWidth`). See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). */
+  fitGlyphs(
+    rooms: Iterable<readonly [string, GlyphRoom]>,
+    widthOf: (unit: string) => number
+  ): void {
+    const atPoint = new Set<string>();
+    const glyphs = new Map<string, GlyphUnit>();
+    for (const [unit, room] of rooms) {
+      let g = glyphs.get(unit);
+      if (g === undefined)
+        glyphs.set(
+          unit,
+          (g = { pointSigma: Infinity, cellFit: [Infinity, Infinity] })
+        );
+      if (room.kind === "point") atPoint.add(unit);
+      else if (!(room.span >= 0 && room.width >= 0))
+        throw new Error(
+          `[gofish:layout] a glyph of the unit "${unit}" is placed in a ` +
+            `cell ${room.span} wide with a size ${room.width} wide: both ` +
+            `must be finite and at least 0.`
+        );
+      else if (room.width > 0)
+        g.cellFit[room.axis] = Math.min(
+          g.cellFit[room.axis],
+          room.span / room.width
+        );
+    }
+    for (const unit of atPoint) {
+      const domain = widthOf(unit);
+      if (!(domain >= 0))
+        throw new Error(
+          `[gofish:layout] the glyph unit "${unit}" has a domain ${domain} ` +
+            `wide: it must be finite and at least 0.`
+        );
+      if (domain > 0) glyphs.get(unit)!.pointSigma = GLYPH_ROOM_PX / domain;
+    }
+    this.glyphs = glyphs;
+  }
+
+  /** The σ of a glyph unit (#972): the smallest bound its rooms set, its
+   *  cells' at `frame` (the σ of the frame placing it) and its points'. With
+   *  no `frame` (the claim walk) only the points' bound. See
+   *  [glyph sizes](/internals/core/underlying-space#glyph-sizes-and-lengths-of-the-space). TODO(#1324): one σ per frame axis. */
+  glyphSigma(
+    unit: string,
+    frame?: readonly [number | undefined, number | undefined]
+  ): number {
+    const g = this.glyphs?.get(unit);
+    if (g === undefined)
+      throw new Error(
+        `[gofish:layout] the glyph unit "${unit}" is sized before its ` +
+          `glyphs' rooms were fit (fitGlyphs).`
+      );
+    let sigma = g.pointSigma;
+    if (frame !== undefined)
+      for (const axis of [0, 1] as const) {
+        const fit = g.cellFit[axis];
+        if (fit === Infinity) continue;
+        const frameSigma = frame[axis];
+        if (frameSigma === undefined)
+          throw new Error(
+            `[gofish:layout] the glyphs of the unit "${unit}" are placed in ` +
+              `cells on ${axis === 0 ? "x" : "y"}, but the frame that places ` +
+              `them has no scale there to turn a cell into pixels.`
+          );
+        sigma = Math.min(sigma, frameSigma * fit);
+      }
+    return sigma === Infinity ? 0 : sigma;
+  }
 
   /**
    * Solve the scope of a node with a literal size on one axis (#1114): its
@@ -314,15 +419,22 @@ export class ScopeRegistry {
    * claim walk are equalized, and their claims hold the leftover pixels, so
    * the node still claims its size. `yDirection` is the direction of its
    * axis order on y. Call it after both axes' {@link solveFixed}; a no-op
-   * unless both share a declared unit.
+   * unless both are in one declared unit, or map one tied unit alone
+   * (`tiedUnit`, `KeyedDomains.tiedUnitOf`).
    */
-  equalizeFixed(node: object, rootKey: string, yDirection: 1 | -1): void {
+  equalizeFixed(
+    node: object,
+    rootKey: string,
+    yDirection: 1 | -1,
+    tiedUnit?: (axis: 0 | 1) => string | undefined
+  ): void {
     const solves = this.fixed.get(node);
     const axisOf = (axis: 0 | 1): EqualMeasureAxis | undefined => {
       const s = solves?.[axis]?.solve;
       return (
         s && {
           space: s.space,
+          tiedUnit: tiedUnit && (() => tiedUnit(axis)),
           claim: s.claim,
           box: s.box,
           sigma: s.solution.sigma,
@@ -539,7 +651,8 @@ export class ScopeRegistry {
    * It lives on the registry, so every slope a render produces is
    * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a
    * `recenter` entry per axis). Returns the equalized axes; a no-op
-   * (undefined) unless both axes are given and share a declared unit.
+   * (undefined) unless both axes are given and are in one declared unit, or
+   * map one tied unit alone (`EqualMeasureAxis.tiedUnit`).
    */
   equalizeMeasure(
     rootKey: string,
@@ -549,7 +662,7 @@ export class ScopeRegistry {
     if (
       ax === undefined ||
       ay === undefined ||
-      !sharesDeclaredMeasure(ax.space, ay.space)
+      !(sharesDeclaredMeasure(ax.space, ay.space) || inOneTiedUnit(ax, ay))
     )
       return undefined;
     // Only an axis with a data width binds: a one-value axis (`isOneValue`)

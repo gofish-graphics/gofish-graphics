@@ -1,5 +1,5 @@
 import { GoFishNode } from "./_node";
-import { type LayerSharingPlan } from "./constraints/compose";
+import { type SharingPlan } from "./constraints/compose";
 import { round12 } from "./cells";
 import { layer } from "./graphicalOperators/layer";
 import { Constraint } from "./constraints";
@@ -88,14 +88,9 @@ export async function wrapRing(
   // content is the ring's first child, by construction, and the rule reads
   // it by that slot, not by identity: a later pass (label elaboration) may
   // wrap the content and put its wrapper in the content's place.
-  root.INTERNAL_setSharing((childNodes): LayerSharingPlan => {
+  root.INTERNAL_setSharing((childNodes): SharingPlan => {
     const sets = childNodes.map((_, k) => (k === 0 ? 0 : k + 1));
-    const none = (): [Set<number>, Set<number>] => [new Set(), new Set()];
-    return {
-      sets: [sets, [...sets]],
-      nested: none(),
-      datumPlaced: none(),
-    };
+    return { sets: [sets, [...sets]], nested: [new Set(), new Set()] };
   });
   // Every handle is a slot: the content is slot 0, and each of the ring's
   // shapes is the slot of the child `layer` made of it. A shape may be

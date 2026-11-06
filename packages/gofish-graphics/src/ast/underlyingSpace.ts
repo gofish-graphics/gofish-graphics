@@ -23,6 +23,7 @@ import {
   rootUnit,
   unify,
   unionInOrder,
+  unitKey,
   unitOf,
   type MeasureSite,
   type Quantity,
@@ -736,6 +737,15 @@ export const spaceUnit = (
   if (r === undefined) return undefined;
   const { unit, summands: _, ...rest } = r;
   return unit === undefined ? rest : { ...rest, unit: resolveUnit(unit) };
+};
+
+/** The key of a space's unit ({@link spaceUnit}, `unitKey`): equal for two
+ *  spaces iff they are in one unit. Undefined for a space with none. */
+export const unitKeyOf = (
+  space: UnderlyingSpace | undefined
+): string | undefined => {
+  const unit = spaceUnit(space)?.unit;
+  return unit === undefined ? undefined : unitKey(unit);
 };
 
 /** The zone of the calendar of a space's axis, when its data are

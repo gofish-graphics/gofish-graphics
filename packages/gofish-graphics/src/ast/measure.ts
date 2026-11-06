@@ -58,6 +58,9 @@ export type Quantity = {
   /** The column the values were read from, when they were read from one (a
    *  count or a share was not): what a schema declares a unit for. */
   column?: string;
+  /** Set on the square root of an amount of a quantity, which an area
+   *  channel hands its mark ({@link sqrtQuantity}): that quantity. */
+  rootOf?: Quantity;
 };
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
@@ -121,6 +124,42 @@ export const columnQuantity = (
   return q;
 };
 
+/** The square roots made by {@link sqrtQuantity}: one object per quantity,
+ *  as {@link columnQuantity} makes one per column. */
+const sqrtQuantities = new WeakMap<Quantity, Quantity>();
+
+/** The traits of every root unit (`√unit`, {@link sqrtQuantity}): none. One
+ *  object, so the occurrences of one root unit meet as the same traits. */
+const ROOT_TRAITS: UnitTraits = Object.freeze({});
+
+/** The quantity of the square root of an amount of `q` (#972), the unit
+ *  `√q` an area channel's length is in (`CHANNEL_INFER.area`). It keeps
+ *  `q`'s declaredness and no trait (no `CanSum`: √(a + b) ≠ √a + √b). See
+ *  "Unit implications" under
+ *  [cells of the plane](/internals/core/underlying-space#cells-of-the-plane-a-binned-struct). */
+export const sqrtQuantity = (q: Quantity): Quantity => {
+  let root = sqrtQuantities.get(q);
+  if (root === undefined) {
+    root = {
+      name: `√${q.name}`,
+      rootOf: q,
+      ...(q.unit !== undefined
+        ? {
+            unit: {
+              unit: `√${q.unit.unit}`,
+              traits: ROOT_TRAITS,
+              ...(q.unit.symbol !== undefined
+                ? { symbol: `√${q.unit.symbol}` }
+                : {}),
+            },
+          }
+        : {}),
+    };
+    sqrtQuantities.set(q, root);
+  }
+  return root;
+};
+
 /** `xs` quoted and joined, for a message: `"a", "b"`. */
 const quoteList = (xs: readonly string[]): string =>
   xs.map((x) => `"${x}"`).join(", ");
@@ -137,12 +176,23 @@ export const addsUp = (q: Quantity): boolean =>
  * the loud error names the column (or, for values read from none, the
  * quantity) and the unit, and says how to fix it. A unit whose difference
  * is in a unit of its own that adds up (an instant's, a duration) is summed
- * by its differences: the error says to subtract a reference first.
+ * by its differences: the error says to subtract a reference first. A
+ * square root's unit (`Quantity.rootOf`, {@link sqrtQuantity}) is no unit a
+ * user can define, so its error says what to do with the marks instead.
  */
 export function checkSummable(q: Quantity | undefined, where: string): void {
   if (q === undefined || addsUp(q)) return;
   const what = whoOf(q);
   const unit = q.unit!.unit; // declared, or it would add up
+  if (q.rootOf !== undefined)
+    throw new Error(
+      `${where} sums ${what}, in the unit "${unit}", the square root of ` +
+        `"${q.rootOf.unit?.unit}" that an area channel gives its mark. Square roots ` +
+        `do not add up (√(a + b) is not √a + √b), so lengths read from areas ` +
+        `cannot be summed. Place the marks side by side (spread) instead of ` +
+        `stacking them, or size them by a length (r, w or h) if their sizes ` +
+        `should add up.`
+    );
   const difference = q.unit!.difference;
   if (difference?.traits?.CanSum !== undefined)
     throw new Error(
@@ -256,6 +306,9 @@ export class UnitVar {
   /** @internal at a root: the columns in the class, the keys a schema
    *  declares their unit by. */
   columns: string[];
+  /** @internal at a root: whether some mark draws one value of the class as
+   *  a length on both axes ({@link tieUnit}). */
+  tied?: boolean;
   constructor(
     readonly name: string,
     column?: string
@@ -489,8 +542,23 @@ export function unify(a: UnitVar, b: UnitVar, site: MeasureSite): UnitVar {
   ra.unit = unit ?? ra.unit ?? rb.unit;
   ra.names = unionInOrder(ra.names, rb.names);
   ra.columns = unionInOrder(ra.columns, rb.columns);
+  ra.tied ||= rb.tied;
   return ra;
 }
+
+/**
+ * Record that a mark draws one value of `v`'s unit as a length on both axes
+ * (#1087): an aspect lock that derives one axis's data size from the
+ * other's. The unit is then one length on x and y, as a declared unit is
+ * (#582). The tie is kept on the class, so it holds for every occurrence of
+ * the unit the walk unifies with it.
+ */
+export const tieUnit = (v: UnitVar): void => {
+  findRoot(v).tied = true;
+};
+
+/** Whether some mark ties `v`'s unit ({@link tieUnit}). */
+export const isTiedUnit = (v: UnitVar): boolean => findRoot(v).tied === true;
 
 /**
  * Two declared occurrences of one unit (one name) that meet in a class of

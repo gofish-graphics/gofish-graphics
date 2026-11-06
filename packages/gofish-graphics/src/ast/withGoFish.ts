@@ -547,12 +547,14 @@ function buildCreatedMark(
       const isEntry =
         typeof channelSpec === "object" && channelSpec?.entry === true;
 
-      if (isValue(markValue)) {
-        // Already a Value wrapper (e.g. v(...)) — pass through directly
-        shapeProps[propName] = markValue;
-      } else if (isEntry && channelType === "size") {
-        shapeProps[propName] = inferEntrySize(markValue, d);
+      if (isEntry && channelType === "size") {
+        // An already-wrapped value (`v(...)`) is the size as it is.
+        shapeProps[propName] = isValue(markValue)
+          ? markValue
+          : inferEntrySize(markValue, d);
       } else if (channelType !== undefined) {
+        // Each kind reads an already-wrapped value (`datum(...)`) itself
+        // (`CHANNEL_INFER`): an area roots it, the others keep it.
         shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
         if (
           markValue !== undefined &&

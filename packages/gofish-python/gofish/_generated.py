@@ -180,8 +180,8 @@ def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
             _kw[_k] = _v
     return Mark("rect", **_kw)
 
-def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, r: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[int | float | str] = None, fill_opacity: Optional[float] = None) -> Mark:
-    """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.
+def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, r: Optional[int | float | str] = None, area: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[int | float | str] = None, fill_opacity: Optional[float] = None) -> Mark:
+    """A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
@@ -197,7 +197,8 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
-        r: Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h.
+        r: Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h.
+        area: Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h.
         fill: Fill color, or a field name for a color scale.
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -220,6 +221,7 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
         ("r", _channel(r)),
+        ("area", _channel(area)),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),

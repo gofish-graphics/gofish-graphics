@@ -155,11 +155,6 @@ packages/gofish-graphics/stories/forwardsyntax/CurveLadder.stories.tsx
 # rows take Calendar values only. The other Time stories are ported. Port: #1105.
 packages/gofish-graphics/stories/forwardsyntax/Time.stories.tsx::QuarterlyBars
 
-# Time benchmark ports: CircleTimeline sizes each circle in a JS function mark
-# (a literal pixel radius per row), which cannot cross the bridge. StackedArea
-# and SurplusDeficitLine are ported. Port: #1105.
-packages/gofish-graphics/stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx::CircleTimeline
-
 # Enclose shapes: PenguinsFourShapes lays four charts out in a DOM grid (one
 # story renders four containers), and ChartAccentSubSaharanAfrica filters a
 # selectAll bag with a JS lambda over refs (project(ref, "Region")), which

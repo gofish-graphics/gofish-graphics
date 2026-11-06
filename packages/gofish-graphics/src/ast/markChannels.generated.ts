@@ -28,6 +28,7 @@ export const MARK_CHANNELS = {
     h: "size",
     dims: "dims",
     r: "size",
+    area: "area",
     fill: "color",
     stroke: "color",
     opacity: "raw",

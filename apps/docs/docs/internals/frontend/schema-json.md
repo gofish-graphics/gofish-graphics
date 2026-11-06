@@ -2006,7 +2006,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its diameter is set by at most one of r, w, or h and applies to both axes; with none, the circle fills the space it is given.",
+      "description": "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2074,7 +2074,11 @@ for the API.
         },
         "r": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, w, and h."
+          "description": "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h."
+        },
+        "area": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Area. A number is square pixels. A field name or an accessor is data, summed over the mark's rows, and the circle's area is proportional to it, so its radius grows with the square root. Pass at most one of r, area, w, and h."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",

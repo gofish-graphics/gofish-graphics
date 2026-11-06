@@ -451,19 +451,17 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND — the **Route B** unit gate, only inside a coordinate space — its size
-is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
-`sameValueUnit` reads both through the render's union-find, which
-`resolveEmbedding` installs as the type walk does, so two unknowns
-are one unit only when they are one column or met on a shared axis). A size
-in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
-position) stays ink: a flat point at the mapped center, not a swept wedge.
-The discriminator is mark-local because a polar coord forgets its axis
-measure; a positioned mark's own position unit is the axis unit it sits on. This consumes the quantity provenance #534
-carried to mark channels. The revocation is
-coord-scoped, so Cartesian behavior matches the former construction-time
-inference. (Route A — relational, measure-free embedding — is not yet
-implemented; tracked under #618.)
+AND, only inside a coordinate space, it is no glyph size (`GoFishNode.isGlyph`,
+#972): a size placed at a datum in another unit, by its parent's position or
+by the mark's own `min`/`center`/`max`, stays ink, a flat point at the mapped
+center (a scatter bubble), not a swept wedge. Units are read through the
+render's union-find, which `resolveEmbedding` installs as the type walk does.
+Embedding and sizing ask this one question, so a glyph is never warped and a
+length of the space always is (see
+[Glyph sizes and lengths of the space](../core/underlying-space.md#glyph-sizes-and-lengths-of-the-space)).
+The revocation is coord-scoped, so Cartesian behavior matches the former
+construction-time inference. (Route A, relational, measure-free embedding, is
+not yet implemented; tracked under #618.)
 
 ### Pass 9: Layout Calculation
 
@@ -597,12 +595,21 @@ the equal-measure step and the root's frame in Pass 10 all read, and
 distinguishes it from the `layoutW`/`layoutH` it hands to `child.layout`
 (where a shrink-to-fit axis is left unsized). **Shared-measure
 equal scale** (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: when `spaceUnit(x).unit` and
-`spaceUnit(y).unit` are the same DECLARED unit (two unknowns that unified
-through overlays do not count), each axis's pixels-per-data-unit — a POSITION
+are built and before `child.layout`: when the two axes are in one measure,
+each axis's pixels-per-data-unit — a POSITION
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
-maps stay undistorted); the binding axis fills, and on the other the box keeps
+maps stay undistorted). Two axes are in one measure in either of two cases.
+They share a DECLARED unit (`spaceUnit(x).unit` and `spaceUnit(y).unit` are
+equal; two unknowns that unified through overlays do not count). Or they are
+in one TIED unit: an aspect-locked mark whose size is data (`circle({ r })`,
+`circle({ h })`, an `ellipse` with `aspectRatio`) draws one value of its unit as
+a length on both axes, so it ties the unit (`tieUnit` in the type walk, #1087), and
+the axes equalize when each maps that unit and no other
+(`KeyedDomains.tiedUnitOf`). An axis that also maps another unit (a marginal
+histogram's count beside the scatter's) is not one measure with the other
+axis, so a tied unit the two merely both contain does not equalize them. The
+binding axis fills, and on the other the box keeps
 its size and the content sits at its top-left, the leftover empty after it in
 screen terms (its claim takes the leftover at its far end, or at its start for a
 y that grows upward). Stage 6c makes this a named `equalizeMeasure` operation

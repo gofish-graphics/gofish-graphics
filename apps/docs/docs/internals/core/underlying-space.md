@@ -1465,6 +1465,95 @@ have a minimum size, such as a spread operator where even if the shapes
 have 0 size, the spacing between the shapes yields some minimum overall
 size).
 
+### Glyph sizes and lengths of the space
+
+A data size is one of two things, by one rule (#972).
+
+- A **glyph size**. The rule is per axis and belongs to the size's unit. A
+  unit is a glyph unit when, on some axis, the mark is placed at a datum in
+  another unit, and the size the mark is given on that same axis is in the
+  unit. Its parent places it there (at a point or in a cell, when the
+  parent's axis is in another unit), or its own value position does (a
+  `cx` or `x` in another unit). Every size in a
+  glyph unit is a glyph size (`GoFishNode.isGlyph`), so `circle({ area })`
+  placed on x only is a glyph on y too: it is given one size, in one unit,
+  on both axes, and one unit has one σ. A glyph size is a scale of its own,
+  keyed by its unit. No axis's σ scales it, and a coordinate transform does
+  not warp it. A bubble in a scatter and a circle in a 2D histogram's cell
+  are glyphs.
+- A **length of the space**. Every other data size is a length along its
+  axis: one whose unit has no datum position on an axis it is given on, or
+  one in the unit of the parent's axis that places it. The axis's σ scales it,
+  its claim is part of the axis's claim, and a coordinate transform warps
+  it. A bar in a stack, a circle in a spread's slot, and a histogram bar
+  are lengths. The histogram bar sits in a bin cell on x, but its height is
+  a size on y, where nothing places it at a datum.
+
+Sizing and embedding ask this one question (`GoFishNode.isGlyph`, decided
+once per node and axis and memoized with the claim walk). The embedding
+pass keeps a glyph flat (`resolveEmbedding`), and layout hands a glyph its
+unit's σ in place of its frame's (`GoFishNode.layout`), so a layer passes
+its children its frame's σ and nothing more.
+
+The litmus test is whether the coordinate system should warp the shape. In
+a bubble chart it should not: the bubble's area measures population, and
+the axes measure GDP and life expectancy. In a spread of circles it should:
+the circles are the axis's extent, as the bars of a bar chart are. A
+histogram bar's height should warp too: in polar it becomes a ring
+segment's depth.
+
+A box declares its aspect lock once (`AspectLock`, from
+`elaborateOwnDims`, shared by rect and ellipse). A size the lock derives is
+not given on its axis, so it takes no part in the rule: it follows the size
+it is derived from, and its data size is that size times the ratio. `circle({ h:
+"value" })` placed at a year on x only is given its height on y, where
+nothing places it, so the height is a length of y and reads against the
+value axis, as the histogram bar's does, and in polar it warps. Its width is
+the height's pixels. On x the width sits at a datum in another unit, so its
+pixels are at y's σ, which no claim on x can be written in: it claims
+nothing there (its size kind is "follows"), and the circles at the ends may
+reach past the plot. `circle({ w: "value" })` there is given its width on x,
+where a year places it, so it is a glyph, and its height is the same glyph
+size.
+
+Each glyph unit has one σ, found as the shared-measure σ is (#582): every
+glyph bounds it, and it is the smallest bound
+(`ScopeRegistry.glyphSigma`). A glyph's bound is the σ at which its own
+domain fills its room. A glyph in a cell has the cell for its room, which is
+data on the axis that places it, so its pixels are known at its frame's σ;
+the largest σ that fits every glyph in its cell is
+`k = min_i(cell_i / d_i)`. A glyph at a point has the glyph range for its
+room, the same for every glyph, so the points bound σ by the range over the
+widest glyph of the unit (`KeyedDomains.unitWidth`). The range is one
+internal constant (`GLYPH_ROOM_PX`), a placeholder until chart options can
+set the range of a non-spatial scale. When no room bounds σ, every glyph of
+the unit is 0 wide and is drawn 0 wide at any σ, so σ is 0. The registry
+builds each unit's bounds once, before the claim walk, from every glyph's
+room in the final tree (`ScopeRegistry.fitGlyphs`: the points' bound, and per
+axis the smallest `cell_i / d_i`), and each parent's sharing plan holds the
+cell it places each child in (`SharingPlan.cells`), so sizing N glyphs takes
+time linear in N.
+
+A glyph claims pixels, not σ (`GoFishNode.glyphClaim`). A glyph in a cell
+claims nothing past the cell, since the cell's data already claims the
+cell. A glyph at a point claims its size at its unit's σ as the claim walk
+knows it. So the axes the glyphs are placed on fit their positions alone,
+and the glyphs' sizes do not shrink the plot.
+
+Three shortcuts remain. The claim walk runs before any frame's σ is solved,
+so it cannot turn a cell into pixels: it sizes a glyph at a point by the
+points' bound alone (`glyphSigma` with no frame). When a cell of the same
+unit binds lower (a circle in a bin on x, unplaced on y, whose cells are
+narrower than the glyph range), layout draws it smaller than it claims on y:
+the claim is an upper bound, never an overflow. Writing the exact claim
+needs a claim on y that reads x's σ, which a claim, a function of its own
+axis's σ, cannot express. A cell is turned into pixels at the σ of the frame
+asking for the glyph's σ, so every frame that places one unit's glyphs must
+map its axis at one σ, which holds within one chart. And a size in the unit
+of one axis its parent places it on is a length on both axes of the mark,
+so `circle({ r: "a" })` at `x: "a", y: "b"` is a length of x drawn at the
+x and y σs, which the aspect lock reconciles by the smaller.
+
 ## Layout dispatch
 
 After both walks, layout proceeds on a single principle:
@@ -1631,7 +1720,22 @@ The marginal histogram's layer prints as:
 The registry is the sole producer of every slope. A coord boundary hands down
 the one σ its scope solves, which its map shares, and the #582 equal measure
 (equating x and y when they share a declared unit) is a named `equalizeMeasure`
-operation _on_ the registry, so the dump records the FINAL σ. The render root
+operation _on_ the registry, so the dump records the FINAL σ. Two axes share
+a unit when both their spaces are in one declared unit, or when each maps
+keyed domains of one unit and no other, and a mark ties that unit
+(`KeyedDomains.tiedUnitOf`). An axis that also maps another unit is
+not in one measure with the other axis: a marginal histogram's counts on
+the top (y) and the right (x) sit beside the scatter's beak lengths, so the
+two count scales stay apart. An aspect-locked mark whose size is data,
+such as a circle, ties its unit (#1087): it draws one value as a length on
+both axes, so its unit is one length on x and y even when it is unknown.
+The type walk records the tie on the unit's class in the union-find
+(`tieUnit`), so it holds for every occurrence the walk unifies with it. So
+a row of `circle({ h: "value" })` in a spread fits both axes at
+`σ = min(H / max v, W / Σv)`, and the value axis reads that σ. The aspect
+lock gives the other axis the same data length (`elaborateOwnDims`'s
+`dataSize`), so
+both axes claim it. The render root
 and a chart with a literal size on both axes both go through it. The chart
 solves its two scopes in the claim walk (`solveFixed`) and equalizes them
 there (`equalizeFixed`) before either claim is read. Both take the smaller σ,
@@ -2105,8 +2209,10 @@ extent only when it is in the same unit as the dim's own position — a size in
 a foreign unit (a bubble's area) stays a flat point. It reads the units
 through the render's union-find (`sameValueUnit`, which compares the
 variables with `sameUnitVar`), after the walk: two unknowns are the same unit only when
-they are one column or met on a shared axis. See
-the embedding-resolution pass under
+they are one column or met on a shared axis. A mark its parent places is
+compared the same way: a glyph (`isGlyph`, see
+[Glyph sizes](#glyph-sizes-and-lengths-of-the-space)) stays a flat point.
+See the embedding-resolution pass under
 [layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
 
 **Constraint-domain measures.** A `position` constraint's datum coordinate
@@ -2910,7 +3016,17 @@ reports no quantity of its own, leaving
 get their own declared unit, `shareQuantity(base, byName)` — see
 [Space-filling spines](#space-filling-spines-normalize-nests-each-part)
 above for why a share is a distinct unit (0–1, not the base quantity's own
-units) that must never silently union with it.
+units) that must never silently union with it. An area channel (#972,
+`CHANNEL_INFER.area` in `channels.ts`) roots its sum, and the root is in a unit of its
+own too, `√q` (`sqrtQuantity` in `measure.ts`), so a circle sized by
+`area: "count"` never shares a scale with a bar of `h: "count"`. A declared
+unit stays declared, as `√unit`, with its symbol rooted too, and an unknown
+one stays unknown, the variable `√name`. The root keeps none of the unit's
+traits: a square root does not preserve sums (√(a + b) is not √a + √b), so
+`√unit` has no `CanSum` and a stack of area circles is refused by the sum
+check. It keeps no `difference` or `zone` either (an area channel sums its
+rows first, so amounts of an instant never reach it), and it records no
+column, since its values are not the column's.
 
 ## Axis inference
 

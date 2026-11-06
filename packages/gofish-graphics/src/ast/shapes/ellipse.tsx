@@ -55,7 +55,7 @@ export const Ellipse = ({
   // A length for its own size (`w: percent(30)`, `w: fr(2)`) is laid out in
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
-  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims, aspectRatio);
   const { dims, dataSize } = own;
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });

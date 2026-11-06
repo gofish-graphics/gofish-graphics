@@ -142,22 +142,14 @@ export const CircleTimeline: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    const maxSales = Math.max(...quarterlySales.map((d) => d.sales));
-    // Area proportional to sales, the largest 18 px in radius.
-    const rows = quarterlySales.map((d) => ({
-      ...d,
-      radius: 18 * Math.sqrt(d.sales / maxSales),
-    }));
-    // A data-driven `r` would be a size in data units, scaled with the axes,
-    // so each circle gets a literal pixel `r`.
-    chart(rows, { schema: { date: Unit.time() }, w: args.w })
+    // Area proportional to sales. A circle placed at a date is a glyph, so
+    // its size is a scale of its own, not a length on the time axis.
+    chart(quarterlySales, { schema: { date: Unit.time() }, w: args.w })
       .flow(
         spread({ by: "category", dir: "y", spacing: 60 }),
         scatter({ by: "date", x: "date", alignment: "middle" })
       )
-      .mark((d: any) =>
-        circle({ r: d[0].radius, fill: "category", opacity: 0.8 })(d)
-      )
+      .mark(circle({ area: "sales", fill: "category", opacity: 0.8 }))
       .render(container);
     return container;
   },

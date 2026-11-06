@@ -105,7 +105,7 @@ export const Rect = ({
   // the room it is given, known only once it is in its tree (#1176 step 6).
   // `embedded` is authored by the resolveEmbedding pass (after underlying-space
   // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
-  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims);
+  const own = elaborateOwnDims<MaybeValue<number>>(fancyDims, aspectRatio);
   const { dims, dataSize } = own;
   const { rx, ry } = cornerRadii(rxGiven, ryGiven, 0);
   // An inset is never negative. A percent's box is known only at layout, so

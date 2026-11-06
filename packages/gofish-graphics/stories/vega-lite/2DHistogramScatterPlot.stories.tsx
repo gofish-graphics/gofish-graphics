@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, circle, scatter, rect, v } from "../../src/lib";
+import { Bin, chart, circle, field, partition } from "../../src/lib";
 import data from "vega-datasets";
-import { uniq } from "lodash";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/circle_binned.html
 
@@ -24,64 +23,32 @@ export const Default: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
   render: (args: Args, context: any) => {
-
     const container = initializeContainer();
-    const moviesRaw = context.loaded.movies as any[];
-  
-    const xbinSize =
-      (Math.max(...moviesRaw.map((d) => d["IMDB Rating"])) -
-        Math.min(...moviesRaw.map((d) => d["IMDB Rating"]))) /
-        10 || 1;
-    const ybinSize = (Math.max(...moviesRaw.map((d) => d["Rotten Tomatoes Rating"])) - Math.min(...moviesRaw.map((d) => d["Rotten Tomatoes Rating"]))) / 10 || 1;
-    let movies = moviesRaw
-        .filter((d) => d["IMDB Rating"] != null && d["Rotten Tomatoes Rating"] != null)
-        .map((d) => ({
-      x: Math.floor(d["IMDB Rating"] / xbinSize) * xbinSize,
-      y: Math.floor(d["Rotten Tomatoes Rating"] / ybinSize) * ybinSize,
-    }));
+    const movies = (context.loaded.movies as any[]).filter(
+      (d) => d["IMDB Rating"] != null && d["Rotten Tomatoes Rating"] != null
+    );
 
-    const xs = uniq(movies.map((d) => d.x));
-    const ys = uniq(movies.map((d) => d.y));
-
-    // Build a flat list of (x, y) bin coordinates.
-    const coords = xs.flatMap((x) => ys.map((y) => [x, y] as const));
-
-    const counts = coords
-      .map(([x, y]) => ({
-        x,
-        y,
-        count: movies.filter((d) => d.x === x && d.y === y).length,
-      }))
-      .filter((d) => d.count > 0);
-
-    const maxCount = Math.max(1, ...counts.map((d) => d.count));
-
-    // Map counts to mark sizes, capped by bin size so marks stay inside bins.
-    const movieCounts = counts.map((d, i) => {
-      const t = d.count / maxCount; // 0..1
-      const w = Math.max(1, xbinSize * 5 * t) / xs.length;
-      const h = Math.max(1, ybinSize * 5 * t) / ys.length;
-      const size = Math.min(w, h);
-      return { ...d, size, id: i };
-    });
-    
-
-    chart(movieCounts, { w: args.w, h: args.h })
-      .flow(scatter({ by: "id", x: "x", y: "y" }))
-      // Size each cell by bucket count.
+    // One cell per pair of bins, and in it a circle whose area is the
+    // number of movies in the cell. The largest circle fits its cell.
+    chart(movies, { w: args.w, h: args.h })
+      .flow(
+        partition({
+          by: {
+            x: field("IMDB Rating").bin(Bin.step(1)),
+            y: field("Rotten Tomatoes Rating").bin(Bin.step(10)),
+          },
+        })
+      )
       .mark(
-        rect({
-          w: "size",
-          aspectRatio: 1,
+        circle({
+          area: field("IMDB Rating").count(),
           fill: "transparent",
           stroke: "black",
           strokeWidth: 1,
-          rx: 2,
-          ry: 2,
-        } as any)
+        })
       )
       .render(container);
 
     return container;
-  }
+  },
 };

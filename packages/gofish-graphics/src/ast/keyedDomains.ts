@@ -18,16 +18,17 @@
 import * as Interval from "../util/interval";
 import { childRole, type SharingPlan } from "./constraints/compose";
 import { unionChildSpaces } from "./graphicalOperators/alignment";
+import { isTiedUnit } from "./measure";
 import {
   isCONTINUOUS,
   originIs,
   spaceUnit,
+  unitKeyOf,
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import type { Size } from "./dims";
 import { mapsDomain, niceScope, widenScope, type Extent } from "./extent";
-import { unitKey } from "./measure";
 
 /** The part of a node the table reads (duck-typed: `_node.ts` imports this
  *  module). */
@@ -54,18 +55,29 @@ const isKeyedNode = (n: unknown): n is KeyedNode =>
  *  when its parent detaches or nests it). */
 type Seat = { spaceRoot: KeyedNode; top: KeyedNode; topType?: UnderlyingSpace };
 
-/** The key of a domain: its unit's representative, or, for values with no
- *  unit (literals), the top of their set, which is a key of its own. */
-const domainKey = (
+/** What a domain is: the unit it is in (`unitKeyOf`), when its values have
+ *  one, and whether it holds data positions or only widths. */
+type DomainId = { unit?: string; kind: "position" | "width" };
+
+/** A keyed domain: its interval, what it is ({@link DomainId}), and
+ *  whether some mark ties its unit (`tieUnit`, #1087). */
+type KeyedDomain = DomainId & { interval: Interval.Interval; tied: boolean };
+
+/** What the domain of a space is ({@link DomainId}), and its key: its
+ *  unit's representative, or, for values with no unit (literals), the top
+ *  of their set, which is a key of its own. */
+const domainId = (
   space: UnderlyingSpace | undefined,
   top: KeyedNode
-): string => {
-  const unit = spaceUnit(space)?.unit;
-  const key = unit === undefined ? `set:${top.uid}` : unitKey(unit);
+): DomainId & { key: string } => {
+  const unit = unitKeyOf(space);
+  const key = unit ?? `set:${top.uid}`;
   // An origin-less space (a middle alignment) has only widths, no data
   // positions, so its domain is the unit's domain of widths, kept apart
   // from the domain of positions.
-  return originIs(space, "none") ? `${key}/width` : key;
+  return originIs(space, "none")
+    ? { unit, kind: "width", key: `${key}/width` }
+    : { unit, kind: "position", key };
 };
 
 /**
@@ -80,7 +92,7 @@ export class KeyedDomains {
   private readonly seats = new Map<KeyedNode, [Seat, Seat]>();
   private readonly domains = new Map<
     KeyedNode,
-    [Map<string, Interval.Interval>, Map<string, Interval.Interval>]
+    [Map<string, KeyedDomain>, Map<string, KeyedDomain>]
   >();
   private readonly demand = new Map<
     KeyedNode,
@@ -117,13 +129,17 @@ export class KeyedDomains {
     if (space === undefined || !isCONTINUOUS(space)) return;
     const iv = space.dataInterval;
     if (!Interval.isFinite(iv)) return;
-    const key = domainKey(space, seat.top);
+    const { key, ...id } = domainId(space, seat.top);
     const domains = KeyedDomains.entry(this.domains, seat.spaceRoot);
     const prior = domains[axis].get(key);
-    domains[axis].set(
-      key,
-      prior === undefined ? iv : Interval.union(prior, iv)
-    );
+    const tied =
+      space.measure?.unit !== undefined && isTiedUnit(space.measure.unit);
+    this.anyTied ||= tied;
+    domains[axis].set(key, {
+      ...id,
+      tied,
+      interval: prior === undefined ? iv : Interval.union(prior.interval, iv),
+    });
   }
 
   /** Record the axes drawn over each keyed domain, from the `axisDemand`
@@ -224,7 +240,51 @@ export class KeyedDomains {
   ): Interval.Interval | undefined {
     const key = this.keyOf(node, axis, space, viaSet);
     if (key === undefined) return undefined;
-    return this.domains.get(key.spaceRoot)?.[axis].get(key.key);
+    return this.domains.get(key.spaceRoot)?.[axis].get(key.key)?.interval;
+  }
+
+  /** Whether some keyed domain's unit is tied (`tieUnit`). */
+  private anyTied = false;
+
+  /** The tied unit a node's space maps alone on `axis` (#1087): its space
+   *  root's keyed domains there, positions and widths, are all in one unit,
+   *  and some mark ties it (`tieUnit`). Undefined otherwise. An axis that
+   *  also maps another unit (a marginal histogram's count beside the
+   *  scatter's beak length) is not in one measure with the other axis. */
+  tiedUnitOf(node: KeyedNode, axis: 0 | 1): string | undefined {
+    if (!this.anyTied) return undefined;
+    const seat = this.seatOf(node, axis);
+    const domains = seat && this.domains.get(seat.spaceRoot)?.[axis];
+    let one: KeyedDomain | undefined;
+    for (const d of domains?.values() ?? []) {
+      if (d.unit === undefined) continue;
+      if (one !== undefined && one.unit !== d.unit) return undefined;
+      one = d;
+    }
+    return one?.tied === true ? one.unit : undefined;
+  }
+
+  /** The width of the widest keyed domain of `unit` (`unitKey`), in any
+   *  space and on either axis: the widest glyph of a glyph unit (#972). */
+  unitWidth(unit: string): number {
+    return (this.unitWidths ??= this.widestByUnit()).get(unit) ?? 0;
+  }
+
+  /** The memo of {@link unitWidth}: the table is built once and never
+   *  changes after, so each unit's widest domain is found in one scan. */
+  private unitWidths?: Map<string, number>;
+
+  private widestByUnit(): Map<string, number> {
+    const widths = new Map<string, number>();
+    for (const axes of this.domains.values())
+      for (const domains of axes)
+        for (const { unit, interval } of domains.values())
+          if (unit !== undefined)
+            widths.set(
+              unit,
+              Math.max(widths.get(unit) ?? 0, Interval.width(interval))
+            );
+    return widths;
   }
 
   /** The ticks of an axis some node draws over the same keyed domain, or
@@ -314,11 +374,11 @@ export class KeyedDomains {
     const seat = this.seatOf(node, axis);
     if (seat === undefined) return undefined;
     if (spaceUnit(space)?.unit !== undefined)
-      return { spaceRoot: seat.spaceRoot, key: domainKey(space, seat.top) };
+      return { spaceRoot: seat.spaceRoot, key: domainId(space, seat.top).key };
     if (!viaSet) return undefined;
     return {
       spaceRoot: seat.spaceRoot,
-      key: domainKey(seat.topType, seat.top),
+      key: domainId(seat.topType, seat.top).key,
     };
   }
 
@@ -335,12 +395,12 @@ export class KeyedDomains {
   ): void {
     for (const [root, axes] of this.domains)
       ([0, 1] as const).forEach((axis) => {
-        for (const [key, iv] of axes[axis])
+        for (const [key, { interval }] of axes[axis])
           f(
             root,
             axis,
             key,
-            iv,
+            interval,
             this.demand.get(root)?.[axis].has(key) ?? false
           );
       });
