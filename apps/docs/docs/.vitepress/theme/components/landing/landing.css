@@ -576,18 +576,6 @@ html.landing-page .DocSearch-Button {
   }
 }
 
-/* hero load motion */
-.landing .rise {
-  opacity: 0;
-  transform: translateY(18px);
-  animation: gf-rise 0.7s ease-out forwards;
-}
-@keyframes gf-rise {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
 /* The hero's and the spectrum row's cards are taped down as the page loads: each drifts in from
    just above the sheet with its tape already on and its bottom swung up,
    and the bottom swings down around the tape to its lifted rest
@@ -1187,10 +1175,6 @@ html.landing-page .VPNavBarSocialLinks {
     animation-duration: 0.01ms !important;
     animation-delay: 0.01ms !important;
     transition-duration: 0.01ms !important;
-  }
-  .landing .rise {
-    opacity: 1 !important;
-    transform: none !important;
   }
   .landing .pic {
     animation: none !important;

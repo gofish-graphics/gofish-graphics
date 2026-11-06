@@ -25,8 +25,8 @@ const railScrolls = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // The taped cards are taped down one after another as the page loads
-// (landing.css, gf-hang), in list order, starting once the title has begun
-// to rise. The hero's cards and the spectrum row's start together.
+// (landing.css, gf-hang), in list order, starting just after load. The
+// hero's cards and the spectrum row's start together.
 const dropDelay = (i: number): Record<string, string> => ({
   "--drop-delay": `${250 + 60 * i}ms`,
 });
@@ -355,16 +355,14 @@ onBeforeUnmount(() => {
           <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
                its right end at an angle. Kept as real text so it is announced to
                screen readers. -->
-          <h1 id="hero-h" class="wordmark rise" style="animation-delay: 0ms">
-            GoFish<span class="hero-stamp" style="animation-delay: 240ms"
-              >alpha</span
-            >
+          <h1 id="hero-h" class="wordmark">
+            GoFish<span class="hero-stamp">alpha</span>
           </h1>
-          <p class="subtitle rise" style="animation-delay: 90ms">
+          <p class="subtitle">
             an open-source visualization library for
             JavaScript&nbsp;and&nbsp;Python
           </p>
-          <div class="rise" style="animation-delay: 180ms">
+          <div>
             <CtaBlock />
           </div>
         </div>
