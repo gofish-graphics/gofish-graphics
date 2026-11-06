@@ -275,9 +275,10 @@
         <p class="lede">
           Issue #1331 asks whether the flower chart's bespoke
           <code>petal</code> mark can be drawn from general GoFish pieces, now
-          that the flower chart is on the front page. It can: today's petal is,
-          within 2 px, a five-point polygon in its slot, bent by the polar
-          coord.
+          that the flower chart is on the front page. It can: today's petal is
+          two straight edges and two quadratic curves in its slot. Warp the
+          curves' control points through the polar coord, draw the curves on
+          screen, and you get today's petal back.
         </p>
       </header>
 
@@ -285,17 +286,24 @@
         <h2>The proposal</h2>
         <ul>
           <li>
-            A petal is the pentagon
-            <code>[[0,0],[0,.5],[.5,1],[1,.5],[1,0]]</code> in its slot (u
-            across the slot, v out from the center). Polar bends its two slanted
-            edges into today's curves.
+            A petal is the outline
+            <code>M.5 0 L0 .5 Q.167 .75 .5 1 Q.833 .75 1 .5 Z</code> in its slot
+            (u across the slot, v out from the center). One fixed outline for
+            every slot angle.
+          </li>
+          <li>
+            Every point of an outline, vertex or curve control point, goes
+            through the coord. Straight edges follow the coord, as polygon edges
+            do today. Curves are drawn on screen between the warped points, as
+            <code>Curve</code> does for <code>line</code>.
           </li>
           <li>
             <code>polygon</code> takes <code>w</code> and <code>h</code>, like
-            <code>rect</code>. Its literal points stretch from their own
-            bounding box into that box. Left out, <code>w</code> and
-            <code>h</code> are the points' own extent, so existing polygons draw
-            as before.
+            <code>rect</code>, and an outline as <code>points</code> (straight
+            edges) or <code>d</code> (an SVG path, for curves). The outline
+            stretches from its own bounding box into that box. Left out,
+            <code>w</code> and <code>h</code> are the outline's own extent, so
+            existing polygons draw as before.
           </li>
           <li>
             Shapes that sweep their slot are warped by the coord (rect becomes a
@@ -309,50 +317,119 @@
       </section>
 
       <article class="card">
-        <span class="tag">Recommended · flower head</span>
-        <h2>B. Polygon with a box</h2>
+        <span class="tag">Recommended · widest slot</span>
+        <h2>B. Polygon with a box and a curved outline</h2>
         <div class="pics">
           <figure>
             <img
-              src="head-today.png"
-              alt="Today's petal flower head, five colored petals"
-              width="205"
-              height="184"
+              src="wide-today.png"
+              alt="Lake F flower head today: a wide green petal with straight sides and a rounded point"
+              width="215"
+              height="200"
             />
             <figcaption>Today: <code>petal</code></figcaption>
           </figure>
           <figure>
             <img
-              src="head-b-box-ring.png"
-              alt="The same flower head drawn with a warped polygon; outlines within 2 px of today's"
-              width="205"
-              height="184"
+              src="wide-b-quad.png"
+              alt="The same head with the curved outline: the wide green petal is close to today's, slightly more pointed"
+              width="215"
+              height="200"
             />
-            <figcaption>
-              B: <code>polygon</code> with <code>w</code> (prototype)
-            </figcaption>
+            <figcaption>B: curved outline (prototype)</figcaption>
           </figure>
+          <figure>
+            <img
+              src="wide-b-pentagon.png"
+              alt="The same head with the five-point outline: the wide green petal bulges into a round heart"
+              width="215"
+              height="200"
+            />
+            <figcaption>Five points only: bulges on wide slots</figcaption>
+          </figure>
+        </div>
+        <p>
+          Lake F at R = 90 px; its green slot is 192°. Largest outline gap to
+          today's, by slot angle, measured on the rendered SVG paths:
+        </p>
+        <div style="overflow-x: auto">
+          <table>
+            <thead>
+              <tr>
+                <th>outline</th>
+                <th>16°</th>
+                <th>29°</th>
+                <th>37°</th>
+                <th>86°</th>
+                <th>192°</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>curved (B)</td>
+                <td>0.15</td>
+                <td>0.26</td>
+                <td>0.30</td>
+                <td>1.62</td>
+                <td>4.56</td>
+              </tr>
+              <tr>
+                <td>five points</td>
+                <td>0.45</td>
+                <td>0.45</td>
+                <td>0.45</td>
+                <td>0.88</td>
+                <td>12.3</td>
+              </tr>
+              <tr>
+                <td>nine points (best fixed set)</td>
+                <td>1.52</td>
+                <td>2.55</td>
+                <td>3.16</td>
+                <td>5.23</td>
+                <td>4.92</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
         <div class="codes">
           <span class="label">Proposed, JS</span>
-          <pre><code class="language-javascript" data-chg="1,2,6">// A petal is a pentagon in its slot. Polar bends the two slanted edges.
-const PETAL = [[0, 0], [0, 0.5], [0.5, 1], [1, 0.5], [1, 0]];
+          <pre><code class="language-javascript" data-chg="1,2,3,7">// Two straight edges out from the center, then two quadratic curves to the
+// tip. Their control points go through polar like the vertices do.
+const PETAL = "M.5 0 L0 .5 Q.167 .75 .5 1 Q.833 .75 1 .5 Z";
 
 const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: 40 }))
-  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
+  .mark(polygon({ w: "count", d: PETAL, fill: "species" }));</code></pre>
           <span class="label">Proposed, Python</span>
-          <pre><code class="language-python" data-chg="1,6">PETAL = [(0, 0), (0, 0.5), (0.5, 1), (1, 0.5), (1, 0)]
+          <pre><code class="language-python" data-chg="1,6">PETAL = "M.5 0 L0 .5 Q.167 .75 .5 1 Q.833 .75 1 .5 Z"
 
 flower = (
     chart(coord=Coord.polar(), axes=False)
     .flow(stack(by="species", dir="x", h=40))
-    .mark(polygon(w="count", points=PETAL, fill="species"))
+    .mark(polygon(w="count", d=PETAL, fill="species"))
 )</code></pre>
           <span class="label">Today</span>
           <pre><code class="language-javascript" data-chg="3">const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: 40 }))
   .mark(petal({ w: "count", fill: "species" }));</code></pre>
+          <details class="inner">
+            <summary>The five-point version (no curves)</summary>
+            <div class="body">
+              <pre><code class="language-javascript" data-chg="">const PETAL = [[0, 0], [0, 0.5], [0.5, 1], [1, 0.5], [1, 0]];
+
+polygon({ w: "count", points: PETAL, fill: "species" });</code></pre>
+              <p>
+                Under 1 px from today's up to about 110° slots, but the straight
+                edges warp into spirals that keep the full slot angle until near
+                the tip, so wide petals bulge. No fixed point set fixes this:
+                today's control point sits a fixed pixel distance from the
+                petal's axis, which no fixed angle reproduces. The best
+                nine-point fit halves the worst gap and is worse everywhere
+                else, with visible kinks.
+              </p>
+            </div>
+          </details>
         </div>
       </article>
 
@@ -371,25 +448,24 @@ flower = (
           </figure>
           <figure>
             <img
-              src="flower-b-box-ring.png"
-              alt="The same flower chart with polygon petals; petals match, chart slightly wider"
-              width="505"
+              src="flower-b-quad.png"
+              alt="The same flower chart with curved-outline petals: nearly identical to today"
+              width="430"
               height="404"
             />
-            <figcaption>B (prototype)</figcaption>
+            <figcaption>B: curved outline (prototype)</figcaption>
           </figure>
         </div>
         <p>
-          The petals match. The prototype chart is wider, most likely because it
-          is a literal polygon with no declared size space, where
-          <code>petal</code> declares a rect-like one. The real B would declare
-          the rect's space. Not checked yet.
+          Same layout as today. At the front page's 40 px radius the largest
+          computed gap is 1.1 px on slots up to 108° and 2.1 px on the 192° slot
+          (five points: 5.5 px there).
         </p>
         <div class="codes">
           <span class="label">Change to the story (the rest is unchanged)</span>
           <pre><code class="language-javascript" data-chg="3">const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: FLOWER_RADIUS }))
-  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
+  .mark(polygon({ w: "count", d: PETAL, fill: "species" }));</code></pre>
           <details class="inner">
             <summary>Today</summary>
             <div class="body">
@@ -398,12 +474,32 @@ flower = (
   .mark(petal({ w: "count", fill: "species" }));</code></pre>
             </div>
           </details>
+          <details class="inner">
+            <summary>The five-point version of this chart</summary>
+            <div class="body">
+              <img
+                src="flower-b-box-ring.png"
+                alt="Flower chart with five-point petals: the wide green petals bulge"
+                width="505"
+                height="404"
+              />
+              <p>
+                The wide green petals bulge. This prototype is also wider than
+                today's chart, because it is a literal polygon with no declared
+                size space; the curved prototype declares a rect-like one and
+                lays out exactly like today.
+              </p>
+            </div>
+          </details>
         </div>
       </article>
-
       <article class="card">
         <span class="tag">Hard example</span>
         <h2>B under a donut clock</h2>
+        <p>
+          Rendered with the five-point outline. The curved outline warps its
+          points the same way, so it starts at the hole too (not rendered).
+        </p>
         <div class="pics">
           <figure>
             <img
@@ -567,42 +663,104 @@ const flower = chart({ coord: Coord.polar(), axes: false })
           Why B: the measurement, precedent, and what deletion touches
         </summary>
         <div class="body">
-          <h3>Today's petal is a warped pentagon</h3>
+          <h3>What today's petal is</h3>
           <p>
             <code>petal.tsx</code> draws two straight lines from the center
             along the slot's side edges to half the radius, then two quadratic
             Béziers to a tip at the full radius, turned to the slot's middle
             angle. The straight lines are rays, which polar draws straight
-            anyway. The quadratics stay close to what polar does to a straight
-            line from (edge angle, r/2) to (middle angle, r). Largest computed
-            gap at R = 90 px (on the rendered Lake A head, today vs B measures
-            0.45, 0.45, 0.73, 1.49 and 1.86 px for its 28°, 42°, 80°, 101° and
-            108° slots):
+            anyway. Each quadratic's control point sits at three quarters of the
+            radius, at the same distance from the petal's axis as the
+            half-radius corner. That distance is in pixels, so its angle shrinks
+            in a way no fixed point in (angle, radius) reproduces for every
+            slot. Warping the control point instead, from the fixed unit-box
+            spot (1/6, 3/4), matches today's narrow petals almost exactly and
+            stays within about 2 px on the widest.
           </p>
-          <table>
-            <thead>
-              <tr>
-                <th>slot angle</th>
-                <th>20°</th>
-                <th>40°</th>
-                <th>60°</th>
-                <th>90°</th>
-                <th>120°</th>
-                <th>180°</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>gap (px)</td>
-                <td>0.06</td>
-                <td>0.09</td>
-                <td>0.26</td>
-                <td>0.98</td>
-                <td>2.6</td>
-                <td>9.9</td>
-              </tr>
-            </tbody>
-          </table>
+          <p>
+            Largest outline gap to today's petal at the front page's 40 px
+            radius, computed over the flower chart's own slot angles (sampled
+            outlines, so about 0.3 px is the sampling floor):
+          </p>
+          <div style="overflow-x: auto">
+            <table>
+              <thead>
+                <tr>
+                  <th>outline</th>
+                  <th>16°</th>
+                  <th>42°</th>
+                  <th>73°</th>
+                  <th>90°</th>
+                  <th>108°</th>
+                  <th>127°</th>
+                  <th>162°</th>
+                  <th>192°</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>curved, control points warped (B)</td>
+                  <td>0.07</td>
+                  <td>0.23</td>
+                  <td>0.53</td>
+                  <td>0.80</td>
+                  <td>1.13</td>
+                  <td>1.46</td>
+                  <td>1.92</td>
+                  <td>2.07</td>
+                </tr>
+                <tr>
+                  <td>five points</td>
+                  <td>0.35</td>
+                  <td>0.41</td>
+                  <td>0.52</td>
+                  <td>0.62</td>
+                  <td>0.94</td>
+                  <td>1.49</td>
+                  <td>3.17</td>
+                  <td>5.48</td>
+                </tr>
+                <tr>
+                  <td>nine points, best fixed fit</td>
+                  <td>0.68</td>
+                  <td>1.53</td>
+                  <td>2.12</td>
+                  <td>2.25</td>
+                  <td>2.19</td>
+                  <td>1.90</td>
+                  <td>0.72</td>
+                  <td>2.24</td>
+                </tr>
+                <tr>
+                  <td>seven points, best fixed fit</td>
+                  <td>0.82</td>
+                  <td>1.90</td>
+                  <td>2.65</td>
+                  <td>2.78</td>
+                  <td>2.68</td>
+                  <td>2.33</td>
+                  <td>0.97</td>
+                  <td>2.72</td>
+                </tr>
+                <tr>
+                  <td>five points + <code>Curve.catmullRom()</code></td>
+                  <td>0.60</td>
+                  <td>1.06</td>
+                  <td>1.48</td>
+                  <td>1.61</td>
+                  <td>1.69</td>
+                  <td>1.74</td>
+                  <td>2.31</td>
+                  <td>2.78</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            The fixed fits minimize the worst gap over all slots, so they trade
+            the narrow petals for the wide ones. Rendered checks at R = 90 px
+            agree with these numbers scaled by 90/40.
+          </p>
           <h3>Precedent</h3>
           <ul>
             <li>
@@ -644,7 +802,9 @@ const flower = chart({ coord: Coord.polar(), axes: false })
           <ul>
             <li>
               Desugars into the core: polygon plus a box, lowered by the
-              existing warp. No new node kind, no polar special case.
+              existing warp, plus quadratic and cubic segments drawn through
+              warped control points, the rule <code>Curve</code> already uses
+              for <code>line</code>. No new node kind, no polar special case.
             </li>
             <li>
               Marks lay out alike: a polygon with <code>w</code> and
@@ -716,8 +876,8 @@ const flower = chart({ coord: Coord.polar(), axes: false })
         <ol>
           <li>
             Approve B: <code>polygon</code> takes <code>w</code> and
-            <code>h</code>, literal points stretch into that box, and
-            <code>petal</code> is deleted?
+            <code>h</code>, its outline stretches into that box, curve control
+            points are warped like vertices, and <code>petal</code> is deleted?
           </li>
           <li>
             Which way does the box run: v up from the baseline (data order:
@@ -725,9 +885,11 @@ const flower = chart({ coord: Coord.polar(), axes: false })
             order, as literal points are today)? This ties to #1038.
           </li>
           <li>
-            Keep the five-point outline, or add a <code>curve</code> option on
-            polygon for wide slots (over 90°) where the old petal and the warp
-            differ by more than a pixel?
+            Curved outlines: spell them as an SVG path, <code>d</code> on
+            <code>polygon</code> (SVG and Vega precedent), or as points plus a
+            new <code>Curve</code> member that reads every other point as a
+            control point (TrueType outlines mark off-curve points the same
+            way)? Or keep five points and accept bulging wide petals?
           </li>
           <li>Ship A in the flower story now as a stopgap, or wait for B?</li>
           <li>

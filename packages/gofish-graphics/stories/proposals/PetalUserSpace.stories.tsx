@@ -93,12 +93,16 @@ export const DataRing: StoryObj = {
 // unit points into the box `stack` gives the mark. The prototype does that
 // scaling by hand: inside polar the slot is count·(2π/total) wide (radians)
 // and R tall (pixels).
-const boxPolygonOf = (span: number, h: number) =>
+const boxPolygonOf = (
+  span: number,
+  h: number,
+  ring: [number, number][] = PETAL
+) =>
   createMark(
     ({ count, of, fill }: { count: any; of?: any; fill: string }) => {
       const w = (getValue(count) * span) / (of ? getValue(of) : total);
       return polygon({
-        points: PETAL.map(([u, v]) => [u * w, v * h]) as any,
+        points: ring.map(([u, v]) => [u * w, v * h]) as any,
         fill,
       }) as any;
     },
@@ -139,8 +143,13 @@ const parseUnitPath = (d: string) =>
 const Glyph = ({
   d,
   fill = "black",
+  warpPoints = false,
   ...fancyDims
-}: { d: string; fill?: any } & FancyDims<MaybeValue<number>>) => {
+}: {
+  d: string;
+  fill?: any;
+  warpPoints?: boolean;
+} & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
@@ -196,6 +205,9 @@ const Glyph = ({
           [(a[1] - C[1]) / e, (b[1] - C[1]) / e],
         ];
         const map = (u: number, v: number) => {
+          // Warp each point (vertex or control point) through the full
+          // coord; the curves between them are then drawn on screen.
+          if (warpPoints) return toPixel(f(t0 + u * tw, r0 + v * rh)).join(",");
           const du = (u - 0.5) * tw;
           const dv = (v - 0.5) * rh;
           return toPixel([
@@ -291,4 +303,60 @@ export const FlowerBoxRing: StoryObj = {
 };
 export const FlowerToday: StoryObj = {
   render: () => flowerChart(petal({ w: "count", fill: "species" })),
+};
+
+// Round 2: wide slots. Nine points fitted (fixed, for every slot angle) by
+// minimizing the largest outline gap to today's petal over the flower
+// chart's slot angles (tests/tmp/petal-snips/search2.py).
+const NINE: [number, number][] = [
+  [0, 0],
+  [0, 0.5],
+  [0.15, 0.55],
+  [0.32, 0.74],
+  [0.5, 1],
+  [0.68, 0.74],
+  [0.85, 0.55],
+  [1, 0.5],
+  [1, 0],
+];
+// Quadratic Béziers whose control points are warped like vertices; the
+// curves are drawn on screen. The control (1/6, 3/4) is today's control
+// point in the narrow-slot limit.
+const QUAD_D = "M.5 0 L0 .5 Q.16667 .75 .5 1 Q.83333 .75 1 .5 Z";
+
+const lakeF = stemData.filter((d) => d.lake === "Lake F");
+const wideHead = (mark: any) => {
+  const container = initializeContainer();
+  chart(lakeF, { coord: Coord.polar(), axes: false, w: 220, h: 220 })
+    .flow(stack({ by: "species", dir: "x", h: R }))
+    .mark(mark)
+    .render(container);
+  return container;
+};
+const ringMark = (h: number, ring: [number, number][]) =>
+  (boxPolygonOf(2 * Math.PI, h, ring) as any)({
+    count: "count",
+    of: "lakeTotal",
+    fill: "species",
+  });
+const quadMark = () =>
+  (glyph as any)({ w: "count", d: QUAD_D, warpPoints: true, fill: "species" });
+
+export const WideToday: StoryObj = {
+  render: () => wideHead(petal({ w: "count", fill: "species" })),
+};
+export const WidePentagon: StoryObj = {
+  render: () => wideHead(ringMark(R, PETAL)),
+};
+export const WideNine: StoryObj = {
+  render: () => wideHead(ringMark(R, NINE)),
+};
+export const WideQuad: StoryObj = {
+  render: () => wideHead(quadMark()),
+};
+export const FlowerNine: StoryObj = {
+  render: () => flowerChart(ringMark(40, NINE)),
+};
+export const FlowerQuad: StoryObj = {
+  render: () => flowerChart(quadMark()),
 };
