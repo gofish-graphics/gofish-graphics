@@ -589,8 +589,8 @@ html.landing-page .DocSearch-Button {
   }
 }
 /* The hero's cards are taped down as the page loads: each drifts in from
-   just above the sheet with its bottom swung up, the tape is pressed on at
-   its top, and the bottom swings down around the tape to its lifted rest
+   just above the sheet with its tape already on and its bottom swung up,
+   and the bottom swings down around the tape to its lifted rest
    (--lift-rest), sways past it, back above it and past it once more, less
    each time, and settles. The animation runs the individual translate
    property and the --lift / --rise properties that the card's hinge and
@@ -599,10 +599,6 @@ html.landing-page .DocSearch-Button {
    order. */
 .landing .hero .pic {
   animation: gf-hang 0.95s var(--drop-delay, 0ms) backwards;
-}
-.landing .hero .pic .tape {
-  animation: gf-tape 0.18s calc(var(--drop-delay, 0ms) + 0.22s) ease-out
-    backwards;
 }
 @keyframes gf-hang {
   0% {
@@ -638,12 +634,6 @@ html.landing-page .DocSearch-Button {
     translate: 0 0;
     --rise: 0;
     --lift: var(--lift-rest);
-  }
-}
-@keyframes gf-tape {
-  from {
-    opacity: 0;
-    scale: 1.25;
   }
 }
 
@@ -1202,8 +1192,7 @@ html.landing-page .VPNavBarSocialLinks {
     opacity: 1 !important;
     transform: none !important;
   }
-  .landing .pic,
-  .landing .pic .tape {
+  .landing .pic {
     animation: none !important;
     opacity: 1 !important;
   }
