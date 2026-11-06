@@ -14,7 +14,7 @@ import { checkLengths } from "../length";
  * captures that shape once so each operator is a short config:
  *
  *   split    : (opts, data) -> [ (key, subdata), ... ] + optional meta
- *   layout   : the low-level node builder (e.g. Spread, Scatter, Frame, Table)
+ *   layout   : the low-level node builder (e.g. Spread, Scatter, layer, Table)
  *   channels?: { w: "size" } — auto-apply inferSize/inferPos/inferColor
  *
  * High-level opts are passed to `layout` directly (after channels apply and
@@ -37,12 +37,15 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark, MarkChild, Operator } from "../types";
 import {
+  callMark,
   datumOfInput,
   layerKey,
+  LayerContext,
+  markContext,
   resolveMarkResult,
   stashLayerName,
-  type LayerContext,
 } from "./markResult";
+import { withRegistrar } from "../../interaction/resolveContext";
 import {
   CHANNEL_INFER,
   isBatchAccessor,
@@ -148,12 +151,17 @@ export function withMarkKind<M>(mark: M, kind: MarkKind): M {
 export async function applyMark<T>(
   mark: Mark<T> | Mark<T[]>,
   group: T[],
-  groupKey?: string | number,
-  layerContext?: LayerContext
+  groupKey: string | number | undefined,
+  layerContext: LayerContext
 ): Promise<GoFishNode[]> {
   const kind = getMarkKind(mark);
   if (kind === "expand") {
-    const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
+    const result = await callMark(
+      mark as Mark<T[]>,
+      group,
+      groupKey,
+      layerContext
+    );
     return Promise.all(
       (result as unknown as GoFishNode[]).map((r) =>
         resolveMarkResult(r as any, layerContext)
@@ -197,7 +205,7 @@ export type ModifierConfig<Args extends any[] = any[]> = {
    *  uses it to resolve a per-datum paint-order callback. */
   apply: (
     node: GoFishNode,
-    layerContext: LayerContext | undefined,
+    layerContext: LayerContext,
     datum: unknown,
     ...args: Args
   ) => void | Promise<void>;
@@ -308,16 +316,19 @@ function modifierMethod(
     const wrapped: Mark<any> = async (
       d: any,
       key?: string | number,
-      layerContext?: LayerContext
+      given?: LayerContext
     ) => {
-      const raw = await (base as any)(d, key, layerContext);
+      const layerContext = markContext(given);
+      const raw = await callMark(base, d, key, layerContext);
       // Resolved once per input, however many nodes it produces.
       const applied = resolveArgs ? await resolveArgs([d]) : args;
       // Expand-kind marks return an array of nodes; per-item return one.
       // Apply the modifier to each produced node either way.
       if (getMarkKind(base) === "expand") {
         const nodes = await Promise.all(
-          (raw as GoFishNode[]).map((r) => resolveMarkResult(r, layerContext))
+          (raw as unknown as GoFishNode[]).map((r) =>
+            resolveMarkResult(r, layerContext)
+          )
         );
         for (const node of nodes)
           await cfg.apply(node, layerContext, d, ...applied);
@@ -372,9 +383,10 @@ export function translateMark<T>(
   const wrapped: Mark<T> = async (
     d: T,
     key?: string | number,
-    layerContext?: LayerContext
+    given?: LayerContext
   ) => {
-    const raw = await (base as any)(d, key, layerContext);
+    const layerContext = markContext(given);
+    const raw = await callMark(base, d, key, layerContext);
     const node = await resolveMarkResult(raw, layerContext);
     return positionNode(opts, [node]);
   };
@@ -414,7 +426,10 @@ export function attachModifiers<T>(
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
   attachBuilderTerminals(base, async (options, pass) => {
-    const node = await resolveMarkResult(base as Mark<any>);
+    const node = await resolveMarkResult(
+      base as Mark<any>,
+      new LayerContext(undefined, pass?.registrar)
+    );
     installBuildIn(node, options, pass);
     return { node, options };
   });
@@ -570,9 +585,15 @@ function datumValueModifier<V extends number | boolean>(
   const valueOf = (value: Arg | undefined) => (value ?? fallback) as Arg;
   return {
     name,
-    apply: (node, _layerContext, datum, value) => {
+    apply: (node, layerContext, datum, value) => {
       const v = valueOf(value);
-      set(node, typeof v === "function" ? v(datum) : v);
+      // The one call of the callback, after the mark's own `await`.
+      set(
+        node,
+        typeof v === "function"
+          ? withRegistrar(layerContext.registrar, () => v(datum))
+          : v
+      );
     },
     resolveArgs: (value) =>
       isBatchAccessor(value)
@@ -1177,7 +1198,8 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   opts: Options,
   d: Datum[],
   entries: Map<SplitKey, Datum[]> | undefined,
-  layoutOpts: Record<string, unknown> | undefined
+  layoutOpts: Record<string, unknown> | undefined,
+  layerContext: LayerContext
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
     const rows = new Set<unknown>(d);
@@ -1189,7 +1211,10 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
     return copyColumnTypes([...rows], d);
   });
   const resolved = isThenable(pending) ? await pending : pending;
-  const withChannels = applyChannels(resolved, channels, d, entries);
+  // The one call of an operator's channel functions.
+  const withChannels = withRegistrar(layerContext.registrar, () =>
+    applyChannels(resolved, channels, d, entries)
+  );
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
   return { ...stripped, ...layoutOpts } as Options;
@@ -1222,11 +1247,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       // Combinator form: apply each mark to the same data d, then layout.
       const withChildren =
         (children: MarkChild[] | Promise<MarkChild[]>): Mark<Datum[]> =>
-        async (
-          d: Datum[],
-          key?: string | number,
-          layerContext?: LayerContext
-        ) => {
+        async (d: Datum[], key?: string | number, given?: LayerContext) => {
+          const layerContext = markContext(given);
           // Marks may be a Promise<Mark[]> when produced by helpers like
           // `map(...)` — await before mapping. Entries may also be already
           // resolved nodes (e.g. `ref(...)`) rather than mark functions, so
@@ -1247,9 +1269,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             opts,
             d,
             undefined,
-            undefined
+            undefined,
+            layerContext
           );
-          const node = (await layout(lowOpts, nodes)) as GoFishNode;
+          // The one call of the layout function, in the scope of the context
+          // the operator is applied in (`time.sequence` reads its clock in it).
+          const node = (await withRegistrar(layerContext.registrar, () =>
+            layout(lowOpts, nodes)
+          )) as GoFishNode;
           node.datum = datumOfInput(d);
           return node;
         };
@@ -1293,8 +1320,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       return (async (
         d: Datum[],
         key?: string | number,
-        layerContext?: LayerContext
+        given?: LayerContext
       ) => {
+        const layerContext = markContext(given);
         // Expand-kind marks (e.g. `cut`) consume the whole group at once and
         // emit N nodes 1:1 with the data — so the operator hands them a single
         // leaf containing all rows, regardless of the operator's own `split`
@@ -1422,7 +1450,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           opts,
           d,
           entries,
-          splitLayoutOpts
+          splitLayoutOpts,
+          layerContext
         );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the
@@ -1437,7 +1466,10 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         ) {
           (lowOpts as any).axisMeasures = groupMeasures;
         }
-        const built = (await layout(lowOpts, nodes)) as unknown as GoFishNode;
+        // The one call of the layout function, as in the combinator form.
+        const built = (await withRegistrar(layerContext.registrar, () =>
+          layout(lowOpts, nodes)
+        )) as unknown as GoFishNode;
         if (transitionState !== undefined) {
           recordOperatorTransition(built, transitionState);
         }

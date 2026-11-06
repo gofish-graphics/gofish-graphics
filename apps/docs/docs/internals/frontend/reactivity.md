@@ -52,24 +52,57 @@ deliberate — it means the same authoring surface can later grow finer-grained
 incremental layout without an API change (see [Incremental
 outlook](#incremental-outlook)).
 
-## The ambient resolve context
+## The registrar scope
 
 The builder cannot tell whether a chart is interactive by inspecting the method
 chain: `live()` is just a channel value, and a library input read inside a
-`derive()` closure surfaces only when that closure _runs_. So the render
-terminal installs an **ambient context** around resolve and lets inputs announce
-themselves on read.
+`derive()` closure surfaces only when that closure _runs_. So each chart's
+`InteractionRuntime` is handed to its resolve as its **registrar**, and inputs
+announce themselves to it on read.
 
-`resolveContext.ts` holds a single module-level variable (the current
-`AmbientRegistrar`). The **render terminal** (`renderTerminal.ts`,
-`renderWithInteraction`) wraps resolution in `withInteractiveResolve(runtime,
-fn)`, which sets the variable for the duration of the resolve and restores it
-after. Every library input's accessor, when read, runs the `track` half of one
-of the input's **dependencies** (`dependency(input)` in `inputs.ts`):
+The registrar travels explicitly. The **render terminal** (`renderTerminal.ts`,
+`renderWithInteraction`) puts it on the `RenderPass` it hands the resolve. The
+resolve builds its root `LayerContext` with it (`resolveForRender` in
+`chartBuilder.ts`, a mark's terminal in `createOperator.ts`, a component thunk
+in `gofish()`), and every `LayerContext` below carries it on
+(`LayerContext.registrar`): a nested registry has its parent's, and a name
+boundary (a `createMark` body) is a root built with the registrar of the scope
+it bounds. `GoFishNode.rebuild` resolves again with the same registrar, so a
+rebuild for `label.angle: "auto"` registers with the same chart.
+
+The last hop cannot be explicit. A user callback reads an input through a
+zero-argument accessor (`n()`, `p.datum()`), so there is no argument to hand the
+registrar in. This is the one special case, and it is the one Solid has for its
+tracked reads (its `Listener`): a dynamic scope. `resolveContext.ts` holds one
+module variable, and `withRegistrar(registrar, fn)` sets it for one
+SYNCHRONOUS call and restores it after (it calls `fn` straight through when
+`registrar` is already the one in scope). One rule says where: `callMark`
+scopes the synchronous part of every mark call (a component thunk, a widget,
+a mark's resolve-time `live()` evaluation, which comes before its first
+`await`), and every user callback GoFish calls after an `await` is wrapped
+where it is called: a `derive` function or `filter` predicate (`mapOperator`),
+a mark's and an operator's channel functions, a `createMark` body, a
+`.hidden(fn)` or `.zOrder(fn)` callback, a relational mark's `produce`, and an
+operator's layout function (`time.sequence` reads its clock as the first
+statement of its layout, and `time.transition` reads its playhead in its
+`produce`). A root `LayerContext` built with no registrar of its own takes the
+one in scope (`scopedRegistrar`); that is how a node operator, which builds
+when it is called, finds its chart when it is called in a component thunk.
+`callMark` and `resolveMarkResult` take the context as a required argument,
+so a call site with no context is a type error rather than a read that
+registers with nothing. User code may still call a mark directly
+(`rect({...})([box])`, to give a component mark a datum); that call is a root
+build, and the mark makes itself a root registry (`markContext`). A primitive that
+returns children to drop into a combinator returns marks, not built nodes, for
+the same reason: each slice of `cut(source, ...)` resolves its source in the
+context of the place it is a child of.
+Every library input's accessor,
+when read, runs the `track` half of one of the input's **dependencies**
+(`dependency(input)` in `inputs.ts`):
 
 ```ts
-const reg = ambientRegistrar();
-if (!reg) return; // read outside a resolve — just a plain read
+const reg = scopedRegistrar();
+if (!reg) return; // no user call in progress: a plain read
 reg.registerInput(input); // wire this input into event dispatch (idempotent)
 if (!inLiveEval()) readers.add(reg); // a spec read → pipeline dependency
 ```
@@ -100,24 +133,36 @@ tick of the value. If nothing registers during a resolve, the runtime reports
 `hasWork() === false` and the chart renders down the static path untouched — no
 `data-gf-id`, output identical to a non-interactive build.
 
-> **Concurrency caveat.** The ambient context is a module variable, so two
-> charts resolving _concurrently_ (interleaving at `await` points — e.g. a Python
-> `derive` RPC) could cross-register. Registration sites are synchronous
-> spec-evaluation code in practice; a scoped-storage mechanism can replace the
-> module var if async marks ever make the race real. Paint is the exception
-> that showed up: a live slot re-runs on a clock tick, and the tick can land
-> while another chart's resolve is suspended at an `await`. So every slot
-> `setLiveSlots` stores reads under `runInLiveEval`, and a paint read never
-> becomes a pipeline dependency of whatever chart is resolving. (It can still
-> register the input with that chart's runtime, which only wires events.)
+> **Concurrent charts.** A page that renders several charts at once interleaves
+> their resolves at `await` points. The scope is set only during a synchronous
+> call, and JavaScript does not interleave synchronous code, so a read always
+> registers with the chart whose call it is in: a `pointer()` chart keeps its
+> hit-test hooks beside a static chart, and two charts that read one signal both
+> re-run when it changes. Lowering and paint are not resolves and register
+> nothing: a node that reads a paint-time value once to have something to lower
+> (`readLive`) and a live slot that re-runs on a clock tick are outside every
+> call. The one limit is Solid's own: a read after an `await` inside an async
+> user callback (a `derive` that fetches, then reads a signal) is outside the
+> call too, so it registers with nothing, and the chart neither re-runs on it
+> nor wires its events: read the input before the first `await`. GoFish does
+> not warn. Every mark call is async, so a count of pending callbacks is never
+> zero during a resolve, and a promise that never settles (a dead Python
+> kernel, a chart unmounted mid-resolve) would leave it stuck.
+>
+> A node operator (`Layer`, `Spread`, ...) builds when it is called, not when
+> its chart resolves, so one called outside every scope (at the top level of a
+> module) has no chart to register with. The public combinators (`layer([...])`,
+> `spread(opts, [...])`) are marks, which resolve in their caller's context, so
+> this reaches only the internal node operators. Making those lazy too would
+> let the constructor fallback above go.
 
 ## One terminal, three callers — including components
 
 `renderWithInteraction` (in `renderTerminal.ts`) is the single place a resolve is
-run under the ambient context. It is regime- and pipeline-agnostic: given a
+handed its chart's registrar. It is regime- and pipeline-agnostic: given a
 `resolveForRender` thunk that yields a `{ node, options }` pair and a container,
 it creates a fresh `InteractionRuntime`, calls `beginResolve()`, evaluates the
-thunk under `withInteractiveResolve`, threads `options.interaction = runtime`
+thunk with the runtime on its `RenderPass`, threads `options.interaction = runtime`
 **iff** `hasWork()`, and wires `setRerender` to re-invoke the whole resolve into
 the same container. It hands each resolve a `RenderPass` that says whether this
 is the chart's first render or a re-render, and lets the resolve register a
@@ -153,7 +198,7 @@ runtime, and both are unlocked by the _thunk_: a raw node is built once and cann
 re-evaluate its spec, so a `signal()`/`wheel()` read outside `live()` needs a
 thunk the scheduler can re-invoke, and a `pointer()` read inside `live()` needs
 the runtime installed for `data-gf-id` hit-testing (its resolve-time evaluation
-registers the input under the ambient context, flipping `hasWork()` true). The
+registers the input with the thunk's registrar, flipping `hasWork()` true). The
 thunk plays exactly the role the chart builder's immutable rebuild plays.
 
 `renderTerminal.ts` lives in the interaction layer (not `marks/chartBuilder.ts`)
@@ -548,7 +593,7 @@ scope being the natural measure/arrange invalidation unit), the
 invalidate/coalesce scheduler shell, the recorded scales, and paint-level
 reactivity (the leaf tier of any incremental engine). What gets **replaced**: the
 body of the re-render thunk — "rebuild everything through the builder" — which
-becomes "re-run only the dirty scopes". The ambient-context flags and the
+becomes "re-run only the dirty scopes". The registrar scope, the `inLiveEval` flag and the
 thunk-in-side-table paint path are stable regardless of which direction the
 pipeline's incrementality takes (Solid-izing nodes as memos vs. salsa-style scope
 memoization over the functional pipeline).

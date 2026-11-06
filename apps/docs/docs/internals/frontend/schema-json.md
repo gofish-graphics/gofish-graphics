@@ -1329,7 +1329,7 @@ for the API.
       }
     },
     "GroupOperator": {
-      "description": "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
+      "description": "Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Its box takes spread's `x`, `y`, `w` and `h`.",
       "type": "object",
       "required": ["type", "by"],
       "additionalProperties": true,
@@ -1350,6 +1350,36 @@ for the API.
             }
           ],
           "description": "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows."
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
+        },
+        "w": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+        },
+        "h": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ChannelValue"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            }
+          ],
+          "description": "Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "label": {
           "$ref": "#/$defs/LabelIR"

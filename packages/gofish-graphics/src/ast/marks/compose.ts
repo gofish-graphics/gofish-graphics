@@ -1,5 +1,10 @@
 import type { Mark, Operator } from "../types";
-import { datumOfInput, resolveMarkResult } from "./markResult";
+import {
+  callMark,
+  datumOfInput,
+  markContext,
+  resolveMarkResult,
+} from "./markResult";
 
 const COMPOSED_OPERATORS = Symbol("gofish.composedOperators");
 const FLOW_STEP = Symbol("gofish.flowStep");
@@ -42,10 +47,11 @@ export const flowStepMarkOf = (op: unknown): Mark<any> | undefined =>
  */
 function flowStepOperator(mark: Mark<any>): Operator<any, any> {
   const op: Operator<any, any> = async (inner) =>
-    (async (d: unknown[], key, layerContext) => {
+    (async (d: unknown[], key, given) => {
+      const layerContext = markContext(given);
       const child = await resolveMarkResult(inner, layerContext, d, key);
       child.datum ??= datumOfInput(d);
-      return mark([child], key, layerContext);
+      return callMark(mark, [child], key, layerContext);
     }) as Mark<any>;
   Object.defineProperty(op, FLOW_STEP_MARK, { value: mark });
   return op;

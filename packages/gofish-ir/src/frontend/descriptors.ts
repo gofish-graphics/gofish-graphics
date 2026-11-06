@@ -1466,15 +1466,12 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
   { label: "Paint", fields: paint },
 ];
 
-/** The box fields `spread` and `stack` (a re-tagged `spread({glue: true})`)
- *  share. `x`/`y` place the operator's box in the parent's space: `Spread`
- *  spreads its `FancyDims` into the box, like treemap's. `w`/`h` are the
- *  data-driven operator extent (#4/#20, field/datum-driven cross-axis
- *  sizing), and `size` the per-entry stack-axis extent (#700 Phase 2);
- *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
- *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
- *  the old `normalize: true` layout flag. */
-const spreadBoxFields: FieldGroup = group({
+/** The box fields `spread`, `stack` (a re-tagged `spread({glue: true})`) and
+ *  `group` share. `x`/`y` place the operator's box in the parent's space:
+ *  `Spread` spreads its `FancyDims` into the box, like treemap's. `w`/`h` are
+ *  the data-driven operator extent (#4/#20, field/datum-driven cross-axis
+ *  sizing). */
+const operatorBoxFields: FieldGroup = group({
   x: ch.pos(
     "Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it."
   ),
@@ -1489,6 +1486,13 @@ const spreadBoxFields: FieldGroup = group({
     "Height of this operator's box: pixels, or a field name sizing it from data." +
       PERCENT_FR
   ),
+});
+
+/** `spread`'s and `stack`'s per-entry stack-axis extent (#700 Phase 2):
+ *  `size: field(<name>).normalize()` (a field accessor with a `normalize`
+ *  pipeline op) is the space-filling spine (mosaic/marimekko) that replaced
+ *  the old `normalize: true` layout flag. */
+const spreadSizeField: FieldGroup = group({
   size: ch.size(
     "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
   ),
@@ -1647,7 +1651,8 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      ...spreadBoxFields,
+      ...operatorBoxFields,
+      ...spreadSizeField,
     },
   }),
 
@@ -1690,17 +1695,19 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Reverse the children's order along dir.",
       },
       axes: { type: t.ref("AxesOptions") },
-      ...spreadBoxFields,
+      ...operatorBoxFields,
+      ...spreadSizeField,
     },
   }),
 
   group: operator("group", {
-    doc: "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
+    doc: "Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Its box takes spread's `x`, `y`, `w` and `h`.",
     fields: {
       by: splitBy(
         "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.",
         true
       ),
+      ...operatorBoxFields,
     },
   }),
 
@@ -2347,18 +2354,23 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       // A real `layer` option, not a chart-only one: `layer({ coord }, children)`
-      // delegates to the `coord` transform (layer.tsx's `options.coord !== undefined`
-      // branch), and the deserializer resolves a coord config out of the combinator
-      // options (`resolveOptions` in serialize/fromJSON.ts).
+      // makes the layer the `coord` transform's box (layer.tsx's
+      // `options.coord !== undefined` branch), and the deserializer resolves a
+      // coord config out of the combinator options (`resolveOptions` in
+      // serialize/fromJSON.ts). `axes` and `padding` go to that space, so they
+      // are options of the coord-bearing form only (a plain layer ignores them).
       coord: {
         type: t.any,
         doc: "Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.",
       },
-      // Rides the same `...restDims` passthrough into `coord(...)`, so it is a
-      // real option of the coord-bearing form only (a plain layer ignores it).
       axes: {
         type: t.ref("AxesOptions"),
         doc: "Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.",
+      },
+      padding: {
+        type: t.number,
+        default: 30,
+        doc: "Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`.",
       },
       transform: {
         type: t.object({

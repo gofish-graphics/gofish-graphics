@@ -17,7 +17,6 @@ import { seafood } from "../data/catch";
 import { catchLocations } from "../data/catch";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { stackX } from "../ast/graphicalOperators/stackX";
-import { frame } from "../ast/graphicalOperators/frame";
 // export const testScatterFlower = (size: { width: number; height: number }) =>
 //   gofish(
 //     { width: size.width, height: size.height, transform: { x: 200, y: 800 } },
@@ -75,15 +74,15 @@ const scatterData = _(seafood)
   .value();
 
 export const testScatterFlower = (height: number) =>
-  frame(
+  layer(
     scatterData.map((sample) =>
-      frame({ x: sample.x }, [
+      layer({ x: sample.x }, [
         rect({
           w: 2,
           h: sample.y,
           fill: color.green[5],
         }),
-        frame(
+        layer(
           {
             coord: polar(),
             y: sample.y,

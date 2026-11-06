@@ -117,9 +117,9 @@ export function attachTerminals(
  * Attach every terminal in {@link TERMINALS} to `target`, for a surface that
  * also prepares the render options (e.g. merging chart-level `axes`/`color`).
  * Every terminal returns a Promise. `render` goes through
- * `renderWithInteraction`, so resolution runs under the ambient interactive
- * context and the reactive surface (live() channels, input reads in
- * derive()) can register, whatever the surface: a chart builder, or a
+ * `renderWithInteraction`, so resolution is handed the chart's runtime (the
+ * `RenderPass` registrar) and the reactive surface (live() channels, input
+ * reads in derive()) can register, whatever the surface: a chart builder, or a
  * combinator of charts (#1170). A surface where nothing registers renders
  * down the static path untouched.
  */

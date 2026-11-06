@@ -26,22 +26,8 @@ export const tailwindColorGrid = () => {
       });
     });
 
-    // stack the shade squares horizontally with the color name
-    // return frame([
-    //   // Color name label
-    //   rect({
-    //     w: 80,
-    //     h: 40,
-    //     fill: "oklch(97% 0 0)",
-    //     stroke: "oklch(87% 0 0)",
-    //     strokeWidth: 1,
-    //   }),
-    //   // TODO: Add text label when text support is available
-
-    //   // stack the color squares
+    // stack the color squares
     return spreadX({ spacing: 2 }, shadeSquares);
-    //   // .translate(85, 0),
-    // ]);
   });
 
   // stack all rows vertically

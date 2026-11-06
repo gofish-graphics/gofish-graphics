@@ -11,7 +11,7 @@ import { color, color6, white } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
 import { spreadX } from "../ast/graphicalOperators/spreadX";
-import { frame } from "../ast/graphicalOperators/frame";
+import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
 import { enclose } from "../lib";
 const fishColors = {
@@ -25,7 +25,7 @@ const fishColors = {
 export const testStacking = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
-    frame([
+    layer([
       enclose({}, [
         spreadX({ spacing: 64, alignment: "middle" }, [
           rect({ w: 32, h: 32 }).name("1"),

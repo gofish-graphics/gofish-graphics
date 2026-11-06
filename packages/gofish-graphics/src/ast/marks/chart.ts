@@ -111,7 +111,8 @@ import {
 } from "../schema";
 import { withWire } from "../wire";
 import { withKindValues } from "../strategyKind";
-import { LayerContext, datumOfInput } from "./markResult";
+import { LayerContext, datumOfInput, markContext } from "./markResult";
+import { withRegistrar } from "../../interaction/resolveContext";
 import { withFlowStep } from "./compose";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -126,13 +127,17 @@ export type { ChartOptions };
  * resolve refs (see `resolve`).
  */
 function mapOperator<T, U>(
-  fn: (d: T, layerContext?: LayerContext) => U | Promise<U>,
+  fn: (d: T, layerContext: LayerContext) => U | Promise<U>,
   serialize: { type: string; opts: Record<string, unknown> },
   typeResult: (out: U, input: T) => U | Promise<U>
 ): Operator<T, U> {
   const op: Operator<T, U> = async (mark: Mark<U>) =>
-    (async (d: T, key?: string | number, layerContext?: LayerContext) => {
-      const out = await fn(d, layerContext);
+    (async (d: T, key?: string | number, given?: LayerContext) => {
+      const layerContext = markContext(given);
+      // The one call of a `derive` function or a `filter` predicate.
+      const out = await withRegistrar(layerContext.registrar, () =>
+        fn(d, layerContext)
+      );
       return resolveMarkResult(
         mark,
         layerContext,
@@ -286,10 +291,7 @@ export function resolve(
 ): Operator<any[], any[]> {
   return mapOperator<any[], any[]>(
     (rows, layerContext) => {
-      const refs = resolveRefData(
-        opts.from,
-        layerContext ?? new LayerContext()
-      );
+      const refs = resolveRefData(opts.from, layerContext);
       const matchField = (r: GoFishRef): string => {
         const field = opts.key ?? (r.targetNode as any)?.__splitBy;
         if (typeof field !== "string") {
@@ -855,18 +857,21 @@ export function createRelationalMark<O extends Record<string, unknown>>(
       datum: unknown,
       key?: string,
       layerContext?: LayerContext
-    ): Promise<GoFishNode> =>
-      finish(
-        (await produce(
-          resolveLive(await resolveGroupPaint(type, o, group), datum),
+    ): Promise<GoFishNode> => {
+      const paint = await resolveGroupPaint(type, o, group);
+      // The one call of its `produce`, with its `live()` channels evaluated
+      // at resolve, in the scope of the context it is applied in.
+      const node = await withRegistrar(layerContext?.registrar, () =>
+        produce(
+          resolveLive(paint, datum),
           operands,
           inferred,
           key,
           layerContext
-        )) as GoFishNode,
-        operands,
-        datum
+        )
       );
+      return finish(node as GoFishNode, operands, datum);
+    };
     /** The rows a bag of operands reaches: each operand's datum (a ref's is
      *  its node's, a node's its own). */
     const rowsOf = (operands: GoFishAST[]): unknown[] =>
@@ -1286,7 +1291,7 @@ export function layer<T>(
       // `selectAll("bars")` outside the spread gathers every cell's. Resolve
       // sequentially so a child referencing a name sees earlier siblings'
       // registrations.
-      const sharedContext = _layerContext?.child() ?? new LayerContext();
+      const sharedContext = markContext(_layerContext).child();
       const resolved: GoFishNode[] = [];
       for (const m of children) {
         // Each child is a mark position over this layer's rows: an empty-scope
@@ -1324,7 +1329,8 @@ function makeCompositeCombinator<O extends object>(
     const marks = (Array.isArray(optsOrMarks) ? optsOrMarks : maybeMarks) ?? [];
     const withChildren =
       (children: readonly MarkChild[]): Mark<T> =>
-      async (d, key, layerContext) => {
+      async (d, key, given) => {
+        const layerContext = markContext(given);
         const operands = await Promise.all(
           children.map((m) => resolveMarkResult(m, layerContext, d, key))
         );

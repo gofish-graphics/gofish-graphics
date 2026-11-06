@@ -54,7 +54,7 @@ const ROOT_DIR = dirname(dirname(import.meta.dirname));
 //     other types (below).
 //   - **Retired API names** — the public surface is lowercase-only (#146,
 //     #416): the capitalized spellings (`Chart`, `Layer`, `Spread`, `StackY`,
-//     `Frame`, ...) were aliases or node-level forms of the lowercase
+//     ...) were aliases or node-level forms of the lowercase
 //     operators and are no longer exported, and `For` was renamed to `map`.
 //     A pure `Layer`→`layer` / `For`→`map` rename in a JS story has no Python
 //     counterpart, since Python was always lowercase (and uses list
@@ -356,7 +356,6 @@ const RETIRED_CAPITALIZED_NAMES = [
   "SpreadX",
   "SpreadY",
   "Enclose",
-  "Frame",
   "Position",
   "Arrow",
   "Cut",
@@ -372,6 +371,9 @@ const RETIRED_API_NAMES: Record<string, string> = {
     ])
   ),
   For: "map",
+  // Frame was folded into layer (#156).
+  Frame: "layer",
+  frame: "layer",
 };
 const RETIRED_API_NAMES_RE = new RegExp(
   `\\b(${Object.keys(RETIRED_API_NAMES).join("|")})\\b`,

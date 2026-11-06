@@ -68,8 +68,10 @@ export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
  *
  * `evalLiveStatic` is this applied to a `live()` channel. A NODE reaches for it
  * directly when the paint-time value is its own rather than a channel the user
- * wrote — `tween` reads the playhead this way, to have a value to lower and to
- * register the clock, while leaving the per-frame reading to the paint tier.
+ * wrote — `tween` reads the playhead this way, to have a value to lower, while
+ * leaving the per-frame reading to the paint tier. A read registers with the
+ * registrar in scope (`resolveContext.ts`); outside one, as in lowering, it
+ * registers nothing.
  */
 export const readLive = <T>(read: () => T): T =>
   untrack(() => runInLiveEval(read));
@@ -149,9 +151,10 @@ export type StripLive<O> = { [K in keyof O]: Exclude<O[K], LiveValue> };
 /**
  * `opts` with each live channel replaced by its resolve-time value at `datum`.
  * Reading a live channel here is also what REGISTERS its input with the
- * interaction runtime, so this is the single point where that happens for a
- * mark's channels — and the single point where the `LiveValue` arm is discharged
- * from the type.
+ * interaction runtime, the registrar in scope (its caller makes the call in
+ * the scope of the context the mark is applied in; see `resolveContext.ts`),
+ * so this is the single point where that happens for a mark's channels — and
+ * the single point where the `LiveValue` arm is discharged from the type.
  */
 export const withLiveStatics = <O extends Record<string, unknown>>(
   opts: O,

@@ -35,8 +35,12 @@ import { text } from "../ast/shapes/text";
 import { layer as Layer } from "../ast/graphicalOperators/layer";
 import { Constraint } from "../ast/constraints";
 import { nameableMark, type NameableMark } from "../ast/marks/createOperator";
-import { resolveMarkResult } from "../ast/marks/markResult";
-import type { Mark } from "../ast/types";
+import {
+  markContext,
+  resolveMarkResult,
+  type LayerContext,
+} from "../ast/marks/markResult";
+import type { Mark, MarkChild } from "../ast/types";
 import { clamp, mod } from "../util";
 import { click, drag } from "./inputs";
 import { live, readLive } from "./live";
@@ -62,8 +66,12 @@ export type Control = NameableMark<unknown> & { dispose(): void };
 function control<I>(spec: {
   input: (hitTest: (pt: SvgPoint, hit: Hit | undefined) => boolean) => I;
   write: (input: I, primaryId: () => string | undefined) => void;
+  /** Build the picture in `ctx`, the context the control is applied in: its
+   *  marks resolve in it, so the inputs they read register with that
+   *  chart. */
   build: (
-    input: I
+    input: I,
+    ctx: LayerContext
   ) => Promise<{ node: GoFishNode; targets: [GoFishNode, GoFishNode] }>;
 }): Control {
   // The uids of the two nodes the latest build produced. Refreshed per build,
@@ -80,8 +88,11 @@ function control<I>(spec: {
     return disposeRoot;
   });
 
-  const mark: Mark<unknown> = async () => {
-    const { node, targets } = await spec.build(input);
+  const mark: Mark<unknown> = async (_d, _key, layerContext) => {
+    const { node, targets } = await spec.build(
+      input,
+      markContext(layerContext)
+    );
     primary = targets[0].uid;
     secondary = targets[1].uid;
     return node;
@@ -90,10 +101,6 @@ function control<I>(spec: {
   result.dispose = dispose;
   return result;
 }
-
-/** Invoke a leaf mark with no datum — what an operator does to a mark child. */
-const leaf = (mark: unknown): Promise<GoFishNode> =>
-  resolveMarkResult(mark as Parameters<typeof resolveMarkResult>[0]);
 
 /* -------------------------------- slider -------------------------------- */
 
@@ -216,7 +223,7 @@ export function slider(opts: SliderOptions): Control {
         const next = valueAt((pt.x - (box.x + HANDLE_R)) / px);
         if (next !== untrack(readValue)) onInput(next);
       }),
-    build: async (scrub) => {
+    build: async (scrub, ctx) => {
       // Every read of the value or the drag state is a PAINT-time read. This
       // one is the value the handle is laid out at: `readLive` reads it without
       // making the input a pipeline dependency, and still registers it with
@@ -226,7 +233,7 @@ export function slider(opts: SliderOptions): Control {
       const frac0 = frac(readLive(readValue));
 
       const track = (
-        await leaf(
+        await resolveMarkResult(
           rect({
             x: 0,
             cy: HANDLE_R,
@@ -234,17 +241,19 @@ export function slider(opts: SliderOptions): Control {
             h: TRACK_H,
             rx: TRACK_H / 2,
             fill: "#e5e5e5",
-          })
+          }),
+          ctx
         )
       ).name("track");
-      const handle = await leaf(
+      const handle = await resolveMarkResult(
         ellipse({
           cx: HANDLE_R + frac0 * travel,
           cy: HANDLE_R,
           w: 2 * HANDLE_R,
           h: 2 * HANDLE_R,
           fill: live(() => (scrub.isActive() ? "#111" : "#333")),
-        })
+        }),
+        ctx
       );
       // The handle follows the value at paint. Lowered items are in pixels, so
       // the slot moves the lowered `cx` by the value's change of fraction times
@@ -257,14 +266,15 @@ export function slider(opts: SliderOptions): Control {
       // ANCHOR, and the node's box runs leftward from it — which is the whole
       // bbox-stability trick.
       const readout = (
-        await leaf(
+        await resolveMarkResult(
           text({
             x: w + READOUT_GAP + slotW,
             textAnchor: "end",
             text: live(() => format(readValue())),
             fontSize: READOUT_FONT,
             fill: "#333",
-          })
+          }),
+          ctx
         )
       ).name("readout");
       const node = await (
@@ -337,14 +347,14 @@ export function button(opts: ButtonOptions): Control {
         onClick();
       });
     },
-    build: async (press) => {
+    build: async (press, ctx) => {
       // The caption changes the text's box, so it is read at resolve and
       // re-measures. The pressed shading changes no box, so it is a paint-time
       // read; evaluating that `live()` channel at resolve is also what
       // registers the click input with the runtime.
       const label = typeof caption === "function" ? caption() : caption;
       const box = (
-        await leaf(
+        await resolveMarkResult(
           rect({
             w,
             h,
@@ -352,11 +362,15 @@ export function button(opts: ButtonOptions): Control {
             fill: live(() => (press.isArmed() ? "#e0e0e0" : "#f2f2f2")),
             stroke: "#ccc",
             strokeWidth: 1,
-          })
+          }),
+          ctx
         )
       ).name("box");
       const glyph = (
-        await leaf(text({ text: label, fontSize: 12, fill: "#333" }))
+        await resolveMarkResult(
+          text({ text: label, fontSize: 12, fill: "#333" }),
+          ctx
+        )
       ).name("label");
       const node = await (
         await Layer({}, [box, glyph])

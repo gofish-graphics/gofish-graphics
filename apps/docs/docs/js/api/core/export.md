@@ -4,7 +4,7 @@ Get a chart's SVG out as a value instead of mounting it into the page.
 `toSVG()` is the primitive; `save()` is the convenience that infers the format
 from the file extension. These are siblings of [`render`](/js/api/core/render) —
 same options, plus `background` — and chain off any chart, mark, layer, or
-combinator (e.g. `layer([chartA, chartB])`, `frame(...)`).
+combinator (e.g. `layer([chartA, chartB])`, `spread({ dir: "x" }, [...])`).
 
 ```ts
 // SVG markup as a string
@@ -71,7 +71,7 @@ doc.items; // [{ kind: "rect", x, y, w, h, style, … }, …]
 
 It takes the same options as [`render`](/js/api/core/render) (`w`, `h`, `axes`,
 …) and is available on a chart builder, a mark, a layer, and a
-combinator root (`layer([chartA, chartB])`, `frame(...)` — every multi-chart
+combinator root (`layer([chartA, chartB])`, `spread({ dir: "x" }, [...])` — every multi-chart
 composition) — the post-layout, positioned-output analogue of
 [`toJSON`](/internals/frontend/serialization-api), which serializes the _pre-layout_
 spec. The list is **viewport-baked**: layout is

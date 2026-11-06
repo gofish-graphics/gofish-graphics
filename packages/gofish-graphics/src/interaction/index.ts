@@ -31,13 +31,8 @@ export type {
 export { slider, button } from "./widgets";
 export type { Control, SliderOptions, ButtonOptions } from "./widgets";
 export { InteractionRuntime } from "./runtime";
-export {
-  withInteractiveResolve,
-  ambientRegistrar,
-  inLiveEval,
-  runInLiveEval,
-} from "./resolveContext";
-export type { AmbientRegistrar } from "./resolveContext";
+export { withRegistrar, inLiveEval, runInLiveEval } from "./resolveContext";
+export type { Registrar } from "./resolveContext";
 export { frameConversions, invertAffine } from "./frameScales";
 export type { FrameConversions } from "./frameScales";
 export { getLiveSlots, setLiveSlots } from "./liveSlots";

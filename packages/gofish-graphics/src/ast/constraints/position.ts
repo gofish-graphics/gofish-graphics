@@ -194,7 +194,7 @@ export interface PositionOptions {
    *  Point form only — an interval coordinate pins both edges itself. */
   anchor?: AlignAnchor;
   /** Authoritative pin: also reposition a target that ALREADY self-placed during
-   *  its own layout (a Frame / coord glyph arrives with a translate, which makes
+   *  its own layout (a layer / coord glyph arrives with a translate, which makes
    *  the write-once `place()` a no-op). Set by `scatter`, whose `x`/`y` ARE the
    *  child's placement. Off (default) for axis/pie/legend pins, where a
    *  pre-placed target keeps its position (the write-once no-op). Point form

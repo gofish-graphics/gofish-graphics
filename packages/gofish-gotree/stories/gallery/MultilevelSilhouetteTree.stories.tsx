@@ -1,13 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import {
-  rect,
-  ellipse,
-  line,
-  layer,
-  frame,
-  Coord,
-  Curve,
-} from "gofish-graphics";
+import { rect, ellipse, line, layer, Coord, Curve } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -49,7 +41,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 // Like RadialDeep / OutsideInTree, this BYPASSES the tree()/combine() DSL: the
 // DSL cannot express a per-subtree template swap, so a small story-local pass
 // computes each node's angular slice directly and emits marks explicitly into a
-// frame({ coord: polar() }).
+// layer({ coord: polar() }).
 //   • Angular allocation (X.Subtree=flatten, leaf-count weighted): the 2π circle
 //     is divided among the 19 depth-1 subtrees ∝ their leaf count (leaf = 1
 //     slot, internal = Σ children; 37 leaf slots total). Each subtree's slot is
@@ -283,7 +275,7 @@ export const MultilevelSilhouetteTree: StoryObj = {
   },
   render: () => {
     const container = initializeContainer();
-    frame({ coord: Coord.clock() as any }, [layer(marks)]).render(container, {
+    layer({ coord: Coord.clock() as any }, [layer(marks)]).render(container, {
       w: 660,
       h: 660,
     });

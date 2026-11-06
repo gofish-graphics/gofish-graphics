@@ -16,6 +16,11 @@ import { GoFishRef } from "../_ref";
 import { RelateOperand } from "../constraints/relate";
 import { isToken } from "../createName";
 import type { Mark, MarkChild } from "../types";
+import {
+  scopedRegistrar,
+  withRegistrar,
+  type Registrar,
+} from "../../interaction/resolveContext";
 
 /** The marks one name stands for in a registry: the nodes, and the datum of
  *  each, in registration order. */
@@ -60,8 +65,27 @@ export class LayerContext {
   /** The registries nested in this one, in creation order. */
   private readonly kids: LayerContext[] = [];
 
-  constructor(readonly parent?: LayerContext) {
+  /**
+   * The interaction runtime of the chart this registry is resolved for, which
+   * the inputs read in its scope register with (see `resolveContext.ts`). A
+   * nested registry has its parent's. A root has the one it was given: a
+   * render's root gets its chart's (`RenderPass.registrar`), and a name
+   * boundary (a `createMark` body) gets the registrar of the scope it bounds
+   * (`new LayerContext(undefined, ctx.registrar)`). A root built with none
+   * takes the registrar of the synchronous user call it is built in, if any
+   * (a node operator called in a component thunk, or a mark user code calls
+   * directly, {@link markContext}), and carries it on from then on. This is the one fallback to the scope.
+   */
+  readonly registrar: Registrar | undefined;
+
+  constructor(
+    readonly parent?: LayerContext,
+    registrar?: Registrar
+  ) {
     this.depth = parent ? parent.depth + 1 : 0;
+    this.registrar = parent
+      ? parent.registrar
+      : (registrar ?? scopedRegistrar());
     parent?.kids.push(this);
   }
 
@@ -232,6 +256,35 @@ export const datumOfInput = <T>(d: T[]): T[] | undefined =>
   d === NO_ROWS ? undefined : d;
 
 /**
+ * The context a mark resolves in. GoFish calls every mark with one. A mark
+ * that user code calls directly (`rect({...})([box])`, which gives a
+ * component mark a datum) has none: it is a root build, as a node operator
+ * called at the top level is, and gets a root registry, built in the call
+ * (see `LayerContext.registrar` for the registrar a root takes).
+ */
+export const markContext = (
+  layerContext: LayerContext | undefined
+): LayerContext => layerContext ?? new LayerContext();
+
+/**
+ * Call a mark: the one place GoFish calls one, user code included (a
+ * component thunk, a `createMark` body, the channel functions and `live()`
+ * channels a mark reads, a `derive` function), so the synchronous part of the
+ * call is made in the registrar scope of the context it is made in (see
+ * `resolveContext.ts`).
+ */
+export function callMark(
+  mark: Mark<any>,
+  rows: unknown,
+  key: string | number | undefined,
+  layerContext: LayerContext
+): ReturnType<Mark<any>> {
+  return withRegistrar(layerContext.registrar, () =>
+    mark(rows as any, key, layerContext)
+  );
+}
+
+/**
  * Resolve what a mark position holds into a GoFishNode, against the rows of
  * the partition it sits in (`rows`, keyed `key`). This is the one rule for
  * every mark position: a chart's `.mark(...)`, each child of a combinator
@@ -243,7 +296,7 @@ export const datumOfInput = <T>(d: T[]): T[] | undefined =>
  */
 export async function resolveMarkResult(
   raw: MarkChild,
-  layerContext?: LayerContext,
+  layerContext: LayerContext,
   rows: unknown = NO_ROWS,
   key?: string | number
 ): Promise<GoFishNode> {
@@ -261,19 +314,15 @@ export async function resolveMarkResult(
   // chart elaborates to `.mark(anchor).layer(R)`, i.e. a LayerBuilder — so a
   // chart pipeline handed anywhere a mark is taken (a `.layer(...)` tier, a
   // `layer([...])` child) can be one. Its tiers share the ENCLOSING scope's
-  // layer context (its own, when there is none), so a `.name(...)` inside it
-  // is findable from outside.
+  // layer context, so a `.name(...)` inside it is findable from outside.
   if (isChartPipeline(raw))
-    return raw
-      .inScope(rows)
-      .withLayerContext(layerContext ?? new LayerContext())
-      .resolve();
+    return raw.inScope(rows).withLayerContext(layerContext).resolve();
   if (typeof raw === "function")
     return resolveMarkResult(
       // Pass layerContext through so mark wrappers (e.g. .name(...)) that
       // need to register into the layer context still see it when invoked
       // here.
-      (raw as Mark<any>)(rows as any, key, layerContext),
+      callMark(raw as Mark<any>, rows, key, layerContext),
       layerContext
     );
   return raw as unknown as GoFishNode;

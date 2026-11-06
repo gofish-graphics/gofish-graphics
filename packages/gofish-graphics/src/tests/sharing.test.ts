@@ -20,7 +20,6 @@ import type { GoFishAST } from "../ast/_ast";
 import { Spread } from "../ast/graphicalOperators/spread";
 import { layer } from "../ast/graphicalOperators/layer";
 import { offset } from "../ast/graphicalOperators/offset";
-import { Frame } from "../ast/graphicalOperators/frame";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
@@ -269,7 +268,7 @@ async function main() {
   // parent's sets carries no data. Keyed domains are per space root (step 5);
   // the plan adds nothing for it.
   const flower = () =>
-    (Frame as any)({ coord: polar(), w: 40, h: 40 }, [
+    (layer as any)({ coord: polar(), w: 40, h: 40 }, [
       (rect as any)({ w: v(1), h: 10 }),
     ]);
   const nodeCases: [string, () => Promise<SharingPlan>, Want][] = [
@@ -368,7 +367,7 @@ async function main() {
       { x: [0, 0], y: [0, 0] },
     ],
     [
-      "coord, frame({ coord }): the plan adds nothing",
+      "coord, layer({ coord }): the plan adds nothing",
       () => planOf((layer as any)([flower(), flower()])),
       { x: [0, 0], y: [0, 0] },
     ],
@@ -376,7 +375,7 @@ async function main() {
       "chart(): a frame with one child, nothing",
       () =>
         planOf(
-          (Frame as any)({ w: 200, h: 100 }, [
+          (layer as any)({ w: 200, h: 100 }, [
             (rect as any)({ w: 10, h: v(3) }),
           ])
         ),

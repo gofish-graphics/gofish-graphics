@@ -19,8 +19,10 @@ import { ChartBuilder, LayerBuilder } from "./marks/chart";
 import {
   LayerContext,
   datumOfInput,
+  markContext,
   resolveMarkResult,
 } from "./marks/markResult";
+import { withRegistrar } from "../interaction/resolveContext";
 import {
   CHANNEL_INFER,
   hasNoValue,
@@ -238,14 +240,13 @@ export async function reifyChildrenSequentially(
     | LayerBuilder
     | Mark<any>
   )[],
-  layerContext?: LayerContext
+  layerContext: LayerContext
 ): Promise<GoFishAST[]> {
   // A thunked promise must resolve before the next child is resolved.
   const resolved: GoFishAST[] = [];
-  const sharedLayerContext = layerContext ?? new LayerContext();
 
   for (const child of children) {
-    const node = await reifyChild(child, sharedLayerContext);
+    const node = await reifyChild(child, layerContext);
     if (node != null) resolved.push(node);
   }
 
@@ -302,6 +303,9 @@ export function createNodeOperator<T extends Record<string, any>, R>(
 export async function reifyChildren(
   children: GoFishChildrenInput
 ): Promise<GoFishAST[]> {
+  // Built before the first `await`, so a combinator called in a user call (a
+  // component thunk) takes that call's registrar (`LayerContext.registrar`).
+  const layerContext = new LayerContext();
   const flattened = await flattenAndAwaitPromises<
     | GoFishAST
     | Promise<GoFishAST>
@@ -309,7 +313,6 @@ export async function reifyChildren(
     | LayerBuilder
     | Mark<any>
   >(children);
-  const layerContext = new LayerContext();
   const resolvedAll = await Promise.all(
     flattened.map((child) => reifyChild(child, layerContext))
   );
@@ -338,6 +341,8 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         T,
         GoFishChildrenInputWithThunks
       >(args, "createNodeOperatorSequential");
+      // Built before the first `await`, as in `reifyChildren`.
+      const layerContext = new LayerContext();
       // First phase: flatten and await, preserving thunks, marks, and
       // ChartBuilder instances for the sequential second phase.
       const flattenedWithThunks = await flattenAndAwaitPromises<
@@ -347,7 +352,6 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         | LayerBuilder
         | Mark<any>
       >(children);
-      const layerContext = new LayerContext();
       const resolvedChildren = await reifyChildrenSequentially(
         flattenedWithThunks,
         layerContext
@@ -506,8 +510,9 @@ function buildCreatedMark(
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,
-    _layerContext?: LayerContext
+    given?: LayerContext
   ) => {
+    const _layerContext = markContext(given);
     if (markOpts.debug) {
       console.log("mark", key, d);
     }
@@ -523,7 +528,8 @@ function buildCreatedMark(
     // `live(...)` channels: the pipeline renders (and measures) the accessor's
     // resolve-time value; the paint layer re-evaluates it reactively per frame
     // via the datum-bound thunk baked at lower time. One split, shared with
-    // every other mark factory — see `splitLiveChannels`.
+    // every other mark factory — see `splitLiveChannels`. It is evaluated
+    // before the first `await`, in the scope `callMark` sets.
     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
       channelOpts,
       d
@@ -537,45 +543,53 @@ function buildCreatedMark(
     // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
     // layout. A sum or a count of no rows is 0, a value, and draws.
     let noValue = false;
-    for (const propName of Object.keys(resolvedOpts)) {
-      if (propName === "debug") continue;
-      const channelSpec = channels[propName];
-      const markValue = resolvedOpts[propName];
+    // The one call of a mark's channel functions and of a `createMark` body,
+    // after the `await` above, in the scope of the mark's context.
+    const raw = await withRegistrar(_layerContext.registrar, () => {
+      for (const propName of Object.keys(resolvedOpts)) {
+        if (propName === "debug") continue;
+        const channelSpec = channels[propName];
+        const markValue = resolvedOpts[propName];
 
-      const channelType: ChannelType | undefined =
-        typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
-      const isEntry =
-        typeof channelSpec === "object" && channelSpec?.entry === true;
+        const channelType: ChannelType | undefined =
+          typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+        const isEntry =
+          typeof channelSpec === "object" && channelSpec?.entry === true;
 
-      if (isEntry && channelType === "size") {
-        // An already-wrapped value (`v(...)`) is the size as it is.
-        shapeProps[propName] = isValue(markValue)
-          ? markValue
-          : inferEntrySize(markValue, d);
-      } else if (channelType !== undefined) {
-        // Each kind reads an already-wrapped value (`datum(...)`) itself
-        // (`CHANNEL_INFER`): an area roots it, the others keep it.
-        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
-        if (
-          markValue !== undefined &&
-          hasNoValue(channelType, shapeProps[propName])
-        )
-          noValue = true;
-      } else {
-        shapeProps[propName] = markValue;
+        if (isEntry && channelType === "size") {
+          // An already-wrapped value (`v(...)`) is the size as it is.
+          shapeProps[propName] = isValue(markValue)
+            ? markValue
+            : inferEntrySize(markValue, d);
+        } else if (channelType !== undefined) {
+          // Each kind reads an already-wrapped value (`datum(...)`) itself
+          // (`CHANNEL_INFER`): an area roots it, the others keep it.
+          shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
+          if (
+            markValue !== undefined &&
+            hasNoValue(channelType, shapeProps[propName])
+          )
+            noValue = true;
+        } else {
+          shapeProps[propName] = markValue;
+        }
       }
-    }
-
-    // For expand-kind marks, hand the data array to shapeFn so it can
-    // build N output nodes 1:1 with input rows. shapeFn may be async.
-    // A component body may return anything a combinator child may be (a
-    // built node, or a mark such as `layer([...])`), so it is reified through
-    // the same `resolveMarkResult` path. The name context is fresh: the
-    // component is a naming boundary. An expand mark (its kind, declared at
-    // `createMark`) returns its array of slice nodes, which pass through as-is.
-    const raw = await shapeFn(shapeProps, kind === "expand" ? d : undefined);
+      // For expand-kind marks, hand the data array to shapeFn so it can
+      // build N output nodes 1:1 with input rows. shapeFn may be async.
+      // A component body may return anything a combinator child may be (a
+      // built node, or a mark such as `layer([...])`), so it is reified
+      // through the same `resolveMarkResult` path. The name context is fresh:
+      // the component is a naming boundary. An expand mark (its kind,
+      // declared at `createMark`) returns an array of slices, each reified
+      // the same way, in one boundary.
+      return shapeFn(shapeProps, kind === "expand" ? d : undefined);
+    });
+    // A fresh ROOT registry, a name boundary, for the same chart.
+    const boundary = new LayerContext(undefined, _layerContext.registrar);
     if (kind === "expand") {
-      const result = raw as GoFishNode[];
+      const result = await Promise.all(
+        (raw as MarkChild[]).map((slice) => resolveMarkResult(slice, boundary))
+      );
       const types = getColumnTypes(d);
       // Expand path: stamp each slice with its own datum, a one-row group
       // `[row]` tagged with the column types like any split leaf. A slice
@@ -594,7 +608,7 @@ function buildCreatedMark(
       }
       return result as unknown as GoFishNode;
     }
-    const node = await resolveMarkResult(raw, new LayerContext());
+    const node = await resolveMarkResult(raw, boundary);
     if (liveChannels) node.__gfLive = liveChannels;
     applyFilter(node, filter);
     // Its whole drawing, not only its own lowering: a component's children

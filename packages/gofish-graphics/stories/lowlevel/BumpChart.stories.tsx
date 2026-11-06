@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { newCarColors } from "../../src/data/newCarColors";
-import { frame, spread, line, ellipse, map, v } from "../../src/lib";
+import { layer, spread, line, ellipse, map, v } from "../../src/lib";
 import { groupBy } from "lodash";
 import _ from "lodash";
 
@@ -24,12 +24,12 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    frame({}, [
-      map(groupBy(newCarColors, "Year"), (d, key) =>
+    layer(
+      _.map(groupBy(newCarColors, "Year"), (d, key) =>
         spread(
           {
             dir: "y",
-            x: ((key as number) - 2000) * 30,
+            x: (Number(key) - 2000) * 30,
             spacing: 16,
             alignment: "start",
           },
@@ -39,8 +39,8 @@ export const Default: StoryObj<Args> = {
             )
           )
         )
-      ),
-    ])
+      )
+    )
       .relate((names) =>
         map(groupBy(newCarColors, "Color"), (d) =>
           line(

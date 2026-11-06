@@ -12,7 +12,7 @@ import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
-import { frame } from "../ast/graphicalOperators/frame";
+import { layer } from "../ast/graphicalOperators/layer";
 
 const data = [
   { category: "A", group: "x", value: 0.1 },
@@ -27,7 +27,7 @@ const data = [
 ];
 
 export const testPolarCenterStackedBar = () =>
-  frame({ coord: polar_DEPRECATED() }, [
+  layer({ coord: polar_DEPRECATED() }, [
     stack(
       {
         x: 2,

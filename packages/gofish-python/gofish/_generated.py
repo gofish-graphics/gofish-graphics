@@ -785,16 +785,24 @@ def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Opt
             opts[_k] = _v
     return opts
 
-def _group_opts(*, by: str | FieldAccessor | ChunkKey, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Partition rows by `by` into a flat `Frame` (no layout beyond grouping).
+def _group_opts(*, by: str | FieldAccessor | ChunkKey, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Partition rows by `by` into one `layer` of the groups (no layout beyond grouping). Its box takes spread's `x`, `y`, `w` and `h`.
 
     Args:
         by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows.
+        x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
+        w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
+        h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("by", by),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("w", _channel(_to_wire(("ref", "Length"), w, "w"))),
+        ("h", _channel(_to_wire(("ref", "Length"), h, "h"))),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -1218,7 +1226,7 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
             opts[_k] = _v
     return opts
 
-def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
+def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, coord: Optional[Any] = None, axes: Optional[bool | dict] = None, padding: Optional[float] = None, transform: Optional[dict] = None, box: Optional[bool] = None) -> Dict[str, Any]:
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
@@ -1237,6 +1245,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         key: Internal per-node key override.
         coord: Coordinate transform (`Coord.polar()`, `Coord.clock()`, `Coord.wavy()`, ...) the children are drawn in. Given one, the layer becomes that coordinate boundary.
         axes: Draw the coordinate axes of this layer's `coord`. Ignored on a layer with no `coord`.
+        padding: Pixels the content of this layer's `coord` keeps from the edge of its box (a polar space's outer radius is half the shorter side less this). Ignored on a layer with no `coord`. Default 30.
         transform: Non-affine-foldable scale applied to the composed children.
         box: True renders this as a coordinate-space transparent "box" boundary rather than a plain layer.
     """
@@ -1257,6 +1266,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         ("key", key),
         ("coord", coord),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
+        ("padding", padding),
         ("transform", _to_wire(("object", {"scale": ("scale", ("object", {"x": ("x", None), "y": ("y", None)}))}), transform, "transform")),
         ("box", box),
     ]:

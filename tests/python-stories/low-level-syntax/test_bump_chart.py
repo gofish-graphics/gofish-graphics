@@ -4,7 +4,7 @@ A bump chart of new-car-color popularity rankings from 2000 to 2015. Each year
 is a `spread` column of dots stacked top-to-bottom by rank; every dot is named
 `<Color>-<Year>`. One line per color then threads its dots across the years via
 `connect`s over `ref`s to those names (the Pulley cross-tier pattern), all
-wrapped in a single `layer`.
+wrapped in a single `layer` (the JS story's `frame` became `layer` too, #156).
 """
 
 from gofish import layer, spread, line, ellipse, ref, datum

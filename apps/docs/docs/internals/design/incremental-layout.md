@@ -267,9 +267,10 @@ pipeline and fine-grained invalidation falls out of tracking.
   worse than none.
 - _Blocking fact:_ **resolve is async** (Python `derive` RPC, async marks),
   and Solid's dependency tracking is synchronous — the tracking context is
-  lost at the first `await`. This is also why the reactive layer's ambient
-  registrar is _not_ redundant re-implementation of `createComputed`: it is
-  the async-safe version of it. Any consolidation of the manual
+  lost at the first `await`. This is also why the reactive layer's registrar
+  is _not_ redundant re-implementation of `createComputed`: it rides the
+  resolve's `LayerContext` across every `await`, and only its last hop into a
+  synchronous user call is a dynamic scope like Solid's. Any consolidation of the manual
   `usedInSpec`/`specRuntimes` bookkeeping into Solid tracking is blocked on
   the same fact.
 - _Does Solid 2.0 unblock this?_ Partially, and it doesn't change the
@@ -282,7 +283,7 @@ pipeline and fine-grained invalidation falls out of tracking.
   — so an effectful resolve (the `derive` RPC is a network call, names
   register into contexts) must be idempotent or cached per run before it can
   live inside one. Second, the prize is small: what tracking would replace is
-  the ~40 lines of ambient-registrar bookkeeping, while the rAF coalescing,
+  the ~40 lines of registrar bookkeeping, while the rAF coalescing,
   event dispatch, and frame publication stay ours either way. Third, and
   decisive: Option B wants the dependency key to be _ours_ — explicit
   (stage, scope) keys with bitwise cutoffs we can inspect, test, and
@@ -335,7 +336,7 @@ The current design was chosen so that v1's "re-run everything" is the coarse
 end of a dial, not a dead end:
 
 - **Read-location dependency registration** survives; only the key refines
-  (input → chart becomes input → (stage, scope)). The ambient-registrar
+  (input → chart becomes input → (stage, scope)). The registrar
   mechanism is the async-safe tracking primitive either way.
 - **The rAF-coalesced scheduler** survives unchanged — incremental engines
   still coalesce and re-run at frame cadence; `invalidate()` just gets a

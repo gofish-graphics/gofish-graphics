@@ -1306,6 +1306,39 @@ async function main() {
     );
   }
 
+  console.log("\na ref in a layer({ coord }) is not laid out in the space");
+  {
+    // A coordinate space lays out nodes: a `ref` stand-in among a coord
+    // layer's children is left out of it, so the space draws as it does
+    // without the ref.
+    const blueIn = async (withRef: boolean) => {
+      const one = gf.createName("one");
+      const dl = await gf
+        .layer([
+          gf.rect({ x: 10, y: 10, w: 30, h: 20, fill: "red" }).name(one),
+          gf.layer({ coord: gf.Coord.polar(), x: 50, y: 50, w: 100, h: 100 }, [
+            gf.rect({ w: 1, h: 20, fill: "blue" }),
+            ...(withRef ? [gf.ref(one)] : []),
+          ]),
+        ])
+        .toDisplayList({ w: 200, h: 200 });
+      const flat: any[] = [];
+      const walk = (it: any) => {
+        flat.push(it);
+        for (const c of it.children ?? []) walk(c);
+      };
+      dl.items.forEach(walk);
+      return flat.find((i) => i.style?.fill === "blue");
+    };
+    const alone = await blueIn(false);
+    const withRef = await blueIn(true);
+    check(
+      "the space's rect lands where it does without the ref",
+      alone !== undefined && alone.x === withRef?.x && alone.y === withRef?.y,
+      JSON.stringify([alone?.x, alone?.y, withRef?.x, withRef?.y])
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

@@ -7,7 +7,7 @@
  *
  * Each factory returns plain accessor(s) backed by SolidJS signals plus a
  * private {@link InputPrimitive} that the runtime drives. Reading an accessor
- * during resolve registers the input with the ambient context; the READ
+ * during resolve registers the input with the registrar in scope; the READ
  * LOCATION decides the regime (see resolveContext.ts):
  *   - inside a `live()` channel → paint-time reactivity only (no re-run);
  *   - anywhere else during resolve → a pipeline dependency whose writes
@@ -23,7 +23,7 @@ import type {
   SvgPoint,
 } from "./types";
 import type { InteractionRuntime } from "./runtime";
-import { ambientRegistrar, inLiveEval } from "./resolveContext";
+import { inLiveEval, scopedRegistrar } from "./resolveContext";
 import { clamp } from "../util";
 
 /**
@@ -31,7 +31,7 @@ import { clamp } from "../util";
  * schedule — as a pipeline dependency: `track` is the read-time hook its
  * accessors call, `invalidate` is what a write to that state calls.
  *
- * A read registers the input with the ambient runtime either way. A read
+ * A read registers the input with the registrar in scope either way. A read
  * outside a `live()` channel also makes this readable a pipeline dependency OF
  * THAT CHART: the registrar is the chart's runtime (a SpecInvalidator), so it
  * joins this readable's reader set (one of `input.specReaders`); a readable
@@ -49,7 +49,7 @@ function dependency(input: InputPrimitive): {
   input.specReaders.push(readers);
   return {
     track() {
-      const reg = ambientRegistrar();
+      const reg = scopedRegistrar();
       if (!reg) return;
       reg.registerInput(input);
       if (!inLiveEval()) readers.add(reg);

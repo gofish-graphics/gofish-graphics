@@ -17,7 +17,6 @@ import { balloon } from "./balloon";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { seafood } from "../data/catch";
 import { catchLocations } from "../data/catch";
-import { frame } from "../ast/graphicalOperators/frame";
 const baseData = [
   { category: 1, value: 4 },
   { category: 2, value: 6 },
@@ -323,10 +322,10 @@ const scatterData = _(seafood)
   .value();
 
 export const testScatterBalloon2 = (height: number) =>
-  frame(
+  layer(
     { coord: wavy(), x: 0, y: 0 },
     scatterData.map((data, i) =>
-      frame({ x: data.x }, [
+      layer({ x: data.x }, [
         rect({
           x: 0,
           y: 0,

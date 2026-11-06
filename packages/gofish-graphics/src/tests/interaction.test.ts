@@ -47,11 +47,13 @@ const {
   slider,
   button,
   spreadY,
-  frame,
   layer,
   Coord,
   intersect,
   image,
+  time,
+  cut,
+  datum,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -582,6 +584,260 @@ async function main() {
         .join(",")
     );
     ok("hover caused zero re-runs", resolves === 1, `resolves=${resolves}`);
+  }
+
+  console.log("\nconcurrent renders: each chart's inputs register with it");
+  {
+    // Charts on one page render at once (nothing awaits between their
+    // `.render` calls), so their resolves interleave. An input read in one
+    // chart's spec must register with THAT chart's runtime, wherever the other
+    // resolves are: a pointer chart keeps its hit-test hooks, a static chart
+    // next to it gets none, and a `time.sequence` chart (whose clock registers
+    // at resolve, below a `layer` of its keyframes) keeps its own. Each chart's
+    // hooks are checked against the same chart rendered alone.
+    const p = pointer();
+    const n = signal(3);
+    let derived = 0;
+    let autoBuilds = 0;
+    const longNames = ["first category", "second category", "third category"];
+    const charts: Record<string, (box: HTMLElement) => Promise<any>> = {
+      pointer: (box) =>
+        chart(data, { axes: false })
+          .flow(spread({ by: "cat", dir: "x" }))
+          .mark(
+            rect({
+              h: "count",
+              fill: live(() => (p.datum() ? "#f00" : "#00f")),
+            })
+          )
+          .render(box, { w: 200, h: 120 }),
+      static: (box) =>
+        chart(data, { axes: false })
+          .flow(spread({ by: "cat", dir: "x" }))
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+      sequence: (box) =>
+        chart(
+          [1, 2, 3].flatMap((t) => data.map((d) => ({ ...d, t }))),
+          { axes: false }
+        )
+          .flow(
+            time.sequence({ by: "t", duration: 300, playing: false }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+      // Crowded labels, so `label.angle: "auto"` lays the chart out again,
+      // through `GoFishNode.rebuild`, after the resolve has returned.
+      autoAngle: (box) =>
+        chart(
+          longNames.map((cat, i) => ({ cat, count: i + 1 })),
+          { axes: { x: { label: { angle: "auto" } } } }
+        )
+          .flow(
+            derive((rows: any[]) => {
+              autoBuilds++;
+              return rows;
+            }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(
+            rect({
+              h: "count",
+              fill: live(() => (p.datum() ? "#f00" : "#00f")),
+            })
+          )
+          .render(box, { w: 90, h: 120 }),
+      // Two charts read one signal in their specs.
+      signalA: (box) =>
+        chart(data, { axes: false })
+          .flow(
+            derive((rows: any[]) => {
+              derived++;
+              return rows.slice(0, n());
+            }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+      signalB: (box) =>
+        chart(data, { axes: false })
+          .flow(
+            derive((rows: any[]) => {
+              derived++;
+              return rows.slice(0, n());
+            }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+    };
+    const ids = (box: HTMLElement) =>
+      box.querySelectorAll("[data-gf-id]").length;
+    const alone: Record<string, number> = {};
+    for (const [name, render] of Object.entries(charts)) {
+      const box = makeContainer();
+      const view = await render(box);
+      await settle();
+      alone[name] = ids(box);
+      view.unmount();
+    }
+    const boxes = Object.fromEntries(
+      Object.keys(charts).map((name) => [name, makeContainer()])
+    );
+    const views = await Promise.all(
+      Object.entries(charts).map(([name, render]) => render(boxes[name]))
+    );
+    await settle();
+    ok(
+      "pointer chart keeps its data-gf-id",
+      ids(boxes.pointer) === 3,
+      String(ids(boxes.pointer))
+    );
+    ok(
+      "static chart beside it emits none",
+      ids(boxes.static) === 0,
+      String(ids(boxes.static))
+    );
+    ok(
+      "sequence chart keeps its data-gf-id",
+      ids(boxes.sequence) > 0,
+      String(ids(boxes.sequence))
+    );
+    ok(
+      "a label.angle auto chart keeps its data-gf-id through its rebuilds",
+      autoBuilds > 2 && ids(boxes.autoAngle) > 0,
+      `builds=${autoBuilds} ids=${ids(boxes.autoAngle)}`
+    );
+    for (const name of Object.keys(charts)) {
+      ok(
+        `${name}: the same hooks rendered at once as rendered alone`,
+        ids(boxes[name]) === alone[name],
+        `${ids(boxes[name])} vs ${alone[name]}`
+      );
+    }
+    const bars = (box: HTMLElement) => box.querySelectorAll("rect").length;
+    derived = 0;
+    n.set(2);
+    await settle();
+    ok(
+      "one signal read by two charts re-runs both",
+      derived === 2 && bars(boxes.signalA) === 2 && bars(boxes.signalB) === 2,
+      `runs=${derived} a=${bars(boxes.signalA)} b=${bars(boxes.signalB)}`
+    );
+    for (const v of views) v.unmount();
+  }
+
+  console.log("\na .hidden(fn) callback reads in its chart's scope");
+  {
+    // `.hidden(fn)` is called after the mark's own `await`, so it is wrapped
+    // where it is called: a signal it reads re-runs the chart.
+    const toggle = signal(false);
+    let runs = 0;
+    const box = makeContainer();
+    const view = await chart(data, { axes: false })
+      .flow(
+        derive((rows: any[]) => {
+          runs++;
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count" }).hidden(() => toggle()))
+      .render(box, { w: 200, h: 120 });
+    await settle();
+    const shown = () => box.querySelectorAll("rect").length;
+    ok("bars drawn while not hidden", shown() === 3, String(shown()));
+    toggle.set(true);
+    await settle();
+    ok(
+      "a write to the signal .hidden reads re-runs the chart",
+      runs === 2 && shown() === 0,
+      `runs=${runs} rects=${shown()}`
+    );
+    view.unmount();
+  }
+
+  console.log("\na chart inside a top-level layer([...]) registers its inputs");
+  {
+    // `layer([...])` is a mark, so it resolves when it is rendered, in the
+    // render's context: a chart inside it registers with that render.
+    const p = pointer();
+    const n = signal(3);
+    const box = makeContainer();
+    const view = await layer([
+      chart(data, { axes: false })
+        .flow(
+          derive((rows: any[]) => rows.slice(0, n())),
+          spread({ by: "cat", dir: "x" })
+        )
+        .mark(
+          rect({
+            h: "count",
+            fill: live(() => (p.datum() ? "#f00" : "#00f")),
+          })
+        ),
+    ]).render(box, { w: 200, h: 120 });
+    await settle();
+    ok(
+      "the pointer chart inside the layer emits data-gf-id",
+      box.querySelectorAll("[data-gf-id]").length === 3,
+      String(box.querySelectorAll("[data-gf-id]").length)
+    );
+    n.set(2);
+    await settle();
+    ok(
+      "a signal read inside the layer's chart re-runs it",
+      box.querySelectorAll("rect").length === 2,
+      String(box.querySelectorAll("rect").length)
+    );
+    view.unmount();
+  }
+
+  console.log("\na cut's source registers its inputs with the chart");
+  {
+    // Each slice of `cut(source, ...)` is a mark, so its source resolves in
+    // the context of the place the slice is a child of: a pointer its paint
+    // reads and a signal it reads register with the render.
+    const p = pointer();
+    const h = signal(40);
+    let sourceRuns = 0;
+    const box = makeContainer();
+    const view = await gofish(box, { w: 240, h: 120 }, () =>
+      spreadX(
+        { spacing: 6 },
+        cut(
+          () => {
+            sourceRuns++;
+            return rect({
+              w: 120,
+              h: h(),
+              fill: live(() => (p.datum() ? "#f00" : "#00f")),
+            });
+          },
+          { dir: "x", size: [datum(1), datum(1), datum(1)] }
+        )
+      )
+    );
+    await settle();
+    const ids = () => box.querySelectorAll("[data-gf-id]").length;
+    ok(
+      "a cut whose source reads a pointer emits data-gf-id",
+      ids() === 3,
+      String(ids())
+    );
+    const runsBefore = sourceRuns;
+    h.set(60);
+    await settle();
+    const heights = Array.from(box.querySelectorAll("rect")).map((r) =>
+      r.getAttribute("height")
+    );
+    ok(
+      "a signal a cut's source reads re-runs it",
+      sourceRuns > runsBefore && heights.some((v) => v === "60"),
+      `runs ${runsBefore}->${sourceRuns} heights=${heights.join(",")}`
+    );
+    view.unmount();
   }
 
   console.log("\npointer hit-test on a painted composite");
@@ -2024,7 +2280,7 @@ async function main() {
     });
     await gofish(container, { w: 400, h: 400, legend: false }, () =>
       spreadY({ spacing: 12 }, [
-        frame({ w: 300, h: 300 }, [map]),
+        layer({ w: 300, h: 300 }, [map]),
         spreadX({ spacing: 8 }, [playButton, timeSlider]),
       ])
     );

@@ -15,7 +15,8 @@
  *      `pointer().datum()`), an id → on-screen box map (for `drag().nodeBox`),
  *      plus the frame's data-space conversions.
  *
- * Inputs register themselves during resolve (via the ambient context). At the
+ * Inputs register themselves during resolve (with the registrar in scope, see
+ * resolveContext.ts). At the
  * start of each resolve the runtime drops itself from every registered input's
  * `specReaders` sets, so an input read in one resolve but not the next stops
  * invalidating this chart (a shared input keeps its edges to OTHER charts).
@@ -30,7 +31,7 @@ import type {
   SvgBox,
   SvgPoint,
 } from "./types";
-import type { AmbientRegistrar } from "./resolveContext";
+import type { Registrar } from "./resolveContext";
 import { frameConversions, type FrameConversions } from "./frameScales";
 
 /** Set equality by membership (small sets of event-type strings). */
@@ -117,7 +118,7 @@ function itemBox(
   }
 }
 
-export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
+export class InteractionRuntime implements Registrar, SpecInvalidator {
   private inputs: InputPrimitive[] = [];
   private registered = new Set<InputPrimitive>();
   /** node uid → first lowered item with that id, rebuilt each frame. */
@@ -134,8 +135,8 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
    *  later resolve that registered a new input kind grows the listener set. */
   private attachedEvents?: Set<InteractionEventType>;
 
-  /** Register an input (idempotent by identity: the ambient-context path
-   *  re-registers the same inputs on every re-resolve). */
+  /** Register an input (idempotent by identity: a re-resolve re-registers
+   *  the same inputs). */
   registerInput(input: InputPrimitive): void {
     if (this.registered.has(input)) return;
     this.registered.add(input);

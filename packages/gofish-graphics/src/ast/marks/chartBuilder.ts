@@ -8,7 +8,6 @@ import { withKindValues } from "../strategyKind";
 import { rowsReached } from "../datumProjection";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
-import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
@@ -34,6 +33,7 @@ import {
   resolveMarkResult,
   stashLayerName,
   LayerContext,
+  markContext,
 } from "./markResult";
 import { markDataTime, chainedUpdates } from "../../animation/transition";
 import {
@@ -917,7 +917,7 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
         : nameableMark(((d, key, layerContext) =>
             resolveMarkResult(
               finalMark,
-              layerContext,
+              markContext(layerContext),
               d,
               key
             )) as Mark<TOutput>);
@@ -1177,8 +1177,8 @@ function isChartOptions(x: unknown): x is ChartOptions {
 }
 
 /**
- * A chart's node: a `Frame` with the chart's options over one layer of
- * `children`, its content. `Frame` picks out what it needs (`coord`, `axes`,
+ * A chart's node: a `layer` with the chart's options over one layer of
+ * `children`, its content. The layer picks out what it needs (`coord`, `axes`,
  * `padding`, and the dims, which size it), so this is the whole bag rather
  * than a key list. A chart is where its axes are drawn (#1114 step 6): they
  * go around it, sized or not, and read their datums in its frame (#1257).
@@ -1198,7 +1198,7 @@ async function frameChart(
 ): Promise<GoFishNode> {
   const content = await Layer({}, children);
   content._chartContent = true;
-  const node = await Frame(options, [content]);
+  const node = await Layer(options, [content]);
   // A percent or fr length only where the chart's options take one.
   // TODO(#852, #1238): a percent padding around a polar or geo drawing
   // needs the room of the coordinate space's box, in its own units.
@@ -1440,7 +1440,11 @@ async function resolveForRender(
   options: RenderOptions & BuildClockOptions,
   pass?: RenderPass
 ) {
-  const node = await this.resolve();
+  // Each render resolves into a registry of its own, whose registrar is the
+  // render's (see `resolveContext.ts`).
+  const node = await this.withLayerContext(
+    new LayerContext(undefined, pass?.registrar)
+  ).resolve();
   // The build-in: marks with enter transitions enter once, on one clock for
   // the whole chart, which the render options `playing` / `at` can hold. A
   // chart with none is untouched. It plays on the chart's first render only

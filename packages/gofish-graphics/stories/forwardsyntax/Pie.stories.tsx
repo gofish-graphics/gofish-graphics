@@ -67,6 +67,35 @@ export const Donut: StoryObj<Args> = {
   },
 };
 
+export const SmallMultiples: StoryObj<Args> = {
+  args: { w: 700, h: 140 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Small Multiple Pie Charts",
+      description:
+        "One pie chart per lake, side by side, each breaking that lake's fish catch down by species.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    // One pie per lake: the spread lays the lakes out, and each lake is a
+    // nested chart of its own, a polar space where its species stack around
+    // a circle.
+    chart(seafood, { w: args.w, h: args.h })
+      .flow(spread({ by: "lake", dir: "x", spacing: 20 }))
+      .mark(
+        chart({ coord: clock(), w: 100, h: 100, padding: 0 })
+          .flow(stack({ by: "species", dir: "x" }))
+          .mark(rect({ w: "count", fill: "species" }))
+      )
+      .render(container);
+
+    return container;
+  },
+};
+
 export const Rose: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   tags: ["gallery"],

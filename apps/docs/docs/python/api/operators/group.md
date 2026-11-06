@@ -4,9 +4,9 @@ order: 50
 
 # group
 
-Partitions the data by a field and wraps each partition in its own frame,
-without positioning the frames. Pair it with another operator — or a nested
-mark — to lay the groups out.
+Partitions the data by a field and draws the partitions in one
+[`layer`](/python/api/operators/layer), without positioning them. Pair it with
+another operator — or a nested mark — to lay the groups out.
 
 ::: gofish example:grouped-bar-chart hidden
 :::
@@ -38,7 +38,7 @@ the flow's own grouping by default (see [`ribbon`'s Default
 grouping](/python/api/marks/ribbon#default-grouping)). `group()` is for nested
 splits (composing with a connector's own `by`, or an explicit `by` override)
 and for operator pipelines generally — anywhere you need a named per-partition
-frame without a connector mark driving the partitioning. `group`'s own `by` reads
+group without a connector mark driving the partitioning. `group`'s own `by` reads
 refs when it runs after a `select_all`, and a ref is read through its rows, so the
 bare field name works — `by="species"`:
 
@@ -58,7 +58,7 @@ Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 ## How it works
 
 `group` only **partitions** — it draws each partition's contents in a shared
-frame but does not move the frames apart. Use it when a later operator (or the
+layer but does not move the partitions apart. Use it when a later operator (or the
 mark itself) is responsible for layout, or when you need the grouping boundary
 for scales and color.
 

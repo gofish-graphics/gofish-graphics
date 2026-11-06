@@ -36,6 +36,7 @@ import { bakeChildren } from "../coordinateTransforms/bake";
 import { applyFilter, displayFilter, type FilterOptions } from "../drawFilter";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
+import type { AxesOptions } from "../gofish";
 import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
 import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
 import {
@@ -198,41 +199,47 @@ const chainsOf = (
   return chains;
 };
 
+export type LayerOptions = {
+  key?: string;
+  /** Lays the children out in this coordinate space: the layer is then the
+   *  space's box (`coord`), and takes its `axes` and `padding`. */
+  coord?: CoordinateTransform;
+  axes?: AxesOptions;
+  padding?: number;
+  transform?: { scale?: { x?: number; y?: number } };
+  box?: boolean;
+} & FilterOptions &
+  FancyDims;
+
 export const layer = createNodeOperatorSequential(
   async (
-    childrenOrOptions:
-      | ({
-          key?: string;
-          coord?: CoordinateTransform;
-          transform?: { scale?: { x?: number; y?: number } };
-          box?: boolean;
-        } & FilterOptions &
-          FancyDims)
-      | GoFishAST[],
+    childrenOrOptions: LayerOptions | GoFishAST[],
     maybeChildren?: GoFishAST[]
   ) => {
-    const options = Array.isArray(childrenOrOptions) ? {} : childrenOrOptions;
+    const options: LayerOptions = Array.isArray(childrenOrOptions)
+      ? {}
+      : childrenOrOptions;
     const children = Array.isArray(childrenOrOptions)
       ? childrenOrOptions
       : maybeChildren || [];
 
-    // If coord is provided, delegate to coord transform (similar to frame but without transform/box)
-    if (!Array.isArray(childrenOrOptions) && options.coord !== undefined) {
+    // With a coord, the layer is the coordinate space's box: the space takes
+    // the layer's dims (`w`, `h`, `dims`, ...), key, axes and padding (#535).
+    // `transform` (a pixel scale) and `box` have no counterpart in a space.
+    if (options.coord !== undefined) {
       const {
         coord: coordTransform,
-        key,
         transform: _transform,
         box: _box,
         filter: _filter,
-        ...restDims
+        ...rest
       } = options;
+      // A coordinate space lays out nodes. A `ref` stand-in's place is its
+      // target's, which only a layer plans (`planPlacement`), so the space
+      // gets the nodes alone.
       return applyFilter(
         await coord(
-          {
-            key,
-            transform: coordTransform,
-            ...restDims,
-          },
+          { ...rest, transform: coordTransform },
           children.filter((c): c is GoFishNode => c instanceof GoFishNode)
         ),
         displayFilter(options.filter, "layer({ filter })")

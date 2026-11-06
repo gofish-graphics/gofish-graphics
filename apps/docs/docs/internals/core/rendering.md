@@ -414,7 +414,11 @@ signal during resolve), three things change; when it is absent — the common ca
   for a node and as a `Promise<View>` wherever a resolve comes first (a chart
   builder, a mark or combinator surface, a component thunk; `gofish()` reifies
   a function child, thunk or mark, through `resolveMarkResult`, which calls it
-  with `NO_ROWS`). `unmount()` runs
+  with `NO_ROWS`). The thunk resolves into a root registry of its own, built
+  with the render's registrar (`new LayerContext(undefined, registrar)`), so
+  the inputs it reads register with this chart and no other (see
+  [Reactivity](/internals/frontend/reactivity)). That same build is the root's
+  `rebuild`, so a rebuild resolves with the same registrar. `unmount()` runs
   the full teardown, `disposeChart(container)`, but only while the container's
   state is still the object the view was made with. That identity check is
   what makes `unmount()` idempotent (the first call clears the state) and
