@@ -3,7 +3,10 @@ import { initializeContainer } from "../helper";
 import data from "vega-datasets";
 import {
   chart,
+  field,
   group,
+  rect,
+  spread,
   line,
   Place,
   ribbon,
@@ -13,18 +16,23 @@ import {
 } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 import { streamgraphData } from "../../src/data/streamgraphData";
+import { seafood } from "../../src/data/catch";
 
 /**
  * THROWAWAY prototype stories for the croissant-sampling proposal (#1332),
  * line and ribbon section. The proposal lets `line` and `ribbon` take their
- * position channels (`x`, `y`, `along`) and a `.stack(...)` after the mark.
- * Both are sugar for one rewrite:
+ * position channels (`x`, `y`, `along`), as sugar for one rewrite:
  *
- *   .flow(...ops).mark(R({ x, y, along, ...rest }).stack(s))
- *     ==> .flow(...ops, scatter({ by: along ?? x, x, y }), stack(s)).mark(R(rest))
+ *   .flow(...ops).mark(R({ x, y, along, ...rest }))
+ *     ==> .flow(...ops, scatter({ by: along ?? x, x, y })).mark(R(rest))
  *
- * `xy(ops, pos, s)` does that rewrite by hand, so each story runs the spelling
- * the engine would see. The proposed user code is in the proposal page.
+ * and reads `stack` pointwise: it adds the children's heights at each
+ * position they share. Under that reading `stack` commutes with the mark's
+ * position tier, so a stack written before the mark draws the same stacked
+ * area as one written after the scatter. `xy(ops, pos, s)` builds the flow
+ * the engine would run (the stack goes after the scatter), so each story
+ * draws the proposed spelling. `StackOuterToday` shows what today's box
+ * stack does with the stack written first.
  */
 const meta: Meta = { title: "Proposals/Line Ribbon XY" };
 export default meta;
@@ -101,7 +109,8 @@ export const Area: StoryObj = {
   },
 };
 
-// ribbon({ x: "x", h: "y", fill: "c" }).stack({ by: "c", dir: "y" })
+// .flow(stack({ by: "c", dir: "y" })).mark(ribbon({ x: "x", h: "y", fill: "c" }))
+// read pointwise: the stack goes inside each x slice
 export const StackedArea: StoryObj = {
   render: () => {
     const container = initializeContainer();
@@ -113,14 +122,84 @@ export const StackedArea: StoryObj = {
   },
 };
 
-// .flow(stack({ by: "c", dir: "y" })).mark(ribbon({ x: "x", h: "y", fill: "c" }))
-// The stack is outside the x tier, so it stacks whole ribbons by their boxes.
-export const StackBeforeMark: StoryObj = {
+// TODAY: the stack written first, as today's engine reads it (a box stack).
+// Each series is one box as tall as its peak, so the series sit in bands.
+// Under the pointwise reading this spelling draws StackedArea instead.
+export const StackOuterToday: StoryObj = {
   render: () => {
     const container = initializeContainer();
     chart(streamgraphData, { w: 480, h: 260 })
-      .flow(...xy([stack({ by: "c", dir: "y" })], { x: "x" }))
+      .flow(stack({ by: "c", dir: "y" }), scatter({ by: "x", x: "x" }))
       .mark(ribbon({ h: "y", fill: "c", opacity: 0.8 }))
+      .render(container);
+    return container;
+  },
+};
+
+// TODAY: bars with the stack written before the spread. Today's box stack
+// puts each species' whole row of bars on top of the last.
+export const StackOuterBarsToday: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(seafood, { w: 480, h: 260 })
+      .flow(
+        stack({ by: "species", dir: "y" }),
+        spread({ by: "lake", dir: "x", spacing: 16 })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .render(container);
+    return container;
+  },
+};
+
+// The same bars read pointwise: the stack goes inside each lake, which is
+// today's stacked bar chart (spread, then stack).
+export const StackOuterBarsPointwise: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(seafood, { w: 480, h: 260 })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 16 }),
+        stack({ by: "species", dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .render(container);
+    return container;
+  },
+};
+
+// What rect({ x, y }) with data fields does today, with no flow.
+export const RectXYToday: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(drivingShifts, { w: 480, h: 260 })
+      .mark(rect({ x: "year", y: "gas", w: 6, h: 6, fill: "steelblue" }))
+      .render(container);
+    return container;
+  },
+};
+
+// A ridgeline is a spread: each series keeps its own baseline, and the
+// ridges overlap because each row is taller than the pitch. Same pattern as
+// the gallery Ridgeline Chart (spread with anchor "baseline").
+//   .flow(spread({ by: "c", dir: "y", anchor: "baseline", spacing: 36 }))
+//   .mark(ribbon({ x: "x", h: "y", fill: "c" }))
+export const Ridgeline: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(streamgraphData, { w: 480, axes: { x: true, y: false } })
+      .flow(
+        spread({
+          by: field("c").sort([4, 3, 2, 1, 0]),
+          dir: "y",
+          anchor: "baseline",
+          spacing: 36,
+        }),
+        scatter({ by: "x", x: "x", h: 80 })
+      )
+      .mark(
+        ribbon({ h: "y", fill: "c", stroke: "white", strokeWidth: 1, opacity: 0.9 })
+      )
       .render(container);
     return container;
   },
