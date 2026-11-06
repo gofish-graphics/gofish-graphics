@@ -667,6 +667,136 @@ The third form needs `density` and `simplicity` terms that only make sense for t
 
 A `choose` node works the same way over whole alternatives. Before the parent gives room, `choose` reports the smallest size among its alternatives, which is the `min` in #630. A wrapped flow whose width comes from the room needs its height as a function of its width, `h(w)`. That is stage 3 of the shipping order.
 
+## Railroad diagrams
+
+Chiplunkar and Pit-Claudel (ECOOP 2026, arXiv 2509.15834) give the first formal account of how to lay out a railroad diagram, also called a syntax diagram. They call it a 1.5-dimensional problem. The diagram has one reading order, like text, so it wraps to fit a width. Its parts also nest and split into tracks, like a graph. That puts it between the pretty printer in this proposal and the layered graph layout in the sankey proposal, so it is a good hard example for both.
+
+Their layout has three steps. Alignment picks where each part's rail enters and leaves. Wrapping picks where each sequence breaks into rows. Justification spreads extra width across rails and parts so the diagram meets the target width exactly.
+
+![Four layouts of the JSON object diagram (paper Fig. 2)](img/prior/railroad-fig2-json-layouts.png)
+![Layout constructors and tips (paper Fig. 10)](img/prior/railroad-fig10-tips.png)
+![Align, wrap, justify (paper Fig. 4)](img/prior/railroad-fig4-phases.png)
+
+### How the paper maps onto this proposal
+
+| Paper                                                                                                | Under this proposal                                                                                                                                     |
+| ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sequence, wrapped into rows (inline vertical concatenation)                                          | `spread({ dir: "x", wrap: {...} })`. Each wrapped row is a row of the silhouette.                                                                       |
+| Choice (positive stack)                                                                              | `spread({ dir: "y" }, [top, bottom])`. Each branch is its own track, so this is a spread and not a stack.                                               |
+| Loop (negative stack)                                                                                | The same spread. Its lower track reads right to left, which is `reverse: true`, an option `spread` has today.                                           |
+| Collapse: `(+ (+ a b) c)` drawn as one three-way stack                                               | The nested-flow rule along y. Whether to collapse is a `choose`, because authors sometimes keep negative stacks apart on purpose.                       |
+| Local wrapping: the first wrap, in order of preference, whose min-content width fits                 | First fit over an ordered `choose`, the default.                                                                                                        |
+| Wrap cost `max(0, maxContent − w)² + 10 · Σ ℓ · 4^depth`, then the smallest max-content width        | `cost: [Cost.overflow(), Cost.weighted(Cost.lines(), 4 ** depth), Cost.balance()]`. The grammar function passes the depth, so no hidden rule is needed. |
+| Objectives ranked lexicographically or by a linear combination                                       | The `cost: [...]` list is lexicographic, and `Cost.weighted` is the linear form.                                                                        |
+| min-content and max-content widths                                                                   | `choose` reporting its smallest size (#630), and `h(w)` from stage 3 of the shipping order.                                                             |
+| Justification: grow parts to max-content, then split the rest between gaps (`flex-absorb`) and parts | The layout engine's room and `fr` distribution (#1176). Even gaps are #1165.                                                                            |
+| Rails                                                                                                | Connectors drawn after layout between anchors. They stretch when justification adds width.                                                              |
+
+### Sketch: the JSON object grammar
+
+Proposed syntax with no render yet. `token`, `nonterminal` and `rails` are templates. `alignment: "tip"` is new.
+
+```js
+// A sequence is a spread along x that may wrap onto more rows.
+// The grammar function passes its nesting depth, so deeper wraps cost more.
+const seq = (items, { depth = 0, reverse = false } = {}) =>
+  spread(
+    {
+      dir: "x",
+      spacing: "2ch",
+      reverse,
+      alignment: "tip",
+      wrap: {
+        cost: [
+          Cost.overflow(),
+          Cost.weighted(Cost.lines(), 4 ** depth),
+          Cost.balance(),
+        ],
+      },
+    },
+    items
+  );
+
+// A choice is a spread along y: each branch is its own track.
+const alt = (branches) => rails(spread({ dir: "y", spacing: 8 }, branches));
+
+// A loop is the same, and its lower track runs right to left.
+const loop = (body, back) =>
+  rails(spread({ dir: "y", spacing: 8 }, [body, back]));
+
+// JSON object: "{" (member ("," member)*)? "}"
+const member = seq([nonterminal("string"), token(":"), nonterminal("value")], {
+  depth: 1,
+});
+const object = seq([
+  token("{"),
+  alt([blank(), loop(member, seq([token(",")], { reverse: true }))]),
+  token("}"),
+]);
+```
+
+```python
+def seq(items, depth=0, reverse=False):
+    return spread(
+        items,
+        dir="x",
+        spacing="2ch",
+        reverse=reverse,
+        alignment="tip",
+        wrap={
+            "cost": [
+                Cost.overflow(),
+                Cost.weighted(Cost.lines(), 4**depth),
+                Cost.balance(),
+            ]
+        },
+    )
+
+
+def alt(branches):
+    return rails(spread(branches, dir="y", spacing=8))
+
+
+def loop(body, back):
+    return rails(spread([body, back], dir="y", spacing=8))
+
+
+member = seq([nonterminal("string"), token(":"), nonterminal("value")], depth=1)
+obj = seq(
+    [
+        token("{"),
+        alt([blank(), loop(member, seq([token(",")], reverse=True))]),
+        token("}"),
+    ]
+)
+```
+
+### What is new
+
+1. **Tips.** Each part must say where a rail enters on its left side and leaves on its right side, and the two heights can differ. A text baseline is the case where both are the same. The silhouette needs an entry anchor and an exit anchor in place of one baseline.
+2. **Alignment between neighbors.** Each part's exit must line up with the next part's entry. Today `alignment` puts every child on one guide. This should generalize alignment to anchors, which may be the same idea as the sankey proposal's `alignment: "anchor"`.
+3. **`rails` as a template.** The rails that split and merge around a stack are a `layer` of the spread and connectors between its children's tips, as long as a `ref` can reach a tip anchor.
+4. **Collapse and the wrapper.** The nested-flow rule only sees a bare nested `spread`, so collapsing needs the unwrapped form below. This suggests the stack draws its own rails. That is open.
+
+```js
+// (a | b | c) written as two binary choices. The inner spread has the same
+// direction and no options of its own, so it continues the outer tracks and
+// draws as one three-way choice. choose decides whether to keep it separate.
+const tracks = (branches) => spread({ dir: "y", spacing: 8 }, branches);
+choose([
+  rails(tracks([a, tracks([b, c])])), // collapsed: one set of brackets
+  rails(tracks([a, rails(tracks([b, c]))])), // nested: two sets of brackets
+]);
+```
+
+### How it relates to the sankey proposal
+
+- Railroads need no layering or ordering step. The grammar's nesting fixes the layers and their order.
+- Both proposals need anchor alignment, links drawn between anchors (a rail is a link with no width) and even gaps (#1165).
+- Plain boxes are enough, because the paper requires the boxes of unrelated parts not to overlap. `Outline.contour()` is not needed.
+- The diagrams the paper leaves out (its Fig. 5a and 5b) need general graph layout, which is the sankey side.
+- The align, wrap and justify steps are one more data point for the deferred review of layout phases.
+
 ## How it composes
 
 - **Layout engine.** A `choose` node lays out each alternative in the room its parent gives, and keeps the chosen one. When the parent asks for its size before giving room, `choose` reports the smallest size among its alternatives (#630). Monotone piecewise-linear claims stay invertible under `min`.
@@ -730,6 +860,9 @@ The runner-up is Approach C. It is a subset of B, with the same engine and no us
 12. Does `"auto"` stay as named sugar, with the docs showing its expansion?
 13. Do we want penalties on alternatives now (`node.cost(2)`), or later?
 14. Do tick-only cost terms (`density`, `simplicity`) belong in `Cost`, or should tick count stay first fit only?
+15. Railroad diagrams. Does every part expose an entry anchor and an exit anchor (tips), with a text baseline as the case where both are equal?
+16. Railroad diagrams. Is lining up each part's exit with the next part's entry a new `alignment` value, or a general alignment on anchors shared with the sankey proposal?
+17. Railroad diagrams. Does a stack draw its own rails on its children's tips, or does a `rails` template wrap it? Only the first lets nested choices collapse by the nested-flow rule.
 
 ## Syntax to review
 

@@ -623,6 +623,7 @@
           ><a href="#wrapping">Where wrapping lives</a
           ><a href="#nested-flows">Nested flows</a
           ><a href="#geometry">Geometry inside</a
+          ><a href="#railroad">Railroad diagrams</a
           ><a href="#decisions">Decisions</a
           ><a href="#shipping">Shipping order</a>
         </nav>
@@ -1854,6 +1855,273 @@
         </p>
       </div>
 
+      <h2 id="railroad">Railroad diagrams</h2>
+      <div class="prose">
+        <p>
+          Chiplunkar and Pit-Claudel (ECOOP 2026) give the first formal account
+          of how to lay out a railroad diagram, also called a syntax diagram.
+          They call it a 1.5-dimensional problem. The diagram has one reading
+          order, like text, so it wraps to fit a width. Its parts also nest and
+          split into tracks, like a graph. That puts it between the pretty
+          printer in this proposal and the layered graph layout in the sankey
+          proposal, so it is a good hard example for both.
+        </p>
+        <p>
+          Their layout has three steps. Alignment picks where each part's rail
+          enters and leaves. Wrapping picks where each sequence breaks into
+          rows. Justification spreads extra width across rails and parts so the
+          diagram meets the target width exactly.
+        </p>
+      </div>
+      <div class="pgrid">
+        <div class="pc">
+          <h4>One diagram, four layouts</h4>
+          <figure>
+            <div class="plate">
+              <a href="img/prior/railroad-fig2-json-layouts.png"
+                ><img
+                  src="img/prior/railroad-fig2-json-layouts.png"
+                  alt="Four layouts of the JSON object railroad diagram"
+              /></a>
+            </div>
+            <figcaption>
+              Fig. 2 of the paper. The JSON object grammar laid out three ways
+              by their tool and once by hand (json.org).
+            </figcaption>
+          </figure>
+        </div>
+        <div class="pc">
+          <h4>Tips and stacks</h4>
+          <figure>
+            <div class="plate">
+              <a href="img/prior/railroad-fig10-tips.png"
+                ><img
+                  src="img/prior/railroad-fig10-tips.png"
+                  alt="Layout constructors from the paper: wrapped rows, positive and negative stacks, and tip choices"
+              /></a>
+            </div>
+            <figcaption>
+              Fig. 10 of the paper. A wrapped sequence, a choice, a loop, and
+              two stacks whose entry and exit tips sit on different rows.
+            </figcaption>
+          </figure>
+        </div>
+      </div>
+      <figure style="max-width: 720px">
+        <div class="plate">
+          <a href="img/prior/railroad-fig4-phases.png"
+            ><img
+              src="img/prior/railroad-fig4-phases.png"
+              alt="The paper's three steps: align, wrap, justify"
+          /></a>
+        </div>
+        <figcaption>
+          Fig. 4 of the paper. Align, then wrap, then justify.
+        </figcaption>
+      </figure>
+
+      <h3>How the paper maps onto this proposal</h3>
+      <div class="tw">
+        <table>
+          <thead>
+            <tr>
+              <th>Paper</th>
+              <th>Under this proposal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                Sequence, wrapped into rows (inline vertical concatenation)
+              </td>
+              <td>
+                <code>spread({ dir: "x", wrap: {...} })</code>. Each wrapped row
+                is a row of the silhouette.
+              </td>
+            </tr>
+            <tr>
+              <td>Choice (positive stack)</td>
+              <td>
+                <code>spread({ dir: "y" }, [top, bottom])</code>. Each branch is
+                its own track, so this is a spread and not a stack.
+              </td>
+            </tr>
+            <tr>
+              <td>Loop (negative stack)</td>
+              <td>
+                The same spread. Its lower track reads right to left, which is
+                <code>reverse: true</code>, an option <code>spread</code> has
+                today.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Collapse: <code>(+ (+ a b) c)</code> drawn as one three-way
+                stack
+              </td>
+              <td>
+                The nested-flow rule along y. A nested <code>spread</code> in
+                the same direction with no options of its own continues its
+                parent. Whether to collapse is a <code>choose</code>, because
+                authors sometimes keep negative stacks apart on purpose.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Local wrapping: take the first wrap, in order of preference,
+                whose min-content width fits
+              </td>
+              <td>
+                First fit over an ordered <code>choose</code>, the default.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Wrap cost
+                <code>max(0, maxContent − w)² + 10 · Σ ℓ · 4^depth</code>, then
+                the smallest max-content width
+              </td>
+              <td>
+                <code
+                  >cost: [Cost.overflow(), Cost.weighted(Cost.lines(), 4 **
+                  depth), Cost.balance()]</code
+                >. Our overflow is already squared. The grammar function passes
+                the depth, so no hidden rule is needed.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Objectives ranked "lexicographically or by a linear combination"
+              </td>
+              <td>
+                The <code>cost: [...]</code> list is lexicographic, and
+                <code>Cost.weighted</code> is the linear form. The paper arrived
+                at both forms on its own.
+              </td>
+            </tr>
+            <tr>
+              <td>min-content and max-content widths</td>
+              <td>
+                <code>choose</code> reporting its smallest size (#630), and the
+                <code>h(w)</code> that stage 3 of the shipping order already
+                needs.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                Justification: grow parts to max-content, then split the rest
+                between gaps (<code>flex-absorb</code>) and parts
+              </td>
+              <td>
+                The layout engine's room and <code>fr</code> distribution
+                (#1176). Even gaps are #1165, which the sankey proposal also
+                needs.
+              </td>
+            </tr>
+            <tr>
+              <td>Rails</td>
+              <td>
+                Connectors drawn after layout between anchors. They stretch on
+                their own when justification adds width.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Sketch: the JSON object grammar</h3>
+      <p class="small">
+        This is proposed syntax with no render yet. <code>token</code>,
+        <code>nonterminal</code> and <code>rails</code> are templates a user or
+        a grammar helper would write. <code>alignment: "tip"</code> is new, see
+        below.
+      </p>
+      <div class="syntax">
+        <pre
+          class="code"
+        ><code data-lang="javascript"><span class="ln">// A sequence is a spread along x that may wrap onto more rows.</span><span class="ln">// The grammar function passes its nesting depth, so deeper wraps cost more.</span><span class="ln">const seq = (items, { depth = 0, reverse = false } = {}) =&gt;</span><span class="ln">  spread(</span><span class="ln">    {</span><span class="ln">      dir: "x",</span><span class="ln">      spacing: "2ch",</span><span class="ln">      reverse,</span><span class="ln">      alignment: "tip",</span><span class="ln">      wrap: {</span><span class="ln">        cost: [</span><span class="ln">          Cost.overflow(),</span><span class="ln">          Cost.weighted(Cost.lines(), 4 ** depth),</span><span class="ln">          Cost.balance(),</span><span class="ln">        ],</span><span class="ln">      },</span><span class="ln">    },</span><span class="ln">    items,</span><span class="ln">  );</span><span class="ln"></span><span class="ln">// A choice is a spread along y: each branch is its own track.</span><span class="ln">const alt = (branches) =&gt; rails(spread({ dir: "y", spacing: 8 }, branches));</span><span class="ln"></span><span class="ln">// A loop is the same, and its lower track runs right to left.</span><span class="ln">const loop = (body, back) =&gt;</span><span class="ln">  rails(spread({ dir: "y", spacing: 8 }, [body, back]));</span><span class="ln"></span><span class="ln">// JSON object: "{" (member ("," member)*)? "}"</span><span class="ln">const member = seq([nonterminal("string"), token(":"), nonterminal("value")], {</span><span class="ln">  depth: 1,</span><span class="ln">});</span><span class="ln">const object = seq([</span><span class="ln">  token("{"),</span><span class="ln">  alt([blank(), loop(member, seq([token(",")], { reverse: true }))]),</span><span class="ln">  token("}"),</span><span class="ln">]);</span></code></pre>
+        <details class="py">
+          <summary>Python</summary>
+          <pre
+            class="code"
+          ><code data-lang="python"><span class="ln">def seq(items, depth=0, reverse=False):</span><span class="ln">    return spread(</span><span class="ln">        items,</span><span class="ln">        dir="x",</span><span class="ln">        spacing="2ch",</span><span class="ln">        reverse=reverse,</span><span class="ln">        alignment="tip",</span><span class="ln">        wrap={</span><span class="ln">            "cost": [</span><span class="ln">                Cost.overflow(),</span><span class="ln">                Cost.weighted(Cost.lines(), 4**depth),</span><span class="ln">                Cost.balance(),</span><span class="ln">            ]</span><span class="ln">        },</span><span class="ln">    )</span><span class="ln"></span><span class="ln"></span><span class="ln">def alt(branches):</span><span class="ln">    return rails(spread(branches, dir="y", spacing=8))</span><span class="ln"></span><span class="ln"></span><span class="ln">def loop(body, back):</span><span class="ln">    return rails(spread([body, back], dir="y", spacing=8))</span><span class="ln"></span><span class="ln"></span><span class="ln">member = seq([nonterminal("string"), token(":"), nonterminal("value")], depth=1)</span><span class="ln">obj = seq(</span><span class="ln">    [</span><span class="ln">        token("{"),</span><span class="ln">        alt([blank(), loop(member, seq([token(",")], reverse=True))]),</span><span class="ln">        token("}"),</span><span class="ln">    ]</span><span class="ln">)</span></code></pre>
+        </details>
+      </div>
+
+      <h3>What is new</h3>
+      <div class="prose">
+        <ol class="geo">
+          <li>
+            <b>Tips.</b> Each part must say where a rail enters on its left side
+            and leaves on its right side, and the two heights can differ. In
+            Fig. 10 the last stack enters on its second row and leaves at its
+            bottom. A text baseline is the case where both heights are the same.
+            So the silhouette needs an entry anchor and an exit anchor in place
+            of one baseline. This is the main new piece.
+          </li>
+          <li>
+            <b>Alignment between neighbors.</b> The rail between two neighbors
+            is straight, so each part's exit must line up with the next part's
+            entry. Today <code>alignment</code> puts every child on one guide.
+            The new rule matches each pair of neighbors instead, and it is the
+            same as baseline alignment when entry and exit are equal. It should
+            generalize alignment to anchors, not add a mode only railroads use.
+            The sankey proposal's <code>alignment: "anchor"</code> (a parent
+            placed on its first or last child) may be the same idea.
+          </li>
+          <li>
+            <b><code>rails</code> as a template.</b> The rails that split and
+            merge around a stack are a <code>layer</code> of the spread and
+            connectors between its children's tips. That is a
+            <code>createMark</code> template, not a core operator, as long as a
+            <code>ref</code> can reach a tip anchor.
+          </li>
+          <li>
+            <b>Collapse and the wrapper.</b> The nested-flow rule only sees a
+            bare nested <code>spread</code>. When <code>rails</code> wraps the
+            inner stack, the rule no longer applies, so collapsing needs the
+            unwrapped form below. This suggests the rails belong to the stack
+            itself, drawn on its children's tips, and not to a wrapper. That is
+            open.
+          </li>
+        </ol>
+      </div>
+      <div class="syntax">
+        <pre
+          class="code"
+        ><code data-lang="javascript"><span class="ln">// (a | b | c) written as two binary choices. The inner spread has the same</span><span class="ln">// direction and no options of its own, so it continues the outer tracks and</span><span class="ln">// draws as one three-way choice. choose decides whether to keep it separate.</span><span class="ln">const tracks = (branches) =&gt; spread({ dir: "y", spacing: 8 }, branches);</span><span class="ln">choose([</span><span class="ln">  rails(tracks([a, tracks([b, c])])), // collapsed: one set of brackets</span><span class="ln">  rails(tracks([a, rails(tracks([b, c]))])), // nested: two sets of brackets</span><span class="ln">]);</span></code></pre>
+      </div>
+
+      <h3>How it relates to the sankey proposal</h3>
+      <div class="prose">
+        <ul>
+          <li>
+            Railroads need no layering or ordering step. The grammar's nesting
+            fixes the layers and their order, so nested operators do that work.
+          </li>
+          <li>
+            Both proposals need anchor alignment, links drawn between anchors (a
+            rail is a link with no width, as in the stacked ribbons anchors) and
+            even gaps (#1165).
+          </li>
+          <li>
+            The paper requires the boxes of unrelated parts not to overlap, so
+            plain boxes are enough and <code>Outline.contour()</code> is not
+            needed.
+          </li>
+          <li>
+            The diagrams the paper leaves out (its Fig. 5a and 5b, where a part
+            does not nest inside its neighbor) need general graph layout, which
+            is the sankey side.
+          </li>
+          <li>
+            The paper's align, wrap and justify steps are one more data point
+            for the later review of layout phases across algorithms. That review
+            stays deferred.
+          </li>
+        </ul>
+      </div>
+
       <h2 id="precedent">Precedent</h2>
       <div class="pgrid">
         <div class="pc">
@@ -2444,6 +2712,21 @@
             Do tick-only cost terms (<code>density</code>,
             <code>simplicity</code>) belong in <code>Cost</code>, or should tick
             count stay first fit only?
+          </li>
+          <li>
+            Railroad diagrams. Does every part expose an entry anchor and an
+            exit anchor (tips), with a text baseline as the case where both are
+            equal?
+          </li>
+          <li>
+            Railroad diagrams. Is lining up each part's exit with the next
+            part's entry a new <code>alignment</code> value, or a general
+            alignment on anchors shared with the sankey proposal?
+          </li>
+          <li>
+            Railroad diagrams. Does a stack draw its own rails on its children's
+            tips, or does a <code>rails</code> template wrap it? Only the first
+            lets nested choices collapse by the nested-flow rule.
           </li>
         </ol>
       </div>
