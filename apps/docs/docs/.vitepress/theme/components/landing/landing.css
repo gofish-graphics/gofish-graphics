@@ -423,53 +423,44 @@ html.landing-page .DocSearch-Button {
   line-height: 1;
 }
 
-/* Floating specimen cards (wide screens): picture cards from landingCards.ts
-   (FLOATING), each placed in one corner of the hero. */
+/* Floating hero cards (wide screens): the hero's cards from landingCards.ts
+   (HERO), each placed by its `float` (LandingPage.vue sets top, the side
+   offset and --fc-w). They tilt twice as far as in the collage, for a looser
+   pile, and leave out their captions. */
+.landing .hero-cards {
+  --fc-scale: 1;
+}
 .landing .float-card {
   position: absolute;
   z-index: 4;
+  width: calc(var(--fc-w) * var(--fc-scale));
+  transform: rotate(calc(var(--tilt) * 2));
 }
 .landing .float-card .card {
   padding: 10px;
 }
-.landing .fc-tl {
-  left: 6%;
-  top: 14%;
-  animation-delay: 400ms;
+.landing .float-card .cap {
+  display: none;
 }
-.landing .fc-tr {
-  right: 6%;
-  top: 12%;
-  animation-delay: 520ms;
-}
-.landing .fc-bl {
-  left: 3%;
-  bottom: 6%;
-  animation-delay: 640ms;
-}
-.landing .fc-br {
-  right: 5%;
-  bottom: 7%;
-  animation-delay: 720ms;
-}
-/* Breakpoint must equal --sheet-w (a media query can't read a custom prop). */
-@media (max-width: 1240px) {
-  .landing .fc-tl {
-    left: 2.5%;
-    top: 3%;
+/* room under the install command for the bottom row of cards */
+@media (min-width: 1101px) {
+  .landing .hero {
+    padding-bottom: 230px;
   }
-  .landing .fc-tr {
-    right: 2.5%;
-    top: 3%;
+}
+/* Breakpoint must equal --sheet-w (a media query can't read a custom prop).
+   Below it the hero narrows with the window, so the cards shrink. */
+@media (max-width: 1240px) {
+  .landing .hero-cards {
+    --fc-scale: 0.82;
   }
   .landing .hero h1 {
     font-size: clamp(2.4rem, 4.8vw, 3.9rem);
   }
 }
-@media (max-width: 1200px) {
-  .landing .fc-bl,
-  .landing .fc-br {
-    display: none;
+@media (max-width: 1180px) {
+  .landing .hero-cards {
+    --fc-scale: 0.74;
   }
 }
 /* display:none, not just hidden: Chrome does not fetch a lazy image inside a
@@ -560,7 +551,7 @@ html.landing-page .DocSearch-Button {
     transform: translateY(0);
   }
 }
-/* longhands, so the shorthand does not reset each corner's animation-delay */
+/* longhands, so the shorthand does not reset each card's animation-delay */
 .landing .float-card {
   opacity: 0;
   animation-name: gf-settle;

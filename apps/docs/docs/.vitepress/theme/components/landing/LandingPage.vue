@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { docsLang, examplesHref } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
 import PictureCard from "./PictureCard.vue";
-import { COLLAGE, FLOATING, SPECTRUM } from "./landingCards";
+import { HERO, SPECTRUM, type HeroCard } from "./landingCards";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the inline chart art never goes through
@@ -24,6 +24,21 @@ const knobEl = ref<HTMLElement | null>(null);
 const railScrolls = ref(false);
 const jsReady = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
+
+// Place a hero card floating around the title (wide screens); the cards
+// settle in one after another, in list order. landing.css scales the width.
+function floatStyle(card: HeroCard, i: number): Record<string, string> {
+  const f = card.float;
+  const style: Record<string, string> = {
+    top: `${f.y}px`,
+    "--fc-w": `${f.width}px`,
+    animationDelay: `${400 + 80 * i}ms`,
+  };
+  if (f.side === "center")
+    style.left = `calc(50% - var(--fc-w) * var(--fc-scale) / 2)`;
+  else style[f.side] = `${f.x}px`;
+  return style;
+}
 
 // Collected teardown callbacks (listeners, observers, injected nodes).
 const cleanups: Array<() => void> = [];
@@ -331,16 +346,16 @@ onBeforeUnmount(() => {
     <div class="sheet">
       <!-- ===================== HERO ===================== -->
       <section class="hero" aria-labelledby="hero-h">
-        <!-- wide screens: taped specimen cards floating around the title,
-             each linking to its example page. The container is display:none
+        <!-- wide screens: the hero's cards floating around the title, each
+             linking to its example page. The container is display:none
              at 1100px and below, so phones never fetch their lazy pictures. -->
         <div class="hero-cards">
           <PictureCard
-            v-for="card in FLOATING"
+            v-for="(card, i) in HERO"
             :key="card.id"
             :card="card"
-            :class="['float-card', `fc-${card.corner}`]"
-            :style="{ width: `${card.width}px` }"
+            class="float-card"
+            :style="floatStyle(card, i)"
           />
         </div>
 
@@ -362,8 +377,8 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
-        <!-- phones and tablets, where the floating cards are hidden: a pile
-             of taped specimen cards, each linking to its example page -->
+        <!-- phones and tablets, where the floating cards are hidden: the
+             same cards as a pile, each linking to its example page -->
         <div class="collage-wrap">
           <div class="collage">
             <!-- two columns that stack on their own, then the wide cards
@@ -374,13 +389,13 @@ onBeforeUnmount(() => {
               :class="['collage-col', `collage-${column}`]"
             >
               <PictureCard
-                v-for="card in COLLAGE.filter((c) => c.column === column)"
+                v-for="card in HERO.filter((c) => c.column === column)"
                 :key="card.id"
                 :card="card"
               />
             </div>
             <PictureCard
-              v-for="card in COLLAGE.filter((c) => c.column === 'wide')"
+              v-for="card in HERO.filter((c) => c.column === 'wide')"
               :key="card.id"
               :card="card"
               class="wide"
