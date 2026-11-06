@@ -502,15 +502,12 @@ html.landing-page .DocSearch-Button {
   align-items: start;
 }
 /* Each column is its own stack, so a card's height moves only the cards
-   under it. The right column starts lower, so wherever the screen ends it
-   cuts through a card and the reader sees there is more below. */
+   under it (the card order in landingCards.ts keeps the two columns' edges
+   apart). */
 .landing .collage-col {
   display: flex;
   flex-direction: column;
   gap: var(--collage-gap);
-}
-.landing .collage-right {
-  margin-top: 56px;
 }
 .landing .collage .pic.wide {
   grid-column: 1 / -1;
@@ -544,9 +541,6 @@ html.landing-page .DocSearch-Button {
     --collage-gap: 10px;
     margin: 22px -14px 0;
     column-gap: 8px;
-  }
-  .landing .collage-right {
-    margin-top: 44px;
   }
   .landing .collage .pic.wide {
     width: 104%;

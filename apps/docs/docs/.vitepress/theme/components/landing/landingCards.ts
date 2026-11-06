@@ -87,16 +87,19 @@ export const FLOATING: FloatingCard[] = [
 export interface CollageCard extends LandingCard {
   /**
    * Where the card goes: the left or right column (two independent stacks,
-   * the right one starting lower so the two columns' card edges never line
-   * up), or full width under both columns.
+   * so each column's card edges fall where its own cards' heights put them),
+   * or full width under both columns.
    */
   column: "left" | "right" | "wide";
 }
 
 /**
  * The hero collage. Each column shows its cards in list order: on the left
- * the croissant chart, the bottle fill chart and the bubble treemap; on the
- * right the pulley diagram and the flower chart; then two full-width cards.
+ * the croissant chart, the bubble treemap and the bottle fill chart; on the
+ * right the flower chart and the pulley diagram; then two full-width cards.
+ * The order is picked so the two columns' card edges fall far apart: the tall
+ * pulley diagram spans the place where a phone or tablet screen ends, so the
+ * first screen always cuts through a card.
  */
 export const COLLAGE: CollageCard[] = [
   {
@@ -109,15 +112,6 @@ export const COLLAGE: CollageCard[] = [
     column: "left",
   },
   {
-    id: "bottle-fill-chart",
-    caption: "a bottle fill chart",
-    alt: "Bottle fill chart: four wine bottles filled to 30, 60, 75 and 100 percent",
-    aspect: 1.84,
-    tilt: 1.4,
-    tape: -2,
-    column: "left",
-  },
-  {
     id: "bubble-treemap",
     caption: "a bubble treemap",
     alt: "Bubble treemap: circles packed into nested blobs, one color per group",
@@ -127,13 +121,13 @@ export const COLLAGE: CollageCard[] = [
     column: "left",
   },
   {
-    id: "pulley-diagram",
-    caption: "a pulley diagram",
-    alt: "Pulley diagram: two weights hanging from a system of three pulleys",
-    aspect: 0.78,
-    tilt: 2.2,
-    tape: -3,
-    column: "right",
+    id: "bottle-fill-chart",
+    caption: "a bottle fill chart",
+    alt: "Bottle fill chart: four wine bottles filled to 30, 60, 75 and 100 percent",
+    aspect: 1.84,
+    tilt: 1.4,
+    tape: -2,
+    column: "left",
   },
   {
     id: "flower-chart",
@@ -142,6 +136,15 @@ export const COLLAGE: CollageCard[] = [
     aspect: 1.14,
     tilt: 2,
     tape: -5,
+    column: "right",
+  },
+  {
+    id: "pulley-diagram",
+    caption: "a pulley diagram",
+    alt: "Pulley diagram: two weights hanging from a system of three pulleys",
+    aspect: 0.78,
+    tilt: 2.2,
+    tape: -3,
     column: "right",
   },
   {

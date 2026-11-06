@@ -366,9 +366,8 @@ onBeforeUnmount(() => {
              of taped specimen cards, each linking to its example page -->
         <div class="collage-wrap">
           <div class="collage">
-            <!-- two columns that stack on their own (the right one starts
-                 lower, so their card edges never line up), then the wide
-                 cards across both -->
+            <!-- two columns that stack on their own, then the wide cards
+                 across both -->
             <div
               v-for="column in ['left', 'right'] as const"
               :key="column"
