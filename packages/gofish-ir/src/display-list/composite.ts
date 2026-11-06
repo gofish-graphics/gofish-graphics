@@ -2,7 +2,7 @@
 // @wiki Rendering — /internals/core/rendering
 // </gofish-wiki>
 
-import type { CompositeItem, DisplayItem } from "./schema.js";
+import type { CompositeItem, DisplayFilter, DisplayItem } from "./schema.js";
 
 /** A mask a composite layer is clipped by: the alpha of the listed
  *  operands' shapes drawn together (their union), or, with `invert`, one
@@ -113,16 +113,19 @@ const maskKey = (m: CompositeMask): string =>
  * so they cannot drift.
  *
  * Each group of items in `defs` is written once, as a `<g id>` def. Each
- * mask in `masks` is a `<mask>` of `<use>`s of defs: an alpha mask
- * (`mask-type:alpha`) of their shapes, or, with `invert`, a white rect over
- * the item's bbox with their shapes drawn black on it. Each layer is a
+ * mask in `masks` is a `<mask>`: with `alpha`, an alpha mask
+ * (`mask-type:alpha`) of `<use>`s of those defs' shapes; with `outside`, a
+ * white rect over the item's bbox with a black rect over it, clipped by the
+ * alpha mask `outside` names, so it is one minus that mask. It draws the
+ * shapes black with a mask, not with a CSS `brightness(0)` filter: WebKit
+ * ignores CSS filter functions on SVG elements (#1330). Each layer is a
  * `<use>` of a def, wrapped in a `<g mask>` per mask (the first mask
  * outermost), and, with a `blendMode`, in a group that mixes by it. The
  * layers sit in a group `isolate`d, so a blend mixes the layers only.
  */
 export interface CompositePlan {
   defs: { id: string; items: DisplayItem[] }[];
-  masks: { id: string; invert: boolean; uses: string[] }[];
+  masks: ({ id: string; alpha: string[] } | { id: string; outside: string })[];
   layers: { use: string; masks: string[]; blendMode?: string }[];
 }
 
@@ -145,9 +148,16 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
   const maskId = (m: CompositeMask): string => {
     const id = `${uid}-m-${maskKey(m)}`;
     if (!masks.has(id)) {
-      const uses = m.operands.map(shapeId);
-      for (const u of uses) used.add(u);
-      masks.set(id, { id, invert: m.invert, uses });
+      if (m.invert) {
+        masks.set(id, {
+          id,
+          outside: maskId({ operands: m.operands, invert: false }),
+        });
+      } else {
+        const uses = m.operands.map(shapeId);
+        for (const u of uses) used.add(u);
+        masks.set(id, { id, alpha: uses });
+      }
     }
     return id;
   };
@@ -180,33 +190,74 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
   return { defs, masks: [...masks.values()], layers };
 }
 
-/** The `luminanceToAlpha` filter (`DisplayFilter`) as an SVG `<filter>` of
- *  one `feColorMatrix`: each pixel becomes black with an alpha of its
- *  luminance, computed in sRGB as a CSS mask would. A backend writes it
- *  once per render, when an item uses it ({@link usesLuminanceToAlpha}),
- *  under an id it draws from the counter its composite ids come from, so
- *  two visualizations on one page do not share it. */
-export const LUMINANCE_TO_ALPHA_FILTER = {
-  colorInterpolationFilters: "sRGB",
-  matrixType: "luminanceToAlpha",
-} as const;
+/** A display filter a backend draws as an SVG `<filter>` def: every kind
+ *  but a raw CSS string. */
+export type DefFilter = Exclude<DisplayFilter, { kind: "css" }>;
 
-/** Whether any of `items`, looking inside groups and composites, is drawn
- *  under the `luminanceToAlpha` filter. */
-export function usesLuminanceToAlpha(items: readonly DisplayItem[]): boolean {
-  return items.some((item) => {
-    if (item.kind === "group")
-      return (
-        item.filter?.kind === "luminanceToAlpha" ||
-        usesLuminanceToAlpha(item.children)
-      );
-    if (item.kind === "composite")
-      return (
-        item.operands.some(
-          (o) =>
-            usesLuminanceToAlpha(o.paint) || usesLuminanceToAlpha(o.shape ?? [])
-        ) || usesLuminanceToAlpha(item.fill ?? [])
-      );
-    return false;
-  });
+/** The `<filter>` def of `filter`: one `feColorMatrix`, computed in sRGB
+ *  as CSS filters are. `grayscale` is the CSS `grayscale(amount)` matrix of
+ *  the Filter Effects spec; `luminanceToAlpha` makes each pixel black with
+ *  an alpha of its luminance, as a CSS mask reads it. A backend draws a
+ *  filter as a def, not as a CSS function in the `filter` attribute,
+ *  because WebKit ignores CSS filter functions on SVG elements (#1330). */
+export function filterDef(filter: DefFilter): {
+  colorInterpolationFilters: "sRGB";
+  matrixType: "matrix" | "luminanceToAlpha";
+  values?: string;
+} {
+  switch (filter.kind) {
+    case "grayscale": {
+      const g = 1 - (filter.amount ?? 1);
+      const [r, gr, b] = [0.2126, 0.7152, 0.0722];
+      const n = (x: number) => +x.toFixed(6);
+      const values = [
+        [n(r + (1 - r) * g), n(gr - gr * g), n(b - b * g), 0, 0],
+        [n(r - r * g), n(gr + (1 - gr) * g), n(b - b * g), 0, 0],
+        [n(r - r * g), n(gr - gr * g), n(b + (1 - b) * g), 0, 0],
+        [0, 0, 0, 1, 0],
+      ];
+      return {
+        colorInterpolationFilters: "sRGB",
+        matrixType: "matrix",
+        values: values.map((row) => row.join(" ")).join(" "),
+      };
+    }
+    case "luminanceToAlpha":
+      return {
+        colorInterpolationFilters: "sRGB",
+        matrixType: "luminanceToAlpha",
+      };
+  }
+}
+
+/** A key that names a def filter, so a render writes each distinct one
+ *  once. */
+export const filterKey = (filter: DefFilter): string =>
+  filter.kind === "grayscale" ? `grayscale-${filter.amount ?? 1}` : filter.kind;
+
+/** The distinct def filters `items` are drawn under, looking inside groups
+ *  and composites, by {@link filterKey}, in the order they are first used.
+ *  A backend writes one `<filter>` def for each, once per render, under an
+ *  id it draws from the counter its composite ids come from, so two
+ *  visualizations on one page do not share them. */
+export function defFilters(items: readonly DisplayItem[]): DefFilter[] {
+  const found = new Map<string, DefFilter>();
+  const walk = (items: readonly DisplayItem[]): void => {
+    for (const item of items) {
+      if (item.kind === "group") {
+        const f = item.filter;
+        if (f !== undefined && f.kind !== "css" && !found.has(filterKey(f)))
+          found.set(filterKey(f), f);
+        walk(item.children);
+      } else if (item.kind === "composite") {
+        for (const o of item.operands) {
+          walk(o.paint);
+          walk(o.shape ?? []);
+        }
+        walk(item.fill ?? []);
+      }
+    }
+  };
+  walk(items);
+  return [...found.values()];
 }

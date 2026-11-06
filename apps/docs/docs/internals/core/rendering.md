@@ -231,15 +231,19 @@ flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
   list can't fold away, and the group a node with a `filter` option draws its whole
-  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
-  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
-  `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
-  SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
-  render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`
-  (`composite.ts`), which both backends write from. Its id is the render's own,
+  drawing in (`drawFilter.ts`). Its `filter` is a raw CSS filter value
+  (`{ kind: "css", value: "blur(2px)" }`), written as the `filter` attribute, or
+  a `Filter` strategy as itself (`{ kind: "grayscale", amount? }`,
+  `{ kind: "luminanceToAlpha" }`). A backend draws a strategy as an SVG
+  `<filter>` def of one `feColorMatrix` in sRGB (`filterDef` in `composite.ts`,
+  which both backends write from): `grayscale` as the Filter Effects spec's
+  `grayscale(amount)` matrix, `luminanceToAlpha` as `type="luminanceToAlpha"`.
+  It does not write `filter="grayscale(1)"`, because WebKit ignores CSS filter
+  functions on SVG elements (#1330). A render writes one def per distinct
+  filter it uses (`defFilters`, keyed by `filterKey`), under ids of its own,
   drawn from the counter the composite ids come from (`paintDocument` in
   `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
-  share it. A
+  share them. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its
@@ -287,7 +291,10 @@ flat-absolute fold cannot express on its own:
   data-URI `<image>` inside it decodes and never invalidate). Both write out
   one `compositePlan(item, uid)` (`composite.ts`), ids and all: the defs, each
   group of items written once; the masks, each distinct one once; and the
-  layers, each a `<use>` of a def in its masks and blend. The plan drops a
+  layers, each a `<use>` of a def in its masks and blend. An inverse mask is a
+  white rect over the bbox with a black rect on it, clipped by the alpha mask
+  of the same operands, not the shapes drawn black with a CSS `brightness(0)`
+  filter, which WebKit ignores on SVG elements (#1330). The plan drops a
   layer that would draw an operand with no paint, and writes a def only where
   a layer or a mask uses it, so a hidden operand's shape is written only for
   the masks that read it. A Canvas/WebGPU backend would map the plan to its

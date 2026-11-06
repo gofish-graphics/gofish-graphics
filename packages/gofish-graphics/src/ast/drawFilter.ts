@@ -18,8 +18,8 @@ export type FilterOption = Filter | string;
 export type FilterOptions = { filter?: FilterOption };
 
 /** The display-list filter a `filter` option draws with, checked once per
- *  spec: undefined when none is given. `grayscale` is a CSS function;
- *  `luminanceToAlpha` has none, so a backend draws its SVG def. */
+ *  spec: undefined when none is given. A `Filter` strategy is drawn as
+ *  itself (a backend draws its SVG def), a raw string as CSS. */
 export function displayFilter(
   value: FilterOption | undefined,
   where: string
@@ -28,12 +28,7 @@ export function displayFilter(
   if (typeof value === "string") return { kind: "css", value };
   const filter = kindValue(value) as Filter;
   Frontend.checkStrategy("Filter", filter, where);
-  switch (filter.kind) {
-    case "grayscale":
-      return { kind: "css", value: `grayscale(${filter.amount ?? 1})` };
-    case "luminanceToAlpha":
-      return { kind: "luminanceToAlpha" };
-  }
+  return filter;
 }
 
 /** Give `node` a filter made by {@link displayFilter}; `undefined` leaves

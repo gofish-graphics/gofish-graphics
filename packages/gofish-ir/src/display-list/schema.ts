@@ -135,13 +135,15 @@ export interface GroupItem extends BaseDisplayItem {
 
 /**
  * A filter over a group's drawing. `css` is a CSS `filter` value
- * (`grayscale(1)`, `url(#shadow)`), which SVG takes as the `filter`
- * attribute. `luminanceToAlpha` has no CSS function, so a backend draws it
- * as an SVG `<filter>` def: an `feColorMatrix type="luminanceToAlpha"` in
- * sRGB, which makes each pixel black with an alpha of its luminance.
+ * (`url(#shadow)`, `blur(2px)`), which SVG takes as the `filter` attribute.
+ * The other kinds are the `Filter` strategies; an SVG backend draws each as
+ * an SVG `<filter>` def of one `feColorMatrix` (`filterDef`): `grayscale`
+ * as CSS `grayscale(amount)` does, and `luminanceToAlpha` making each pixel
+ * black with an alpha of its luminance, both in sRGB.
  */
 export type DisplayFilter =
   | { kind: "css"; value: string }
+  | { kind: "grayscale"; amount?: number }
   | { kind: "luminanceToAlpha" };
 
 /**

@@ -106,6 +106,15 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
               type: "object",
               required: ["kind"],
               additionalProperties: false,
+              properties: {
+                kind: { const: "grayscale" },
+                amount: { type: "number" },
+              },
+            },
+            {
+              type: "object",
+              required: ["kind"],
+              additionalProperties: false,
               properties: { kind: { const: "luminanceToAlpha" } },
             },
           ],

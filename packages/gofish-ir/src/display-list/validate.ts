@@ -209,13 +209,16 @@ function checkItem(
       f !== undefined &&
       !(
         isObject(f) &&
-        ((f.kind === "css" && isStr(f.value)) || f.kind === "luminanceToAlpha")
+        ((f.kind === "css" && isStr(f.value)) ||
+          (f.kind === "grayscale" &&
+            (f.amount === undefined || typeof f.amount === "number")) ||
+          f.kind === "luminanceToAlpha")
       )
     )
       errors.push({
         path: `${path}.filter`,
         message:
-          'filter must be { kind: "css", value: string } or { kind: "luminanceToAlpha" }',
+          'filter must be { kind: "css", value: string }, { kind: "grayscale", amount?: number } or { kind: "luminanceToAlpha" }',
       });
     if (!Array.isArray(item.children))
       errors.push({

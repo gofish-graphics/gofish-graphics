@@ -83,8 +83,11 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* A chart wider than the column scrolls inside its box instead of widening
+   the page (#1330). */
 .gofish-vue {
   padding-bottom: 1rem;
+  overflow-x: auto;
   transform-origin: center center;
 }
 </style>

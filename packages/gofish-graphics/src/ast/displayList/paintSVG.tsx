@@ -51,32 +51,43 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   return (merged as Style) ?? item.style;
 };
 
-/** Deterministic id counter for composite defs and the filter def — same
+/** Deterministic id counter for composite defs and the filter defs — same
  *  scheme as gofish-ir's string backend so the two backends agree on id
  *  shape. A module-level counter (Math.random is non-reproducible), never
  *  reset, so ids are unique across every visualization on a page. */
 let compositeIdCounter = 0;
 
-/** A render's display list painted, with the `luminanceToAlpha` filter's
- *  `<filter>` def written once ahead of it when an item uses it
- *  (`DisplayList.usesLuminanceToAlpha`), under an id of this render's own;
- *  gofish-ir's string backend writes the same def. */
+/** The ids of a render's filter defs, by `DisplayList.filterKey`. */
+type FilterIds = ReadonlyMap<string, string>;
+
+/** A render's display list painted, with a `<filter>` def written once
+ *  ahead of it for each distinct filter an item uses
+ *  (`DisplayList.defFilters`), under ids of this render's own; gofish-ir's
+ *  string backend writes the same defs. */
 export function paintDocument(
   items: readonly DisplayList.DisplayItem[],
   interactive?: boolean
 ): JSX.Element[] {
-  const filterId = `gf-luminance-to-alpha-${compositeIdCounter++}`;
-  const painted = items.map((item) => paintSVG(item, filterId, interactive));
-  if (!DisplayList.usesLuminanceToAlpha(items)) return painted;
-  const f = DisplayList.LUMINANCE_TO_ALPHA_FILTER;
+  const prefix = `gf-filter-${compositeIdCounter++}`;
+  const filters = DisplayList.defFilters(items);
+  const filterIds: FilterIds = new Map(
+    filters.map((f, i) => [DisplayList.filterKey(f), `${prefix}-${i}`])
+  );
+  const painted = items.map((item) => paintSVG(item, filterIds, interactive));
+  if (!filters.length) return painted;
   return [
     <defs>
-      <filter
-        id={filterId}
-        color-interpolation-filters={f.colorInterpolationFilters}
-      >
-        <feColorMatrix type={f.matrixType} />
-      </filter>
+      {filters.map((filter, i) => {
+        const f = DisplayList.filterDef(filter);
+        return (
+          <filter
+            id={`${prefix}-${i}`}
+            color-interpolation-filters={f.colorInterpolationFilters}
+          >
+            <feColorMatrix type={f.matrixType} values={f.values} />
+          </filter>
+        );
+      })}
     </defs>,
     ...painted,
   ];
@@ -102,11 +113,11 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
-/** `item` painted. `filterId` is the id of its render's `luminanceToAlpha`
- *  filter def ({@link paintDocument}). */
+/** `item` painted. `filterIds` names its render's filter defs
+ *  ({@link paintDocument}). */
 function paintSVG(
   item: DisplayList.DisplayItem,
-  filterId: string,
+  filterIds: FilterIds,
   interactive?: boolean
 ): JSX.Element {
   // Live channels (a `live()` value baked at lower time): per-attribute
@@ -208,13 +219,18 @@ function paintSVG(
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const transform = parts.length ? parts.join(" ") : undefined;
       const children = item.children.map((c) =>
-        paintSVG(c, filterId, interactive)
+        paintSVG(c, filterIds, interactive)
       );
       const f = item.filter;
-      // `luminanceToAlpha` has no CSS function: it is an SVG `<filter>` def
-      // the render writes once ({@link paintDocument}).
+      // A `Filter` strategy is an SVG `<filter>` def the render writes once
+      // ({@link paintDocument}), not a CSS function: WebKit ignores CSS
+      // filter functions on SVG elements (#1330).
       const filter =
-        f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
+        f === undefined
+          ? undefined
+          : f.kind === "css"
+            ? f.value
+            : `url(#${filterIds.get(DisplayList.filterKey(f))})`;
       return (
         <g transform={transform} filter={filter}>
           {children}
@@ -266,24 +282,25 @@ function paintSVG(
           <defs>
             {plan.defs.map((d) => (
               <g id={d.id}>
-                {d.items.map((c) => paintSVG(c, filterId, false))}
+                {d.items.map((c) => paintSVG(c, filterIds, false))}
               </g>
             ))}
-            {plan.masks.map((m) => {
-              const uses = m.uses.map((u) => (
-                <use
-                  href={`#${u}`}
-                  filter={m.invert ? "brightness(0)" : undefined}
-                />
-              ));
-              return m.invert ? (
+            {plan.masks.map((m) =>
+              "outside" in m ? (
                 <mask
                   id={m.id}
                   maskUnits="userSpaceOnUse"
                   maskContentUnits="userSpaceOnUse"
                 >
                   <rect x={x} y={y} width={w} height={h} fill="#fff" />
-                  {uses}
+                  <rect
+                    x={x}
+                    y={y}
+                    width={w}
+                    height={h}
+                    fill="#000"
+                    mask={`url(#${m.outside})`}
+                  />
                 </mask>
               ) : (
                 <mask
@@ -292,10 +309,12 @@ function paintSVG(
                   maskContentUnits="userSpaceOnUse"
                   style="mask-type:alpha"
                 >
-                  {uses}
+                  {m.alpha.map((u) => (
+                    <use href={`#${u}`} />
+                  ))}
                 </mask>
-              );
-            })}
+              )
+            )}
           </defs>
           {drawn}
         </g>

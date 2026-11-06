@@ -42,12 +42,25 @@ console.log("# a mark's filter wraps its drawing");
   ]).toDisplayList({ w: 100, h: 100 });
   const g = groups(dl);
   check(
-    "one filtered group, grayscale(1)",
+    "one filtered group, grayscale",
     g.length === 1 &&
-      g[0].filter.kind === "css" &&
-      g[0].filter.value === "grayscale(1)" &&
+      g[0].filter.kind === "grayscale" &&
       g[0].children[0].kind === "rect",
     dl.items
+  );
+  // WebKit ignores CSS filter functions on SVG elements (#1330), so a
+  // strategy is drawn as an SVG `<filter>` def, never `filter="grayscale(1)"`.
+  const svg = DisplayList.displayListToSVG(dl);
+  const id = /<filter id="([^"]+)"/.exec(svg)?.[1];
+  check(
+    "the string backend draws grayscale as an feColorMatrix def",
+    svg.includes(
+      '<feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0.2126 0.7152 0.0722 0 0 0 0 0 1 0"/>'
+    ) &&
+      id !== undefined &&
+      svg.includes(`filter="url(#${id})"`) &&
+      !svg.includes("grayscale("),
+    svg
   );
 }
 
@@ -57,11 +70,36 @@ console.log("# a raw CSS string and an amount");
     rect({ w: 10, h: 10, fill: "red", filter: "blur(2px)" }),
     rect({ w: 10, h: 10, fill: "red", filter: Filter.grayscale({ amount: 0.5 }) }),
   ]).toDisplayList({ w: 100, h: 100 });
-  const values = groups(dl).map((g: any) => g.filter.value);
+  const filters = groups(dl).map((g: any) => g.filter);
   check(
     "blur(2px) and grayscale(0.5)",
-    values[0] === "blur(2px)" && values[1] === "grayscale(0.5)",
-    values
+    filters[0].kind === "css" &&
+      filters[0].value === "blur(2px)" &&
+      filters[1].kind === "grayscale" &&
+      filters[1].amount === 0.5,
+    filters
+  );
+  const svg = DisplayList.displayListToSVG(dl);
+  check(
+    "the raw string stays CSS; the amount sets the matrix",
+    svg.includes('filter="blur(2px)"') &&
+      svg.includes('values="0.6063 0.3576 0.0361 0 0 '),
+    svg
+  );
+}
+
+console.log("# two amounts draw two defs, one amount one");
+{
+  const dl = await layer([
+    rect({ w: 10, h: 10, filter: Filter.grayscale }),
+    rect({ w: 10, h: 10, filter: Filter.grayscale }),
+    rect({ w: 10, h: 10, filter: Filter.grayscale({ amount: 0.5 }) }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  const svg = DisplayList.displayListToSVG(dl);
+  check(
+    "two <filter> defs",
+    (svg.match(/<filter /g) ?? []).length === 2,
+    svg
   );
 }
 

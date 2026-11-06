@@ -72,8 +72,12 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+/* A chart is drawn at its own pixel size. One wider than the column (on a
+   phone) scrolls inside its box, as a code block does, instead of widening
+   the page (#1330). */
 .gofish-example {
   padding-bottom: 1rem;
+  overflow-x: auto;
 }
 .gofish-example-canvas {
   display: inline-block;
