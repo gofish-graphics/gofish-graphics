@@ -112,6 +112,7 @@ import {
 import { withWire } from "../wire";
 import { withKindValues } from "../strategyKind";
 import { LayerContext, datumOfInput } from "./markResult";
+import { withRegistrar } from "../../interaction/resolveContext";
 import { withFlowStep } from "./compose";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -132,7 +133,10 @@ function mapOperator<T, U>(
 ): Operator<T, U> {
   const op: Operator<T, U> = async (mark: Mark<U>) =>
     (async (d: T, key?: string | number, layerContext?: LayerContext) => {
-      const out = await fn(d, layerContext);
+      // The one call of a `derive` function or a `filter` predicate.
+      const out = await withRegistrar(layerContext?.registrar, () =>
+        fn(d, layerContext)
+      );
       return resolveMarkResult(
         mark,
         layerContext,
@@ -822,8 +826,12 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     /** The opts `produce` is built from: each `live(...)` channel replaced by
      *  its value at the connector's datum (the same substitution a leaf mark's
      *  channels get — see `withLiveStatics`). */
-    const resolveLive = (o: O, datum: unknown): StripLive<O> =>
-      withLiveStatics(o, liveChannels, datum);
+    const resolveLive = (
+      o: O,
+      datum: unknown,
+      layerContext: LayerContext | undefined
+    ): StripLive<O> =>
+      withLiveStatics(o, liveChannels, datum, layerContext?.registrar);
     /** Tag a produced connector with its operands, the datum it carries, and
      *  the paint-time thunks for its live channels. */
     const finish = (
@@ -858,7 +866,11 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     ): Promise<GoFishNode> =>
       finish(
         (await produce(
-          resolveLive(await resolveGroupPaint(type, o, group), datum),
+          resolveLive(
+            await resolveGroupPaint(type, o, group),
+            datum,
+            layerContext
+          ),
           operands,
           inferred,
           key,

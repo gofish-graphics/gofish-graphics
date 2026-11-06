@@ -32,8 +32,8 @@ export { slider, button } from "./widgets";
 export type { Control, SliderOptions, ButtonOptions } from "./widgets";
 export { InteractionRuntime } from "./runtime";
 export {
-  withInteractiveResolve,
-  ambientRegistrar,
+  withRegistrar,
+  scopedRegistrar,
   inLiveEval,
   runInLiveEval,
 } from "./resolveContext";

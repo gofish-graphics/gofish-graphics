@@ -62,8 +62,12 @@ export type Control = NameableMark<unknown> & { dispose(): void };
 function control<I>(spec: {
   input: (hitTest: (pt: SvgPoint, hit: Hit | undefined) => boolean) => I;
   write: (input: I, primaryId: () => string | undefined) => void;
+  /** Build the picture. `leaf` resolves one of its marks in the context the
+   *  control is applied in, so the inputs its marks read register with that
+   *  chart. */
   build: (
-    input: I
+    input: I,
+    leaf: (mark: unknown) => Promise<GoFishNode>
   ) => Promise<{ node: GoFishNode; targets: [GoFishNode, GoFishNode] }>;
 }): Control {
   // The uids of the two nodes the latest build produced. Refreshed per build,
@@ -80,8 +84,13 @@ function control<I>(spec: {
     return disposeRoot;
   });
 
-  const mark: Mark<unknown> = async () => {
-    const { node, targets } = await spec.build(input);
+  const mark: Mark<unknown> = async (_d, _key, layerContext) => {
+    const { node, targets } = await spec.build(input, (child) =>
+      resolveMarkResult(
+        child as Parameters<typeof resolveMarkResult>[0],
+        layerContext
+      )
+    );
     primary = targets[0].uid;
     secondary = targets[1].uid;
     return node;
@@ -90,10 +99,6 @@ function control<I>(spec: {
   result.dispose = dispose;
   return result;
 }
-
-/** Invoke a leaf mark with no datum — what an operator does to a mark child. */
-const leaf = (mark: unknown): Promise<GoFishNode> =>
-  resolveMarkResult(mark as Parameters<typeof resolveMarkResult>[0]);
 
 /* -------------------------------- slider -------------------------------- */
 
@@ -216,7 +221,7 @@ export function slider(opts: SliderOptions): Control {
         const next = valueAt((pt.x - (box.x + HANDLE_R)) / px);
         if (next !== untrack(readValue)) onInput(next);
       }),
-    build: async (scrub) => {
+    build: async (scrub, leaf) => {
       // Every read of the value or the drag state is a PAINT-time read. This
       // one is the value the handle is laid out at: `readLive` reads it without
       // making the input a pipeline dependency, and still registers it with
@@ -337,7 +342,7 @@ export function button(opts: ButtonOptions): Control {
         onClick();
       });
     },
-    build: async (press) => {
+    build: async (press, leaf) => {
       // The caption changes the text's box, so it is read at resolve and
       // re-measures. The pressed shading changes no box, so it is a paint-time
       // read; evaluating that `live()` channel at resolve is also what

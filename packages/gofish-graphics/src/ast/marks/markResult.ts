@@ -16,6 +16,11 @@ import { GoFishRef } from "../_ref";
 import { RelateOperand } from "../constraints/relate";
 import { isToken } from "../createName";
 import type { Mark, MarkChild } from "../types";
+import {
+  scopedRegistrar,
+  withRegistrar,
+  type AmbientRegistrar,
+} from "../../interaction/resolveContext";
 
 /** The marks one name stands for in a registry: the nodes, and the datum of
  *  each, in registration order. */
@@ -60,14 +65,38 @@ export class LayerContext {
   /** The registries nested in this one, in creation order. */
   private readonly kids: LayerContext[] = [];
 
-  constructor(readonly parent?: LayerContext) {
+  /**
+   * The interaction runtime of the chart this registry is resolved for, which
+   * the inputs read in its scope register with (see `resolveContext.ts`). A
+   * nested registry has its parent's. A root has the one it was given: a
+   * render's root gets its chart's (`RenderPass.registrar`), and a name
+   * boundary (a `createMark` body) gets the registrar of the scope it bounds.
+   * A root built with none takes the registrar of the synchronous user call
+   * it is built in, if any (a combinator called in a component thunk), and
+   * carries it on from then on.
+   */
+  readonly registrar: AmbientRegistrar | undefined;
+
+  constructor(
+    readonly parent?: LayerContext,
+    registrar?: AmbientRegistrar
+  ) {
     this.depth = parent ? parent.depth + 1 : 0;
+    this.registrar = parent
+      ? parent.registrar
+      : (registrar ?? scopedRegistrar());
     parent?.kids.push(this);
   }
 
   /** A fresh registry nested in this one. */
   child(): LayerContext {
     return new LayerContext(this);
+  }
+
+  /** A fresh ROOT registry, a name boundary, for the same chart: it shares
+   *  no names with this one, and keeps its registrar. */
+  boundary(): LayerContext {
+    return new LayerContext(undefined, this.registrar);
   }
 
   /** The marks filed under `key` in this registry itself, not widened. */
@@ -241,6 +270,23 @@ export const datumOfInput = <T>(d: T[]): T[] | undefined =>
  * itself. What a mark function returns is resolved as a root: with
  * {@link NO_ROWS}, the rows of no partition.
  */
+/**
+ * Call a mark: the one place GoFish calls one, user code included (a
+ * component thunk, a `createMark` body, the channel functions and `live()`
+ * channels a mark reads, a `derive` function), so the call is made in the
+ * registrar scope of the context it is made in (see `resolveContext.ts`).
+ */
+export function callMark(
+  mark: Mark<any>,
+  rows: unknown,
+  key: string | number | undefined,
+  layerContext: LayerContext | undefined
+): ReturnType<Mark<any>> {
+  return withRegistrar(layerContext?.registrar, () =>
+    mark(rows as any, key, layerContext)
+  );
+}
+
 export async function resolveMarkResult(
   raw: MarkChild,
   layerContext?: LayerContext,
@@ -273,7 +319,7 @@ export async function resolveMarkResult(
       // Pass layerContext through so mark wrappers (e.g. .name(...)) that
       // need to register into the layer context still see it when invoked
       // here.
-      (raw as Mark<any>)(rows as any, key, layerContext),
+      callMark(raw as Mark<any>, rows, key, layerContext),
       layerContext
     );
   return raw as unknown as GoFishNode;

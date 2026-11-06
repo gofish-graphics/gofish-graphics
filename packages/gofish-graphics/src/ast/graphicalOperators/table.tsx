@@ -98,52 +98,55 @@ export type TableOptions = {
   numCols?: number;
 };
 
-export const table = createOperator<any, TableOptions>(Table, {
-  // The columns are the split of the rows by `by.x`, and the rows the split
-  // by `by.y`, each as `spread` splits (`splitEntries`: a binned key's groups
-  // are its cells, empty ones included). Each cell of the table holds the
-  // rows in both its column's group and its row's group.
-  split: ({ by }, d) => {
-    if (by?.x === undefined || by?.y === undefined)
-      throw new Error(
-        "table operator form requires opts.by = { x, y }: a key for the " +
-          "columns and one for the rows (field names or field(...) keys, " +
-          'e.g. { x: "month", y: field("date").bin(Calendar.weekday) })'
+export const table = createOperator<any, TableOptions>(
+  (opts, children) => Table(opts, children),
+  {
+    // The columns are the split of the rows by `by.x`, and the rows the split
+    // by `by.y`, each as `spread` splits (`splitEntries`: a binned key's groups
+    // are its cells, empty ones included). Each cell of the table holds the
+    // rows in both its column's group and its row's group.
+    split: ({ by }, d) => {
+      if (by?.x === undefined || by?.y === undefined)
+        throw new Error(
+          "table operator form requires opts.by = { x, y }: a key for the " +
+            "columns and one for the rows (field names or field(...) keys, " +
+            'e.g. { x: "month", y: field("date").bin(Calendar.weekday) })'
+        );
+      const cols = splitEntries(by.x, d);
+      const rows = splitEntries(by.y, d);
+      // One pass over the rows: each row's row key, then each column's rows
+      // into their cells, which are made first, every one, in row-major order,
+      // each keyed by its place in that order. A cell is found by its column
+      // key and then its row key, never by a string of the two: keys may hold
+      // any text ("6-15", "-5").
+      const rowOf = new Map<unknown, unknown>();
+      for (const [rowKey, rowRows] of rows)
+        for (const r of rowRows) rowOf.set(r, rowKey);
+      const cellOf = new Map<unknown, Map<unknown, any[]>>(
+        [...cols.keys()].map((colKey) => [colKey, new Map()])
       );
-    const cols = splitEntries(by.x, d);
-    const rows = splitEntries(by.y, d);
-    // One pass over the rows: each row's row key, then each column's rows
-    // into their cells, which are made first, every one, in row-major order,
-    // each keyed by its place in that order. A cell is found by its column
-    // key and then its row key, never by a string of the two: keys may hold
-    // any text ("6-15", "-5").
-    const rowOf = new Map<unknown, unknown>();
-    for (const [rowKey, rowRows] of rows)
-      for (const r of rowRows) rowOf.set(r, rowKey);
-    const cellOf = new Map<unknown, Map<unknown, any[]>>(
-      [...cols.keys()].map((colKey) => [colKey, new Map()])
-    );
-    const entries = new Map<number, any[]>();
-    for (const rowKey of rows.keys())
-      for (const colKey of cols.keys()) {
-        const cell: any[] = [];
-        cellOf.get(colKey)!.set(rowKey, cell);
-        entries.set(entries.size, cell);
-      }
-    for (const [colKey, colRows] of cols)
-      for (const r of colRows)
-        if (rowOf.has(r)) cellOf.get(colKey)!.get(rowOf.get(r))!.push(r);
-    return {
-      entries,
-      layoutOpts: {
-        colKeys: [...cols.keys()],
-        rowKeys: [...rows.keys()],
-        colHasOrder: cols.hasOrder,
-        rowHasOrder: rows.hasOrder,
-      },
-    };
-  },
-  axisFields: ({ by }) =>
-    by ? { x: fieldNameOf(by.x), y: fieldNameOf(by.y) } : undefined,
-  serialize: "table",
-});
+      const entries = new Map<number, any[]>();
+      for (const rowKey of rows.keys())
+        for (const colKey of cols.keys()) {
+          const cell: any[] = [];
+          cellOf.get(colKey)!.set(rowKey, cell);
+          entries.set(entries.size, cell);
+        }
+      for (const [colKey, colRows] of cols)
+        for (const r of colRows)
+          if (rowOf.has(r)) cellOf.get(colKey)!.get(rowOf.get(r))!.push(r);
+      return {
+        entries,
+        layoutOpts: {
+          colKeys: [...cols.keys()],
+          rowKeys: [...rows.keys()],
+          colHasOrder: cols.hasOrder,
+          rowHasOrder: rows.hasOrder,
+        },
+      };
+    },
+    axisFields: ({ by }) =>
+      by ? { x: fieldNameOf(by.x), y: fieldNameOf(by.y) } : undefined,
+    serialize: "table",
+  }
+);

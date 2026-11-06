@@ -241,61 +241,64 @@ export type SpreadOptions<T = any> = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
-export const spread = createOperator<any, SpreadOptions>(Spread as any, {
-  // Without `by`, `splitEntries` splits by row identity. Expand-kind marks
-  // (e.g. `cut`) need the whole array in one leaf instead; that override
-  // lives in createOperator (it dispatches on the mark's kind), not here, so
-  // this split stays kind-agnostic.
-  //
-  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
-  // origin at the midpoint of the column's order instead of at its first
-  // part's tail; the split knows the groups present, so it computes it. It
-  // reorders every level of the order the way it reorders the groups, so the
-  // stack knows which way it lays the order out even in a row with one part.
-  // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
-  // ordinal space it folds knows its keys are ordered.
-  split: ({ by, glue, reverse }, d) => {
-    const entries = splitEntries(by, d);
-    const hasOrder = entries.hasOrder;
-    if (!glue)
-      return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
-    const column = fieldNameOf(by);
-    const type = columnType(d, column);
-    // Only a column with HasMidpoint moves the origin (as in `stackOrigin`),
-    // so the level order is built only for one. The stack's origin stays
-    // undefined, the default.
-    if (!type?.HasMidpoint)
-      return { entries, layoutOpts: { hasOrder, origin: undefined } };
-    const levels = (type?.HasLevels?.levels ?? []) as (string | number)[];
-    const split = orderEntries(
-      by,
-      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
-    );
-    const origin = stackOrigin(
-      column,
-      type,
-      [...split.keys()],
-      [...entries.keys()],
-      reverse
-    );
-    return { entries, layoutOpts: { hasOrder, origin } };
-  },
-  channels: { w: "size", h: "size", size: { type: "size", entry: true } },
-  axisFields: ({ by, dir }) => {
-    const name = fieldNameOf(by);
-    return name === undefined ? undefined : { [dir]: name };
-  },
-  // `dir` is the axis this operator lays its groups out along (`stack` is
-  // `spread({glue: true})`, so it inherits this). The travel-axis rule reads
-  // this at build time, before the enclosing coordinate space is known, so a
-  // coord-declared `dir` (`theta`, `lon`, ...) positions neither axis here.
-  // TODO(#838 follow-up): resolve the travel axis by name too.
-  arrangement: {
-    kind: "arrangement",
-    positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),
-  },
-  serialize: "spread",
-});
+export const spread = createOperator<any, SpreadOptions>(
+  (opts: any, children) => Spread(opts, children),
+  {
+    // Without `by`, `splitEntries` splits by row identity. Expand-kind marks
+    // (e.g. `cut`) need the whole array in one leaf instead; that override
+    // lives in createOperator (it dispatches on the mark's kind), not here, so
+    // this split stays kind-agnostic.
+    //
+    // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
+    // origin at the midpoint of the column's order instead of at its first
+    // part's tail; the split knows the groups present, so it computes it. It
+    // reorders every level of the order the way it reorders the groups, so the
+    // stack knows which way it lays the order out even in a row with one part.
+    // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
+    // ordinal space it folds knows its keys are ordered.
+    split: ({ by, glue, reverse }, d) => {
+      const entries = splitEntries(by, d);
+      const hasOrder = entries.hasOrder;
+      if (!glue)
+        return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
+      const column = fieldNameOf(by);
+      const type = columnType(d, column);
+      // Only a column with HasMidpoint moves the origin (as in `stackOrigin`),
+      // so the level order is built only for one. The stack's origin stays
+      // undefined, the default.
+      if (!type?.HasMidpoint)
+        return { entries, layoutOpts: { hasOrder, origin: undefined } };
+      const levels = (type?.HasLevels?.levels ?? []) as (string | number)[];
+      const split = orderEntries(
+        by,
+        new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+      );
+      const origin = stackOrigin(
+        column,
+        type,
+        [...split.keys()],
+        [...entries.keys()],
+        reverse
+      );
+      return { entries, layoutOpts: { hasOrder, origin } };
+    },
+    channels: { w: "size", h: "size", size: { type: "size", entry: true } },
+    axisFields: ({ by, dir }) => {
+      const name = fieldNameOf(by);
+      return name === undefined ? undefined : { [dir]: name };
+    },
+    // `dir` is the axis this operator lays its groups out along (`stack` is
+    // `spread({glue: true})`, so it inherits this). The travel-axis rule reads
+    // this at build time, before the enclosing coordinate space is known, so a
+    // coord-declared `dir` (`theta`, `lon`, ...) positions neither axis here.
+    // TODO(#838 follow-up): resolve the travel axis by name too.
+    arrangement: {
+      kind: "arrangement",
+      positions: ({ dir }) => ({ x: dir === "x", y: dir === "y" }),
+    },
+    serialize: "spread",
+  }
+);
 
 /** Stack glues children together, summing sizes into a POSITION at the spread
  * level. Neither `spacing` nor `glue` is configurable — stacked children always

@@ -112,9 +112,10 @@ export function makeRule(
       const channels = items.map((item) => channelsOf(item, effects, role));
 
       // The static value: the state at the playhead as it stands now, read
-      // untracked so lowering does not subscribe to the clock. It is written
-      // into the renderer's items in place, so each keeps its identity (its
-      // id and any live slots already set on it).
+      // untracked so lowering does not subscribe to the clock. Lowering is
+      // paint, so it registers nothing either (`resolveContext.ts`). It is
+      // written into the renderer's items in place, so each keeps its
+      // identity (its id and any live slots already set on it).
       const k0 = readLive(key);
       const first = { key: k0, items: stateAt(k0) };
       items.forEach((item, j) => {

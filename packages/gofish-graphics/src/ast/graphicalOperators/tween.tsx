@@ -334,14 +334,11 @@ export const tween = createNodeOperator(
     const live = typeof playhead === "function";
     const readPlayhead = live ? playhead : () => playhead;
 
-    // The playhead, read ONCE, HERE: the value the node lowers to, and the
-    // read that registers the clock with the chart's interaction runtime.
-    // Here rather than in `layout` because this is the part of the node's life
-    // that happens during RESOLVE, which is when the ambient runtime is
-    // installed and an input read can reach it. `readLive` is what keeps the
-    // read paint-time — untracked, and flagged so the input wires event
-    // dispatch without becoming a pipeline dependency of this chart (see
-    // `src/interaction/live.ts`).
+    // The playhead, read ONCE, HERE: the value the node lowers to. It
+    // registers nothing: the node has no context, so `time.transition()`
+    // registers the clock with its chart before building it. `readLive` is
+    // what keeps the read paint-time — untracked, and flagged so it is no
+    // pipeline dependency of this chart (see `src/interaction/live.ts`).
     const t = readLive(readPlayhead);
     /** Where the run is read at a playhead and how opaque it is there. */
     const life = lifecycle(knots, sequence, ease);

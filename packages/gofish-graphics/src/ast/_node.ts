@@ -3392,6 +3392,9 @@ export class GoFishNode {
     // Paint-time animation (see `INTERNAL_animate`): this node's own rule, or
     // the rule of the mark it is attached to. Like visibility, a taken-over
     // drawing skips it: its new owner decides how it shows.
+    // Lowering is paint, not resolve: the reads below (the rule's paint, the
+    // visibility) register nothing with any chart. The inputs they read were
+    // registered as the chart resolved.
     const rule = this.__gfAnimate ?? this._attachedTo?.__gfAnimate;
     if (rule) {
       const role = this.__gfAnimate ? "host" : "rider";

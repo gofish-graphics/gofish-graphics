@@ -21,7 +21,7 @@ import { lowerToDisplayList } from "./displayList/lower";
 import { paintDocument } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
 import { renderWithInteraction } from "../interaction/renderTerminal";
-import { resolveMarkResult } from "./marks/markResult";
+import { LayerContext, resolveMarkResult } from "./marks/markResult";
 import type { Size } from "./dims";
 import {
   continuousInterval,
@@ -1324,8 +1324,8 @@ export function gofish(
   // `live()`) needs a thunk the scheduler can re-invoke; and a `pointer()` read
   // in a `live()` needs the runtime installed for `data-gf-id` hit-testing. Both
   // fall out of routing the thunk through the same terminal the chart builders
-  // use — a fresh InteractionRuntime, resolve under the ambient context, thread
-  // the runtime only if something registered. A PLAIN node keeps today's exact
+  // use — a fresh InteractionRuntime, handed to the resolve as its registrar,
+  // thread the runtime only if something registered. A PLAIN node keeps today's exact
   // static behavior below (a `live()` channel on a plain node still patches at
   // paint — that's runtime-independent — it just gets no runtime/hit-testing).
   //
@@ -1334,11 +1334,17 @@ export function gofish(
   // the empty list `[]` (a root has no rows; a thunk ignores it) and reifies
   // whatever it returns.
   if (typeof child === "function") {
-    const build = () => resolveMarkResult(child as any);
-    return renderWithInteraction(async () => {
+    return renderWithInteraction(async (pass) => {
+      // The thunk is resolved into a registry of its own, whose registrar is
+      // the render's (see `resolveContext.ts`).
+      const build = () =>
+        resolveMarkResult(
+          child as any,
+          new LayerContext(undefined, pass.registrar)
+        );
       const node = await build();
       // A thunk can build the chart again, which `label.angle: "auto"` needs
-      // (see `GoFishNode.rebuild`).
+      // (see `GoFishNode.rebuild`); the rebuild is for the same render.
       node.rebuild = build;
       return { node, options: { ...options } };
     }, container);

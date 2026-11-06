@@ -37,12 +37,14 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark, MarkChild, Operator } from "../types";
 import {
+  callMark,
   datumOfInput,
   layerKey,
+  LayerContext,
   resolveMarkResult,
   stashLayerName,
-  type LayerContext,
 } from "./markResult";
+import { withRegistrar } from "../../interaction/resolveContext";
 import {
   CHANNEL_INFER,
   isBatchAccessor,
@@ -153,7 +155,12 @@ export async function applyMark<T>(
 ): Promise<GoFishNode[]> {
   const kind = getMarkKind(mark);
   if (kind === "expand") {
-    const result = await (mark as Mark<T[]>)(group, groupKey, layerContext);
+    const result = await callMark(
+      mark as Mark<T[]>,
+      group,
+      groupKey,
+      layerContext
+    );
     return Promise.all(
       (result as unknown as GoFishNode[]).map((r) =>
         resolveMarkResult(r as any, layerContext)
@@ -414,7 +421,10 @@ export function attachModifiers<T>(
   // `.transition({ enter })` as a chart does (`installBuildIn`, which the
   // render options `playing` / `at` can hold). See terminals.ts.
   attachBuilderTerminals(base, async (options, pass) => {
-    const node = await resolveMarkResult(base as Mark<any>);
+    const node = await resolveMarkResult(
+      base as Mark<any>,
+      new LayerContext(undefined, pass?.registrar)
+    );
     installBuildIn(node, options, pass);
     return { node, options };
   });
@@ -785,7 +795,11 @@ export type DeriveOperatorOptions<LayoutProps, Channels, Datum> = {
 /** The low-level layout function passed as createOperator's first arg. */
 export type LayoutFn<Options> = (
   opts: Options,
-  children: GoFishAST[]
+  children: GoFishAST[],
+  /** The context the operator is applied in: its names, and the registrar
+   *  a read the layout itself makes registers with (`time.sequence`'s
+   *  clock). */
+  layerContext?: LayerContext
 ) => GoFishAST | PromiseLike<GoFishAST | PromiseLike<GoFishAST>>;
 
 /**
@@ -1177,7 +1191,8 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   opts: Options,
   d: Datum[],
   entries: Map<SplitKey, Datum[]> | undefined,
-  layoutOpts: Record<string, unknown> | undefined
+  layoutOpts: Record<string, unknown> | undefined,
+  layerContext: LayerContext | undefined
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
     const rows = new Set<unknown>(d);
@@ -1189,7 +1204,10 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
     return copyColumnTypes([...rows], d);
   });
   const resolved = isThenable(pending) ? await pending : pending;
-  const withChannels = applyChannels(resolved, channels, d, entries);
+  // The one call of an operator's channel functions.
+  const withChannels = withRegistrar(layerContext?.registrar, () =>
+    applyChannels(resolved, channels, d, entries)
+  );
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
   return { ...stripped, ...layoutOpts } as Options;
@@ -1247,9 +1265,14 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             opts,
             d,
             undefined,
-            undefined
+            undefined,
+            layerContext
           );
-          const node = (await layout(lowOpts, nodes)) as GoFishNode;
+          const node = (await layout(
+            lowOpts,
+            nodes,
+            layerContext
+          )) as GoFishNode;
           node.datum = datumOfInput(d);
           return node;
         };
@@ -1422,7 +1445,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           opts,
           d,
           entries,
-          splitLayoutOpts
+          splitLayoutOpts,
+          layerContext
         );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the
@@ -1437,7 +1461,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         ) {
           (lowOpts as any).axisMeasures = groupMeasures;
         }
-        const built = (await layout(lowOpts, nodes)) as unknown as GoFishNode;
+        const built = (await layout(
+          lowOpts,
+          nodes,
+          layerContext
+        )) as unknown as GoFishNode;
         if (transitionState !== undefined) {
           recordOperatorTransition(built, transitionState);
         }

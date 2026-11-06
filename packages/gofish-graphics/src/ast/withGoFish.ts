@@ -21,6 +21,7 @@ import {
   datumOfInput,
   resolveMarkResult,
 } from "./marks/markResult";
+import { withRegistrar } from "../interaction/resolveContext";
 import {
   CHANNEL_INFER,
   hasNoValue,
@@ -302,6 +303,9 @@ export function createNodeOperator<T extends Record<string, any>, R>(
 export async function reifyChildren(
   children: GoFishChildrenInput
 ): Promise<GoFishAST[]> {
+  // Built before the first `await`, so a combinator called in a user call (a
+  // component thunk) takes that call's registrar (`LayerContext.registrar`).
+  const layerContext = new LayerContext();
   const flattened = await flattenAndAwaitPromises<
     | GoFishAST
     | Promise<GoFishAST>
@@ -309,7 +313,6 @@ export async function reifyChildren(
     | LayerBuilder
     | Mark<any>
   >(children);
-  const layerContext = new LayerContext();
   const resolvedAll = await Promise.all(
     flattened.map((child) => reifyChild(child, layerContext))
   );
@@ -338,6 +341,8 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         T,
         GoFishChildrenInputWithThunks
       >(args, "createNodeOperatorSequential");
+      // Built before the first `await`, as in `reifyChildren`.
+      const layerContext = new LayerContext();
       // First phase: flatten and await, preserving thunks, marks, and
       // ChartBuilder instances for the sequential second phase.
       const flattenedWithThunks = await flattenAndAwaitPromises<
@@ -347,7 +352,6 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
         | LayerBuilder
         | Mark<any>
       >(children);
-      const layerContext = new LayerContext();
       const resolvedChildren = await reifyChildrenSequentially(
         flattenedWithThunks,
         layerContext
@@ -526,7 +530,8 @@ function buildCreatedMark(
     // every other mark factory — see `splitLiveChannels`.
     const { static: staticOpts, live: liveChannels } = splitLiveChannels(
       channelOpts,
-      d
+      d,
+      _layerContext?.registrar
     );
     const pending = resolveChannelAccessors(staticOpts, channels, () => d);
     const resolvedOpts = isThenable(pending) ? await pending : pending;
@@ -537,34 +542,37 @@ function buildCreatedMark(
     // (Vega-Lite's default `invalid: "filter"`). It keeps its place in the
     // layout. A sum or a count of no rows is 0, a value, and draws.
     let noValue = false;
-    for (const propName of Object.keys(resolvedOpts)) {
-      if (propName === "debug") continue;
-      const channelSpec = channels[propName];
-      const markValue = resolvedOpts[propName];
+    // The one call of a mark's channel functions.
+    withRegistrar(_layerContext?.registrar, () => {
+      for (const propName of Object.keys(resolvedOpts)) {
+        if (propName === "debug") continue;
+        const channelSpec = channels[propName];
+        const markValue = resolvedOpts[propName];
 
-      const channelType: ChannelType | undefined =
-        typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
-      const isEntry =
-        typeof channelSpec === "object" && channelSpec?.entry === true;
+        const channelType: ChannelType | undefined =
+          typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+        const isEntry =
+          typeof channelSpec === "object" && channelSpec?.entry === true;
 
-      if (isEntry && channelType === "size") {
-        // An already-wrapped value (`v(...)`) is the size as it is.
-        shapeProps[propName] = isValue(markValue)
-          ? markValue
-          : inferEntrySize(markValue, d);
-      } else if (channelType !== undefined) {
-        // Each kind reads an already-wrapped value (`datum(...)`) itself
-        // (`CHANNEL_INFER`): an area roots it, the others keep it.
-        shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
-        if (
-          markValue !== undefined &&
-          hasNoValue(channelType, shapeProps[propName])
-        )
-          noValue = true;
-      } else {
-        shapeProps[propName] = markValue;
+        if (isEntry && channelType === "size") {
+          // An already-wrapped value (`v(...)`) is the size as it is.
+          shapeProps[propName] = isValue(markValue)
+            ? markValue
+            : inferEntrySize(markValue, d);
+        } else if (channelType !== undefined) {
+          // Each kind reads an already-wrapped value (`datum(...)`) itself
+          // (`CHANNEL_INFER`): an area roots it, the others keep it.
+          shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);
+          if (
+            markValue !== undefined &&
+            hasNoValue(channelType, shapeProps[propName])
+          )
+            noValue = true;
+        } else {
+          shapeProps[propName] = markValue;
+        }
       }
-    }
+    });
 
     // For expand-kind marks, hand the data array to shapeFn so it can
     // build N output nodes 1:1 with input rows. shapeFn may be async.
@@ -573,7 +581,10 @@ function buildCreatedMark(
     // the same `resolveMarkResult` path. The name context is fresh: the
     // component is a naming boundary. An expand mark (its kind, declared at
     // `createMark`) returns its array of slice nodes, which pass through as-is.
-    const raw = await shapeFn(shapeProps, kind === "expand" ? d : undefined);
+    // The one call of a `createMark` body.
+    const raw = await withRegistrar(_layerContext?.registrar, () =>
+      shapeFn(shapeProps, kind === "expand" ? d : undefined)
+    );
     if (kind === "expand") {
       const result = raw as GoFishNode[];
       const types = getColumnTypes(d);
@@ -594,7 +605,10 @@ function buildCreatedMark(
       }
       return result as unknown as GoFishNode;
     }
-    const node = await resolveMarkResult(raw, new LayerContext());
+    const node = await resolveMarkResult(
+      raw,
+      _layerContext?.boundary() ?? new LayerContext()
+    );
     if (liveChannels) node.__gfLive = liveChannels;
     applyFilter(node, filter);
     // Its whole drawing, not only its own lowering: a component's children

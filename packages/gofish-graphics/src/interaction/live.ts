@@ -32,7 +32,11 @@ import {
   type Owner,
   type Setter,
 } from "solid-js";
-import { runInLiveEval } from "./resolveContext";
+import {
+  runInLiveEval,
+  withRegistrar,
+  type AmbientRegistrar,
+} from "./resolveContext";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
 
@@ -68,8 +72,10 @@ export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
  *
  * `evalLiveStatic` is this applied to a `live()` channel. A NODE reaches for it
  * directly when the paint-time value is its own rather than a channel the user
- * wrote — `tween` reads the playhead this way, to have a value to lower and to
- * register the clock, while leaving the per-frame reading to the paint tier.
+ * wrote — `tween` reads the playhead this way, to have a value to lower, while
+ * leaving the per-frame reading to the paint tier. A read registers with the
+ * registrar in scope (`resolveContext.ts`); outside one, as in lowering, it
+ * registers nothing.
  */
 export const readLive = <T>(read: () => T): T =>
   untrack(() => runInLiveEval(read));
@@ -149,20 +155,24 @@ export type StripLive<O> = { [K in keyof O]: Exclude<O[K], LiveValue> };
 /**
  * `opts` with each live channel replaced by its resolve-time value at `datum`.
  * Reading a live channel here is also what REGISTERS its input with the
- * interaction runtime, so this is the single point where that happens for a
- * mark's channels — and the single point where the `LiveValue` arm is discharged
- * from the type.
+ * interaction runtime, the registrar of `registrar` (the context the mark is
+ * applied in; see `resolveContext.ts`), so this is the single point where
+ * that happens for a mark's channels — and the single point where the
+ * `LiveValue` arm is discharged from the type.
  */
 export const withLiveStatics = <O extends Record<string, unknown>>(
   opts: O,
   live: Record<string, LiveValue> | undefined,
-  datum: unknown
+  datum: unknown,
+  registrar: AmbientRegistrar | undefined
 ): StripLive<O> =>
   (live
     ? {
         ...opts,
-        ...Object.fromEntries(
-          Object.entries(live).map(([k, v]) => [k, evalLiveStatic(v, datum)])
+        ...withRegistrar(registrar, () =>
+          Object.fromEntries(
+            Object.entries(live).map(([k, v]) => [k, evalLiveStatic(v, datum)])
+          )
         ),
       }
     : opts) as StripLive<O>;
@@ -175,8 +185,9 @@ export const withLiveStatics = <O extends Record<string, unknown>>(
  */
 export const splitLiveChannels = <O extends Record<string, unknown>>(
   opts: O,
-  datum: unknown
+  datum: unknown,
+  registrar: AmbientRegistrar | undefined
 ): { static: StripLive<O>; live: Record<string, LiveValue> | undefined } => {
   const live = liveChannelsOf(opts);
-  return { static: withLiveStatics(opts, live, datum), live };
+  return { static: withLiveStatics(opts, live, datum, registrar), live };
 };

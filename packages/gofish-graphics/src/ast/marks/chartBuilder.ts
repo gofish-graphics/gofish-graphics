@@ -1439,7 +1439,11 @@ async function resolveForRender(
   options: RenderOptions & BuildClockOptions,
   pass?: RenderPass
 ) {
-  const node = await this.resolve();
+  // Each render resolves into a registry of its own, whose registrar is the
+  // render's (see `resolveContext.ts`).
+  const node = await this.withLayerContext(
+    new LayerContext(undefined, pass?.registrar)
+  ).resolve();
   // The build-in: marks with enter transitions enter once, on one clock for
   // the whole chart, which the render options `playing` / `at` can hold. A
   // chart with none is untouched. It plays on the chart's first render only

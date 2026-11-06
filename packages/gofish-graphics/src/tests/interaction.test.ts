@@ -591,54 +591,171 @@ async function main() {
     // chart's spec must register with THAT chart's runtime, wherever the other
     // resolves are: a pointer chart keeps its hit-test hooks, a static chart
     // next to it gets none, and a `time.sequence` chart (whose clock registers
-    // at resolve, below a `layer` of its keyframes) keeps its own.
-    const pointerBox = makeContainer();
-    const staticBox = makeContainer();
-    const sequenceBox = makeContainer();
+    // at resolve, below a `layer` of its keyframes) keeps its own. Each chart's
+    // hooks are checked against the same chart rendered alone.
     const p = pointer();
-    const renders = [
-      chart(data, { axes: false })
-        .flow(spread({ by: "cat", dir: "x" }))
-        .mark(
-          rect({
-            h: "count",
-            fill: live(() => (p.datum() ? "#f00" : "#00f")),
-          })
+    const n = signal(3);
+    let derived = 0;
+    let autoBuilds = 0;
+    const longNames = ["first category", "second category", "third category"];
+    const charts: Record<string, (box: HTMLElement) => Promise<any>> = {
+      pointer: (box) =>
+        chart(data, { axes: false })
+          .flow(spread({ by: "cat", dir: "x" }))
+          .mark(
+            rect({
+              h: "count",
+              fill: live(() => (p.datum() ? "#f00" : "#00f")),
+            })
+          )
+          .render(box, { w: 200, h: 120 }),
+      static: (box) =>
+        chart(data, { axes: false })
+          .flow(spread({ by: "cat", dir: "x" }))
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+      sequence: (box) =>
+        chart(
+          [1, 2, 3].flatMap((t) => data.map((d) => ({ ...d, t }))),
+          { axes: false }
         )
-        .render(pointerBox, { w: 200, h: 120 }),
-      chart(data, { axes: false })
-        .flow(spread({ by: "cat", dir: "x" }))
-        .mark(rect({ h: "count" }))
-        .render(staticBox, { w: 200, h: 120 }),
-      chart(
-        [1, 2, 3].flatMap((t) => data.map((d) => ({ ...d, t }))),
-        { axes: false }
-      )
-        .flow(
-          time.sequence({ by: "t", duration: 300, playing: false }),
-          spread({ by: "cat", dir: "x" })
+          .flow(
+            time.sequence({ by: "t", duration: 300, playing: false }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+      // Crowded labels, so `label.angle: "auto"` lays the chart out again,
+      // through `GoFishNode.rebuild`, after the resolve has returned.
+      autoAngle: (box) =>
+        chart(
+          longNames.map((cat, i) => ({ cat, count: i + 1 })),
+          { axes: { x: { label: { angle: "auto" } } } }
         )
-        .mark(rect({ h: "count" }))
-        .render(sequenceBox, { w: 200, h: 120 }),
-    ];
-    const views = await Promise.all(renders);
-    await settle();
+          .flow(
+            derive((rows: any[]) => {
+              autoBuilds++;
+              return rows;
+            }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(
+            rect({
+              h: "count",
+              fill: live(() => (p.datum() ? "#f00" : "#00f")),
+            })
+          )
+          .render(box, { w: 90, h: 120 }),
+      // Two charts read one signal in their specs.
+      signalA: (box) =>
+        chart(data, { axes: false })
+          .flow(
+            derive((rows: any[]) => {
+              derived++;
+              return rows.slice(0, n());
+            }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+      signalB: (box) =>
+        chart(data, { axes: false })
+          .flow(
+            derive((rows: any[]) => {
+              derived++;
+              return rows.slice(0, n());
+            }),
+            spread({ by: "cat", dir: "x" })
+          )
+          .mark(rect({ h: "count" }))
+          .render(box, { w: 200, h: 120 }),
+    };
     const ids = (box: HTMLElement) =>
       box.querySelectorAll("[data-gf-id]").length;
+    const alone: Record<string, number> = {};
+    for (const [name, render] of Object.entries(charts)) {
+      const box = makeContainer();
+      const view = await render(box);
+      await settle();
+      alone[name] = ids(box);
+      view.unmount();
+    }
+    const boxes = Object.fromEntries(
+      Object.keys(charts).map((name) => [name, makeContainer()])
+    );
+    const views = await Promise.all(
+      Object.entries(charts).map(([name, render]) => render(boxes[name]))
+    );
+    await settle();
     ok(
       "pointer chart keeps its data-gf-id",
-      ids(pointerBox) === 3,
-      String(ids(pointerBox))
+      ids(boxes.pointer) === 3,
+      String(ids(boxes.pointer))
     );
     ok(
       "static chart beside it emits none",
-      ids(staticBox) === 0,
-      String(ids(staticBox))
+      ids(boxes.static) === 0,
+      String(ids(boxes.static))
     );
     ok(
       "sequence chart keeps its data-gf-id",
-      ids(sequenceBox) > 0,
-      String(ids(sequenceBox))
+      ids(boxes.sequence) > 0,
+      String(ids(boxes.sequence))
+    );
+    ok(
+      "a label.angle auto chart keeps its data-gf-id through its rebuilds",
+      autoBuilds > 2 && ids(boxes.autoAngle) > 0,
+      `builds=${autoBuilds} ids=${ids(boxes.autoAngle)}`
+    );
+    for (const name of Object.keys(charts)) {
+      ok(
+        `${name}: the same hooks rendered at once as rendered alone`,
+        ids(boxes[name]) === alone[name],
+        `${ids(boxes[name])} vs ${alone[name]}`
+      );
+    }
+    const bars = (box: HTMLElement) => box.querySelectorAll("rect").length;
+    derived = 0;
+    n.set(2);
+    await settle();
+    ok(
+      "one signal read by two charts re-runs both",
+      derived === 2 && bars(boxes.signalA) === 2 && bars(boxes.signalB) === 2,
+      `runs=${derived} a=${bars(boxes.signalA)} b=${bars(boxes.signalB)}`
+    );
+    for (const v of views) v.unmount();
+  }
+
+  console.log("\na read after an await in an async callback warns once");
+  {
+    // The one limit of the registrar scope: a read after an `await` in an
+    // async user callback is outside the call GoFish made, so it registers
+    // with nothing. GoFish says so, once.
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warnings.push(String(args[0]));
+    const late = signal(1);
+    const box = makeContainer();
+    const twice = [box, makeContainer()].map((c) =>
+      chart(data, { axes: false })
+        .flow(
+          derive(async (rows: any[]) => {
+            await Promise.resolve();
+            return late() > 0 ? rows : [];
+          }),
+          spread({ by: "cat", dir: "x" })
+        )
+        .mark(rect({ h: "count" }))
+        .render(c, { w: 200, h: 120 })
+    );
+    const views = await Promise.all(twice);
+    await settle();
+    console.warn = warn;
+    const ours = warnings.filter((w) => w.includes("after an `await`"));
+    ok(
+      "the late read warns, once across both charts",
+      ours.length === 1,
+      String(ours.length)
     );
     for (const v of views) v.unmount();
   }

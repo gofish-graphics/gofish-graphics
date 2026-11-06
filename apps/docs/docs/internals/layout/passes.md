@@ -1621,8 +1621,8 @@ item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`) and the
 
 The [reactive layer](/internals/frontend/reactivity) adds a few hooks to this
 phase that are inert on the static path. The render terminal
-(`chartBuilder.ts`) always resolves under an **ambient interaction context**, so
-a `live()` channel or a library input read inside `derive()` can register during
+(`chartBuilder.ts`) always hands the resolve its chart's **registrar** (its
+interaction runtime, carried on the root `LayerContext`), so a `live()` channel or a library input read inside `derive()` can register during
 resolve; if nothing registers, rendering proceeds untouched. When something does,
 `INTERNAL_lower` (`_node.ts`) stamps each emitted item's `id` (the node's uid, for
 `data-gf-id` hit-testing) and — for a `live()` channel carried on the node as

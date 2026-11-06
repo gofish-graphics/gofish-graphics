@@ -58,10 +58,10 @@ const slots = new WeakMap<DisplayList.DisplayItem, LiveSlots>();
  *  either having to know about the other.
  *
  *  Every slot reads its inputs as a LIVE read (`runInLiveEval`). A slot runs
- *  at paint, and paint can run while another chart's resolve is suspended at
- *  an await with that chart's runtime ambient; an ordinary read there would
- *  make the input a pipeline dependency of that other chart, so a build
- *  clock's ticks re-rendered a chart that never read it. */
+ *  at paint, where no registrar is in scope, so it registers with no chart;
+ *  the flag also keeps a slot run inside a user call (a Solid effect flushed
+ *  by a write in one) from making the input a pipeline dependency of the
+ *  chart that call is for. */
 export function setLiveSlots(
   item: DisplayList.DisplayItem,
   record: LiveSlots

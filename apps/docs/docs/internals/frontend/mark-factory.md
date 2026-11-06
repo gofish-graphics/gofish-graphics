@@ -254,7 +254,10 @@ Walking `withGoFish.ts:431-477`:
    instead return a mark, such as `layer([...])` or `spread(opts, [...])`, or
    a chart builder. That result goes through `resolveMarkResult`, the same
    path a combinator uses for each child, with a fresh name context because the
-   component is a naming boundary. So a component is written with the same
+   component is a naming boundary (`LayerContext.boundary`, which keeps the
+   chart's registrar). The body, like the channel functions, is called in the
+   registrar scope of the mark's context (`withRegistrar`, see
+   [Reactivity](/internals/frontend/reactivity)). So a component is written with the same
    lowercase operators as a chart, and there is no separate node-level
    spelling to reach for. An expand mark's array of slice nodes passes through
    unchanged, each slice stamped with its own one-row group `[row]`, tagged

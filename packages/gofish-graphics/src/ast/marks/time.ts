@@ -37,6 +37,7 @@ import { GoFishNode } from "../_node";
 import { projectPath, splitEntries, type TimeTier } from "../datumProjection";
 import { timer, type Timer } from "../../interaction/inputs";
 import { readLive } from "../../interaction/live";
+import { withRegistrar } from "../../interaction/resolveContext";
 import type { MaybeValue } from "../data";
 import { assertOneRowPerKnot, resolveMethod } from "../../interpolate";
 import type { Curve } from "../../families/curve";
@@ -250,14 +251,14 @@ export function sequence(opts: SequenceOptions) {
   // `observe`; every other operator is a module-level factory because it has
   // no state to keep.
   const operator = createOperator<any, SequenceOptions>(
-    async (_o, children) => {
+    async (_o, children, layerContext) => {
       // Read ONCE, HERE, and only for what a resolve-time read is for: this is
       // where the clock is lazily built (the domain is known by now) and where
-      // it registers with the chart's interaction runtime, which is installed
-      // around resolve and nowhere else. `readLive` is what keeps it
-      // paint-time — untracked and flagged, so the clock wires up for events
-      // without becoming a pipeline dependency (see `src/interaction/live.ts`).
-      readLive(tier.clock);
+      // it registers with the chart's interaction runtime, the registrar this
+      // operator's context hands it. `readLive` is what keeps it paint-time —
+      // untracked and flagged, so the clock wires up for events without
+      // becoming a pipeline dependency (see `src/interaction/live.ts`).
+      withRegistrar(layerContext?.registrar, () => readLive(tier.clock));
       const frame = await layer({}, children);
       // The keyframes are this layer's children, so a node finds the keyframe
       // it is part of by walking up to it (`keyframeOf`).
@@ -388,7 +389,7 @@ export type TransitionOptions = {
  */
 export const transition = createRelationalMark<TransitionOptions>(
   "time.transition",
-  (o, children, inferred, key) => {
+  (o, children, inferred, key, layerContext) => {
     const tier = inferred.time;
     // BUILD MODE: no keyframes at all, so the transition is from the empty
     // chart and every selected mark enters (`src/animation/`), which checks
@@ -463,6 +464,11 @@ export const transition = createRelationalMark<TransitionOptions>(
       typeof playhead === "function"
         ? () => foldTime(playhead(), cycle)
         : foldTime(playhead, cycle);
+    // The clock registers HERE, with the registrar this mark's context hands
+    // it: the tween reads it again for the value it lowers to, but as a node
+    // built after an `await`, with no context to register with.
+    if (typeof at === "function")
+      withRegistrar(layerContext?.registrar, () => readLive(at));
     return tween(
       {
         at,
