@@ -61,10 +61,10 @@ The fragment lists the summaries but does not spell them. In a channel the
 specs write them as methods on a Dist expression or a field: `x.mean()`,
 `x.median()`, `x.quantile(p)`, `x.min()`, `x.max()`, and `x.probability()`
 inside a cell made by binning `x`. Slabs, intervals and line ribbons are not
-marks (Josh, 11-04). Each one is written out as the plain GoFish it
-elaborates into (`../../elaborations.md`): a `derive` that calls one of two
-data helpers, then `scatter`, `ribbon`, `rect`, `circle` and `line`. The
-helpers are in the prelude below. On a Dist cell with no `sample` a summary
+built-in marks (Josh, 11-04). The specs call `slab`, `interval`,
+`lineribbon` and `gradientinterval`, which are ordinary user code of a few
+lines each, defined in section 1 of `../theory-fragment.html` and copied in
+the prelude below. On a Dist cell with no `sample` a summary
 is exact, which is the same as `sample(n: Infinity)` followed by the
 summary. On rows of a sample, the density curve is a kernel estimate.
 `as("dist")` reads a column of Dist cells as a Dist expression.
@@ -141,14 +141,11 @@ const withDraw = (rows) => rows.map((r, i) => ({ ...r, draw: i }));
 // Each output row keeps the columns that every input row shares, such as
 // the group's keys, so fill: "subgroup" still reads.
 
-// densityCurve(rows, x, { n = 121, range } = {}): the density curve of the
-// draws at n evenly spaced values. One row per value: { v, density, cdf }.
-// range defaults to the distribution's display range (support()). On a
+// densityCurve(rows, x, { n = 121, range, normalize } = {}): the density
+// curve of the draws at n evenly spaced values. One row per value:
+// { v, density, cdf }. range defaults to the distribution's display range
+// (support()). normalize: "peak" divides the density by its peak. On a
 // sample the density is a Gaussian kernel estimate (Silverman bandwidth).
-// A slab is this curve, scatter({ x: "v" }), and ribbon({ h: "density" }).
-// Side start negates density; side both is a layer of the two halves;
-// normalize: "group" divides by the curve's peak; a slab cut to a central
-// interval keeps the rows with |cdf - 0.5| <= p / 2.
 
 // centralIntervals(rows, x, levels, { by } = {}): the equal-tailed central
 // interval of the draws at each level p, from Q((1 - p) / 2) to
@@ -156,22 +153,63 @@ const withDraw = (rows) => rows.map((r, i) => ({ ...r, draw: i }));
 // center is the interval's midpoint and size its width. center equals the
 // median only for a symmetric distribution. With by (a field or a list of
 // fields), one row per level and per value of by, with the by columns.
-// A point interval is one rect per level, rect({ cx: "center", w: "size" }),
-// thickest for the narrowest level, and circle({ cx: "median" }). A line
-// ribbon is these rows by x, group({ by: "level" }), scatter by x,
-// rect({ w: 0, cy: "center", h: "size" }) and ribbon(), plus a line through
-// the median of the draws at each x.
+
+// The marks, as in section 1 of ../theory-fragment.html. The interval's mark
+// is a function of the group's rows, as .mark((rows) => ...) allows.
+// slab: the density curve of the draws, as a ribbon. side "start" hangs it below the line,
+// and "both" mirrors it. density holds densityCurve's options; curve(c, rows) may cut or
+// rewrite the curve's rows.
+const slab = (x, { dir = "x", side = "end", density = {}, curve = (c) => c, ...o } = {}) => {
+  const half = (s) => chart()
+    .flow(derive((rows) => curve(densityCurve(rows, x, density), rows).map((r) => ({ ...r, density: s * r.density }))),
+          scatter({ [dir]: "v" }))
+    .mark(ribbon({ dir, [dir === "x" ? "h" : "w"]: "density", fill: SLAB, ...o }));
+  return side === "both" ? layer([half(1), half(-1)]) : half(side === "start" ? -1 : 1);
+};
+
+// interval: one rect per interval of the draws, the widest drawn first and thinnest, and a
+// circle at the median. A rect sits at its interval's center, the midpoint, which is the
+// median only when the distribution is symmetric (not a lognormal, a beta, or most samples).
+const interval = (x, { levels = [0.95, 0.66], dir = "x", intervals = centralIntervals,
+                       point = "median", fill = INK, ...o } = {}) => (rows) => {
+  const [c, s, t] = dir === "x" ? ["cx", "w", "h"] : ["cy", "h", "w"];
+  const ints = intervals(rows, x, levels), n = ints.length;
+  return layer([
+    ...ints.map((d, i) => rect({ [c]: v(d.center), [s]: v(d.size),
+                                 [t]: n === 1 ? 4 : 1.5 + (2.5 * i) / (n - 1), fill, ...o })),
+    ...(point ? [circle({ [c]: v(ints[0][point]), r: 4, fill })] : []),
+  ]);
+};
+
+// lineribbon: at each value of along, one ribbon per central interval of the draws, and a
+// line through their medians.
+const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5], fill = "level", stroke = INK, ...o } = {}) => layer([
+  chart().flow(derive((rows) => centralIntervals(rows, y, levels, { by: along })),
+               group({ by: "level" }), scatter({ by: along, x: along }))
+    .mark(rect({ w: 0, cy: "center", h: "size" })).layer(ribbon({ fill, ...o })),
+  chart().flow(derive((rows) => centralIntervals(rows, y, [0], { by: along })),
+               scatter({ by: along, x: along, y: "median" }))
+    .mark(line({ stroke, strokeWidth: 2 })),
+]);
+
+// gradientinterval: the slab divided by its peak, read as opacity over the full height.
+// gap: GoFish has no opacity that varies along one region.
+const gradientinterval = (x, o = {}) => slab(x, { density: { normalize: "peak" }, opacity: "alpha", ...o,
+  curve: (c) => c.map((r) => ({ ...r, alpha: r.density, density: 1 })) });
 
 // keepDeepest (83, 84, 87): a derive that scores each draw by the mean over
 // its rows of depth(row) and keeps the deepest share of draws.
 ```
 
-Each spec writes the expansion out in full, even where it repeats, so its
-real length shows. A gap is a `// gap:` comment at the place it occurs. The
-mode and the highest-density interval (30, 31, 61) are written as
+A gap is a `// gap:` comment at the place it occurs. A gap that belongs to
+a mark sits with its definition: the gradient interval's opacity along one
+region is on `gradientinterval`. Cut slabs pass a `curve` that filters the
+curve's rows, so their ends are as fine as the curve's grid. The mode and
+the highest-density interval (30, 31, 61) are written as
 `highestDensityIntervals(rows, x, levels)` and `x.mode()`, the calls they
 would most likely be, with a gap comment, because version 2 does not list
-them. Bin widths for dotplots are chosen by hand, and each `Bin.step` says
+them. `interval(x, { intervals: highestDensityIntervals, point: "mode" })`
+draws them. Bin widths for dotplots are chosen by hand, and each `Bin.step` says
 so: ggdist picks the width so the tallest stack fits.
 
 Data names are the R data frames in camelCase (`df`, `distDf`, `priors`,
@@ -261,12 +299,12 @@ be families of the proposal's `dist` namespace.
 6. **The density curve is a curve.** The fragment lists "the density"
    beside one-number summaries. A slab reads it at every position, and a
    gradient reads it as opacity along the slab. The fragment does not say how
-   a channel reads a curve. The specs turn it into rows with `densityCurve`
-   in a derive, so the channel reads a column.
+   a channel reads a curve. The slab mark turns it into rows with
+   `densityCurve` in a derive, so the channel reads a column.
 7. **The gradient and fade marks need one more GoFish piece.** The fragment
    names the gap (opacity along one region) correctly. Fades also divide
    the opacity by its peak, not only the thickness, so that the plateau is
-   opaque. Written out, that is arithmetic in the derive.
+   opaque. That is arithmetic on the curve's rows, in the slab's `curve`.
 8. **`spread({ by: "level" })` at n = Infinity is the CCDF bar only with an
    anchor.** Each bar must run from a fixed point at or below the support to
    the draw (93). A bar from 0 is wrong when the distribution crosses 0.

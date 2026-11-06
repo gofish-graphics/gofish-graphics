@@ -11,6 +11,82 @@
   <li><strong>The draw key's type.</strong> The key records whether draws are shared across cells (draw 3 is one whole run of a model) or made per cell, and whether n is finite. Section 3 gives the rules that read it.</li>
 </ol>
 <p>Everything else is GoFish as it is today.</p>
+<!-- marks -->
+<h3>Marks defined in GoFish</h3>
+<p>ggdist's slab, interval and line ribbon are not new built-in marks. They are ordinary user code, written below in today's GoFish, and every spec in this tab and in the Catalog uses them. Each one is a function that returns a mark. The interval returns a function of the group's rows, as <code>.mark((rows) =&gt; ...)</code> already allows, because each of its levels gets its own fixed thickness. <code>gradientinterval</code> is a variant of the slab that carries a GoFish gap.</p>
+<p>The definitions use two data helpers. The specs can be read without them.</p>
+<ul>
+  <li><code>densityCurve(rows, x, { n, range, normalize })</code> gives the density curve of the draws as n rows <code>{ v, density, cdf }</code>. <code>normalize: "peak"</code> divides the density by its peak.</li>
+  <li><code>centralIntervals(rows, x, levels, { by })</code> gives one row per level <code>{ level, center, size, median }</code>: the central interval that holds that share of the draws.</li>
+</ul>
+<p>The core of each mark, without options:</p>
+<pre class="gr-marks"><code class="language-js">// slab: the density curve of the draws, drawn as a ribbon
+const slab = (x) =&gt;
+  chart()
+    .flow(derive((rows) =&gt; densityCurve(rows, x)), scatter({ x: "v" }))
+    .mark(ribbon({ h: "density" }));
+
+// interval: one rect per central interval (the wider, the thinner), and a circle at the median
+const interval = (x, levels = [0.95, 0.66]) =&gt; (rows) =&gt; {
+  const ints = centralIntervals(rows, x, levels);
+  return layer([
+    ...ints.map((d, i) =&gt; rect({ cx: v(d.center), w: v(d.size), h: 1.5 + 2.5 * i })),
+    circle({ cx: v(ints[0].median), r: 4 }),
+  ]);
+};
+
+// lineribbon: at each value of along, a ribbon per central interval, and a line through the medians
+const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5] }) =&gt; layer([
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, levels, { by: along })),
+               group({ by: "level" }), scatter({ by: along, x: along }))
+    .mark(rect({ w: 0, cy: "center", h: "size" })).layer(ribbon({ fill: "level" })),
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, [0], { by: along })),
+               scatter({ by: along, x: along, y: "median" }))
+    .mark(line()),
+]);</code></pre>
+<details><summary>Full definitions, with the options the catalog uses (sides, direction, highest-density intervals, the gradient variant)</summary>
+<pre class="gr-marks"><code class="language-js">// slab: the density curve of the draws, as a ribbon. side "start" hangs it below the line,
+// and "both" mirrors it. density holds densityCurve's options; curve(c, rows) may cut or
+// rewrite the curve's rows.
+const slab = (x, { dir = "x", side = "end", density = {}, curve = (c) =&gt; c, ...o } = {}) =&gt; {
+  const half = (s) =&gt; chart()
+    .flow(derive((rows) =&gt; curve(densityCurve(rows, x, density), rows).map((r) =&gt; ({ ...r, density: s * r.density }))),
+          scatter({ [dir]: "v" }))
+    .mark(ribbon({ dir, [dir === "x" ? "h" : "w"]: "density", fill: SLAB, ...o }));
+  return side === "both" ? layer([half(1), half(-1)]) : half(side === "start" ? -1 : 1);
+};
+
+// interval: one rect per interval of the draws, the widest drawn first and thinnest, and a
+// circle at the median. A rect sits at its interval's center, the midpoint, which is the
+// median only when the distribution is symmetric (not a lognormal, a beta, or most samples).
+const interval = (x, { levels = [0.95, 0.66], dir = "x", intervals = centralIntervals,
+                       point = "median", fill = INK, ...o } = {}) =&gt; (rows) =&gt; {
+  const [c, s, t] = dir === "x" ? ["cx", "w", "h"] : ["cy", "h", "w"];
+  const ints = intervals(rows, x, levels), n = ints.length;
+  return layer([
+    ...ints.map((d, i) =&gt; rect({ [c]: v(d.center), [s]: v(d.size),
+                                 [t]: n === 1 ? 4 : 1.5 + (2.5 * i) / (n - 1), fill, ...o })),
+    ...(point ? [circle({ [c]: v(ints[0][point]), r: 4, fill })] : []),
+  ]);
+};
+
+// lineribbon: at each value of along, one ribbon per central interval of the draws, and a
+// line through their medians.
+const lineribbon = (y, { along, levels = [0.95, 0.8, 0.5], fill = "level", stroke = INK, ...o } = {}) =&gt; layer([
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, levels, { by: along })),
+               group({ by: "level" }), scatter({ by: along, x: along }))
+    .mark(rect({ w: 0, cy: "center", h: "size" })).layer(ribbon({ fill, ...o })),
+  chart().flow(derive((rows) =&gt; centralIntervals(rows, y, [0], { by: along })),
+               scatter({ by: along, x: along, y: "median" }))
+    .mark(line({ stroke, strokeWidth: 2 })),
+]);
+
+// gradientinterval: the slab divided by its peak, read as opacity over the full height.
+// gap: GoFish has no opacity that varies along one region.
+const gradientinterval = (x, o = {}) =&gt; slab(x, { density: { normalize: "peak" }, opacity: "alpha", ...o,
+  curve: (c) =&gt; c.map((r) =&gt; ({ ...r, alpha: r.density, density: 1 })) });</code></pre>
+</details>
+<!-- /marks -->
 
 <h2>2. Every chart is one way of using up the draws</h2>
 <div class="tw"><table>
@@ -51,7 +127,7 @@
   <li><strong><code>sample</code> moved from the flow to the data.</strong> Eight ggdibbler examples use one seed so two layers read the same draws. A step inside one chart's flow can't be shared.</li>
   <li><strong><code>level</code> replaced sorting the draw key.</strong> Version 1 ranked draws with <code>field("draw").sort("value")</code>. That ranks inside a cell only because of how today's sort happens to work, and it breaks when a cell has several rows per draw. A <code>level</code> column says what it means. It also makes the line rule in 3.2 work: version 1's rule fired on ggdist's own median line.</li>
   <li><strong>Summaries are a way to use up draws.</strong> About 60 ggdist charts draw an interval, and none could be written by filtering ranks. They need the quantiles of the draws.</li>
-  <li><strong>The slab is the density curve of the draws, not the limit of the dotplot.</strong> A dotplot reaches the slab only as the number of draws grows and the bin width shrinks together, so no single flow at n = Infinity gives it. This keeps Josh's 11-04 decision that the slab is separate. It is not a new mark either. The catalog writes every slab as the density curve in a <code>derive</code>, a <code>scatter</code> and a <code>ribbon</code>, and every interval as one <code>rect</code> per level and a <code>circle</code> at the median.</li>
+  <li><strong>The slab is the density curve of the draws, not the limit of the dotplot.</strong> A dotplot reaches the slab only as the number of draws grows and the bin width shrinks together, so no single flow at n = Infinity gives it. This keeps Josh's 11-04 decision that the slab is separate. It is not a new built-in mark either. The <code>slab</code> of section 1 is the density curve in a <code>derive</code>, a <code>scatter</code> and a <code>ribbon</code>, and the <code>interval</code> is one <code>rect</code> per level and a <code>circle</code> at the median.</li>
   <li><strong>ggdist has a second kind of mark.</strong> Its gradient interval sets opacity from the density scaled so the peak is opaque, and the Correll and Gleicher fades are flat in the middle and fade in the tails. Neither is the limit of any picture of draws. Each is a function of the distribution, drawn with an ordinary channel: the density curve or the CDF of the draws, then opacity from data. So <code>blend</code> stays a plain average with no rescaling option. Today GoFish lacks an opacity that varies along one region, which the catalog counts as a GoFish gap.</li>
   <li><strong>M(U(X)) and U(M(X)) are kinds of charts, not packages.</strong> A chart that reads only <code>level</code> or summaries per cell depends only on each cell's own distribution. A chart that joins cells along a shared draw key, or summarizes each draw, depends on how cells move together. ggdist's <code>curve_interval</code> is the second kind. Every ggdibbler example uses per-cell draws, so in information they are all the first kind, even when they draw a line along the draw key (which 3.2 warns about).</li>
   <li><strong>Two levels need a second source of draws.</strong> ggdist's MCSE dots show the uncertainty of a sample itself. That needs a <code>Dist&lt;Dist&lt;T&gt;&gt;</code> made from a sample by resampling, and a way to name the second draw key, since <code>sample</code> always writes <code>draw</code> and <code>level</code>. Both are still missing, so the catalog counts these charts as not fitting.</li>

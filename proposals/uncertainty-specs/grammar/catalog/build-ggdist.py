@@ -107,9 +107,9 @@ def r_code(entry):
 
 # ---------------------------------------------------------------- specs
 # Each entry: title, gofish (JS), uses_up, fit, verdict, note. Version 2 of
-# the grammar (../theory-fragment.html). No spec calls a slab, interval or
-# lineribbon mark: each is written out as the plain GoFish it elaborates
-# into (../../elaborations.md). Names used but not defined in a spec
+# the grammar (../theory-fragment.html). slab, interval, lineribbon and
+# gradientinterval are marks defined in ordinary GoFish in section 1 of
+# ../theory-fragment.html. Other names used but not defined in a spec
 # (densityCurve, centralIntervals, as, withDraw, keepDeepest, INK, SLAB)
 # are the prelude in ggdist-summary.md: plain JS over today's GoFish
 # plus the version 2 additions. The v1 fit of each entry is in v1-fits.json.
@@ -126,180 +126,21 @@ const dots = sample(cell, { n: 100, at: "quantiles" });
 // one row per geom
 spread({ dir: "y", spacing: 8 }, [
   // halfeye
-  chart(cell).mark(
-    layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, x)),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  ),
+  chart(cell).mark(layer([slab(x), interval(x)])),
   // eye
   chart(cell).mark(
     layer([
-      // slab, side both: the density curve of the draws and
-      // its mirror image
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, x)),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, x).map((r) => ({
-              ...r,
-              density: -r.density,
-            }))
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
+      slab(x, { side: "both" }),
       // gap: this should sit on the slab's zero line, but a
       // layer aligns its children's boxes, not their
       // origins
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval(x),
     ])
   ),
   // gradientinterval: opacity from the density, scaled so
   // the peak is 1
   chart(cell).mark(
-    layer([
-      // slab: the density curve divided by its peak, read
-      // as opacity over the full height
-      // gap: an opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, x);
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              height: 1,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "height",
-            fill: SLAB,
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
+    layer([gradientinterval(x), interval(x)])
   ),
   // ccdfinterval: one bar per level, from the axis start to
   // the draw
@@ -312,43 +153,7 @@ spread({ dir: "y", spacing: 8 }, [
           fill: SLAB,
         })
       ),
-    chart(cell).mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    chart(cell).mark(interval(x)),
   ]),
   // cdfinterval: one bar per level, from the draw to the
   // axis end
@@ -361,144 +166,21 @@ spread({ dir: "y", spacing: 8 }, [
           fill: SLAB,
         })
       ),
-    chart(cell).mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    chart(cell).mark(interval(x)),
   ]),
   // interval
   chart(cell).mark(
-    layer([
-      // interval: the 95%, 80% and 50% central intervals of
-      // the draws
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 10,
-            fill: INK,
-            opacity: 1 / 3,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) => centralIntervals(rows, x, [0.8]))
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 10,
-            fill: INK,
-            opacity: 1 / 3,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) => centralIntervals(rows, x, [0.5]))
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 10,
-            fill: INK,
-            opacity: 1 / 3,
-          })
-        ),
-    ])
+    interval(x, {
+      levels: [0.95, 0.8, 0.5],
+      point: false,
+      h: 10,
+      opacity: 1 / 3,
+    })
   ),
   // pointinterval
-  chart(cell).mark(
-    layer([
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  ),
+  chart(cell).mark(interval(x)),
   // slab
-  chart(cell).mark(
-    layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, x)),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-    ])
-  ),
+  chart(cell).mark(slab(x)),
   // histinterval
   layer([
     chart(histDf)
@@ -509,43 +191,7 @@ spread({ dir: "y", spacing: 8 }, [
         })
       )
       .mark(rect({ h: field("x").count(), fill: SLAB })),
-    chart(cell).mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    chart(cell).mark(interval(x)),
   ]),
   // dots
   chart(dots)
@@ -562,43 +208,7 @@ spread({ dir: "y", spacing: 8 }, [
         stack({ dir: "y" })
       )
       .mark(circle({ r: 2 })),
-    chart(cell).mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    chart(cell).mark(interval(x)),
   ]),
 ]);
 """,
@@ -615,47 +225,19 @@ const x = dist.normal({ mean: 4, sd: 1 });
 chart([{ g: 0 }], { axes: { x: { domain: [-1, 10] } } })
   .mark(
     layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, x, { range: [0, 8] })
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "gray75",
-            stroke: "black",
-            strokeWidth: 1,
-          })
-        ),
-      // interval: the 68.27% central interval of the draws,
-      // and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.6827])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 3,
-              fill: "black",
-            }),
-            circle({
-              cx: "median",
-              r: 4,
-              fill: "gray75",
-              stroke: "black",
-            }),
-          ])
-        ),
+      slab(x, {
+        fill: "gray75",
+        density: { range: [0, 8] },
+        stroke: "black",
+        strokeWidth: 1,
+      }),
+      // the definition draws the point in the interval's
+      // fill; ggdist draws it gray75 with a black outline
+      interval(x, {
+        levels: [0.6827],
+        fill: "black",
+        h: 3,
+      }),
     ])
   )
   // the red annotations: brackets, reference lines, labels
@@ -675,7 +257,7 @@ chart([{ g: 0 }], { axes: { x: { domain: [-1, 10] } } })
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
     verdict='ok',
-    note="The halfeye itself is the elaborations.md half-eye, written out. The annotation layer needs bracket-ended segments (arrowheads at 90 degrees) placed in data coordinates, which GoFish's arrow mark does not offer.",
+    note="The halfeye is the slab and interval marks of section 1. The annotation layer needs bracket-ended segments (arrowheads at 90 degrees) placed in data coordinates, which GoFish's arrow mark does not offer.",
 )
 
 E[3] = dict(
@@ -683,58 +265,12 @@ E[3] = dict(
     gofish="""
 chart(df)
   .flow(spread({ by: "group", dir: "y" }))
-  .mark(
-    layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "value")),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  );
+  .mark(layer([slab("value"), interval("value")]));
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
     verdict='ok',
-    note="This is elaborations.md's half-eye, written out. The slab is a derive of the density curve of each group's rows, which ggdist estimates with a kernel, then a scatter and a ribbon. The interval is a derive of central intervals, drawn as rects by center and size, and a circle at the median. Version 1 computed the distribution by hand in its derives.",
+    note="A half-eye is a layer of the slab and interval marks of section 1. The slab draws the density curve of each group's rows, which ggdist estimates with a kernel. The interval draws the central intervals of the rows as rects by center and size, and a circle at the median. Version 1 computed the distribution by hand in its derives.",
 )
 
 E[4] = dict(
@@ -746,58 +282,11 @@ spread({ dir: "x", spacing: 16 }, [
     .flow(spread({ by: "group", dir: "x" }))
     .mark(
       layer([
-        // slab, side start: the density curve of the draws,
-        // hanging below the line
-        chart()
-          .flow(
-            derive((rows) =>
-              densityCurve(rows, "value").map((r) => ({
-                ...r,
-                density: -r.density,
-              }))
-            ),
-            scatter({ y: "v" })
-          )
-          .mark(
-            ribbon({ dir: "y", w: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
+        slab("value", { dir: "y", side: "start" }),
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cy: "center",
-              h: "size",
-              w: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cy: "center",
-                h: "size",
-                w: 4,
-                fill: INK,
-              }),
-              circle({ cy: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval("value", { dir: "y" }),
       ])
     ),
   // side both
@@ -805,66 +294,11 @@ spread({ dir: "x", spacing: 16 }, [
     .flow(spread({ by: "group", dir: "x" }))
     .mark(
       layer([
-        // slab, side both: the density curve of the draws
-        // and its mirror image
-        chart()
-          .flow(
-            derive((rows) => densityCurve(rows, "value")),
-            scatter({ y: "v" })
-          )
-          .mark(
-            ribbon({ dir: "y", w: "density", fill: SLAB })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              densityCurve(rows, "value").map((r) => ({
-                ...r,
-                density: -r.density,
-              }))
-            ),
-            scatter({ y: "v" })
-          )
-          .mark(
-            ribbon({ dir: "y", w: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
+        slab("value", { dir: "y", side: "both" }),
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cy: "center",
-              h: "size",
-              w: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cy: "center",
-                h: "size",
-                w: 4,
-                fill: INK,
-              }),
-              circle({ cy: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval("value", { dir: "y" }),
       ])
     ),
   // side end
@@ -872,49 +306,8 @@ spread({ dir: "x", spacing: 16 }, [
     .flow(spread({ by: "group", dir: "x" }))
     .mark(
       layer([
-        // slab: the density curve of the draws
-        chart()
-          .flow(
-            derive((rows) => densityCurve(rows, "value")),
-            scatter({ y: "v" })
-          )
-          .mark(
-            ribbon({ dir: "y", w: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cy: "center",
-              h: "size",
-              w: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cy: "center",
-                h: "size",
-                w: 4,
-                fill: INK,
-              }),
-              circle({ cy: "median", r: 4, fill: INK }),
-            ])
-          ),
+        slab("value", { dir: "y" }),
+        interval("value", { dir: "y" }),
       ])
     ),
 ]);
@@ -934,58 +327,11 @@ spread({ dir: "x", spacing: 16 }, [
     .flow(spread({ by: "group", dir: "y" }))
     .mark(
       layer([
-        // slab, side start: the density curve of the draws,
-        // hanging below the line
-        chart()
-          .flow(
-            derive((rows) =>
-              densityCurve(rows, "value").map((r) => ({
-                ...r,
-                density: -r.density,
-              }))
-            ),
-            scatter({ x: "v" })
-          )
-          .mark(
-            ribbon({ dir: "x", h: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
+        slab("value", { side: "start" }),
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval("value"),
       ])
     ),
   // side both
@@ -993,118 +339,17 @@ spread({ dir: "x", spacing: 16 }, [
     .flow(spread({ by: "group", dir: "y" }))
     .mark(
       layer([
-        // slab, side both: the density curve of the draws
-        // and its mirror image
-        chart()
-          .flow(
-            derive((rows) => densityCurve(rows, "value")),
-            scatter({ x: "v" })
-          )
-          .mark(
-            ribbon({ dir: "x", h: "density", fill: SLAB })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              densityCurve(rows, "value").map((r) => ({
-                ...r,
-                density: -r.density,
-              }))
-            ),
-            scatter({ x: "v" })
-          )
-          .mark(
-            ribbon({ dir: "x", h: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
+        slab("value", { side: "both" }),
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval("value"),
       ])
     ),
   // side end
   chart(df)
     .flow(spread({ by: "group", dir: "y" }))
-    .mark(
-      layer([
-        // slab: the density curve of the draws
-        chart()
-          .flow(
-            derive((rows) => densityCurve(rows, "value")),
-            scatter({ x: "v" })
-          )
-          .mark(
-            ribbon({ dir: "x", h: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    .mark(layer([slab("value"), interval("value")])),
 ]);
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
@@ -1123,74 +368,15 @@ chart(df)
   )
   .mark(
     layer([
-      // slab, side both: the density curve of the draws and
-      // its mirror image
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "value")),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "density",
-            fill: "subgroup",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").map((r) => ({
-              ...r,
-              density: -r.density,
-            }))
-          ),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "density",
-            fill: "subgroup",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
+      slab("value", {
+        dir: "y",
+        side: "both",
+        fill: "subgroup",
+      }),
       // gap: this should sit on the slab's zero line, but a
       // layer aligns its children's boxes, not their
       // origins
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value", { dir: "y" }),
     ])
   );
 """,
@@ -1211,73 +397,11 @@ chart(distDf)
   )
   .mark(
     layer([
-      // slab, side both: the density curve of the draws and
-      // its mirror image
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, y)),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "density",
-            fill: "subgroup",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, y).map((r) => ({
-              ...r,
-              density: -r.density,
-            }))
-          ),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "density",
-            fill: "subgroup",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
+      slab(y, { dir: "y", side: "both", fill: "subgroup" }),
       // gap: this should sit on the slab's zero line, but a
       // layer aligns its children's boxes, not their
       // origins
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, y, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, y, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval(y, { dir: "y" }),
     ])
   );
 """,
@@ -1293,53 +417,7 @@ E[8] = dict(
 const x = dist.beta({ alpha: "alpha", beta: 10 });
 chart(betas)
   .flow(scatter({ by: "alpha", y: "alpha" }))
-  .mark(
-    layer({ h: 24 }, [
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, x)),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // skewed: center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  );
+  .mark(layer({ h: 24 }, [slab(x), interval(x)]));
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
@@ -1352,20 +430,8 @@ E[9] = dict(
     gofish="""
 const x = dist.beta({ alpha: "alpha", beta: 10 });
 chart(betas, { color: Color.gradient("viridis") })
-  .flow(
-    group({ by: "alpha" }),
-    // slab: the density curve of each alpha's distribution
-    derive((rows) => densityCurve(rows, x)),
-    scatter({ x: "v" })
-  )
-  .mark(
-    ribbon({
-      dir: "x",
-      h: "density",
-      fill: "none",
-      stroke: "alpha",
-    })
-  );
+  .flow(group({ by: "alpha" }))
+  .mark(slab(x, { fill: "none", stroke: "alpha" }));
 """,
     uses_up='the density curve of the draws per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
     fit='fits',
@@ -1381,55 +447,7 @@ E[10] = dict(
 // truncated at 0
 chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
-  .mark(
-    layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "dist")),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // the gamma and the truncated normal are skewed:
-      // center is the midpoint of an interval, not the
-      // median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  );
+  .mark(layer([slab("dist"), interval("dist")]));
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
@@ -1446,126 +464,23 @@ const prior = dist.normal({ mean: 0, sd: 1 });
 const separate = chart([{}]).mark(
   layer([
     // the posterior slab, divided by its peak
-    chart()
-      .flow(
-        derive((rows) => {
-          const curve = densityCurve(rows, post);
-          const peak = Math.max(
-            ...curve.map((r) => r.density)
-          );
-          return curve.map((r) => ({
-            ...r,
-            density: r.density / peak,
-          }));
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(ribbon({ dir: "x", h: "density", fill: SLAB })),
-    // interval: the 95% and 66% central intervals of the
-    // draws, and a circle at their median
-    chart()
-      .flow(
-        derive((rows) =>
-          centralIntervals(rows, post, [0.95])
-        )
-      )
-      .mark(
-        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
-      ),
-    chart()
-      .flow(
-        derive((rows) =>
-          centralIntervals(rows, post, [0.66])
-        )
-      )
-      .mark(
-        layer([
-          rect({
-            cx: "center",
-            w: "size",
-            h: 4,
-            fill: INK,
-          }),
-          circle({ cx: "median", r: 4, fill: INK }),
-        ])
-      ),
+    slab(post, { density: { normalize: "peak" } }),
+    interval(post),
     // the prior slab, divided by its peak
-    chart()
-      .flow(
-        derive((rows) => {
-          const curve = densityCurve(rows, prior);
-          const peak = Math.max(
-            ...curve.map((r) => r.density)
-          );
-          return curve.map((r) => ({
-            ...r,
-            density: r.density / peak,
-          }));
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({
-          dir: "x",
-          h: "density",
-          fill: "none",
-          stroke: "red",
-        })
-      ),
+    slab(prior, {
+      fill: "none",
+      density: { normalize: "peak" },
+      stroke: "red",
+    }),
   ])
 );
 // shared: one size scale for both (scale_thickness_shared)
 const shared = chart([{}]).mark(
   layer([
-    // slab: the density curve of the draws
-    chart()
-      .flow(
-        derive((rows) => densityCurve(rows, post)),
-        scatter({ x: "v" })
-      )
-      .mark(ribbon({ dir: "x", h: "density", fill: SLAB })),
-    // interval: the 95% and 66% central intervals of the
-    // draws, and a circle at their median
-    chart()
-      .flow(
-        derive((rows) =>
-          centralIntervals(rows, post, [0.95])
-        )
-      )
-      .mark(
-        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
-      ),
-    chart()
-      .flow(
-        derive((rows) =>
-          centralIntervals(rows, post, [0.66])
-        )
-      )
-      .mark(
-        layer([
-          rect({
-            cx: "center",
-            w: "size",
-            h: 4,
-            fill: INK,
-          }),
-          circle({ cx: "median", r: 4, fill: INK }),
-        ])
-      ),
+    slab(post),
+    interval(post),
     // the prior slab
-    chart()
-      .flow(
-        derive((rows) => densityCurve(rows, prior)),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({
-          dir: "x",
-          h: "density",
-          fill: "none",
-          stroke: "#e41a1c",
-        })
-      ),
+    slab(prior, { fill: "none", stroke: "#e41a1c" }),
   ])
 );
 spread({ dir: "x", spacing: 16 }, [separate, shared]);
@@ -1573,7 +488,7 @@ spread({ dir: "x", spacing: 16 }, [separate, shared]);
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
     verdict='ok',
-    note='GoFish\'s default is ggdist\'s scale_thickness_shared, because both slabs read one size scale. The separate version divides each density curve by its own peak in the derive, which is normalize: "group" in elaborations.md.',
+    note='GoFish\'s default is ggdist\'s scale_thickness_shared, because both slabs read one size scale. The separate version divides each density curve by its own peak with the slab\'s density option, which is normalize: "group" in elaborations.md.',
 )
 
 E[12] = dict(
@@ -1584,53 +499,7 @@ const x = dist.lognormal({
   sdlog: 2 * Math.log(10),
 });
 chart([{}], { axes: { x: { scale: "log" } } }) // no log axis today
-  .mark(
-    layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, x)),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // skewed: center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  );
+  .mark(layer([slab(x), interval(x)]));
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='gofish-gap',
@@ -1656,40 +525,7 @@ const vertical = chart(df)
         .mark(
           rect({ w: field("value").count(), fill: SLAB })
         ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value", { dir: "y" }),
     ])
   );
 const horizontal = chart(df)
@@ -1706,40 +542,7 @@ const horizontal = chart(df)
         .mark(
           rect({ h: field("value").count(), fill: SLAB })
         ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value"),
     ])
   );
 spread({ dir: "x", spacing: 16 }, [vertical, horizontal]);
@@ -1775,40 +578,7 @@ const separate = chart(df)
         .layer(
           line({ curve: Curve.step(), stroke: "gray45" })
         ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value"),
     ])
   );
 // outline_bars = TRUE: every bar outlined
@@ -1830,40 +600,7 @@ const outlined = chart(df)
             stroke: "gray45",
           })
         ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value"),
     ])
   );
 spread({ dir: "x", spacing: 16 }, [separate, outlined]);
@@ -1918,40 +655,7 @@ chart(withDraw(df), {
       chart()
         .flow(spread({ by: "level", dir: "x", spacing: 0 }))
         .mark(rect({ h: "value", fill: "subgroup" })),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value", { dir: "y" }),
     ])
   );
 """,
@@ -1978,40 +682,7 @@ chart(withDraw(df), {
       chart()
         .flow(spread({ by: "level", dir: "x", spacing: 0 }))
         .mark(rect({ h: "value", fill: "subgroup" })),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value", { dir: "y" }),
     ])
   );
 """,
@@ -2031,66 +702,11 @@ chart(df)
   )
   .mark(
     layer([
-      // slab: the density curve divided by its peak, read
-      // as opacity over the full width
-      // gap: an opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "value");
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              height: 1,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "height",
-            fill: "subgroup",
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      gradientinterval("value", {
+        dir: "y",
+        fill: "subgroup",
+      }),
+      interval("value", { dir: "y" }),
     ])
   );
 """,
@@ -2110,66 +726,11 @@ chart(df)
   )
   .mark(
     layer([
-      // slab: the density curve divided by its peak, read
-      // as opacity over the full width
-      // gap: an opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "value");
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              height: 1,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "height",
-            fill: "subgroup",
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      gradientinterval("value", {
+        dir: "y",
+        fill: "subgroup",
+      }),
+      interval("value", { dir: "y" }),
     ])
   );
 """,
@@ -2247,40 +808,7 @@ chart(withDraw(df), {
       chart()
         .flow(group({ by: "draw", blend: "mean" }))
         .mark(rect({ h: "value", fill: "subgroup" })),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cy: "center",
-              h: "size",
-              w: 4,
-              fill: INK,
-            }),
-            circle({ cy: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value", { dir: "y" }),
     ])
   );
 """,
@@ -2297,65 +825,13 @@ chart(priors)
   .flow(spread({ by: "label", dir: "y" }))
   .mark(
     layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "dist")),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: "gray85" })
-        ),
+      slab("dist", { fill: "gray85" }),
       // the same curve cut to |x| < 1.5, drawn on top
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "dist").filter(
-              (r) => Math.abs(r.v) < 1.5
-            )
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "skyblue",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      slab("dist", {
+        fill: "skyblue",
+        curve: (c) => c.filter((r) => Math.abs(r.v) < 1.5),
+      }),
+      interval("dist"),
     ])
   );
 """,
@@ -2375,144 +851,32 @@ chart(priors)
       // fill = x > 1: two eyes cut at 1
       // an eye cut to x <= 1, divided by its peak; gap: an
       // opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
-              (r) => r.v <= 1
-            );
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              density: r.density / peak,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "gray75",
-            opacity: "alpha",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
-              (r) => r.v <= 1
-            );
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              density: -r.density / peak,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "gray75",
-            opacity: "alpha",
-          })
-        ),
+      slab("dist", {
+        side: "both",
+        fill: "gray75",
+        density: { normalize: "peak" },
+        curve: (c) =>
+          c
+            .filter((r) => r.v <= 1)
+            .map((r) => ({ ...r, alpha: r.density })),
+        opacity: "alpha",
+      }),
       // an eye cut to x > 1, divided by its peak; gap: an
       // opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
-              (r) => r.v > 1
-            );
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              density: r.density / peak,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "skyblue",
-            opacity: "alpha",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
-              (r) => r.v > 1
-            );
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              density: -r.density / peak,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "skyblue",
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
+      slab("dist", {
+        side: "both",
+        fill: "skyblue",
+        density: { normalize: "peak" },
+        curve: (c) =>
+          c
+            .filter((r) => r.v > 1)
+            .map((r) => ({ ...r, alpha: r.density })),
+        opacity: "alpha",
+      }),
       // gap: this should sit on the slab's zero line, but a
       // layer aligns its children's boxes, not their
       // origins
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("dist"),
     ])
   );
 """,
@@ -2532,61 +896,19 @@ chart(priors)
       // Correll and Gleicher: opacity 1 over the central
       // 95%, fading to 0 in the tails
       // gap: an opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "dist").map((r) => ({
-              ...r,
-              height: 1,
-              alpha:
-                (1 -
-                  Math.max(Math.abs(1 - 2 * r.cdf), 0.95)) /
-                0.05,
-            }))
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "height",
-            fill: SLAB,
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      slab("dist", {
+        curve: (c) =>
+          c.map((r) => ({
+            ...r,
+            density: 1,
+            alpha:
+              (1 -
+                Math.max(Math.abs(1 - 2 * r.cdf), 0.95)) /
+              0.05,
+          })),
+        opacity: "alpha",
+      }),
+      interval("dist"),
     ])
   );
 """,
@@ -2605,89 +927,22 @@ chart(priors)
     layer([
       // an eye with the fade of entry 25 as its opacity
       // gap: an opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "dist").map((r) => ({
-              ...r,
-              alpha:
-                (1 -
-                  Math.max(Math.abs(1 - 2 * r.cdf), 0.95)) /
-                0.05,
-            }))
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: SLAB,
-            opacity: "alpha",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "dist")
-              .map((r) => ({
-                ...r,
-                alpha:
-                  (1 -
-                    Math.max(
-                      Math.abs(1 - 2 * r.cdf),
-                      0.95
-                    )) /
-                  0.05,
-              }))
-              .map((r) => ({ ...r, density: -r.density }))
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: SLAB,
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
+      slab("dist", {
+        side: "both",
+        curve: (c) =>
+          c.map((r) => ({
+            ...r,
+            alpha:
+              (1 -
+                Math.max(Math.abs(1 - 2 * r.cdf), 0.95)) /
+              0.05,
+          })),
+        opacity: "alpha",
+      }),
       // gap: this should sit on the slab's zero line, but a
       // layer aligns its children's boxes, not their
       // origins
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("dist"),
     ])
   );
 """,
@@ -2711,48 +966,19 @@ chart(distDf)
       // Tukey pencils: thickness max(0, |1 - 2 cdf| -
       // 0.95), on both sides. gap: fill_ramp by the same
       // curve
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, y).map((r) => ({
-              ...r,
-              pencil: Math.max(
-                0,
-                Math.abs(1 - 2 * r.cdf) - 0.95
-              ),
-            }))
-          ),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "pencil",
-            fill: "subgroup",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, y)
-              .map((r) => ({
-                ...r,
-                pencil: Math.max(
-                  0,
-                  Math.abs(1 - 2 * r.cdf) - 0.95
-                ),
-              }))
-              .map((r) => ({ ...r, pencil: -r.pencil }))
-          ),
-          scatter({ y: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "y",
-            w: "pencil",
-            fill: "subgroup",
-          })
-        ),
+      slab(y, {
+        dir: "y",
+        side: "both",
+        fill: "subgroup",
+        curve: (c) =>
+          c.map((r) => ({
+            ...r,
+            density: Math.max(
+              0,
+              Math.abs(1 - 2 * r.cdf) - 0.95
+            ),
+          })),
+      }),
     ])
   );
 """,
@@ -2770,82 +996,24 @@ chart(df)
   .mark(
     layer([
       // the whole curve
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "value")),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: "gray85" })
-        ),
+      slab("value", { fill: "gray85" }),
       // the curve cut to the central 95% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-            )
+      slab("value", {
+        fill: "#c6dbef",
+        curve: (c) =>
+          c.filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
           ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "#c6dbef",
-          })
-        ),
+      }),
       // the curve cut to the central 66% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.66 / 2
-            )
+      slab("value", {
+        fill: "#6baed6",
+        curve: (c) =>
+          c.filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.66 / 2
           ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "#6baed6",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      }),
+      interval("value"),
     ])
   );
 """,
@@ -2863,86 +1031,24 @@ chart(df)
   .mark(
     layer([
       // the whole curve
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "value")),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "#deebf7",
-          })
-        ),
+      slab("value", { fill: "#deebf7" }),
       // the curve cut to the central 95% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-            )
+      slab("value", {
+        fill: "#9ecae1",
+        curve: (c) =>
+          c.filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
           ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "#9ecae1",
-          })
-        ),
+      }),
       // the curve cut to the central 66% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.66 / 2
-            )
+      slab("value", {
+        fill: "#3182bd",
+        curve: (c) =>
+          c.filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.66 / 2
           ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "#3182bd",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      }),
+      interval("value"),
     ])
   );
 """,
@@ -2960,90 +1066,26 @@ const x = dist.beta({ alpha: 10, beta: 2 });
 const qi = chart([{}]).mark(
   layer([
     // the whole curve
-    chart()
-      .flow(
-        derive((rows) => densityCurve(rows, x)),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "gray95" })
-      ),
+    slab(x, { fill: "gray95" }),
     // the curve cut to the central 95% interval
-    chart()
-      .flow(
-        derive((rows) =>
-          densityCurve(rows, x).filter(
-            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-          )
-        ),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
-      ),
+    slab(x, {
+      fill: "#deebf7",
+      curve: (c) =>
+        c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2),
+    }),
     // the curve cut to the central 80% interval
-    chart()
-      .flow(
-        derive((rows) =>
-          densityCurve(rows, x).filter(
-            (r) => Math.abs(r.cdf - 0.5) <= 0.8 / 2
-          )
-        ),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
-      ),
+    slab(x, {
+      fill: "#9ecae1",
+      curve: (c) =>
+        c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.8 / 2),
+    }),
     // the curve cut to the central 50% interval
-    chart()
-      .flow(
-        derive((rows) =>
-          densityCurve(rows, x).filter(
-            (r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2
-          )
-        ),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
-      ),
-    // interval: the 95%, 80% and 50% central intervals of
-    // the draws, and a circle at their median
-    // skewed: center is the midpoint, not the median
-    chart()
-      .flow(
-        derive((rows) => centralIntervals(rows, x, [0.95]))
-      )
-      .mark(
-        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
-      ),
-    chart()
-      .flow(
-        derive((rows) => centralIntervals(rows, x, [0.8]))
-      )
-      .mark(
-        rect({
-          cx: "center",
-          w: "size",
-          h: 2.75,
-          fill: INK,
-        })
-      ),
-    chart()
-      .flow(
-        derive((rows) => centralIntervals(rows, x, [0.5]))
-      )
-      .mark(
-        layer([
-          rect({
-            cx: "center",
-            w: "size",
-            h: 4,
-            fill: INK,
-          }),
-          circle({ cx: "median", r: 4, fill: INK }),
-        ])
-      ),
+    slab(x, {
+      fill: "#3182bd",
+      curve: (c) =>
+        c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2),
+    }),
+    interval(x, { levels: [0.95, 0.8, 0.5] }),
   ])
 );
 // mode_hdci
@@ -3052,113 +1094,48 @@ const hdci = chart([{}]).mark(
     // gap: the mode and the highest-density interval,
     // written as the helper they would most likely be
     // the whole curve
-    chart()
-      .flow(
-        derive((rows) => densityCurve(rows, x)),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "gray95" })
-      ),
+    slab(x, { fill: "gray95" }),
     // the curve cut to the 95% highest-density interval
-    chart()
-      .flow(
-        derive((rows) => {
-          const [hdi] = highestDensityIntervals(rows, x, [
-            0.95,
-          ]);
-          return densityCurve(rows, x, {
-            range: [
-              hdi.center - hdi.size / 2,
-              hdi.center + hdi.size / 2,
-            ],
-          });
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
-      ),
+    slab(x, {
+      fill: "#deebf7",
+      curve: (c, rows) => {
+        const [hdi] = highestDensityIntervals(rows, x, [
+          0.95,
+        ]);
+        return c.filter(
+          (r) => Math.abs(r.v - hdi.center) <= hdi.size / 2
+        );
+      },
+    }),
     // the curve cut to the 80% highest-density interval
-    chart()
-      .flow(
-        derive((rows) => {
-          const [hdi] = highestDensityIntervals(rows, x, [
-            0.8,
-          ]);
-          return densityCurve(rows, x, {
-            range: [
-              hdi.center - hdi.size / 2,
-              hdi.center + hdi.size / 2,
-            ],
-          });
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
-      ),
+    slab(x, {
+      fill: "#9ecae1",
+      curve: (c, rows) => {
+        const [hdi] = highestDensityIntervals(rows, x, [
+          0.8,
+        ]);
+        return c.filter(
+          (r) => Math.abs(r.v - hdi.center) <= hdi.size / 2
+        );
+      },
+    }),
     // the curve cut to the 50% highest-density interval
-    chart()
-      .flow(
-        derive((rows) => {
-          const [hdi] = highestDensityIntervals(rows, x, [
-            0.5,
-          ]);
-          return densityCurve(rows, x, {
-            range: [
-              hdi.center - hdi.size / 2,
-              hdi.center + hdi.size / 2,
-            ],
-          });
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
-      ),
-    // interval: the 95%, 80% and 50% highest-density
-    // intervals of the draws, and a circle at their mode
-    chart()
-      .flow(
-        derive((rows) =>
-          highestDensityIntervals(rows, x, [0.95])
-        )
-      )
-      .mark(
-        rect({ cx: "center", w: "size", h: 1.5, fill: INK })
-      ),
-    chart()
-      .flow(
-        derive((rows) =>
-          highestDensityIntervals(rows, x, [0.8])
-        )
-      )
-      .mark(
-        rect({
-          cx: "center",
-          w: "size",
-          h: 2.75,
-          fill: INK,
-        })
-      ),
-    chart()
-      .flow(
-        derive((rows) =>
-          highestDensityIntervals(rows, x, [0.5])
-        )
-      )
-      .mark(
-        layer([
-          rect({
-            cx: "center",
-            w: "size",
-            h: 4,
-            fill: INK,
-          }),
-          circle({ cx: "mode", r: 4, fill: INK }),
-        ])
-      ),
+    slab(x, {
+      fill: "#3182bd",
+      curve: (c, rows) => {
+        const [hdi] = highestDensityIntervals(rows, x, [
+          0.5,
+        ]);
+        return c.filter(
+          (r) => Math.abs(r.v - hdi.center) <= hdi.size / 2
+        );
+      },
+    }),
+    interval(x, {
+      levels: [0.95, 0.8, 0.5],
+      intervals: highestDensityIntervals,
+      point: "mode",
+    }),
   ])
 );
 spread({ dir: "y", spacing: 16 }, [qi, hdci]);
@@ -3179,40 +1156,19 @@ const x = dist.beta({ alpha: 10, beta: 2 });
 const qi = chart([{}]).mark(
   layer([
     // the whole curve
-    chart()
-      .flow(
-        derive((rows) => densityCurve(rows, x)),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
-      ),
+    slab(x, { fill: "#deebf7" }),
     // the curve cut to the central 95% interval
-    chart()
-      .flow(
-        derive((rows) =>
-          densityCurve(rows, x).filter(
-            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-          )
-        ),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
-      ),
+    slab(x, {
+      fill: "#9ecae1",
+      curve: (c) =>
+        c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2),
+    }),
     // the curve cut to the central 50% interval
-    chart()
-      .flow(
-        derive((rows) =>
-          densityCurve(rows, x).filter(
-            (r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2
-          )
-        ),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
-      ),
+    slab(x, {
+      fill: "#3182bd",
+      curve: (c) =>
+        c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2),
+    }),
     // spikes; linetype by kind: no field mapping
     rect({ x: x.median(), w: 1, h: x.density(x.median()) }),
     rect({
@@ -3233,52 +1189,31 @@ const hdi = chart([{}]).mark(
     // gap: the mode and the highest-density interval,
     // written as the helper they would most likely be
     // the whole curve
-    chart()
-      .flow(
-        derive((rows) => densityCurve(rows, x)),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#deebf7" })
-      ),
+    slab(x, { fill: "#deebf7" }),
     // the curve cut to the 95% highest-density interval
-    chart()
-      .flow(
-        derive((rows) => {
-          const [hdi] = highestDensityIntervals(rows, x, [
-            0.95,
-          ]);
-          return densityCurve(rows, x, {
-            range: [
-              hdi.center - hdi.size / 2,
-              hdi.center + hdi.size / 2,
-            ],
-          });
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#9ecae1" })
-      ),
+    slab(x, {
+      fill: "#9ecae1",
+      curve: (c, rows) => {
+        const [hdi] = highestDensityIntervals(rows, x, [
+          0.95,
+        ]);
+        return c.filter(
+          (r) => Math.abs(r.v - hdi.center) <= hdi.size / 2
+        );
+      },
+    }),
     // the curve cut to the 50% highest-density interval
-    chart()
-      .flow(
-        derive((rows) => {
-          const [hdi] = highestDensityIntervals(rows, x, [
-            0.5,
-          ]);
-          return densityCurve(rows, x, {
-            range: [
-              hdi.center - hdi.size / 2,
-              hdi.center + hdi.size / 2,
-            ],
-          });
-        }),
-        scatter({ x: "v" })
-      )
-      .mark(
-        ribbon({ dir: "x", h: "density", fill: "#3182bd" })
-      ),
+    slab(x, {
+      fill: "#3182bd",
+      curve: (c, rows) => {
+        const [hdi] = highestDensityIntervals(rows, x, [
+          0.5,
+        ]);
+        return c.filter(
+          (r) => Math.abs(r.v - hdi.center) <= hdi.size / 2
+        );
+      },
+    }),
     // spikes at the mode and the ends of the 95% hdi
     rect({ x: x.mode(), w: 1, h: x.density(x.mode()) }),
     rect({
@@ -3313,90 +1248,26 @@ chart(df)
     layer([
       // gap: fill_ramp, the subgroup's color lightened by level
       // the curve cut to the central 95% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-            )
+      slab("value", {
+        fill: "subgroup",
+        curve: (c) =>
+          c.filter(
+            (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
           ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "subgroup",
-          })
-        ),
+      }),
       // the curve cut to the central 80% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.8 / 2
-            )
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "subgroup",
-          })
-        ),
+      slab("value", {
+        fill: "subgroup",
+        curve: (c) =>
+          c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.8 / 2),
+      }),
       // the curve cut to the central 50% interval
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2
-            )
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: "subgroup",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      slab("value", {
+        fill: "subgroup",
+        curve: (c) =>
+          c.filter((r) => Math.abs(r.cdf - 0.5) <= 0.5 / 2),
+      }),
+      interval("value"),
     ])
   );
 """,
@@ -3417,48 +1288,15 @@ chart(distDf)
   )
   .mark(
     layer([
-      // interval: the 95%, 80% and 50% central intervals of
-      // the draws
       // gap: color_ramp, the subgroup's color lightened by
       // level
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, y, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 4,
-            fill: "subgroup",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) => centralIntervals(rows, y, [0.8]))
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 4,
-            fill: "subgroup",
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) => centralIntervals(rows, y, [0.5]))
-        )
-        .mark(
-          rect({
-            cy: "center",
-            h: "size",
-            w: 4,
-            fill: "subgroup",
-          })
-        ),
+      interval(y, {
+        levels: [0.95, 0.8, 0.5],
+        dir: "y",
+        point: false,
+        fill: "subgroup",
+        w: 4,
+      }),
     ])
   );
 """,
@@ -3476,143 +1314,50 @@ chart(priors)
   .mark(
     layer([
       // raindrop: log(pdf) inside the 99% interval
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
+      slab("dist", {
+        side: "both",
+        fill: "gray85",
+        curve: (c) => {
+          const k = c
+            .filter(
               (r) => Math.abs(r.cdf - 0.5) <= 0.99 / 2
-            );
-            // thickness log(pdf); normalize = "groups":
-            // edges at 0, peak at 1
-            const lo = Math.min(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            const hi = Math.max(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            return curve.map((r) => ({
+            )
+            .map((r) => ({
               ...r,
-              density:
-                (Math.log(r.density) - lo) / (hi - lo),
+              density: Math.log(r.density),
             }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: "gray85" })
-        ),
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.99 / 2
-            );
-            // thickness log(pdf); normalize = "groups":
-            // edges at 0, peak at 1
-            const lo = Math.min(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            const hi = Math.max(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            return curve.map((r) => ({
-              ...r,
-              density:
-                -(Math.log(r.density) - lo) / (hi - lo),
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: "gray85" })
-        ),
+          const lo = Math.min(...k.map((r) => r.density));
+          const hi = Math.max(...k.map((r) => r.density));
+          return k.map((r) => ({
+            ...r,
+            density: (r.density - lo) / (hi - lo),
+          }));
+        },
+      }),
       // and inside the 95% interval
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
+      slab("dist", {
+        side: "both",
+        curve: (c) => {
+          const k = c
+            .filter(
               (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-            );
-            // thickness log(pdf); normalize = "groups":
-            // edges at 0, peak at 1
-            const lo = Math.min(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            const hi = Math.max(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            return curve.map((r) => ({
+            )
+            .map((r) => ({
               ...r,
-              density:
-                (Math.log(r.density) - lo) / (hi - lo),
+              density: Math.log(r.density),
             }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, "dist").filter(
-              (r) => Math.abs(r.cdf - 0.5) <= 0.95 / 2
-            );
-            // thickness log(pdf); normalize = "groups":
-            // edges at 0, peak at 1
-            const lo = Math.min(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            const hi = Math.max(
-              ...curve.map((r) => Math.log(r.density))
-            );
-            return curve.map((r) => ({
-              ...r,
-              density:
-                -(Math.log(r.density) - lo) / (hi - lo),
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
+          const lo = Math.min(...k.map((r) => r.density));
+          const hi = Math.max(...k.map((r) => r.density));
+          return k.map((r) => ({
+            ...r,
+            density: (r.density - lo) / (hi - lo),
+          }));
+        },
+      }),
       // gap: this should sit on the slab's zero line, but a
       // layer aligns its children's boxes, not their
       // origins
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "dist", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("dist"),
     ])
   );
 """,
@@ -3634,24 +1379,7 @@ chart(ridgesDf)
       spacing: 24,
     })
   )
-  .mark(
-    layer({ h: 60 }, [
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, "x")),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "density",
-            fill: SLAB,
-            stroke: "black",
-          })
-        ),
-    ])
-  );
+  .mark(layer({ h: 60 }, [slab("x", { stroke: "black" })]));
 """,
     uses_up='the density curve of the draws per cell (exact on a Dist; a kernel estimate over the rows on a sample)',
     fit='fits',
@@ -3676,16 +1404,10 @@ chart(ridgesDf, { color: Color.palette("viridis") })
       // expand = TRUE: the curve runs over the x axis's
       // limits, set by hand. gap: fill_ramp and color_ramp
       // along x
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "x", { range: [-6, 14] })
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: "group" })
-        ),
+      slab("x", {
+        fill: "group",
+        density: { range: [-6, 14] },
+      }),
     ])
   )
   .layer(
@@ -3720,41 +1442,7 @@ spread({ dir: "y", spacing: 20 }, [
       )
       .mark(circle({ r: 2 })),
     chart(cells.filter((d) => d.group === "a")).mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
+      interval(x)
     ),
   ]),
   // b
@@ -3771,42 +1459,10 @@ spread({ dir: "y", spacing: 20 }, [
       .mark(circle({ r: 2 })),
     chart(cells.filter((d) => d.group === "b")).mark(
       layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval(x),
       ])
     ),
   ]),
@@ -3824,42 +1480,10 @@ spread({ dir: "y", spacing: 20 }, [
       .mark(circle({ r: 2 })),
     chart(cells.filter((d) => d.group === "c")).mark(
       layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval(x),
       ])
     ),
   ]),
@@ -3884,62 +1508,15 @@ layer([
     )
     .mark(
       layer([
-        // slab, side start: the density curve of the draws,
-        // hanging below the line
-        chart()
-          .flow(
-            derive((rows) =>
-              densityCurve(rows, "value").map((r) => ({
-                ...r,
-                density: -r.density,
-              }))
-            ),
-            scatter({ y: "v" })
-          )
-          .mark(
-            ribbon({
-              dir: "y",
-              w: "density",
-              fill: "subgroup",
-            })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
+        slab("value", {
+          dir: "y",
+          side: "start",
+          fill: "subgroup",
+        }),
         // gap: this should sit on the slab's zero line, but
         // a layer aligns its children's boxes, not their
         // origins
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cy: "center",
-              h: "size",
-              w: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cy: "center",
-                h: "size",
-                w: 4,
-                fill: INK,
-              }),
-              circle({ cy: "median", r: 4, fill: INK }),
-            ])
-          ),
+        interval("value", { dir: "y" }),
         text({ y: value.median(), text: "label" }),
       ])
     ),
@@ -3971,21 +1548,9 @@ E[39] = dict(
     gofish="""
 layer([
   chart(df)
-    .flow(
-      group({ by: "group" }),
-      // slab: the density curve of each group's draws,
-      // overplotted
-      derive((rows) => densityCurve(rows, "value")),
-      scatter({ x: "v" })
-    )
-    .mark(
-      ribbon({
-        dir: "x",
-        h: "density",
-        fill: "group",
-        opacity: 0.3,
-      })
-    ),
+    // one slab per group, overplotted
+    .flow(group({ by: "group" }))
+    .mark(slab("value", { fill: "group", opacity: 0.3 })),
   chart(df)
     .flow(
       spread({
@@ -3994,44 +1559,7 @@ layer([
         spacing: 4,
       }).translate({ y: -12 })
     )
-    .mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        // on a sample, center is the midpoint, not the median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: "group",
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, "value", [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: "group",
-              }),
-              circle({ cx: "median", r: 4, fill: "group" }),
-            ])
-          ),
-      ])
-    ),
+    .mark(interval("value", { fill: "group" })),
 ]);
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
@@ -4056,26 +1584,8 @@ layer([
     ),
   chart(cell).mark(
     layer([
-      // interval: the 68.27% central interval of the draws,
-      // and a circle at their median
       // gap: a square point shape
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.6827])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 5,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval(x, { levels: [0.6827], h: 5 }),
     ])
   ),
 ])
@@ -4529,45 +2039,7 @@ chart(sample(distDf2, { n: 100, at: "quantiles" }))
   .layer(
     chart(distDf2)
       .flow(spread({ by: "distName", dir: "y" }))
-      .mark(
-        layer([
-          // interval: the 95% and 66% central intervals of
-          // the draws, and a circle at their median
-          // the beta and the gamma are skewed: center is
-          // the midpoint of an interval, not the median
-          chart()
-            .flow(
-              derive((rows) =>
-                centralIntervals(rows, "dist", [0.95])
-              )
-            )
-            .mark(
-              rect({
-                cx: "center",
-                w: "size",
-                h: 1.5,
-                fill: INK,
-              })
-            ),
-          chart()
-            .flow(
-              derive((rows) =>
-                centralIntervals(rows, "dist", [0.66])
-              )
-            )
-            .mark(
-              layer([
-                rect({
-                  cx: "center",
-                  w: "size",
-                  h: 4,
-                  fill: INK,
-                }),
-                circle({ cx: "median", r: 4, fill: INK }),
-              ])
-            ),
-        ])
-      )
+      .mark(interval("dist"))
   );
 """,
     uses_up='sample(data, { n: 100, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is quantiles and the median of the draws',
@@ -4600,46 +2072,12 @@ chart(sample(distDf2, { n: 1000, at: "quantiles" }), {
       .flow(spread({ by: "distName", dir: "y" }))
       .mark(
         layer([
-          // interval: the 95% and 66% highest-density
-          // intervals of the draws, and a circle at their
-          // mode
           // gap: the mode and the highest-density interval,
           // written as the helper they would most likely be
-          chart()
-            .flow(
-              derive((rows) =>
-                highestDensityIntervals(rows, "dist", [
-                  0.95,
-                ])
-              )
-            )
-            .mark(
-              rect({
-                cx: "center",
-                w: "size",
-                h: 1.5,
-                fill: INK,
-              })
-            ),
-          chart()
-            .flow(
-              derive((rows) =>
-                highestDensityIntervals(rows, "dist", [
-                  0.66,
-                ])
-              )
-            )
-            .mark(
-              layer([
-                rect({
-                  cx: "center",
-                  w: "size",
-                  h: 4,
-                  fill: INK,
-                }),
-                circle({ cx: "mode", r: 4, fill: INK }),
-              ])
-            ),
+          interval("dist", {
+            intervals: highestDensityIntervals,
+            point: "mode",
+          }),
         ])
       )
   );
@@ -4668,45 +2106,7 @@ chart(sample(distDf2, { n: 500, at: "quantiles" }), {
   .layer(
     chart(distDf2)
       .flow(spread({ by: "distName", dir: "y" }))
-      .mark(
-        layer([
-          // interval: the 95% and 66% central intervals of
-          // the draws, and a circle at their median
-          // the beta and the gamma are skewed: center is
-          // the midpoint of an interval, not the median
-          chart()
-            .flow(
-              derive((rows) =>
-                centralIntervals(rows, "dist", [0.95])
-              )
-            )
-            .mark(
-              rect({
-                cx: "center",
-                w: "size",
-                h: 1.5,
-                fill: INK,
-              })
-            ),
-          chart()
-            .flow(
-              derive((rows) =>
-                centralIntervals(rows, "dist", [0.66])
-              )
-            )
-            .mark(
-              layer([
-                rect({
-                  cx: "center",
-                  w: "size",
-                  h: 4,
-                  fill: INK,
-                }),
-                circle({ cx: "median", r: 4, fill: INK }),
-              ])
-            ),
-        ])
-      )
+      .mark(interval("dist"))
   );
 """,
     uses_up='sample(data, { n: 500, at: "quantiles" }), then partition by a bin and stack (finite n); the interval is central intervals of the draws',
@@ -4748,21 +2148,14 @@ chart(halfeyeDotDf, { color: Color.palette("Set2") })
   .flow(spread({ by: "abc", dir: "y" }))
   .mark(
     layer([
-      // slab: the density curve of the draws times their
-      // count, as a ribbon
-      chart()
-        .flow(
-          derive((rows) =>
-            densityCurve(rows, "value").map((r) => ({
-              ...r,
-              density: r.density * rows.length,
-            }))
-          ),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: "abc" })
-        ),
+      slab("value", {
+        fill: "abc",
+        curve: (c, rows) =>
+          c.map((r) => ({
+            ...r,
+            density: r.density * rows.length,
+          })),
+      }),
       // dots below the line. gap: they should hang from the
       // slab's zero line
       chart()
@@ -4775,40 +2168,7 @@ chart(halfeyeDotDf, { color: Color.palette("Set2") })
           stack({ dir: "y" })
         )
         .mark(circle({ r: 2, fill: "abc" })),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      // on a sample, center is the midpoint, not the median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, "value", [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
+      interval("value"),
     ])
   );
 """,
@@ -4910,31 +2270,13 @@ layer([
       stack({ dir: "y" })
     )
     .mark(circle({ r: 2 })),
-  // bands: at each Petal.Length, the 95%, 80% and 50%
-  // central intervals of the draws, then one ribbon per
-  // level
-  chart(predictionGrid)
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, p, [0.95, 0.8, 0.5], {
-          by: "Petal.Length",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "Petal.Length", x: "Petal.Length" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "#08306b", opacity: 0.25 })),
-  // line: the median of the draws at each Petal.Length
-  chart(predictionGrid)
-    .flow(
-      scatter({
-        by: "Petal.Length",
-        x: "Petal.Length",
-        y: p.median(),
-      })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
+  chart(predictionGrid).mark(
+    lineribbon(p, {
+      along: "Petal.Length",
+      fill: "#08306b",
+      opacity: 0.25,
+    })
+  ),
 ]);
 """,
     uses_up='dots: partition by a bin and stack over the rows; ribbon: quantiles and the median of the draws per x',
@@ -4965,26 +2307,13 @@ chart(
 E[70] = dict(
     title='geom_lineribbon() of median_qi(y) per x (one 95% band)',
     gofish="""
-layer([
-  // bands: at each x, the 95% central interval of the
-  // draws, then one ribbon per level
-  chart(df)
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95], { by: "x" })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "gray65" })),
-  // line: the median of the draws at each x
-  chart(df)
-    .flow(
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
-]);
+chart(df).mark(
+  lineribbon("y", {
+    along: "x",
+    levels: [0.95],
+    fill: "gray65",
+  })
+);
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
@@ -4995,30 +2324,9 @@ layer([
 E[71] = dict(
     title='geom_lineribbon() with .width = c(.5, .8, .95)',
     gofish="""
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(df, {
-    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
-  })
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each x
-  chart(df)
-    .flow(
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
-]);
+chart(df, {
+  color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+}).mark(lineribbon("y", { along: "x" }));
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
@@ -5029,30 +2337,9 @@ layer([
 E[72] = dict(
     title='stat_lineribbon() over the draws',
     gofish="""
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(df, {
-    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
-  })
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each x
-  chart(df)
-    .flow(
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
-]);
+chart(df, {
+  color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+}).mark(lineribbon("y", { along: "x" }));
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
@@ -5067,26 +2354,9 @@ const levels = Array.from(
   { length: 50 },
   (_, i) => (i + 0.5) / 50
 );
-layer([
-  // bands: at each x, the central interval of the draws at
-  // each level, then one ribbon per level
-  chart(df, { color: Color.gradient("Blues") })
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", levels, { by: "x" })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each x
-  chart(df)
-    .flow(
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
-]);
+chart(df, { color: Color.gradient("Blues") }).mark(
+  lineribbon("y", { along: "x", levels: levels })
+);
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x, at 50 levels',
     fit='fits',
@@ -5234,32 +2504,11 @@ layer([
 E[76] = dict(
     title='stat_lineribbon() of two groups, color = g, fill = level (brewer)',
     gofish="""
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(df2groups, {
-    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
-  })
-    .flow(
-      group({ by: "g" }),
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each x
-  chart(df2groups)
-    .flow(
-      group({ by: "g" }),
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: "g", strokeWidth: 2 })),
-]);
+chart(df2groups, {
+  color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+})
+  .flow(group({ by: "g" }))
+  .mark(lineribbon("y", { along: "x", stroke: "g" }));
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
@@ -5270,30 +2519,16 @@ layer([
 E[77] = dict(
     title='stat_lineribbon(aes(fill = g), alpha = 1/4)',
     gofish="""
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(df2groups)
-    .flow(
-      group({ by: "g" }),
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "g", opacity: 0.25 })),
-  // line: the median of the draws at each x
-  chart(df2groups)
-    .flow(
-      group({ by: "g" }),
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: "g", strokeWidth: 2 })),
-]);
+chart(df2groups)
+  .flow(group({ by: "g" }))
+  .mark(
+    lineribbon("y", {
+      along: "x",
+      fill: "g",
+      stroke: "g",
+      opacity: 0.25,
+    })
+  );
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
@@ -5305,30 +2540,11 @@ E[78] = dict(
     title='stat_lineribbon(aes(fill = g, fill_ramp = after_stat(level)))',
     gofish="""
 // gap: fill_ramp, the group's color lightened by level
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(df2groups)
-    .flow(
-      group({ by: "g" }),
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "g" })),
-  // line: the median of the draws at each x
-  chart(df2groups)
-    .flow(
-      group({ by: "g" }),
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: "g", strokeWidth: 2 })),
-]);
+chart(df2groups)
+  .flow(group({ by: "g" }))
+  .mark(
+    lineribbon("y", { along: "x", fill: "g", stroke: "g" })
+  );
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='gofish-gap',
@@ -5339,66 +2555,31 @@ layer([
 E[79] = dict(
     title='stat_lineribbon with order = interaction(level, group)',
     gofish="""
-// every group's 95% band first, then 80%, then 50%: level
-// outer, group inner
+// ggdist draws every group's 95% band first, then 80%, then
+// 50%: level outer, group inner. One lineribbon per group
+// draws group by group, so the 50% band of g = a is under
+// the 95% band of g = b. The definition's own flow could
+// interleave them, by grouping by level before g.
 // gap: fill_ramp, the group's color lightened by level
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(df2groups)
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: ["g", "x"],
-        })
-      ),
-      group({ by: "level" }),
-      group({ by: "g" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "g" })),
-  // line: the median of the draws at each x
-  chart(df2groups)
-    .flow(
-      group({ by: "g" }),
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: "g", strokeWidth: 2 })),
-]);
+chart(df2groups)
+  .flow(group({ by: "g" }))
+  .mark(
+    lineribbon("y", { along: "x", fill: "g", stroke: "g" })
+  );
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='gofish-gap',
     verdict='ok',
-    note="Interleaving the two groups' bands by level is drawing order, which is flow order: group by level, then by g. Written out, the bands are ordinary flow steps, so this ordering is now expressible; version 2's lineribbon helper hid them. Here level is the band's level p, not sample's column. Missing: fill_ramp as in entry 78.",
+    note="ggdist draws every group's widest band first. That is drawing order, which is flow order: group by level, then by g. The lineribbon mark groups by g outside the mark, so it draws one group's bands at a time; the spec says so in a comment. The definition's own flow could interleave them if it took the grouping as an option. Missing: fill_ramp as in entry 78.",
 )
 
 E[80] = dict(
     title='stat_lineribbon(aes(ydist = dist_normal(y_mean, y_sd)))',
     gofish="""
 const y = dist.normal({ mean: "y_mean", sd: "y_sd" });
-layer([
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
-  chart(analyticalDf, {
-    color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
-  })
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, y, [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each x
-  chart(analyticalDf)
-    .flow(scatter({ by: "x", x: "x", y: y.median() }))
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
-]);
+chart(analyticalDf, {
+  color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
+}).mark(lineribbon(y, { along: "x" }));
 """,
     uses_up='quantiles and the median of the draws per cell, with one cell per x',
     fit='fits',
@@ -5426,24 +2607,13 @@ E[82] = dict(
     title='50% pointwise intervals with point_interval() over the curves',
     gofish="""
 layer([
-  // bands: at each x, the 50% central interval of the
-  // draws, then one ribbon per level
-  chart(curves)
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.5], { by: "x" })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "#3182bd" })),
-  // line: the median of the draws at each x
-  chart(curves)
-    .flow(
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
+  chart(curves).mark(
+    lineribbon("y", {
+      along: "x",
+      levels: [0.5],
+      fill: "#3182bd",
+    })
+  ),
   chart(curves, { schema: { y: { draws: ".draw" } } })
     .flow(
       group({ by: ".draw" }),
@@ -5534,28 +2704,9 @@ const pointwise = layer([
   chart([{ y: 1 }]).mark(
     rect({ y: "y", h: 1, strokeDasharray: "4 3" })
   ),
-  // bands: at each x, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
   chart(largeCurves, {
     color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
-  })
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "y", [0.95, 0.8, 0.5], {
-          by: "x",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "x", x: "x" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each x
-  chart(largeCurves)
-    .flow(
-      scatter({ by: "x", x: "x", y: field("y").median() })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
+  }).mark(lineribbon("y", { along: "x" })),
 ]);
 const curvewise = layer([kept(0.95), kept(0.8), kept(0.5)]);
 spread({ dir: "y", spacing: 16 }, [pointwise, curvewise]);
@@ -5594,32 +2745,14 @@ E[86] = dict(
     title='stat_lineribbon(.width = c(.5, .7, .9)) of the bootstrap fits, with the data',
     gofish="""
 layer([
-  // bands: at each mpg, the 90%, 70% and 50% central
-  // intervals of the draws, then one ribbon per level
   chart(mtcarsBoot, {
     color: Color.palette(["#deebf7", "#9ecae1", "#3182bd"]),
-  })
-    .flow(
-      derive((rows) =>
-        centralIntervals(rows, "hp", [0.9, 0.7, 0.5], {
-          by: "mpg",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "mpg", x: "mpg" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "level" })),
-  // line: the median of the draws at each mpg
-  chart(mtcarsBoot)
-    .flow(
-      scatter({
-        by: "mpg",
-        x: "mpg",
-        y: field("hp").median(),
-      })
-    )
-    .mark(line({ stroke: INK, strokeWidth: 2 })),
+  }).mark(
+    lineribbon("hp", {
+      along: "mpg",
+      levels: [0.9, 0.7, 0.5],
+    })
+  ),
   chart(mtcars)
     .flow(scatter({ x: "mpg", y: "hp" }))
     .mark(circle({ r: 1.5 })),
@@ -5715,52 +2848,7 @@ const x = dist.studentT({
 });
 chart(tidyCoefs)
   .flow(spread({ by: "term", dir: "y" }))
-  .mark(
-    layer([
-      // slab: the density curve of the draws
-      chart()
-        .flow(
-          derive((rows) => densityCurve(rows, x)),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({ dir: "x", h: "density", fill: SLAB })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
-  );
+  .mark(layer([slab(x), interval(x)]));
 """,
     uses_up='summaries per cell: the density curve of the draws for the slab, and quantiles and the median of the draws for the interval (exact on a Dist, which is n = Infinity; over the rows on a sample)',
     fit='fits',
@@ -5779,52 +2867,7 @@ const x = dist.studentT({
 layer([
   chart(fitted)
     .flow(spread({ by: "condition", dir: "y" }))
-    .mark(
-      layer({ h: 30 }, [
-        // slab: the density curve of the draws
-        chart()
-          .flow(
-            derive((rows) => densityCurve(rows, x)),
-            scatter({ x: "v" })
-          )
-          .mark(
-            ribbon({ dir: "x", h: "density", fill: SLAB })
-          ),
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    .mark(layer({ h: 30 }, [slab(x), interval(x)])),
   // the data as ticks below each half-eye. gap: placed by a
   // hand offset, not from the slab's zero line
   chart(ABC)
@@ -5854,67 +2897,7 @@ const x = dist.studentT({
 chart(fitted)
   .flow(spread({ by: "condition", dir: "y" }))
   .mark(
-    layer({ h: 30 }, [
-      // slab: the density curve divided by its peak, read
-      // as opacity over the full height
-      // gap: an opacity that varies along one region
-      chart()
-        .flow(
-          derive((rows) => {
-            const curve = densityCurve(rows, x);
-            const peak = Math.max(
-              ...curve.map((r) => r.density)
-            );
-            return curve.map((r) => ({
-              ...r,
-              height: 1,
-              alpha: r.density / peak,
-            }));
-          }),
-          scatter({ x: "v" })
-        )
-        .mark(
-          ribbon({
-            dir: "x",
-            h: "height",
-            fill: SLAB,
-            opacity: "alpha",
-          })
-        ),
-      // interval: the 95% and 66% central intervals of the
-      // draws, and a circle at their median
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.95])
-          )
-        )
-        .mark(
-          rect({
-            cx: "center",
-            w: "size",
-            h: 1.5,
-            fill: INK,
-          })
-        ),
-      chart()
-        .flow(
-          derive((rows) =>
-            centralIntervals(rows, x, [0.66])
-          )
-        )
-        .mark(
-          layer([
-            rect({
-              cx: "center",
-              w: "size",
-              h: 4,
-              fill: INK,
-            }),
-            circle({ cx: "median", r: 4, fill: INK }),
-          ])
-        ),
-    ])
+    layer({ h: 30 }, [gradientinterval(x), interval(x)])
   );
 """,
     uses_up='the density curve of the draws per cell, divided by its peak and read as opacity along the slab (the second kind of ggdist mark)',
@@ -5945,43 +2928,7 @@ layer([
     ),
   chart(fitted)
     .flow(spread({ by: "condition", dir: "y" }))
-    .mark(
-      layer([
-        // interval: the 95% and 66% central intervals of
-        // the draws, and a circle at their median
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.95])
-            )
-          )
-          .mark(
-            rect({
-              cx: "center",
-              w: "size",
-              h: 1.5,
-              fill: INK,
-            })
-          ),
-        chart()
-          .flow(
-            derive((rows) =>
-              centralIntervals(rows, x, [0.66])
-            )
-          )
-          .mark(
-            layer([
-              rect({
-                cx: "center",
-                w: "size",
-                h: 4,
-                fill: INK,
-              }),
-              circle({ cx: "median", r: 4, fill: INK }),
-            ])
-          ),
-      ])
-    ),
+    .mark(interval(x)),
 ]);
 """,
     uses_up='spread({ by: "level" }), n = Infinity',
@@ -6021,28 +2968,16 @@ const y = dist.studentT({
   sigma: ".se.fit",
 });
 layer([
-  // bands: at each hp, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
   chart(fittedMpg, { color: Color.palette("Set2") })
-    .flow(
-      group({ by: "cyl" }),
-      derive((rows) =>
-        centralIntervals(rows, y, [0.95, 0.8, 0.5], {
-          by: "hp",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "hp", x: "hp" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "cyl", opacity: 0.25 })),
-  // line: the median of the draws at each hp
-  chart(fittedMpg)
-    .flow(
-      group({ by: "cyl" }),
-      scatter({ by: "hp", x: "hp", y: y.median() })
-    )
-    .mark(line({ stroke: "cyl", strokeWidth: 2 })),
+    .flow(group({ by: "cyl" }))
+    .mark(
+      lineribbon(y, {
+        along: "hp",
+        fill: "cyl",
+        stroke: "cyl",
+        opacity: 0.25,
+      })
+    ),
   chart(mtcars)
     .flow(scatter({ x: "hp", y: "mpg" }))
     .mark(circle({ r: 1.5, fill: "cyl" })),
@@ -6064,28 +2999,15 @@ const y = dist.studentT({
 });
 // gap: fill_ramp, the cylinder count's color lightened by level
 layer([
-  // bands: at each hp, the 95%, 80% and 50% central
-  // intervals of the draws, then one ribbon per level
   chart(fittedMpg)
-    .flow(
-      group({ by: "cyl" }),
-      derive((rows) =>
-        centralIntervals(rows, y, [0.95, 0.8, 0.5], {
-          by: "hp",
-        })
-      ),
-      group({ by: "level" }),
-      scatter({ by: "hp", x: "hp" })
-    )
-    .mark(rect({ w: 0, cy: "center", h: "size" }))
-    .layer(ribbon({ fill: "cyl" })),
-  // line: the median of the draws at each hp
-  chart(fittedMpg)
-    .flow(
-      group({ by: "cyl" }),
-      scatter({ by: "hp", x: "hp", y: y.median() })
-    )
-    .mark(line({ stroke: "cyl", strokeWidth: 2 })),
+    .flow(group({ by: "cyl" }))
+    .mark(
+      lineribbon(y, {
+        along: "hp",
+        fill: "cyl",
+        stroke: "cyl",
+      })
+    ),
   chart(mtcars)
     .flow(scatter({ x: "hp", y: "mpg" }))
     .mark(circle({ r: 1.5, fill: "cyl" })),
