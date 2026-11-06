@@ -1,8 +1,7 @@
 # Petal in user space (#1331)
 
-**Summary.** Today's `petal` is two straight edges and two quadratic curves in its slot. Warp the curves' control points through polar, draw the curves on screen, and one fixed unit-box outline reproduces it (within 1.1 px up to 108° slots, 2.1 px at 192°, at the front page's 40 px radius).
-So the petal does not need its own mark: `polygon` needs `w` and `h` (like a rect) and a curved outline, `d`.
-**Recommendation:** approach B, `polygon({ w: "count", d: "M.5 0 L0 .5 Q.167 .75 .5 1 Q.833 .75 1 .5 Z" })`, then delete `petal` from JS, the IR, Python and the docs.
+**Summary.** `polygon` gains a rect's `w` and `h` and takes its outline as an SVG path, `d`. The outline is stretched into the slot box, and under a polar coord the whole outline, curves included, is drawn through the coord, the same way `line` and a pie slice's arc are. Then the petal is a polygon and needs no mark of its own.
+**Recommendation:** approach B, `polygon({ w: "count", d: PETAL })`, with one of the two petal shapes below, then delete `petal` from JS, the IR, Python and the docs.
 
 Issue #1331 asks whether the flower chart's petal can be drawn from general GoFish pieces, now that the flower chart is on the front page.
 Prototype stories: `packages/gofish-graphics/stories/proposals/PetalUserSpace.stories.tsx` (throwaway).
@@ -17,19 +16,7 @@ Prototype stories: `packages/gofish-graphics/stories/proposals/PetalUserSpace.st
 
 `src/ast/shapes/petal.tsx` builds a path in pixels pointing along +x, then turns it to the slot's middle angle. The path goes from the center out to the slot's two side edges at half the radius (two straight lines along those edges), then two quadratic Béziers to a tip at the full radius. It is a local-frame glyph, ported from herrstucki's d3 bl.ock (pie layout plus a `rotate` transform).
 
-The two straight lines are rays from the center, which polar draws straight anyway. Each quadratic's control point sits at 3/4 of the radius, at the same pixel distance from the petal's axis as the half-radius corner. Because that distance is in pixels, its angle shrinks with the slot in a way no fixed point in (angle, radius) reproduces. Warping the control point from the fixed unit-box spot (1/6, 3/4) (today's control in the narrow-slot limit) and drawing the curve on screen matches best.
-
-Largest outline gap to today's petal at the front page's 40 px radius, computed over the flower chart's own slot angles (`tests/tmp/petal-snips/search*.py`; sampled outlines, about 0.3 px floor). The fixed fits minimize the worst gap over all slots:
-
-| outline                            | 16°  | 42°  | 73°  | 90°  | 108° | 127° | 162° | 192° |
-| ---------------------------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
-| curved, control points warped (B)  | 0.07 | 0.23 | 0.53 | 0.80 | 1.13 | 1.46 | 1.92 | 2.07 |
-| five points                        | 0.35 | 0.41 | 0.52 | 0.62 | 0.94 | 1.49 | 3.17 | 5.48 |
-| nine points, best fixed fit        | 0.68 | 1.53 | 2.12 | 2.25 | 2.19 | 1.90 | 0.72 | 2.24 |
-| seven points, best fixed fit       | 0.82 | 1.90 | 2.65 | 2.78 | 2.68 | 2.33 | 0.97 | 2.72 |
-| five points + `Curve.catmullRom()` | 0.60 | 1.06 | 1.48 | 1.61 | 1.69 | 1.74 | 2.31 | 2.78 |
-
-Rendered checks at R = 90 px agree after scaling by 90/40. Lake F head (slots 16°, 29°, 37°, 86°, 192°), measured on the SVG paths: curved 0.15 / 0.26 / 0.30 / 1.62 / 4.56 px; five points 0.45 / 0.45 / 0.45 / 0.88 / 12.3 px; nine points 1.52 / 2.55 / 3.16 / 5.23 / 4.92 px. The nine-point outline also shows visible kinks.
+The two straight lines are rays from the center, which polar draws straight anyway. The two curves are drawn on screen, so no outline that bends through polar matches today's exactly, and matching it is not the goal. The rule for polygon is decided: its outline lives in the coord's space, and every point of it, curves included, goes through the coord.
 
 ## Approaches
 
@@ -66,47 +53,63 @@ const flower = chart(rows, { coord: Coord.polar(), axes: false })
 - Works today: `polygon({ points: "ring" })` reads data-space rings and warps them. Same petal shapes, but the head is smaller (the radius comes from the r scale, not 90 px), so outlines sit 14 to 24 px from today's.
 - The user re-implements `stack` with a running sum, and the radius is a data value, so the fixed 40 px head radius of the flower chart has no direct spelling. This is the large partial overlap with `stack` that api-design.md warns about. Good as a stopgap, not as the answer.
 
-### B. Box-relative polygon with a curved outline (recommended)
-
-Widest slot (Lake F, R = 90 px, green slot 192°): today, B curved, five points only.
-
-![today](wide-today.png) ![B curved](wide-b-quad.png) ![five points](wide-b-pentagon.png)
+### B. Box-relative polygon, bent by the coord (recommended)
 
 ```js
-// Two straight edges out from the center, then two quadratic curves to the
-// tip. Their control points go through polar like the vertices do.
-const PETAL = "M.5 0 L0 .5 Q.167 .75 .5 1 Q.833 .75 1 .5 Z";
+// Shape 1: rounder than today's petal.
+const SHAPE_1 = "M0 0 L0 .5 Q.31 .871 .5 1 Q.69 .871 1 .5 L1 0 Z";
+// Closest: the shape closest to today's petal.
+const CLOSEST = "M0 0 L0 .5 Q.18 .5 .5 1 Q.82 .5 1 .5 L1 0 Z";
 
 const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: 40 }))
-  .mark(polygon({ w: "count", d: PETAL, fill: "species" }));
+  .mark(polygon({ w: "count", d: SHAPE_1, fill: "species" }));
 ```
 
 ```python
-PETAL = "M.5 0 L0 .5 Q.167 .75 .5 1 Q.833 .75 1 .5 Z"
+SHAPE_1 = "M0 0 L0 .5 Q.31 .871 .5 1 Q.69 .871 1 .5 L1 0 Z"
 
 flower = (
     chart(coord=Coord.polar(), axes=False)
     .flow(stack(by="species", dir="x", h=40))
-    .mark(polygon(w="count", d=PETAL, fill="species"))
+    .mark(polygon(w="count", d=SHAPE_1, fill="species"))
 )
 ```
 
-- The change: `polygon` gains the `w` / `h` size channels a rect has, and takes its outline as `points` (straight edges) or `d` (an SVG path, for curves). The outline is stretched from its own bounding box into the `w` by `h` box. Left out, `w` and `h` default to the outline's own extent, so every existing literal polygon draws as before (the default is a value the user can write).
-- The rule for curves: every point, vertex or Bézier control point, goes through the coord. Straight edges follow the coord, as polygon edges do today; curves are drawn on screen between the warped points, the rule `Curve` already uses for `line`. No polar special case and no slot-dependent shape.
-- It lays out like a rect of the same size ("marks lay out alike"). The curved prototype (a throwaway node that declares a rect-like size) lays out exactly like today's chart.
-- It works under every coord, because the warp does. Under `Coord.clock({ innerRadius: 0.4 })` the five-point B petals start at the donut hole; today's petal ignores the hole and draws from the center (bug, below). The curved outline warps its points the same way (not rendered).
-- With only `points`, the five-point pentagon `[[0,0],[0,.5],[.5,1],[1,.5],[1,0]]` already matches narrow slots, but its straight edges warp into spirals that keep the full slot angle until near the tip, so wide petals bulge (5.5 px at 192°, R = 40). No fixed point set fixes that without hurting narrow slots (table above).
+Front-page flower chart: today, Shape 1, Closest.
 
-Front-page flower chart: today, B curved, five points only.
+![flower today](flower-today.png) ![flower Shape 1](flower-b-shape1.png) ![flower Closest](flower-b-closest.png)
 
-![flower today](flower-today.png) ![flower B curved](flower-b-quad.png) ![flower five points](flower-b-box-ring.png)
+Widest slot (Lake F, R = 90 px, green slot 192°): today, Shape 1, Closest.
 
-The five-point prototype chart is wider because it is a literal polygon with no declared size space; the curved prototype declares a rect-like one and lays out like today.
+![today](wide-today.png) ![Shape 1](wide-b-shape1.png) ![Closest](wide-b-closest.png)
 
-Donut clock (five-point outline), today and with B:
+Donut clock (`Coord.clock({ innerRadius: 0.4 })`): today, Shape 1, Closest. B petals start at the hole.
 
-![donut today](donut-today.png) ![donut B](donut-b-box-ring.png)
+![donut today](donut-today.png) ![donut Shape 1](donut-b-shape1.png) ![donut Closest](donut-b-closest.png)
+
+A box outline, `M0 0 L0 1 L1 1 L1 0 Z`, draws a true pie:
+
+![pie slice](pie-b-slice.png)
+
+- The change: `polygon` gains the `w` / `h` size channels a rect has, and takes its outline as `points` (straight edges) or `d` (an SVG path with `M`, `L`, `Q`, `C`, `Z`). The outline is stretched from its own bounding box into the `w` by `h` box. Left out, `w` and `h` default to the outline's own extent, so every existing literal polygon draws as before.
+- The rule: the outline lives in the coord's space. Straight edges and Bézier curves are both resampled through the coord by the adaptive resampler that already draws `line` and polygon edges (`adaptive-resampling.ts` already takes Bézier segments). No polar special case and no slot-dependent shape.
+- It lays out like a rect of the same size ("marks lay out alike"): the flower chart keeps today's layout.
+- It works under every coord, because the resampling does. Under the donut clock the petals start at the hole; today's petal ignores the hole (bug, below).
+- Shape 1 is rounder than today's petal, and its wide petals grow past today's (6.5 px at 192°). Closest stays within 2.2 px of today's at every slot, but it keeps today's sharp shoulders, and in wide slots its sides bow in a little.
+
+Largest outline gap to today's petal at the front page's 40 px radius, one head per slot angle. "Real" is measured on the rendered SVG paths (`MeasureToday`, `MeasureShape1`, `MeasureClosest` stories; `tests/tmp/petal-snips/pairwise.mjs`). "Editor" is the shape editor's emulation, 48 samples per quadratic, each warped through polar (`emulate.py`).
+
+| shape           | 16°  | 42°  | 90°  | 108° | 127° | 162° | 192° |
+| --------------- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+| Shape 1, real   | 0.29 | 0.67 | 1.32 | 1.69 | 2.37 | 4.15 | 6.50 |
+| Shape 1, editor | 0.34 | 0.70 | 1.35 | 1.75 | 2.37 | 4.17 | 6.50 |
+| Closest, real   | 0.68 | 1.59 | 2.24 | 2.11 | 1.70 | 0.42 | 2.20 |
+| Closest, editor | 0.69 | 1.54 | 2.18 | 2.04 | 1.64 | 0.81 | 2.19 |
+
+The real resampler and the editor agree within 0.1 px, except Closest at 162° (0.4 px apart, both under 1 px). So the editor's previews are what GoFish draws.
+
+The prototype is on this branch only, marked `PROTOTYPE (#1331)`: `polygon.tsx` parses `d`, takes `w` / `h` as size channels and stretches the outline into its box; `lowerHelpers.ts` gets `outlineItem`, which is `ringItem` for a path with curves (`ringItem` now calls it). Lowering needed no new mechanism: `transformPath(..., { resample: true })` already resamples Bézier segments.
 
 ### C. Local-frame glyph in the slot's tangent frame
 
@@ -155,10 +158,11 @@ Glyph libraries put custom shapes in a local frame because their marks are point
 - **#1111 part 1 is already fixed.** #1111 (petals draw nothing under `clock()`, and no fluent way to lighten field colors) says petal skips `clock()`. It now checks `coordinateTransform.polar`, and the clock render works. Part 2 (lightening) is still open and is unrelated.
 - **A literal polygon's y runs opposite ways in Cartesian and polar.** The same points `[[0,0],…,[.5,1]]` point down in Cartesian (pixels, y down) and outward in polar. This is #1038 (inside a coord, y direction should be measured from the nearest frame, not the canvas). It decides which way B's unit box runs.
 
+## Decided
+
+- **Polygon's outline lives in the coord's space.** Every point of it, curves included, goes through the coord, the same as `line` under polar and a pie slice's arc. Warping only the curves' control points and drawing the curves on screen is not polygon's behavior. A shape drawn in a local frame belongs to a separate mark (C).
+
 ## Open decisions
 
-1. Approve B: `polygon` takes `w` / `h`, its outline stretches into that box, curve control points warp like vertices, and `petal` is deleted?
-2. Which way does the unit box run: v up from the baseline (data order, so a petal points up in Cartesian and outward in polar) or y down (pixel order, as literal polygon points are today)? This ties to #1038.
-3. Curved outlines: spell them as an SVG path, `d` on `polygon` (SVG and Vega precedent), or as points plus a new `Curve` member that reads every other point as a control point (TrueType outlines mark off-curve points the same way)? Or keep five points and accept bulging wide petals?
-4. Ship A in the flower story now as a stopgap, or wait for B?
-5. Keep C (a unit-box glyph mark for point glyphs) as a separate future issue, or drop it?
+1. Which petal shape goes in the flower story: Shape 1 (rounder, wide petals grow) or Closest (within 2.2 px of today's)?
+2. Keep C, a unit-box glyph mark in the slot's tangent frame for point glyphs (markers, arrowheads), as a separate future issue, or drop it?

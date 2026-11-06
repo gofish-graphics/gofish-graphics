@@ -71,8 +71,25 @@ export const ringItem = (
   toPixel: ToPixel,
   datum: Record<string, unknown>[] | undefined,
   style: DisplayList.Style
+): DisplayList.PathItem =>
+  outlineItem(
+    path(points, { closed: true }),
+    coordinateTransform,
+    toPixel,
+    datum,
+    style
+  );
+
+/** PROTOTYPE (#1331, petal-user-space branch): a closed outline that may
+ *  have curved segments, drawn like `ringItem`. Under a nonlinear coordinate
+ *  space the whole outline, curves included, is resampled through it. */
+export const outlineItem = (
+  ring: Path,
+  coordinateTransform: CoordinateTransform | undefined,
+  toPixel: ToPixel,
+  datum: Record<string, unknown>[] | undefined,
+  style: DisplayList.Style
 ): DisplayList.PathItem => {
-  const ring = path(points, { closed: true });
   const drawn =
     coordinateTransform === undefined || coordinateTransform.type === "linear"
       ? ring

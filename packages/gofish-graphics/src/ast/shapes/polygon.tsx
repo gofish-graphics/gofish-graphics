@@ -19,7 +19,17 @@ import { posFn } from "../domain";
 import { interval } from "../../util/interval";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, ringItem } from "../displayList/lowerHelpers";
+import { lowerStyle, outlineItem, ringItem } from "../displayList/lowerHelpers";
+import {
+  curve,
+  quadratic,
+  samePoint,
+  segment,
+  type Path,
+  type PathSegment,
+  type Point,
+} from "../../path";
+import { pointOrMagnitude } from "../underlyingSpace";
 import { withWire } from "../wire";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
@@ -38,7 +48,93 @@ export type PolygonProps = {
    *     coordinates, so the vertices go through the axis position scales and the
    *     polygon places itself, exactly as a data-positioned `rect` does.
    */
-  points: MaybeValue<Ring>;
+  points?: MaybeValue<Ring>;
+  /** PROTOTYPE (#1331): the outline as an absolute SVG path (M, L, Q, C, Z),
+   *  in place of `points`. Curves are drawn like edges: under a nonlinear
+   *  coordinate space the whole outline is resampled through it. */
+  d?: string;
+  /** PROTOTYPE (#1331): the box the outline is stretched into, like a
+   *  rect's. A data value scales like a rect's width; left out, the outline
+   *  keeps its own extent (or takes the room it is given when the other
+   *  side is set). */
+  w?: MaybeValue<number>;
+  h?: MaybeValue<number>;
+};
+
+/** PROTOTYPE (#1331): parse an absolute SVG path of M/L/Q/C/Z commands into
+ *  outline segments. */
+const parseOutline = (d: string): Path => {
+  const out: Path = [];
+  let cur: Point = [0, 0];
+  let start: Point = [0, 0];
+  for (const seg of d.match(/[MLQCZ][^MLQCZ]*/gi) ?? []) {
+    const cmd = seg[0].toUpperCase();
+    const n = (seg.slice(1).match(/-?\d*\.?\d+(?:e-?\d+)?/gi) ?? []).map(
+      Number
+    );
+    const pts: Point[] = [];
+    for (let i = 0; i + 1 < n.length; i += 2) pts.push([n[i], n[i + 1]]);
+    if (cmd === "M") {
+      cur = start = pts[0];
+      for (const p of pts.slice(1)) {
+        out.push(segment(cur, p));
+        cur = p;
+      }
+    } else if (cmd === "L") {
+      for (const p of pts) {
+        out.push(segment(cur, p));
+        cur = p;
+      }
+    } else if (cmd === "Q") {
+      for (let i = 0; i + 1 < pts.length; i += 2) {
+        out.push(quadratic(cur, pts[i], pts[i + 1]));
+        cur = pts[i + 1];
+      }
+    } else if (cmd === "C") {
+      for (let i = 0; i + 2 < pts.length; i += 3) {
+        out.push(curve(cur, pts[i], pts[i + 1], pts[i + 2]));
+        cur = pts[i + 2];
+      }
+    } else if (cmd === "Z") {
+      if (!samePoint(cur, start)) out.push(segment(cur, start));
+      cur = start;
+    }
+  }
+  return out;
+};
+
+const segmentPoints = (s: PathSegment): Point[] =>
+  s.type === "line"
+    ? [s.points[0], s.points[1]]
+    : [s.start, s.control1, s.control2, s.end];
+
+const mapSegment = (s: PathSegment, f: (p: Point) => Point): PathSegment =>
+  s.type === "line"
+    ? segment(f(s.points[0]), f(s.points[1]))
+    : curve(f(s.start), f(s.control1), f(s.control2), f(s.end));
+
+/** A flattened ring of an outline, for geometry (labels, enclosing circle). */
+const flattenOutline = (outline: Path): Ring => {
+  const ring: Ring = [];
+  for (const s of outline) {
+    if (s.type === "line") ring.push(s.points[0]);
+    else
+      for (let i = 0; i < 16; i++) {
+        const t = i / 16;
+        const u = 1 - t;
+        ring.push([
+          u * u * u * s.start[0] +
+            3 * u * u * t * s.control1[0] +
+            3 * u * t * t * s.control2[0] +
+            t * t * t * s.end[0],
+          u * u * u * s.start[1] +
+            3 * u * u * t * s.control1[1] +
+            3 * u * t * t * s.control2[1] +
+            t * t * t * s.end[1],
+        ]);
+      }
+  }
+  return ring;
 };
 
 /**
@@ -58,9 +154,28 @@ export const Polygon = ({
   strokeWidth = 0,
   opacity = 1,
   points,
+  d,
+  w,
+  h,
 }: PolygonProps) => {
   const dataBound = isValue(points);
-  const ring: Ring = dataBound ? (getValue(points) as Ring) : (points as Ring);
+  // PROTOTYPE (#1331): an outline with a box (`w`/`h`) or a path (`d`) is
+  // stretched from its own extent into that box, and drawn with its curves.
+  const shaped =
+    !dataBound && (d !== undefined || w !== undefined || h !== undefined);
+  const baseOutline: Path | undefined = !shaped
+    ? undefined
+    : d !== undefined
+      ? parseOutline(d)
+      : (points as unknown as Ring).map((p, i, all) =>
+          segment(p as Point, all[(i + 1) % all.length] as Point)
+        );
+  const ring: Ring = baseOutline
+    ? baseOutline.flatMap(segmentPoints)
+    : dataBound
+      ? (getValue(points) as Ring)
+      : (points as unknown as Ring);
+  const outlineRef: { current: Path | undefined } = { current: baseOutline };
 
   // Without an explicit guard an empty ring's extent is (Infinity, -Infinity),
   // producing a bbox with size: -Infinity that silently corrupts downstream
@@ -97,8 +212,42 @@ export const Polygon = ({
               CONTINUOUS(interval(minX, maxX), "pinned"),
               CONTINUOUS(interval(minY, maxY), "pinned"),
             ]
-          : [UNDEFINED, UNDEFINED],
+          : shaped
+            ? [
+                w !== undefined ? pointOrMagnitude(undefined, w) : UNDEFINED,
+                h !== undefined ? pointOrMagnitude(undefined, h) : UNDEFINED,
+              ]
+            : [UNDEFINED, UNDEFINED],
       layout: (_size, scales) => {
+        if (shaped && baseOutline) {
+          // A side with no size of its own takes the room it is given when
+          // the other side is set (as a rect does), else its own extent.
+          const side = (
+            v: MaybeValue<number> | undefined,
+            axis: 0 | 1,
+            own: number,
+            other: MaybeValue<number> | undefined
+          ) =>
+            isValue(v)
+              ? getValue(v) * (scales?.[axis]?.sigma ?? 1)
+              : (v ?? (other !== undefined ? (_size?.[axis] ?? own) : own));
+          const W = side(w, 0, maxX - minX, h);
+          const H = side(h, 1, maxY - minY, w);
+          const sx = maxX > minX ? W / (maxX - minX) : 0;
+          const sy = maxY > minY ? H / (maxY - minY) : 0;
+          const scaled = baseOutline.map((sg) =>
+            mapSegment(sg, ([x, y]) => [(x - minX) * sx, (y - minY) * sy])
+          );
+          outlineRef.current = scaled;
+          localRef.current = flattenOutline(scaled);
+          return {
+            intrinsicDims: [
+              { min: 0, size: W },
+              { min: 0, size: H },
+            ],
+            transform: { translate: [undefined, undefined] },
+          };
+        }
         if (!dataBound) {
           return {
             intrinsicDims: [
@@ -149,6 +298,22 @@ export const Polygon = ({
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
           resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
+        if (outlineRef.current) {
+          return [
+            outlineItem(
+              outlineRef.current.map((sg) => mapSegment(sg, (p) => local(p))),
+              coordinateTransform,
+              toPixel,
+              node.datum,
+              lowerStyle({
+                fill: resolvedFill,
+                stroke: resolvedStroke,
+                strokeWidth: strokeWidth ?? 0,
+                opacity,
+              })
+            ),
+          ];
+        }
         return [
           ringItem(
             localRef.current.map((p) => local(p)),
@@ -183,14 +348,28 @@ export const Polygon = ({
 /** `fill`/`stroke` are color channels, as on `rect`: a field name (or
  *  `field(...)`) reads the row's value and goes through the chart's color
  *  scale; any other string is a literal color. */
-const basePolygon = createMark(Polygon, MARK_CHANNELS.polygon, "polygon");
+// PROTOTYPE (#1331): `w`/`h` are size channels, as on rect.
+const basePolygon = createMark(
+  Polygon,
+  {
+    ...MARK_CHANNELS.polygon,
+    w: "size",
+    h: "size",
+  } as typeof MARK_CHANNELS.polygon,
+  "polygon"
+);
 
 export type PolygonMarkProps = Omit<
   Parameters<typeof basePolygon>[0],
-  "points"
+  "points" | "d" | "w" | "h"
 > & {
   /** A literal ring, or the name of a field holding one ring per row. */
-  points: Ring | string;
+  points?: Ring | string;
+  /** PROTOTYPE (#1331): an absolute SVG path outline instead of points. */
+  d?: string;
+  /** PROTOTYPE (#1331): the box the outline stretches into, as on rect. */
+  w?: number | string;
+  h?: number | string;
 };
 
 /**

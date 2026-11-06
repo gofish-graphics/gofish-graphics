@@ -143,12 +143,10 @@ const parseUnitPath = (d: string) =>
 const Glyph = ({
   d,
   fill = "black",
-  warpPoints = false,
   ...fancyDims
 }: {
   d: string;
   fill?: any;
-  warpPoints?: boolean;
 } & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
@@ -205,9 +203,6 @@ const Glyph = ({
           [(a[1] - C[1]) / e, (b[1] - C[1]) / e],
         ];
         const map = (u: number, v: number) => {
-          // Warp each point (vertex or control point) through the full
-          // coord; the curves between them are then drawn on screen.
-          if (warpPoints) return toPixel(f(t0 + u * tw, r0 + v * rh)).join(",");
           const du = (u - 0.5) * tw;
           const dv = (v - 0.5) * rh;
           return toPixel([
@@ -305,24 +300,13 @@ export const FlowerToday: StoryObj = {
   render: () => flowerChart(petal({ w: "count", fill: "species" })),
 };
 
-// Round 2: wide slots. Nine points fitted (fixed, for every slot angle) by
-// minimizing the largest outline gap to today's petal over the flower
-// chart's slot angles (tests/tmp/petal-snips/search2.py).
-const NINE: [number, number][] = [
-  [0, 0],
-  [0, 0.5],
-  [0.15, 0.55],
-  [0.32, 0.74],
-  [0.5, 1],
-  [0.68, 0.74],
-  [0.85, 0.55],
-  [1, 0.5],
-  [1, 0],
-];
-// Quadratic Béziers whose control points are warped like vertices; the
-// curves are drawn on screen. The control (1/6, 3/4) is today's control
-// point in the narrow-slot limit.
-const QUAD_D = "M.5 0 L0 .5 Q.16667 .75 .5 1 Q.83333 .75 1 .5 Z";
+// Real polygon({ w, d }) (prototype in src/ast/shapes/polygon.tsx): the
+// outline is stretched into the slot and, under polar, the whole outline,
+// curves included, is resampled through the coord.
+const SHAPE_1 = "M0 0 L0 .5 Q.31 .871 .5 1 Q.69 .871 1 .5 L1 0 Z";
+const CLOSEST = "M0 0 L0 .5 Q.18 .5 .5 1 Q.82 .5 1 .5 L1 0 Z";
+const PIE = "M0 0 L0 1 L1 1 L1 0 Z";
+const shaped = (d: string) => polygon({ w: "count", d, fill: "species" } as any);
 
 const lakeF = stemData.filter((d) => d.lake === "Lake F");
 const wideHead = (mark: any) => {
@@ -333,30 +317,57 @@ const wideHead = (mark: any) => {
     .render(container);
   return container;
 };
-const ringMark = (h: number, ring: [number, number][]) =>
-  (boxPolygonOf(2 * Math.PI, h, ring) as any)({
-    count: "count",
-    of: "lakeTotal",
-    fill: "species",
-  });
-const quadMark = () =>
-  (glyph as any)({ w: "count", d: QUAD_D, warpPoints: true, fill: "species" });
 
 export const WideToday: StoryObj = {
   render: () => wideHead(petal({ w: "count", fill: "species" })),
 };
-export const WidePentagon: StoryObj = {
-  render: () => wideHead(ringMark(R, PETAL)),
+export const WideShape1: StoryObj = { render: () => wideHead(shaped(SHAPE_1)) };
+export const WideClosest: StoryObj = {
+  render: () => wideHead(shaped(CLOSEST)),
 };
-export const WideNine: StoryObj = {
-  render: () => wideHead(ringMark(R, NINE)),
+export const FlowerShape1: StoryObj = {
+  render: () => flowerChart(shaped(SHAPE_1)),
 };
-export const WideQuad: StoryObj = {
-  render: () => wideHead(quadMark()),
+export const FlowerClosest: StoryObj = {
+  render: () => flowerChart(shaped(CLOSEST)),
 };
-export const FlowerNine: StoryObj = {
-  render: () => flowerChart(ringMark(40, NINE)),
+export const PieSlice: StoryObj = { render: () => head(shaped(PIE)) };
+export const DonutShape1: StoryObj = {
+  render: () => head(shaped(SHAPE_1), donutClock()),
 };
-export const FlowerQuad: StoryObj = {
-  render: () => flowerChart(quadMark()),
+export const DonutClosest: StoryObj = {
+  render: () => head(shaped(CLOSEST), donutClock()),
+};
+
+// Measurement: one radius-40 head per slot angle (the petal under test, then
+// a filler petal for the rest of the circle).
+const SLOTS = [16, 42, 90, 108, 127, 162, 192];
+const measure = (mark: () => any) => {
+  const container = initializeContainer();
+  for (const a of SLOTS) {
+    const div = document.createElement("div");
+    container.appendChild(div);
+    chart(
+      [
+        { s: "a", count: a },
+        { s: "b", count: 360 - a },
+      ],
+      { coord: Coord.polar(), axes: false, w: 100, h: 100 }
+    )
+      .flow(stack({ by: "s", dir: "x", h: 40 }))
+      .mark(mark())
+      .render(div);
+  }
+  return container;
+};
+const measured = (d: string) => () =>
+  polygon({ w: "count", d, fill: "s" } as any);
+export const MeasureToday: StoryObj = {
+  render: () => measure(() => petal({ w: "count", fill: "s" })),
+};
+export const MeasureShape1: StoryObj = {
+  render: () => measure(measured(SHAPE_1)),
+};
+export const MeasureClosest: StoryObj = {
+  render: () => measure(measured(CLOSEST)),
 };
