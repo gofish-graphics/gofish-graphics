@@ -521,5 +521,66 @@ console.log("# #972: a glyph size is a scale of its own");
   );
 }
 
+console.log("# #972: a glyph unit's σ with no room to bound it");
+{
+  const { scatter } = GoFish as any;
+  const radii = async (ns: number[]) =>
+    ellipsesOf(
+      await chart(ns.map((n, i) => ({ a: i, b: i, n })))
+        .flow(scatter({ by: "a", x: "a", y: "b" }))
+        .mark(circle({ area: "n" }))
+        .toDisplayList({ w: 300, h: 300 })
+    ).map((e) => e.rx);
+  // Every value 0: the unit's widest glyph is 0 wide, so no room bounds σ,
+  // and every glyph is drawn 0 wide at any σ.
+  const zero = await radii([0, 0]);
+  check(
+    "areas that are all 0 draw circles 0 wide",
+    zero.length === 2 && zero.every((r) => r === 0),
+    JSON.stringify(zero)
+  );
+  const equal = await radii([5, 5]);
+  check(
+    "equal areas each fill the glyph range",
+    equal.every((r) => Math.abs(2 * r - 30) < 1e-9),
+    JSON.stringify(equal)
+  );
+  const some = await radii([0, 4]);
+  check(
+    "a 0 area beside another draws 0 wide, and the other fills the range",
+    some[0] === 0 && Math.abs(2 * some[1] - 30) < 1e-9,
+    JSON.stringify(some)
+  );
+}
+
+console.log("# #972: glyph sizes lay out in linear time");
+{
+  const { scatter } = GoFish as any;
+  // Each glyph's room comes from its parent's sharing plan, and its unit's
+  // σ from bounds kept as rooms are recorded, so a bubble scatter's layout
+  // grows with its points, not their square (5k points took ~9 s when each
+  // glyph rescanned every constraint and room).
+  const n = 5000;
+  const points = Array.from({ length: n }, (_, i) => ({
+    id: i,
+    a: (i * 37) % 101,
+    b: (i * 53) % 97,
+    n: 1 + (i % 7),
+  }));
+  const start = performance.now();
+  const bubbles = ellipsesOf(
+    await chart(points)
+      .flow(scatter({ by: "id", x: "a", y: "b" }))
+      .mark(circle({ area: "n" }))
+      .toDisplayList({ w: 300, h: 300 })
+  );
+  const ms = performance.now() - start;
+  check(
+    `a ${n}-point bubble scatter lays out in under 4 s (${Math.round(ms)} ms)`,
+    bubbles.length === n && ms < 4000,
+    `${bubbles.length} bubbles in ${Math.round(ms)} ms`
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

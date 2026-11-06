@@ -96,6 +96,7 @@ export async function wrapRing(
       sets: [sets, [...sets]],
       nested: none(),
       datumPlaced: none(),
+      cells: [new Map(), new Map()],
     };
   });
   // Every handle is a slot: the content is slot 0, and each of the ring's

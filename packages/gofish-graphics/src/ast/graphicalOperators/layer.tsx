@@ -946,7 +946,7 @@ export const layer = createNodeOperatorSequential(
             // A glyph is sized at its unit's σ (#972, `GoFishNode.glyphSigma`).
             const sigmaOf = (axis: 0 | 1) =>
               child instanceof GoFishNode && child.isGlyph(axis)
-                ? (child.glyphSigma(axis, frameSigmas) ?? 0)
+                ? child.glyphSigma(axis, frameSigmas)
                 : childScaleFactors[axis];
             const childPlaceable = child.layout(
               layoutSize,

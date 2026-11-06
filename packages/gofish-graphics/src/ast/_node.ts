@@ -59,8 +59,7 @@ import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
-import { GoFishRef, resolution } from "./_ref";
-import { isPositionInterval } from "./constraints/position";
+import { GoFishRef } from "./_ref";
 import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -1356,52 +1355,48 @@ export class GoFishNode {
   }
 
   /** The room this glyph is placed in on `dim` (#972): the cell its
-   *  parent's position places it across there, else the point it is placed
-   *  at. */
+   *  parent's position places it across there (`LayerSharingPlan.cells`),
+   *  else the point it is placed at. */
   private glyphRoom(dim: 0 | 1): GlyphRoom {
     const p = this.parent!;
-    const i = p.indexOfChild(this);
-    const refs = resolution(p);
-    for (const c of p.constraints) {
-      if (c.type !== "position") continue;
-      const coord = dim === 0 ? c.x : c.y;
-      const edges = isPositionInterval(coord) ? coord : c.region?.spans[dim];
-      if (edges === undefined) continue;
-      const placesThis = c.children.some((ref) => {
-        const op = ref && refs.operands.get(refs.keyOf(ref));
-        return op?.direct === true && op.child === i;
-      });
-      const [a, b] = edges.map((e) => getValue(e));
-      if (placesThis && typeof a === "number" && typeof b === "number")
-        return {
-          kind: "cell",
-          axis: dim,
-          span: Math.abs(b - a),
-          width: intervalWidth(
-            (this._underlyingSpace![dim] as CONTINUOUS_TYPE).dataInterval ?? {
-              min: 0,
-              max: 0,
-            }
-          ),
-        };
-    }
-    return { kind: "point" };
+    const span = (p.sharing() as Partial<LayerSharingPlan>).cells?.[dim].get(
+      p.indexOfChild(this)!
+    );
+    if (span === undefined) return { kind: "point" };
+    return {
+      kind: "cell",
+      axis: dim,
+      span,
+      width: intervalWidth(
+        (this._underlyingSpace![dim] as CONTINUOUS_TYPE).dataInterval ?? {
+          min: 0,
+          max: 0,
+        }
+      ),
+    };
   }
 
   /**
    * The σ this glyph is sized at on `dim` (#972): its unit's σ
    * (`ScopeRegistry.glyphSigma`), at `frame`, the σ of the frame its parent
-   * places it in on each axis.
+   * places it in on each axis. With no `frame` (the claim walk, before any
+   * frame's σ is solved) it is the bound its unit's points set alone.
    */
   public glyphSigma(
     dim: 0 | 1,
-    frame: readonly [number | undefined, number | undefined]
-  ): number | undefined {
-    const session = this.tryGetRenderSession();
+    frame?: readonly [number | undefined, number | undefined]
+  ): number {
+    const session = this.getRenderSession();
+    const keyed = session.keyedDomains;
+    if (keyed === undefined)
+      throw new Error(
+        "[gofish:layout] a glyph is sized before the render's keyed domains " +
+          "are built, so its unit's widest glyph is unknown."
+      );
     const unit = this.glyphUnit(dim);
     return getScopeRegistry(session).glyphSigma(
       unit,
-      session?.keyedDomains?.unitWidth(unit) ?? 0,
+      keyed.unitWidth(unit),
       frame
     );
   }
@@ -1412,28 +1407,27 @@ export class GoFishNode {
    * (`isGlyph`) it records its room and claims the pixels it draws. A glyph
    * in a cell fits inside the cell, which the cell's data already claims,
    * so it claims nothing past it. A glyph at a point claims its size at its
-   * unit's σ.
+   * unit's σ as the claim walk knows it (`glyphSigma` with no frame): the
+   * points' bound. A cell of its unit may bound σ lower in layout, so the
+   * claim is at least what is drawn.
    */
   private glyphClaim(
     claim: Size<Extent | undefined>
   ): Size<Extent | undefined> {
     if (!this.isGlyph(0) && !this.isGlyph(1)) return claim;
-    const scopes = getScopeRegistry(this.tryGetRenderSession());
+    const scopes = getScopeRegistry(this.getRenderSession());
     return ([0, 1] as const).map((dim) => {
       const e = claim[dim];
-      if (!this.isGlyph(dim) || e === undefined) return e;
+      if (!this.isGlyph(dim)) return e;
       const room = this.glyphRoom(dim);
       scopes.fitGlyph(this.glyphUnit(dim), `${this.uid}/${dim}`, room);
-      const sigma =
-        room.kind === "point"
-          ? this.glyphSigma(dim, [undefined, undefined])
-          : undefined;
-      return sigma === undefined
-        ? Extent(Pwl.ZERO)
-        : Extent(
-            Pwl.constant(Pwl.at(e.ascent, sigma)),
-            Pwl.constant(Pwl.at(e.descent, sigma))
-          );
+      if (e === undefined) return e;
+      if (room.kind === "cell") return Extent(Pwl.ZERO);
+      const sigma = this.glyphSigma(dim);
+      return Extent(
+        Pwl.constant(Pwl.at(e.ascent, sigma)),
+        Pwl.constant(Pwl.at(e.descent, sigma))
+      );
     }) as Size<Extent | undefined>;
   }
 

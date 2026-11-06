@@ -253,6 +253,41 @@ export type GlyphRoom =
   | { kind: "point" }
   | { kind: "cell"; axis: 0 | 1; span: number; width: number };
 
+/** A glyph unit's rooms ({@link ScopeRegistry.fitGlyph}), and the bounds
+ *  they set on its σ: whether some glyph is at a point, and, per axis, the
+ *  smallest ratio of a cell to the glyph in it (`span / width`), so the
+ *  cells there bound σ by the frame's σ times it. `Infinity`: no cell there
+ *  bounds it (none, or only glyphs 0 wide). */
+type GlyphUnit = {
+  rooms: Map<string, GlyphRoom>;
+  atPoint: boolean;
+  cellFit: [number, number];
+};
+
+const emptyGlyphUnit = (): GlyphUnit => ({
+  rooms: new Map(),
+  atPoint: false,
+  cellFit: [Infinity, Infinity],
+});
+
+/** Fold one room into its unit's bounds. */
+const foldRoom = (g: GlyphUnit, room: GlyphRoom): void => {
+  if (room.kind === "point") g.atPoint = true;
+  else if (room.width > 0)
+    g.cellFit[room.axis] = Math.min(
+      g.cellFit[room.axis],
+      room.span / room.width
+    );
+};
+
+const sameRoom = (a: GlyphRoom, b: GlyphRoom): boolean =>
+  a.kind === "point"
+    ? b.kind === "point"
+    : b.kind === "cell" &&
+      a.axis === b.axis &&
+      a.span === b.span &&
+      a.width === b.width;
+
 /**
  * Per-render record of every σ-scope solved. Lives on the {@link RenderSession}
  * (one per render, so no cross-render leakage); a render lays its tree out
@@ -294,18 +329,36 @@ export class ScopeRegistry {
     return y.has(u) && this.tied.has(u);
   }
 
-  /** Each glyph unit's rooms (`fitGlyph`), by the unit's key, each once. */
-  private glyphs = new Map<string, Map<string, GlyphRoom>>();
+  /** Each glyph unit's rooms (`fitGlyph`), by the unit's key. */
+  private glyphs = new Map<string, GlyphUnit>();
 
   /**
    * Record a glyph's room on one axis (#972, `GoFishNode.isGlyph`): its
    * size there is at most its room. `id` names the room, so the claim walk
-   * may record it again.
+   * may record it again. The unit's bounds are kept as rooms are recorded,
+   * so {@link glyphSigma} reads them in constant time: a new room folds into
+   * them, and only a room recorded again with another value (never, within
+   * one layout) recomputes them.
    */
   fitGlyph(unit: string, id: string, room: GlyphRoom): void {
-    let rooms = this.glyphs.get(unit);
-    if (rooms === undefined) this.glyphs.set(unit, (rooms = new Map()));
-    rooms.set(id, room);
+    if (room.kind === "cell" && !(room.span >= 0 && room.width >= 0))
+      throw new Error(
+        `[gofish:layout] a glyph of the unit "${unit}" is placed in a cell ` +
+          `${room.span} wide with a size ${room.width} wide: both must be ` +
+          `finite and at least 0.`
+      );
+    let g = this.glyphs.get(unit);
+    if (g === undefined) this.glyphs.set(unit, (g = emptyGlyphUnit()));
+    const prior = g.rooms.get(id);
+    if (prior !== undefined && sameRoom(prior, room)) return;
+    g.rooms.set(id, room);
+    if (prior === undefined) foldRoom(g, room);
+    else {
+      const fresh = emptyGlyphUnit();
+      for (const r of g.rooms.values()) foldRoom(fresh, r);
+      g.atPoint = fresh.atPoint;
+      g.cellFit = fresh.cellFit;
+    }
   }
 
   /**
@@ -315,10 +368,17 @@ export class ScopeRegistry {
    * theirs ({@link equalizeMeasure}). A glyph at a point has the glyph range
    * for its room ({@link GLYPH_ROOM_PX}), the same for each, so the points
    * bound σ by the range over the widest glyph, `domain` (the width of the
-   * unit's widest keyed domain). A glyph in a cell has the cell for its room,
-   * which is data in its axis's unit, so its pixels are known only at
-   * `frame`, the σ of the frame that places it. Undefined when no glyph of
-   * the unit has a size.
+   * unit's widest keyed domain, `KeyedDomains.unitWidth`). A glyph in a cell
+   * has the cell for its room, which is data in its axis's unit, so its
+   * pixels are known only at `frame`, the σ of the frame that places it.
+   *
+   * The claim walk asks before any frame's σ is solved, with no `frame`:
+   * the cell bounds are left out, so it gets the point bound, at least the
+   * σ layout draws at (`GoFishNode.glyphClaim`). Layout passes the frame,
+   * and a frame with no σ on an axis its unit's cells are on is an error.
+   * When no room bounds σ, every glyph of the unit is 0 wide (its widest
+   * domain is, and so is every glyph in a cell), and each is drawn 0 wide at
+   * any σ: σ is 0.
    *
    * TODO(#1324): a cell is turned into pixels at the asking frame's σ, so
    * every frame that places one unit's glyphs must map its axis at one σ
@@ -327,19 +387,34 @@ export class ScopeRegistry {
   glyphSigma(
     unit: string,
     domain: number,
-    frame: readonly [number | undefined, number | undefined]
-  ): number | undefined {
-    let sigma: number | undefined;
-    const bound = (s: number) => {
-      if (Number.isFinite(s) && s >= 0)
-        sigma = sigma === undefined ? s : Math.min(sigma, s);
-    };
-    for (const room of this.glyphs.get(unit)?.values() ?? []) {
-      if (room.kind === "point") bound(GLYPH_ROOM_PX / domain);
-      else if (frame[room.axis] !== undefined)
-        bound((frame[room.axis]! * room.span) / room.width);
-    }
-    return sigma;
+    frame?: readonly [number | undefined, number | undefined]
+  ): number {
+    const g = this.glyphs.get(unit);
+    if (g === undefined)
+      throw new Error(
+        `[gofish:layout] the glyph unit "${unit}" has no room: its glyphs ` +
+          `are sized before the claim walk recorded where they are placed.`
+      );
+    if (!(domain >= 0))
+      throw new Error(
+        `[gofish:layout] the glyph unit "${unit}" has a domain ${domain} ` +
+          `wide: it must be finite and at least 0.`
+      );
+    let sigma = g.atPoint && domain > 0 ? GLYPH_ROOM_PX / domain : Infinity;
+    if (frame !== undefined)
+      for (const axis of [0, 1] as const) {
+        const fit = g.cellFit[axis];
+        if (fit === Infinity) continue;
+        const frameSigma = frame[axis];
+        if (frameSigma === undefined)
+          throw new Error(
+            `[gofish:layout] the glyphs of the unit "${unit}" are placed in ` +
+              `cells on ${axis === 0 ? "x" : "y"}, but the frame that places ` +
+              `them has no scale there to turn a cell into pixels.`
+          );
+        sigma = Math.min(sigma, frameSigma * fit);
+      }
+    return sigma === Infinity ? 0 : sigma;
   }
 
   /**

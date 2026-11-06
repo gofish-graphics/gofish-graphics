@@ -36,6 +36,7 @@
 
 import type { GoFishAST } from "../_ast";
 import type { Cell } from "../cells";
+import { getValue } from "../data";
 import { Size } from "../dims";
 import {
   UNDEFINED,
@@ -400,9 +401,14 @@ export const childRole = (
 
 /** A layer's plan ({@link planSharing}): its sharing sets, and, per axis, the
  *  children a datum `position` places. The layer's own union leaves those
- *  out, since their own extent is nested at the datum. */
+ *  out, since their own extent is nested at the datum. `cells` holds, per
+ *  axis, the data width of the cell a datum interval places a child across
+ *  (an interval coordinate, or a region's span), by child: a glyph's room
+ *  there (`GoFishNode.glyphRoom`, #972). A datum-placed child with no entry
+ *  is placed at a point. */
 export type LayerSharingPlan = SharingPlan & {
   datumPlaced: [Set<number>, Set<number>];
+  cells: [Map<number, number>, Map<number, number>];
 };
 
 export function planSharing(
@@ -419,6 +425,10 @@ export function planSharing(
       .filter((i): i is number => i !== undefined);
 
   const datumPlaced: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const cells: [Map<number, number>, Map<number, number>] = [
+    new Map(),
+    new Map(),
+  ];
   const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
   const rooms: [Set<number>, Set<number>] = [new Set(), new Set()];
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
@@ -440,11 +450,25 @@ export function planSharing(
         // way. A constraint gives at most one coordinate per axis.
         const idx = idxOf(c.children);
         for (const axis of [0, 1] as const) {
-          const kind = positionCoordKind(axisCoordinates(c, axis)[0]);
+          const coords = axisCoordinates(c, axis);
+          const kind = positionCoordKind(coords[0]);
           if (kind === "pixel") detach(axis, idx);
           if (kind === "datum") {
             idx.forEach((i) => datumPlaced[axis].add(i));
             nest(axis, idx);
+            // The cell it is placed across: its interval, or its region's
+            // span, in data.
+            const span = coords.find(isPositionInterval)?.map(getValue);
+            if (
+              span !== undefined &&
+              typeof span[0] === "number" &&
+              typeof span[1] === "number"
+            ) {
+              const width = Math.abs(span[1] - span[0]);
+              idx.forEach((i) => {
+                if (!cells[axis].has(i)) cells[axis].set(i, width);
+              });
+            }
           }
           // A region's cell, with no coordinate of its own on the axis, is
           // the child's room there.
@@ -526,7 +550,7 @@ export function planSharing(
       return s;
     });
   }
-  return { sets, nested, rooms, datumPlaced };
+  return { sets, nested, rooms, datumPlaced, cells };
 }
 
 const foldOptions = (s: Seg) => ({

@@ -243,13 +243,22 @@ export class KeyedDomains {
   /** The width of the widest keyed domain of `unit` (`unitKey`), in any
    *  space and on either axis: the widest glyph of a glyph unit (#972). */
   unitWidth(unit: string): number {
-    let width = 0;
+    return (this.unitWidths ??= this.widestByUnit()).get(unit) ?? 0;
+  }
+
+  /** The memo of {@link unitWidth}: the table is built once and never
+   *  changes after, so each unit's widest domain is found in one scan. */
+  private unitWidths?: Map<string, number>;
+
+  private widestByUnit(): Map<string, number> {
+    const widths = new Map<string, number>();
     for (const axes of this.domains.values())
       for (const domains of axes)
-        for (const [key, d] of domains)
-          if (key.replace(/\/width$/, "") === unit)
-            width = Math.max(width, d.max - d.min);
-    return width;
+        for (const [key, d] of domains) {
+          const unit = key.replace(/\/width$/, "");
+          widths.set(unit, Math.max(widths.get(unit) ?? 0, d.max - d.min));
+        }
+    return widths;
   }
 
   /** The ticks of an axis some node draws over the same keyed domain, or
