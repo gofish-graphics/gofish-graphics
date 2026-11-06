@@ -1404,9 +1404,9 @@ const XLINK_NS = "http://www.w3.org/1999/xlink";
 
 /**
  * Serialize an `<svg>` element to a standalone SVG markup string suitable for
- * writing to a `.svg` file: ensures the SVG/xlink namespaces and a `viewBox`
- * are present, and optionally paints a background rect. Works on a clone, so
- * the passed element is left untouched.
+ * writing to a `.svg` file: ensures the SVG/xlink namespaces are present
+ * (`render` already wrote the `viewBox`), and optionally paints a background
+ * rect. Works on a clone, so the passed element is left untouched.
  */
 export function serializeSVG(
   svg: SVGSVGElement,
@@ -1416,13 +1416,6 @@ export function serializeSVG(
 
   el.setAttribute("xmlns", SVG_NS);
   if (!el.getAttribute("xmlns:xlink")) el.setAttribute("xmlns:xlink", XLINK_NS);
-
-  // viewBox so the SVG scales when a consumer overrides width/height.
-  const width = el.getAttribute("width");
-  const height = el.getAttribute("height");
-  if (!el.getAttribute("viewBox") && width && height) {
-    el.setAttribute("viewBox", `0 0 ${width} ${height}`);
-  }
 
   const background = opts?.background;
   if (background) {
@@ -1579,11 +1572,23 @@ export const render = (
     perfAdd("paint", perfNow() - __tPaint);
     return painted;
   };
+  // The viewBox matches the size, so at its own size the drawing is one CSS
+  // px per user unit, and a page can shrink it to fit a narrow column with
+  // CSS (`max-width: 100%; height: auto`) (#1330). The interaction runtime
+  // maps the pointer through the screen CTM, so a scaled chart still reads
+  // the pointer in user units. The canvas is a whole number of pixels, the
+  // layout's size rounded up: a browser lays a box out in fractions of a
+  // pixel (1/64 in Blink and WebKit, 1/60 in Gecko), so a fractional size
+  // gets a box a little smaller than its viewBox, and the viewBox would
+  // shrink the whole drawing by that much. The layout itself is unchanged.
+  const canvasW = Math.ceil(width);
+  const canvasH = Math.ceil(height);
   return (
     <svg
       ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
-      width={width}
-      height={height}
+      width={canvasW}
+      height={canvasH}
+      viewBox={`0 0 ${canvasW} ${canvasH}`}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>

@@ -361,16 +361,35 @@ canvas, so `render()` reserves no margins: it lowers the tree through the identi
 
 ```ts
 const paintBaked = () => paintDocument(lowerToDisplayList(child)); // identity toPixel
+const canvasW = Math.ceil(width);
+const canvasH = Math.ceil(height);
 return (
-  <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
+  <svg
+    width={canvasW}
+    height={canvasH}
+    viewBox={`0 0 ${canvasW} ${canvasH}`}
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <Show when={defs}><defs>{defs}</defs></Show>
     {paintBaked()}
   </svg>
 );
 ```
 
+The `viewBox` matches the size, so at its own size the drawing is one CSS px per
+user unit, and a page can shrink a chart to fit a narrow column with CSS alone
+(`max-width: 100%; height: auto`, which the docs' `GoFishExample` and `GoFishVue`
+set, #1330). The canvas is the layout's size rounded up to whole pixels, and the
+layout itself is unchanged. A browser lays a box out in fractions of a pixel
+(1/64 in Blink and WebKit, 1/60 in Gecko), so a fractional size would get a box a
+little smaller than its `viewBox`, and the `viewBox` would shrink the whole drawing
+by that much. The interaction runtime maps the pointer to user units through the
+inverse screen CTM (`localPoint` in `interaction/runtime.ts`), so a shrunk chart
+reads the pointer as it does at its own size.
+
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
-pipeline against a throwaway container and serialize the result.
+pipeline against a throwaway container and serialize the result, which already
+carries the `viewBox`.
 
 The real `paintBaked` brackets each half with the perf instrumentation
 (`src/ast/perf.ts`): it times `lowerToDisplayList(child)`

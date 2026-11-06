@@ -83,11 +83,14 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* A chart wider than the column scrolls inside its box instead of widening
-   the page (#1330). */
 .gofish-vue {
   padding-bottom: 1rem;
-  overflow-x: auto;
   transform-origin: center center;
+}
+/* A chart wider than the column shrinks to fit it through its viewBox, and
+   never grows past its own size (#1330). */
+.gofish-vue :deep(svg) {
+  max-width: 100%;
+  height: auto;
 }
 </style>
