@@ -451,19 +451,17 @@ captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
 A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND — the **Route B** unit gate, only inside a coordinate space — its size
-is in the same unit as the dim's own _position_ (`min`/`center`/`max`;
-`sameValueUnit` reads both through the render's union-find, which
-`resolveEmbedding` installs as the type walk does, so two unknowns
-are one unit only when they are one column or met on a shared axis). A size
-in a unit _foreign_ to where the mark sits (a scatter bubble's area ≠ its
-position) stays ink: a flat point at the mapped center, not a swept wedge.
-The discriminator is mark-local because a polar coord forgets its axis
-measure; a positioned mark's own position unit is the axis unit it sits on. This consumes the quantity provenance #534
-carried to mark channels. The revocation is
-coord-scoped, so Cartesian behavior matches the former construction-time
-inference. (Route A — relational, measure-free embedding — is not yet
-implemented; tracked under #618.)
+AND, only inside a coordinate space, it is no glyph size (`GoFishNode.isGlyph`,
+#972): a size placed at a datum in another unit, by its parent's position or
+by the mark's own `min`/`center`/`max`, stays ink, a flat point at the mapped
+center (a scatter bubble), not a swept wedge. Units are read through the
+render's union-find, which `resolveEmbedding` installs as the type walk does.
+Embedding and sizing ask this one question, so a glyph is never warped and a
+length of the space always is (see
+[Glyph sizes and lengths of the space](../core/underlying-space.md#glyph-sizes-and-lengths-of-the-space)).
+The revocation is coord-scoped, so Cartesian behavior matches the former
+construction-time inference. (Route A, relational, measure-free embedding, is
+not yet implemented; tracked under #618.)
 
 ### Pass 9: Layout Calculation
 

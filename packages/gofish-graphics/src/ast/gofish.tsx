@@ -543,8 +543,8 @@ export async function layout(
   );
 
   // Author each dim's `embedded` flag (point/line/area) now that underlying
-  // space has resolved each coord axis's measure — Route B reads it to keep a
-  // foreign-measure size flat. Runs on the final (axis/title/legend-elaborated)
+  // space has resolved each coord axis's measure: inside a coord a glyph size
+  // stays flat (`isGlyph`). Runs on the final (axis/title/legend-elaborated)
   // tree, before layout/render consume the flag. See _node.resolveEmbedding.
   const __tEmbed = perfNow();
   child.resolveEmbedding();

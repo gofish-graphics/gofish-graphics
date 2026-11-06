@@ -5,7 +5,13 @@
 import { Interval } from "./dims";
 import { FieldExpr, type FieldOp } from "./fieldExpr";
 import type { ColumnType } from "./schema";
-import { sameUnitVar, unitOf, type Quantity } from "./measure";
+import {
+  resolveUnit,
+  sameUnitVar,
+  unitKey,
+  unitOf,
+  type Quantity,
+} from "./measure";
 
 export type { FieldOp } from "./fieldExpr";
 export { FieldExpr } from "./fieldExpr";
@@ -181,6 +187,14 @@ export const scaleValue = (
     : k * s;
 
 export const value = <T>(datum: T): DatumValueImpl => new DatumValueImpl(datum);
+
+/** The key of the unit a value is in (`unitKey`), read through the type
+ *  walk's union-find, as {@link sameValueUnit} reads it; undefined for a
+ *  value with no quantity (a literal). */
+export const valueUnitKey = <T>(v: MaybeValue<T>): string | undefined => {
+  const q = getQuantity(v);
+  return q === undefined ? undefined : unitKey(resolveUnit(unitOf(q)));
+};
 
 /**
  * `datum(x)` is the recommended name for the data-driven value wrapper

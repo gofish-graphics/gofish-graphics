@@ -58,7 +58,10 @@ console.log("# embedding: baseEmbedded predicate (coord-free half)");
 // needs a union-find of its own.
 fresh(() => {
   ok("data size embeds", baseEmbedded({ size: q(5, "amount") }) === true);
-  ok("pixel (number) size does not embed", baseEmbedded({ size: 10 }) === false);
+  ok(
+    "pixel (number) size does not embed",
+    baseEmbedded({ size: 10 }) === false
+  );
   ok("unsized embeds (nest-growth case)", baseEmbedded({}) === true);
   ok(
     "min in a clashing measure blocks embed",
@@ -112,6 +115,30 @@ console.log("# embedding: Route B in context");
     ) === JSON.stringify([false, false]),
     "a foreign-measure size must not warp into a wedge"
   );
+
+  // Embedding and sizing ask one question (#972, `GoFishNode.isGlyph`): the
+  // bubble's own center places it at a datum in another unit, so its size is
+  // a glyph size on both axes, the same verdict that keeps it flat above.
+  // They used to disagree: the embedding pass compared the mark's own
+  // positions with its size, while sizing read only its parent's placement,
+  // so this bubble was drawn flat but sized as a length of the space.
+  {
+    const root: any = await coord({ transform: polar() }, [
+      Ellipse({
+        w: q(5, "pop"),
+        h: q(5, "pop"),
+        cx: q(2, "amount"),
+        cy: q(3, "amount"),
+      }),
+    ]);
+    await root.resolveAliases();
+    root.resolveUnderlyingSpace();
+    const leaf = root.children[0];
+    ok(
+      "a bubble placed by its own center is a glyph on both axes",
+      leaf.isGlyph(0) && leaf.isGlyph(1)
+    );
+  }
 
   // The SAME bubble in Cartesian space is unchanged from the old inferEmbedded
   // (the Route B revocation is coord-scoped) — pins that cartesian didn't move.

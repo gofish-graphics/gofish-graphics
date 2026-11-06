@@ -70,7 +70,7 @@ import {
   isValue,
   MaybeValue,
   baseEmbedded,
-  sameValueUnit,
+  valueUnitKey,
 } from "./data";
 import { color6 } from "../color";
 import { hasUnits, Units, withUnits } from "./measure";
@@ -219,6 +219,12 @@ export const outlineOverhang = (
     ? strokeWidth / 2
     : 0;
 
+/** What a node's own data size is on one axis (#972): a length of the
+ *  space, a glyph size (`GoFishNode.isGlyph`), or a size an aspect lock
+ *  derives from a length of the other axis where the node is placed at a
+ *  datum in another unit, which claims nothing there. */
+type SizeKind = "length" | "glyph" | "follows";
+
 /** The claim walk's memos of a node (`GoFishNode._claimMemo`), cleared with
  *  its claims. */
 type ClaimMemo = {
@@ -247,6 +253,9 @@ type ClaimMemo = {
   /** Per axis, the key of its unit ({@link GoFishNode.unitKeyAt}), once
    *  read. */
   unitKeys?: [string | undefined, string | undefined];
+  /** Per axis, what its own size is ({@link GoFishNode.sizeKind}), once
+   *  read. */
+  sizeKinds?: [SizeKind, SizeKind];
 };
 
 const freshClaimMemo = (): ClaimMemo => ({
@@ -1327,11 +1336,30 @@ export class GoFishNode {
    * parent's axis that places it.
    */
   public isGlyph(dim: 0 | 1): boolean {
-    const own = this.unitKeyAt(dim);
-    if (own === undefined) return false;
-    return ([0, 1] as const).some(
-      (axis) => this.givesSize(axis) && this.foreignPlaced(axis) === own
-    );
+    return this.sizeKind(dim) === "glyph";
+  }
+
+  /** What this node's own data size is on `dim` ({@link SizeKind}), decided
+   *  once per claim walk. */
+  private sizeKind(dim: 0 | 1): SizeKind {
+    const memo = this._claimMemo.sizeKinds;
+    if (memo !== undefined) return memo[dim];
+    // An own value position's unit reads the type walk's union-find.
+    if (!hasUnits())
+      return withUnits(this.walkUnits(), () => this.sizeKind(dim));
+    const placed = [this.foreignPlaced(0), this.foreignPlaced(1)] as const;
+    const kindOn = (axis: 0 | 1): SizeKind => {
+      const own = this.unitKeyAt(axis);
+      if (
+        own !== undefined &&
+        ([0, 1] as const).some((a) => this.givesSize(a) && placed[a] === own)
+      )
+        return "glyph";
+      return !this.givesSize(axis) && placed[axis] !== undefined
+        ? "follows"
+        : "length";
+    };
+    return (this._claimMemo.sizeKinds = [kindOn(0), kindOn(1)])[dim];
   }
 
   /** The key of this node's unit on `dim` (`unitKeyOf`), or undefined when
@@ -1346,31 +1374,30 @@ export class GoFishNode {
     ])[dim];
   }
 
-  /** The unit of this node's data size on `axis` when its parent places it
-   *  at a datum there (at a point, or in a cell) and the parent's axis is
-   *  not in that unit: a size that is no length of the axis that places it.
-   *  Undefined otherwise. */
+  /** The unit of this node's data size on `axis` when it is placed at a
+   *  datum in another unit there: by its parent (at a point, or in a cell),
+   *  or by its own value position (its `min`, `center` or `max`). It is a
+   *  size that is no length of the axis that places it. Undefined
+   *  otherwise. */
   private foreignPlaced(axis: 0 | 1): string | undefined {
+    const size = this.unitKeyAt(axis);
+    if (size === undefined) return undefined;
     const p = this.parent;
     const i = p?.indexOfChild(this);
-    if (p === undefined || i === undefined) return undefined;
-    const datumPlaced = p.sharing().datumPlaced;
-    if (datumPlaced?.[axis].has(i) !== true) return undefined;
-    const size = this.unitKeyAt(axis);
-    return size !== p.unitKeyAt(axis) ? size : undefined;
-  }
-
-  /** Whether this node's size on `dim` is derived by an aspect lock from a
-   *  length of the other axis, where its parent places it at a datum in
-   *  another unit (`circle({ h })` placed on x only, #972). It is drawn the
-   *  pixels of the size it follows, at the other axis's σ, which no claim on
-   *  `dim` can be written in, so it claims nothing there (`glyphClaim`). */
-  private followsAcross(dim: 0 | 1): boolean {
-    return (
-      !this.givesSize(dim) &&
-      !this.isGlyph(dim) &&
-      this.foreignPlaced(dim) !== undefined
-    );
+    if (
+      p !== undefined &&
+      i !== undefined &&
+      p.sharing().datumPlaced?.[axis].has(i) === true &&
+      p.unitKeyAt(axis) !== size
+    )
+      return size;
+    const d = this.ownDims?.[axis];
+    if (d === undefined) return undefined;
+    return [d.min, d.center, d.max].some(
+      (pos) => isValue(pos) && valueUnitKey(pos) !== size
+    )
+      ? size
+      : undefined;
   }
 
   /** Whether this node is given its size on `axis`, rather than deriving
@@ -1386,8 +1413,9 @@ export class GoFishNode {
    *  parent's position places it across there (`SharingPlan.cells`),
    *  else the point it is placed at. */
   private glyphRoom(dim: 0 | 1): GlyphRoom {
-    const p = this.parent!;
-    const span = p.sharing().cells?.[dim].get(p.indexOfChild(this)!);
+    const p = this.parent;
+    const i = p?.indexOfChild(this);
+    const span = i === undefined ? undefined : p!.sharing().cells?.[dim].get(i);
     if (span === undefined) return { kind: "point" };
     return {
       kind: "cell",
@@ -1440,16 +1468,13 @@ export class GoFishNode {
   private glyphClaim(
     claim: Size<Extent | undefined>
   ): Size<Extent | undefined> {
-    const glyph = [this.isGlyph(0), this.isGlyph(1)] as const;
-    const follows = [this.followsAcross(0), this.followsAcross(1)] as const;
-    if (!glyph[0] && !glyph[1] && !follows[0] && !follows[1]) return claim;
+    const kinds = [this.sizeKind(0), this.sizeKind(1)] as const;
+    if (kinds[0] === "length" && kinds[1] === "length") return claim;
     return ([0, 1] as const).map((dim) => {
       const e = claim[dim];
-      if (follows[dim]) return e === undefined ? e : Extent(Pwl.ZERO);
-      if (!glyph[dim]) return e;
-      const room = this.glyphRoom(dim);
-      if (e === undefined) return e;
-      if (room.kind === "cell") return Extent(Pwl.ZERO);
+      if (e === undefined || kinds[dim] === "length") return e;
+      if (kinds[dim] === "follows") return Extent(Pwl.ZERO);
+      if (this.glyphRoom(dim).kind === "cell") return Extent(Pwl.ZERO);
       const sigma = this.glyphSigma(dim);
       return Extent(
         Pwl.constant(Pwl.at(e.ascent, sigma)),
@@ -1521,17 +1546,17 @@ export class GoFishNode {
     const spaces = this.resolveUnderlyingSpace();
     const childSpaces = this.children.map((c) => c.resolveUnderlyingSpace());
     const childExtents = this.children.map((c) => c.resolveExtent());
-    const extent = this.glyphClaim(
-      this._resolveExtent(
-        childExtents,
-        childSpaces,
-        spaces,
-        this.children,
-        this.constraints
-      )
+    const own = this._resolveExtent(
+      childExtents,
+      childSpaces,
+      spaces,
+      this.children,
+      this.constraints
     );
+    const extent = this.glyphClaim(own);
     if (this._plotExtent !== undefined)
-      this._plotExtent = this.glyphClaim(this._plotExtent);
+      this._plotExtent =
+        this._plotExtent === own ? extent : this.glyphClaim(this._plotExtent);
     // A node fills the room it is given when it has no size of its own: a
     // leaf with no claim, a node whose room is given to it from outside
     // its content (`isScope`), or a node with no size of its own whose
@@ -2174,27 +2199,14 @@ export class GoFishNode {
    * `emX`/`emY` (or `connect`'s `embed()`), which lock the flag to `true` and are
    * never recomputed here.
    *
-   * Two routes by which a dim's edges become coordinate-space positions (so a
-   * coord warps the extent):
+   * A dim embeds iff {@link baseEmbedded} holds (its size is a data value
+   * or unsized) and, inside a coordinate space, it is no glyph size
+   * ({@link isGlyph}): a size placed at a datum in another unit, by its
+   * parent or by its own `min`/`center`/`max`, stays ink, drawn flat at the
+   * mapped point (a scatter bubble). Embedding and sizing ask the one
+   * question, so a glyph is never warped and never a length of the space.
    *
-   * - **Route B (intrinsic, measure-gated)** — implemented here. A dim embeds iff
-   *   {@link baseEmbedded} holds (its size is a data value or unsized) AND, when
-   *   inside a coordinate space, the size's own measure matches the dim's
-   *   *position* measure — the measure of wherever the box sits in coord space
-   *   (its `min`/`center`/`max`, whichever is a data value). A *foreign*-measure
-   *   size (a scatter bubble's area at a positioned center, area ≠ position
-   *   measure) stays ink — drawn flat at the mapped center.
-   *
-   *   The discriminator is mark-LOCAL (size-vs-position on the same dim), not
-   *   read from the coord: a polar coord *forgets* its axis measure (its
-   *   underlying space is measureless), but a positioned mark's own position
-   *   measure IS the axis measure it sits on. A pure-size mark (a bar: size, no
-   *   position) has no position measure to clash with → embeds.
-   * - **Route A (relational, measure-free)** — deferred (no corpus oracle yet).
-   *
-   * The extra revocation only fires INSIDE a coord, so Cartesian behavior is
-   * byte-identical to the old construction-time `inferEmbedded` (which gated on
-   * `min` alone). Runs AFTER `resolveUnderlyingSpace`, BEFORE `layout`/render;
+   * The glyph revocation only fires INSIDE a coord. Runs AFTER `resolveUnderlyingSpace`, BEFORE `layout`/render;
    * like {@link resolveAliases} it mutates the shared `args.dims` element so the
    * captured render closure observes it.
    */
@@ -2217,21 +2229,11 @@ export class GoFishNode {
         // A length embeds as the size it fixes (`fixedSize`): its pixels
         // never do, and a share of its scope does, as a box with no size.
         const box = isLength(dim.size) ? this.fixedBox(dir) : dim;
-        const size = box.size;
-        let embedded = baseEmbedded(box as Dimensions[number]);
-        // Route B gate (coord-scoped): a value-sized dim positioned in a unit
-        // FOREIGN to its size's unit is a foreign extent (a bubble) → ink.
-        // A glyph size (`isGlyph`: its parent places it at a datum in
-        // another unit) is the same case, placed by its parent.
-        if (embedded && within && this.isGlyph(dir)) embedded = false;
-        if (embedded && within) {
-          for (const pos of [dim.min, dim.center, dim.max]) {
-            if (isValue(pos) && !sameValueUnit(pos, size)) {
-              embedded = false;
-              break;
-            }
-          }
-        }
+        // Inside a coord, a glyph size (`isGlyph`: placed at a datum in
+        // another unit, by its parent or by its own position) is ink.
+        const embedded =
+          baseEmbedded(box as Dimensions[number]) &&
+          !(within && this.isGlyph(dir));
         dims[dir] = { ...dim, embedded };
       }
     }
@@ -2460,6 +2462,16 @@ export class GoFishNode {
       return withUnits(this.walkUnits(), () =>
         this.layout(size, scales, shape)
       );
+    }
+    // A glyph is sized at its unit's σ (#972), at the σ of the frame its
+    // parent places it in.
+    if (this.isGlyph(0) || this.isGlyph(1)) {
+      const frame = [scales[0]?.sigma, scales[1]?.sigma] as const;
+      scales = ([0, 1] as const).map((dim) =>
+        this.isGlyph(dim)
+          ? { ...scales[dim], sigma: this.glyphSigma(dim, frame) }
+          : scales[dim]
+      ) as Size<AxisScale | undefined>;
     }
     const direction = this.yFrame.direction;
     const parentDirection = yDirection(this.parent);
