@@ -25,8 +25,8 @@ const railScrolls = ref(false);
 const allExamplesHref = computed(() => examplesHref(docsLang.value));
 
 // The taped cards are taped down one after another as the page loads
-// (landing.css, gf-hang): the hero's in list order, starting once the title
-// has begun to rise, then the spectrum row's.
+// (landing.css, gf-hang), in list order, starting once the title has begun
+// to rise. The hero's cards and the spectrum row's start together.
 const dropDelay = (i: number): Record<string, string> => ({
   "--drop-delay": `${250 + 60 * i}ms`,
 });
@@ -426,7 +426,7 @@ onBeforeUnmount(() => {
               :card="card"
               lift
               class="specimen"
-              :style="dropDelay(HERO.length + i)"
+              :style="dropDelay(i)"
               role="group"
               :aria-label="`${i + 1} of ${SPECTRUM.length}`"
             />
