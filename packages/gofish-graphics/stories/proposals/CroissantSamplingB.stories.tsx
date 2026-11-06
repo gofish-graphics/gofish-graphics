@@ -255,7 +255,7 @@ export const Parametric: StoryObj = {
 
 // ---------------------------------------------------------------------------
 // Candidate C: rows over a continuous index. The spec is the rows spec, with
-// `repeat(interval, "v")` in place of a grid. `continuumIndex` emulates the
+// `sweep({ v: [a, b] })` in place of a grid. `continuumIndex` emulates the
 // continuum: it picks the v the connector would sample, adaptively, and the
 // real scatter / stack / ribbon / line run on those rows unchanged.
 

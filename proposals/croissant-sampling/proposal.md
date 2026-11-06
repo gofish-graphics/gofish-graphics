@@ -1,16 +1,16 @@
 # Croissant Sampling: removing the hand-sampled grids (#1332)
 
 - Today the croissant stories sample a function by hand: `gridOf`, a hand-written `kde`, and `quantileRows` over 1000 rows, with a grid range and size picked per story.
-- Proposed: keep the rows spec that draws an area today (scatter the rows, then connect them with `ribbon`), and let the rows come from a continuous index: `derive(repeat(x.range(), "v"))`. The connecting mark picks which v to draw, to half a pixel, so the spec never names a grid, an `n` or a step.
-- `ribbon({ h: x.density() })` (approach B) is short for that spec. Because the curve is still rows, `stack` adds two curves at each x with no new machinery: the wall B had alone is gone.
+- Proposed: a new flow step, `sweep({ v: x.range() })`, makes a row for every v in an interval. The rows spec that draws an area today runs on them unchanged: `scatter` places each row and `ribbon` connects them. The connecting mark picks which v to draw, to half a pixel, so the spec never names a grid, an `n` or a step.
+- `ribbon({ h: x.density() })` (approach B) is short for that spec. Because the curve is still rows, `stack` adds two curves at each x with no new machinery.
 
 ## Recommendation
 
-Candidate C: rows over a continuous index, with B as its short form. A continuum of rows comes from #980's `repeat`, given an interval instead of a count. The rest is the spec GoFish already uses for an area: `scatter` places each row, `stack` works inside each x slice, and `ribbon` or `line` connects the slices. Prototype renders of the normal croissant, two stacked densities, a plain function and a spiral all use the real `scatter`, `stack`, `ribbon` and `line`. Their rows are an emulated continuum: the v values were picked adaptively before layout. The wall is the real version. There, the connector has to lay out each slice on demand as it samples, and no prototype does that yet. A continuous `scatter` was weighed and rejected: it makes rows as well as placing them, and it has no spelling for a parametric curve.
+Candidate C: rows over a continuous index, made by a new operator, `sweep`, with B as its short form. `repeat` stays discrete. A count and an interval make rows that allow different operators after them, so they are two operators, not one with two argument types. After `sweep`, the spec is the one GoFish already uses for an area: `scatter` places each row, `stack` works inside each x slice, and `ribbon` or `line` connects the slices. Prototype renders of the normal croissant, two stacked densities, a plain function and a spiral use the real `scatter`, `stack`, `ribbon` and `line` on an emulated continuum: the v values were picked adaptively before layout. The wall is the real version, where the connector lays out each slice on demand as it samples; no prototype does that yet. The runner-up is `repeat` given an interval. A continuous `scatter` was weighed and rejected.
 
 ## Relation to #980
 
-This applies #980 to the croissant; it does not compete with it. #980 (first-class distributions: the data holds a Dist; draws and quantile levels are rows made by `repeat(n, ...)`; slab and interval are user code, not marks) already says that binning a Dist key by `Bin.quantiles` cuts it at its quantiles. C extends #980's `repeat` from a count to an interval. B answers #980's open question of curve summaries in channels, as the short form of C. A is #980's `densityCurve` helper, which is C with a finite grid. Nothing adds a mark or reopens a #980 decision, and all three delete `quantileRows` (#1231). The continuous-type section ties into #980's scales tab, which says a density's "per" must name the field it is spread over.
+This applies #980 to the croissant; it does not compete with it. #980 (first-class distributions: the data holds a Dist; draws and quantile levels are rows made by `repeat(n, ...)`; slab and interval are user code, not marks) already says that binning a Dist key by `Bin.quantiles` cuts it at its quantiles. `sweep` is the continuous counterpart of #980's `repeat`, and it takes #980's intervals as arguments (`sweep({ v: x.interval(0.95) })`). B answers #980's open question of curve summaries in channels, as the short form of C. A is #980's `densityCurve` helper, which is C over a finite grid. Nothing adds a mark or reopens a #980 decision, and all three delete `quantileRows` (#1231). The continuous-type section ties into #980's scales tab, which says a density's "per" must name the field it is spread over.
 
 Artifact: https://claude.ai/artifact/Fh12g89z1cChzAqpQZ8mGH. The #980 proposal: https://claude.ai/artifact/QKR9jSHs1LWCtjp25bFuBq.
 
@@ -19,11 +19,11 @@ Renders are real GoFish renders. B uses a throwaway prototype node, `packages/go
 ## Rules
 
 1. The function lives in the data as a Dist: `dist.normal({ mean, sd })` over parameter columns, or `field(x).kde()` over a group's rows (#980).
-2. `repeat` takes a count or an interval. `repeat(n, "draw")` makes n rows (#980). `repeat(interval(a, b), "v")` makes a row for every v in [a, b]. A Dist's `x.range()` is an interval.
-3. A continuum of rows goes through the same operators as any rows. `scatter({ x: "v" })` places each one, `stack` works inside each slice, and `ribbon` or `line` connects them. The connector picks the v it draws, to half a pixel, through the axis scales and the coordinate transform. Sampling has no spelling, so there is no knob to model.
-4. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, the way #980's `x.quantile("p")` reads a level. With no argument, `ribbon({ h: x.density() })` is short for the whole continuum spec over `x.range()` (approach B).
-5. A bare Dist in a position channel still means its blurred limit (#980). That is the Dist's own measure, where draws pile up. A continuum is uniform over its interval. The two are different index sets, so they get different spellings.
-6. An operator that needs to count or list its rows is an error on a continuum: `spread`, `sort`, `count`, and a mark drawn once per row (rect, circle, text).
+2. `sweep({ v: [a, b] })` replaces each row with a continuum of rows, one for every v in [a, b], with the index in column `v`. The interval can be a pair or an interval value: a Dist's `x.range()`, or #980's `x.interval(0.95)`. `repeat(n, "draw")` stays the discrete operator (#980).
+3. A continuum goes through the operators that work one slice at a time: `scatter({ x: "v" })` places each row, `stack` works inside each slice, `derive` maps each row, and `ribbon` or `line` connects the slices. The connector picks the v it draws, to half a pixel, through the axis scales and the coordinate transform. Sampling has no spelling, so there is no knob to model.
+4. An operator that counts or lists its rows is an error after `sweep`: `spread`, `sort`, `count`, and a mark drawn once per row (rect, circle, text). After `repeat` they are legal. This is why the two are two operators.
+5. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, the way #980's `x.quantile("p")` reads a level. With no argument, `ribbon({ h: x.density() })` is short for the whole spec over `x.range()` (approach B).
+6. A bare Dist in a position channel still means its blurred limit (#980). That uses the Dist's own weight, where draws pile up. A continuum weighs every v the same. The two are different, so they get different spellings.
 7. Cuts and dots read the Dist exactly: `x.bin(Bin.quantiles(n))` cuts at the quantile function, and `x.median()` is exact. `quantileRows` is deleted (#1231). No new mark.
 
 ## Rows over a continuous index
@@ -36,10 +36,26 @@ Renders use the real `scatter`, `stack`, `ribbon` and `line` on an emulated cont
 
 ![](img/c-normal.png)
 
-The curve layer is the rows spec. The cuts and dots still come from the Dist, as in every approach. The short form at the bottom of the code is B.
+The curve layer is the rows spec after `sweep`. The cuts and dots still come from the Dist, as in every approach. The short form at the bottom of the code is B.
 
 ```js
-// C: the rows spec, with a continuous index in place of a grid
+// sweep makes a row for every v in the Dist's range; the rest is the rows spec
+chart(params)
+  .flow(sweep({ v: x.range() }), scatter({ x: "v" }))
+  .mark(
+    ribbon({ h: x.density("v") })
+      .name("density")
+      .hidden()
+  );
+
+// B is short for exactly that
+chart(params).mark(ribbon({ h: x.density() }).name("density").hidden());
+```
+
+Runner-up, `repeat` over an interval:
+
+```js
+// Runner-up: repeat, given an interval instead of a count
 chart(params)
   .flow(derive(repeat(x.range(), "v")), scatter({ x: "v" }))
   .mark(
@@ -47,23 +63,21 @@ chart(params)
       .name("density")
       .hidden()
   );
-
-// B is sugar for exactly that
-chart(params).mark(ribbon({ h: x.density() }).name("density").hidden());
 ```
 
-Alternative, continuous `scatter`:
+Python:
 
-```js
-// Alternative: a continuous scatter
-chart(params)
-  .flow(scatter({ x: x.range() }))
-  .mark(ribbon({ h: x.density() }).name("density").hidden());
+```python
+(
+    chart(params)
+    .flow(sweep(v=x.range()), scatter(x="v"))
+    .mark(ribbon(h=x.density("v")).name("density").hidden())
+)
 ```
 
 ### Two densities, stacked at each x
 
-**Works: the wall B had alone is gone.**
+**Works: stack adds inside each slice.**
 
 ![](img/c-stack.png)
 
@@ -73,6 +87,19 @@ chart(params)
 // one row per curve: { series, mean, sd }; x = dist.normal({ mean: "mean", sd: "sd" })
 chart(params)
   .flow(
+    sweep({ v: [-4, 4] }),
+    scatter({ by: "v", x: "v" }),
+    stack({ by: "series", dir: "y" })
+  )
+  .mark(ribbon({ h: x.density("v"), fill: "series" }));
+```
+
+Runner-up, `repeat` over an interval:
+
+```js
+// Runner-up: repeat, given an interval
+chart(params)
+  .flow(
     derive(repeat(interval(-4, 4), "v")),
     scatter({ by: "v", x: "v" }),
     stack({ by: "series", dir: "y" })
@@ -80,13 +107,18 @@ chart(params)
   .mark(ribbon({ h: x.density("v"), fill: "series" }));
 ```
 
-Alternative, continuous `scatter`:
+Python:
 
-```js
-// Alternative: scatter makes the slices, so its by-key has to be implicit
-chart(params)
-  .flow(scatter({ x: interval(-4, 4) }), stack({ by: "series", dir: "y" }))
-  .mark(ribbon({ h: x.density(), fill: "series" }));
+```python
+(
+    chart(params)
+    .flow(
+        sweep(v=[-4, 4]),
+        scatter(by="v", x="v"),
+        stack(by="series", dir="y"),
+    )
+    .mark(ribbon(h=x.density("v"), fill="series"))
+)
 ```
 
 ### A plain function
@@ -95,11 +127,23 @@ chart(params)
 
 ![](img/c-sin.png)
 
-No Dist, so the interval is written. The row accessor `(d) => wave(d.v)` is a tentative spelling.
+No Dist, so the interval is written as a pair. The row accessor `(d) => wave(d.v)` is a tentative spelling; in Python a lambda over a row needs the callback bridge.
 
 ```js
 const wave = (v) => Math.sin(v) + 0.3 * Math.sin(7 * v);
 
+chart([{}])
+  .flow(
+    sweep({ v: [0, 4 * Math.PI] }),
+    scatter({ x: "v", y: (d) => wave(d.v) })
+  )
+  .mark(line());
+```
+
+Runner-up, `repeat` over an interval:
+
+```js
+// Runner-up: repeat, given an interval
 chart([{}])
   .flow(
     derive(repeat(interval(0, 4 * Math.PI), "v")),
@@ -108,25 +152,42 @@ chart([{}])
   .mark(line());
 ```
 
-Alternative, continuous `scatter`:
+Python:
 
-```js
-// Alternative: a continuous scatter
-chart([{}])
-  .flow(scatter({ x: interval(0, 4 * Math.PI), y: wave }))
-  .mark(line());
+```python
+def wave(v):
+    return math.sin(v) + 0.3 * math.sin(7 * v)
+
+
+(
+    chart([{}])
+    .flow(sweep(v=[0, 4 * math.pi]), scatter(x="v", y=lambda d: wave(d["v"])))
+    .mark(line())
+)
 ```
 
 ### A parametric curve
 
-**Works with repeat; continuous scatter cannot say it.**
+**Works.**
 
 ![](img/c-spiral.png)
 
-The index t is neither x nor y. `repeat` gives it a column of its own, and `scatter` places each row at (x(t), y(t)). A continuous `scatter` uses its index set as the x axis, so it has no spelling for this curve.
+The index t is neither x nor y. `sweep` gives it a column of its own, and `scatter` places each row at (x(t), y(t)). A continuous `scatter`, which uses its index set as the x axis, has no spelling for this curve.
 
 ```js
 // The index t is not a position: x and y are both functions of it
+chart([{}])
+  .flow(
+    sweep({ t: [0, 6 * Math.PI] }),
+    scatter({ x: (d) => d.t * Math.cos(d.t), y: (d) => d.t * Math.sin(d.t) })
+  )
+  .mark(line());
+```
+
+Runner-up, `repeat` over an interval:
+
+```js
+// Runner-up: repeat, given an interval
 chart([{}])
   .flow(
     derive(repeat(interval(0, 6 * Math.PI), "t")),
@@ -135,38 +196,64 @@ chart([{}])
   .mark(line());
 ```
 
-Alternative, continuous `scatter`:
+Python:
 
-```js
-// Alternative: no spelling. A continuous scatter's index set is its x axis,
-// and here the index t is neither x nor y.
+```python
+(
+    chart([{}])
+    .flow(
+        sweep(t=[0, 6 * math.pi]),
+        scatter(
+            x=lambda d: d["t"] * math.cos(d["t"]),
+            y=lambda d: d["t"] * math.sin(d["t"]),
+        ),
+    )
+    .mark(line())
+)
 ```
 
 ### Which operator makes the continuum
 
-- **Continuous `scatter`: `scatter({ x: interval })`**: Makes the rows and places them in one step. `scatter` today only places rows it is given; it never makes them. So the continuous form would overlap `repeat` + `scatter` over most of its range, which api-design.md calls the wrong factoring. It also cannot spell a parametric curve, and its stack needs an implicit `by`.
-- **A new operator: `sweep(interval, "v")`**: A clean concept: make a continuum of rows. But it is one concept with `repeat`, which makes n rows with an index. A count and an interval are two index sets for the same operation. A second name would split them.
-- **Extend `repeat`: `repeat(interval, "v")` (recommended)**: Keeps today's name and gives it a continuous index set. Mathematica does the same: `Table[expr, {i, imin, imax}]` steps by 1, and `Plot[f, {x, xmin, xmax}]` takes the same iterator form and samples it continuously.
+- **A new operator, `sweep({ v: [a, b] })` (recommended)**: A count and an interval make rows of different types. After `repeat(n)`, `spread`, `sort`, counting and a mark per row are legal. After `sweep`, they are errors, and a connector samples the rows instead. So the two differ in what may follow them, not just in their argument. Two operators is the honest factoring, and they share no case worth building through one mechanism: a zero-width interval is one point, which nobody would write as a sweep.
+- **Extend `repeat`: `repeat(interval, "v")` (runner-up)**: One name and Mathematica's precedent: `Table[expr, {i, imin, imax}]` steps by 1, and `Plot[f, {x, xmin, xmax}]` samples the same iterator form continuously. But then the type of what `repeat` returns depends on its argument, and an error after it (a `spread` after a continuum) points at a later step. `repeat` should feel discrete.
+- **Continuous `scatter`: `scatter({ x: interval })` (rejected)**: Makes the rows and places them in one step. `scatter` today only places rows it is given. So the continuous form would overlap `sweep` + `scatter` over most of its range, which api-design.md calls the wrong factoring. It also cannot spell a parametric curve, and its stack needs an implicit `by`.
 
 ```js
-// Recommended: #980's repeat, given an interval instead of a count
-derive(repeat(1000, "draw")); // 1000 rows, draw = 0, 1, ..., 999
+// Rejected: a continuous scatter makes rows and places them in one step
+chart(params)
+  .flow(scatter({ x: x.range() }))
+  .mark(ribbon({ h: x.density() }));
+
+// Runner-up: one operator, repeat, over a count or an interval
+derive(repeat(1000, "draw")); // rows 0 to 999
 derive(repeat(interval(0, 1), "p")); // a row for every p in [0, 1]
 
-// Runner-up: a new operator for the continuous case
-derive(sweep(interval(0, 1), "p"));
+// Recommended: two operators, because their outputs allow different operators after them
+derive(repeat(1000, "draw")); // a list: spread, sort, count, per-row marks are legal
+sweep({ p: [0, 1] }); // a continuum: those are errors; connectors sample it
 ```
 
-| Name                                    | What it is                                                                                             | Note                                                             |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `repeat` (GoFish, #980)                 | `repeat(n, "draw")`: n rows with an index                                                              | the current name; extend it                                      |
-| Mathematica iterator                    | `{i, imin, imax}` in `Table` (steps of 1) and `{x, xmin, xmax}` in `Plot`, `ParametricPlot` (adaptive) | verified: one form, discrete or continuous                       |
-| Vega-Lite `sequence`                    | `{ start, stop, step, as }`; `step` defaults to 1; `stop` exclusive                                    | verified: always discrete                                        |
-| numpy `linspace`, polars `linear_space` | `linear_space(start, end, num_samples, closed="both")`                                                 | verified (polars): a count is required                           |
-| TikZ `domain`, `samples`                | `plot (\x, {f(\x)})` with `domain` (initially -5:5) and `samples` (initially 25)                       | verified: a count, with a default                                |
-| Wilkinson GPL                           | `line(position(density.normal(x)))`: a density function in the position of a line element              | verified in IBM's GPL reference: a function in a channel, like B |
-| `sample`, `range`, `along`              | taken: #980's `value.sample`, `x.range()`, and the `along` option of `line` and `ribbon`               | rule out                                                         |
-| `sweep`, `over`, `continuum`            | no clash in GoFish                                                                                     | no precedent checked; the fallback names                         |
+```js
+// The same step under each candidate name
+sweep({ v: x.range() }); // recommended
+continuum({ v: x.range() }); // runner-up name
+interval({ v: x.range() }); // clashes with #980's interval
+domain({ v: x.range() }); // clashes with Domain and every scale domain
+span({ v: x.range() }); // clashes with a channel's { min, max } span
+
+// It reads well with #980's own interval: sweep the central 95%
+sweep({ v: x.interval(0.95) });
+```
+
+| Name                                  | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Note                                         |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `sweep` (recommended)                 | No GoFish export or option uses it, on main or on the #980 branch. It appears only as local variables in arc code and in prose: `centralAngle` is the polar "total angular sweep", and the animation clock input documents "one sweep of the domain", the same meaning. A verb that says the index moves over the whole interval. Python: `sweep(v=[a, b])`.                                                                                                                                                                                                                                                                            | no clash; no visualization precedent checked |
+| `continuum`                           | Free everywhere. A noun, and long; it names the result, not the step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | no clash; runner-up name                     |
+| `interval` (Josh's suggestion)        | Clashes in the uncertainty vocabulary. On the #980 branch `x.interval(0.95)` is a central interval of a Dist (25 uses in its proposal docs and stories), `interval({ x, levels })` is the user function that draws one, after ggdist's interval geom, and `centralIntervals` is a helper. Main already calls a `dims` entry `{ min, max }` an interval. The operator could take the value constructor's place (`interval({ v: [0, 2 * Math.PI] })`), but then `interval(...)` would make rows in a flow and a span everywhere else. Better: interval is the type of `sweep`'s argument, so `sweep({ v: x.interval(0.95) })` reads well. | serious clash                                |
+| `domain`                              | TikZ's `domain=a:b` and Mathematica's `{x, a, b}` iterator are the precedent. But GoFish already has the `Domain` family (`Domain.discrete(levels)`, with `Domain.continuous` planned as the type of an interval of numbers), plus every scale domain and the domain-inference pass.                                                                                                                                                                                                                                                                                                                                                    | serious clash                                |
+| `span`                                | Main uses span for a channel's `{ min, max }` extent (`xMin`/`xMax` in scatter's `dims`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | clash                                        |
+| `sample`, `range`, `along`            | Taken: #980's `value.sample`, `x.range()`, and the `along` option of `line` and `ribbon`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | rule out                                     |
+| Precedent for a continuous index step | Mathematica's `{x, xmin, xmax}` iterator. TikZ `domain` (initially -5:5) with `samples` (initially 25). Vega-Lite `sequence` (`step` defaults to 1, `stop` exclusive) and polars `linear_space` (requires `num_samples`) are discrete. Wilkinson's GPL puts a density in a channel instead: `line(position(density.normal(x)))`.                                                                                                                                                                                                                                                                                                        | verified                                     |
 
 ## The croissants in the short form (B)
 
@@ -364,21 +451,14 @@ Python:
 
 ```python
 def croissant(data, x, n=10, fill=FILL, stroke=STROKE):
-    return layer(
-        [chart(data).mark(ribbon(h=x.density()).name("density").hidden())]
-    ).relate(
+    return layer([chart(data).mark(ribbon(h=x.density()).name("density").hidden())]).relate(
         lambda density: [
             chart(data)
             .flow(partition(by=x.bin(Bin.quantiles(n)), dir="x"))
             .mark(
                 layer(
                     [
-                        intersect(
-                            [density, region(inset=3)],
-                            fill=fill,
-                            stroke=stroke,
-                            stroke_width=2,
-                        ),
+                        intersect([density, region(inset=3)], fill=fill, stroke=stroke, stroke_width=2),
                         circle(cx=x.median(), cy=6, r=3, fill=stroke),
                     ]
                 )
@@ -670,7 +750,7 @@ Taking a function as a mark input is common (Mathematica, Plots.jl, Makie), and 
 
 ## Open decisions
 
-1. Index operator: extend `repeat` to take an interval (recommended), add a new operator (`sweep`), or give `scatter` a continuous index set?
+1. Name of the continuous operator: `sweep` (recommended), `continuum`, or Josh's `interval` despite its clash with #980's `x.interval(p)` and `interval({ x, levels })`? (`domain` and `span` clash too.)
 2. Real implementation of a continuum: the connector lays out each slice on demand as it samples. Which operators can lay out one slice at a time? `stack` and `scatter` can; `spread`, `sort` and `count` cannot and become errors. Is that list right?
 3. Short form: is `ribbon({ h: x.density() })` (B) worth keeping as sugar for the continuum spec over `x.range()`? And how does a plain function or a parametric curve read the index: `(d) => wave(d.v)`, or a column expression?
 4. Extent of a stack: each Dist's own range, or one shared interval (as the stacked card writes it)? Where one curve has no row at some v, is it 0?
