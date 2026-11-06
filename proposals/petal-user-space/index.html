@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Petal in User Space</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=IBM+Plex+Sans:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        /* Layout: one column of example cards; renders side by side on top, code below. */
+        --bg: #f7f8f6;
+        --surface: #ffffff;
+        --ink: #1d2420;
+        --muted: #5d6862;
+        --line: #dde3df;
+        --accent: #2f7a54;
+        --chg: #fff3c4;
+        --chg-bar: #d9a400;
+        --code-bg: #f3f5f3;
+        --tok-kw: #8a3ffc;
+        --tok-str: #1b7f4b;
+        --tok-num: #b0451b;
+        --tok-com: #7b857f;
+        --tok-fn: #1f5fbf;
+        --font-display: "Fraunces", Georgia, serif;
+        --font-body: "IBM Plex Sans", system-ui, sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #141816;
+          --surface: #1c211e;
+          --ink: #e5ebe7;
+          --muted: #9aa69f;
+          --line: #2e3631;
+          --accent: #6cc79a;
+          --chg: #3b3416;
+          --chg-bar: #e0b53a;
+          --code-bg: #161a18;
+          --tok-kw: #c39bff;
+          --tok-str: #7fd3a4;
+          --tok-num: #f0a37f;
+          --tok-com: #7d8882;
+          --tok-fn: #8db8ff;
+          color-scheme: dark;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #141816;
+        --surface: #1c211e;
+        --ink: #e5ebe7;
+        --muted: #9aa69f;
+        --line: #2e3631;
+        --accent: #6cc79a;
+        --chg: #3b3416;
+        --chg-bar: #e0b53a;
+        --code-bg: #161a18;
+        --tok-kw: #c39bff;
+        --tok-str: #7fd3a4;
+        --tok-num: #f0a37f;
+        --tok-com: #7d8882;
+        --tok-fn: #8db8ff;
+        color-scheme: dark;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font: 16px/1.55 var(--font-body);
+      }
+      main {
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 32px 20px 64px;
+        display: grid;
+        gap: 24px;
+      }
+      h1,
+      h2,
+      h3 {
+        font-family: var(--font-display);
+        font-weight: 600;
+        text-wrap: balance;
+        margin: 0;
+      }
+      h1 {
+        font-size: 2rem;
+      }
+      h2 {
+        font-size: 1.35rem;
+      }
+      h3 {
+        font-size: 1rem;
+        font-family: var(--font-body);
+      }
+      p {
+        margin: 0;
+        max-width: 68ch;
+      }
+      .lede {
+        color: var(--muted);
+      }
+      .rules {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-left: 4px solid var(--accent);
+        border-radius: 6px;
+        padding: 16px 20px;
+      }
+      .rules ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+        display: grid;
+        gap: 6px;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 20px;
+        display: grid;
+        gap: 14px;
+      }
+      .card .tag {
+        font-size: 0.8rem;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      .pics {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 16px;
+      }
+      figure {
+        margin: 0;
+        display: grid;
+        gap: 4px;
+      }
+      figure img {
+        max-width: 100%;
+        height: auto;
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        background: #fff;
+      }
+      figcaption {
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      .codes {
+        display: grid;
+        gap: 10px;
+      }
+      .label {
+        font-size: 0.8rem;
+        color: var(--muted);
+        font-weight: 600;
+      }
+      pre {
+        margin: 0;
+        background: var(--code-bg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 10px 0;
+        overflow-x: auto;
+      }
+      code {
+        font: 13.5px/1.5 var(--font-mono);
+      }
+      pre code {
+        display: block;
+      }
+      .ln {
+        display: block;
+        padding: 0 14px;
+        border-left: 3px solid transparent;
+        white-space: pre;
+      }
+      .ln.chg {
+        background: var(--chg);
+        border-left-color: var(--chg-bar);
+      }
+      p code,
+      li code,
+      td code {
+        background: var(--code-bg);
+        padding: 1px 4px;
+        border-radius: 3px;
+        font-size: 0.88em;
+      }
+      details {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--surface);
+      }
+      details > summary {
+        cursor: pointer;
+        padding: 10px 14px;
+        font-weight: 600;
+      }
+      details > summary:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      details > .body {
+        padding: 0 16px 16px;
+        display: grid;
+        gap: 12px;
+      }
+      details.inner {
+        background: transparent;
+      }
+      table {
+        border-collapse: collapse;
+        font-variant-numeric: tabular-nums;
+      }
+      th,
+      td {
+        border-bottom: 1px solid var(--line);
+        padding: 4px 10px;
+        text-align: right;
+      }
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+      ol,
+      ul {
+        margin: 0;
+      }
+      .decisions ol {
+        display: grid;
+        gap: 8px;
+        padding-left: 22px;
+      }
+      .hljs-keyword,
+      .hljs-built_in,
+      .hljs-literal {
+        color: var(--tok-kw);
+      }
+      .hljs-string {
+        color: var(--tok-str);
+      }
+      .hljs-number {
+        color: var(--tok-num);
+      }
+      .hljs-comment {
+        color: var(--tok-com);
+        font-style: italic;
+      }
+      .hljs-title,
+      .hljs-title.function_,
+      .hljs-property {
+        color: var(--tok-fn);
+      }
+      a {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header style="display: grid; gap: 8px">
+        <h1>Petal in user space</h1>
+        <p class="lede">
+          Issue #1331 asks whether the flower chart's bespoke
+          <code>petal</code> mark can be drawn from general GoFish pieces, now
+          that the flower chart is on the front page. It can: today's petal is,
+          within a pixel, a five-point polygon in its slot, bent by the polar
+          coord.
+        </p>
+      </header>
+
+      <section class="rules">
+        <h2>The proposal</h2>
+        <ul>
+          <li>
+            A petal is the pentagon
+            <code>[[0,0],[0,.5],[.5,1],[1,.5],[1,0]]</code> in its slot (u
+            across the slot, v out from the center). Polar bends its two slanted
+            edges into today's curves.
+          </li>
+          <li>
+            <code>polygon</code> takes <code>w</code> and <code>h</code>, like
+            <code>rect</code>. Its literal points stretch from their own
+            bounding box into that box. Left out, <code>w</code> and
+            <code>h</code> are the points' own extent, so existing polygons draw
+            as before.
+          </li>
+          <li>
+            Shapes that sweep their slot are warped by the coord (rect becomes a
+            wedge, polygon becomes a petal). Point glyphs stay in a local frame.
+          </li>
+          <li>
+            Delete <code>petal</code> everywhere: JS, IR, Python, docs. No
+            alias.
+          </li>
+        </ul>
+      </section>
+
+      <article class="card">
+        <span class="tag">Recommended · flower head</span>
+        <h2>B. Polygon with a box</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="head-today.png"
+              alt="Today's petal flower head, five colored petals"
+              width="205"
+              height="184"
+            />
+            <figcaption>Today: <code>petal</code></figcaption>
+          </figure>
+          <figure>
+            <img
+              src="head-b-box-ring.png"
+              alt="The same flower head drawn with a warped polygon, visually identical"
+              width="205"
+              height="184"
+            />
+            <figcaption>
+              B: <code>polygon</code> with <code>w</code> (prototype)
+            </figcaption>
+          </figure>
+        </div>
+        <div class="codes">
+          <span class="label">Proposed, JS</span>
+          <pre><code class="language-javascript" data-chg="1,2,6">// A petal is a pentagon in its slot. Polar bends the two slanted edges.
+const PETAL = [[0, 0], [0, 0.5], [0.5, 1], [1, 0.5], [1, 0]];
+
+const flower = chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: 40 }))
+  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
+          <span class="label">Proposed, Python</span>
+          <pre><code class="language-python" data-chg="1,6">PETAL = [(0, 0), (0, 0.5), (0.5, 1), (1, 0.5), (1, 0)]
+
+flower = (
+    chart(coord=Coord.polar(), axes=False)
+    .flow(stack(by="species", dir="x", h=40))
+    .mark(polygon(w="count", points=PETAL, fill="species"))
+)</code></pre>
+          <span class="label">Today</span>
+          <pre><code class="language-javascript" data-chg="3">const flower = chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: 40 }))
+  .mark(petal({ w: "count", fill: "species" }));</code></pre>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag">Recommended · front page</span>
+        <h2>B in the flower chart</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="flower-today.png"
+              alt="Front-page flower chart today: six flowers on green stems"
+              width="430"
+              height="404"
+            />
+            <figcaption>Today</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="flower-b-box-ring.png"
+              alt="The same flower chart with polygon petals; petals match, chart slightly wider"
+              width="505"
+              height="404"
+            />
+            <figcaption>B (prototype)</figcaption>
+          </figure>
+        </div>
+        <p>
+          The petals match. The prototype chart is wider, most likely because it
+          is a literal polygon with no declared size space, where
+          <code>petal</code> declares a rect-like one. The real B would declare
+          the rect's space. Not checked yet.
+        </p>
+        <div class="codes">
+          <span class="label">Change to the story (the rest is unchanged)</span>
+          <pre><code class="language-javascript" data-chg="3">const flower = chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: FLOWER_RADIUS }))
+  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
+          <details class="inner">
+            <summary>Today</summary>
+            <div class="body">
+              <pre><code class="language-javascript" data-chg="3">const flower = chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: FLOWER_RADIUS }))
+  .mark(petal({ w: "count", fill: "species" }));</code></pre>
+            </div>
+          </details>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag">Hard example</span>
+        <h2>B under a donut clock</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="donut-today.png"
+              alt="Today's petals under a clock coord with a donut hole: they ignore the hole and start at the center"
+              width="260"
+              height="224"
+            />
+            <figcaption>Today: ignores the hole (bug)</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="donut-b-box-ring.png"
+              alt="Polygon petals under the same coord: they start at the hole's edge"
+              width="260"
+              height="224"
+            />
+            <figcaption>B: starts at the hole</figcaption>
+          </figure>
+        </div>
+        <div class="codes">
+          <pre><code class="language-javascript" data-chg="1">chart(lake, { coord: Coord.clock({ innerRadius: 0.4 }), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: 90 }))
+  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag">Same mark, no coord</span>
+        <h2>B and C in Cartesian</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="bars-b-box-ring.png"
+              alt="Polygon petals with no coord: pentagon flags"
+              width="330"
+              height="124"
+            />
+            <figcaption>
+              B: the bare pentagon. The curves came from polar.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="bars-c-tangent-glyph.png"
+              alt="Glyph petals with no coord: curved leaf shapes"
+              width="330"
+              height="124"
+            />
+            <figcaption>C: the path's own curves</figcaption>
+          </figure>
+        </div>
+        <p>
+          Both point down here and outward in polar. A literal polygon's y runs
+          down in Cartesian and outward in polar; that is #1038 (inside a coord,
+          y direction should be measured from the nearest frame, not the
+          canvas). Decision 2 below.
+        </p>
+        <div class="codes">
+          <pre><code class="language-javascript" data-chg="">chart(lakeA)
+  .flow(stack({ by: "species", dir: "x", h: 100 }))
+  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag">Alternative · works today</span>
+        <h2>A. Ring in data space</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="head-today.png"
+              alt="Today's petal flower head"
+              width="205"
+              height="184"
+            />
+            <figcaption>Today</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="head-a-data-ring.png"
+              alt="Flower head from data-space rings, visually identical"
+              width="205"
+              height="184"
+            />
+            <figcaption>A: no library change</figcaption>
+          </figure>
+        </div>
+        <p>
+          Works now, but the user re-implements <code>stack</code> with a
+          running sum, and the radius becomes a data value, so a fixed 40 px
+          head has no direct spelling. A stopgap at most.
+        </p>
+        <div class="codes">
+          <pre><code class="language-javascript" data-chg="5,6,7,8,9,10,11,12,13,14,15,16,17">// The petal in its slot: u across, v out from the center.
+const PETAL = [[0, 0], [0, 0.5], [0.5, 1], [1, 0.5], [1, 0]];
+
+// Stack by hand: each ring in data space (angle in counts, radius 0..1).
+const flower = chart(rows, { coord: Coord.polar(), axes: false })
+  .flow(
+    derive((rows) =&gt; {
+      let at = 0;
+      return rows.map((d) =&gt; {
+        const start = at;
+        at += d.count;
+        const ring = PETAL.map(([u, v]) =&gt; [start + u * d.count, v]);
+        return { ...d, ring };
+      });
+    }),
+  )
+  .mark(polygon({ points: "ring", fill: "species" }));</code></pre>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag">Alternative · new mark</span>
+        <h2>C. Glyph in the slot's tangent frame</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="head-today.png"
+              alt="Today's petal flower head"
+              width="205"
+              height="184"
+            />
+            <figcaption>Today</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="head-c-tangent-glyph.png"
+              alt="Flower head from tangent-frame glyphs: boxier petals with gaps between them"
+              width="205"
+              height="184"
+            />
+            <figcaption>C (prototype)</figcaption>
+          </figure>
+        </div>
+        <p>
+          A path in the unit box, moved, scaled and turned by the coord's
+          straight-line approximation at the slot's middle. Curves stay exact,
+          but straight sides cannot follow the slot, so wide petals gap and
+          overlap. This is how d3, Plot and Vega draw custom symbols, and fits
+          point glyphs (markers, arrowheads) better than a petal.
+          <code>path</code> is already a <code>lib.ts</code> export, so it needs
+          another name.
+        </p>
+        <div class="codes">
+          <pre><code class="language-javascript" data-chg="2,6">// An SVG path in the unit box, drawn in the slot's tangent frame.
+const PETAL = "M.5 0 L0 .5 Q0 .75 .5 1 Q1 .75 1 .5 Z";
+
+const flower = chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: 40 }))
+  .mark(glyph({ w: "count", d: PETAL, fill: "species" }));</code></pre>
+        </div>
+      </article>
+
+      <details>
+        <summary>
+          Why B: the measurement, precedent, and what deletion touches
+        </summary>
+        <div class="body">
+          <h3>Today's petal is a warped pentagon</h3>
+          <p>
+            <code>petal.tsx</code> draws two straight lines from the center
+            along the slot's side edges to half the radius, then two quadratic
+            Béziers to a tip at the full radius, turned to the slot's middle
+            angle. The straight lines are rays, which polar draws straight
+            anyway. The quadratics stay within a pixel of what polar does to a
+            straight line from (edge angle, r/2) to (middle angle, r). Largest
+            gap at R = 90 px:
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>slot angle</th>
+                <th>20°</th>
+                <th>40°</th>
+                <th>60°</th>
+                <th>90°</th>
+                <th>120°</th>
+                <th>180°</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>gap (px)</td>
+                <td>0.06</td>
+                <td>0.09</td>
+                <td>0.26</td>
+                <td>0.98</td>
+                <td>2.6</td>
+                <td>9.9</td>
+              </tr>
+            </tbody>
+          </table>
+          <h3>Precedent</h3>
+          <ul>
+            <li>
+              <strong>herrstucki's bl.ock (d3):</strong>
+              <code>d3.layout.pie</code> gives angles, a
+              <code>petalPath</code> builds the shape along +x with two
+              quadratics, <code>rotate(angle)</code> turns it. A local-frame
+              glyph (C). GoFish's petal is a port of it.
+            </li>
+            <li>
+              <strong>d3 and Observable Plot:</strong> custom symbols are
+              <code>draw(context, size)</code> objects in a local frame around a
+              point, turned by a <code>rotate</code> channel (C).
+            </li>
+            <li>
+              <strong>Vega and Vega-Lite:</strong> the
+              <code>shape</code> channel takes an SVG path in a [-1, 1] box,
+              scaled by <code>size</code>, turned by <code>angle</code> (C, unit
+              box).
+            </li>
+            <li>
+              <strong>ggplot2:</strong> <code>geom_polygon</code> under
+              <code>coord_polar</code> warps the polygon, resampling its edges
+              (<code>coord_munch</code>) (A).
+            </li>
+            <li>
+              <strong>GoFish:</strong> a rect in a polar slot warps into a
+              wedge, and polygon already warps its rings. B applies the rect
+              rule to polygon.
+            </li>
+          </ul>
+          <p>
+            Glyph libraries use a local frame because their custom shapes are
+            points. ggplot uses data space because its polar marks sweep. A
+            petal sweeps its slot, so B fits it, and C stays available for real
+            point glyphs.
+          </p>
+          <h3>Design rules it meets</h3>
+          <ul>
+            <li>
+              Desugars into the core: polygon plus a box, lowered by the
+              existing warp. No new node kind, no polar special case.
+            </li>
+            <li>
+              Marks lay out alike: a polygon with <code>w</code> and
+              <code>h</code> lays out like a rect of that size.
+            </li>
+            <li>
+              A default is sugar: no <code>w</code> means the points' own width,
+              a value the user can write.
+            </li>
+            <li>
+              No back-compat: <code>petal</code> is deleted, not kept as an
+              alias.
+            </li>
+          </ul>
+          <h3>What deleting <code>petal</code> touches</h3>
+          <ul>
+            <li>
+              JS: <code>shapes/petal.tsx</code>, <code>lib.ts</code>,
+              <code>serialize/registry.ts</code>,
+              <code>markChannels.generated.ts</code>,
+              <code>chartBuilder.typetest.ts</code>, comments in
+              <code>underlyingSpace.ts</code>, <code>coord.tsx</code>,
+              <code>lowerHelpers.ts</code>.
+            </li>
+            <li>
+              Old test charts: <code>petalChart.ts</code>,
+              <code>scatterPetal.ts</code>, <code>scatterFlower.ts</code>,
+              <code>scatterPie2.ts</code>, <code>scatterBalloon.ts</code>,
+              <code>scatterBalloon2.ts</code>.
+            </li>
+            <li>
+              Story: <code>forwardsyntax/FlowerChart.stories.tsx</code> (gallery
+              id <code>flower-chart</code>).
+            </li>
+            <li>
+              IR: <code>descriptors.ts</code> (drop <code>petal</code>, add
+              <code>w</code>/<code>h</code> to <code>polygon</code>),
+              <code>schema.ts</code>, display-list examples and schema test.
+            </li>
+            <li>
+              Python: <code>_generated.py</code> (regenerated),
+              <code>__init__.py</code>, <code>ast.py</code>, two test files, and
+              the flower chart parity port.
+            </li>
+            <li>
+              Docs: both <code>marks/petal.md</code> pages, mentions in
+              <code>rect.md</code>, <code>core/chart.md</code>,
+              <code>python/api/core/mark.md</code>, and several internals
+              essays.
+            </li>
+          </ul>
+          <h3>Found along the way</h3>
+          <ul>
+            <li>
+              Today's petal ignores <code>innerRadius</code> and draws through a
+              donut hole. B fixes this.
+            </li>
+            <li>
+              #1111 says petal draws nothing under <code>clock()</code>. That
+              part is already fixed: petal now checks for any polar-family
+              coord. Its other part, lightening field colors, is still open.
+            </li>
+          </ul>
+        </div>
+      </details>
+
+      <section class="card decisions">
+        <h2>Open decisions</h2>
+        <ol>
+          <li>
+            Approve B: <code>polygon</code> takes <code>w</code> and
+            <code>h</code>, literal points stretch into that box, and
+            <code>petal</code> is deleted?
+          </li>
+          <li>
+            Which way does the box run: v up from the baseline (data order:
+            petals point up in Cartesian, outward in polar) or y down (pixel
+            order, as literal points are today)? This ties to #1038.
+          </li>
+          <li>
+            Keep the five-point outline, or add a <code>curve</code> option on
+            polygon for wide slots (over 90°) where the old petal and the warp
+            differ by more than a pixel?
+          </li>
+          <li>Ship A in the flower story now as a stopgap, or wait for B?</li>
+          <li>
+            File C (a unit-box glyph mark for point glyphs) as its own issue, or
+            drop it?
+          </li>
+        </ol>
+      </section>
+    </main>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>
+      document.querySelectorAll("pre code").forEach(function (el) {
+        if (window.hljs) hljs.highlightElement(el);
+        var chg = (el.getAttribute("data-chg") || "")
+          .split(",")
+          .filter(Boolean)
+          .map(Number);
+        var lines = el.innerHTML.split("\n");
+        el.innerHTML = lines
+          .map(function (l, i) {
+            var cls = chg.indexOf(i + 1) >= 0 ? "ln chg" : "ln";
+            return '<span class="' + cls + '">' + (l || " ") + "</span>";
+          })
+          .join("");
+      });
+    </script>
+  </body>
+</html>
