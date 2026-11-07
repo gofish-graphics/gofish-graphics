@@ -4,10 +4,13 @@ order: 70
 
 # polygon
 
-Draws a closed polygon. Its `points` are either literal local coordinates — for
-non-rectangular glyphs (trapezoids, arrows, custom shapes) that the standard
-shape primitives can't express — or the name of a field holding one ring per
-data row, which is how a map's outlines are drawn.
+Draws a closed polygon. Its outline is `points` or `d`. `points` is either a
+literal ring of local coordinates, for non-rectangular glyphs (trapezoids,
+arrows, custom shapes) that the standard shape primitives can't express, or the
+name of a field holding one ring per data row, which is how a map's outlines
+are drawn. `d` is SVG path data, for an outline with curves. With `w` or `h`,
+the outline is drawn in a box that lays out like a rect's, such as a petal in
+its slot of a polar stack.
 
 ::: gofish
 
@@ -32,10 +35,11 @@ gf.chart([{}])
 ## Signature
 
 ```ts
-polygon({ points, fill?, stroke?, strokeWidth?, opacity = 1 })
+polygon({ points?, d?, w?, h?, fill?, stroke?, strokeWidth?, opacity = 1 })
 ```
 
-`points` is either a literal ring or a field name.
+Pass exactly one of `points` and `d`. `points` is either a literal ring or a
+field name. `w` and `h` take a literal outline only.
 
 ## Parameters
 
@@ -92,6 +96,45 @@ polygon({
 });
 ```
 
+## Path outlines
+
+`d` is SVG path data: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands.
+It is read in the same frame as literal `points`. The outline closes back to its
+first point, with or without `Z`. Relative (lowercase) commands, the other SVG
+commands and a second `M` are errors.
+
+```ts
+polygon({ d: "M0 0 L40 0 Q40 30 20 30 Q0 30 0 0 Z", fill: "teal" });
+```
+
+## Outlines in a box
+
+With `w` or `h`, a literal outline is in the unit box, 0 to 1 on each axis, and
+is stretched to a `w` by `h` box. The box lays out like a rect of the same size:
+`w` and `h` take a number (pixels), a field name or an accessor, and a side left
+out fills the space it is given. The unit box's y runs the way the polygon's
+frame does: top-down on a plain canvas, and outward from the center in a polar
+slot.
+
+Under a polar or other curved coordinate space, every point of the outline goes
+through the space, curves included, the same as a `line`. So a box outline in a
+polar slot is a pie slice, and the flower chart's petal is a polygon whose
+outline its slot bends:
+
+::: gofish example:flower-chart
+:::
+
+```ts
+const PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z";
+
+chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: 40 }))
+  .mark(polygon({ w: "count", d: PETAL, fill: "species" }));
+```
+
+Under a donut (`innerRadius`), the slot starts at the hole, and so does the
+outline.
+
 ## Field-bound points
 
 When `points` is a string, it names a field on each row of the mark's data, and
@@ -110,7 +153,7 @@ chart(world110m, {
 
 Under a curved coordinate space the edges are adaptively resampled, so an
 outline follows the projection rather than joining its vertices with straight
-pixels.
+pixels. A field-bound ring takes no `w` or `h`.
 
 ## Data-driven fill
 

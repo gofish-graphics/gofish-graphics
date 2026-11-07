@@ -1343,7 +1343,7 @@ old all-or-nothing axis guard could not.) See
 
 Three patterns cover most operators:
 
-**Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
+**Leaf shapes** (`rect`, `ellipse`, `polygon`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
 `CONTINUOUS(interval(0, value), "free")` on y (the value's positive part as
 ascent, its negative part as descent); the same rect with literal `y` and `y2`
@@ -3147,7 +3147,7 @@ display spaces, from before the tree was built, is kept in
 - The traversal drivers: `_node.ts`'s `resolveUnderlyingSpace()` and
   `resolveExtent()`.
 - Per-shape resolvers:
-  `src/ast/shapes/{rect,ellipse,petal,text,image}.tsx`.
+  `src/ast/shapes/{rect,ellipse,polygon,text,image}.tsx`.
 - Per-operator resolvers (each colocated with the operator):
   `src/ast/graphicalOperators/{spread,layer,scatter,enclose,porterDuff,position,connect,arrow,table,coord}.tsx`.
 - Overlay union helpers: `src/ast/graphicalOperators/alignment.ts`.

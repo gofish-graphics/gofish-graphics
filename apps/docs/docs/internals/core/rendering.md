@@ -111,12 +111,15 @@ and the y title is simply rotated `-90°`.
 `toPixel` is a translate, so a straight path stays straight: a shape with a curved
 path maps each of its control points through `toPixel` and re-serializes
 (`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling. `toPixel` never
-resamples. A coordinate transform does: a closed ring of layout points (a
-`polygon`, or a `region` with an outline) is lowered by `ringItem`
-(`lowerHelpers.ts`), which draws the ring straight under a linear coordinate space
-and, under any other, maps it through the space with adaptive resampling
-(`transformPath(..., { resample: true })`), so a straight edge in data space draws as
-the curve the space makes of it. Only then does it go through `toPixel`.
+resamples. A coordinate transform does: a closed outline of layout points (a
+`polygon`, straight edges and curves alike, or a `region` with an outline) is
+lowered by `outlineItem` (`lowerHelpers.ts`; `ringItem` is its straight-edged
+form), which draws the outline as it is under a linear coordinate space and,
+under any other, maps every point of it through the space with adaptive
+resampling (`transformPath(..., { resample: true })`), so a straight edge in
+data space draws as the curve the space makes of it, and a curve as the curve
+the space makes of that. A polygon's curves are never drawn flat between warped
+control points. Only then does it go through `toPixel`.
 A rectangle's corner radii follow SVG's rule, in one helper (`cornerRadii` in
 `lowerHelpers.ts`) that `rect` and `enclose`'s box both use: one of `rx` and `ry`
 given is both, and neither is the shape's own default (0 for `rect`, 2 for the box).
@@ -192,7 +195,7 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
   (`bakeChildren`), stopping at each bake boundary under it, and maps each
   entry through its coordinate transform then its own translate. A `coord` is the
   archetype: it lowers its whole subtree into resolved `path`/`rect`/`ellipse` items
-  whose coordinates are already warped (a petal becomes a `path`, a polar bar a warped
+  whose coordinates are already warped (a petal polygon becomes a `path`, a polar bar a warped
   `path`), so the backend never sees the polar mapping — just absolute pixel paths.
 - A **self-drawer** (`connect`, `arrow`) reads its own baked absolute translate
   (`displayTranslate`) to place the geometry it draws from its children's anchors.

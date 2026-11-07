@@ -323,7 +323,7 @@ function chart(operators: any[], mark: any = { type: "rect" }) {
 const nestedChart = {
   type: "chart",
   data: { type: "previous-tier" },
-  mark: { type: "petal", w: "count" },
+  mark: { type: "polygon", w: "count", d: "M0 0 L0 1 L1 1 L1 0 Z" },
 };
 const layerOfCharts = {
   type: "layer",

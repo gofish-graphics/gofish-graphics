@@ -150,7 +150,7 @@ whole document inline if you just want to read it.
 
 `toJSON → validate → fromJSON → render` works for the standard library:
 spread, stack, scatter, group, table, log; rect, circle, line, area,
-blank, ellipse, petal, text, image, polygon; layer, arrow, connect,
+blank, ellipse, text, image, polygon; layer, arrow, connect,
 treemap, Porter-Duff; refs, named layers via `.name("...")`, chained
 `.label(accessor, options)`, chart options, constraints. The round-trip
 is verified end-to-end against every storybook chart in CI.

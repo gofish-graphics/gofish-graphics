@@ -46,19 +46,6 @@ export const MARK_CHANNELS = {
     fill: "color",
     stroke: "color",
   },
-  petal: {
-    x: "pos",
-    cx: "pos",
-    x2: "pos",
-    w: "size",
-    y: "pos",
-    cy: "pos",
-    y2: "pos",
-    h: "size",
-    dims: "dims",
-    fill: "color",
-    stroke: "color",
-  },
   text: {
     x: "pos",
     cx: "pos",
@@ -85,6 +72,8 @@ export const MARK_CHANNELS = {
     dims: "dims",
   },
   polygon: {
+    w: "size",
+    h: "size",
     fill: "color",
     stroke: "color",
   },

@@ -1,11 +1,15 @@
 """Equivalent of FlowerChart.stories.tsx — Forward Syntax/Flower Chart."""
 
-from gofish import Constraint, Coord, chart, layer, petal, rect, scatter, stack
+from gofish import Constraint, Coord, chart, layer, polygon, rect, scatter, stack
 from python_stories.data import CATCH_LOCATIONS, COLORS, SEAFOOD
 
 # Fixed radius of every flower head, in pixels. The petals fan out to this
 # shared length; only their colors and angular widths vary with the data.
 FLOWER_RADIUS = 40
+
+# One petal in its slot's unit box: across the slot on x, out from the
+# center on y. The polar coord bends the whole outline.
+PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z"
 
 # Each species row tagged with its lake's planting location on x.
 STEM_DATA = [{**d, "x": CATCH_LOCATIONS[d["lake"]]["x"]} for d in SEAFOOD]
@@ -19,7 +23,7 @@ def story_default():
         chart(coord=Coord.polar(), axes=False)
         .flow(stack(by="species", dir="x", h=FLOWER_RADIUS))
         # TODO(#1111): lighten the petals, as the low-level version did.
-        .mark(petal(w="count", fill="species"))
+        .mark(polygon(w="count", d=PETAL, fill="species"))
     )
 
     # One plant per lake, planted at the lake's x location: a thin green stem

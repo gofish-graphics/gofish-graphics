@@ -8,14 +8,20 @@ import {
 import { GoFishNode, outlineOverhang } from "../_node";
 import {
   boxOfDims,
+  flattenPath,
+  openRing,
   outlinePaint,
-  ringExtent,
   ringOutline,
   ringsEnclosingCircle,
 } from "../geometry";
 import { GoFishAST } from "../_ast";
 import { Size } from "../dims";
-import { UNDEFINED, UnderlyingSpace, CONTINUOUS } from "../underlyingSpace";
+import {
+  UNDEFINED,
+  UnderlyingSpace,
+  CONTINUOUS,
+  pointOrMagnitude,
+} from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { nameableMark, type NameableMark } from "../marks/createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
@@ -24,7 +30,14 @@ import { posFn } from "../domain";
 import { interval } from "../../util/interval";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, ringItem } from "../displayList/lowerHelpers";
+import { lowerStyle, outlineItem } from "../displayList/lowerHelpers";
+import {
+  mapPathPoints,
+  parseClosedPath,
+  pathBounds,
+  segment,
+  type Path,
+} from "../../path";
 import { withWire } from "../wire";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
@@ -42,20 +55,47 @@ export type PolygonProps = {
    *   - a `value([...])` (what a field-bound `points` produces) is in DATA
    *     coordinates, so the vertices go through the axis position scales and the
    *     polygon places itself, exactly as a data-positioned `rect` does.
+   * Pass exactly one of `points` and `d`.
    */
-  points: MaybeValue<Ring>;
+  points?: MaybeValue<Ring>;
+  /** The outline as SVG path data (absolute M, L, Q, C, Z; see
+   *  `parseClosedPath`), read the way literal `points` are. */
+  d?: string;
+  /** The box the outline is stretched to, as a rect's. With either side
+   *  given the outline is in the unit box, 0 to 1 on each axis, and a side
+   *  left out fills the space it is given. */
+  w?: MaybeValue<number>;
+  h?: MaybeValue<number>;
 };
+
+/** A ring's closed outline: one straight edge from each vertex to the next,
+ *  the last back to the first. */
+const ringPath = (ring: Ring): Path =>
+  ring.map((p, i) => segment(p, ring[(i + 1) % ring.length]));
+
+/** The tolerance, in pixels, the outline is flattened to for its enclosing
+ *  circle. Exact on straight edges. */
+const CIRCLE_TOLERANCE = 0.25;
 
 /**
  * A closed polygon.
  *
- * With literal points it is a local-coordinate shape (in the axis order of the
- * polygon's own frame: pixels, y down) whose bounding box comes from the points and whose placement comes from the parent
- * constraint system. With data-bound points (a `value(ring)`) it is a
- * data-positioned mark: it declares a POSITION space per axis spanning the
- * ring's extent, maps its vertices through the axis scales, and self-places at
- * its own low corner — which is how a country outline lands in the right place
- * under a `geo` coordinate space.
+ * Its outline is `points` (straight edges) or `d` (SVG path data, with
+ * curves). Three readings:
+ *   - A literal outline with no `w`/`h` is a local-coordinate shape (in the
+ *     axis order of the polygon's own frame: pixels, y down) whose bounding
+ *     box comes from the outline and whose placement comes from the parent
+ *     constraint system.
+ *   - A literal outline with `w` or `h` is in the unit box, stretched to a
+ *     `w` by `h` box. It declares each set side as a rect does, so it lays
+ *     out like a rect of that size: a polygon in a polar slot fills the slot.
+ *   - Data-bound points (a `value(ring)`) are a data-positioned mark: it
+ *     declares a POSITION space per axis spanning the ring's extent, maps its
+ *     vertices through the axis scales, and self-places at its own low corner
+ *     — which is how a country outline lands in the right place under a `geo`
+ *     coordinate space.
+ * Under a nonlinear coordinate space every point of the outline goes through
+ * the space, curves included (`outlineItem`).
  */
 export const Polygon = ({
   fill = "black",
@@ -63,24 +103,45 @@ export const Polygon = ({
   strokeWidth = 0,
   opacity = 1,
   points,
+  d,
+  w,
+  h,
 }: PolygonProps) => {
-  const dataBound = isValue(points);
-  const ring: Ring = dataBound ? (getValue(points) as Ring) : (points as Ring);
-
-  // Without an explicit guard an empty ring's extent is (Infinity, -Infinity),
-  // producing a bbox with size: -Infinity that silently corrupts downstream
-  // layout. Three points is the closed-polygon floor.
-  if (ring.length < 3) {
-    throw new Error(`polygon requires at least 3 points, got ${ring.length}`);
+  if ((points === undefined) === (d === undefined)) {
+    throw new Error(
+      "polygon takes its outline as exactly one of `points` and `d`" +
+        (points === undefined ? ", and got neither." : ", and got both.")
+    );
   }
-  const { minX, maxX, minY, maxY } = ringExtent(ring);
+  const dataBound = isValue(points);
+  const boxed = w !== undefined || h !== undefined;
+  if (dataBound && boxed) {
+    throw new Error(
+      "polygon: a field-bound `points` ring is in data coordinates and places " +
+        "itself, so it takes no `w` or `h`."
+    );
+  }
+  let outline: Path;
+  if (d !== undefined) {
+    outline = parseClosedPath(d);
+  } else {
+    const ring = (dataBound ? getValue(points!) : points) as Ring;
+    // Without an explicit guard an empty ring's extent is (Infinity,
+    // -Infinity), producing a bbox with size: -Infinity that silently
+    // corrupts downstream layout. Three points is the closed-polygon floor.
+    if (ring.length < 3) {
+      throw new Error(`polygon requires at least 3 points, got ${ring.length}`);
+    }
+    outline = ringPath(ring);
+  }
+  const { minX, maxX, minY, maxY } = pathBounds(outline);
 
-  // The vertices in LOCAL coordinates, in the polygon's own axis order, as
-  // `layout` resolved them: the literal points, or — when data-bound — the
-  // scaled points minus the node's own translate. `lower` and `geometry` read
-  // this, in pixels (y times the polygon's direction), so they emit exactly
-  // what layout measured.
-  const localRef: { current: Ring } = { current: ring };
+  // The outline in LOCAL coordinates, in the polygon's own axis order, as
+  // `layout` resolved it: the literal outline, the unit outline stretched to
+  // its box, or — when data-bound — the scaled outline minus the node's own
+  // translate. `lower` and `geometry` read this, in pixels (y times the
+  // polygon's direction), so they emit exactly what layout measured.
+  const localRef: { current: Path } = { current: outline };
 
   // How it paints its outline, read once.
   const paint = outlinePaint({ fill, stroke, strokeWidth });
@@ -102,8 +163,32 @@ export const Polygon = ({
               CONTINUOUS(interval(minX, maxX), "pinned"),
               CONTINUOUS(interval(minY, maxY), "pinned"),
             ]
-          : [UNDEFINED, UNDEFINED],
-      layout: (_size, scales) => {
+          : // A side of the box is a size, as a rect's `w` is.
+            [
+              w !== undefined ? pointOrMagnitude(undefined, w) : UNDEFINED,
+              h !== undefined ? pointOrMagnitude(undefined, h) : UNDEFINED,
+            ],
+      layout: (size, scales) => {
+        if (boxed) {
+          // A side's length, read as a rect reads its own: a data value
+          // through the axis's σ, a number as pixels, and left out, the space
+          // the polygon is given.
+          const side = (v: MaybeValue<number> | undefined, axis: 0 | 1) =>
+            isValue(v)
+              ? getValue(v) * (scales?.[axis]?.sigma ?? 1)
+              : (v ?? size[axis]);
+          const W = side(w, 0);
+          const H = side(h, 1);
+          localRef.current = mapPathPoints(outline, ([x, y]) => [x * W, y * H]);
+          return {
+            intrinsicDims: [
+              { min: 0, size: W },
+              { min: 0, size: H },
+            ],
+            // translate is set by the parent's constraint placement.
+            transform: { translate: [undefined, undefined] },
+          };
+        }
         if (!dataBound) {
           return {
             intrinsicDims: [
@@ -120,18 +205,10 @@ export const Polygon = ({
         // data-positioned rect takes.
         const mapX = posFn(scales?.[0]?.map) ?? ((d: number) => d);
         const mapY = posFn(scales?.[1]?.map) ?? ((d: number) => d);
-        // One array for the whole mapping: scale in place, take the extent, then
-        // rebase the same points onto the node's own low corner.
-        const mapped: Ring = new Array(ring.length);
-        for (let i = 0; i < ring.length; i++) {
-          mapped[i] = [mapX(ring[i][0]), mapY(ring[i][1])];
-        }
-        const { minX: tx, maxX: hiX, minY: ty, maxY: hiY } = ringExtent(mapped);
-        for (const p of mapped) {
-          p[0] -= tx;
-          p[1] -= ty;
-        }
-        localRef.current = mapped;
+        const mapped = mapPathPoints(outline, ([x, y]) => [mapX(x), mapY(y)]);
+        const { minX: tx, maxX: hiX, minY: ty, maxY: hiY } = pathBounds(mapped);
+        // Rebase the mapped outline onto the node's own low corner.
+        localRef.current = mapPathPoints(mapped, ([x, y]) => [x - tx, y - ty]);
         return {
           intrinsicDims: [
             { min: 0, size: hiX - tx },
@@ -141,10 +218,11 @@ export const Polygon = ({
         };
       },
       // IR lowering: a local point in axis order maps to its pixel through
-      // the node's `local` map. Under a nonlinear coordinate space the edges are
-      // adaptively resampled so a straight edge in data space draws as the
-      // curve the projection makes of it — a country outline, not its
-      // vertices joined.
+      // the node's `local` map. Under a nonlinear coordinate space the whole
+      // outline, curves included, is adaptively resampled through it, so a
+      // straight edge in data space draws as the curve the projection makes
+      // of it: a country outline, not its vertices joined; a pie slice, not
+      // its corners joined.
       lower: (
         { coordinateTransform, toPixel, local },
         _children,
@@ -155,8 +233,8 @@ export const Polygon = ({
         const resolvedStroke =
           resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
         return [
-          ringItem(
-            localRef.current.map((p) => local(p)),
+          outlineItem(
+            mapPathPoints(localRef.current, local),
             coordinateTransform,
             toPixel,
             node.datum,
@@ -169,16 +247,24 @@ export const Polygon = ({
           ),
         ];
       },
-      // The smallest circle through the ring's vertices (Welzl, via d3's
+      // The outline, flattened to the tolerance asked for (exact on straight
+      // edges), and the smallest circle through its points (Welzl, via d3's
       // `packEnclose` over zero-radius circles), in the local frame `layout`
-      // resolved the ring into. Its outline is the ring.
+      // resolved the outline into.
       geometry: ({ intrinsicDims }, _children, node) => ({
         box: boxOfDims(intrinsicDims, node.type),
-        outline: () => [
-          ringOutline(localRef.current, node.yFrame.direction, paint),
+        outline: (tolerance) => [
+          ringOutline(
+            openRing(flattenPath(localRef.current, tolerance)),
+            node.yFrame.direction,
+            paint
+          ),
         ],
         enclosingCircle: () =>
-          ringsEnclosingCircle([localRef.current], node.yFrame.direction),
+          ringsEnclosingCircle(
+            [flattenPath(localRef.current, CIRCLE_TOLERANCE)],
+            node.yFrame.direction
+          ),
       }),
     },
     []
@@ -187,7 +273,8 @@ export const Polygon = ({
 
 /** `fill`/`stroke` are color channels, as on `rect`: a field name (or
  *  `field(...)`) reads the row's value and goes through the chart's color
- *  scale; any other string is a literal color. */
+ *  scale; any other string is a literal color. `w`/`h` are size channels, as
+ *  on `rect`. */
 const basePolygon = createMark(Polygon, MARK_CHANNELS.polygon, "polygon");
 
 export type PolygonMarkProps = Omit<
@@ -195,17 +282,22 @@ export type PolygonMarkProps = Omit<
   "points"
 > & {
   /** A literal ring, or the name of a field holding one ring per row. */
-  points: Ring | string;
+  points?: Ring | string;
 };
 
 /**
- * `polygon` — a closed ring, either literal or field-bound.
+ * `polygon` — a closed outline: a literal or field-bound ring of `points`, or
+ * the SVG path data `d`.
  *
- * `points: [[x, y], …]` is the local-coordinate shape. `points: "ring"` reads
- * the ring off each row of the mark's data, so one row is one ring and a whole
- * basemap is `chart(world110m).mark(polygon({ points: "ring" }))`. Field-bound
- * rings are data positions: they go through the axis scales and, under a `geo`
- * space, land at their own longitude and latitude.
+ * `points: [[x, y], …]` is the local-coordinate shape, and so is `d`. With
+ * `w` or `h` the literal outline is in the unit box instead, stretched to a
+ * box that lays out like a rect's: `polygon({ w: "count", d })` under
+ * `stack({ dir: "x" })` in a polar coord is a petal its slot bends.
+ * `points: "ring"` reads the ring off each row of the mark's data, so one row
+ * is one ring and a whole basemap is
+ * `chart(world110m).mark(polygon({ points: "ring" }))`. Field-bound rings are
+ * data positions: they go through the axis scales and, under a `geo` space,
+ * land at their own longitude and latitude.
  */
 export const polygon = (opts: PolygonMarkProps): NameableMark<any> => {
   if (typeof opts.points !== "string") {

@@ -37,7 +37,6 @@ from gofish import (
     line,
     pack,
     partition,
-    petal,
     polygon,
     rect,
     region,
@@ -367,15 +366,16 @@ def test_treemap_combinator_accepts_key():
     assert d["options"]["size"] == "gross"
 
 
-def test_polygon_requires_points():
-    with pytest.raises(TypeError):
-        polygon(fill="red")
+def test_polygon_takes_points_or_d():
+    # The outline is `points` or `d`; JS rejects neither or both at render.
     d = ir(polygon(points=[[0, 0], [1, 1], [0, 1]]))
     assert d["points"] == [[0, 0], [1, 1], [0, 1]]
+    d = ir(polygon(w="count", d="M0 0 L0 1 L1 1 L1 0 Z"))
+    assert d == {"type": "polygon", "w": "count", "d": "M0 0 L0 1 L1 1 L1 0 Z"}
 
 
-def test_circle_ellipse_petal_blank_signatures_are_closed():
-    # These four used to take open **kwargs that reached the wire unchecked
+def test_circle_ellipse_blank_signatures_are_closed():
+    # These used to take open **kwargs that reached the wire unchecked
     # (#1007). Now an undeclared or camelCase kwarg is a TypeError, as on
     # every other generated factory.
     with pytest.raises(TypeError):
@@ -384,8 +384,6 @@ def test_circle_ellipse_petal_blank_signatures_are_closed():
         circle(r=3, fillOpacity=0.6)
     with pytest.raises(TypeError):
         ellipse(w=4, h=4, stroke_dasharray="2 2")
-    with pytest.raises(TypeError):
-        petal(w=4, h=4, opacity=0.5)
     with pytest.raises(TypeError):
         blank(w=4, stroke="red")
 

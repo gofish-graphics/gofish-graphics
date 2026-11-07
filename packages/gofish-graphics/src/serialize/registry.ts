@@ -42,7 +42,6 @@ import {
   type Operator,
 } from "../ast/marks/chart";
 import { ellipse } from "../ast/shapes/ellipse";
-import { petal } from "../ast/shapes/petal";
 import { polygon } from "../ast/shapes/polygon";
 import { text } from "../ast/shapes/text";
 import { image } from "../ast/shapes/image";
@@ -259,7 +258,6 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   rect,
   circle,
   ellipse,
-  petal,
   text,
   image,
   polygon,

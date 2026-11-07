@@ -775,7 +775,6 @@ export type LeafMarkType =
   | "blank"
   | "region"
   | "ellipse"
-  | "petal"
   | "text"
   | "image"
   | "polygon"
@@ -1227,7 +1226,6 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "blank",
   "region",
   "ellipse",
-  "petal",
   "text",
   "image",
   "polygon",

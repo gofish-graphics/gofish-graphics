@@ -5,7 +5,7 @@
 /**
  * Shared helpers for per-primitive `lower` bodies — the IR counterparts of the
  * small JSX-emitting snippets each shape's `render` uses. Keeping them here
- * means rect/ellipse/petal/connect/coord lower their warped paths identically.
+ * means rect/ellipse/polygon/connect/coord lower their warped paths identically.
  */
 
 import type { DisplayList } from "gofish-ir";
@@ -61,18 +61,36 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** A closed ring of layout points as a path item, drawn straight under a
- *  linear coordinate space and adaptively resampled under any other, so a
- *  straight edge in data space draws as the curve the space makes of it.
- *  Shared by the polygon and region lower bodies. */
+/** A closed ring of layout points as a path item: the {@link outlineItem}
+ *  of its straight edges. Used by the region lower body. */
 export const ringItem = (
   points: Point[],
   coordinateTransform: CoordinateTransform | undefined,
   toPixel: ToPixel,
   datum: Record<string, unknown>[] | undefined,
   style: DisplayList.Style
+): DisplayList.PathItem =>
+  outlineItem(
+    path(points, { closed: true }),
+    coordinateTransform,
+    toPixel,
+    datum,
+    style
+  );
+
+/** A closed outline of layout points, straight edges and curves alike, as a
+ *  path item. It is drawn as it is under a linear coordinate space. Under any
+ *  other, every point of it goes through the space: the whole outline is
+ *  adaptively resampled, curves included, so a straight edge in data space
+ *  draws as the curve the space makes of it, as a `line` does. Shared by the
+ *  polygon and region lower bodies. */
+export const outlineItem = (
+  ring: Path,
+  coordinateTransform: CoordinateTransform | undefined,
+  toPixel: ToPixel,
+  datum: Record<string, unknown>[] | undefined,
+  style: DisplayList.Style
 ): DisplayList.PathItem => {
-  const ring = path(points, { closed: true });
   const drawn =
     coordinateTransform === undefined || coordinateTransform.type === "linear"
       ? ring

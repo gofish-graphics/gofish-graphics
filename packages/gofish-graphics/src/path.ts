@@ -196,6 +196,91 @@ export const pathBounds = (path: Path): BoundingBox => {
   return { minX: lo[0], maxX: hi[0], minY: lo[1], maxY: hi[1] };
 };
 
+/** How many numbers each command of {@link parseClosedPath} takes. */
+const PATH_ARITY: Record<string, number> = { M: 2, L: 2, Q: 4, C: 6, Z: 0 };
+
+/**
+ * One closed outline from SVG path data: absolute `M`, `L`, `Q`, `C` and `Z`
+ * commands, as in `"M0 0 L0 1 Q.5 1.5 1 1 L1 0 Z"`. It is one ring: it starts
+ * with one `M`, and it closes back to that point, with or without a final
+ * `Z`. A command may repeat its arguments (`L1 0 1 1` is two lines), as in
+ * SVG. Relative (lowercase) commands, the other SVG commands (`H`, `V`, `S`,
+ * `T`, `A`), a second `M` and a count of numbers a command cannot take are
+ * errors.
+ */
+export const parseClosedPath = (d: string): Path => {
+  const fail = (why: string): never => {
+    throw new Error(`[gofish] polygon d "${d}": ${why}`);
+  };
+  const tokens =
+    d.match(/[A-Za-z]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?|[^\s,]/g) ?? [];
+  const out: Path = [];
+  let start: Point | undefined;
+  let cur: Point = [0, 0];
+  let closed = false;
+  let i = 0;
+  while (i < tokens.length) {
+    const cmd = tokens[i++];
+    if (!/^[A-Za-z]$/.test(cmd)) fail(`expected a command, got "${cmd}".`);
+    if (!(cmd in PATH_ARITY)) {
+      fail(
+        cmd === cmd.toLowerCase() && cmd.toUpperCase() in PATH_ARITY
+          ? `"${cmd}" is a relative command; write it as "${cmd.toUpperCase()}" with absolute points.`
+          : `"${cmd}" is not one of M, L, Q, C, Z.`
+      );
+    }
+    const args: number[] = [];
+    while (i < tokens.length && !/^[A-Za-z]$/.test(tokens[i])) {
+      const n = Number(tokens[i]);
+      if (!Number.isFinite(n)) fail(`"${tokens[i]}" is not a number.`);
+      args.push(n);
+      i++;
+    }
+    if (start === undefined && cmd !== "M") fail("it must start with M.");
+    if (start !== undefined && cmd === "M")
+      fail("a polygon is one outline; it takes one M.");
+    if (closed) fail("nothing may follow Z.");
+    const arity = PATH_ARITY[cmd];
+    if (arity === 0 && args.length > 0) fail("Z takes no numbers.");
+    if (arity > 0 && (args.length === 0 || args.length % arity !== 0))
+      fail(`${cmd} takes ${arity} numbers at a time, got ${args.length}.`);
+    const pts: Point[] = [];
+    for (let k = 0; k + 1 < args.length; k += 2)
+      pts.push([args[k], args[k + 1]]);
+    if (cmd === "M") {
+      start = cur = pts[0];
+      // Extra pairs after M are lines, as in SVG.
+      for (const p of pts.slice(1)) {
+        out.push(segment(cur, p));
+        cur = p;
+      }
+    } else if (cmd === "L") {
+      for (const p of pts) {
+        out.push(segment(cur, p));
+        cur = p;
+      }
+    } else if (cmd === "Q") {
+      for (let k = 0; k < pts.length; k += 2) {
+        out.push(quadratic(cur, pts[k], pts[k + 1]));
+        cur = pts[k + 1];
+      }
+    } else if (cmd === "C") {
+      for (let k = 0; k < pts.length; k += 3) {
+        out.push(curve(cur, pts[k], pts[k + 1], pts[k + 2]));
+        cur = pts[k + 2];
+      }
+    } else {
+      if (!samePoint(cur, start!)) out.push(segment(cur, start!));
+      cur = start!;
+      closed = true;
+    }
+  }
+  if (start === undefined) fail("it is empty.");
+  if (!samePoint(cur, start!)) out.push(segment(cur, start!));
+  if (out.length === 0) fail("it draws no edge.");
+  return out;
+};
+
 export const segmentToSVG = (segment: PathSegment): string => {
   if (segment.type === "line") {
     const [[x1, y1], [x2, y2]] = segment.points;

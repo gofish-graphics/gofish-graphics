@@ -283,7 +283,7 @@ export const connect = createNodeOperator(
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
         // paint into the shared discrete-color scale. Prefer whichever
-        // channel is data-driven — same idiom as rect/petal's `color`. By the
+        // channel is data-driven — same idiom as rect/polygon's `color`. By the
         // time Connect sees them, field-valued paints have already been
         // resolved to `Value`s by `resolveGroupFill` (chart.ts), so
         // `isValue` distinguishes data-driven from a literal color.

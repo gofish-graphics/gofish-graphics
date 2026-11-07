@@ -248,7 +248,7 @@ order. The op takes no other key, so the
 old flat spelling, `{ "op": "bin", "thresholds": 20 }`, is an error, not the
 default partition, and so is the untagged `{ "step": 0.5 }`. A partition
 with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks are a tree — leaves
-(`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
+(`rect`, `circle`, `blank`, `ellipse`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `position`, `line`, `ribbon`, `enclose`, `treemap`, `pack`, and the
@@ -969,7 +969,7 @@ type has to be declared before Python can take it.
 It emits:
 
 - Closed-signature **leaf mark** factories (`rect`, `circle`, `ellipse`,
-  `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
+  `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
   plus wire-key rename, with docstrings from each field's `doc`. An
   undeclared kwarg is a `TypeError` on all of them; none takes `**kwargs`.
 - The five compositing operators and other **combinator-only** marks —

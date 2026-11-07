@@ -61,7 +61,7 @@ rect(dims={"theta": {"size": 0.4}, "r": {"size": "value"}})
 space does not declare raises an error that lists the ones it does, and setting
 the same part of an axis twice (for example `w` and `dims["theta"]["size"]`) is
 an error. `dims` is the one keyword for axis names, so the rest of the
-signature stays closed. The same keyword works on `ellipse`, `petal`, `text`,
+signature stays closed. The same keyword works on `ellipse`, `text`,
 `image`, and `layer`.
 
 ## Encoding

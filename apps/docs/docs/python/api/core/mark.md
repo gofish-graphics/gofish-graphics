@@ -85,10 +85,12 @@ marks and a chart. Here each lake draws a stem and a polar flower on top of it:
 :::
 
 ```python
+PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z"
+
 flower = (
     chart(coord=Coord.polar(), axes=False)  # no data -> inherits this lake's rows
     .flow(stack(by="species", dir="x", h=40))
-    .mark(petal(w="count", fill="species"))
+    .mark(polygon(w="count", d=PETAL, fill="species"))
 )
 
 chart(stem_data, axes=False).flow(scatter(by="lake", x="x")).mark(

@@ -22,7 +22,7 @@ from gofish import (
     line,
     ribbon,
     ellipse,
-    petal,
+    polygon,
     text,
     image,
     Constraint,
@@ -509,7 +509,7 @@ class TestConvenienceMethods:
 
 
 class TestNewMarks:
-    """Test ellipse, petal, text, image marks."""
+    """Test ellipse, polygon, text, image marks."""
 
     def test_ellipse_mark(self):
         """Test ellipse mark creation."""
@@ -520,13 +520,14 @@ class TestNewMarks:
         assert d["h"] == 20
         assert d["fill"] == "blue"
 
-    def test_petal_mark(self):
-        """Test petal mark creation."""
-        m = petal(w="size", h="size")
+    def test_polygon_outline_mark(self):
+        """Test a polygon with a path outline and a box."""
+        m = polygon(w="size", h="size", d="M0 0 L0 1 L1 1 L1 0 Z")
         d = ir(m)
-        assert d["type"] == "petal"
+        assert d["type"] == "polygon"
         assert d["w"] == "size"
         assert d["h"] == "size"
+        assert d["d"] == "M0 0 L0 1 L1 1 L1 0 Z"
 
     def test_text_mark(self):
         """Test text mark creation."""
@@ -581,7 +582,7 @@ class TestNewMarks:
         """Test all marks support .name()."""
         for mark_fn in [
             lambda: ellipse(w=10),
-            lambda: petal(w=10),
+            lambda: polygon(w=10, d="M0 0 L1 0 L1 1 Z"),
             lambda: text(fill="red", text="value"),
             lambda: image(w=10, href="url"),
         ]:
@@ -762,6 +763,9 @@ class TestChartBuilder:
         assert node["mark"]["type"] == "line"
 
 
+PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z"
+
+
 class TestNestedChart:
     """A nested chart in a mark position crosses as its own IR, and a layer of
     charts as the `layer` combinator with chart children, inline in the mark
@@ -775,7 +779,7 @@ class TestNestedChart:
         return (
             chart(coord=Coord.polar(), axes=False)
             .flow(stack(by="species", dir="x", h=40))
-            .mark(petal(w="count", fill="species"))
+            .mark(polygon(w="count", d=PETAL, fill="species"))
         )
 
     def test_mark_and_combinator_child_share_one_encoding(self):
@@ -788,7 +792,12 @@ class TestNestedChart:
             "operators": [
                 {"type": "stack", "by": "species", "dir": "x", "h": 40}
             ],
-            "mark": {"type": "petal", "w": "count", "fill": "species"},
+            "mark": {
+                "type": "polygon",
+                "w": "count",
+                "d": PETAL,
+                "fill": "species",
+            },
             "options": direct["options"],
         }
 

@@ -565,7 +565,7 @@ export const mergeCells = (
   return out;
 };
 
-/** One axis of a mark sized about a point (an ellipse, a petal): a datum
+/** One axis of a mark sized about a point (an ellipse, a polygon): a datum
  *  position is a pinned point, else a datum size is a free magnitude, else
  *  nothing (literal sizes are resolved at layout time). */
 export const pointOrMagnitude = (

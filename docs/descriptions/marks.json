@@ -20,13 +20,9 @@
       "type": "ellipse",
       "description": "An ellipse shape."
     },
-    "petal": {
-      "type": "petal",
-      "description": "A petal shape."
-    },
     "polygon": {
       "type": "polygon",
-      "description": "A closed polygon defined by explicit local-coordinate points (GoFish-native y-up); its bounding box is computed from the points."
+      "description": "A closed outline, given as points or as SVG path data, optionally stretched from the unit box to a w by h box."
     },
     "blank": {
       "type": "blank",

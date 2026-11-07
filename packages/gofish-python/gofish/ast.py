@@ -910,7 +910,6 @@ from ._generated import (  # noqa: E402
     rect,
     circle,
     ellipse,
-    petal,
     text,
     image,
     polygon,
@@ -3610,7 +3609,7 @@ def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dic
 
 # Mark factory functions
 #
-# rect / circle / ellipse / petal / text / image / polygon / blank are
+# rect / circle / ellipse / text / image / polygon / blank are
 # generated (packages/gofish-python/gofish/_generated.py) — pure
 # kwargs-collection + wire rename, imported above. `rect()`'s generated
 # signature drops the phantom `rs=`/`ts=` kwargs (they existed nowhere in JS)

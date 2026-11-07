@@ -299,11 +299,13 @@ head, where the head is its own `chart(...)` named `"flower"` so the layer can
 align its center onto the stem's top:
 
 ```ts
+const PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z";
+
 layer([
   rect({ w: 4, h: "total", fill: "green" }).name("stem"),
   chart(species, { coord: Coord.polar() })
     .flow(stack({ by: "species", dir: "x" }))
-    .mark(petal({ w: "count", fill: "species" }))
+    .mark(polygon({ w: "count", d: PETAL, fill: "species" }))
     .name("flower"),
 ]).relate(({ stem, flower }) => [
   Constraint.align({ x: "middle" }, [stem, flower]),
