@@ -1,14 +1,15 @@
 # Croissant Sampling: removing the hand-sampled grids (#1332)
 
-- Today the croissant stories sample a function by hand (`gridOf`, a hand-written `kde`, `quantileRows`), and every line or area chart, croissant or not, needs a `scatter` before its `line` or `ribbon`.
-- Proposed, part 1: `line` and `ribbon` take their position, `line({ x: "date", y: "price" })`. On a mark that draws one shape from many rows, the position picks the vertices. It rewrites to a `scatter` right before the mark.
-- Proposed, part 2: `stack` adds heights at each position its children share. Bars are the case with one position per child. A stack of whole regions whose height varies is an error, as a stack of things that cannot be added is today; a ridgeline is a `spread`. Then `stack` gives the same picture before or after the position tier, and the stacked area needs no `.stack()` method.
-- Proposed, part 3: `sweep({ v: [a, b] })` makes a row for every v in an interval, so the same `ribbon({ x: "v", h: x.density("v") })` draws a function with no grid.
-- Relation to #47: a stacked area and a parallel sets chart are the same structure (positions, ends stacked at each, ribbons threading a key). A sankey's anchors run the same `stack` on a placed node's side. One kernel, two places it runs; no second stacking mechanism.
+- Today the croissant stories sample a function by hand (`gridOf`, a hand-written `kde`, `quantileRows`), and every line or area chart needs a `scatter` before its `line` or `ribbon`.
+- Proposed, part 1: `line` and `ribbon` take their position, `line({ x: "date", y: "price" })`. On a mark that draws one shape through many rows, the position picks the vertices. It rewrites to a `scatter` right before the mark.
+- Proposed, part 2: a stacked area is one area of the total, divided by series, as Mascot builds it. GoFish already has Mascot's divide: `cut`. `ribbon({ x, h }).cut({ by: "c", dir: "y" })` divides the area at each x; `cut({ dir: "x" })` at a Dist's quantiles is the croissant. It reads only the mark's own rows, so it is local, and its rewrite is a stack inside each x slice.
+- Proposed, part 3: the flow `stack` stays local. It stacks whole children, so a stack of whole ribbons whose height varies is a loud error that points at `cut` and at `spread`.
+- Proposed, part 4: `sweep({ v: [a, b] })` makes a row for every v in an interval, so a density draws with no grid.
+- Found along the way: GoFish divides a box by weight in three operators (`stack` with `size`, `treemap` with `Tile.slice`/`Tile.dice`, `cut`), and by scale cells in a fourth (`partition`). Drafted as its own issue.
 
 ## Recommendation
 
-Josh's picture holds, with a different spelling for the stack: `chart(params).flow(sweep({ v: [-4, 4] }), stack({ by: "series", dir: "y" })).mark(ribbon({ x: "v", h: x.density("v"), fill: "series" }))`. Round 5 kept `stack` a box stack and needed `.stack()` after the mark to put it inside the x slices. Josh's correction (a ridgeline is not a stack, because the regions do not add up) removes the reason for that: `stack` adds heights where its children share a position, so it commutes with the mark's position tier and the flow `stack` works in either order. The `.stack()` method is dropped. That also removes round 5's conflict with #47, which had rejected `ribbon().stack()` as a second route to the flow `stack`. `x`, `y` and `along` on `line` and `ribbon` stay, as sugar with one written rewrite. No `area` twin: with a pointwise `stack` there is no stacking behavior left to build into a mark. `rect` gets no such sugar, because a rect is one shape with one position, so its `x` is a value of its rows (their mean, today), while a line's `x` is a list of vertices. The wall from earlier rounds stays: under `sweep` the slices are laid out on demand, and no prototype does that yet.
+Divide wins, and it replaces this round's first recommendation, a `.stack()` modifier. The lead: `chart(params).flow(sweep({ v: [-4, 4] })).mark(ribbon({ x: "v", h: x.density("v"), fill: "series" }).cut({ by: "series", dir: "y" }))`. Josh's objection to round 6 stands: a flow `stack` that reaches into each ribbon's x positions is not local. A `.stack()` modifier on each series' ribbon says that it is not local, but it still reaches across marks. Divide does not reach across anything: the ribbon is one area of the total at each x (its `h` adds, as sizes do), and `cut` divides that one mark by its own rows. This is how Mascot draws its stacked area and streamgraph (densify, then divide), and GoFish already took the operator from Mascot as `cut`, with a function twin (`cut(image(), opts)`) as api-design.md asks of a one-child method. The same `cut` along x is the croissant. The reasons GoFish gave against divide were about where it lives (a mark, not an operator) and what it returns (many pieces); `cut` settled both. The `.stack()` modifier is the runner-up: it reads better for stacked lines, which have no extent to divide. The wall from earlier rounds stays: under `sweep` the slices are laid out on demand, and no prototype does that yet.
 
 ## Relation to #980
 
@@ -21,12 +22,12 @@ Renders are real GoFish renders. B uses a throwaway prototype node, `packages/go
 ## Rules
 
 1. A mark draws one shape per flow cell, as today. A rect, circle or text is one shape with one position, so its channels are values of the cell's rows (a position is their mean today). A line or ribbon is one shape through many points, so its position channels `x`, `y` and `along` are its vertices: one vertex per `along` value (`x` by default). `.mark(R({ x, y, along, ...rest }))` is `.flow(..., scatter({ by: along ?? x, x, y })).mark(R(rest))`.
-2. Which rows join: the rows of one flow cell, as #786 decided. A paint field that varies inside one line is the loud error it is today, so a multi-series line writes `group({ by: "symbol" })`.
-3. In what order: the `along` key's order, as `scatter({ by })` gives today.
-4. `stack` adds its children's heights at each position they share on the other axis. A child's positions are the keys of its position tier on that axis (a `scatter` or `spread` `by`, or a `sweep` index). A child with no such tier has one position (a bar). So `stack` before or after a position tier gives the same picture.
-5. A stack whose children have heights that cannot be added at shared positions is an error: a child whose height varies with no position tier (a whole ribbon, a polygon), children with different position keys, or values without CanSum (#1311). A ridgeline is a `spread` with `anchor: "baseline"`, which keeps each series in its own space and lets the ridges overlap.
+2. Which rows join: the rows of one flow cell, as #786 decided. In what order: the `along` key's order.
+3. The flow `stack` is local: it lays its children end to end and adds their sizes. Each child must have one size along `dir` that can be added (CanSum, #1311). A child with no single size (a ribbon over many x positions, a `spread` of bars) is an error whose message names the child, `cut` and `spread`.
+4. `cut` divides one mark by its own rows (Mascot's divide). By weight: `cut({ by, dir, size })`, the pieces share the mark's extent. By cells: `cut({ by: x.bin(...), dir })`, the pieces are the mark's parts inside each cell. On a ribbon or line, a cut across the path divides the extent at each vertex, and rewrites to `stack({ by })` inside each vertex slice.
+5. A cut mark's paint channels are read per piece, so `ribbon({ fill: "c" }).cut({ by: "c" })` gives each piece its color. (Today a paint field that varies inside one ribbon is an error, and today's cut slices do not read paint.)
 6. `sweep({ v: [a, b] })` replaces each row with a continuum of rows over [a, b]; `repeat(n)` stays discrete (#980). After `sweep`, `spread`, `sort`, `count` and a mark per row are errors, and `line` or `ribbon` sample the continuum to half a pixel.
-7. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, as #980's `x.quantile("p")` reads a level. `ribbon({ h: x.density() })` with no x is short for the whole spec over `x.range()` (approach B). Cuts and dots read the Dist exactly: `x.bin(Bin.quantiles(n))`, `x.median()`.
+7. A channel reads a Dist at the index: `x.density("v")`, `x.cdf("v")`, as #980's `x.quantile("p")` reads a level. `ribbon({ h: x.density() })` with no x is short for the whole spec over `x.range()` (approach B). Dots read the Dist exactly: `x.median()`.
 
 ## Line and ribbon take their position
 
@@ -41,14 +42,13 @@ chart(data)
   .flow(...ops, scatter({ by: along ?? x, x, y }))
   .mark(R(rest));
 
-// 2. stack adds heights at each position its children share, so it commutes
-//    with a position tier on the other axis (P is scatter or spread)
+// 2. cut on a ribbon divides its extent at each vertex: a stack inside each vertex slice
 chart(data)
-  .flow(stack({ by: s }), P({ by: k }))
-  .mark(M); // draws the same as
+  .flow(...ops)
+  .mark(ribbon({ x, h, ...rest }).cut({ by: k, dir: "y" }));
 chart(data)
-  .flow(P({ by: k }), stack({ by: s }))
-  .mark(M);
+  .flow(...ops, scatter({ by: x, x }), stack({ by: k, dir: "y" }))
+  .mark(ribbon({ h, ...rest }));
 ```
 
 ### Line chart
@@ -131,24 +131,28 @@ chart(rows)
   .mark(ribbon({ h: "y" }));
 ```
 
-### Stacked area chart
+### Stacked area chart: one area, divided
 
 ![](img/l-stacked-area.png)
 
-![](img/l-stack-outer-today.png)
-
-Top: the proposed spec, read pointwise (the render runs it with the stack moved inside the x slices). Bottom: what today's engine draws for the same spec, a box stack with each series as tall as its peak. Josh's point: those boxes cannot be added, so that reading is wrong, not a second chart.
+Without the `cut`, `ribbon({ x, h })` is the total area: one vertex per x, its `h` the sum of the series there. `cut` divides it by c at each x. The render runs the rewrite, a `scatter` by x and a stack inside each slice. The second spelling is the runner-up, a stack modifier on the series ribbons.
 
 ```js
-chart(rows)
-  .flow(stack({ by: "c", dir: "y" }))
-  .mark(ribbon({ x: "x", h: "y", fill: "c" }));
+// One area of the total at each x, divided by series
+chart(rows).mark(
+  ribbon({ x: "x", h: "y", fill: "c" }).cut({ by: "c", dir: "y" })
+);
+
+// Runner-up: a stack modifier on the series ribbons
+chart(rows).mark(
+  ribbon({ x: "x", h: "y", fill: "c" }).stack({ by: "c", dir: "y" })
+);
 ```
 
 Python:
 
 ```python
-chart(rows).flow(stack(by="c", dir="y")).mark(ribbon(x="x", h="y", fill="c"))
+chart(rows).mark(ribbon(x="x", h="y", fill="c").cut(by="c", dir="y"))
 ```
 
 Today:
@@ -159,7 +163,96 @@ chart(rows)
   .mark(ribbon({ h: "y", fill: "c" }));
 ```
 
-### Ridgeline: a spread, not a stack
+### Streamgraph
+
+![](img/l-streamgraph.png)
+
+The lakes are a `spread` centered on the baseline (`alignment: "middle"`, as Mascot's `vertCellAlignment: "middle"`). The ribbon is each lake's total, divided by species. The rewrite is today's gallery Streamgraph, and the render is it. (The y labels all read 10 here, a bug in today's story.)
+
+```js
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }))
+  .mark(
+    ribbon({ h: "count", fill: "species" }).cut({ by: "species", dir: "y" })
+  );
+```
+
+Today:
+
+```js
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(ribbon({ h: "count", fill: "species" }));
+```
+
+### Stacked lines: where divide falls short
+
+![](img/l-stacked-lines.png)
+
+A line has no extent, so there is nothing to divide. As a cut, stacked lines are the top edges of the divided area, which needs an edge-only paint GoFish does not have. The stack modifier spells it directly. Today it needs `h` on the line's invisible anchors and `source`/`target` pinned to their tops (render).
+
+```js
+// Runner-up only: cut divides an extent, and a line has none
+chart(rows).mark(
+  line({ x: "x", y: "y", stroke: "c" }).stack({ by: "c", dir: "y" })
+);
+
+// With cut, the lines are the top edges of the divided area: a gap (no edge-only paint today)
+chart(rows).mark(
+  ribbon({ x: "x", h: "y", stroke: "c", fill: "none" }).cut({
+    by: "c",
+    dir: "y",
+  })
+);
+```
+
+Today:
+
+```js
+// Today: line runs through the tops of stacked invisible anchors
+chart(rows)
+  .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
+  .mark(
+    line({ h: "y", stroke: "c", source: { y: "end" }, target: { y: "end" } })
+  );
+```
+
+### Error: the stack written in the flow
+
+![](img/l-stack-outer-today.png)
+
+![](img/l-bars-today.png)
+
+The flow `stack` stacks whole children, and a whole ribbon has no single height, so this spec is an error. The renders show what today's engine draws instead: each series as one box as tall as its peak, and for bars, whole rows of bars piled up. No story or test writes `stack` before a `spread`, `scatter` or `group` (combinator forms not searched).
+
+```js
+chart(rows)
+  .flow(stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ x: "x", h: "y", fill: "c" }));
+
+// Error: stack({ by: "c", dir: "y" }) adds the heights of its children, but
+// child c = 0 has no single height: it is a ribbon over 10 x positions, with
+// a different height at each. To divide the area at each x by c, cut the mark:
+//   ribbon({ x: "x", h: "y", fill: "c" }).cut({ by: "c", dir: "y" })
+// To give each series its own baseline (a ridgeline), use spread:
+//   spread({ by: "c", dir: "y", anchor: "baseline" })
+```
+
+```js
+chart(seafood)
+  .flow(stack({ by: "species", dir: "y" }), spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count", fill: "species" }));
+
+// Error: stack({ by: "species", dir: "y" }) adds the heights of its children,
+// but child species = "Bass" has no single height: it is a spread of 6 lakes.
+// To stack the species in each lake, put the stack after the spread:
+//   spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" })
+```
+
+### Ridgeline: a spread
 
 ![](img/l-ridgeline.png)
 
@@ -183,25 +276,6 @@ chart(rows)
   .mark(ribbon({ h: "y", fill: "c" }));
 ```
 
-### Bars: one position per child
-
-![](img/l-bars-pointwise.png)
-
-![](img/l-bars-today.png)
-
-Top: stacked bars, which both spellings draw under the pointwise rule. Bottom: today's box stack of the stack-first spelling, which piles whole rows of bars. A search of the stories and tests found no flow that writes `stack` before a `spread`, `scatter` or `group`, so no existing spec changes picture (combinator forms were not searched).
-
-```js
-// Read pointwise, both orders draw the stacked bar chart
-chart(seafood)
-  .flow(stack({ by: "species", dir: "y" }), spread({ by: "lake", dir: "x" }))
-  .mark(rect({ h: "count", fill: "species" }));
-
-chart(seafood)
-  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
-  .mark(rect({ h: "count", fill: "species" }));
-```
-
 ### History: how line, ribbon and stack got here
 
 - **#511 / #519 (merged)**: Added `.connect(line())` as builder sugar for connecting a chart's marks.
@@ -211,16 +285,20 @@ chart(seafood)
 - **#290 (open)**: Stack as a mark method. Josh's 07-10 note: for connectors a mark-side `.stack()` can only mean stacking the rows (stacking whole ribbons draws a ridgeline), so it is a spelling of the flow `stack`, not a new operation; ggplot's position adjustments mark the boundary of what could go mark-side. The waffle case was later solved by `wrap`, so `stack` keeps one meaning, a hard seam, at every level.
 - **#47 (open)**: Stacked ribbons. Its approach C, `ribbon().stack()` (including `ribbon({ h }).stack({ by: "series" })` for a stacked area), was rejected as a second route to the flow `stack`. Its current direction is anchors: `.anchor({ name, position: "x-max", slots: data().flow(stack(...)) })`, a flow along a mark's side, with ribbon widths from the slot sizes and references like `nodes.out`.
 - **Josh, 11-06**: A ridgeline is not a stack, because the subregions do not add up. `stack` glues spaces into one by adding them (CanSum, #1197 and #1311); `spread` keeps them separate.
+- **Josh, 11-06, on round 6**: A flow `stack` that draws a stacked area "just doesn't work like any other operator"; a stack modifier says it "does something non-operator-like the same way labels do", something "not completely local". And: `stack` "fights the typical hierarchy" and overlaps with spread, partition and treemap.
 - **api-design.md**: A method chain reads or branches on the caller's state; an option is a local adjective. A method has a function twin only for a one-child operator. `stack` and `spread` differ in spaces (stack glues children into one space), not in spacing.
 - **memory note**: `.connect()` as the canonical line form is out of date: #745 deleted it. The canonical form today is a `scatter` in the flow and a fused `line` in `.mark()`.
 
 ### Does this answer the past objections?
 
-- **"Which rows join" (#745, #786)**: Unchanged. The proposal adds no grouping of its own: rows join within one flow cell, by #786's rule. It does not let `stroke: "symbol"` split rows (ggplot and Vega-Lite do); that stays a decision.
-- **"In what order"**: The `along` key's order, `x` when `along` is absent, which is the order `scatter({ by })` gives today. Whether `line({ x })` should sort by x (ggplot's `geom_line`) or keep data order (`geom_path`) is a decision.
-- **"Spooky action" in fusion (#748)**: One more key goes to the anchor tier, and it is a position: `x`, `y` and `along` become a `scatter`. It is the same kind of written rewrite #748 already does for `h`, with the same loud errors.
-- **Stack as a mark modifier (#290, #47)**: Not needed any more. With a pointwise `stack`, the flow `stack` draws the stacked area wherever it is written, so there is nothing for a mark method to add. That keeps `stack` one operator with one place, and matches #47's rejection of approach C.
-- **Ridgeline as a stack (round 5)**: Withdrawn. Round 5 showed a stack of whole ribbons as a real chart and used it to keep `stack` a box stack. Those boxes cannot be added (Josh), and the real ridgeline is a `spread` with overlap. Under the new rule that spec is an error, or, with a position tier inside, the stacked area.
+- **"Which rows join" (#745, #786)**: Unchanged: rows join within one flow cell. A divided ribbon's pieces join by the cut's `by` key, which is written.
+- **"In what order"**: The `along` key's order, `x` when `along` is absent. Sorting by x (ggplot's `geom_line`) is a decision.
+- **"Spooky action" in fusion (#748)**: `x`, `y` and `along` become a `scatter`, the same kind of written rewrite #748 already does for `h`.
+- **Josh on round 6: not local**: Answered by divide: `cut` reads only its own mark's rows. Round 7's first answer, a `.stack()` modifier, made the non-locality visible; divide removes it.
+- **Stack as a mark method (#290)**: Not needed. #290's note said a mark-side stack on a connector can only mean stacking the rows; the divide does that work from the parent's side.
+- **#47, approach C**: C was `ribbon().stack()`, rejected as a second route to the flow `stack`. The lead no longer uses it, so #47's decision stands; picking the runner-up would reverse it. `ribbon().cut()` divides one ribbon, and that fits #47's title, "Stacked/Divided Ribbons": a sankey link divided lengthwise into strands is the same `cut`.
+- **The methods rule (api-design.md)**: `cut` is the rule's own example of a method with a function twin: `image(...).cut(opts)` is `cut(image(...), opts)`. On a ribbon it is still one child.
+- **`ChartBuilder.stack()`**: `chart(d).stack(s)` is sugar for `.flow(stack(s))`, the local operator, so `chart(d).stack(s).mark(ribbon({ x, h }))` is the error case. Keep it or remove it is a decision.
 
 ### Why line and ribbon, but not rect
 
@@ -239,11 +317,12 @@ chart(drivingShifts)
 chart(drivingShifts).mark(line({ x: "year", y: "gas" }));
 ```
 
-Today `chart(drivingShifts).mark(rect({ x: "year", y: "gas" }))` draws one rect, at the mean year and mean gas (render). A rect is one shape with one position, so its position channel aggregates its cell's rows (the channel types from #1197: positions average, sizes add). To get one rect per year, the flow makes one cell per year. Which cells, and how they are arranged (`scatter`, `spread`, `stack`), is a real choice, and it belongs in the flow.
+Today `chart(drivingShifts).mark(rect({ x: "year", y: "gas" }))` draws one rect, at the mean year and mean gas (render). A rect is one shape with one position, so its position channel aggregates its cell's rows (positions average, sizes add, #1197). To get one rect per year, the flow makes one cell per year. Which cells, and how they are arranged (`scatter`, `spread`, `stack`), is a real choice, and it belongs in the flow.
 
-A line or ribbon is one shape with many positions. Its `x` cannot be one mean value; the only reading is a list, one vertex per row group. So the sugar adds no choice: the cells of a path are always "one per `along` value, placed at x", which is `scatter`. The rule a user can predict: a mark's channels describe one shape per cell; for a shape with one position they are values of the cell, for a shape through many points they are its vertices.
+A line or ribbon is one shape with many positions. Its `x` cannot be one mean value; the only reading is a list, one vertex per row group. So the sugar adds no choice: the cells of a path are always one per `along` value, placed at x, which is `scatter`. The rule a user can predict: a mark's channels describe one shape per cell; for a shape with one position they are values of the cell, for a shape through many points they are its vertices.
 
-Where it stops: a line through the tops of a bar chart's bars (`spread` over lakes) has no data x, so it keeps the flow form and reads the bars' cells. The sugar only covers paths placed by data position.
+The same split explains the divide. A rect's `h` over its rows is their sum, so a rect with a `cut` is a bar divided. A ribbon's `h` at each vertex is the sum of that vertex's rows, so a ribbon with a `cut` is an area divided at each x. Where it stops: a line through the tops of a bar chart's bars has no data x, so it keeps the flow form.
+
 
 ### A twin mark (`area`, `path`) instead?
 
@@ -257,13 +336,158 @@ chart(rows).mark(line({ x: "x", y: "y" })); // sorted by x
 chart(rows).mark(path({ x: "x", y: "y" })); // data order
 ```
 
-With a pointwise `stack`, the stacking behavior is the `stack` operator, so an `area` mark with stacking built in would be a second route to it: the partial overlap the repo rules forbid (one concept, one operator; zero overlap or full subsumption). ggplot's `geom_area` is a `geom_ribbon` with a default position, and GoFish has no default positions.
+An `area` mark with stacking built in would be `ribbon` plus a default division. Two names for one shape that differ only in a default is the overlap the repo rules forbid (one concept, one operator; consolidate on the current name). ggplot's `geom_area` is a `geom_ribbon` with a default position, and GoFish has no default positions. Josh's point holds too: `line` would need a twin, and no name tells them apart.
 
-The line twin is about order, not stacking. ggplot's `path` is the precedent name, and a cleaner name than `link`. But the difference is one choice, sort or keep data order, which fits an option of `line` (`along` with or without a sort, decision 4) better than a second mark. Consolidate on the current names, `line` and `ribbon`.
+The line twin is about order, not stacking. ggplot's `path` is the precedent name, and clearer than `link`. But the difference is one choice, sort or keep data order, which fits an option of `line` better than a second mark.
 
 - **ggplot2**: `geom_area` stacks by default (`position = "stack"`); `geom_ribbon` does not and takes `ymin`/`ymax`. `geom_line` sorts by x; `geom_path` keeps data order.
 - **Vega-Lite**: `area` stacks by default when a non-position channel maps a field; `line` connects in x order unless an `order` channel is given; `trail` is a separate mark.
 - **Observable Plot**: `areaY` does not stack by itself; a `stackY` transform does it. `line` keeps data order (from memory).
+
+## What is stack?
+
+![stack with size](img/s-mosaic-stack.png)
+
+![treemap dice then slice](img/s-mosaic-treemap.png)
+
+```js
+// stack with `size`: the box is given, and the children divide it by weight
+chart(seafood)
+  .flow(
+    stack({ by: "lake", dir: "x", size: "count" }),
+    stack({ by: "species", dir: "y", size: field("count").normalize() })
+  )
+  .mark(rect({ fill: "species" }));
+
+// treemap with Tile.dice, then Tile.slice: the same division
+chart(seafood)
+  .flow(
+    treemap({ by: "lake", size: "count", tile: Tile.dice }),
+    treemap({ by: "species", size: "count", tile: Tile.slice })
+  )
+  .mark(rect({ fill: "species" }));
+```
+
+- **Two jobs share one name: yes**: (a) Lay whole children end to end so their sizes add up to the whole (bars, a mosaic's segments). Local, and it needs CanSum. (b) A running sum per position for a collective mark: at each x, the heights of the series below. (b) is a computation across marks along a key, which is why it fights the mark hierarchy when it is spelled on the series.
+- **Two directions, one rule**: The rule: the whole's size is the sum of its parts along one axis. Bottom-up, the parts are given and the whole is their sum: `stack`. Top-down, the whole is given and the parts divide it: by weight (`stack` with `size`, `treemap` with `Tile.slice` or `Tile.dice`, `cut` with `size`), or by cells of a scale (`partition`, `cut` by a binned key). Job (b) read top-down is a divide of the total, which is local. That is why divide fits it.
+- **Is `partition` the twin of `stack`? No**: `partition` places each group in the cell of a binned key at its true place on one continuous scale (descriptors.ts). Its sizes come from the scale, not from siblings. The weight-divider is `stack`'s own `size` mode.
+- **Overlap regime: a large partial overlap**: Dividing a box by weight along one axis is spelled three ways: `stack({ size })`, `treemap({ tile: Tile.slice })` and `cut({ size })`. The mosaic renders show the first two drawing the same picture (treemap also sorts by size). That is a design smell, separate from this proposal; drafted as `issues/stack-divide-family.md`. `stack`'s descriptor doc also still says "`spread({ glue: true })`", the framing Josh rejected on 11-05.
+- **(b) as a data transform?**: d3.stack and the Vega-Lite stack transform write the offsets into the rows (`y0`, `y1`), and the mark places each vertex by its span (code below). Nothing reaches across marks, and the offsets are visible columns. But it repeats the summing next to the layout `stack` (a partial overlap), and loses px sizes, CanSum checks and centered stacks. Divide gets the same locality with no second sum. The transform is third.
+- **Where `spread` sits**: `spread` keeps each child's space separate, with gaps: a ridgeline, small multiples. Nothing adds up, so it is outside the rule.
+- **Recommendation**: `stack` stays an operator for job (a). Job (b) is a divide of the total, spelled `cut` on the collective mark. The family overlap goes to its own issue.
+
+```js
+// Job (b) as a data transform (d3.stack, the Vega-Lite stack transform):
+// write the offsets into the rows, then place each vertex by its span
+chart(rows)
+  .flow(
+    derive(stackOffsets({ by: "c", along: "x", value: "y" })), // adds y0, y1
+    group({ by: "c" }),
+    scatter({ by: "x", x: "x", yMin: "y0", yMax: "y1" })
+  )
+  .mark(ribbon({ fill: "c" }));
+```
+
+## Divide: Mascot's operator, GoFish's cut
+
+```js
+// Mascot.js, docs/demos/static/stackedAreaChart.js (verbatim, trimmed)
+let rect = scene.mark("rect", { top: 60, left: 100, width: 800, height: 450 });
+let anyArea = msc.densify(rect, data, {
+  orientation: "horizontal",
+  attribute: "date",
+});
+let { newMark: area, collection: areas } = msc.divide(anyArea, data, {
+  orientation: "vertical",
+  attribute: "industry",
+});
+msc.update(areas.layout, { vertCellAlignment: "bottom" }); // "middle" in streamGraph.js
+msc.encode(area, "height", "unemployments");
+msc.encode(area.anyVertex, "x", "date");
+```
+
+- **What Mascot has**: Six generative operations that join graphics with data (Liu et al., MSC, VIS 2024, section 4.2): repeat, divide, densify, classify, repopulate and stratify. Divide "splits a mark into a collection of smaller marks": a rect into rects (horizontal or vertical), a circle into a pie or rings, a line into lines, a pie or ring into arcs. Densify "transforms a rectangle into an area mark, a circle into a polygon, and a line into a polyline" by adding one vertex per value. Stratify layers a mark by a tree (icicle, sunburst). Both divide and densify give each new mark or vertex the rows that share a value as its data scope.
+- **How Mascot draws a stacked area**: `stackedAreaChart.js` in the Mascot gallery: densify a rect by date (one area with a vertex per date), then divide that area by industry, then set the collection layout's `vertCellAlignment` to `bottom`. `streamGraph.js` is the same with `middle`. A stacked bar is repeat then divide (paper, section 4.6). So in Mascot a stacked area is literally a divided area, and the parent area exists before its pieces.
+- **Is a croissant a divided density?**: Yes: the density area divided across x at its quantiles. That is a divide by cells, not by weight.
+- **Is divide partition applied to one mark?**: Half of it. Divide by cells (the croissant) is `partition` applied to one mark: the cells come from a binned key on the mark's scale. Divide by weight (the stacked area, the 100% bar) is `stack`'s top-down mode (`size`) applied to one mark.
+
+### The croissant: a density divided along x
+
+![](img/c-normal.png)
+
+The same `cut`, across x and by cells: the pieces are the parts of the density inside each quantile cell, with a gap. Today the croissant hides a density layer and intersects it with one region per cell; `cut` is defined as exactly that (`mask(window, source)`, #404).
+
+```js
+// The croissant: a density divided along x at its quantiles (absolute cells)
+chart(days).mark(
+  ribbon({ x: "v", h: x.density("v") }).cut({
+    by: x.bin(Bin.quantiles(10)),
+    dir: "x",
+    inset: 2,
+  })
+);
+```
+
+Today:
+
+```js
+// Today: a hidden density layer, a grid, and an intersect layer per cell
+chart(densityCurve(d))
+  .flow(scatter({ x: "v" }))
+  .mark(ribbon({ h: "density" }).name("density").hidden())
+  .layer(
+    chart(quantileRows(d, 10))
+      .flow(partition({ by: field("v").bin(Bin.quantiles(10)) }))
+      .mark(intersect([region(), ref("density")]))
+  );
+```
+
+### 100% bars: a rect divided by weight
+
+![](img/d-hundred-cut.png)
+
+Today's `cut` already divides each lake's fixed-height rect by species weight (render). Two gaps show: the slices do not read `fill` per piece (they render black), and today the pieces are laid out by a `stack` in the flow above the mark, which is the hierarchy fight in another form.
+
+```js
+// 100% bars: a fixed-height rect per lake, divided by species weight
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(
+    rect({ w: 40, h: 200, fill: "species" }).cut({
+      by: "species",
+      dir: "y",
+      size: "count",
+    })
+  );
+```
+
+Today:
+
+```js
+// Today (render): cut returns one slice per row, and a stack lays them out.
+// The slices do not read fill per piece yet (they render black).
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }), stack({ dir: "y" }))
+  .mark(
+    rect({ w: 40, h: 200, fill: "species" }).cut({ dir: "y", size: "count" })
+  );
+
+// Today, with stack's top-down mode
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }),
+    stack({ by: "species", dir: "y", size: field("count").normalize() })
+  )
+  .mark(rect({ fill: "species" }));
+```
+
+### Why GoFish set divide aside, and whether the reasons hold
+
+- **"Coupled to marks in those systems, whereas I think they should be pure operators" (#48)**: Not a good reason any more. Dividing empty space does want an operator (`partition`, `bin`). But when the pieces take their shape from a mark (an image, an area, a circle into a pie), the coupling is the point. GoFish conceded this in #208 ("probably best exposed as a modifier", goal syntax `image().cut()`) and shipped `cut` that way in #404.
+- **"It returns an array of children; operators return one element" (#208)**: Was a real constraint, now solved: `cut` is an expand mark. What is left is its syntax, which Josh wanted to revisit (#404): today a flow operator above the mark lays out the pieces. For a divided area the pieces would stay inside the cut mark, which is cleaner.
+- **A second route to stacked bars**: Real, but at the edge. `spread, stack, rect` and `spread, rect.cut(...)` draw the same stacked bar. Overlap at a degenerate case (a rect divided is rects stacked) is allowed if `cut` on a rect is defined by that rewrite, `stack({ size })` inside the rect's box. The bigger overlap is in the family below.
+- **Mascot links attach at a node's middle (#47)**: A criticism of Mascot's sankey links, not of divide.
+- **Sizes are relative in cut, absolute in stack (#47 anchors notes)**: Still true and still matters for sankey slots, which need absolute sizes and slack. For a divided area it does not matter: the parent's `h` is the sum, so relative and absolute agree.
 
 ## Relation to stacked ribbons (#47)
 
@@ -315,18 +539,18 @@ chart(nodes)
   .layer(ribbon({ from: "nodes.out", to: "nodes.in" }));
 ```
 
-- **Is a stacked area the same idea?**: Yes, at the level of structure. #47's own summary says it: "a sankey is a stacked area chart whose stacks are nodes". In a stacked area each x is a position, the series ends stack at it, and a ribbon threads the ends that share a key. Parallel sets are the same structure with discrete axes as the positions (render). The pointwise stack at one x is a 1D flow in the space of that position, which is what an anchor runs on a mark's side.
-- **Where they differ**: Where the 1D space comes from. In a stacked area or parallel sets it is a position the flow made (a key of `scatter` or `spread`), with no mark of its own: no size, no slack, no second side, and the end order is the series key's order. In a sankey it is a side of a placed node (`x-min`, `x-max`), and that brings what #47 had to add: a node with its own size and slack, two sides with different end orders, ends ordered by the far node's position, and links joined by shared rows or by name (`nodes.out`), not threaded by one key.
-- **Overlap regime**: Exact composition, on one condition. The kernel is `stack` (or `spread`) run in a 1D space. The flow runs it in a position's space; an anchor runs it in a part's space. If anchors are defined as "the ordinary flow, in the space of a named part", as #47 page v9 (#composition) argues, then neither is a second stacking engine. If `.anchor` grew its own stacking rule, or this proposal kept `ribbon().stack()`, that would be the large partial overlap.
-- **Which spelling**: Both, for different hosts. Stacked area, streamgraph and parallel sets keep the flow form: their positions come from the data, and there is no node to hang an anchor on. Sankey, chord and labels use anchors: their ends live on marks placed by something else. A stacked area written with anchors would need an invisible host mark at every x, which is what the flow form already is.
-- **Conflicts with #47**: Round 5 had one: `ribbon().stack()`, which #47 rejected as a second route to the flow `stack` (approach C). Round 6 drops it. "Ribbon width from anchor sizes" agrees: the fused `h` already goes to an invisible anchor (#748), so the ribbon's width is its slot's size. References by anchor name do not arise: the fused form joins within one flow cell, and names are needed only across charts. #47's open review item (move the join from the anchor to `resolve`) is not touched.
+- **Is a stacked area the same idea?**: Same structure, different place. #47's own summary: "a sankey is a stacked area chart whose stacks are nodes". In a stacked area each x is a position, the series ends stack at it, and a ribbon threads the ends that share a key. Parallel sets are the same structure with discrete axes (render). The divided ribbon's rewrite builds exactly that: an invisible anchor per (x, series), stacked inside each x slice.
+- **Where they differ**: Where the 1D space comes from. A stacked area's slices are positions the flow made, with no mark of their own: no size, no slack, no second side, and the end order is the series key's order. A sankey's ends live on a side of a placed node, which brings node size and slack, in and out sides with their own orders, ends ordered by the far node, and links joined by row or by name (`nodes.out`).
+- **Anchors are a divide of a side**: An anchor's slots divide one part of a mark (its side) into intervals. That is Mascot's divide applied to a part, with absolute sizes and slack. So the family is: `cut` divides a mark's extent, `.anchor()` divides a part of its outline, and both are local to their host mark.
+- **No reversal of #47**: An earlier draft of this round brought back `ribbon().stack()` and reversed #47's approach C. With divide as the lead, that reversal is withdrawn: #47's decision stands. It comes back only if Josh picks the runner-up.
+- **Other #47 decisions**: "Ribbon width from anchor sizes" agrees: the fused `h` goes to an invisible anchor (#748). References by anchor name do not come up. #47's open item about moving the join to `resolve` is not touched.
 
-| System          | Stacking and grouping                                                                                                                                                                                                                                                                        | Checked                                                 |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| ggplot2         | `geom_area(position = "stack")`; `geom_density(position = "stack")` stacks densities on a shared grid. The stack is an option of the layer, computed on the rows. `geom_line` connects in x order; `geom_path` in data order. `group` defaults to the interaction of the discrete variables. | verified (aes_group_order, geom_path pages)             |
-| Vega-Lite       | `stack` is a property of the x or y encoding (`zero`, `normalize`, `center`, `null`), on by default for bar, area and arc when a non-position channel maps another field. Non-position channels set the series; the `order` channel sets the stack order.                                    | verified (stack page)                                   |
-| Observable Plot | `Plot.areaY(data, Plot.stackY({ x, y, fill }))`: the stack is a transform on the mark's options; `z`, `fill` or `stroke` set the series.                                                                                                                                                     | from memory: the docs page refused the fetch (HTTP 429) |
-| matplotlib      | `ax.stackplot(x, y1, y2, ...)`: a separate function over shared x.                                                                                                                                                                                                                           | from memory                                             |
+| System | Stacking and grouping | Checked |
+| --- | --- | --- |
+| ggplot2 | `geom_area(position = "stack")`; `geom_density(position = "stack")` stacks densities on a shared grid. The stack is an option of the layer, computed on the rows. `geom_line` connects in x order; `geom_path` in data order. `group` defaults to the interaction of the discrete variables. | verified (aes_group_order, geom_path pages) |
+| Vega-Lite | `stack` is a property of the x or y encoding (`zero`, `normalize`, `center`, `null`), on by default for bar, area and arc when a non-position channel maps another field. Non-position channels set the series; the `order` channel sets the stack order. | verified (stack page) |
+| Observable Plot | `Plot.areaY(data, Plot.stackY({ x, y, fill }))`: the stack is a transform on the mark's options; `z`, `fill` or `stroke` set the series. | from memory: the docs page refused the fetch (HTTP 429) |
+| matplotlib | `ax.stackplot(x, y1, y2, ...)`: a separate function over shared x. | from memory |
 
 ## Rows over a continuous index
 
@@ -378,24 +602,29 @@ Python:
 
 ### Two densities, stacked at each x
 
-**Works: stack adds inside each slice.**
+**Works: the stack runs inside each slice.**
 
 ![](img/c-stack.png)
 
-Josh's picture, with the stack in the flow. `sweep` crosses each params row (one per series) with v. The mark's `x: "v"` becomes a `scatter` by v, and the pointwise `stack` adds f(v) and g(v) at every v, the way it adds two bar heights. The render runs the rewrite on an emulated continuum. In the render g is scaled by 0.6.
+Josh's picture, divided. `sweep` crosses each params row (one per series) with v. The ribbon is the total density at each v (sizes add), and `cut` divides it by series, so g sits on f at every v. The rewrite is a stack inside each v slice, which the render runs on an emulated continuum. In the render g is scaled by 0.6.
 
 ```js
 // one row per curve: { series, mean, sd }; x = dist.normal({ mean: "mean", sd: "sd" })
+// The ribbon is the total density at each v; cut divides it by series
 chart(params)
-  .flow(sweep({ v: [-4, 4] }), stack({ by: "series", dir: "y" }))
-  .mark(ribbon({ x: "v", h: x.density("v"), fill: "series" }));
+  .flow(sweep({ v: [-4, 4] }))
+  .mark(
+    ribbon({ x: "v", h: x.density("v"), fill: "series" }).cut({
+      by: "series",
+      dir: "y",
+    })
+  );
 ```
 
 Rewrites to (runs today):
 
 ```js
-// What it rewrites to: x on the mark is a scatter before the mark,
-// and the pointwise stack moves inside each v slice
+// What it rewrites to: x is a scatter by v, and the division is a stack inside each v slice
 chart(params)
   .flow(
     sweep({ v: [-4, 4] }),
@@ -410,8 +639,8 @@ Python:
 ```python
 (
     chart(params)
-    .flow(sweep(v=[-4, 4]), stack(by="series", dir="y"))
-    .mark(ribbon(x="v", h=x.density("v"), fill="series"))
+    .flow(sweep(v=[-4, 4]))
+    .mark(ribbon(x="v", h=x.density("v"), fill="series").cut(by="series", dir="y"))
 )
 ```
 
@@ -539,15 +768,15 @@ span({ v: x.range() }); // clashes with a channel's { min, max } span
 sweep({ v: x.interval(0.95) });
 ```
 
-| Name                                  | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | Note                                         |
-| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
-| `sweep` (recommended)                 | No GoFish export or option uses it, on main or on the #980 branch. It appears only as local variables in arc code and in prose: `centralAngle` is the polar "total angular sweep", and the animation clock input documents "one sweep of the domain", the same meaning. A verb that says the index moves over the whole interval. Python: `sweep(v=[a, b])`.                                                                                                                                                                                                                                                                            | no clash; no visualization precedent checked |
-| `continuum`                           | Free everywhere. A noun, and long; it names the result, not the step.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | no clash; runner-up name                     |
-| `interval` (Josh's suggestion)        | Clashes in the uncertainty vocabulary. On the #980 branch `x.interval(0.95)` is a central interval of a Dist (25 uses in its proposal docs and stories), `interval({ x, levels })` is the user function that draws one, after ggdist's interval geom, and `centralIntervals` is a helper. Main already calls a `dims` entry `{ min, max }` an interval. The operator could take the value constructor's place (`interval({ v: [0, 2 * Math.PI] })`), but then `interval(...)` would make rows in a flow and a span everywhere else. Better: interval is the type of `sweep`'s argument, so `sweep({ v: x.interval(0.95) })` reads well. | serious clash                                |
-| `domain`                              | TikZ's `domain=a:b` and Mathematica's `{x, a, b}` iterator are the precedent. But GoFish already has the `Domain` family (`Domain.discrete(levels)`, with `Domain.continuous` planned as the type of an interval of numbers), plus every scale domain and the domain-inference pass.                                                                                                                                                                                                                                                                                                                                                    | serious clash                                |
-| `span`                                | Main uses span for a channel's `{ min, max }` extent (`xMin`/`xMax` in scatter's `dims`).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | clash                                        |
-| `sample`, `range`, `along`            | Taken: #980's `value.sample`, `x.range()`, and the `along` option of `line` and `ribbon`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | rule out                                     |
-| Precedent for a continuous index step | Mathematica's `{x, xmin, xmax}` iterator. TikZ `domain` (initially -5:5) with `samples` (initially 25). Vega-Lite `sequence` (`step` defaults to 1, `stop` exclusive) and polars `linear_space` (requires `num_samples`) are discrete. Wilkinson's GPL puts a density in a channel instead: `line(position(density.normal(x)))`.                                                                                                                                                                                                                                                                                                        | verified                                     |
+| Name | What it is | Note |
+| --- | --- | --- |
+| `sweep` (recommended) | No GoFish export or option uses it, on main or on the #980 branch. It appears only as local variables in arc code and in prose: `centralAngle` is the polar "total angular sweep", and the animation clock input documents "one sweep of the domain", the same meaning. A verb that says the index moves over the whole interval. Python: `sweep(v=[a, b])`. | no clash; no visualization precedent checked |
+| `continuum` | Free everywhere. A noun, and long; it names the result, not the step. | no clash; runner-up name |
+| `interval` (Josh's suggestion) | Clashes in the uncertainty vocabulary. On the #980 branch `x.interval(0.95)` is a central interval of a Dist (25 uses in its proposal docs and stories), `interval({ x, levels })` is the user function that draws one, after ggdist's interval geom, and `centralIntervals` is a helper. Main already calls a `dims` entry `{ min, max }` an interval. The operator could take the value constructor's place (`interval({ v: [0, 2 * Math.PI] })`), but then `interval(...)` would make rows in a flow and a span everywhere else. Better: interval is the type of `sweep`'s argument, so `sweep({ v: x.interval(0.95) })` reads well. | serious clash |
+| `domain` | TikZ's `domain=a:b` and Mathematica's `{x, a, b}` iterator are the precedent. But GoFish already has the `Domain` family (`Domain.discrete(levels)`, with `Domain.continuous` planned as the type of an interval of numbers), plus every scale domain and the domain-inference pass. | serious clash |
+| `span` | Main uses span for a channel's `{ min, max }` extent (`xMin`/`xMax` in scatter's `dims`). | clash |
+| `sample`, `range`, `along` | Taken: #980's `value.sample`, `x.range()`, and the `along` option of `line` and `ribbon`. | rule out |
+| Precedent for a continuous index step | Mathematica's `{x, xmin, xmax}` iterator. TikZ `domain` (initially -5:5) with `samples` (initially 25). Vega-Lite `sequence` (`step` defaults to 1, `stop` exclusive) and polars `linear_space` (requires `num_samples`) are discrete. Wilkinson's GPL puts a density in a channel instead: `line(position(density.normal(x)))`. | verified |
 
 ## The croissants in the short form (B)
 
@@ -975,15 +1204,15 @@ croissant(grid, { n: 5, fill: PAPER_FILL, stroke: PAPER_STROKE });
 
 C is rows over a continuous type: a continuum is the interval with uniform weight, rows are point masses, and a Dist is a weight that totals 1. Everything B loses without rows is an ordinary operation on a continuous value. chebfun ("computing with functions") is the closest precedent: it stores a function adaptively, to about machine precision, and overloads MATLAB's vector commands, so `sum` is a definite integral and `max`, `roots` and `cumsum` work on the function. GoFish would need far less, only what the table below lists.
 
-| Lost without rows | Operation                | Field                              | Measure                                            | Rows                 |
-| ----------------- | ------------------------ | ---------------------------------- | -------------------------------------------------- | -------------------- |
-| Hover datum       | evaluate at a point      | f(x₀)                              | density and cdf at x₀                              | the row at x₀        |
-| `selectAll`       | the value itself         | one curve                          | one Dist                                           | the rows             |
-| `partition`       | restrict to an interval  | f on [a, b]                        | the measure cut to [a, b] (mass = its probability) | the rows in the cell |
-| `stack`           | pointwise add            | f + g (same unit)                  | the sum of the measures (a weighted mixture)       | add per x            |
-| sum               | integrate                | ∫f dx, in a new unit (degree-days) | the total weight (1 for a Dist)                    | Σ weights            |
-| median            | where half the weight is | not defined: a field has no weight | the 0.5 quantile                                   | the median row       |
-| y domain          | max                      | max f                              | max density                                        | max value            |
+| Lost without rows | Operation | Field | Measure | Rows |
+| --- | --- | --- | --- | --- |
+| Hover datum | evaluate at a point | f(x₀) | density and cdf at x₀ | the row at x₀ |
+| `selectAll` | the value itself | one curve | one Dist | the rows |
+| `partition` | restrict to an interval | f on [a, b] | the measure cut to [a, b] (mass = its probability) | the rows in the cell |
+| `stack` | pointwise add | f + g (same unit) | the sum of the measures (a weighted mixture) | add per x |
+| sum | integrate | ∫f dx, in a new unit (degree-days) | the total weight (1 for a Dist) | Σ weights |
+| median | where half the weight is | not defined: a field has no weight | the 0.5 quantile | the median row |
+| y domain | max | max f | max density | max value |
 
 ```js
 const mass = field("Body Mass (g)").kde(); // a measure: weight spread over x
@@ -1011,18 +1240,18 @@ Precedent:
 
 ## Precedent: a function as a mark input
 
-| System                  | What the user writes              | Range                                 | Resolution                                                                                                                       | Screen-aware                      | Checked                      |
-| ----------------------- | --------------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- | ---------------------------- |
-| Mathematica `Plot`      | `Plot[f[x], {x, lo, hi}]`         | user                                  | `PlotPoints` (initial even samples) then up to `MaxRecursion` adaptive subdivisions; both `Automatic` by default                 | no: adapts in its own space       | verified, reference page     |
-| Plots.jl                | `plot(f, xmin, xmax)`             | user                                  | `PlotUtils.adapted_grid`: 31 even points, refined up to 7 times where curvature is large; applied after the axis scale functions | no: data space                    | verified, source             |
-| Makie                   | `lines(0..10, sin)`               | the interval                          | `convert_arguments(::AbstractInterval, ::Function)` calls the same `adapted_grid`                                                | no: data space                    | verified, source             |
-| ggplot2 `geom_function` | `geom_function(fun = dnorm)`      | the scale (`xlim` to override)        | `n = 101`, even                                                                                                                  | no                                | verified, reference page     |
-| function-plot           | `{ fn: "x^2" }`                   | the viewport                          | interval arithmetic picks where to sample; re-evaluated whenever the scale changes                                               | yes                               | verified, docs page          |
-| d3-geo resample         | `projection.precision(...)`       | n/a                                   | adaptive to a pixel tolerance; the model for `adaptive-resampling.ts`                                                            | yes                               | GoFish source                |
-| seaborn `kdeplot`       | `kdeplot(x=...)`                  | data ± `cut=3` bandwidths             | `gridsize=200`                                                                                                                   | no                                | round 1 survey               |
-| ggdist `stat_slab`      | `aes(xdist = dist_normal(0, 1))`  | 0.001 to 0.999 quantiles (`p_limits`) | `n = 501`                                                                                                                        | no; intervals exact from the dist | round 1 survey               |
-| Vega-Lite `density`     | `{ density: "x", extent, steps }` | data extent, or `extent`              | adaptive, 25 to 200 steps                                                                                                        | partly                            | round 1 survey               |
-| Desmos                  | type `y = sin(x)`                 | the viewport                          | adaptive, redone on pan and zoom                                                                                                 | yes                               | not verified: no public docs |
+| System | What the user writes | Range | Resolution | Screen-aware | Checked |
+| --- | --- | --- | --- | --- | --- |
+| Mathematica `Plot` | `Plot[f[x], {x, lo, hi}]` | user | `PlotPoints` (initial even samples) then up to `MaxRecursion` adaptive subdivisions; both `Automatic` by default | no: adapts in its own space | verified, reference page |
+| Plots.jl | `plot(f, xmin, xmax)` | user | `PlotUtils.adapted_grid`: 31 even points, refined up to 7 times where curvature is large; applied after the axis scale functions | no: data space | verified, source |
+| Makie | `lines(0..10, sin)` | the interval | `convert_arguments(::AbstractInterval, ::Function)` calls the same `adapted_grid` | no: data space | verified, source |
+| ggplot2 `geom_function` | `geom_function(fun = dnorm)` | the scale (`xlim` to override) | `n = 101`, even | no | verified, reference page |
+| function-plot | `{ fn: "x^2" }` | the viewport | interval arithmetic picks where to sample; re-evaluated whenever the scale changes | yes | verified, docs page |
+| d3-geo resample | `projection.precision(...)` | n/a | adaptive to a pixel tolerance; the model for `adaptive-resampling.ts` | yes | GoFish source |
+| seaborn `kdeplot` | `kdeplot(x=...)` | data ± `cut=3` bandwidths | `gridsize=200` | no | round 1 survey |
+| ggdist `stat_slab` | `aes(xdist = dist_normal(0, 1))` | 0.001 to 0.999 quantiles (`p_limits`) | `n = 501` | no; intervals exact from the dist | round 1 survey |
+| Vega-Lite `density` | `{ density: "x", extent, steps }` | data extent, or `extent` | adaptive, 25 to 200 steps | partly | round 1 survey |
+| Desmos | type `y = sin(x)` | the viewport | adaptive, redone on pan and zoom | yes | not verified: no public docs |
 
 Taking a function as a mark input is common (Mathematica, Plots.jl, Makie), and all of them sample adaptively without a knob in the usual case. But they adapt in data space at conversion time. Only the viewport systems (function-plot, Desmos) and d3-geo adapt on the screen. B does both: the function is in the spec, and it is sampled in pixels through the coordinate transform.
 
@@ -1044,16 +1273,19 @@ Taking a function as a mark input is common (Mathematica, Plots.jl, Makie), and 
 
 ## Open decisions
 
-1. Should `line` and `ribbon` take `x`, `y` and `along`, as sugar for a `scatter` right before the mark?
-2. Should `stack` add heights at each shared position, so it commutes with a position tier on the other axis?
-3. In a pointwise stack, is a position missing from one child a 0 or an error?
-4. Should the engine do it by moving `stack` inside the position tier (one rewrite), or match positions inside `stack`?
-5. Is a stack of whole regions with varying height an error, with a message that points at `spread`?
-6. Agree: no `.stack()` method on marks, and no `area` or `path` twin?
-7. Should a field in `stroke` or `fill` split rows into series, or stay an error that asks for `group({ by })`?
-8. Should `line({ x })` sort by x, or keep data order?
-9. Anchors (#47) as "the ordinary flow in a part's space", sharing `stack` with the flow: agree?
-10. Name of the continuous operator: `sweep`, `continuum`, or `interval`?
-11. Which operators may run one slice at a time on a continuum?
-12. Keep B, `ribbon({ h: x.density() })`, as the shortest form?
-13. The earlier open items stand: stack extent over Dists, cell weight, ridgeline quantiles, field vs measure, default range, infinite cells, peak warning.
+1. Divide or modifier: `ribbon({ x, h }).cut({ by: "c", dir: "y" })` (the lead), or `ribbon(...).stack({ by: "c" })` on the series ribbons (runner-up)?
+2. Is the name `cut` right for dividing an area, or should `cut` be renamed `divide` (Mascot's word), with the image story as one use?
+3. Should a divided ribbon's pieces stay inside the cut mark, so no flow operator lays them out? (Today's cut needs a `stack` above it, the syntax #404 left to revisit.)
+4. Stacked lines have no extent to divide. Accept the flow `stack` inside a `scatter` for them, or add an edge-only paint so they are a cut's top edges?
+5. Should `line` and `ribbon` take `x`, `y` and `along`, as sugar for a `scatter` right before the mark?
+6. Is the error text for a flow `stack` of whole ribbons right, and should it name both `cut` and `spread`?
+7. Keep `ChartBuilder.stack()` (sugar for the local flow `stack`), or remove it?
+8. Streamgraph centering: keep `alignment: "middle"` on the outer `spread`, or put it on the cut?
+9. In a divided ribbon, is a series missing at one x a 0 or an error?
+10. Should a cut mark read `fill` and `stroke` per piece?
+11. Should `line({ x })` sort by x, or keep data order?
+12. #47 approach C stays rejected (no reversal). Agree?
+13. File `issues/stack-divide-family.md` (stack with `size`, treemap slice/dice and cut all divide a box by weight)?
+14. Name of the continuous operator: `sweep`, `continuum`, or `interval`? Which operators may run one slice at a time on it?
+15. Keep B, `ribbon({ h: x.density() })`, as the shortest form?
+16. The earlier open items stand: stack extent over Dists, cell weight, ridgeline quantiles, field vs measure, default range, infinite cells, peak warning.

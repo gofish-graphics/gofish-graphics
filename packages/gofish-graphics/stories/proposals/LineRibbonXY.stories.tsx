@@ -12,6 +12,8 @@ import {
   ribbon,
   scatter,
   stack,
+  Tile,
+  treemap,
   Unit,
 } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
@@ -20,19 +22,18 @@ import { seafood } from "../../src/data/catch";
 
 /**
  * THROWAWAY prototype stories for the croissant-sampling proposal (#1332),
- * line and ribbon section. The proposal lets `line` and `ribbon` take their
- * position channels (`x`, `y`, `along`), as sugar for one rewrite:
+ * line and ribbon section (round 7). Two sugars, each one written rewrite:
  *
- *   .flow(...ops).mark(R({ x, y, along, ...rest }))
- *     ==> .flow(...ops, scatter({ by: along ?? x, x, y })).mark(R(rest))
+ *   .mark(R({ x, y, along, ...rest }))
+ *     ==> .flow(..., scatter({ by: along ?? x, x, y })).mark(R(rest))
+ *   .mark(R(...).stack(s))
+ *     ==> the same, with stack(s) as the last flow step (inside the slices)
  *
- * and reads `stack` pointwise: it adds the children's heights at each
- * position they share. Under that reading `stack` commutes with the mark's
- * position tier, so a stack written before the mark draws the same stacked
- * area as one written after the scatter. `xy(ops, pos, s)` builds the flow
- * the engine would run (the stack goes after the scatter), so each story
- * draws the proposed spelling. `StackOuterToday` shows what today's box
- * stack does with the stack written first.
+ * The flow `stack` stays local: it stacks whole children, so a stack of
+ * whole ribbons whose height varies is an error. `xy(ops, pos, s)` builds
+ * the rewritten flow, so each story draws the proposed spelling.
+ * `StackOuterToday` and `StackOuterBarsToday` show what today's engine draws
+ * for the specs that become errors.
  */
 const meta: Meta = { title: "Proposals/Line Ribbon XY" };
 export default meta;
@@ -168,6 +169,45 @@ export const StackOuterBarsPointwise: StoryObj = {
   },
 };
 
+// .flow(spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }))
+// .mark(ribbon({ h: "count", fill: "species" }).stack({ by: "species", dir: "y" }))
+// The streamgraph: the lakes are a spread (no data x), so `.stack()` goes
+// right after it. The rewrite is today's gallery Streamgraph.
+export const StreamLakes: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(seafood, { w: 480, h: 260 })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
+        stack({ by: "species", dir: "y" })
+      )
+      .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
+      .render(container);
+    return container;
+  },
+};
+
+// line({ x: "x", y: "y", stroke: "c" }).stack({ by: "c", dir: "y" })
+// Stacked lines: each line runs along the top of its slot.
+export const StackedLines: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(streamgraphData, { w: 480, h: 260 })
+      .flow(...xy([], { x: "x" }, { by: "c", dir: "y" }))
+      .mark(
+        line({
+          h: "y",
+          stroke: "c",
+          strokeWidth: 2,
+          source: { y: "end" },
+          target: { y: "end" },
+        })
+      )
+      .render(container);
+    return container;
+  },
+};
+
 // What rect({ x, y }) with data fields does today, with no flow.
 export const RectXYToday: StoryObj = {
   render: () => {
@@ -199,6 +239,53 @@ export const Ridgeline: StoryObj = {
       )
       .mark(
         ribbon({ h: "y", fill: "c", stroke: "white", strokeWidth: 1, opacity: 0.9 })
+      )
+      .render(container);
+    return container;
+  },
+};
+
+// "What is stack?": a box divided by weights, two ways. stack with `size`
+// (the gallery Mosaic Chart's spelling) ...
+export const MosaicStack: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(seafood, { w: 360, h: 260 })
+      .flow(
+        stack({ by: "lake", dir: "x", size: "count" }),
+        stack({ by: "species", dir: "y", size: field("count").normalize() })
+      )
+      .mark(rect({ fill: "species", stroke: "white", strokeWidth: 2 }))
+      .render(container);
+    return container;
+  },
+};
+
+// ... and treemap with Tile.dice then Tile.slice.
+export const MosaicTreemap: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(seafood, { w: 360, h: 260 })
+      .flow(
+        treemap({ by: "lake", size: "count", tile: Tile.dice }),
+        treemap({ by: "species", size: "count", tile: Tile.slice })
+      )
+      .mark(rect({ fill: "species", stroke: "white", strokeWidth: 2 }))
+      .render(container);
+    return container;
+  },
+};
+
+// 100% bars with today's cut: each lake's rect is divided by species weight.
+// cut is an expand mark: it returns one slice per row, and the flow's last
+// tier (stack) lays the slices out.
+export const HundredCut: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(seafood, { w: 480, h: 260 })
+      .flow(spread({ by: "lake", dir: "x", spacing: 16 }), stack({ dir: "y" }))
+      .mark(
+        rect({ w: 40, h: 200, fill: "species" }).cut({ dir: "y", size: "count" })
       )
       .render(container);
     return container;
