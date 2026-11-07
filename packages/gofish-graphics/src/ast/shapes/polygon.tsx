@@ -179,6 +179,9 @@ export const Polygon = ({
               : (v ?? size[axis]);
           const W = side(w, 0);
           const H = side(h, 1);
+          // The unit box's v runs the way the polygon's frame does: top-down
+          // on a plain canvas, outward in a polar slot. TODO(#1038): whether
+          // it should run from the nearest frame's baseline instead.
           localRef.current = mapPathPoints(outline, ([x, y]) => [x * W, y * H]);
           return {
             intrinsicDims: [
