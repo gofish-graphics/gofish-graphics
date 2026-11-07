@@ -63,7 +63,7 @@ export type PolygonProps = {
 
 /** PROTOTYPE (#1331): parse an absolute SVG path of M/L/Q/C/Z commands into
  *  outline segments. */
-const parseOutline = (d: string): Path => {
+export const parseOutline = (d: string): Path => {
   const out: Path = [];
   let cur: Point = [0, 0];
   let start: Point = [0, 0];
@@ -108,7 +108,10 @@ const segmentPoints = (s: PathSegment): Point[] =>
     ? [s.points[0], s.points[1]]
     : [s.start, s.control1, s.control2, s.end];
 
-const mapSegment = (s: PathSegment, f: (p: Point) => Point): PathSegment =>
+export const mapSegment = (
+  s: PathSegment,
+  f: (p: Point) => Point
+): PathSegment =>
   s.type === "line"
     ? segment(f(s.points[0]), f(s.points[1]))
     : curve(f(s.start), f(s.control1), f(s.control2), f(s.end));

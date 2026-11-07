@@ -277,7 +277,8 @@
           <code>petal</code> mark can be drawn from general GoFish pieces, now
           that the flower chart is on the front page. It can: give
           <code>polygon</code> a rect's box and a curved outline, and let the
-          polar coord bend the whole outline, the way it bends a pie slice.
+          coord bend the whole outline, the way it bends a pie slice. A shape
+          that must stay flat gets its own mark, <code>glyph</code> (#1339).
         </p>
       </header>
 
@@ -298,8 +299,12 @@
             <code>line</code> under polar and a pie slice's arc.
           </li>
           <li>
-            A petal is one fixed outline in its slot (u across the slot, v out
-            from the center). Two candidate shapes are below.
+            The flower chart's petal is Josh's tapered outline as a polygon.
+          </li>
+          <li>
+            Decided: a shape that must stay flat (a marker, an arrowhead) is a
+            separate mark, <code>glyph</code>, not a polygon mode. Filed as
+            #1339.
           </li>
           <li>
             Delete <code>petal</code> everywhere: JS, IR, Python, docs. No
@@ -309,13 +314,13 @@
       </section>
 
       <article class="card">
-        <span class="tag">Recommended · front page</span>
-        <h2>B. Polygon with a box, bent by the coord</h2>
+        <span class="tag">Front page</span>
+        <h2>The flower chart, four ways</h2>
         <div class="pics">
           <figure>
             <img
               src="flower-today.png"
-              alt="Front-page flower chart today: six flowers on green stems"
+              alt="Today's petal, front-page flower chart"
               width="430"
               height="404"
             />
@@ -323,99 +328,151 @@
           </figure>
           <figure>
             <img
-              src="flower-b-shape1.png"
-              alt="The same chart with Shape 1 petals: rounder, wide green petals larger"
+              src="flower-c-leaf.png"
+              alt="Today's leaf as a C glyph, front-page flower chart"
               width="430"
               height="404"
             />
-            <figcaption>Shape 1</figcaption>
+            <figcaption>C: today's leaf as a glyph</figcaption>
           </figure>
           <figure>
             <img
-              src="flower-b-closest.png"
-              alt="The same chart with the Closest petals: close to today, sharper shoulders"
+              src="flower-b-favorite.png"
+              alt="Josh's petal as a bent polygon, front-page flower chart"
               width="430"
               height="404"
             />
-            <figcaption>Closest</figcaption>
+            <figcaption>B: Josh's petal, bent</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="flower-c-favorite.png"
+              alt="Josh's petal as a C glyph, front-page flower chart"
+              width="430"
+              height="404"
+            />
+            <figcaption>C: Josh's petal as a glyph</figcaption>
           </figure>
         </div>
         <p>
-          Real GoFish renders (prototype on the branch). Same layout as today.
+          Real GoFish renders (prototypes on the branch). B keeps today's
+          layout. As a glyph, today's leaf turns into a diamond on the wide
+          green slots, and Josh's petal gets a flat base through the center, so
+          its petals overlap.
         </p>
+      </article>
+
+      <article class="card">
+        <span class="tag">Recommended</span>
+        <h2>B. Polygon with a box, bent by the coord</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="wide-b-favorite.png"
+              alt="Lake F head with Josh's petal as a bent polygon: a tapered heart in the wide green slot"
+              width="215"
+              height="200"
+            />
+            <figcaption>Lake F, 192° slot</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="donut-b-favorite.png"
+              alt="Josh's petal under a donut clock: petals start at the hole"
+              width="260"
+              height="224"
+            />
+            <figcaption>Donut clock: starts at the hole</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="pie-b-slice.png"
+              alt="A box outline under polar: a true pie chart"
+              width="205"
+              height="184"
+            />
+            <figcaption>Box outline: a true pie</figcaption>
+          </figure>
+        </div>
         <div class="codes">
           <span class="label">Proposed, JS</span>
-          <pre><code class="language-javascript" data-chg="1,2,3,4,8">// Shape 1: rounder than today's petal.
-const SHAPE_1 = "M0 0 L0 .5 Q.31 .871 .5 1 Q.69 .871 1 .5 L1 0 Z";
-// Closest: the shape closest to today's petal.
-const CLOSEST = "M0 0 L0 .5 Q.18 .5 .5 1 Q.82 .5 1 .5 L1 0 Z";
+          <pre><code class="language-javascript" data-chg="1,5">const PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z";
 
 const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: 40 }))
-  .mark(polygon({ w: "count", d: SHAPE_1, fill: "species" }));</code></pre>
+  .mark(polygon({ w: "count", d: PETAL, fill: "species" }));</code></pre>
           <span class="label">Proposed, Python</span>
-          <pre><code class="language-python" data-chg="1,6">SHAPE_1 = "M0 0 L0 .5 Q.31 .871 .5 1 Q.69 .871 1 .5 L1 0 Z"
+          <pre><code class="language-python" data-chg="1,6">PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z"
 
 flower = (
     chart(coord=Coord.polar(), axes=False)
     .flow(stack(by="species", dir="x", h=40))
-    .mark(polygon(w="count", d=SHAPE_1, fill="species"))
+    .mark(polygon(w="count", d=PETAL, fill="species"))
 )</code></pre>
           <span class="label">Today</span>
           <pre><code class="language-javascript" data-chg="3">const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: 40 }))
   .mark(petal({ w: "count", fill: "species" }));</code></pre>
         </div>
+        <p>
+          The outline lives in the coord's space: straight edges and curves are
+          both resampled through the coord by the resampler that already draws
+          <code>line</code>. No polar special case. Josh's petal tapers to its
+          tip; it is not today's leaf, and is not meant to be.
+        </p>
       </article>
 
       <article class="card">
-        <span class="tag">Widest slot</span>
-        <h2>B on a 192° petal</h2>
+        <span class="tag">Separate mark · #1339</span>
+        <h2>C. Glyph in a flat frame</h2>
         <div class="pics">
           <figure>
             <img
               src="wide-today.png"
-              alt="Lake F flower head today: a wide green petal with straight sides and a rounded point"
+              alt="Lake F head today"
               width="215"
-              height="184"
+              height="200"
             />
-            <figcaption>Today</figcaption>
+            <figcaption>Today: <code>petal</code></figcaption>
           </figure>
           <figure>
             <img
-              src="wide-b-shape1.png"
-              alt="The same head with Shape 1: the wide green petal is a round heart, larger than today"
+              src="wide-c-leaf.png"
+              alt="Lake F head with today's leaf as a glyph: the wide green petal is a diamond hanging from the center"
               width="215"
-              height="184"
+              height="200"
             />
-            <figcaption>Shape 1</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="wide-b-closest.png"
-              alt="The same head with Closest: close to today, with sharp shoulders and slightly concave sides"
-              width="215"
-              height="184"
-            />
-            <figcaption>Closest</figcaption>
+            <figcaption>C: today's leaf as a glyph</figcaption>
           </figure>
         </div>
+        <div class="codes">
+          <span class="label">Proposed, JS (prototype)</span>
+          <pre><code class="language-javascript" data-chg="1,5">const LEAF = "M.5 0 L0 .5 Q0 .75 .5 1 Q1 .75 1 .5 Z";
+
+const flower = chart({ coord: Coord.polar(), axes: false })
+  .flow(stack({ by: "species", dir: "x", h: 40 }))
+  .mark(glyph({ w: "count", d: LEAF, fill: "species" }));</code></pre>
+        </div>
         <p>
-          Lake F at R = 90 px. Shape 1 is rounder and grows past today's on wide
-          slots. Closest stays near today's, but keeps its sharp shoulders and
-          its sides bow in a little.
+          The coord places, turns and sizes the frame but never bends it, so
+          curves stay screen curves. The frame, read off the coord at the slot:
+          origin at the slot's base point, v axis to the middle of the outer
+          side, u axis the slot's chord at middle height (today's petal is
+          exactly that wide at its corners). With no coord the frame is the slot
+          box. Name: <code>glyph</code>, the word GoFish already uses for a box
+          placed by its center (#972); <code>shape</code> is taken by the
+          <code>Shape</code> family.
         </p>
         <p>
-          Largest outline gap to today's petal at the front page's 40 px radius,
-          one head per slot angle. Real: measured on the rendered SVG. Editor:
-          the shape editor's emulation (48 samples per quadratic, each warped
-          through polar).
+          It does not reproduce today's petal on wide slots. Largest gap from
+          today's leaf as a glyph to today's <code>petal</code> at R = 40 px,
+          measured on the rendered SVG:
         </p>
         <div style="overflow-x: auto">
           <table>
             <thead>
               <tr>
-                <th>shape</th>
+                <th>slot</th>
                 <th>16°</th>
                 <th>42°</th>
                 <th>90°</th>
@@ -427,152 +484,163 @@ flower = (
             </thead>
             <tbody>
               <tr>
-                <td>Shape 1, real</td>
-                <td>0.29</td>
-                <td>0.67</td>
-                <td>1.32</td>
-                <td>1.69</td>
-                <td>2.37</td>
-                <td>4.15</td>
-                <td>6.50</td>
-              </tr>
-              <tr>
-                <td>Shape 1, editor</td>
-                <td>0.34</td>
-                <td>0.70</td>
-                <td>1.35</td>
-                <td>1.75</td>
-                <td>2.37</td>
-                <td>4.17</td>
-                <td>6.50</td>
-              </tr>
-              <tr>
-                <td>Closest, real</td>
-                <td>0.68</td>
-                <td>1.59</td>
-                <td>2.24</td>
-                <td>2.11</td>
-                <td>1.70</td>
-                <td>0.42</td>
-                <td>2.20</td>
-              </tr>
-              <tr>
-                <td>Closest, editor</td>
-                <td>0.69</td>
-                <td>1.54</td>
-                <td>2.18</td>
-                <td>2.04</td>
-                <td>1.64</td>
-                <td>0.81</td>
-                <td>2.19</td>
+                <td>leaf glyph</td>
+                <td>0.21</td>
+                <td>0.45</td>
+                <td>3.38</td>
+                <td>5.19</td>
+                <td>7.39</td>
+                <td>11.86</td>
+                <td>15.58</td>
               </tr>
             </tbody>
           </table>
         </div>
         <p>
-          The real resampler and the editor agree within 0.1 px, except Closest
-          at 162° (0.4 px apart, both under 1 px). The editor's previews are
-          what GoFish draws.
+          Today's petal is a mix: its corners sit on the slot's side edges at
+          half the radius (points the coord places), and only its curves are
+          flat. On a wide slot those edges pull the corners toward the center. A
+          glyph's corners stay fixed in its frame.
         </p>
       </article>
 
       <article class="card">
         <span class="tag">Hard examples</span>
-        <h2>B under a donut clock, and a pie</h2>
+        <h2>Lake F's 192° slot</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="wide-today.png"
+              alt="Today's petal, Lake F head"
+              width="215"
+              height="200"
+            />
+            <figcaption>Today: <code>petal</code></figcaption>
+          </figure>
+          <figure>
+            <img
+              src="wide-c-leaf.png"
+              alt="Today's leaf as a C glyph, Lake F head"
+              width="215"
+              height="200"
+            />
+            <figcaption>C: today's leaf as a glyph</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="wide-b-favorite.png"
+              alt="Josh's petal as a bent polygon, Lake F head"
+              width="215"
+              height="200"
+            />
+            <figcaption>B: Josh's petal, bent</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="wide-c-favorite.png"
+              alt="Josh's petal as a C glyph, Lake F head"
+              width="215"
+              height="200"
+            />
+            <figcaption>C: Josh's petal as a glyph</figcaption>
+          </figure>
+        </div>
+      </article>
+
+      <article class="card">
+        <span class="tag">Hard examples</span>
+        <h2>Donut clock</h2>
         <div class="pics">
           <figure>
             <img
               src="donut-today.png"
-              alt="Today's petals under a clock coord with a donut hole: they ignore the hole and start at the center"
+              alt="Today's petal, donut clock"
               width="260"
               height="224"
             />
-            <figcaption>Today: ignores the hole (bug)</figcaption>
+            <figcaption>Today: <code>petal</code></figcaption>
           </figure>
           <figure>
             <img
-              src="donut-b-shape1.png"
-              alt="Shape 1 petals under the same coord: they start at the hole's edge"
+              src="donut-c-leaf.png"
+              alt="Today's leaf as a C glyph, donut clock"
               width="260"
               height="224"
             />
-            <figcaption>Shape 1: starts at the hole</figcaption>
+            <figcaption>C: today's leaf as a glyph</figcaption>
           </figure>
           <figure>
             <img
-              src="donut-b-closest.png"
-              alt="Closest petals under the same coord: they start at the hole's edge"
+              src="donut-b-favorite.png"
+              alt="Josh's petal as a bent polygon, donut clock"
               width="260"
               height="224"
             />
-            <figcaption>Closest: starts at the hole</figcaption>
+            <figcaption>B: Josh's petal, bent</figcaption>
           </figure>
           <figure>
             <img
-              src="pie-b-slice.png"
-              alt="A box outline under polar: a true pie chart with curved arcs"
-              width="205"
-              height="184"
+              src="donut-c-favorite.png"
+              alt="Josh's petal as a C glyph, donut clock"
+              width="260"
+              height="224"
             />
-            <figcaption>Box outline: a true pie</figcaption>
-          </figure>
-        </div>
-        <div class="codes">
-          <pre><code class="language-javascript" data-chg="1,3,5,6">chart(lake, { coord: Coord.clock({ innerRadius: 0.4 }), axes: false })
-  .flow(stack({ by: "species", dir: "x", h: 90 }))
-  .mark(polygon({ w: "count", d: SHAPE_1, fill: "species" }));
-
-// The box outline draws a pie: its outer edge bends into a true arc.
-polygon({ w: "count", d: "M0 0 L0 1 L1 1 L1 0 Z", fill: "species" });</code></pre>
-        </div>
-      </article>
-
-      <article class="card">
-        <span class="tag">Same mark, no coord</span>
-        <h2>B and C in Cartesian</h2>
-        <div class="pics">
-          <figure>
-            <img
-              src="bars-b-box-ring.png"
-              alt="Polygon petals with no coord: pentagon flags"
-              width="330"
-              height="124"
-            />
-            <figcaption>
-              B: the bare pentagon. The curves came from polar.
-            </figcaption>
-          </figure>
-          <figure>
-            <img
-              src="bars-c-tangent-glyph.png"
-              alt="Glyph petals with no coord: curved leaf shapes"
-              width="330"
-              height="124"
-            />
-            <figcaption>C: the path's own curves</figcaption>
+            <figcaption>C: Josh's petal as a glyph</figcaption>
           </figure>
         </div>
         <p>
-          Both point down here and outward in polar. A literal polygon's y runs
-          down in Cartesian and outward in polar; that is #1038 (inside a coord,
-          y direction should be measured from the nearest frame, not the
-          canvas). Decision 2 below.
+          <code>Coord.clock({ innerRadius: 0.4 })</code>. B and C start at the
+          hole; today's petal ignores it (bug).
         </p>
-        <div class="codes">
-          <pre><code class="language-javascript" data-chg="">chart(lakeA)
-  .flow(stack({ by: "species", dir: "x", h: 100 }))
-  .mark(polygon({ w: "count", points: PETAL, fill: "species" }));</code></pre>
-        </div>
       </article>
 
       <article class="card">
-        <span class="tag">Alternative · works today</span>
+        <span class="tag">No coord</span>
+        <h2>A stacked bar</h2>
+        <div class="pics">
+          <figure>
+            <img
+              src="bars-c-leaf.png"
+              alt="Today's leaf as a glyph in a stacked bar: pointed leaves pointing up"
+              width="330"
+              height="124"
+            />
+            <figcaption>C: today's leaf as a glyph</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="bars-b-favorite.png"
+              alt="Josh's petal as a polygon in a stacked bar: points down"
+              width="330"
+              height="124"
+            />
+            <figcaption>B: Josh's petal (points down, #1038)</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="bars-c-favorite.png"
+              alt="Josh's petal as a glyph in a stacked bar: points up"
+              width="330"
+              height="124"
+            />
+            <figcaption>C: Josh's petal as a glyph</figcaption>
+          </figure>
+        </div>
+        <p>
+          Today's <code>petal</code> draws nothing without a polar coord. B's
+          petals point down because a literal polygon's v follows pixel y; this
+          is #1038.
+        </p>
+      </article>
+
+      <article class="card">
+        <span class="tag">Stopgap</span>
         <h2>A. Ring in data space</h2>
         <div class="pics">
           <figure>
             <img
               src="head-today.png"
-              alt="Today's petal flower head"
+              alt="Lake A head today"
               width="205"
               height="184"
             />
@@ -581,166 +649,61 @@ polygon({ w: "count", d: "M0 0 L0 1 L1 1 L1 0 Z", fill: "species" });</code></pr
           <figure>
             <img
               src="head-a-data-ring.png"
-              alt="Flower head from data-space rings: same petal shapes, slightly smaller head"
+              alt="Lake A head drawn as data-space rings: same shapes, smaller"
               width="195"
-              height="184"
+              height="164"
             />
-            <figcaption>A: no library change</figcaption>
+            <figcaption>A: data-space ring</figcaption>
           </figure>
         </div>
         <p>
-          Works now with the same petal shapes, but the head is smaller: the
-          radius comes from the r scale, so a fixed 40 px head has no direct
-          spelling. The user also re-implements <code>stack</code> with a
-          running sum. A stopgap at most.
+          Writable today with <code>polygon({ points: "ring" })</code>, but the
+          user re-implements <code>stack</code> with a running sum, and the
+          radius becomes a data value. Good as a stopgap, not as the answer.
         </p>
-        <div class="codes">
-          <pre><code class="language-javascript" data-chg="5,6,7,8,9,10,11,12,13,14,15,16,17">// The petal in its slot: u across, v out from the center.
-const PETAL = [[0, 0], [0, 0.5], [0.5, 1], [1, 0.5], [1, 0]];
-
-// Stack by hand: each ring in data space (angle in counts, radius 0..1).
-const flower = chart(rows, { coord: Coord.polar(), axes: false })
-  .flow(
-    derive((rows) =&gt; {
-      let at = 0;
-      return rows.map((d) =&gt; {
-        const start = at;
-        at += d.count;
-        const ring = PETAL.map(([u, v]) =&gt; [start + u * d.count, v]);
-        return { ...d, ring };
-      });
-    }),
-  )
-  .mark(polygon({ points: "ring", fill: "species" }));</code></pre>
-        </div>
-      </article>
-
-      <article class="card">
-        <span class="tag">Alternative · new mark</span>
-        <h2>C. Glyph in the slot's tangent frame</h2>
-        <div class="pics">
-          <figure>
-            <img
-              src="head-today.png"
-              alt="Today's petal flower head"
-              width="205"
-              height="184"
-            />
-            <figcaption>Today</figcaption>
-          </figure>
-          <figure>
-            <img
-              src="head-c-tangent-glyph.png"
-              alt="Flower head from tangent-frame glyphs: boxier petals with gaps between them"
-              width="205"
-              height="184"
-            />
-            <figcaption>C (prototype)</figcaption>
-          </figure>
-        </div>
-        <p>
-          A path in the unit box, moved, scaled and turned by the coord's
-          straight-line approximation at the slot's middle. Curves stay exact,
-          but straight sides cannot follow the slot, so wide petals gap and
-          overlap (4 to 8.7 px from today's on the 80° to 108° slots). This is
-          how d3, Plot and Vega draw custom symbols, and fits point glyphs
-          (markers, arrowheads) better than a petal.
-          <code>path</code> is already a <code>lib.ts</code> export, so it needs
-          another name.
-        </p>
-        <div class="codes">
-          <pre><code class="language-javascript" data-chg="2,6">// An SVG path in the unit box, drawn in the slot's tangent frame.
-const PETAL = "M.5 0 L0 .5 Q0 .75 .5 1 Q1 .75 1 .5 Z";
-
-const flower = chart({ coord: Coord.polar(), axes: false })
-  .flow(stack({ by: "species", dir: "x", h: 40 }))
-  .mark(glyph({ w: "count", d: PETAL, fill: "species" }));</code></pre>
-        </div>
       </article>
 
       <details>
         <summary>
-          Why B: the measurement, precedent, and what deletion touches
+          Precedent, and what deleting <code>petal</code> touches
         </summary>
         <div class="body">
-          <h3>What today's petal is</h3>
-          <p>
-            <code>petal.tsx</code> draws two straight lines from the center
-            along the slot's side edges to half the radius, then two quadratic
-            Béziers to a tip at the full radius, drawn on screen and turned to
-            the slot's middle angle. Because its curves are drawn on screen, no
-            outline that the coord bends matches it exactly at every slot angle.
-            Matching it is not the goal: polygon's rule is that its whole
-            outline goes through the coord.
-          </p>
-          <h3>The prototype</h3>
-          <p>
-            On this branch only, marked <code>PROTOTYPE (#1331)</code>:
-            <code>polygon.tsx</code> parses <code>d</code> (M, L, Q, C, Z),
-            takes <code>w</code> and <code>h</code> as size channels, and
-            stretches the outline into its box.
-            <code>lowerHelpers.ts</code> gets <code>outlineItem</code>, which is
-            <code>ringItem</code> for a path with curves. Lowering needed no new
-            mechanism: the adaptive resampler already takes Bézier segments.
-          </p>
           <h3>Precedent</h3>
           <ul>
             <li>
-              <strong>herrstucki's bl.ock (d3):</strong>
-              <code>d3.layout.pie</code> gives angles, a
-              <code>petalPath</code> builds the shape along +x with two
-              quadratics, <code>rotate(angle)</code> turns it. A local-frame
-              glyph (C). GoFish's petal is a port of it.
+              herrstucki's bl.ock (d3, 2013): pie angles, a path along +x with
+              two quadratics, and <code>rotate(angle)</code>. GoFish's petal is
+              a port.
             </li>
             <li>
-              <strong>d3 and Observable Plot:</strong> custom symbols are
-              <code>draw(context, size)</code> objects in a local frame around a
-              point, turned by a <code>rotate</code> channel (C).
+              ggplot2: <code>geom_polygon</code> under
+              <code>coord_polar</code> bends the polygon (B);
+              <code>geom_point</code> shapes are placed, not bent (C).
             </li>
             <li>
-              <strong>Vega and Vega-Lite:</strong> the
-              <code>shape</code> channel takes an SVG path in a [-1, 1] box,
-              scaled by <code>size</code>, turned by <code>angle</code> (C, unit
-              box).
+              Vega-Lite: the <code>point</code> mark's <code>shape</code> takes
+              an SVG path in a [-1, 1] box, sized by area, turned by
+              <code>angle</code> (C).
             </li>
             <li>
-              <strong>ggplot2:</strong> <code>geom_polygon</code> under
-              <code>coord_polar</code> warps the polygon, resampling its edges
-              (<code>coord_munch</code>) (A).
+              D3 and Observable Plot: <code>d3.symbol(type, size)</code> and
+              Plot's <code>symbol</code>, drawn around a point, sized by area or
+              <code>r</code> (C).
             </li>
             <li>
-              <strong>GoFish:</strong> a rect in a polar slot warps into a
-              wedge, and polygon already warps its rings. B applies the rect
-              rule to polygon.
+              matplotlib: <code>marker=</code> takes a <code>Path</code>
+              normalized to a unit box (C).
+            </li>
+            <li>
+              SVG <code>&lt;marker&gt;</code>: a local <code>viewBox</code> at
+              path vertices, turned by <code>orient="auto"</code> (C).
             </li>
           </ul>
           <p>
-            Glyph libraries use a local frame because their custom shapes are
-            points. ggplot uses data space because its polar marks sweep. A
-            petal sweeps its slot, so B fits it, and C stays available for real
-            point glyphs.
+            Point-glyph libraries draw shapes flat because their marks are
+            points. ggplot bends polygons because its polar marks sweep. A petal
+            sweeps its slot, so it is B.
           </p>
-          <h3>Design rules it meets</h3>
-          <ul>
-            <li>
-              Desugars into the core: polygon plus a box, lowered by the
-              existing resampler, which already bends straight and curved
-              segments through the coord. No new node kind, no polar special
-              case.
-            </li>
-            <li>
-              Marks lay out alike: a polygon with <code>w</code> and
-              <code>h</code> lays out like a rect of that size.
-            </li>
-            <li>
-              A default is sugar: no <code>w</code> means the points' own width,
-              a value the user can write.
-            </li>
-            <li>
-              No back-compat: <code>petal</code> is deleted, not kept as an
-              alias.
-            </li>
-          </ul>
           <h3>What deleting <code>petal</code> touches</h3>
           <ul>
             <li>
@@ -784,10 +747,11 @@ const flower = chart({ coord: Coord.polar(), axes: false })
               Today's petal ignores <code>innerRadius</code> and draws through a
               donut hole. B fixes this.
             </li>
+            <li>Today's petal draws nothing without a polar coord.</li>
             <li>
               #1111 says petal draws nothing under <code>clock()</code>. That
-              part is already fixed: petal now checks for any polar-family
-              coord. Its other part, lightening field colors, is still open.
+              part is already fixed. Its other part, lightening field colors, is
+              still open.
             </li>
           </ul>
         </div>
@@ -797,18 +761,19 @@ const flower = chart({ coord: Coord.polar(), axes: false })
         <h2>Decided</h2>
         <p>
           A polygon's outline lives in the coord's space: every point, curves
-          included, goes through the coord. Warping only the curves' control
-          points and drawing the curves on screen is not polygon's behavior.
+          included, goes through the coord. A shape that must stay flat is a
+          separate mark, <code>glyph</code> (#1339), not a polygon mode.
         </p>
         <h2>Open decisions</h2>
         <ol>
           <li>
-            Which petal goes in the flower story: Shape 1 (rounder, wide petals
-            grow) or Closest (within 2.2 px of today's)?
+            Approve B with Josh's petal in the flower story, and delete
+            <code>petal</code>?
           </li>
           <li>
-            File C (a unit-box glyph mark in the slot's tangent frame, for point
-            glyphs such as markers and arrowheads) as its own issue, or drop it?
+            Which way does B's unit box run in Cartesian: v up from the baseline
+            (as the glyph does) or y down (pixel order, as literal polygon
+            points are today)? This ties to #1038.
           </li>
         </ol>
       </section>
