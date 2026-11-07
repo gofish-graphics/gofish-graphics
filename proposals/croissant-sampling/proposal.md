@@ -9,13 +9,404 @@
 
 ## Recommendation
 
-Divide wins, and it replaces this round's first recommendation, a `.stack()` modifier. The lead: `chart(params).flow(sweep({ v: [-4, 4] })).mark(ribbon({ x: "v", h: x.density("v"), fill: "series" }).cut({ by: "series", dir: "y" }))`. Josh's objection to round 6 stands: a flow `stack` that reaches into each ribbon's x positions is not local. A `.stack()` modifier on each series' ribbon says that it is not local, but it still reaches across marks. Divide does not reach across anything: the ribbon is one area of the total at each x (its `h` adds, as sizes do), and `cut` divides that one mark by its own rows. This is how Mascot draws its stacked area and streamgraph (densify, then divide), and GoFish already took the operator from Mascot as `cut`, with a function twin (`cut(image(), opts)`) as api-design.md asks of a one-child method. The same `cut` along x is the croissant. The reasons GoFish gave against divide were about where it lives (a mark, not an operator) and what it returns (many pieces); `cut` settled both. The `.stack()` modifier is the runner-up: it reads better for stacked lines, which have no extent to divide. The wall from earlier rounds stays: under `sweep` the slices are laid out on demand, and no prototype does that yet.
+On hold (round 8): read the Constraints section first; it maps the design space and does not recommend. Round 7's recommendation follows. Divide wins, and it replaces this round's first recommendation, a `.stack()` modifier. The lead: `chart(params).flow(sweep({ v: [-4, 4] })).mark(ribbon({ x: "v", h: x.density("v"), fill: "series" }).cut({ by: "series", dir: "y" }))`. Josh's objection to round 6 stands: a flow `stack` that reaches into each ribbon's x positions is not local. A `.stack()` modifier on each series' ribbon says that it is not local, but it still reaches across marks. Divide does not reach across anything: the ribbon is one area of the total at each x (its `h` adds, as sizes do), and `cut` divides that one mark by its own rows. This is how Mascot draws its stacked area and streamgraph (densify, then divide), and GoFish already took the operator from Mascot as `cut`, with a function twin (`cut(image(), opts)`) as api-design.md asks of a one-child method. The same `cut` along x is the croissant. The reasons GoFish gave against divide were about where it lives (a mark, not an operator) and what it returns (many pieces); `cut` settled both. The `.stack()` modifier is the runner-up: it reads better for stacked lines, which have no extent to divide. The wall from earlier rounds stays: under `sweep` the slices are laid out on demand, and no prototype does that yet.
 
 ## Relation to #980
 
 This applies #980 to the croissant; it does not compete with it. #980 (first-class distributions: the data holds a Dist; draws and quantile levels are rows made by `repeat(n, ...)`; slab and interval are user code, not marks) already says that binning a Dist key by `Bin.quantiles` cuts it at its quantiles. `sweep` is the continuous counterpart of #980's `repeat`, and it takes #980's intervals as arguments (`sweep({ v: x.interval(0.95) })`). B answers #980's open question of curve summaries in channels, as the short form of C. A is #980's `densityCurve` helper, which is C over a finite grid. Nothing adds a mark or reopens a #980 decision, and all three delete `quantileRows` (#1231). The continuous-type section ties into #980's scales tab, which says a density's "per" must name the field it is spread over.
 
 Artifact: https://claude.ai/artifact/Fh12g89z1cChzAqpQZ8mGH. The #980 proposal: https://claude.ai/artifact/QKR9jSHs1LWCtjp25bFuBq.
+
+## Constraints: the design space, step by step
+
+This section steps back. It does not recommend a design. It lays out hard examples, spells each one under five ways of factoring the operators, and lists what every design has to satisfy. The rounds below it stay as they were; their recommendation (divide with `cut`) is on hold until this map is read.
+
+The five factorings, the columns of the grid:
+
+- **F1, flow `stack`**: The operator stays local. It lays whole children end to end and adds their sizes. A child with no single size is an error.
+- **F2, `.stack()` modifier**: A method on a collective mark (`ribbon`, `line`) that stacks the mark's rows at each position. It rewrites to F5.
+- **F3, `cut` on the shape**: Divide one shape you already have into pieces: by weight, by cells, or (proposed) by a group at each vertex of an area.
+- **F4, regions plus intersect (Josh)**: No `cut` modes. `stack` and `partition` make regions, which are pieces of space. A shape is divided by intersecting it with those regions, using the region operators that exist today: `intersect`, `atop`, `subtract`, `union`, `exclude` (`graphicalOperators/porterDuff.tsx`).
+- **F5, pieces then connect**: Make the pieces at each position with the ordinary flow (`scatter` then `stack`), then join the pieces that share a key with a ribbon. This is what today's stacked area already is: the fused ribbon threads invisible anchors.
+
+| Example | F1 flow stack | F2 .stack() | F3 cut | F4 regions + intersect | F5 pieces then connect |
+| --- | --- | --- | --- | --- | --- |
+| Stacked area | **can't**: a whole ribbon has no single height | **works**: its rewrite is F5 | **works**: its rewrite is F5 | **awkward**: the regions are the bands, so making them is the whole job; intersecting them with the total area adds nothing | **works**: today (render) |
+| Streamgraph | **can't**: as above | **awkward**: no clear place for the centering | **works**: centering on the outer `spread` | **awkward**: as above | **works**: today, the gallery Streamgraph |
+| Croissant (quantile cuts of a density) | **can't**: the cells are places on x; nothing adds up | **can't**: as F1 | **works**: but only as a second mode: cells, not weights | **works**: today: `partition` cells intersected with the density | **awkward**: one ribbon per cell from its own rows; neighbors must share their boundary vertex or a sliver opens |
+| 100% bar | **works**: `stack` with `size: field(...).normalize()` | **awkward**: the same as F1 on a rect: a second route | **works**: a fixed rect cut by weight (today's pieces draw black) | **works**: the regions are F1's; intersect matters only when the shape is not a rect (PiCCL's alcohol bottle) | **works**: it is F1; there is nothing to connect |
+| Stacked bars | **works**: today | **awkward**: a second route to F1 | **awkward**: the total rect must be built first (`h` = the sum), then cut: a second route | **works**: the regions are the bars themselves | **works**: it is F1 |
+| Stacked area, each band its own texture | **can't**: as for the stacked area | **awkward**: works only if each series' piece can be an operand of `atop`; untested | **can't**: a cut piece is a clipped copy of the one source's paint; a different image per piece is not in the source | **works**: the band is a region and the texture goes `atop` it (render, emulated) | **works**: F5 makes the bands; F4 fills them (render) |
+| Bottle fill (an image masked by a data rect) | **can't**: nothing to stack | **can't**: nothing to stack | **awkward**: the fill is not a division of the bottle: `cut` gives two pieces and one must be blank | **works**: today: `atop([image, rect({ h: "amount" })])` | **can't**: nothing to connect |
+| Pie made by dividing a circle | **works**: today: `stack` in clock coordinates | **awkward**: a second route to F1 | **works**: PiCCL's `divide(circle, "angular")`; in GoFish, a cut of the clock-space box, untested | **works**: wedges as regions; PiCCL's pie intersects a picture with each arc | **works**: it is F1 |
+| Sankey link divided into strands (#47) | **can't**: the strands run along a curve; no child has one size | **can't**: the link is one ribbon; there is nothing to stack across | **works**: cut the link across its width at each vertex | **awkward**: the regions would be the strands themselves | **works**: #47 anchors: slots on each node side, then connect (render, emulated) |
+| Waffle chart | **works**: today it is a `spread` of unit squares, not a stack | **can't**: nothing is continuous | **awkward**: divide a rect into unit cells: the whole is not given, the count is | **works**: each unit is a region, so a texture per unit works | **works**: it is a spread |
+| Ribbon chart (Power BI): bars re-sorted by rank at each x, ribbons crossing | **awkward**: draws the sorted bars (`stack` sorted by count inside each x), but not the ribbons | **awkward**: its rewrite is F5, so with a sort inside each x it draws this; but one ribbon with `.stack()` hides that the order changes at each x | **can't**: crossing ribbons overlap between the bars, so they are not a division of one shape | **can't**: as F3: intersected regions are disjoint | **works**: today (render): sorted bars, then a ribbon per species through its pieces |
+
+**What the ribbon chart shows.** A divide (F3, F4) gives disjoint pieces that tile one shape, in one order at every position. In a ribbon chart the pieces swap order between neighboring bars, so the ribbons cross and overlap between the bars. No division of one shape can do that. Pieces-then-connect (F5) can, at the cost of a connection step. So the stacked area is the special case where the order never changes, and that is the only reason it can be read as one divided shape.
+
+**Where F4 meets a wall.** Regions plus intersect removes the `cut` modes for weights (the regions are `stack({ size })`'s) and for cells (the regions are `partition`'s; the croissant does exactly this today). For a stacked area it does not: the regions are the bands, and the bands need a stack at each x (F5) to exist. That is a constraint, not a failure of F4. F4 tells us how to fill, clip and texture a piece; it does not tell us how to make a band.
+
+**Each mode of cut, against F4.** Today's `cut` is `intersect([regionRect.hidden(), offset(source)])` per piece, with the region rects made by a flexbox-style split of the box (`graphicalOperators/cut.tsx`). So: by weight = regions from a weighted split of a box, which is `stack({ size })`; by cells = regions from `partition` (not a `cut` mode today; the croissant spells it with `partition` and `intersect`); by group on an area (proposed) = regions that are the bands, which need F5. One thing `cut` does that F4 does not: it moves each piece away from its source (`offset`, then a `spread` or `stack` lays the pieces out with gaps, as in the bottle stories). Intersect in place cannot explode a shape.
+
+### Stacked area
+
+![](img/l-stacked-area.png)
+
+Render: F5, today's code.
+
+```js
+// F1: an error. Each ribbon is a whole child with no single height
+chart(rows)
+  .flow(stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ x: "x", h: "y", fill: "c" }));
+
+// F2: a modifier; rewrites to F5
+chart(rows).mark(
+  ribbon({ x: "x", h: "y", fill: "c" }).stack({ by: "c", dir: "y" })
+);
+
+// F3: cut the total area by c at each x; rewrites to F5
+chart(rows).mark(
+  ribbon({ x: "x", h: "y", fill: "c" }).cut({ by: "c", dir: "y" })
+);
+
+// F4: the regions are the bands, so F5 must make them first
+// F5 (today)
+chart(rows)
+  .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ h: "y", fill: "c" }));
+```
+
+### Streamgraph
+
+![](img/l-streamgraph.png)
+
+Render: F5, today's gallery Streamgraph (its y labels all read 10, a bug in today's story).
+
+```js
+// F3
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x", alignment: "middle" }))
+  .mark(
+    ribbon({ h: "count", fill: "species" }).cut({ by: "species", dir: "y" })
+  );
+
+// F5 (today)
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", alignment: "middle" }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(ribbon({ h: "count", fill: "species" }));
+```
+
+### Croissant
+
+![](img/c-normal.png)
+
+Render: F4, the shape of today's croissant code (partition cells intersected with the density).
+
+```js
+// F3: a cut by cells, a second mode of cut
+chart(days).mark(
+  ribbon({ x: "v", h: x.density("v") }).cut({
+    by: x.bin(Bin.quantiles(10)),
+    dir: "x",
+  })
+);
+
+// F4 (today's structure): partition makes the cells, intersect divides the density
+chart(days)
+  .mark(
+    ribbon({ x: "v", h: x.density("v") })
+      .name("density")
+      .hidden()
+  )
+  .layer(
+    chart(days)
+      .flow(partition({ by: x.bin(Bin.quantiles(10)) }))
+      .mark(intersect([ref("density"), region({ inset: 3 })]))
+  );
+```
+
+### 100% bar (mosaic)
+
+![](img/s-mosaic-stack.png)
+
+![](img/d-hundred-cut.png)
+
+Renders: F1 (`stack` with a normalized `size`), and F3, today's `cut` on a fixed rect, whose pieces do not read `fill`.
+
+```js
+// F1 (today): the box is given, the parts are shares
+chart(seafood)
+  .flow(
+    stack({ by: "lake", dir: "x", size: "count" }),
+    stack({ by: "species", dir: "y", size: field("count").normalize() })
+  )
+  .mark(rect({ fill: "species" }));
+
+// F3 (today's cut; the pieces need a stack above them)
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }), stack({ dir: "y" }))
+  .mark(
+    rect({ w: 40, h: 200, fill: "species" }).cut({ dir: "y", size: "count" })
+  );
+
+// F4: F1's regions, intersected with a shape that is not a rect (PiCCL's alcohol bottle)
+chart(seafood)
+  .flow(stack({ by: "species", dir: "y", size: field("count").normalize() }))
+  .mark(intersect([image({ href: bottle }), region()]));
+```
+
+### Stacked bars
+
+![](img/k-stacked-bars.png)
+
+Render: F1, the gallery Stacked Bar Chart.
+
+```js
+// F1 = F4 = F5 (today)
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }));
+
+// F3: the total bar first, then cut it
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count", fill: "species" }).cut({ by: "species", dir: "y" }));
+```
+
+### Stacked area, each band its own texture
+
+![](img/k-bands-textured.png)
+
+Render: F5 makes the bands, F4 fills each with `atop([ribbon(), image])`. Emulated in one respect: `image`'s `href` is not a channel, so the render draws one layer per band, each filtered to its series. With an `href` channel it is the one layer shown first below.
+
+```js
+// F5 then F4, with an href channel (one layer)
+chart(rows)
+  .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
+  .mark(blank({ h: "y" }).name("pts"))
+  .layer(
+    chart(selectAll("pts"))
+      .flow(group({ by: "c" }))
+      .mark(atop([ribbon(), image({ href: "texture" })]))
+  );
+
+// The render (runs today): one layer per band, since href is not a channel
+let c = chart(rows)
+  .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
+  .mark(rect({ w: 0.1, h: "y" }).name("pts"));
+for (let i = 0; i < 10; i++)
+  c = c.layer(
+    chart(selectAll("pts"))
+      .flow(
+        filter((p) => project(p, "c") === i),
+        group({ by: "c" })
+      )
+      .mark(
+        atop([
+          ribbon({ fill: "black" }),
+          image({ href: texture(i), w: 480, h: 260 }),
+        ])
+      )
+  );
+```
+
+### Bottle fill
+
+![](img/k-bottle.png)
+
+Render: F4, the gallery Bottle Fill Chart (from PiCCL).
+
+```js
+// F4 (today): the data rect masks the image
+chart(data)
+  .flow(spread({ by: "category", dir: "x" }))
+  .mark(
+    atop({ blendMode: "color" }, [
+      image({ href: bottlePng, h: v(100), filter: Filter.grayscale }),
+      rect({ h: "amount", w: 175, fill: "#00ff00" }),
+    ])
+  );
+
+// F3: two pieces, one left blank
+chart(data)
+  .flow(spread({ by: "category", dir: "x" }))
+  .mark(
+    image({ href: bottlePng, h: 600 }).cut({
+      dir: "y",
+      size: ["amount", "rest"],
+    })
+  );
+```
+
+### Pie
+
+![](img/k-pie.png)
+
+Render: F1, the gallery Pie Chart. A texture per wedge is F4, as in PiCCL's pie example (not rendered: per-piece paint is not a channel, see below).
+
+```js
+// F1 (today)
+chart(seafood, { coord: Coord.clock() })
+  .flow(stack({ by: "species", dir: "x" }))
+  .mark(rect({ w: "count", fill: "species" }));
+
+// F4: a picture per wedge (PiCCL's pie), with an href channel
+chart(seafood, { coord: Coord.clock() })
+  .flow(stack({ by: "species", dir: "x" }))
+  .mark(atop([rect({ w: "count" }), image({ href: "picture" })]));
+
+// PiCCL, pie.txt (verbatim, trimmed)
+const [pieChart, arc] = PICCL.divide(circle, "angular", {
+  key: "type",
+  sizeEncode: "amount",
+});
+const fruit = new PICCL.Picture().mapValue("url", "url");
+const pie = PICCL.intersect(fruit, arc);
+```
+
+### Sankey link divided into strands
+
+![](img/j-energy.png)
+
+Render: F5 with #47's anchors, emulated on the #47 branch.
+
+```js
+// F3: one link, cut across its width into strands
+chart(links).mark(
+  ribbon({ from: "source", to: "target", h: "value" }).cut({ by: "fuel" })
+);
+
+// F5: slots on each node side, then connect (#47's anchors)
+chart(flows)
+  .flow(resolve(["source", "target"], { from: selectAll("nodes") }))
+  .mark(ribbon({ h: "value", fill: "fuel" }));
+```
+
+### Waffle chart
+
+![](img/k-waffle.png)
+
+Render: the gallery Waffle Chart, a `spread` of unit squares. It stresses one new thing: the pieces are counted units, so the whole is not given and nothing is divided.
+
+```js
+// Today: one square per unit, in rows of five
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 8, alignment: "end" }),
+    derive((d) => d.flatMap((d) => repeat(d, "count"))),
+    spread({ by: chunk(5), dir: "y", spacing: 2, reverse: true }),
+    spread({ dir: "x", spacing: 2 })
+  )
+  .mark(rect({ w: 8, h: 8, fill: "species" }));
+```
+
+### Ribbon chart
+
+![](img/k-ribbon-chart.png)
+
+Render: F5, real, today. At each lake the bars are stacked in order of count, so the order changes from lake to lake, and a ribbon per species joins its pieces. The ribbons cross where ranks swap.
+
+```js
+// F5 (today): sorted pieces at each lake, then a ribbon per species
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 48 }),
+    stack({ by: field("species").sort("count"), dir: "y" })
+  )
+  .mark(rect({ w: 24, h: "count", fill: "species" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(group({ by: "species" }))
+      .mark(ribbon({ fill: "species", opacity: 0.5 }))
+  );
+
+// F2: the rewrite is F5, but one ribbon with .stack() hides the reordering
+chart(seafood).mark(
+  ribbon({ x: "lake", h: "count", fill: "species" }).stack({
+    by: field("species").sort("count"),
+    dir: "y",
+  })
+);
+
+// F3, F4: can't. Crossing ribbons are not a division of one shape
+```
+
+### Textures per region
+
+- **A band is a region today**: Each operand of `atop` gives its region by its alpha. In the render above, a selection groups the stacked anchors by series and draws `atop([ribbon(), image(...)])`, so the ribbon's band clips the texture. No new operator is needed.
+- **What blocks it**: Three gaps. (1) `image`'s `href` is not a channel: a function or a field throws (`href.startsWith is not a function`), so a texture per piece needs one layer per value. PiCCL maps it per piece (`Picture().mapValue("url", "url")`). (2) The fused stacked ribbon cannot be named and read one band at a time: `ref("bands")` is the whole collection, and `bands[i]` gives `atop` one operand. The selection (`selectAll` then `group`) works. (3) A per-piece paint chosen by a function is put through the color scale even when it returns `literal("none")`, so "draw only this piece" cannot be emulated that way (tried for the pie and bars; not kept).
+- **Under F3**: A cut piece is a clipped copy of one source. A different image per piece would need `cut` to read paint per piece, which makes it F4 under another name.
+
+### Precedent, as read
+
+- **PiCCL (read: piccl.github.io example specs `pie.txt`, `alcohol.txt`, `cucumber.txt`, `bicycle.txt`, fetched 11-06; and the #47 notes in `proposals/stacked-ribbons/research/piccl-specs.md`)**: `PICCL.divide(object, direction, { key, sizeEncode, gap })` splits a rect or picture along x or y, or a circle or arc by angle or radius, and returns `[collection, part]`. It has both of Josh's factorings. `cucumber.txt` divides a picture directly (GoFish's `image().cut()`). `alcohol.txt` divides a plain rect by `consumption2`, then `PICCL.intersect(bottleShape, collection)`: regions first, then intersect with the picture. `pie.txt` divides a circle into arcs and fills each with its own picture, `PICCL.intersect(fruit, arc)` with `new PICCL.Picture().mapValue("url", "url")`: a texture per piece, by regions plus intersect, with the image's URL as a per-piece channel. Links attach by `linkId`, and their slots on a node's edge are implicit.
+- **Mascot (read: `docs/demos/static/stackedAreaChart.js`, `streamGraph.js`; `content/docs/marks/image.md`)**: Per-piece paint after `divide` is an encoding on the piece: `msc.encode(area, "fillColor", "industry", { mapping })`. An image is its own mark (`src`, `x`, `y`, `width`, `height`). A code search of the repository for pattern fills found none.
+- **ggpattern (read: the README)**: "Custom ggplot2 geoms which support filled areas with geometric and image-based patterns." There is a pattern twin of each filled geom (`geom_area_pattern`, `geom_ribbon_pattern`, `geom_density_pattern`, `geom_col_pattern`, ...), and the pattern is an aesthetic (`pattern = 'stripe'`, or an image). So in R a texture is a channel of the piece, and a textured stacked area comes free because `position_stack` stacks at each x.
+- **Data Illustrator, Charticulator, ggtextures**: Not read this round.
+
+### What type does each operator have?
+
+Terms. A **unit** is what a column's values are measured in (counts, USD, days). A **trait** is something a unit's values can do. The one that matters here is **CanSum**: the amounts add up, so a sum of them means something (money, counts, lengths, but not temperatures or prices). It is declared with `Unit("USD", { traits: [Trait.summable()] })` (`families/trait.ts`). A column with no declared unit passes every check (gradual typing, `addsUp` in `measure.ts`).
+
+Each continuous axis of a node has an extent with an **origin state** (`underlyingSpace.ts`, the essay *Underlying Space*): **pinned** means it is placed at a data position (a scatter's x over [30, 50]); **free** means it is an amount hanging from a baseline nothing has placed yet (a bar of 30 is [0, 30]); **none** means only its width means anything (a centered streamgraph). A **ratio** here is a share of a given whole: weight divided by the total.
+
+| Operator | Takes | Gives | Sums? | Checked today |
+| --- | --- | --- | --- | --- |
+| stack | children, each with a free extent along `dir` in a unit with CanSum | one space whose extent is the sum; each part is pinned at the running sum of the parts before it | yes | yes: `distribute.ts` calls `currentUnits().sum(q, "stack")` for each free part. A pinned part is not summed; only its width is added. |
+| stack with `size` | a size per child: a field in a unit with CanSum, or `field(x).normalize()` | each child wrapped in a box of that size, then a stack. With `normalize`, the sizes are shares that sum to 1, so the whole is the box it is given | yes; with `normalize`, a ratio | yes for a field name (`inferEntrySize` calls `checkSummable`). `normalize` makes a unit with CanSum (`fieldExpr.ts`). |
+| spread | any children | separate spaces side by side with gaps; an ordinal axis over the keys | no | nothing to check |
+| partition | a key with a region: `field(x).bin(...)` on a continuous column, or `struct({ x, y }).bin(...)` | one cell per bin, pinned at its true place on one continuous scale; a cell's width is a difference of positions | no | the key must make cells; no trait is checked |
+| bin | a continuous column | a key whose values are cells | no (quantile bins count rows) | n/a |
+| treemap | a size per child, in a unit with CanSum | tiles of a given box, each with area equal to its share of the total | yes, a ratio | yes: `treemap.tsx` calls `checkSummable` |
+| cut (a), at positions or cells | a shape on a pinned continuous axis, and cell boundaries | the parts of the shape inside each cell | no; it needs positions whose differences mean something, not sums | not a mode of `cut` today; the croissant spells it as `partition` plus `intersect` |
+| cut (b), by weight (`size`) | a box with explicit `w` and `h`, and a weight per piece | pieces whose extents are their shares of the box (raw numbers are absolute pixels) | yes, and it divides by the total: a ratio | a field name, yes (through `inferEntrySize`). The combinator form's `datum()` weights, no: `resolveExtents` sums them with no CanSum check |
+| cut (c), by bin cells | as (a) | as (a) | no | not implemented |
+| cut (d), an area by a group (proposed) | a ribbon whose `h` at each vertex is the sum of the group's `h` there | one band per group: a stack at each vertex | yes, at each vertex | not implemented; would be `stack`'s check at each vertex |
+
+- **Does cutting imply summability?** By weight, yes, and it needs more than `stack` does. `stack` needs CanSum: the whole is whatever the parts add to. A cut by weight has the whole given and makes each part its share, weight divided by the total. That needs CanSum (for the total) and a total that is not 0, and the result is a ratio, a unitless share. `stack({ size: field(x).normalize() })` and `treemap` already have exactly this type. At positions or cells, no: the cut needs a positioned axis whose differences mean something (a cell's width), and nothing is added. By a group on an area, yes, at each vertex, which is `stack`'s type applied at every x.
+- **Is arbitrary cutting a different type from content cutting?** Yes. A geometric cut (at positions or cells) has `partition`'s type: a positioned space in, cells out, no sums. A content cut (by weight or group) has `stack`'s type: amounts with CanSum in, parts end to end out; with the whole given, it is `stack`'s `size` mode or `treemap`. So the two kinds of cutting coincide with operators that exist: the geometric kind with `partition`, the content kind with `stack({ size })`. That is evidence for F4: the regions come from `partition` or `stack`, and intersect does the cutting. One `cut` with both modes would be one name over two types.
+- **Is the cut-by-weight property stronger than stack's?** Yes. It is the ratio form: `stack` with a whole given. `stack` with no size has a weaker type (the whole is the sum). The stacked-area cut (d) has `stack`'s weaker type at each vertex: the ribbon's `h` is the sum, so no ratio is needed.
+
+#### Where the code does not check what the types say
+
+- `cut`'s combinator form sums its `datum()` weights with no CanSum check (`resolveExtents` in `cut.tsx`).
+- `cut.tsx`'s header says it throws when weights "carry incompatible measure tags", but `resolveExtents` does not check tags.
+- All-zero weights pass silently: `weightTotal` falls back to 1, so every piece has size 0. A ratio needs a total that is not 0; this should be an error.
+- A sum taken while a chart is built (a size channel, `.sum()`, `treemap`, `cut`, `normalize`) cannot see a unit definition in another chart (`TODO(#1197 follow-up)` in `schema.ts`).
+- `partition` checks no trait of its key's unit. A cell's width is a difference of positions, which needs an axis with meaningful differences; there is no check that would catch a key whose differences mean nothing.
+
+### Names: one reading each
+
+- **`.stack()` on a ribbon admits several readings**: Stack the whole ribbons (a ridgeline, which is what the flow `stack` does to whole children today); stack the series at each x in a fixed order (a stacked area); or stack them re-sorted by rank at each x (a ribbon chart).
+- **`.cut()` admits one**: Divide the shape you already have. Josh: "ribbon().stack() could wrongly suggest a kind of stacked ribbon chart shape whereas ribbon().cut() doesn't suggest that to me b/c cut implies cutting into stuff whereas there are a few ways you could stack things." This counts for `cut` in the comparison.
+
+### What we know
+
+Every factoring must satisfy these.
+
+1. Stacking must be local: an operator reads only its own children.
+2. A band of a stacked area must be usable as a region, for textures, clipping and labels. Today it is, through a selection.
+3. Making the bands of a stacked area needs a stack at each x. Regions plus intersect does not remove that step; it only says how to use the bands once they exist.
+4. A divide gives disjoint pieces that tile one shape, in one order at every position. Anything whose order changes per position (a ribbon chart) or whose pieces cross must be built as pieces, then connected.
+5. Connecting pieces across positions is its own step: a ribbon through the pieces that share a key today, and #47's anchors for slots on a node's side.
+6. Per-piece paint (a color, an image, a pattern) must be a channel of the piece. Today `fill` is; `href` is not.
+7. A divide by weight needs CanSum and a given whole (a ratio). A divide at positions needs a positioned axis and no sum. They are two types.
+8. Pieces may need to move away from their source (an exploded cut with gaps). Intersect in place does not do that; a layout step does.
+9. The name should admit one reading.
+
+### What is still open
+
+1. Should `cut` stay as a name, as sugar for regions plus intersect, and if so for which type: weight, cells, or both?
+2. Where is the stack at each x written: in the flow inside a `scatter` (today), as a modifier, or as a cut of the total?
+3. Should `image` get an `href` channel, so a texture per piece is one mark?
+4. How does a spec name one band of a collective mark (`bands[i]` fails today)?
+5. Should a ribbon chart have a short form, or is pieces-then-connect its spelling?
+6. Data Illustrator, Charticulator and ggtextures are not read yet.
 
 Renders are real GoFish renders. B uses a throwaway prototype node, `packages/gofish-graphics/src/ast/shapes/_prototypeFnCurve.tsx`, which `stories/proposals/CroissantSamplingB.stories.tsx` drives. `fnCurve({ f, range })` stands in for `ribbon({ h: x.density() })`. In both approaches the cut layer emulates an exact Dist cut with 2000 exact quantile rows.
 
