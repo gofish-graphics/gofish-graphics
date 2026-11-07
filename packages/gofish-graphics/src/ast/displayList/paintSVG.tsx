@@ -57,29 +57,27 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
  *  reset, so ids are unique across every visualization on a page. */
 let compositeIdCounter = 0;
 
-/** A render's display list painted, with its `<filter>` defs
+/** A render's display list painted, with the `<filter>` defs its items use
  *  (`DisplayList.filterPlan`) written once ahead of it, under ids of this
- *  render's own; gofish-ir's string backend writes the same defs. */
+ *  render's own; gofish-ir's string backend writes the same defs. Painting
+ *  the items registers their filters, so the defs are read after it: every
+ *  item is painted eagerly, outside any JSX expression Solid would defer. */
 export function paintDocument(
   items: readonly DisplayList.DisplayItem[],
   interactive?: boolean
 ): JSX.Element[] {
-  const filters = DisplayList.filterPlan(
-    items,
-    `gf-filter-${compositeIdCounter++}`
-  );
+  const filters = DisplayList.filterPlan(`gf-filter-${compositeIdCounter++}`);
   const painted = items.map((item) => paintSVG(item, filters, interactive));
   if (!filters.defs.length) return painted;
-  return [
-    <defs>
-      {filters.defs.map((d) => (
-        <filter id={d.id} color-interpolation-filters="sRGB">
-          <feColorMatrix type={d.type} values={d.values} />
-        </filter>
-      ))}
-    </defs>,
-    ...painted,
-  ];
+  const defs = filters.defs.map((d) => (
+    <filter id={d.id} color-interpolation-filters="sRGB">
+      <feColorMatrix
+        type={d.type}
+        values={d.type === "matrix" ? d.values : undefined}
+      />
+    </filter>
+  ));
+  return [<defs>{defs}</defs>, ...painted];
 }
 
 /** SolidJS `style` prop for the CSS-only bits (mix-blend-mode). */
@@ -207,11 +205,12 @@ function paintSVG(
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const transform = parts.length ? parts.join(" ") : undefined;
+      const filter = filters.attr(item.filter);
       const children = item.children.map((c) =>
         paintSVG(c, filters, interactive)
       );
       return (
-        <g transform={transform} filter={filters.attr(item.filter)}>
+        <g transform={transform} filter={filter}>
           {children}
         </g>
       );
@@ -242,6 +241,10 @@ function paintSVG(
         item,
         `gf-comp-${compositeIdCounter++}`
       );
+      const defs = plan.defs.map((d) => {
+        const painted = d.items.map((c) => paintSVG(c, filters, false));
+        return <g id={d.id}>{painted}</g>;
+      });
       const drawn = plan.layers.map((l) => {
         let out: JSX.Element = <use href={`#${l.use}`} />;
         for (const m of [...l.masks].reverse())
@@ -259,14 +262,16 @@ function paintSVG(
           data-gf-id={gfId}
         >
           <defs>
-            {plan.defs.map((d) => (
-              <g id={d.id}>{d.items.map((c) => paintSVG(c, filters, false))}</g>
-            ))}
+            {defs}
             {plan.masks.map((m) =>
               "outside" in m ? (
                 <mask
                   id={m.id}
                   maskUnits="userSpaceOnUse"
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={h}
                   maskContentUnits="userSpaceOnUse"
                 >
                   <rect x={x} y={y} width={w} height={h} fill="#fff" />
@@ -283,6 +288,10 @@ function paintSVG(
                 <mask
                   id={m.id}
                   maskUnits="userSpaceOnUse"
+                  x={x}
+                  y={y}
+                  width={w}
+                  height={h}
                   maskContentUnits="userSpaceOnUse"
                   style="mask-type:alpha"
                 >

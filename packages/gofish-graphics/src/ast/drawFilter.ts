@@ -44,7 +44,8 @@ export function displayFilter(
 
 /** The `feColorMatrix` `values` of CSS `grayscale(amount)`, as the Filter
  *  Effects spec defines it: each channel mixes toward the luminance, with
- *  the `[r, g, b]` weights, by `amount`. */
+ *  the `[r, g, b]` weights, by `amount`. `checkStrategy` has already held
+ *  `amount` to [0, 1], the range CSS clamps it to. */
 function grayscaleMatrix(amount: number): string {
   const [r, g, b] = [0.2126, 0.7152, 0.0722];
   const inv = 1 - amount;

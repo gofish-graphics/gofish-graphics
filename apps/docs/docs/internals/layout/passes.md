@@ -1470,9 +1470,9 @@ render's `padding` option.
 <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} xmlns="http://www.w3.org/2000/svg">
 ```
 
-The SVG is the render's `w`/`h`, or, on a dimension the render does not give, the
-root's laid-out box plus its ink, rounded up to whole pixels (`svgDim` in
-`runLayout`), with a `viewBox` of
+The SVG is the render's `w`/`h`, rounded up to whole pixels before layout, or, on
+a dimension the render does not give, the root's laid-out box plus its ink,
+rounded up the same way (`svgDim` in `layout`), with a `viewBox` of
 the same size (see [Rendering](/internals/core/rendering#how-the-live-render-wires-it-together)). There is **no inner flip `<g>`**:
 layout is already in y-down pixels, so the display-list items paint directly under
 the `<svg>`.

@@ -31,7 +31,12 @@ const all = (items: any[]): any[] =>
   items.flatMap((i: any) => [
     i,
     ...all(i.children ?? []),
-    ...all((i.operands ?? []).flatMap((o: any) => [...(o.paint ?? []), ...(o.shape ?? [])])),
+    ...all(
+      (i.operands ?? []).flatMap((o: any) => [
+        ...(o.paint ?? []),
+        ...(o.shape ?? []),
+      ])
+    ),
   ]);
 
 console.log("# a mark's filter wraps its drawing");
@@ -67,7 +72,12 @@ console.log("# a raw CSS string and an amount");
 {
   const dl = await layer([
     rect({ w: 10, h: 10, fill: "red", filter: "url(#shadow)" }),
-    rect({ w: 10, h: 10, fill: "red", filter: Filter.grayscale({ amount: 0.5 }) }),
+    rect({
+      w: 10,
+      h: 10,
+      fill: "red",
+      filter: Filter.grayscale({ amount: 0.5 }),
+    }),
   ]).toDisplayList({ w: 100, h: 100 });
   const filters = groups(dl).map((g: any) => g.filter);
   check(
@@ -95,11 +105,7 @@ console.log("# two amounts draw two defs, one amount one");
     rect({ w: 10, h: 10, filter: Filter.grayscale({ amount: 0.5 }) }),
   ]).toDisplayList({ w: 100, h: 100 });
   const svg = DisplayList.displayListToSVG(dl);
-  check(
-    "two <filter> defs",
-    (svg.match(/<filter /g) ?? []).length === 2,
-    svg
-  );
+  check("two <filter> defs", (svg.match(/<filter /g) ?? []).length === 2, svg);
 }
 
 console.log("# a layer's filter wraps its whole subtree");
@@ -175,7 +181,9 @@ console.log("# a filter inside a coordinate space");
   const g = all(dl.items).filter((i: any) => i.filter !== undefined);
   check(
     "one filtered group holding both shapes, under polar",
-    g.length === 1 && g[0].filter.value === "url(#shadow)" && g[0].children.length === 2,
+    g.length === 1 &&
+      g[0].filter.value === "url(#shadow)" &&
+      g[0].children.length === 2,
     dl.items
   );
 }
@@ -195,7 +203,8 @@ console.log("# a compositor inside a coordinate space");
   const kinds = all(dl.items).map((i: any) => i.kind);
   check(
     "the operands draw as one composite, not two shapes",
-    kinds.includes("composite") || kinds.filter((k: string) => k === "path" || k === "rect").length === 1,
+    kinds.includes("composite") ||
+      kinds.filter((k: string) => k === "path" || k === "rect").length === 1,
     kinds
   );
 }
@@ -211,6 +220,54 @@ console.log("# a bad strategy is an error");
     threw = true;
   }
   check("unknown kind throws", threw);
+}
+
+console.log("# an amount out of [0, 1] is an error");
+for (const amount of [1.5, -0.5]) {
+  // CSS clamps `grayscale(amount)` to [0, 1]; the Filter family rejects an
+  // amount past it, so the matrix is only ever made from one in range.
+  let message = "";
+  try {
+    await layer([
+      rect({ w: 10, h: 10, filter: Filter.grayscale({ amount }) }),
+    ]).toDisplayList({ w: 100, h: 100 });
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  check(
+    `amount ${amount} throws`,
+    message.includes(".amount: expected"),
+    message
+  );
+}
+
+console.log("# every filter reference names a def");
+{
+  // A filter inside a composite's operand is drawn in the composite's defs;
+  // its <filter> def is still written.
+  const dl = await layer([
+    intersect([
+      rect({ w: 10, h: 10, fill: "red", filter: Filter.grayscale }),
+      rect({
+        x: 5,
+        w: 10,
+        h: 10,
+        fill: "blue",
+        filter: Filter.luminanceToAlpha,
+      }),
+    ]),
+    rect({ w: 10, h: 10, filter: Filter.grayscale }),
+  ]).toDisplayList({ w: 100, h: 100 });
+  const svg = DisplayList.displayListToSVG(dl);
+  const defIds = new Set(
+    [...svg.matchAll(/<filter id="([^"]+)"/g)].map((m) => m[1])
+  );
+  const refs = [...svg.matchAll(/filter="url\(#([^)]+)\)"/g)].map((m) => m[1]);
+  check(
+    "two defs, and each reference names one",
+    defIds.size === 2 && refs.length >= 3 && refs.every((r) => defIds.has(r)),
+    svg
+  );
 }
 
 console.log("# the wire");

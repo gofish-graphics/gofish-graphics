@@ -2,7 +2,7 @@
 // @wiki Rendering — /internals/core/rendering
 // </gofish-wiki>
 
-import type { CompositeItem, DisplayFilter, DisplayItem } from "./schema.js";
+import type { CompositeItem, DisplayItem } from "./schema.js";
 
 /** A mask a composite layer is clipped by: the alpha of the listed
  *  operands' shapes drawn together (their union), or, with `invert`, one
@@ -116,7 +116,11 @@ const maskKey = (m: CompositeMask): string =>
  * mask in `masks` is a `<mask>`: with `alpha`, an alpha mask
  * (`mask-type:alpha`) of `<use>`s of those defs' shapes; with `outside`, a
  * white rect over the item's bbox with a black rect over it, clipped by the
- * alpha mask `outside` names, so it is one minus that mask. Each layer is a
+ * alpha mask `outside` names, so it is one minus that mask. Every mask's
+ * region is the item's bbox, in user space (`maskUnits="userSpaceOnUse"`
+ * with its `x`, `y`, `width` and `height`): left out, a mask's region is
+ * SVG's default, -10% to 110% of the viewport, and a composite past it
+ * would not be masked. Each layer is a
  * `<use>` of a def, wrapped in a `<g mask>` per mask (the first mask
  * outermost), and, with a `blendMode`, in a group that mixes by it. The
  * layers sit in a group `isolate`d, so a blend mixes the layers only.
@@ -186,67 +190,4 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
   });
   def(fillId, item.fill);
   return { defs, masks: [...masks.values()], layers };
-}
-
-/** A display filter a backend draws as an SVG `<filter>` def. */
-type ColorMatrix = Extract<DisplayFilter, { kind: "colorMatrix" }>;
-
-/**
- * The filters of a render as SVG draws them: the one plan both SVG backends
- * write out, as {@link compositePlan} is for composites. `defs` are the
- * distinct `colorMatrix` filters `items` use, looking inside groups and
- * composites, in the order they are first used, each under an id made from
- * `prefix`. A backend writes each as a `<filter>` of one `feColorMatrix`, in
- * sRGB as CSS filters are. `attr` is the `filter` attribute of a group drawn
- * under `filter`: a `css` value as it is, a `colorMatrix` as a `url(#id)` of
- * its def. A backend draws `prefix` from the counter its composite ids come
- * from, so two visualizations on one page do not share ids.
- */
-export interface FilterPlan {
-  defs: ({ id: string } & Omit<ColorMatrix, "kind">)[];
-  attr(filter: DisplayFilter | undefined): string | undefined;
-}
-
-/** The {@link FilterPlan} of `items`. */
-export function filterPlan(
-  items: readonly DisplayItem[],
-  prefix: string
-): FilterPlan {
-  const defs: FilterPlan["defs"] = [];
-  const idByKey = new Map<string, string>();
-  const idOf = new Map<DisplayFilter, string>();
-  const walk = (items: readonly DisplayItem[]): void => {
-    for (const item of items) {
-      if (item.kind === "group") {
-        const f = item.filter;
-        if (f?.kind === "colorMatrix" && !idOf.has(f)) {
-          const key = `${f.type} ${f.values ?? ""}`;
-          let id = idByKey.get(key);
-          if (id === undefined) {
-            id = `${prefix}-${defs.length}`;
-            idByKey.set(key, id);
-            defs.push({ id, type: f.type, values: f.values });
-          }
-          idOf.set(f, id);
-        }
-        walk(item.children);
-      } else if (item.kind === "composite") {
-        for (const o of item.operands) {
-          walk(o.paint);
-          walk(o.shape ?? []);
-        }
-        walk(item.fill ?? []);
-      }
-    }
-  };
-  walk(items);
-  return {
-    defs,
-    attr: (filter) =>
-      filter === undefined
-        ? undefined
-        : filter.kind === "css"
-          ? filter.value
-          : `url(#${idOf.get(filter)})`,
-  };
 }

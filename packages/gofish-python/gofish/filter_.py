@@ -24,7 +24,7 @@ __all__ = ["grayscale", "luminance_to_alpha"]
 
 @bare_kind("Filter")
 def grayscale(*, amount: Optional[float] = None) -> Dict[str, Any]:
-    """Draw in grays: CSS `grayscale(amount)`.
+    """Draw in grays, as an SVG `feColorMatrix` in sRGB: the matrix the Filter Effects spec gives for CSS `grayscale(amount)`.
 
     Args:
         amount: How far to gray, from 0 (unchanged) to 1 (all gray). Default 1.

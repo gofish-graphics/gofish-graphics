@@ -13,9 +13,12 @@
 
 /* A chart is drawn at its own pixel size. One wider than the column (on a
    phone) shrinks to fit it through its viewBox, as a GoFishImage picture
-   does, and never grows past its own size (#1330). */
-.gofish-example-canvas svg,
-.gofish-vue svg {
+   does, and never grows past its own size (#1330). Only the root chart svg:
+   GoFishExample appends the story's container div, and GoFishVue renders
+   into its own container div, so the svg is a grandchild of each. An svg
+   nested in a chart (an image mark's) keeps its own size. */
+.gofish-example-canvas > div > svg,
+.gofish-vue > div > svg {
   max-width: 100%;
   height: auto;
 }

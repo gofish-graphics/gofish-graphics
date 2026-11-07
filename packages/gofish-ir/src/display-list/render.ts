@@ -20,7 +20,8 @@ import type {
   DisplayListDocument,
   Style,
 } from "./schema.js";
-import { compositePlan, filterPlan, type FilterPlan } from "./composite.js";
+import { compositePlan } from "./composite.js";
+import { filterPlan, type FilterDef, type FilterPlan } from "./filter.js";
 
 const esc = (s: string): string =>
   s
@@ -123,8 +124,8 @@ const itemToSVG = (item: DisplayItem, filters: FilterPlan): string => {
 let compositeIdCounter = 0;
 
 /** A def of a {@link FilterPlan} as an SVG `<filter>`. */
-const filterSVG = (d: FilterPlan["defs"][number]): string => {
-  const values = d.values !== undefined ? ` values="${esc(d.values)}"` : "";
+const filterSVG = (d: FilterDef): string => {
+  const values = d.type === "matrix" ? ` values="${esc(d.values)}"` : "";
   return `<filter id="${d.id}" color-interpolation-filters="sRGB"><feColorMatrix type="${d.type}"${values}/></filter>`;
 };
 
@@ -133,6 +134,7 @@ const filterSVG = (d: FilterPlan["defs"][number]): string => {
  *  its `compositePlan` (composite.ts), which that backend writes too. */
 const compositeToSVG = (item: CompositeItem, filters: FilterPlan): string => {
   const { x, y, w, h } = item.bbox;
+  const region = `maskUnits="userSpaceOnUse" x="${x}" y="${y}" width="${w}" height="${h}" maskContentUnits="userSpaceOnUse"`;
   const plan = compositePlan(item, `gf-comp-${compositeIdCounter++}`);
   const defs =
     plan.defs
@@ -144,10 +146,10 @@ const compositeToSVG = (item: CompositeItem, filters: FilterPlan): string => {
     plan.masks
       .map((m) =>
         "outside" in m
-          ? `<mask id="${m.id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+          ? `<mask id="${m.id}" ${region}>` +
             `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>` +
             `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000" mask="url(#${m.outside})"/></mask>`
-          : `<mask id="${m.id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha">` +
+          : `<mask id="${m.id}" ${region} style="mask-type:alpha">` +
             `${m.alpha.map((u) => `<use href="#${u}"/>`).join("")}</mask>`
       )
       .join("");
@@ -169,10 +171,12 @@ const compositeToSVG = (item: CompositeItem, filters: FilterPlan): string => {
 export function displayListToSVG(doc: DisplayListDocument): string {
   compositeIdCounter = 0;
   const { w, h } = doc.viewport;
-  const filters = filterPlan(doc.items, `gf-filter-${compositeIdCounter++}`);
+  const filters = filterPlan(`gf-filter-${compositeIdCounter++}`);
+  // The items first: drawing them registers the filters they use.
+  const items = doc.items.map((i) => itemToSVG(i, filters)).join("");
   const defs = filters.defs.length
     ? `<defs>${filters.defs.map(filterSVG).join("")}</defs>`
     : "";
-  const body = defs + doc.items.map((i) => itemToSVG(i, filters)).join("");
+  const body = defs + items;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 }

@@ -649,7 +649,7 @@ export const STRATEGIES = {
     doc: "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape.",
     kinds: {
       grayscale: {
-        doc: "Draw in grays: CSS `grayscale(amount)`.",
+        doc: "Draw in grays, as an SVG `feColorMatrix` in sRGB: the matrix the Filter Effects spec gives for CSS `grayscale(amount)`.",
         params: {
           amount: {
             type: t.num({ min: 0, max: 1 }),

@@ -29,10 +29,11 @@ export type LuminanceToAlphaFilter = Extract<
 >;
 
 /**
- * Draw in grays: CSS `grayscale(amount)`.
+ * Draw in grays. Drawn as an SVG `feColorMatrix`, in sRGB, with the matrix
+ * the Filter Effects spec gives for CSS `grayscale(amount)`.
  *
- * @param amount How far to gray, from 0 (unchanged) to 1 (all gray).
- *   Default 1.
+ * @param amount How far to gray, from 0 (unchanged) to 1 (all gray); an
+ *   amount outside that range is an error. Default 1.
  */
 export const grayscale = bareKind(
   "Filter.grayscale",

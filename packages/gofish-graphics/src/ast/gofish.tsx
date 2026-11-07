@@ -350,6 +350,10 @@ export const axesEnabled = (
   return enabled;
 };
 
+/** `x` rounded up to whole pixels, the size of a canvas: a size a float's
+ *  error past a whole pixel stays that pixel. */
+const wholePx = (x: number): number => Math.ceil(x - 1e-6);
+
 export async function layout(
   {
     w,
@@ -393,6 +397,11 @@ export async function layout(
   // HTML container is a separate feature).
   rejectLength("render's w", w);
   rejectLength("render's h", h);
+  // The canvas every backend draws on is whole pixels (Rendering wiki
+  // essay, #1330), so a given size is rounded once, here, and the root is
+  // fitted to the canvas it is drawn on.
+  if (w !== undefined) w = wholePx(w);
+  if (h !== undefined) h = wholePx(h);
   contexts.session.canvas = [w, h];
   child.setRenderSession(contexts.session);
   // Note: callers must await `document.fonts.ready` before invoking
@@ -886,14 +895,12 @@ export async function layout(
     return (v: number) => origin + direction * pxOf(map, v);
   }) as PixelPosScales;
 
-  // The SVG is the render's size (#493): the root, its chrome included, was
-  // fitted to it. A dimension the render does not give is the root's whole
-  // box, its chrome included, plus its ink. Either is rounded up to whole
-  // pixels, the canvas every backend draws on (Rendering wiki essay, #1330);
-  // a size a float's error past a whole pixel stays that pixel.
-  const wholePx = (x: number): number => Math.ceil(x - 1e-6);
+  // The SVG is the render's size (#493), already whole pixels: the root, its
+  // chrome included, was fitted to it. A dimension the render does not give
+  // is the root's whole box, its chrome included, plus its ink, rounded up
+  // to whole pixels.
   const svgDim = (axis: 0 | 1, given: number | undefined): number => {
-    if (given !== undefined) return wholePx(given);
+    if (given !== undefined) return given;
     const s = root.dims[axis]?.size;
     return wholePx(
       (s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE) +
