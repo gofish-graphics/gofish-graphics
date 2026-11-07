@@ -559,7 +559,13 @@ The spec is the fluent one from PR #1113, not yet on `main`:
 ```ts
 const flower = chart({ coord: Coord.polar(), axes: false })
   .flow(stack({ by: "species", dir: "x", h: 40 }))
-  .mark(petal({ w: "count", fill: "species" }));
+  .mark(
+    polygon({
+      w: "count",
+      d: "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z",
+      fill: "species",
+    })
+  );
 
 chart(stemData, { axes: false })
   .flow(scatter({ by: "lake", x: "x" }))

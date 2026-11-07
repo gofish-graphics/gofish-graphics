@@ -259,7 +259,9 @@ export function simplifyRing<P extends readonly [number, number]>(
 
 /** A path's outline: `path`, kept in a node's axis order, flattened to
  *  `tolerance` (see {@link flattenPath}) and closed or open as `closed`
- *  says, painted as `paint`. An open outline is never filled. */
+ *  says, painted as `paint`. A closed outline drops the repeated closing
+ *  point, as every other closed outline does. An open outline is never
+ *  filled. */
 export const pathOutline = (
   path: Path,
   tolerance: number,
@@ -267,7 +269,12 @@ export const pathOutline = (
   closed: boolean,
   paint: OutlinePaint
 ): Outline => ({
-  points: orderToPixel(flattenPath(path, tolerance), direction),
+  points: orderToPixel(
+    closed
+      ? openRing(flattenPath(path, tolerance))
+      : flattenPath(path, tolerance),
+    direction
+  ),
   closed,
   ...paint,
   filled: closed && paint.filled,

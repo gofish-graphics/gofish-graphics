@@ -15,10 +15,11 @@ import {
   ringOutline,
 } from "../geometry";
 import type { Ring } from "../geometry/ring";
+import { path } from "../../path";
 import {
   lowerStyle,
+  outlineItem,
   rectItemFromBox,
-  ringItem,
   roleFor,
 } from "../displayList/lowerHelpers";
 import { GoFishNode, outlineOverhang } from "../_node";
@@ -240,7 +241,13 @@ export const Region = ({
                 [x0, y1],
               ];
         return [
-          ringItem(points, coordinateTransform, toPixel, node.datum, style),
+          outlineItem(
+            path(points, { closed: true }),
+            coordinateTransform,
+            toPixel,
+            node.datum,
+            style
+          ),
         ];
       },
       // Its outline is what it draws: the cell's outline when it has one,

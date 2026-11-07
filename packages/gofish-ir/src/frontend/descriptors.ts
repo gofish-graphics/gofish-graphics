@@ -2112,7 +2112,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         "Width of the box the outline is stretched to: a number (pixels), a field name, or an accessor, as on rect. With `w` or `h` given, the outline is in the unit box, and a side left out fills the space it is given."
       ),
       h: ch.size(
-        "Height of the box the outline is stretched to, as `w`. The unit box's y runs the way the polygon's frame does: top-down on a plain canvas, outward in a polar slot."
+        "Height of the box the outline is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot."
       ),
       fill: {
         ...ch.color("Fill color, or a field name for a color scale."),

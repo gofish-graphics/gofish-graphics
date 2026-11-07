@@ -28,6 +28,7 @@
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
 import { paintOf } from "../displayList/shapeOnly";
+import { path } from "../../path";
 import { GoFishNode, placeUnplacedChild } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
@@ -35,10 +36,10 @@ import { Extent } from "../extent";
 import * as Pwl from "../solver/pwl";
 import {
   lowerStyle,
+  outlineItem,
   lowerSubtree,
   pixelBox,
   rectItemFromBox,
-  ringItem,
   roleFor,
 } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
@@ -400,8 +401,11 @@ function compositeNode(
         if (ring !== undefined && shapes.every(coversItsOutline)) {
           if (ring.length === 0) return [];
           return [
-            ringItem(
-              ring.map((p) => local(p)),
+            outlineItem(
+              path(
+                ring.map((p) => local(p)),
+                { closed: true }
+              ),
               coordinateTransform,
               toPixel,
               node.datum,

@@ -14,7 +14,6 @@ import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import {
-  path,
   transformPath,
   type Path,
   type Point,
@@ -61,29 +60,13 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** A closed ring of layout points as a path item: the {@link outlineItem}
- *  of its straight edges. Used by the region lower body. */
-export const ringItem = (
-  points: Point[],
-  coordinateTransform: CoordinateTransform | undefined,
-  toPixel: ToPixel,
-  datum: Record<string, unknown>[] | undefined,
-  style: DisplayList.Style
-): DisplayList.PathItem =>
-  outlineItem(
-    path(points, { closed: true }),
-    coordinateTransform,
-    toPixel,
-    datum,
-    style
-  );
-
 /** A closed outline of layout points, straight edges and curves alike, as a
  *  path item. It is drawn as it is under a linear coordinate space. Under any
  *  other, every point of it goes through the space: the whole outline is
  *  adaptively resampled, curves included, so a straight edge in data space
- *  draws as the curve the space makes of it, as a `line` does. Shared by the
- *  polygon and region lower bodies. */
+ *  draws as the curve the space makes of it, as a `line` does. Used by the
+ *  polygon, region and Porter-Duff lower bodies. Rect's nonlinear branch and
+ *  connect still resample their own paths with `transformPath`. */
 export const outlineItem = (
   ring: Path,
   coordinateTransform: CoordinateTransform | undefined,

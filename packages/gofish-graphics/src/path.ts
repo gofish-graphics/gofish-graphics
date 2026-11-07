@@ -247,17 +247,13 @@ export const parseClosedPath = (d: string): Path => {
     const pts: Point[] = [];
     for (let k = 0; k + 1 < args.length; k += 2)
       pts.push([args[k], args[k + 1]]);
-    if (cmd === "M") {
-      start = cur = pts[0];
-      // Extra pairs after M are lines, as in SVG.
-      for (const p of pts.slice(1)) {
-        out.push(segment(cur, p));
-        cur = p;
-      }
-    } else if (cmd === "L") {
-      for (const p of pts) {
-        out.push(segment(cur, p));
-        cur = p;
+    if (cmd === "M" || cmd === "L") {
+      // M moves to its first pair; the pairs after it are lines, as in SVG.
+      let k = 0;
+      if (cmd === "M") start = cur = pts[k++];
+      for (; k < pts.length; k++) {
+        out.push(segment(cur, pts[k]));
+        cur = pts[k];
       }
     } else if (cmd === "Q") {
       for (let k = 0; k < pts.length; k += 2) {
@@ -270,8 +266,6 @@ export const parseClosedPath = (d: string): Path => {
         cur = pts[k + 2];
       }
     } else {
-      if (!samePoint(cur, start!)) out.push(segment(cur, start!));
-      cur = start!;
       closed = true;
     }
   }
@@ -421,8 +415,9 @@ export const path = (
   }
 ): Path => {
   let segments: PathSegment[] = [];
+  // Close on a copy: the caller's points stay as they were given.
   if (closed === true) {
-    points.push(points[0]);
+    points = [...points, points[0]];
   }
   if (interpolation === "linear") {
     for (let i = 0; i < points.length - 1; i++) {

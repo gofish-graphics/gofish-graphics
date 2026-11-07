@@ -399,7 +399,7 @@ def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None
         points: Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). A field-bound ring takes no `w` or `h`.
         d: The outline as SVG path data: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands, such as `"M0 0 L0 .5 Q.5 1.2 1 .5 L1 0 Z"`. It closes back to its first point with or without `Z`.
         w: Width of the box the outline is stretched to: a number (pixels), a field name, or an accessor, as on rect. With `w` or `h` given, the outline is in the unit box, and a side left out fills the space it is given.
-        h: Height of the box the outline is stretched to, as `w`. The unit box's y runs the way the polygon's frame does: top-down on a plain canvas, outward in a polar slot.
+        h: Height of the box the outline is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot.
         fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.

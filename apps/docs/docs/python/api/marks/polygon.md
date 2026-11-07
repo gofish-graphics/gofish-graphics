@@ -113,9 +113,9 @@ polygon(d="M0 0 L40 0 Q40 30 20 30 Q0 30 0 0 Z", fill="teal")
 With `w` or `h`, a literal outline is in the unit box, 0 to 1 on each axis, and
 is stretched to a `w` by `h` box. The box lays out like a rect of the same size:
 `w` and `h` take a number (pixels), a field name or an accessor, and a side left
-out fills the space it is given. The unit box's y runs the way the polygon's
-frame does: top-down on a plain canvas, and outward from the center in a polar
-slot.
+out fills the space it is given. For now (#1038), the unit box's y runs the
+way the polygon's frame does: top-down on a plain canvas, and outward from the
+center in a polar slot.
 
 Under a polar or other curved coordinate space, every point of the outline goes
 through the space, curves included, the same as a `line`. So a box outline in a

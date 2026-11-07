@@ -178,7 +178,6 @@ type LeafMarkType =
   | "line"
   | "area"
   | "ellipse"
-  | "petal"
   | "text"
   | "image"
   | "polygon";
@@ -309,7 +308,7 @@ free-form `.relate` are all just geometry by this point.
 ```ts twoslash
 type DisplayItem = {
   kind: "rect" | "point" | "area" | "path" | "text";
-  // absolute pixel geometry — transforms folded in, polar already applied (a petal is a path)
+  // absolute pixel geometry — transforms folded in, polar already applied (a bent polygon is a path)
   x: number;
   y: number;
   w?: number;

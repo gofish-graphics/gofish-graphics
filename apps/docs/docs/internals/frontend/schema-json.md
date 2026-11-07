@@ -2668,7 +2668,7 @@ for the API.
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Height of the box the outline is stretched to, as `w`. The unit box's y runs the way the polygon's frame does: top-down on a plain canvas, outward in a polar slot."
+          "description": "Height of the box the outline is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
