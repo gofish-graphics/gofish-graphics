@@ -410,6 +410,144 @@ Every factoring must satisfy these.
 
 Renders are real GoFish renders. B uses a throwaway prototype node, `packages/gofish-graphics/src/ast/shapes/_prototypeFnCurve.tsx`, which `stories/proposals/CroissantSamplingB.stories.tsx` drives. `fnCurve({ f, range })` stands in for `ribbon({ h: x.density() })`. In both approaches the cut layer emulates an exact Dist cut with 2000 exact quantile rows.
 
+## Streamgraph by scatter, and where centering lives
+
+Josh asked: what about a streamgraph that uses `scatter` (a continuous x) instead of `spread`, and where does the centering go in the short form, where the ribbon does the scattering? The renders below are real GoFish renders on `streamgraphData` (x from 0 to 9, five series c). The stories are in `stories/proposals/StreamgraphScatter.stories.tsx`.
+
+Terms. **Silhouette** (d3's name; Vega-Lite and Plot call it *center*) puts the middle of each x's stack at 0, so the shape is mirror symmetric. **Wiggle** (Byron and Wattenberg 2008) moves the baseline at each x to make the bands as flat as it can. Wiggle is not middle: its baseline at one x depends on every x before it, so no rule that looks at one x at a time can make it.
+
+### The explicit form: `scatter` with `alignment: "middle"`
+
+**Fails today: the alignment is silently dropped.**
+
+![](img/sg-scatter-middle-today.png)
+
+![](img/sg-scatter-middle-fixed.png)
+
+Top: today. The render is the same as with no alignment, and so is `alignment: "end"`. Bottom: the same spec with a prototype fix in the engine (not committed). Each x slice is centered, and the shape is the silhouette streamgraph. Its y labels all read 50, the same label bug as today's gallery Streamgraph (labels on an axis with no origin).
+
+Why it fails. `scatter` places each slice with a point position on x and an align on y (`scatter.tsx`). The layer composes the align into a type with no origin only when the layer holds nothing but aligns, distributes and interval positions; a point position anywhere sends the whole layer to the default union (`planConstraintComposition` in `constraints/compose.ts`: "A *point* position pin ... puts the layer in a different regime"). So the scatter's y stays pinned, each stack counts as placed by its own data (`placedByOwnData`), and the align skips every child without a warning (`lowerAlignPlacement` in `constraints/align.ts`). The spread version works because a spread has no point position. The prototype fix makes the check per axis: a point position on x does not stop the fold on y. With it, the same flow with rects centers each bar too. `"end"` still draws the stacked area, by design: an align by an end or a baseline leaves a child where its data puts it.
+
+```js
+chart(streamgraphData)
+  .flow(
+    scatter({ by: "x", x: "x", alignment: "middle" }),
+    stack({ by: "c", dir: "y" })
+  )
+  .mark(ribbon({ h: "y", fill: "c" }));
+```
+
+### No alignment: a stacked area
+
+**Works today.**
+
+![](img/sg-scatter-default.png)
+
+`scatter`'s default alignment is `"baseline"`, so each slice's stack starts at 0.
+
+```js
+chart(streamgraphData)
+  .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ h: "y", fill: "c" }));
+```
+
+### (c) A position for each slice: `y: 0`
+
+**Works today.**
+
+![](img/sg-scatter-y0.png)
+
+A point position on y centers its child on the datum, so `y: 0` puts the middle of every slice's stack at 0. This is the silhouette, today, with no engine change and no alignment. It loses the y axis: a literal position names no field, so no axis is drawn.
+
+```js
+// Runs today
+chart(streamgraphData)
+  .flow(scatter({ by: "x", x: "x", y: 0 }), stack({ by: "c", dir: "y" }))
+  .mark(ribbon({ h: "y", fill: "c" }));
+
+// Proposed short form (c): the whole ribbon is centered at 0, then cut
+chart(streamgraphData).mark(
+  ribbon({ x: "x", cy: 0, h: "y", fill: "c" }).cut({ by: "c", dir: "y" })
+);
+```
+
+### Silhouette, computed in `derive`
+
+**Works today.**
+
+![](img/sg-derive-silhouette.png)
+
+Each band's interval `[y0, y1]` is computed in data, as d3's `stackOffsetSilhouette` does, and a second `scatter` places each piece by `yMin`/`yMax`. No stack and no alignment. The shape is the same as the two renders above, and the y axis is right. `offsetRows` and `silhouette` are 20 lines in the story file.
+
+```js
+chart(streamgraphData)
+  .flow(
+    derive((rows) => offsetRows(rows, silhouette)), // adds y0, y1 to each row
+    scatter({ by: "x", x: "x" }),
+    scatter({ by: "c", yMin: "y0", yMax: "y1" })
+  )
+  .mark(ribbon({ fill: "c" }));
+```
+
+### Wiggle, computed in `derive`
+
+**Works today (emulated in data).**
+
+![](img/sg-derive-wiggle.png)
+
+The same, with `wiggle`, a port of d3's `stackOffsetWiggle`. The bands are flatter than the silhouette's, and the shape is no longer symmetric. Only a step that sees every x can draw this: `derive` here, or a `cut` of the whole ribbon (below).
+
+```js
+chart(streamgraphData)
+  .flow(
+    derive((rows) => offsetRows(rows, wiggle)),
+    scatter({ by: "x", x: "x" }),
+    scatter({ by: "c", yMin: "y0", yMax: "y1" })
+  )
+  .mark(ribbon({ fill: "c" }));
+
+// If wiggle becomes an option: a strategy on the cut, which sees every x
+chart(streamgraphData).mark(
+  ribbon({ x: "x", h: "y", fill: "c" }).cut({
+    by: "c",
+    dir: "y",
+    offset: Offset.wiggle(),
+  })
+);
+```
+
+### Where centering could live
+
+- **(a) No sugar for options**: The short form covers the default (a stacked area); to center, you write the `scatter` out with `alignment: "middle"`. Every default desugars to code you can write, as the repo asks. It needs the engine fix above first. It does not compose with `cut`: you leave the short form to center.
+- **(b) An option on the ribbon, passed through**: `ribbon({ x, h, alignment: "middle" })` rewrites to `scatter({ by: x, x, alignment: "middle" })`. It would draw the fixed render above. It is a scatter option leaking into a mark: `alignment` means nothing to a ribbon drawn by hand. Observable Plot does exactly this (`Plot.areaY(data, { x, y, offset: "wiggle" })`, because `areaY` applies `stackY` for you), so it has precedent. But it duplicates (c), which needs no new option.
+- **(c) A position for the whole ribbon**: Centering is a y position for the band: at each vertex the interval is `[-h/2, h/2]`. Rule 1 already says a ribbon's position channels pick its vertices, and the rewrite already makes a point `y` center each slice (the `y: 0` render). One wrinkle: on a rect, `y` is the start edge and `cy` the center (`boxDims` in `descriptors.ts`). To match rect, the ribbon should spell the center `cy`: `ribbon({ x, cy: 0, h })` is the silhouette, `y: 0` (or nothing) is the stacked area, and `y2: 0` hangs from the top. So scatter's three alignments become rect's three edges, and no option is added. It composes with `cut`: `cy` places the whole ribbon, then `cut` divides it, and the pieces keep the whole's place. It cannot express wiggle.
+- **(d) An offset strategy on the stack**: In d3, Vega-Lite and Plot the offset is an option of the stack transform, which sees the whole table. In GoFish the flow `stack` sits inside one x slice and sees only that slice. So `stack({ offset: "center" })` would only center one slice, which is (c) under another name, and wiggle cannot live there: it needs the slices before it. The one GoFish step that sees every vertex and every piece of the ribbon is the `cut`, which reads the mark's own rows. So an offset strategy fits on the cut: `ribbon({ x, h }).cut({ by, dir: "y", offset: Offset.wiggle() })` (a family, as the repo names strategies). Or it stays a data helper in `derive`, as rendered above.
+
+### Precedent
+
+| System | Center | Wiggle | Where the option lives |
+| --- | --- | --- | --- |
+| d3-shape (read: d3js.org/d3-shape/stack) | `stackOffsetSilhouette`: "Shifts the baseline down such that the center of the streamgraph is always at zero." | `stackOffsetWiggle`, "recommended for streamgraphs in conjunction with the inside-out order" | The stack generator, a data transform: `d3.stack().offset(d3.stackOffsetWiggle)` |
+| Vega-Lite (read: vega.github.io/vega-lite/docs/stack.html) | `stack: "center"` ("Stacks around a center baseline, which produces a streamgraph") | none | The position channel, `encoding.y.stack`; or `offset: "center"` in a `stack` transform |
+| Observable Plot (read: `src/transforms/stack.js`, `src/marks/area.js`, 0.6.17) | `offset: "center"` (alias `"silhouette"`) | `offset: "wiggle"`; the default order becomes inside-out | The `stackY` transform. `areaY` applies `stackY` itself, so the option is written in the mark's options |
+| ggplot2 / ggstream (read: the ggstream README) | core: none (`position_stack`, `position_fill`). ggstream: `geom_stream(type = "mirror")`, "a symmetrical area chart around the x axis" | none | An argument of the geom: `type = "mirror" | "ridge" | "proportional"` |
+| Mascot (as read in round 7) | `vertCellAlignment: "middle"` on the layout of the divided pieces | not found | The layout, after the divide |
+
+Every system puts the offset on the stacking step, not on the mark. Plot looks like the exception, but only because its area mark carries an implicit stack transform; the option still belongs to that transform. Wiggle appears only where the stacking step sees the whole table (d3, Plot).
+
+### Recommendation
+
+1. Fix the bug either way. `scatter({ alignment })` on the free axis must not be dropped when the other axis has a point position, and when an align does skip every child, the skip should not be silent. The prototype fix (one check in `planConstraintComposition`, made per axis) draws the silhouette. This should be its own issue.
+2. Centering is a position: (c). `ribbon({ x: "x", cy: 0, h: "y", fill: "c" }).cut({ by: "c", dir: "y" })` is the centered streamgraph. It adds no option, reuses rect's `y`/`cy`/`y2`, rewrites to a flow that runs today (`scatter({ by: "x", x: "x", y: 0 })`, then the stack), and centers the whole before the cut, so the pieces keep the whole's place. The explicit form (a) stays available once the bug is fixed.
+3. Wiggle is not a position. It needs a step that sees every x. Until someone asks for it, it is a data helper in `derive` (rendered above). If it becomes an option, it belongs on the `cut` as an `Offset` strategy, because the cut is the one local step that sees every vertex of the ribbon. That is an argument for `cut` over the `.stack()` modifier and over the flow `stack`.
+4. Reject (b): it moves a scatter option onto a mark and duplicates (c).
+
+### Open
+
+1. `cy` on a ribbon for the band's center, matching rect, or `y` meaning the center as scatter's point `y` does today?
+2. Should wiggle be in GoFish at all, and if so, as an `Offset` strategy on `cut`, or as a `derive` helper?
+3. A literal `cy: 0` draws no y axis. Should a literal position on an axis with a scale still draw the axis?
+
 ## Rules
 
 1. A mark draws one shape per flow cell, as today. A rect, circle or text is one shape with one position, so its channels are values of the cell's rows (a position is their mean today). A line or ribbon is one shape through many points, so its position channels `x`, `y` and `along` are its vertices: one vertex per `along` value (`x` by default). `.mark(R({ x, y, along, ...rest }))` is `.flow(..., scatter({ by: along ?? x, x, y })).mark(R(rest))`.
