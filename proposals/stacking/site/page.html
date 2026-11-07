@@ -494,6 +494,9 @@
     <li><a href="#relation">The one relation</a></li>
     <li><a href="#stack-spread">Stack and spread</a></li>
     <li><a href="#stacked-grouped">Stacked and grouped</a></li>
+    <li><a href="#which-wiggle">Which wiggle</a></li>
+    <li><a href="#baseline-lives">Where the baseline lives</a></li>
+    <li><a href="#stack-reads">What the stack reads</a></li>
     <li><a href="#for-each-x">For each x</a></li>
     <li><a href="#sampling">Sampling</a></li>
     <li><a href="#approaches">Approaches</a></li>
@@ -530,7 +533,9 @@
         children, the same as for rects. The baselines from the streamgraph
         papers (zero, center, wiggle, expand, diverging) and the inside-out
         order become options of that one <code>stack</code>, because it sees
-        whole series.
+        whole series. The baseline is the alignment of the operator that loops
+        over the cross axis; <code>baseline</code> on a stack of ribbons is
+        short for it.
       </li>
       <li>
         Neighboring bands do not need common sample points. They need to draw
@@ -546,8 +551,10 @@
     <p>
       Keep one flow <code>stack</code>. Let its children's thickness be a
       function of the cross axis, and add a <code>baseline</code> option to it
-      (<code>Baseline.zero()</code>, <code>.center()</code>,
-      <code>.wiggle()</code>). The ribbon stays a plain mark:
+      (<code>Align.zero()</code>, <code>.center()</code>,
+      <code>.wiggle()</code>). The baseline is the alignment of the operator
+      that loops over the cross axis; <code>baseline</code> on a stack of
+      ribbons is short for it. The ribbon stays a plain mark:
       <code>ribbon({ x, h })</code>. Keep the per-x form (<code>scatter</code>
       by x, then <code>stack</code>) as the spelling for charts whose order
       changes at each x, e.g., the ribbon chart. Keep <code>.cut()</code> for
@@ -561,17 +568,17 @@
     </p>
     <figure class="fig-single">
       <img
-        src="img/b-weighted-wiggle.png"
+        src="img/w-weighted.png"
         alt="A wiggle streamgraph of six topics over x from 0 to 30."
         loading="lazy"
       />
     </figure>
     <div class="code-label">Proposed: a streamgraph (JS)</div>
     <pre><code class="language-js">chart(topics)
-  .flow(stack({ by: "topic", dir: "y", baseline: Baseline.wiggle() }))
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.wiggle() }))
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));</code></pre>
     <div class="code-label">Python</div>
-    <pre><code class="language-python">gf.chart(topics).flow(gf.stack(by="topic", dir="y", baseline=Baseline.wiggle())).mark(
+    <pre><code class="language-python">gf.chart(topics).flow(gf.stack(by="topic", dir="y", baseline=Align.wiggle())).mark(
     gf.ribbon(x="x", h="value", fill="topic")
 )</code></pre>
     <p class="note">
@@ -986,6 +993,190 @@
     </figure>
   </div>
 
+  <h2 id="which-wiggle">Which wiggle</h2>
+  <div class="grid-3">
+    <figure>
+      <img
+        src="img/w-deviation.png"
+        alt="Streamgraph of six topics with the deviation baseline."
+        loading="lazy"
+      />
+      <figcaption>deviation (local)</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/w-weighted.png"
+        alt="Streamgraph of six topics with the weighted wiggle baseline."
+        loading="lazy"
+      />
+      <figcaption>weighted wiggle (d3, Plot)</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/w-sinestream.png"
+        alt="Streamgraph of six topics with the SineStream baseline."
+        loading="lazy"
+      />
+      <figcaption>SineStream</figcaption>
+    </figure>
+  </div>
+  <p class="note">
+    Same data and order. All three are emulated in <code>derive</code>.
+  </p>
+  <p>
+    The literature has at least four wiggle baselines. They differ in what they
+    make flat.
+  </p>
+  <ul>
+    <li>
+      <strong>Deviation</strong> (Byron and Wattenberg 2008). It keeps the
+      boundaries close to 0. Its formula needs only one x, and its derivative
+      also minimizes the unweighted wiggle. matplotlib's <code>wiggle</code> is
+      close to it.
+    </li>
+    <li>
+      <strong>Weighted wiggle</strong> (Byron and Wattenberg 2008). It flattens
+      each band's slope, weighted by the band's thickness, so thick bands come
+      out flattest. It is a running sum along x. d3, Plot and matplotlib's
+      <code>weighted_wiggle</code> use it.
+    </li>
+    <li>
+      <strong>SineStream</strong> (Bu et al. 2021). The weighted wiggle with a
+      weight that also counts how fast a band changes, to reduce the sine
+      illusion (the eye reads the gap between two parallel curves at a right
+      angle, not vertically).
+    </li>
+    <li>
+      <strong>L1 wiggle</strong> (Di Bartolomeo and Hu 2016). Absolute slopes
+      instead of squared ones. I could not read this paper; SineStream reports
+      that L1 prefers one large bend over several small ones.
+    </li>
+  </ul>
+  <p>
+    No study picks a best one. Thudt et al. 2016 found the weighted wiggle
+    streamgraph a little easier to read than ThemeRiver and the stacked area for
+    some tasks, with small differences. The weighted wiggle is the default in d3
+    and Plot because they followed Byron and Wattenberg, so it is the one users
+    expect, not a proven best. Both later papers pair their baseline with an
+    order, and the order changes the picture as much as the baseline does.
+  </p>
+  <p>
+    So <code>Align</code> is a strategy family with a function escape hatch,
+    like the other families (<a
+      href="https://github.com/gofish-graphics/gofish-graphics/issues/1101"
+      >#1101</a
+    >). <code>Align.wiggle()</code> is the weighted wiggle, so a spec ported
+    from d3 or Plot draws the same picture. <code>Align.deviation()</code> and
+    <code>Align.sineStream()</code> are small additions. A custom strategy is a
+    function that takes the parts on the shared grid, in stack order, and
+    returns the offset at each x. d3's offsets have the same shape.
+  </p>
+
+  <h2 id="baseline-lives">Where the baseline lives</h2>
+  <div class="grid-2">
+    <figure>
+      <img
+        src="img/r-centered-bars.png"
+        alt="Stacked bars of seafood counts, each lake's stack centered."
+        loading="lazy"
+      />
+      <figcaption>today: <code>alignment: "middle"</code></figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/r-wiggle-bars.png"
+        alt="Stacked bars of seafood counts, each lake's stack offset by the weighted wiggle across lakes."
+        loading="lazy"
+      />
+      <figcaption>proposed: <code>Align.wiggle()</code>, emulated</figcaption>
+    </figure>
+  </div>
+  <p>Baselines come in two kinds.</p>
+  <ul>
+    <li>
+      <strong>One stack at a time.</strong> Zero, center, diverging, expand and
+      deviation each need only one stack. They work for any mark, rects
+      included. GoFish already has one:
+      <code>spread({ alignment: "middle" })</code> centers each stack, and the
+      gallery streamgraph uses it.
+    </li>
+    <li>
+      <strong>Neighbors.</strong> Weighted wiggle, SineStream and L1 need the
+      stacks on either side. Only the operator that loops over the cross axis
+      sees them.
+    </li>
+  </ul>
+  <p>
+    So the baseline is the alignment of the operator that loops over the cross
+    axis. In bar charts and in the per-x form that is the outer
+    <code>spread</code> or <code>scatter</code>, and the option is its
+    <code>alignment</code>: <code>"middle"</code> today,
+    <code>Align.wiggle()</code> proposed. That operator reads each child stack's
+    part boundaries by key, which are the child's own measurements reported up
+    to it, so it stays local.
+  </p>
+  <p>
+    In the whole-series form the loop over x sits inside each profile, so no
+    outer operator exists. There,
+    <code>stack({ baseline: Align.wiggle() })</code> is short for writing the
+    <code>scatter</code> by x out with that alignment. The core is
+    <code>alignment</code> on the operator that loops over the cross axis, and
+    <code>baseline</code> on a stack of profiles is sugar with an exact rewrite.
+  </p>
+  <pre><code class="language-js">// centered stacked bars (today)
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", alignment: "middle" }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ w: 32, h: "count", fill: "species" }));
+
+// wiggle stacked bars (proposed)
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", alignment: Align.wiggle() }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ w: 32, h: "count", fill: "species" }));
+
+// streamgraph: the sugar and what it is short for
+chart(topics)
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.wiggle() }))
+  .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
+
+chart(topics)
+  .flow(
+    scatter({ by: "x", x: "x", alignment: Align.wiggle() }),
+    stack({ by: "topic", dir: "y" })
+  )
+  .mark(ribbon({ h: "value", fill: "topic" }));</code></pre>
+
+  <h2 id="stack-reads">What the stack reads</h2>
+  <p>
+    Today each node reports a box, one interval per axis
+    (<code>underlyingSpace.ts:87</code>). A ribbon's box runs from its lowest to
+    its highest y over all x. A stack of boxes puts each ribbon above the whole
+    ribbon before it, which draws a ridgeline. So boxes alone cannot make a
+    stacked area.
+  </p>
+  <p>
+    The stack in B reads a <strong>profile</strong>: each child's extent along
+    <code>dir</code> as a function of the cross axis, in data units. For a
+    ribbon it is the <code>h</code> channel over x. For a rect it is a constant.
+    The data gives it before layout, so the stack's axis can be the sum, and
+    CanSum can be checked at each x.
+  </p>
+  <p>
+    The geometry interface (<code>geometry/index.ts</code>: box, enclosing
+    circle, outline) is the pixel counterpart, and it answers after layout. An
+    outline gives a pixel profile of any shape: its lowest and highest y at each
+    x. Contour spacing needs exactly that, e.g., ridgelines that never overlap,
+    or tidy trees. That is a <code>spread</code> with no sum. So there are two
+    profiles. A stack adds data profiles. A spread can space shapes by pixel
+    profiles. A shape that has only a pixel outline, e.g., a circle or an image,
+    cannot be stacked this way, because its outline is not an amount.
+  </p>
+
   <h2 id="for-each-x">Where the "for each x" is written</h2>
   <p>
     The flow already says where the loop over x is. This decides which knobs a
@@ -1266,7 +1457,7 @@ chart(topics)
 
 // streamgraph, centered
 chart(topics)
-  .flow(stack({ by: "topic", dir: "y", baseline: Baseline.center() }))
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.center() }))
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
 
 // streamgraph, wiggle, inside-out order
@@ -1275,7 +1466,7 @@ chart(topics)
     stack({
       by: field("topic").sort(Order.insideOut("value")),
       dir: "y",
-      baseline: Baseline.wiggle(),
+      baseline: Align.wiggle(),
     })
   )
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
@@ -1294,7 +1485,7 @@ chart(groups)
     gf.stack(
         by=gf.field("topic").sort(Order.inside_out("value")),
         dir="y",
-        baseline=Baseline.wiggle(),
+        baseline=Align.wiggle(),
     )
 ).mark(gf.ribbon(x="x", h="value", fill="topic"))</code></pre>
     <p>
@@ -1363,8 +1554,8 @@ chart(groups)
     <p>Trade-offs:</p>
     <ul>
       <li>
-        New terms: <code>Baseline</code> and maybe <code>Order.insideOut</code>.
-        "Baseline" is already Josh's word for this in
+        New terms: <code>Align</code> and maybe <code>Order.insideOut</code>.
+        The option name <code>baseline</code> is already Josh's word for this in
         <a href="https://github.com/gofish-graphics/gofish-graphics/issues/809"
           >#809</a
         >.
@@ -1387,7 +1578,7 @@ chart(groups)
   ribbon({ x: "x", h: "value", fill: "topic" }).cut({
     by: "topic",
     dir: "y",
-    baseline: Baseline.wiggle(),
+    baseline: Align.wiggle(),
   })
 );</code></pre>
     <ul>
@@ -1469,7 +1660,7 @@ chart(groups)
     </figure>
     <div class="code-label">Proposed</div>
     <pre><code class="language-js">chart(topics)
-  .flow(stack({ by: "topic", dir: "y", baseline: Baseline.center() }))
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.center() }))
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));</code></pre>
     <div class="code-label">Today</div>
     <pre><code class="language-js">// needs #1343; the y: 0 form runs but draws no y axis
@@ -1486,7 +1677,7 @@ chart(topics)
     <div class="grid-2">
       <figure>
         <img
-          src="img/b-weighted-wiggle.png"
+          src="img/w-weighted.png"
           alt="Weighted wiggle streamgraph."
           loading="lazy"
         />
@@ -1507,7 +1698,7 @@ chart(topics)
     stack({
       by: field("topic").sort(Order.insideOut("value")),
       dir: "y",
-      baseline: Baseline.wiggle(),
+      baseline: Align.wiggle(),
     })
   )
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));</code></pre>
@@ -1577,8 +1768,8 @@ chart(sampled)
     <h3>Ribbon chart (order changes at each x)</h3>
     <figure>
       <img
-        src="img/o-per-x-rank-ribbons.png"
-        alt="Ribbon chart with rects re-sorted at each x."
+        src="img/r-ribbon-chart-zero.png"
+        alt="Ribbon chart of seafood counts: each lake's stack sorted by count from a zero baseline, joined by translucent ribbons."
         loading="lazy"
       />
     </figure>
@@ -1586,6 +1777,30 @@ chart(sampled)
     <pre><code class="language-js">chart(seafood)
   .flow(
     spread({ by: "lake", dir: "x", spacing: 48 }),
+    stack({ by: field("species").sort("count"), dir: "y" })
+  )
+  .mark(rect({ w: 24, h: "count", fill: "species" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(group({ by: "species" }))
+      .mark(ribbon({ fill: "species", opacity: 0.5 }))
+  );</code></pre>
+    <figure>
+      <img
+        src="img/r-wiggle-bars-ribbons.png"
+        alt="The same ribbon chart with each lake's stack offset by the weighted wiggle, emulated."
+        loading="lazy"
+      />
+      <figcaption>
+        An earlier version of this page showed the ribbon chart drawn with a
+        wiggle baseline next to a spec with no baseline. That spec draws a zero
+        baseline, above. With a wiggle baseline it is the spec below (proposed;
+        the render is emulated).
+      </figcaption>
+    </figure>
+    <pre><code class="language-js">chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 48, alignment: Align.wiggle() }),
     stack({ by: field("species").sort("count"), dir: "y" })
   )
   .mark(rect({ w: 24, h: "count", fill: "species" }).name("bars"))
@@ -2035,16 +2250,19 @@ chart(days)
       reverses the round 6 answer on a new argument.
     </li>
     <li>
-      Name of the option: <code>baseline</code> (your
-      <a href="https://github.com/gofish-graphics/gofish-graphics/issues/809"
-        >#809</a
-      >, matplotlib), <code>offset</code> (d3, Plot, Vega, but GoFish has an
-      <code>offset()</code> operator), or <code>origin</code>?
+      Name of the family and options: <code>Align</code> with
+      <code>alignment</code> on spread and scatter, and <code>baseline</code> on
+      a stack of profiles as sugar? Or one name in both places?
     </li>
     <li>
       Which baselines ship: zero, center and wiggle? Should diverging stay a
       trait of the order (<code>Trait.diverging()</code>) or become
-      <code>Baseline.diverging()</code>?
+      <code>Align.diverging()</code>?
+    </li>
+    <li>
+      Default wiggle: weighted (d3, Plot), with
+      <code>Align.deviation()</code> and <code>Align.sineStream()</code> as
+      named variants and a function escape hatch?
     </li>
     <li>
       Inside-out order: a sort strategy

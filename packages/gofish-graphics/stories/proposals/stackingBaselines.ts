@@ -100,6 +100,8 @@ export type Offset =
   | "silhouette"
   | "wiggle"
   | "weightedWiggle"
+  | "deviation"
+  | "sineStream"
   | "expand"
   | "diverging";
 
@@ -201,6 +203,52 @@ export const stackRows = (
       g[j] = center - 0.5 * s.total;
     }
   }
+  if (offset === "deviation") {
+    // Byron and Wattenberg 2008, the deviation baseline: local, pointwise.
+    // g0 = -(1/(n+1)) sum_{i=1..n} (n - i + 1) f_i, with f_1 at the bottom.
+    slices.forEach((s, j) => {
+      const n = s.ord.length;
+      g[j] =
+        -s.ord.reduce((sum, c, i) => sum + (n - i) * s.at.get(c)!, 0) /
+        (n + 1);
+    });
+  }
+  if (offset === "sineStream") {
+    // Bu et al. 2021: the weighted wiggle, g0' = -(1/sum w) sum_i w_i
+    // (f_i'/2 + sum_{j<i} f_j'), with w_i = exp(-f_i'^2 / (2 c^2)) f_i and
+    // c the median of |f_1'|..|f_n'| at that x (c = 0: w_i = f_i). The
+    // slopes are backward differences, as in d3; the weight's derivative is
+    // a central difference on the shared grid. Integrated along x.
+    const fAt = (j: number, c: string) => slices[j].at.get(c)!;
+    const median = (vs: number[]) => {
+      const v = [...vs].sort((a, b) => a - b);
+      const m = v.length >> 1;
+      return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+    };
+    let y = 0;
+    for (let j = 1; j < slices.length; j++) {
+      const s = slices[j];
+      const lo = j - 1;
+      const hi = Math.min(slices.length - 1, j + 1);
+      const df = s.ord.map(
+        (c) => (fAt(hi, c) - fAt(lo, c)) / (slices[hi].x - slices[lo].x)
+      );
+      const cc = median(df.map(Math.abs));
+      let below = 0;
+      let num = 0;
+      let den = 0;
+      s.ord.forEach((c, i) => {
+        const v = s.at.get(c)!;
+        const w = cc === 0 ? v : Math.exp(-(df[i] ** 2) / (2 * cc ** 2)) * v;
+        const d = v - fAt(j - 1, c);
+        num += w * (below + d / 2);
+        den += w;
+        below += d;
+      });
+      if (den) y -= num / den;
+      g[j] = y;
+    }
+  }
   // Rows come out grouped by series in the input's order, so the color
   // scale (which takes values in order of appearance) is the same whatever
   // the stack order.
@@ -218,6 +266,18 @@ export const stackRows = (
       }));
     })
     .sort((a, b) => rank(a) - rank(b) || a.x - b.x);
+};
+
+/** The seafood catch as rows: x is the lake's index, c the species. */
+export const seafoodRows = (
+  data: { lake: string; species: string; count: number }[]
+): Row[] => {
+  const lakes = [...new Set(data.map((d) => d.lake))];
+  return data.map((d) => ({
+    x: lakes.indexOf(d.lake),
+    y: d.count,
+    c: d.species,
+  }));
 };
 
 // ---------------------------------------------------------------------------

@@ -5,22 +5,22 @@ Status: proposal. Not implemented. Every picture is a real GoFish render made wi
 **Summary.**
 
 1. Stacking and dividing are one set of equations. Neighboring parts share a boundary, and each part's thickness is its amount. The equations leave one value open. A stack fills it with a **baseline** (where the whole starts). A divide fills it with a **given whole** (how big the whole must be). Spread has none of these equations, so it shares only plumbing with stack.
-2. A stack that adds whole ribbons can stay local if a ribbon's thickness is a function of x and not one number. The stack then reads only its children, the same as for rects. The baselines from the streamgraph papers (zero, center, wiggle, expand, diverging) and the inside-out order become options of that one `stack`, because it sees whole series.
+2. A stack that adds whole ribbons can stay local if a ribbon's thickness is a function of x and not one number. The stack then reads only its children, the same as for rects. The baselines from the streamgraph papers (zero, center, wiggle, expand, diverging) and the inside-out order become options of that one `stack`, because it sees whole series. The baseline is the alignment of the operator that loops over the cross axis; `baseline` on a stack of ribbons is short for it.
 3. Neighboring bands do not need common sample points. They need to draw the same boundary. The simple rule that is always right is to resample every series at the union of all x positions, after each series is curved (ggplot2's `stat_align`).
 
-**Recommendation.** Approach B. Keep one flow `stack`. Let its children's thickness be a function of the cross axis, and add a `baseline` option to it (`Baseline.zero()`, `.center()`, `.wiggle()`). The ribbon stays a plain mark: `ribbon({ x, h })`. Keep the per-x form (`scatter` by x, then `stack`) as the spelling for charts whose order changes at each x, e.g., the ribbon chart. Keep `.cut()` for dividing a shape that the spec draws first (a bottle, a horizon chart, a sankey link), and define it as a stack of shares intersected with that shape. Drop the `.stack()` mark method (#290). Stacked bars and grouped bars stay two different flows, and a transition between them is an animation between two specs, not an option.
+**Recommendation.** Approach B. Keep one flow `stack`. Let its children's thickness be a function of the cross axis, and add a `baseline` option to it (`Align.zero()`, `.center()`, `.wiggle()`). The baseline is the alignment of the operator that loops over the cross axis; `baseline` on a stack of ribbons is short for it. The ribbon stays a plain mark: `ribbon({ x, h })`. Keep the per-x form (`scatter` by x, then `stack`) as the spelling for charts whose order changes at each x, e.g., the ribbon chart. Keep `.cut()` for dividing a shape that the spec draws first (a bottle, a horizon chart, a sankey link), and define it as a stack of shares intersected with that shape. Drop the `.stack()` mark method (#290). Stacked bars and grouped bars stay two different flows, and a transition between them is an animation between two specs, not an option.
 
 ```js
 // Proposed: a streamgraph
 chart(topics)
-  .flow(stack({ by: "topic", dir: "y", baseline: Baseline.wiggle() }))
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.wiggle() }))
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
 ```
 
 ```python
-gf.chart(topics).flow(
-    gf.stack(by="topic", dir="y", baseline=Baseline.wiggle())
-).mark(gf.ribbon(x="x", h="value", fill="topic"))
+gf.chart(topics).flow(gf.stack(by="topic", dir="y", baseline=Align.wiggle())).mark(
+    gf.ribbon(x="x", h="value", fill="topic")
+)
 ```
 
 The shortcut: the engine has no type for a thickness that is a function of x. Until it does, B is a rewrite into today's per-x flow. It resamples the series to the union grid, runs the per-x stack, and computes the baseline from the whole series before it places any slice. Section "Implementation path" says what the full fix is.
@@ -128,6 +128,76 @@ A transition between them is an animation between two specs whose marks match by
 
 ![](img/m-morph-t0.png) ![](img/m-morph-t05.png) ![](img/m-morph-t1.png)
 
+## Which wiggle
+
+![](img/w-deviation.png) ![](img/w-weighted.png) ![](img/w-sinestream.png)
+
+Left to right: deviation (local); weighted wiggle (d3, Plot); SineStream. Same data and order. All three are emulated in `derive`.
+
+The literature has at least four wiggle baselines. They differ in what they make flat.
+
+- **Deviation** (Byron and Wattenberg 2008). It keeps the boundaries close to 0. Its formula needs only one x, and its derivative also minimizes the unweighted wiggle. matplotlib's `wiggle` is close to it.
+- **Weighted wiggle** (Byron and Wattenberg 2008). It flattens each band's slope, weighted by the band's thickness, so thick bands come out flattest. It is a running sum along x. d3, Plot and matplotlib's `weighted_wiggle` use it.
+- **SineStream** (Bu et al. 2021). The weighted wiggle with a weight that also counts how fast a band changes, to reduce the sine illusion (the eye reads the gap between two parallel curves at a right angle, not vertically).
+- **L1 wiggle** (Di Bartolomeo and Hu 2016). Absolute slopes instead of squared ones. I could not read this paper; SineStream reports that L1 prefers one large bend over several small ones.
+
+No study picks a best one. Thudt et al. 2016 found the weighted wiggle streamgraph a little easier to read than ThemeRiver and the stacked area for some tasks, with small differences. The weighted wiggle is the default in d3 and Plot because they followed Byron and Wattenberg, so it is the one users expect, not a proven best. Both later papers pair their baseline with an order, and the order changes the picture as much as the baseline does.
+
+So `Align` is a strategy family with a function escape hatch, like the other families (#1101). `Align.wiggle()` is the weighted wiggle, so a spec ported from d3 or Plot draws the same picture. `Align.deviation()` and `Align.sineStream()` are small additions. A custom strategy is a function that takes the parts on the shared grid, in stack order, and returns the offset at each x. d3's offsets have the same shape.
+
+## Where the baseline lives
+
+![](img/r-centered-bars.png) ![](img/r-wiggle-bars.png)
+
+Left: today, `alignment: "middle"`. Right: proposed, `Align.wiggle()`, emulated.
+
+Baselines come in two kinds.
+
+- **One stack at a time.** Zero, center, diverging, expand and deviation each need only one stack. They work for any mark, rects included. GoFish already has one: `spread({ alignment: "middle" })` centers each stack, and the gallery streamgraph uses it.
+- **Neighbors.** Weighted wiggle, SineStream and L1 need the stacks on either side. Only the operator that loops over the cross axis sees them.
+
+So the baseline is the alignment of the operator that loops over the cross axis. In bar charts and in the per-x form that is the outer `spread` or `scatter`, and the option is its `alignment`: `"middle"` today, `Align.wiggle()` proposed. That operator reads each child stack's part boundaries by key, which are the child's own measurements reported up to it, so it stays local.
+
+In the whole-series form the loop over x sits inside each profile, so no outer operator exists. There, `stack({ baseline: Align.wiggle() })` is short for writing the `scatter` by x out with that alignment. The core is `alignment` on the operator that loops over the cross axis, and `baseline` on a stack of profiles is sugar with an exact rewrite.
+
+```js
+// centered stacked bars (today)
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", alignment: "middle" }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ w: 32, h: "count", fill: "species" }));
+
+// wiggle stacked bars (proposed)
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", alignment: Align.wiggle() }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ w: 32, h: "count", fill: "species" }));
+
+// streamgraph: the sugar and what it is short for
+chart(topics)
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.wiggle() }))
+  .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
+
+chart(topics)
+  .flow(
+    scatter({ by: "x", x: "x", alignment: Align.wiggle() }),
+    stack({ by: "topic", dir: "y" })
+  )
+  .mark(ribbon({ h: "value", fill: "topic" }));
+```
+
+## What the stack reads
+
+Today each node reports a box, one interval per axis (`underlyingSpace.ts:87`). A ribbon's box runs from its lowest to its highest y over all x. A stack of boxes puts each ribbon above the whole ribbon before it, which draws a ridgeline. So boxes alone cannot make a stacked area.
+
+The stack in B reads a **profile**: each child's extent along `dir` as a function of the cross axis, in data units. For a ribbon it is the `h` channel over x. For a rect it is a constant. The data gives it before layout, so the stack's axis can be the sum, and CanSum can be checked at each x.
+
+The geometry interface (`geometry/index.ts`: box, enclosing circle, outline) is the pixel counterpart, and it answers after layout. An outline gives a pixel profile of any shape: its lowest and highest y at each x. Contour spacing needs exactly that, e.g., ridgelines that never overlap, or tidy trees. That is a `spread` with no sum. So there are two profiles. A stack adds data profiles. A spread can space shapes by pixel profiles. A shape that has only a pixel outline, e.g., a circle or an image, cannot be stacked this way, because its outline is not an amount.
+
 ## Where the "for each x" is written
 
 The flow already says where the loop over x is. This decides which knobs a spelling has.
@@ -228,7 +298,7 @@ chart(topics)
 
 // streamgraph, centered
 chart(topics)
-  .flow(stack({ by: "topic", dir: "y", baseline: Baseline.center() }))
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.center() }))
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
 
 // streamgraph, wiggle, inside-out order
@@ -237,7 +307,7 @@ chart(topics)
     stack({
       by: field("topic").sort(Order.insideOut("value")),
       dir: "y",
-      baseline: Baseline.wiggle(),
+      baseline: Align.wiggle(),
     })
   )
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
@@ -258,7 +328,7 @@ gf.chart(topics).flow(
     gf.stack(
         by=gf.field("topic").sort(Order.inside_out("value")),
         dir="y",
-        baseline=Baseline.wiggle(),
+        baseline=Align.wiggle(),
     )
 ).mark(gf.ribbon(x="x", h="value", fill="topic"))
 ```
@@ -281,7 +351,7 @@ Overlap check:
 
 Trade-offs:
 
-- New terms: `Baseline` and maybe `Order.insideOut`. "Baseline" is already Josh's word for this in #809.
+- New terms: `Align` and maybe `Order.insideOut`. The option name `baseline` is already Josh's word for this in #809.
 - The engine needs a profile type for full support (see "Implementation path").
 - A per-x sort written on a whole-series stack is an error, because one order holds for all x. The message points at the per-x form.
 
@@ -294,7 +364,7 @@ chart(topics).mark(
   ribbon({ x: "x", h: "value", fill: "topic" }).cut({
     by: "topic",
     dir: "y",
-    baseline: Baseline.wiggle(),
+    baseline: Align.wiggle(),
   })
 );
 ```
@@ -343,7 +413,7 @@ chart(topics)
 ```js
 // proposed
 chart(topics)
-  .flow(stack({ by: "topic", dir: "y", baseline: Baseline.center() }))
+  .flow(stack({ by: "topic", dir: "y", baseline: Align.center() }))
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
 
 // today (needs #1343; the y: 0 form runs but draws no y axis)
@@ -357,7 +427,7 @@ chart(topics)
 
 ### Wiggle, and wiggle with the inside-out order
 
-![](img/b-weighted-wiggle.png) ![](img/o-inside-out.png)
+![](img/w-weighted.png) ![](img/o-inside-out.png)
 
 ```js
 // proposed
@@ -366,7 +436,7 @@ chart(topics)
     stack({
       by: field("topic").sort(Order.insideOut("value")),
       dir: "y",
-      baseline: Baseline.wiggle(),
+      baseline: Align.wiggle(),
     })
   )
   .mark(ribbon({ x: "x", h: "value", fill: "topic" }));
@@ -418,13 +488,31 @@ chart(sampled)
 
 ### Ribbon chart (order changes at each x)
 
-![](img/o-per-x-rank-ribbons.png)
+![](img/r-ribbon-chart-zero.png)
 
 ```js
 // stays the per-x form
 chart(seafood)
   .flow(
     spread({ by: "lake", dir: "x", spacing: 48 }),
+    stack({ by: field("species").sort("count"), dir: "y" })
+  )
+  .mark(rect({ w: 24, h: "count", fill: "species" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(group({ by: "species" }))
+      .mark(ribbon({ fill: "species", opacity: 0.5 }))
+  );
+```
+
+![](img/r-wiggle-bars-ribbons.png)
+
+An earlier version of this page showed the ribbon chart drawn with a wiggle baseline next to a spec with no baseline. That spec draws a zero baseline, above. With a wiggle baseline it is the spec below (proposed; the render is emulated).
+
+```js
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 48, alignment: Align.wiggle() }),
     stack({ by: field("species").sort("count"), dir: "y" })
   )
   .mark(rect({ w: 24, h: "count", fill: "species" }).name("bars"))
@@ -571,12 +659,13 @@ What the precedent shows:
 ## Decisions for Josh
 
 1. Is the whole-series `stack` of ribbons (B) local enough? It reads each child's thickness, and that thickness is a function of x. This reverses the round 6 answer on a new argument.
-2. Name of the option: `baseline` (your #809, matplotlib), `offset` (d3, Plot, Vega, but GoFish has an `offset()` operator), or `origin`?
-3. Which baselines ship: zero, center and wiggle? Should diverging stay a trait of the order (`Trait.diverging()`) or become `Baseline.diverging()`?
-4. Inside-out order: a sort strategy `field("topic").sort(Order.insideOut("value"))`, or an option on `stack`?
-5. Keep `.cut()` only for dividing a shape the spec draws first, defined as a stack of shares plus `intersect`, plus an optional layout of the pieces?
-6. Drop `.stack()` as a mark method (#290)?
-7. Union grid (simple, works with `ribbon`) or one grid per boundary (fewer points, needs a band mark)?
-8. Curve each series before the stack, which changes today's default stacked areas a little (up to 8% here)?
-9. Stacked to grouped: an animation between two specs (#831), and no option on `stack`. Agree?
-10. Accept the shortcut (a rewrite that peeks at the mark kind) before the profile type exists?
+2. Name of the family and options: `Align` with `alignment` on spread and scatter, and `baseline` on a stack of profiles as sugar? Or one name in both places?
+3. Which baselines ship: zero, center and wiggle? Should diverging stay a trait of the order (`Trait.diverging()`) or become `Align.diverging()`?
+4. Default wiggle: weighted (d3, Plot), with `Align.deviation()` and `Align.sineStream()` as named variants and a function escape hatch?
+5. Inside-out order: a sort strategy `field("topic").sort(Order.insideOut("value"))`, or an option on `stack`?
+6. Keep `.cut()` only for dividing a shape the spec draws first, defined as a stack of shares plus `intersect`, plus an optional layout of the pieces?
+7. Drop `.stack()` as a mark method (#290)?
+8. Union grid (simple, works with `ribbon`) or one grid per boundary (fewer points, needs a band mark)?
+9. Curve each series before the stack, which changes today's default stacked areas a little (up to 8% here)?
+10. Stacked to grouped: an animation between two specs (#831), and no option on `stack`. Agree?
+11. Accept the shortcut (a rewrite that peeks at the mark kind) before the profile type exists?

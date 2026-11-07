@@ -1,10 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
+import { seafood } from "../../src/data/catch";
 import {
   chart,
   circle,
   Curve,
   derive,
+  field,
   group,
   line,
   polygon,
@@ -28,6 +30,7 @@ import {
   sampledByX,
   curveOrderThickness,
   samples,
+  seafoodRows,
   stackRows,
   topics,
   topicsSigned,
@@ -285,5 +288,78 @@ export const DRidgeline = show((el) =>
       scatter({ by: "x", x: "x" })
     )
     .mark(ribbon({ h: "y", fill: "c", opacity: 0.85 }))
+    .render(el)
+);
+
+// ---------------------------------------------------------------------------
+// Which wiggle: deviation (local), weighted wiggle (d3's wiggle), SineStream.
+
+export const WDeviation = show((el) => stacked(topics, "deviation").render(el));
+export const WWeighted = show((el) => stacked(topics, "wiggle").render(el));
+export const WSineStream = show((el) =>
+  stacked(topics, "sineStream").render(el)
+);
+
+// ---------------------------------------------------------------------------
+// Where the baseline lives: stacked bars.
+
+// Today: each lake's stack centered by the outer spread. Real, no emulation.
+export const RCenteredBars = show((el) =>
+  chart(seafood, { w: W, h: H })
+    .flow(
+      spread({ by: "lake", dir: "x", alignment: "middle" }),
+      stack({ by: "species", dir: "y" })
+    )
+    .mark(rect({ w: 32, h: "count", fill: "species" }))
+    .render(el)
+);
+
+// Proposed Align.wiggle() on the outer spread, emulated: the lakes are the
+// x sequence, and each lake's stack is offset by the weighted wiggle.
+const LAKES = [...new Set(seafood.map((d) => d.lake))];
+const wiggleBars = (w = 32, spacing?: number, order?: Order) =>
+  chart(seafoodRows(seafood), { w: W, h: H })
+    .flow(
+      derive((rows: Row[]) =>
+        stackRows(rows, { offset: "wiggle", order }).map((r) => ({
+          ...r,
+          lake: LAKES[r.x],
+        }))
+      ),
+      spread({ by: "lake", dir: "x", spacing }),
+      scatter({ by: "c", yMin: "y0", yMax: "y1" })
+    )
+    .mark(rect({ w, fill: "c" }).name("bars"));
+
+export const RWiggleBars = show((el) => wiggleBars().render(el));
+
+// The ribbon chart with a wiggle baseline: each lake's stack sorted by count
+// (smallest at the bottom, as field("species").sort("count") does), offset
+// by the weighted wiggle, and the pieces joined by translucent ribbons.
+const byCountAscending: Order = (_x, at) =>
+  [...at.keys()].sort((a, b) => at.get(a)! - at.get(b)!);
+export const RWiggleBarsRibbons = show((el) =>
+  wiggleBars(24, 48, byCountAscending)
+    .layer(
+      chart(selectAll("bars"))
+        .flow(group({ by: "c" }))
+        .mark(ribbon({ fill: "c", opacity: 0.5 }))
+    )
+    .render(el)
+);
+
+// The ribbon chart spec on the page, exactly as written: a zero baseline.
+export const RRibbonChartZero = show((el) =>
+  chart(seafood)
+    .flow(
+      spread({ by: "lake", dir: "x", spacing: 48 }),
+      stack({ by: field("species").sort("count"), dir: "y" })
+    )
+    .mark(rect({ w: 24, h: "count", fill: "species" }).name("bars"))
+    .layer(
+      chart(selectAll("bars"))
+        .flow(group({ by: "species" }))
+        .mark(ribbon({ fill: "species", opacity: 0.5 }))
+    )
     .render(el)
 );
