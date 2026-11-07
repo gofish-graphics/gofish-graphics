@@ -75,8 +75,10 @@ onMounted(async () => {
 .gofish-example {
   padding-bottom: 1rem;
 }
+/* The chart shrinks to fit the column (custom.css), so the box does too. */
 .gofish-example-canvas {
   display: inline-block;
+  max-width: 100%;
 }
 .gofish-example-error {
   color: var(--vp-c-danger-1, #d33);

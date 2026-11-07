@@ -15,6 +15,7 @@ const active = computed(() => /^\/internals(\/|\.html|$)/.test(route.path));
     :class="{ 'internals-link--active': active }"
     href="/internals/"
     title="Internals — architecture wiki"
+    aria-label="Internals"
   >
     <svg
       viewBox="0 0 24 24"
@@ -59,5 +60,12 @@ const active = computed(() => /^\/internals(\/|\.html|$)/.test(route.path));
   width: 16px;
   height: 16px;
   flex-shrink: 0;
+}
+/* On a phone the label pushes the nav bar past the screen's edge, which
+   widens every page (#1330); the book icon stands alone there. */
+@media (max-width: 640px) {
+  .internals-link span {
+    display: none;
+  }
 }
 </style>

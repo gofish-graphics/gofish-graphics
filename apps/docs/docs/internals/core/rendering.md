@@ -13,6 +13,7 @@ covers:
   - packages/gofish-ir/src/display-list/schema.ts
   - packages/gofish-ir/src/display-list/render.ts
   - packages/gofish-ir/src/display-list/composite.ts
+  - packages/gofish-ir/src/display-list/filter.ts
 ---
 
 # Rendering
@@ -231,15 +232,29 @@ flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
   list can't fold away, and the group a node with a `filter` option draws its whole
-  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
-  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
-  `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
-  SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
-  render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`
-  (`composite.ts`), which both backends write from. Its id is the render's own,
-  drawn from the counter the composite ids come from (`paintDocument` in
-  `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
-  share it. A
+  drawing in (`drawFilter.ts`). Its `filter` is a raw CSS filter value
+  (`{ kind: "css", value: "url(#shadow)" }`), written as the `filter`
+  attribute, or one SVG `feColorMatrix`
+  (`{ kind: "colorMatrix", type: "matrix", values }`, its `values` the 20
+  numbers of the matrix, or `{ kind: "colorMatrix", type: "luminanceToAlpha" }`,
+  with no `values`; the validator and the JSON Schema check both). `displayFilter` lowers each
+  `Filter` strategy to the matrix it is: `grayscale` to `type: "matrix"` with
+  the Filter Effects spec's `grayscale(amount)` values, `luminanceToAlpha` to
+  `type: "luminanceToAlpha"`. A strategy is not written as a CSS function
+  (`filter="grayscale(1)"`), because WebKit ignores CSS filter functions on SVG
+  elements (#1330). For the same reason a raw CSS function such as
+  `"blur(2px)"` draws unfiltered in WebKit; a `url(#…)` reference works. Both
+  backends write out one `filterPlan(prefix)` (`filter.ts`). Its `attr` is the
+  `filter` attribute of a group (the `css` value, or a `url(#id)` of a def),
+  and it registers a matrix the first time it sees one: one def per distinct
+  matrix (by `type` and `values`), so two equal filters share a def. A backend
+  draws every item first, then writes the plan's `defs`, each a `<filter>` in
+  sRGB, ahead of the items it drew, so every `url(#id)` it wrote names a def,
+  a filter inside a composite's operand included. The live backend paints
+  each item eagerly, outside any JSX expression Solid would run later, so the
+  defs are whole when it reads them. The `prefix` is drawn from the
+  counter the composite ids come from (`paintDocument` in `paintSVG.tsx`,
+  `displayListToSVG`), so two visualizations on one page do not share ids. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its
@@ -287,7 +302,12 @@ flat-absolute fold cannot express on its own:
   data-URI `<image>` inside it decodes and never invalidate). Both write out
   one `compositePlan(item, uid)` (`composite.ts`), ids and all: the defs, each
   group of items written once; the masks, each distinct one once; and the
-  layers, each a `<use>` of a def in its masks and blend. The plan drops a
+  layers, each a `<use>` of a def in its masks and blend. An inverse mask is a
+  white rect over the bbox with a black rect on it, clipped by the alpha mask
+  of the same operands. Every mask's region is the composite's bbox, in user
+  space (`maskUnits="userSpaceOnUse"` with its `x`, `y`, `width` and
+  `height`). Left out, a mask's region is SVG's default, from -10% to 110% of
+  the viewport, and a composite past it would not be masked. The plan drops a
   layer that would draw an operand with no paint, and writes a def only where
   a layer or a mask uses it, so a hidden operand's shape is written only for
   the masks that read it. A Canvas/WebGPU backend would map the plan to its
@@ -355,15 +375,36 @@ canvas, so `render()` reserves no margins: it lowers the tree through the identi
 ```ts
 const paintBaked = () => paintDocument(lowerToDisplayList(child)); // identity toPixel
 return (
-  <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
+  <svg
+    width={width}
+    height={height}
+    viewBox={`0 0 ${width} ${height}`}
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <Show when={defs}><defs>{defs}</defs></Show>
     {paintBaked()}
   </svg>
 );
 ```
 
+The `viewBox` matches the size, so at its own size the drawing is one CSS px per
+user unit, and a page can shrink a chart to fit a narrow column with CSS alone
+(`max-width: 100%; height: auto`, which the docs' `GoFishExample` and `GoFishVue`
+set, #1330). The canvas is whole pixels. `layout` rounds a render's given
+`w`/`h` up to whole pixels once, before it lays anything out, so the root is
+fitted to the canvas it is drawn on, and the overflow warnings and the root's
+placement read that size too. A dimension the render does not give is the
+laid-out size rounded up the same way (`svgDim`). So the live render, `toDisplayList`'s `viewport` and
+`displayListToSVG` all draw on the same whole-pixel canvas. A browser lays a box
+out in fractions of a pixel (1/64 in Blink and WebKit, 1/60 in Gecko), so a
+fractional size would get a box a little smaller than its `viewBox`, and the
+`viewBox` would shrink the whole drawing by that much. The interaction runtime maps the pointer to user units through the
+inverse screen CTM (`localPoint` in `interaction/runtime.ts`), so a shrunk chart
+reads the pointer as it does at its own size.
+
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
-pipeline against a throwaway container and serialize the result.
+pipeline against a throwaway container and serialize the result, which already
+carries the `viewBox`.
 
 The real `paintBaked` brackets each half with the perf instrumentation
 (`src/ast/perf.ts`): it times `lowerToDisplayList(child)`
