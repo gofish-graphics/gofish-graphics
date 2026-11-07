@@ -15,7 +15,7 @@ import * as GoFish from "../../dist/index.js";
 import { cubicAt, parseClosedPath, type Path, type Point } from "../path";
 import { check, items, report } from "./testHelpers";
 
-const { chart, stack, polygon, Coord } = GoFish as any;
+const { chart, stack, spread, polygon, rect, Coord } = GoFish as any;
 
 const PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z";
 const BOX = "M0 0 L0 1 L1 1 L1 0 Z";
@@ -281,6 +281,53 @@ async function main() {
     check(
       "points with no w/h keep their pixel extent",
       close(Math.max(...lx) - Math.min(...lx), 40)
+    );
+  }
+
+  console.log("\n# w/h are sized as a rect's");
+  {
+    // Signed values: the baseline sits inside the plot, so the y map has a
+    // pixel offset (`originPx` is not 0).
+    const signed = [
+      { s: "a", v: 3 },
+      { s: "b", v: -2 },
+      { s: "c", v: 1 },
+    ];
+    const boxes = async (mark: any, data: any[], flow: any, size: any) => {
+      const c = chart(data, { axes: false });
+      const dl = await (flow ? c.flow(flow) : c).mark(mark).toDisplayList(size);
+      return items(dl).map((it) => {
+        if (it.kind === "rect") return [it.x!, it.y!, it.w!, it.h!];
+        const pts = samples(parseClosedPath(it.d as string));
+        const xs = pts.map((p) => p[0]);
+        const ys = pts.map((p) => p[1]);
+        const [x, y] = [Math.min(...xs), Math.min(...ys)];
+        return [x, y, Math.max(...xs) - x, Math.max(...ys) - y];
+      });
+    };
+    const sameBoxes = (a: number[][], b: number[][]) =>
+      a.length === b.length &&
+      a.every((r, i) => r.every((v, k) => close(v, b[i][k], 1e-6)));
+    const size = { w: 200, h: 200 };
+    const bars = spread({ by: "s", dir: "x" });
+    const rects = await boxes(rect({ h: "v" }), signed, bars, size);
+    const polys = await boxes(polygon({ h: "v", d: BOX }), signed, bars, size);
+    check(
+      "on an offset map, each polygon's box is its rect's",
+      sameBoxes(polys, rects),
+      { polys, rects }
+    );
+    check(
+      "a negative h grows down from the baseline, as a rect's does",
+      close(polys[1][1], polys[0][1] + polys[0][3]) && polys[1][3] > 0,
+      polys
+    );
+    const lone = await boxes(polygon({ w: 50, d: BOX }), [{}], undefined, {});
+    const loneRect = await boxes(rect({ w: 50 }), [{}], undefined, {});
+    check(
+      "a side left out with no room from the parent is a rect's default",
+      sameBoxes(lone, loneRect) && lone[0].every(Number.isFinite),
+      { lone, loneRect }
     );
   }
 

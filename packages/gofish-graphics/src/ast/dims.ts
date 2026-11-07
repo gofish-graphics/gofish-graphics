@@ -1,6 +1,7 @@
 import { Frontend } from "gofish-ir";
-import { isValue, scaleValue, type MaybeValue } from "./data";
-import { computeAesthetic } from "../util";
+import { getValue, isValue, scaleValue, type MaybeValue } from "./data";
+import { pxOf, type AxisScale } from "./domain";
+import { computeAesthetic, computeSize } from "../util";
 import {
   heldLength,
   isLength,
@@ -417,6 +418,39 @@ export const positionOf = (
   dim.center !== undefined
     ? startAtCenter(dim.center, scale, middlePx)
     : computeAesthetic(dim.min, scale, undefined);
+
+/** The pixel size a box takes on an axis where nothing sizes it: it has no
+ *  size of its own and its parent gives it no finite room. */
+export const DEFAULT_BOX_SIZE = 16;
+
+/** A box axis's pixel size, or {@link DEFAULT_BOX_SIZE} when it is
+ *  unresolved, so a visible default stands in for an undefined or NaN size. */
+export const orDefaultSize = (s: number | undefined): number =>
+  s === undefined || !Number.isFinite(s) ? DEFAULT_BOX_SIZE : s;
+
+/** A size channel's signed pixel length on one axis, as a rect's `w` or `h`
+ *  with no start of its own reads it: a data value is measured from the
+ *  baseline, data 0, through the axis's position map when it has one, else
+ *  through its size σ (plus the value's pixel offset); a number is pixels;
+ *  and left out, it is the room the parent gives (`given`). Negative for a
+ *  negative data value (#773); {@link orDefaultSize} when unresolved. */
+export const sizeOf = (
+  size: MaybeValue<number> | undefined,
+  scale: AxisScale | undefined,
+  given: number
+): number =>
+  orDefaultSize(
+    isValue(size) && scale?.map
+      ? pxOf(scale.map, getValue(size)!) - pxOf(scale.map, 0)
+      : computeSize(size, scale?.sigma!, given)
+  );
+
+/** A signed pixel length stored canonically as a box axis: its true min and
+ *  unsigned size, so a negative length grows the other way from 0. */
+export const signedExtent = (s: number): { min: number; size: number } => ({
+  min: Math.min(0, s),
+  size: Math.abs(s),
+});
 
 export type IndexedDims<T = number> = {
   0?: Interval<T>;

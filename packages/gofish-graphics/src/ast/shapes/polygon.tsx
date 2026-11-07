@@ -11,10 +11,11 @@ import {
   flattenPath,
   outlinePaint,
   pathOutline,
+  ringExtent,
   ringsEnclosingCircle,
 } from "../geometry";
 import { GoFishAST } from "../_ast";
-import { Size } from "../dims";
+import { signedExtent, Size, sizeOf } from "../dims";
 import {
   UnderlyingSpace,
   CONTINUOUS,
@@ -37,7 +38,6 @@ import {
   type Path,
   type Point,
 } from "../../path";
-import { computeSize } from "../../util";
 import { withWire } from "../wire";
 import { MARK_CHANNELS } from "../markChannels.generated";
 
@@ -66,18 +66,6 @@ export type PolygonProps = {
    *  left out fills the space it is given. */
   w?: MaybeValue<number>;
   h?: MaybeValue<number>;
-};
-
-/** Each `d` string parsed once: every datum of a mark shares one `d`. The
- *  parsed paths are shared, so nothing may mutate them. */
-const parsedPaths = new Map<string, Path>();
-const parsePathOnce = (d: string): Path => {
-  let parsed = parsedPaths.get(d);
-  if (parsed === undefined) {
-    parsed = parseClosedPath(d);
-    parsedPaths.set(d, parsed);
-  }
-  return parsed;
 };
 
 /** The tolerance, in pixels, the outline is flattened to for its enclosing
@@ -136,7 +124,7 @@ export const Polygon = ({
     throw new Error(`polygon requires at least 3 points, got ${ring.length}`);
   }
   const outline: Path =
-    d !== undefined ? parsePathOnce(d) : path(ring!, { closed: true });
+    d !== undefined ? parseClosedPath(d) : path(ring!, { closed: true });
   // The outline's extent, read only where it is the polygon's own: a boxed
   // outline takes its box's.
   const bounds = boxed ? undefined : pathBounds(outline);
@@ -172,20 +160,20 @@ export const Polygon = ({
             [pointOrMagnitude(undefined, w), pointOrMagnitude(undefined, h)],
       layout: (size, scales) => {
         if (boxed) {
-          // A side's length, read as a rect reads its own: a data value
-          // through the axis's σ (plus its pixel offset), a number as pixels,
-          // and left out, the space the polygon is given.
-          const W = computeSize(w, scales?.[0]?.sigma ?? 1, size[0]);
-          const H = computeSize(h, scales?.[1]?.sigma ?? 1, size[1]);
+          // A side's signed length, read as a rect reads its own
+          // (`sizeOf`): a data value from the baseline through the axis's
+          // map, a number as pixels, left out the space the polygon is
+          // given, and a visible default when that is unresolved.
+          const W = sizeOf(w, scales?.[0], size[0]);
+          const H = sizeOf(h, scales?.[1], size[1]);
           // The unit box's v runs the way the polygon's frame does: top-down
           // on a plain canvas, outward in a polar slot. TODO(#1038): whether
-          // it should run from the nearest frame's baseline instead.
+          // it should run from the nearest frame's baseline instead. A
+          // negative side mirrors the outline, which then fills the box a
+          // rect of that size has: from the negative end to 0 (#773).
           localRef.current = mapPathPoints(outline, ([x, y]) => [x * W, y * H]);
           return {
-            intrinsicDims: [
-              { min: 0, size: W },
-              { min: 0, size: H },
-            ],
+            intrinsicDims: [signedExtent(W), signedExtent(H)],
             // translate is set by the parent's constraint placement.
             transform: { translate: [undefined, undefined] },
           };
@@ -209,28 +197,21 @@ export const Polygon = ({
         const mapY = posFn(scales?.[1]?.map) ?? ((d: number) => d);
         // A data-bound ring has only straight edges, so its extent is its
         // vertices'.
-        let [tx, ty, hiX, hiY] = [Infinity, Infinity, -Infinity, -Infinity];
-        const mapped = ring!.map(([x, y]): Point => {
-          const p: Point = [mapX(x), mapY(y)];
-          tx = Math.min(tx, p[0]);
-          ty = Math.min(ty, p[1]);
-          hiX = Math.max(hiX, p[0]);
-          hiY = Math.max(hiY, p[1]);
-          return p;
-        });
+        const mapped = ring!.map(([x, y]): Point => [mapX(x), mapY(y)]);
+        const { minX, maxX, minY, maxY } = ringExtent(mapped);
         // Rebase the mapped vertices, fresh arrays, onto the node's own low
         // corner.
         for (const p of mapped) {
-          p[0] -= tx;
-          p[1] -= ty;
+          p[0] -= minX;
+          p[1] -= minY;
         }
         localRef.current = path(mapped, { closed: true });
         return {
           intrinsicDims: [
-            { min: 0, size: hiX - tx },
-            { min: 0, size: hiY - ty },
+            { min: 0, size: maxX - minX },
+            { min: 0, size: maxY - minY },
           ],
-          transform: { translate: [tx, ty] },
+          transform: { translate: [minX, minY] },
         };
       },
       // IR lowering: a local point in axis order maps to its pixel through
