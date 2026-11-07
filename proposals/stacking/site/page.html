@@ -498,6 +498,7 @@
     <li><a href="#baseline-lives">Where the baseline lives</a></li>
     <li><a href="#stack-reads">What the stack reads</a></li>
     <li><a href="#kinds">Kinds of stacking</a></li>
+    <li><a href="#paths">Paths and normals</a></li>
     <li><a href="#for-each-x">For each x</a></li>
     <li><a href="#sampling">Sampling</a></li>
     <li><a href="#approaches">Approaches</a></li>
@@ -1462,6 +1463,309 @@ chart(seafood)
       There is no way to fix a scale's domain (a missing option, not a bug).
     </li>
   </ol>
+
+  <h2 id="paths">Paths: bundling and stacking along normals</h2>
+  <p class="note">
+    The prose here is from memory of the papers named, not from new reading,
+    except where it cites GoFish code. Every path in these pictures is computed
+    by hand in pixels and drawn as polygons and polylines, so all of them are
+    emulated.
+  </p>
+
+  <h3>Hierarchical edge bundling as a path representation</h3>
+  <p>
+    In Holten's hierarchical edge bundling (2006), and in d3 (<code
+      >a.path(b)</code
+    >
+    with <code>d3.curveBundle.beta(β)</code>), an edge between leaves a and b is
+    a list of control points. The points are the positions of the hierarchy
+    nodes on the tree path from a, up to their lowest common ancestor, and back
+    down to b. The edge stores no coordinates of its own. It points at nodes
+    that are already placed. The drawn shape is a B-spline through the points,
+    and β moves each point toward the straight line from a to b.
+  </p>
+  <div class="grid-3">
+    <figure>
+      <img
+        src="img/k3-heb-b0.png"
+        alt="Edges as straight chords across a circle of leaves."
+        loading="lazy"
+      />
+      <figcaption>β = 0</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-heb-b05.png"
+        alt="Edges bowing toward the center."
+        loading="lazy"
+      />
+      <figcaption>β = 0.5</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-heb-b085.png"
+        alt="Edges between the same groups running together through the group nodes."
+        loading="lazy"
+      />
+      <figcaption>β = 0.85</figcaption>
+    </figure>
+  </div>
+  <p>
+    Three representations from the edge routing research turn out to be one:
+    <strong
+      >an edge is a chain of waypoints owned by other placed shapes, plus a
+      curve through them.</strong
+    >
+    They differ in whether a waypoint is shared.
+  </p>
+  <ul>
+    <li>
+      <strong>Sugiyama layouts.</strong> Each long edge gets its own waypoint
+      per rank. The waypoints take up room, so edges sit side by side.
+    </li>
+    <li>
+      <strong>Hierarchical bundling.</strong> Edges share the waypoint at each
+      ancestor, so they overlap, and the overlap is the bundle.
+    </li>
+    <li>
+      <strong>Ordered bundles.</strong> Each shared waypoint is split into one
+      slot per edge. That is a stack at each waypoint.
+    </li>
+  </ul>
+  <p>
+    The parameter is the position along the tree path, not x and not arc length,
+    so an interval family over x cannot describe these edges. In GoFish terms
+    the edge is a <code>line</code> through <code>ref</code>s to the ancestor
+    nodes, with a bundle strategy in the <code>Curve</code> family carrying β.
+  </p>
+
+  <h3>Points in one space, the curve in another</h3>
+  <p>
+    In a radial tree, d3 places the control points by angle and radius and then
+    draws the spline in screen space. This is the second example of that pattern
+    after the petal.
+  </p>
+  <div class="grid-2">
+    <figure>
+      <img
+        src="img/k3-heb-screen.png"
+        alt="Bundled edges with the spline drawn in screen space."
+        loading="lazy"
+      />
+      <figcaption>
+        points placed in polar, spline drawn in screen space (d3)
+      </figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-heb-polar.png"
+        alt="The same edges interpolated in angle and radius, swirling around the center."
+        loading="lazy"
+      />
+      <figcaption>spline interpolated in angle and radius</figcaption>
+    </figure>
+  </div>
+  <p>
+    In the second picture the edges swirl around the center, because a straight
+    line in angle and radius is a spiral on screen. Both are computed by hand:
+    GoFish has no B-spline in the <code>Curve</code> family
+    (<code>curve.ts:35</code>). A <code>line</code> in
+    <code>Coord.polar</code> gives the same swirling shapes, after wrapping the
+    angles and cutting each line where the angle wraps, because
+    <code>coord.tsx:445</code> fits the angle to the data instead of reading it
+    as radians.
+  </p>
+  <p>
+    The rule so far is that a mark is drawn in the space of the layer it is in,
+    and its outline bends with that space. Two ways to get a curve drawn in
+    screen space keep that rule:
+  </p>
+  <ul>
+    <li>
+      <strong>Refs (no new API).</strong> The edges live in a layer drawn in
+      screen space, and their waypoints are <code>ref</code>s to shapes placed
+      in the polar layer. A ref resolves to a point, and points are mapped as
+      points, so nothing bends that should not. This fits bundling, where the
+      waypoints are other shapes. It does not fit the petal, whose points are
+      not shapes.
+    </li>
+    <li>
+      <strong>A <code>Curve</code> option.</strong> A mark's vertices are always
+      mapped as points, and the curve strategy says which space it interpolates
+      in: the mark's space (the default, today's rule) or screen space.
+      Observable Plot puts this choice on the curve: its default
+      <code>curve: "auto"</code> interpolates on the sphere under a spherical
+      projection and in a straight line otherwise. ggplot2 interpolates in data
+      space and then transforms (<code>coord_munch</code>), and d3's radial
+      lines interpolate in screen space. This fits both bundling and the petal.
+    </li>
+  </ul>
+  <p>
+    The refs version needs no new API, and it is how bundling already thinks
+    about edges. The <code>Curve</code> option is needed only if a mark whose
+    points are its own, e.g., the petal, has to be drawn in screen space.
+  </p>
+
+  <h3>Stacking along normals</h3>
+  <p>
+    Take a centerline c(s), indexed by arc length s, with unit normal n(s).
+    Strand k occupies the offsets from o<sub>k−1</sub>(s) to o<sub>k</sub>(s),
+    where o<sub>k</sub> = o<sub>0</sub> + w<sub>1</sub> + … + w<sub>k</sub>.
+    Each boundary is the offset curve c(s) + o<sub>k</sub>(s)·n(s). These are
+    the glue equations with s in place of x, and the baselines carry over: o<sub
+      >0</sub
+    >
+    = 0 puts one edge on the centerline, and center makes the centerline the
+    middle of the bundle.
+  </p>
+  <p>
+    <strong
+      >It is an ordinary stack in a coordinate system that follows the
+      curve.</strong
+    >
+    Map x to arc length along c and y to distance along the normal: (s, t) goes
+    to c(s) + t·n(s). In that space a plain <code>stack</code> of ribbons draws
+    strands that keep their width along the normal. So the proposal needs no new
+    kind of stack, only a coordinate transform, written here as
+    <code>Coord.along(spine)</code> (name open). It sits at a layer boundary
+    like every other coordinate transform.
+  </p>
+  <pre><code class="language-js">layer({ coord: Coord.along(spine) }, [
+  chart(strands)
+    .flow(stack({ by: "strand", dir: "y", baseline: Align.center() }))
+    .mark(ribbon({ x: "s", h: "width", fill: "strand" })),
+]);</code></pre>
+  <p>
+    <code>Coord.along</code> is close to the spine and envelope work in
+    <code>enclose</code> (<code>Shape.spine</code>, #1247) and in the stacked
+    ribbons design (#47): the spine is the x axis of this coordinate system.
+    <code>Coord.wavy</code> is not this transform. It shifts each point by a
+    fixed sine (<code>wavy.ts:6</code>) and does not follow a curve's normal.
+  </p>
+  <div class="grid-3">
+    <figure>
+      <img
+        src="img/k3-link-separate.png"
+        alt="Three strands as separate strokes overlapping in the steep middle."
+        loading="lazy"
+      />
+      <figcaption>own stroke per strand (d3-sankey)</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-link-vertical.png"
+        alt="Three strands stacked vertically, thinning where steep."
+        loading="lazy"
+      />
+      <figcaption>stacked vertically on one spine</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-link-normal.png"
+        alt="Three strands stacked along the normal, keeping their widths."
+        loading="lazy"
+      />
+      <figcaption>stacked along the normal of one spine</figcaption>
+    </figure>
+  </div>
+  <p>
+    Strands of 12, 24 and 12 px. The separate strokes overlap in the steep
+    middle and touch only where the link is flat. The vertical strands thin
+    where the link is steep. The strands along the normal keep their widths and
+    tile the link.
+  </p>
+  <p>
+    <strong>Sankey nodes.</strong> At a node, link ends are box-stacked
+    vertically on the node's face. d3-sankey makes every link leave and arrive
+    horizontally, and with a horizontal tangent the normal is vertical. So at
+    the node the two stacks agree exactly. A sankey is box stacking at the nodes
+    and stacking along normals along the links, and the two match because of the
+    horizontal tangents. d3-sankey gives each link its own spine, which is why
+    the separate strokes above overlap. A shared spine removes this.
+  </p>
+  <p>
+    <strong>Width that changes along the path.</strong> The same equations hold
+    when each width is a function of s. Minard's map of the march on Moscow is
+    one band whose width changes along a route that bends.
+  </p>
+  <figure>
+    <img
+      src="img/k3-minard.png"
+      alt="A tan band along a bending route narrowing in steps, with a thin black return band."
+      loading="lazy"
+    />
+    <figcaption>
+      a Minard-style band, widths 60 to 8 px along the route
+    </figcaption>
+  </figure>
+  <p>
+    <strong>Junctions.</strong> Where a trunk splits, branch k should take
+    strand k's interval of the trunk. The handoff is exact when the branch's
+    tangent matches the trunk's at the split, because then the cross-sections
+    agree, for the same reason as at sankey nodes. Flow maps grow trees this
+    way, e.g., Buchin, Speckmann and Verbeek's spiral trees (2011), and the
+    width of each trunk is the sum of its branches. The open choice is the
+    strand order at each split. Ordered bundles choose it to reduce crossings,
+    and metro maps change it at stations.
+  </p>
+  <div class="grid-2">
+    <figure>
+      <img
+        src="img/k3-split.png"
+        alt="A trunk splitting cleanly into two branches."
+        loading="lazy"
+      />
+      <figcaption>tangents match at the split</figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-split-mismatch.png"
+        alt="The same split with a wedge-shaped gap at the trunk's end."
+        loading="lazy"
+      />
+      <figcaption>tangents do not match: a gap opens</figcaption>
+    </figure>
+  </div>
+  <p>
+    <strong>The bend limit.</strong> The transform stops being one-to-one where
+    1 − t·κ = 0, with κ the curvature. So it is valid only within a distance of
+    1/κ<sub>max</sub> of the centerline, and a centered bundle must be narrower
+    than 2/κ at its tightest bend. Past that, the inner boundary folds over
+    itself. The fix belongs in the routing: give the spine a minimum bend radius
+    of half the bundle width, as rail and road design do. The layout can check
+    the condition and raise an error instead of drawing a fold.
+  </p>
+  <div class="grid-2">
+    <figure>
+      <img
+        src="img/k3-fold.png"
+        alt="A bundle on a tight arch whose inner boundary folds into a swallowtail."
+        loading="lazy"
+      />
+      <figcaption>
+        bend radius 6, bundle 60 wide: the inner edge folds
+      </figcaption>
+    </figure>
+    <figure>
+      <img
+        src="img/k3-fold-ok.png"
+        alt="The same bundle with the bend radius raised to 30."
+        loading="lazy"
+      />
+      <figcaption>bend radius 30, half the width: no fold</figcaption>
+    </figure>
+  </div>
+
+  <h3>How the two connect</h3>
+  <p>
+    Both parts give a path the same representation: a centerline built from
+    waypoints and a curve. Bundling decides how the centerline is built, and
+    stacking along normals uses it as the x axis of a local coordinate system.
+    An ordered, width-preserving hierarchical bundle is then: route each bundle
+    segment through the hierarchy, put each segment in <code>Coord.along</code>
+    of that segment, stack inside it, and hand strands off at junctions with
+    matching tangents.
+  </p>
 
   <h2 id="for-each-x">Where the "for each x" is written</h2>
   <p>
@@ -2583,6 +2887,20 @@ chart(days)
     <li>
       Accept the shortcut (a rewrite that peeks at the mark kind) before the
       profile type exists?
+    </li>
+    <li>
+      Stacking along normals as a plain <code>stack</code> inside a coordinate
+      system that follows a curve (<code>Coord.along(spine)</code>, name open),
+      rather than a new kind of stack?
+    </li>
+    <li>
+      Where a curve is interpolated when its points are placed in a nonlinear
+      space: through refs from a layer drawn in screen space (no new API), or a
+      <code>Curve</code> option that says which space it interpolates in?
+    </li>
+    <li>
+      When a bundle is wider than its tightest bend allows, should the layout
+      raise an error, or should the routing widen the bend?
     </li>
   </ol>
 </main>

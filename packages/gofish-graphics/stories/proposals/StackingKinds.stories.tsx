@@ -22,6 +22,19 @@ import {
 } from "../../src/lib";
 import { topics } from "./stackingBaselines";
 import {
+  foldInner,
+  foldRings,
+  foldSpine,
+  hebInternal,
+  hebPolarData,
+  hebLeaves,
+  hebRows,
+  link3Nodes,
+  linkStrands,
+  minardBands,
+  minardCenter,
+  splitNodes,
+  splitRings,
   dodgeDots,
   dotValues,
   LINK,
@@ -248,3 +261,140 @@ const rings = (kind: "area" | "radius") =>
     );
 export const ConcentricArea = show((el) => rings("area").render(el));
 export const ConcentricRadius = show((el) => rings("radius").render(el));
+
+// ===========================================================================
+// k3: routing paths. All geometry is computed in `stackingKinds.ts` in
+// pixels and drawn as polygons and polylines in a pixel frame (EMULATED:
+// GoFish has no B-spline curve and no offset-along-a-path operator).
+
+/** A w by h chart whose x and y scales are one data unit per pixel. */
+const frame = (w: number, h: number) =>
+  chart(
+    [
+      { x: 0, y: 0, k: "lo" },
+      { x: w, y: h, k: "hi" },
+    ],
+    { w, h, axes: false, legend: false }
+  )
+    .flow(scatter({ by: "k", x: "x", y: "y" }))
+    .mark(blank());
+
+/** Polylines, one per value of `by`, from rows {i, x, y}. */
+const polylines = (
+  rows: Record<string, unknown>[],
+  by: string | null,
+  style: Parameters<typeof line>[0]
+) =>
+  chart(rows)
+    .flow(
+      ...(by ? [group({ by })] : []),
+      scatter({ by: "i", x: "x", y: "y" })
+    )
+    .mark(line({ curve: Curve.linear, ...style }));
+
+const pieces = (
+  rows: { c: string; ring: [number, number][] }[],
+  style: Parameters<typeof polygon>[0] = {}
+) =>
+  chart(rows).mark(
+    polygon({ points: "ring", fill: "c", stroke: "white", strokeWidth: 1, ...style })
+  );
+
+// k3-1. Hierarchical edge bundling. One layer per group, so each group's
+// leaves and the edges leaving them share a literal color.
+const GROUPS = ["g0", "g1", "g2", "g3"];
+const heb = (beta: number, kind: "screen" | "polar") =>
+  GROUPS.reduce(
+    (ch, g, k) =>
+      ch
+        .layer(
+          polylines(
+            hebRows(beta, kind).filter((r) => r.g === g),
+            "e",
+            { stroke: COLORS[k], strokeWidth: 1.5, opacity: 0.75 }
+          )
+        )
+        .layer(
+          chart(hebLeaves().filter((r) => r.g === g))
+            .flow(scatter({ by: "id", x: "x", y: "y" }))
+            .mark(circle({ r: 4, fill: COLORS[k] }))
+        ),
+    frame(300, 300).layer(
+      chart(hebInternal())
+        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .mark(circle({ r: 2, fill: "#bbb" }))
+    )
+  );
+export const HebBeta0 = show((el) => heb(0, "screen").render(el));
+export const HebBeta05 = show((el) => heb(0.5, "screen").render(el));
+export const HebBeta085 = show((el) => heb(0.85, "screen").render(el));
+export const HebScreen = show((el) => heb(0.85, "screen").render(el));
+export const HebPolar = show((el) => heb(0.85, "polar").render(el));
+// The same splines in (angle, radius) data, drawn by a line in Coord.polar
+// (GoFish maps and resamples them). Anchors pin angle to [0, 2 pi] and
+// radius to [0, 1].
+export const HebPolarNative = show((el) =>
+  chart(
+    [
+      { th: 0, r: 0, k: "lo" },
+      { th: 2 * Math.PI, r: 1, k: "hi" },
+    ],
+    { w: 256, h: 256, coord: Coord.polar(), axes: false, legend: false }
+  )
+    .flow(scatter({ by: "k", x: "th", y: "r" }))
+    .mark(blank())
+    .layer(
+      chart(hebPolarData(0.85))
+        .flow(group({ by: "e" }), scatter({ by: "i", x: "th", y: "r" }))
+        .mark(line({ stroke: "g", strokeWidth: 1.5, opacity: 0.7, curve: Curve.linear }))
+    )
+    .render(el)
+);
+
+// k3-2. One sankey link of width 48 in strands 12, 24, 12.
+const link3 = (kind: "separate" | "vertical" | "normal") =>
+  frame(480, 300)
+    .layer(pieces(link3Nodes, { fill: "#555", stroke: "none" }))
+    .layer(
+      pieces(
+        linkStrands(kind),
+        kind === "separate"
+          ? { opacity: 0.55, stroke: "#222", strokeWidth: 0.75 }
+          : {}
+      )
+    );
+export const LinkSeparate = show((el) => link3("separate").render(el));
+export const LinkVertical = show((el) => link3("vertical").render(el));
+export const LinkNormal = show((el) => link3("normal").render(el));
+
+// k3-3. A Minard band.
+export const Minard = show((el) =>
+  frame(480, 300)
+    .layer(pieces(minardBands.slice(0, 1), { fill: "#d9b98a", stroke: "none" }))
+    .layer(pieces(minardBands.slice(1), { fill: "#222", stroke: "none" }))
+    .layer(
+      polylines(minardCenter, null, {
+        stroke: "white",
+        strokeWidth: 0.75,
+        opacity: 0.8,
+      })
+    )
+    .render(el)
+);
+
+// k3-4. A trunk splitting into two branches.
+const split = (kind: "match" | "mismatch") =>
+  frame(480, 300)
+    .layer(pieces(splitNodes, { fill: "#555", stroke: "none" }))
+    .layer(pieces(splitRings(kind), { opacity: 0.75, stroke: "none" }));
+export const Split = show((el) => split("match").render(el));
+export const SplitMismatch = show((el) => split("mismatch").render(el));
+
+// k3-5. A bundle around a bend tighter than half its width.
+const fold = (rMin: number) =>
+  frame(480, 300)
+    .layer(pieces(foldRings(rMin), { opacity: 0.6, stroke: "none" }))
+    .layer(polylines(foldSpine(rMin), null, { stroke: "#333", strokeWidth: 1 }))
+    .layer(polylines(foldInner(rMin), null, { stroke: "black", strokeWidth: 1.5 }));
+export const Fold = show((el) => fold(6).render(el));
+export const FoldOk = show((el) => fold(30).render(el));

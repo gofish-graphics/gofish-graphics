@@ -239,3 +239,459 @@ export const ringRows = (kind: "area" | "radius", outerPx = 110) => {
   // stands in for a radial data scale.
   return rows.map((row) => ({ ...row, px: round((row.dr / r) * outerPx) }));
 };
+
+// ===========================================================================
+// k3: routing paths. Everything below is in pixels (y up) and drawn as
+// polygons and polylines in a pixel frame: GoFish has no path-offset or
+// B-spline primitive, so the geometry is computed here.
+
+type Pt = [number, number];
+
+/** A sampled path: points with unit tangent, left unit normal and arc
+ *  length. */
+export type PathSample = {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  nx: number;
+  ny: number;
+  s: number;
+};
+
+/** Samples from a dense point list: tangents by central differences, arc
+ *  length by summing chords. */
+const sample = (pts: Pt[]): PathSample[] => {
+  let s = 0;
+  return pts.map(([x, y], i) => {
+    if (i > 0) s += Math.hypot(x - pts[i - 1][0], y - pts[i - 1][1]);
+    const [ax, ay] = pts[Math.max(0, i - 1)];
+    const [bx, by] = pts[Math.min(pts.length - 1, i + 1)];
+    const len = Math.hypot(bx - ax, by - ay) || 1;
+    const [tx, ty] = [(bx - ax) / len, (by - ay) / len];
+    return { x, y, tx, ty, nx: -ty, ny: tx, s };
+  });
+};
+
+/** A cubic Bezier sampled at n + 1 points. */
+const cubic = (p0: Pt, p1: Pt, p2: Pt, p3: Pt, n = 160): Pt[] =>
+  Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n;
+    const u = 1 - t;
+    const b = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    return [
+      b[0] * p0[0] + b[1] * p1[0] + b[2] * p2[0] + b[3] * p3[0],
+      b[0] * p0[1] + b[1] * p1[1] + b[2] * p2[1] + b[3] * p3[1],
+    ];
+  });
+
+/** d3-sankey's link shape: a cubic with horizontal tangents at both ends. */
+const hlink = (a: Pt, b: Pt): Pt[] => {
+  const xm = (a[0] + b[0]) / 2;
+  return cubic(a, [xm, a[1]], [xm, b[1]], b);
+};
+
+function norm([x, y]: Pt): Pt {
+  const l = Math.hypot(x, y) || 1;
+  return [x / l, y / l];
+}
+
+/** A polyline with each corner rounded by a circular arc of radius r (the
+ *  arc is shrunk where a segment is too short for it). */
+const fillet = (pts: Pt[], r: number, step = 2): Pt[] => {
+  const out: Pt[] = [pts[0]];
+  const line = (a: Pt, b: Pt) => {
+    const n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / step));
+    for (let i = 1; i <= n; i++)
+      out.push([a[0] + ((b[0] - a[0]) * i) / n, a[1] + ((b[1] - a[1]) * i) / n]);
+  };
+  let cur = pts[0];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [a, b, c] = [pts[i - 1], pts[i], pts[i + 1]];
+    const u = norm([b[0] - a[0], b[1] - a[1]]);
+    const v = norm([c[0] - b[0], c[1] - b[1]]);
+    const turn = Math.acos(Math.max(-1, Math.min(1, u[0] * v[0] + u[1] * v[1])));
+    const lenAB = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    const lenBC = Math.hypot(c[0] - b[0], c[1] - b[1]);
+    const d = Math.min(r * Math.tan(turn / 2), lenAB / 2, lenBC / 2);
+    const rr = d / Math.tan(turn / 2);
+    const start: Pt = [b[0] - u[0] * d, b[1] - u[1] * d];
+    line(cur, start);
+    // The arc's center is on the inside of the turn.
+    const side = Math.sign(u[0] * v[1] - u[1] * v[0]) || 1;
+    const cx = start[0] - side * u[1] * rr;
+    const cy = start[1] + side * u[0] * rr;
+    const a0 = Math.atan2(start[1] - cy, start[0] - cx);
+    const n = Math.max(2, Math.ceil((rr * turn) / step));
+    for (let k = 1; k <= n; k++) {
+      const ang = a0 + (side * turn * k) / n;
+      out.push([cx + rr * Math.cos(ang), cy + rr * Math.sin(ang)]);
+    }
+    cur = out[out.length - 1];
+  }
+  line(cur, pts[pts.length - 1]);
+  return out;
+};
+
+/** A band along a path between normal offsets lo(s) and hi(s) (s = arc
+ *  length), as a closed ring. */
+const bandAlong = (
+  path: PathSample[],
+  lo: (s: number) => number,
+  hi: (s: number) => number
+): Pt[] => [
+  ...path.map((p): Pt => [p.x + lo(p.s) * p.nx, p.y + lo(p.s) * p.ny]),
+  ...path
+    .map((p): Pt => [p.x + hi(p.s) * p.nx, p.y + hi(p.s) * p.ny])
+    .reverse(),
+];
+
+/** One edge of a band, as polyline rows {i, x, y}. */
+const edgeAlong = (path: PathSample[], o: (s: number) => number) =>
+  path.map((p, i) => ({ i, x: p.x + o(p.s) * p.nx, y: p.y + o(p.s) * p.ny }));
+
+/** Strands of the given widths stacked along a path's normal, centered on
+ *  it: ring k covers [below_k, below_k + w_k] across the path. */
+const strandsAlong = (path: PathSample[], widths: number[], cs?: string[]) => {
+  const total = widths.reduce((s, w) => s + w, 0);
+  let below = -total / 2;
+  return widths.map((w, k) => {
+    const a = below;
+    below += w;
+    return {
+      c: cs?.[k] ?? `s${k}`,
+      ring: bandAlong(path, () => a, () => a + w),
+    };
+  });
+};
+
+const boxRing = (cx: number, cy: number, w: number, h: number) => ({
+  c: "node",
+  ring: box(cx - w / 2, cx + w / 2, cy - h / 2, cy + h / 2),
+});
+
+// ---------------------------------------------------------------------------
+// k3-1. Hierarchical edge bundling (Holten 2006).
+
+/** 4 groups of 5 leaves on a circle, with a gap of one slot between groups.
+ *  Angles in radians, counter-clockwise from 3 o'clock. */
+const HEB_GROUPS = 4;
+const HEB_LEAVES = 5;
+const slot = (2 * Math.PI) / (HEB_GROUPS * (HEB_LEAVES + 1));
+const leafAngle = (g: number, i: number) =>
+  slot * (g * (HEB_LEAVES + 1) + i + 0.5);
+const groupAngle = (g: number) => leafAngle(g, (HEB_LEAVES - 1) / 2);
+
+/** Fifteen edges between leaves in different groups (seeded). */
+const hebEdges = (() => {
+  let s = 7;
+  const r = () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+  const out: { id: number; a: [number, number]; b: [number, number] }[] = [];
+  while (out.length < 15) {
+    const ga = Math.floor(r() * HEB_GROUPS);
+    const gb = Math.floor(r() * HEB_GROUPS);
+    const ia = Math.floor(r() * HEB_LEAVES);
+    const ib = Math.floor(r() * HEB_LEAVES);
+    if (ga !== gb) out.push({ id: out.length, a: [ga, ia], b: [gb, ib] });
+  }
+  return out;
+})();
+
+/** Uniform cubic B-spline over control points, with the end points tripled
+ *  so the curve starts and ends on them (d3's curveBasis). */
+const bspline = (P: Pt[], perSeg = 24): Pt[] => {
+  const Q = [P[0], P[0], ...P, P[P.length - 1], P[P.length - 1]];
+  const out: Pt[] = [];
+  for (let i = 0; i + 3 < Q.length; i++) {
+    const last = i + 4 === Q.length;
+    for (let k = 0; k <= (last ? perSeg : perSeg - 1); k++) {
+      const t = k / perSeg;
+      const b = [
+        (1 - t) ** 3 / 6,
+        (3 * t ** 3 - 6 * t ** 2 + 4) / 6,
+        (-3 * t ** 3 + 3 * t ** 2 + 3 * t + 1) / 6,
+        t ** 3 / 6,
+      ];
+      out.push([
+        b[0] * Q[i][0] + b[1] * Q[i + 1][0] + b[2] * Q[i + 2][0] + b[3] * Q[i + 3][0],
+        b[0] * Q[i][1] + b[1] * Q[i + 1][1] + b[2] * Q[i + 2][1] + b[3] * Q[i + 3][1],
+      ]);
+    }
+  }
+  return out;
+};
+
+/** Holten's straightening: P'_i = beta P_i + (1 - beta) of the chord. */
+const straighten = (P: Pt[], beta: number): Pt[] => {
+  const [a, b] = [P[0], P[P.length - 1]];
+  return P.map(([x, y], i) => {
+    const f = i / (P.length - 1);
+    return [
+      beta * x + (1 - beta) * (a[0] + f * (b[0] - a[0])),
+      beta * y + (1 - beta) * (a[1] + f * (b[1] - a[1])),
+    ];
+  });
+};
+
+/**
+ * One polyline per edge, as rows {e, g, i, x, y} in pixels, in a size by
+ * size frame. The control points are the tree path leaf, group, root,
+ * group, leaf, with leaves at radius 1, groups at 1/2 and the root at 0.
+ * `"screen"`: the points are mapped to the plane first, then straightened
+ * and splined there (d3's convention). `"polar"`: they are straightened and
+ * splined in (angle, radius), then mapped, so the curve bends with the
+ * polar space. The root has no angle; in `"polar"` it takes the angle
+ * halfway between the two groups, the short way round.
+ */
+export const hebRows = (
+  beta: number,
+  kind: "screen" | "polar",
+  size = 300
+) => {
+  const R = size / 2 - 22;
+  const toPx = ([th, r]: Pt): Pt => [
+    size / 2 + R * r * Math.cos(th),
+    size / 2 + R * r * Math.sin(th),
+  ];
+  return hebEdges.flatMap(({ id, a, b }) => {
+    const tA = leafAngle(...a);
+    const gA = groupAngle(a[0]);
+    let gB = groupAngle(b[0]);
+    let tB = leafAngle(...b);
+    // Unwrap so the path goes the short way round from group A to group B.
+    const turn = Math.round((gB - gA) / (2 * Math.PI)) * 2 * Math.PI;
+    gB -= turn;
+    tB -= turn;
+    const polarPts: Pt[] = [
+      [tA, 1],
+      [gA, 0.5],
+      [(gA + gB) / 2, 0],
+      [gB, 0.5],
+      [tB, 1],
+    ];
+    const pts =
+      kind === "screen"
+        ? bspline(straighten(polarPts.map(toPx), beta))
+        : bspline(straighten(polarPts, beta)).map(toPx);
+    return pts.map(([x, y], i) => ({ e: id, g: `g${a[0]}`, i, x, y }));
+  });
+};
+
+/** The `"polar"` splines in (angle, radius) data, unmapped, for a line in
+ *  `Coord.polar`. Angles are unwrapped, so some run below 0 or past 2 pi. */
+export const hebPolarData = (beta: number) =>
+  hebEdges.flatMap(({ id, a, b }) => {
+    const tA = leafAngle(...a);
+    const gA = groupAngle(a[0]);
+    const turn =
+      Math.round((groupAngle(b[0]) - gA) / (2 * Math.PI)) * 2 * Math.PI;
+    const gB = groupAngle(b[0]) - turn;
+    const tB = leafAngle(...b) - turn;
+    const P: Pt[] = [
+      [tA, 1],
+      [gA, 0.5],
+      [(gA + gB) / 2, 0],
+      [gB, 0.5],
+      [tB, 1],
+    ];
+    // Wrapped back into [0, 2 pi) (the polar scale fits the data's angle
+    // extent to the circle, so an unwrapped angle would shrink it), with
+    // the polyline cut where it crosses the seam.
+    let part = 0;
+    let prev: number | undefined;
+    return bspline(straighten(P, beta)).map(([th, r], i) => {
+      const w = ((th % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+      if (prev !== undefined && Math.abs(w - prev) > Math.PI) part++;
+      prev = w;
+      return { e: `${id}-${part}`, g: `g${a[0]}`, i, th: w, r };
+    });
+  });
+
+/** The leaves, and the internal nodes (root and groups), in pixels. */
+export const hebLeaves = (size = 300) => {
+  const R = size / 2 - 22;
+  return Array.from({ length: HEB_GROUPS }, (_, g) =>
+    Array.from({ length: HEB_LEAVES }, (_, i) => ({
+      id: `${g}-${i}`,
+      g: `g${g}`,
+      x: size / 2 + R * Math.cos(leafAngle(g, i)),
+      y: size / 2 + R * Math.sin(leafAngle(g, i)),
+    }))
+  ).flat();
+};
+export const hebInternal = (size = 300) => {
+  const R = size / 2 - 22;
+  return [
+    { id: "root", x: size / 2, y: size / 2 },
+    ...Array.from({ length: HEB_GROUPS }, (_, g) => ({
+      id: `g${g}`,
+      x: size / 2 + (R / 2) * Math.cos(groupAngle(g)),
+      y: size / 2 + (R / 2) * Math.sin(groupAngle(g)),
+    })),
+  ];
+};
+
+// ---------------------------------------------------------------------------
+// k3-2. One sankey link of width 48 split into strands 12, 24, 12.
+
+const LINK3 = {
+  a: [160, 250] as Pt,
+  b: [320, 50] as Pt,
+  widths: [12, 24, 12],
+};
+const linkPath = sample(hlink(LINK3.a, LINK3.b));
+
+/**
+ * The strands of LINK3 as rings. `"separate"`: d3-sankey, each strand its
+ * own link from its own y at the source to its own y at the target, drawn
+ * as a stroke of its width (a band of its width along its own normal).
+ * `"vertical"`: bands offset vertically from one spine. `"normal"`: bands
+ * offset along the spine's normal.
+ */
+export const linkStrands = (kind: "separate" | "vertical" | "normal") => {
+  const { a, b, widths } = LINK3;
+  if (kind === "normal") return strandsAlong(linkPath, widths);
+  const total = widths.reduce((s, w) => s + w, 0);
+  let below = -total / 2;
+  return widths.map((w, k) => {
+    const lo = below;
+    below += w;
+    if (kind === "vertical")
+      return {
+        c: `s${k}`,
+        ring: [
+          ...linkPath.map((p): Pt => [p.x, p.y + lo]),
+          ...linkPath.map((p): Pt => [p.x, p.y + lo + w]).reverse(),
+        ],
+      };
+    const mid = lo + w / 2;
+    const own = sample(hlink([a[0], a[1] + mid], [b[0], b[1] + mid]));
+    return { c: `s${k}`, ring: bandAlong(own, () => -w / 2, () => w / 2) };
+  });
+};
+export const link3Nodes = [
+  boxRing(LINK3.a[0] - 8, LINK3.a[1], 16, 72),
+  boxRing(LINK3.b[0] + 8, LINK3.b[1], 16, 72),
+];
+
+// ---------------------------------------------------------------------------
+// k3-3. A Minard band: width varies along arc length, offsets along the
+// normal, centered on the route.
+
+const minardRoute = sample(
+  fillet(
+    [
+      [20, 150],
+      [110, 195],
+      [210, 120],
+      [300, 180],
+      [380, 115],
+      [460, 140],
+    ],
+    80
+  )
+);
+const minardLen = minardRoute[minardRoute.length - 1].s;
+/** Steps of the army's width, as (fraction of the route, width in px),
+ *  each eased over 10 px of arc length. */
+const MINARD_STEPS: [number, number][] = [
+  [0, 60],
+  [0.22, 44],
+  [0.45, 30],
+  [0.66, 18],
+  [0.84, 8],
+];
+const minardW = (s: number) => {
+  let w = MINARD_STEPS[0][1];
+  for (let k = 1; k < MINARD_STEPS.length; k++) {
+    const at = MINARD_STEPS[k][0] * minardLen;
+    const f = Math.max(0, Math.min(1, (s - at) / 10 + 0.5));
+    w += (MINARD_STEPS[k][1] - MINARD_STEPS[k - 1][1]) * f;
+  }
+  return w;
+};
+/** The return band: thinner, centered 46 px to the right of the route. */
+const returnW = (s: number) => 4 + 6 * (s / minardLen);
+export const minardBands = [
+  {
+    c: "advance",
+    ring: bandAlong(minardRoute, (s) => -minardW(s) / 2, (s) => minardW(s) / 2),
+  },
+  {
+    c: "retreat",
+    ring: bandAlong(
+      minardRoute,
+      (s) => -46 - returnW(s) / 2,
+      (s) => -46 + returnW(s) / 2
+    ),
+  },
+];
+export const minardCenter = edgeAlong(minardRoute, () => 0);
+
+// ---------------------------------------------------------------------------
+// k3-4. A trunk of width 48 splitting into branches of 18 and 30.
+
+const SPLIT = {
+  src: [40, 140] as Pt,
+  at: [210, 160] as Pt,
+  targets: [[440, 50] as Pt, [440, 255] as Pt],
+  widths: [18, 30], // bottom strand first
+};
+const trunkPath = sample(hlink(SPLIT.src, SPLIT.at));
+
+/**
+ * The trunk's strands and each branch, as rings. Branch k starts at the
+ * center of strand k's interval of the trunk's end. `"match"`: the branch
+ * leaves with the trunk's tangent (horizontal), so its first cross-section
+ * is strand k's interval exactly. `"mismatch"`: the branch leaves heading
+ * straight at its target, so its first cross-section is tilted.
+ */
+export const splitRings = (kind: "match" | "mismatch") => {
+  const { at, targets, widths } = SPLIT;
+  const total = widths.reduce((s, w) => s + w, 0);
+  const end = trunkPath[trunkPath.length - 1];
+  const trunk = strandsAlong(trunkPath, widths, ["b0", "b1"]);
+  let below = -total / 2;
+  const branches = widths.map((w, k) => {
+    const mid = below + w / 2;
+    below += w;
+    const start: Pt = [at[0] + mid * end.nx, at[1] + mid * end.ny];
+    const tgt = targets[k];
+    const xm = (start[0] + tgt[0]) / 2;
+    const d = norm([tgt[0] - start[0], tgt[1] - start[1]]);
+    const L = (tgt[0] - start[0]) / 2;
+    const c1: Pt =
+      kind === "match"
+        ? [xm, start[1]]
+        : [start[0] + d[0] * L, start[1] + d[1] * L];
+    const path = sample(cubic(start, c1, [xm, tgt[1]], tgt));
+    return { c: `b${k}`, ring: bandAlong(path, () => -w / 2, () => w / 2) };
+  });
+  return [...trunk, ...branches];
+};
+export const splitNodes = [
+  boxRing(SPLIT.src[0] - 8, SPLIT.src[1], 16, 64),
+  boxRing(SPLIT.targets[0][0] + 8, SPLIT.targets[0][1], 16, 34),
+  boxRing(SPLIT.targets[1][0] + 8, SPLIT.targets[1][1], 16, 46),
+];
+
+// ---------------------------------------------------------------------------
+// k3-5. A bundle of width 60 along an arch whose tightest bend has radius
+// rMin = sigma^2 / h (a Gaussian bump of height h). Below rMin = 30, half
+// the width, the inner boundary folds over itself.
+
+const FOLD = { widths: [20, 20, 20], h: 130 };
+const archPath = (rMin: number) => {
+  const sigma = Math.sqrt(rMin * FOLD.h);
+  return sample(
+    Array.from({ length: 881 }, (_, i): Pt => {
+      const x = 20 + (440 * i) / 880;
+      return [x, 70 + FOLD.h * Math.exp(-0.5 * ((x - 240) / sigma) ** 2)];
+    })
+  );
+};
+export const foldRings = (rMin: number) =>
+  strandsAlong(archPath(rMin), FOLD.widths);
+/** The bundle's inner (lower) boundary and its spine, for strokes. */
+export const foldInner = (rMin: number) => edgeAlong(archPath(rMin), () => -30);
+export const foldSpine = (rMin: number) => edgeAlong(archPath(rMin), () => 0);
