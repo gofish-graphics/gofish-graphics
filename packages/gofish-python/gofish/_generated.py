@@ -434,13 +434,16 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
             _kw[_k] = _v
     return Mark("image", **_kw)
 
-def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None, points: list | str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.
+def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None, points: Optional[list | str] = None, d: Optional[str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+    """A closed outline, given as `points` (straight edges) or as `d` (SVG path data, with curves). Pass exactly one of the two. `points` are coordinates in the frame; `d` is a shape drawn in its own box. Literal `points` are in the frame the polygon sits in (top-down on a plain canvas, upward inside a continuous y), and its box is their extent; a field-bound `points` is in data coordinates and places itself. `d` is in the unit box, 0 to 1 on each axis, stretched to a `w` by `h` box that lays out like a rect's, so `polygon({ d })` fills the space it is given. Under a polar or other curved coordinate space every point of the outline goes through the space, curves included, so a box outline in a polar slot draws as a pie slice.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
-        points: Vertex list, at least 3 points — either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap).
+        points: Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). Takes no `w` or `h`.
+        d: The outline as SVG path data in the unit box, 0 to 1 on each axis, stretched to the `w` by `h` box: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands, such as `"M0 0 L0 .5 Q.5 1.2 1 .5 L1 0 Z"`. It closes back to its first point with or without `Z`.
+        w: Width of the box `d` is stretched to, sized as on rect: a number (pixels), a field name, or an accessor. Left out, it fills the space it is given, or 16 px when it is given none.
+        h: Height of the box `d` is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot.
         fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -451,6 +454,9 @@ def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None
         ("debug", debug),
         ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
         ("points", points),
+        ("d", d),
+        ("w", _channel(w)),
+        ("h", _channel(h)),
         ("fill", _channel(fill)),
         ("stroke", _channel(stroke)),
         ("strokeWidth", stroke_width),

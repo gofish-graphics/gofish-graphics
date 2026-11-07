@@ -367,11 +367,12 @@ def test_treemap_combinator_accepts_key():
     assert d["options"]["size"] == "gross"
 
 
-def test_polygon_requires_points():
-    with pytest.raises(TypeError):
-        polygon(fill="red")
+def test_polygon_takes_points_or_d():
+    # The outline is `points` or `d`; JS rejects neither or both at render.
     d = ir(polygon(points=[[0, 0], [1, 1], [0, 1]]))
     assert d["points"] == [[0, 0], [1, 1], [0, 1]]
+    d = ir(polygon(w="count", d="M0 0 L0 1 L1 1 L1 0 Z"))
+    assert d == {"type": "polygon", "w": "count", "d": "M0 0 L0 1 L1 1 L1 0 Z"}
 
 
 def test_circle_ellipse_petal_blank_signatures_are_closed():

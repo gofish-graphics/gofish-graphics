@@ -305,7 +305,13 @@ For a vertical bar chart where:
   The `SIZE` space is `CONTINUOUS(interval(0, value), "free")`: the value's positive part is its
   ascent and its negative part its descent, so a negative bar extends below
   its baseline. A rect writes no claim hook, so its claim is the one its type
-  implies: `value·σ` on the matching side.
+  implies: `value·σ` on the matching side. At layout the rect reads that
+  size into pixels with `sizeOf` (`src/ast/dims.ts`): through the axis's map
+  from data 0, or the room it is given when it has no size, or a 16 px
+  default when that room is unresolved. It stores the signed result as its
+  box with `signedExtent`, so a negative bar's box runs from its negative end
+  to 0. A `polygon` drawn from `d` sizes its
+  `w` and `h` with the same two helpers.
 
 The logic in `resolveUnderlyingSpace` checks:
 

@@ -659,7 +659,7 @@ export const coord = createNodeOperator(
         // `contentOffset` (the plane origin inside the box, in the coord's
         // upward axis order), so a single `contentToPixel` maps a y-down plane
         // point to the canvas. Content children warp through `inPixels(...)`
-        // in their own `lower` (rect/ellipse/petal emit paths); the grid +
+        // in their own `lower` (rect/ellipse/petal/polygon emit paths); the grid +
         // polar axes are computed in the math-handed plane and map through
         // `planeToPixel`.
         lower: ({ transform, renderData }, _children, node) => {
