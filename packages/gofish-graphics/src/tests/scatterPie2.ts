@@ -11,6 +11,7 @@ import { black, color, color6, white } from "../color";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { layer } from "../ast/graphicalOperators/layer";
+import { petal } from "../ast/shapes/petal";
 import _ from "lodash";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { stackX } from "../ast/graphicalOperators/stackX";

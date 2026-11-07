@@ -59,11 +59,11 @@ export type PolygonProps = {
    */
   points?: MaybeValue<Ring>;
   /** The outline as SVG path data (absolute M, L, Q, C, Z; see
-   *  `parseClosedPath`), read the way literal `points` are. */
+   *  `parseClosedPath`), always in the unit box, 0 to 1 on each axis,
+   *  stretched to the polygon's `w` by `h` box. */
   d?: string;
-  /** The box the outline is stretched to, as a rect's. With either side
-   *  given the outline is in the unit box, 0 to 1 on each axis, and a side
-   *  left out fills the space it is given. */
+  /** The box `d` is stretched to, sized as a rect's: a side left out fills
+   *  the space it is given. `points` take neither. */
   w?: MaybeValue<number>;
   h?: MaybeValue<number>;
 };
@@ -76,14 +76,16 @@ const CIRCLE_TOLERANCE = 0.25;
  * A closed polygon.
  *
  * Its outline is `points` (straight edges) or `d` (SVG path data, with
- * curves). Three readings:
- *   - A literal outline with no `w`/`h` is a local-coordinate shape (in the
- *     axis order of the polygon's own frame: pixels, y down) whose bounding
- *     box comes from the outline and whose placement comes from the parent
- *     constraint system.
- *   - A literal outline with `w` or `h` is in the unit box, stretched to a
- *     `w` by `h` box. It declares each set side as a rect does, so it lays
- *     out like a rect of that size: a polygon in a polar slot fills the slot.
+ * curves). `points` are coordinates in the frame; `d` is a shape drawn in its
+ * own box. Three readings:
+ *   - Literal points are a local-coordinate shape (in the axis order of the
+ *     polygon's own frame: pixels, y down) whose bounding box comes from the
+ *     points and whose placement comes from the parent constraint system.
+ *   - `d` is in the unit box, stretched to a `w` by `h` box. Each side is
+ *     sized as a rect sizes its own (`sizeOf`): a data or number `w`/`h`
+ *     gives it, and a side left out fills the space the parent gives, so
+ *     `polygon({ d })` fills its slot, and a polygon in a polar slot fills
+ *     the slot.
  *   - Data-bound points (a `value(ring)`) are a data-positioned mark: it
  *     declares a POSITION space per axis spanning the ring's extent, maps its
  *     vertices through the axis scales, and self-places at its own low corner
@@ -108,14 +110,13 @@ export const Polygon = ({
         (points === undefined ? ", and got neither." : ", and got both.")
     );
   }
-  const dataBound = isValue(points);
-  const boxed = w !== undefined || h !== undefined;
-  if (dataBound && boxed) {
+  if (points !== undefined && (w !== undefined || h !== undefined)) {
     throw new Error(
-      "polygon: a field-bound `points` ring is in data coordinates and places " +
-        "itself, so it takes no `w` or `h`."
+      "polygon: `w` and `h` size the box `d` is drawn in; `points` are " +
+        "coordinates in the frame, so they take no `w` or `h`."
     );
   }
+  const dataBound = isValue(points);
   const ring = (dataBound ? getValue(points!) : points) as Ring | undefined;
   // Without an explicit guard an empty ring's extent is (Infinity,
   // -Infinity), producing a bbox with size: -Infinity that silently
@@ -125,13 +126,13 @@ export const Polygon = ({
   }
   const outline: Path =
     d !== undefined ? parseClosedPath(d) : path(ring!, { closed: true });
-  // The outline's extent, read only where it is the polygon's own: a boxed
-  // outline takes its box's.
-  const bounds = boxed ? undefined : pathBounds(outline);
+  // The outline's extent, read only where it is the polygon's own: `d` takes
+  // its box's.
+  const bounds = d !== undefined ? undefined : pathBounds(outline);
 
   // The outline in LOCAL coordinates, in the polygon's own axis order, as
-  // `layout` resolved it: the literal outline, the unit outline stretched to
-  // its box, or — when data-bound — the scaled outline minus the node's own
+  // `layout` resolved it: the literal points, the unit outline `d` stretched
+  // to its box, or — when data-bound — the scaled outline minus the node's own
   // translate. `lower` and `geometry` read this, in pixels (y times the
   // polygon's direction), so they emit exactly what layout measured.
   const localRef: { current: Path } = { current: outline };
@@ -159,7 +160,7 @@ export const Polygon = ({
           : // A side of the box is a size, as a rect's `w` is.
             [pointOrMagnitude(undefined, w), pointOrMagnitude(undefined, h)],
       layout: (size, scales) => {
-        if (boxed) {
+        if (d !== undefined) {
           // A side's signed length, read as a rect reads its own
           // (`sizeOf`): a data value from the baseline through the axis's
           // map, a number as pixels, left out the space the polygon is
@@ -193,8 +194,8 @@ export const Polygon = ({
         // are) to the enclosing scope's coordinates. Absent a map the data IS
         // the coordinate, which is the identity — the same fallback a
         // data-positioned rect takes.
-        const mapX = posFn(scales?.[0]?.map) ?? ((d: number) => d);
-        const mapY = posFn(scales?.[1]?.map) ?? ((d: number) => d);
+        const mapX = posFn(scales?.[0]?.map) ?? ((v: number) => v);
+        const mapY = posFn(scales?.[1]?.map) ?? ((v: number) => v);
         // A data-bound ring has only straight edges, so its extent is its
         // vertices'.
         const mapped = ring!.map(([x, y]): Point => [mapX(x), mapY(y)]);
@@ -273,7 +274,7 @@ export const Polygon = ({
 /** `fill`/`stroke` are color channels, as on `rect`: a field name (or
  *  `field(...)`) reads the row's value and goes through the chart's color
  *  scale; any other string is a literal color. `w`/`h` are size channels, as
- *  on `rect`. */
+ *  on `rect`, and size the box `d` is drawn in. */
 const basePolygon = createMark(Polygon, MARK_CHANNELS.polygon, "polygon");
 
 export type PolygonMarkProps = Omit<
@@ -288,9 +289,9 @@ export type PolygonMarkProps = Omit<
  * `polygon` — a closed outline: a literal or field-bound ring of `points`, or
  * the SVG path data `d`.
  *
- * `points: [[x, y], …]` is the local-coordinate shape, and so is `d`. With
- * `w` or `h` the literal outline is in the unit box instead, stretched to a
- * box that lays out like a rect's: `polygon({ w: "count", d })` under
+ * `points: [[x, y], …]` is the local-coordinate shape. `d` is always in the
+ * unit box, stretched to a box that lays out like a rect's, so
+ * `polygon({ d })` fills its slot and `polygon({ w: "count", d })` under
  * `stack({ dir: "x" })` in a polar coord is a petal its slot bends.
  * `points: "ring"` reads the ring off each row of the mark's data, so one row
  * is one ring and a whole basemap is

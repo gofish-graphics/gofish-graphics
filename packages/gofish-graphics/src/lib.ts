@@ -230,6 +230,7 @@ export { offset } from "./ast/graphicalOperators/offset";
 
 // Marks (lowercase, from createMark)
 export { ellipse } from "./ast/shapes/ellipse";
+export { petal } from "./ast/shapes/petal";
 export { polygon } from "./ast/shapes/polygon";
 export { text } from "./ast/shapes/text";
 export { image } from "./ast/shapes/image";

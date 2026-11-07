@@ -51,7 +51,7 @@ rect({ dims: { lon: "lon", lat: "lat" }, w: 4, h: 4 });
 `x` and `y` are always valid keys too. A name the enclosing coordinate space
 does not declare throws an error that lists the ones it does, and setting the
 same part of an axis twice (for example `w` and `dims.theta.size`) is an error.
-The same `dims` option works on `ellipse`, `text`, `image`, and
+The same `dims` option works on `ellipse`, `petal`, `text`, `image`, and
 `layer`.
 
 ## Examples

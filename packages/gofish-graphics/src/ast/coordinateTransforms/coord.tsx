@@ -100,7 +100,7 @@ export type CoordinateTransform = {
   aliases?: { x?: string; y?: string };
   /**
    * Set by the polar family (`polar()`, `clock()`; see `polarPreset`): axis 0
-   * is an angle θ and axis 1 a radius r. Polar geometry (the arc
+   * is an angle θ and axis 1 a radius r. Polar geometry (petals, the arc
    * sampling of a warped box) applies only here.
    */
   polar?: true;
@@ -659,7 +659,7 @@ export const coord = createNodeOperator(
         // `contentOffset` (the plane origin inside the box, in the coord's
         // upward axis order), so a single `contentToPixel` maps a y-down plane
         // point to the canvas. Content children warp through `inPixels(...)`
-        // in their own `lower` (rect/ellipse/polygon emit paths); the grid +
+        // in their own `lower` (rect/ellipse/petal/polygon emit paths); the grid +
         // polar axes are computed in the math-handed plane and map through
         // `planeToPixel`.
         lower: ({ transform, renderData }, _children, node) => {

@@ -66,7 +66,7 @@ The library is built around several key architectural patterns:
 All paths are relative to `packages/gofish-graphics/`:
 
 - `src/ast/` - Core AST implementation and rendering engine
-- `src/ast/shapes/` - Basic visual elements (rect, ellipse, polygon, text, ref)
+- `src/ast/shapes/` - Basic visual elements (rect, ellipse, petal, text, ref)
 - `src/ast/graphicalOperators/` - Composition operators (stack, stackX, stackY, spread, spreadX, spreadY, layer, connect, wrap, arrow, enclose, frame, position)
 - `src/ast/coordinateTransforms/` - Coordinate system transformations (polar, clock, wavy, geo; plus the internal identity `linear`)
 - `src/ast/marks/` - Fluent chart builder (`chart(data).flow(...).mark(...)`) and the mark factories

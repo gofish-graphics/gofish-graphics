@@ -8,8 +8,9 @@ Draws a closed polygon. Its outline is `points` or `d`. `points` is either a
 literal ring of local coordinates, for non-rectangular glyphs (trapezoids,
 arrows, custom shapes) that the standard shape primitives can't express, or the
 name of a field holding one ring per data row. `d` is SVG path data, for an
-outline with curves. With `w` or `h`, the outline is drawn in a box that lays
-out like a rect's, such as a petal in its slot of a polar stack.
+outline with curves, drawn in a box that lays out like a rect's, such as a petal
+in its slot of a polar stack. `points` are coordinates in the frame; `d` is a
+shape drawn in its own box.
 
 ```python
 from gofish import chart, polygon
@@ -34,8 +35,8 @@ polygon(*, points=None, d=None, w=None, h=None, fill=None, stroke=None,
         stroke_width=None, opacity=None, filter=None, debug=None) -> Mark
 ```
 
-Keyword-only. Pass exactly one of `points` and `d`. `w` and `h` take a literal
-outline only.
+Keyword-only. Pass exactly one of `points` and `d`. `w` and `h` size the box
+`d` is drawn in, and `points` take neither.
 
 ## Parameters
 
@@ -100,37 +101,35 @@ polygon(
 ## Path outlines
 
 `d` is SVG path data: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands.
-It is read in the same frame as literal `points`. The outline closes back to its
-first point, with or without `Z`. Relative (lowercase) commands, the other SVG
-commands and a second `M` are errors.
+The outline closes back to its first point, with or without `Z`. Relative
+(lowercase) commands, the other SVG commands and a second `M` are errors.
+
+`d` is always in the unit box, 0 to 1 on each axis, and is stretched to a `w` by
+`h` box. Each side is sized the way a rect sizes its own: `w` and `h` take a
+number (pixels), a field name or an accessor, and a side left out fills the
+space the parent gives, or is 16 px when the parent gives none. So
+`polygon(d=...)` fills its slot. For now (#1038), the unit box's y runs the way
+the polygon's frame does: top-down on a plain canvas, and outward from the
+center in a polar slot.
 
 ```python
-polygon(d="M0 0 L40 0 Q40 30 20 30 Q0 30 0 0 Z", fill="teal")
+polygon(w=40, h=30, d="M0 0 L1 0 Q1 1 .5 1 Q0 1 0 0 Z", fill="teal")
 ```
-
-## Outlines in a box
-
-With `w` or `h`, a literal outline is in the unit box, 0 to 1 on each axis, and
-is stretched to a `w` by `h` box. The box lays out like a rect of the same size:
-`w` and `h` take a number (pixels), a field name or an accessor, and a side left
-out fills the space it is given. For now (#1038), the unit box's y runs the
-way the polygon's frame does: top-down on a plain canvas, and outward from the
-center in a polar slot.
 
 Under a polar or other curved coordinate space, every point of the outline goes
 through the space, curves included, the same as a `line`. So a box outline in a
-polar slot is a pie slice, and the flower chart's petal is a polygon whose
-outline its slot bends:
+polar slot is a pie slice, and a petal is a polygon whose outline its slot
+bends:
 
-::: gofish example:flower-chart hidden
+::: gofish story:shapes-polygon-marks--petal-wide-slot
 :::
 
 ```python
 PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z"
 
 (
-    chart(coord=Coord.polar(), axes=False)
-    .flow(stack(by="species", dir="x", h=40))
+    chart([d for d in seafood if d["lake"] == "Lake F"], coord=Coord.polar(), axes=False)
+    .flow(stack(by="species", dir="x", h=90))
     .mark(polygon(w="count", d=PETAL, fill="species"))
 )
 ```

@@ -5,7 +5,8 @@
 /**
  * Shared helpers for per-primitive `lower` bodies — the IR counterparts of the
  * small JSX-emitting snippets each shape's `render` uses. Keeping them here
- * means rect/ellipse/polygon/connect/coord lower their warped paths identically.
+ * means rect/ellipse/petal/polygon/connect/coord lower their warped paths
+ * identically.
  */
 
 import type { DisplayList } from "gofish-ir";

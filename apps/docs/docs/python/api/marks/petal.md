@@ -1,0 +1,41 @@
+---
+order: 35
+---
+
+# petal
+
+Draws a petal: a wedge whose sides follow the enclosing coordinate system's
+angular and radial axes. It is the polar counterpart of
+[`rect`](/python/api/marks/rect), for flower and rose glyphs where a rectangle's
+straight sides would look wrong.
+
+::: gofish example:flower-chart hidden
+:::
+
+```python
+from gofish import chart, stack, petal, Coord
+
+chart(seafood, coord=Coord.polar()) \
+    .flow(stack(by="species", dir="x")) \
+    .mark(petal(w="count", fill="species")) \
+    .render(w=300, h=300)
+```
+
+## Signature
+
+```python
+petal(*, x=None, cx=None, x2=None, w=None, em_x=None,
+      y=None, cy=None, y2=None, h=None, em_y=None,
+      dims=None,
+      fill=None, stroke=None, stroke_width=None) -> Mark
+```
+
+Use it inside a [`Coord.polar()`](/python/api/coords/polar) or
+[`Coord.clock()`](/python/api/coords/clock) coordinate space, where `w`/`h` read as the
+angular and radial extents. `dims={"theta": ..., "r": ...}` names the same two
+axes by their polar names (see [Axis names](/python/api/coords/polar#axis-names)).
+
+## Parameters
+
+::: gofish-ref petal
+:::

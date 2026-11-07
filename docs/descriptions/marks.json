@@ -20,9 +20,13 @@
       "type": "ellipse",
       "description": "An ellipse shape."
     },
+    "petal": {
+      "type": "petal",
+      "description": "A petal shape."
+    },
     "polygon": {
       "type": "polygon",
-      "description": "A closed outline, given as points or as SVG path data, optionally stretched from the unit box to a w by h box."
+      "description": "A closed outline: points in the frame, or SVG path data drawn in a unit box stretched to w by h."
     },
     "blank": {
       "type": "blank",

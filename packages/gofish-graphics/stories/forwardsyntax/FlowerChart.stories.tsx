@@ -7,7 +7,7 @@ import {
   stack,
   rect,
   layer,
-  polygon,
+  petal,
   Constraint,
   Coord,
 } from "../../src/lib";
@@ -27,10 +27,6 @@ type Args = { w: number; h: number };
 // Fixed radius of every flower head, in pixels. The petals fan out to this
 // shared length; only their colors and angular widths vary with the data.
 const FLOWER_RADIUS = 40;
-
-// One petal in its slot's unit box: across the slot on x, out from the
-// center on y. The polar coord bends the whole outline.
-const PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z";
 
 // Each species row tagged with its lake's planting location on x.
 const stemData = seafood.map((d) => ({
@@ -57,7 +53,7 @@ export const Default: StoryObj<Args> = {
     const flower = chart({ coord: Coord.polar(), axes: false })
       .flow(stack({ by: "species", dir: "x", h: FLOWER_RADIUS }))
       // TODO(#1111): lighten the petals, as the low-level version did.
-      .mark(polygon({ w: "count", d: PETAL, fill: "species" }));
+      .mark(petal({ w: "count", fill: "species" }));
 
     // One plant per lake, planted at the lake's x location: a thin green stem
     // as tall as the lake's total catch, with the flower centered on its top.

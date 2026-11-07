@@ -282,11 +282,55 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
             _kw[_k] = _v
     return Mark("ellipse", **_kw)
 
+def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None) -> Mark:
+    """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
+
+    Args:
+        debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
+        x: Left edge position.
+        cx: Center x.
+        x2: Right edge position.
+        w: Width.
+        em_x: Embed x in the parent's x space.
+        y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
+        cy: Center y.
+        y2: Other y edge position.
+        h: Height.
+        em_y: Embed y in the parent's y space.
+        dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
+        filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
+        fill: Fill color, or a field name for a color scale.
+        stroke: Stroke color. Defaults to `fill`.
+        stroke_width: Stroke width in pixels. Default 0.
+    """
+    _kw: Dict[str, Any] = {}
+    for _k, _v in [
+        ("debug", debug),
+        ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
+        ("w", _channel(w)),
+        ("emX", em_x),
+        ("y", _channel(y)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
+        ("h", _channel(h)),
+        ("emY", em_y),
+        ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
+        ("filter", _to_wire(("ref", "Filter"), filter, "filter")),
+        ("fill", _channel(fill)),
+        ("stroke", _channel(stroke)),
+        ("strokeWidth", stroke_width),
+    ]:
+        if _v is not None:
+            _kw[_k] = _v
+    return Mark("petal", **_kw)
+
 def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, font_size: Optional[float] = None, font_family: Optional[str] = None, font_style: Optional[str] = None, font_weight: Optional[float | str] = None, debug_bounding_box: Optional[bool] = None, rotate: Optional[float] = None, text_anchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
-        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
         x: Left edge position.
         cx: Center x.
         x2: Right edge position.
@@ -391,15 +435,15 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
     return Mark("image", **_kw)
 
 def polygon(*, debug: Optional[bool] = None, filter: Optional[dict | str] = None, points: Optional[list | str] = None, d: Optional[str] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
-    """A closed outline, given as `points` (straight edges) or as `d` (SVG path data, with curves). Pass exactly one of the two. Without `w` or `h` the outline is in the frame the polygon sits in (top-down on a plain canvas, upward inside a continuous y), and its box is the outline's extent. With `w` or `h` the outline is in the unit box, 0 to 1 on each axis, stretched to a `w` by `h` box that lays out like a rect's. A field-bound `points` is in data coordinates and places itself. Under a polar or other curved coordinate space every point of the outline goes through the space, curves included, so a box outline in a polar slot draws as a pie slice.
+    """A closed outline, given as `points` (straight edges) or as `d` (SVG path data, with curves). Pass exactly one of the two. `points` are coordinates in the frame; `d` is a shape drawn in its own box. Literal `points` are in the frame the polygon sits in (top-down on a plain canvas, upward inside a continuous y), and its box is their extent; a field-bound `points` is in data coordinates and places itself. `d` is in the unit box, 0 to 1 on each axis, stretched to a `w` by `h` box that lays out like a rect's, so `polygon({ d })` fills the space it is given. Under a polar or other curved coordinate space every point of the outline goes through the space, curves included, so a box outline in a polar slot draws as a pie slice.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
         filter: A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).
-        points: Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). A field-bound ring takes no `w` or `h`.
-        d: The outline as SVG path data: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands, such as `"M0 0 L0 .5 Q.5 1.2 1 .5 L1 0 Z"`. It closes back to its first point with or without `Z`.
-        w: Width of the box the outline is stretched to: a number (pixels), a field name, or an accessor, as on rect. With `w` or `h` given, the outline is in the unit box, and a side left out fills the space it is given.
-        h: Height of the box the outline is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot.
+        points: Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). Takes no `w` or `h`.
+        d: The outline as SVG path data in the unit box, 0 to 1 on each axis, stretched to the `w` by `h` box: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands, such as `"M0 0 L0 .5 Q.5 1.2 1 .5 L1 0 Z"`. It closes back to its first point with or without `Z`.
+        w: Width of the box `d` is stretched to, sized as on rect: a number (pixels), a field name, or an accessor. Left out, it fills the space it is given, or 16 px when it is given none.
+        h: Height of the box `d` is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot.
         fill: Fill color, or a field name for a color scale. Default "black".
         stroke: Stroke color. Defaults to `fill`.
         stroke_width: Stroke width in pixels. Default 0.
@@ -1080,7 +1124,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         w: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         h: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
-        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -1123,7 +1167,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
         w: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
         h: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
-        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -1161,7 +1205,7 @@ def _enclose_opts(*, padding: Optional[int | float | str] = None, shape: Optiona
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "4 2") for a dashed outline.
         opacity: Opacity of the whole outline, fill and stroke, 0 to 1. Default 1.
         fill_opacity: Opacity of the fill alone, 0 to 1. The stroke keeps `opacity`, so a tinted region can keep a full-strength outline.
-        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
+        debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     if clearance is not None:
         if not (isinstance(clearance, (int, float)) and not isinstance(clearance, bool)):

@@ -310,7 +310,8 @@ For a vertical bar chart where:
   from data 0, or the room it is given when it has no size, or a 16 px
   default when that room is unresolved. It stores the signed result as its
   box with `signedExtent`, so a negative bar's box runs from its negative end
-  to 0. A boxed `polygon` sizes its `w` and `h` with the same two helpers.
+  to 0. A `polygon` drawn from `d` sizes its
+  `w` and `h` with the same two helpers.
 
 The logic in `resolveUnderlyingSpace` checks:
 

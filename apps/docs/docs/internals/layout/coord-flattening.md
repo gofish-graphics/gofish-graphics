@@ -286,8 +286,8 @@ whether columns get them too is #1195). Each trait is an independent fact, and
 claim's low edge sits at the box's low edge (`originPx = claim.descent(σ)`), and
 a pixel offset inside it is taken up. `polarPreset` declares θ
 `{ HasCycle: { period: 2π } }` and r `{ HasZero: {} }`. It also declares that
-the transform belongs to the polar family, `polar: true`, which the
-arc sampling of a warped box (`coordUtils.ts`) reads; the fit does not.
+the transform belongs to the polar family, `polar: true`, which petals and the
+arc sampling of a warped box (`coordUtils.ts`) read; the fit does not.
 
 **`HasCycle`: data 0 at the baseline angle.** A periodic axis (one period is one
 full turn) has its 0 at a fixed angle, θ = 0 of the transform, which is the

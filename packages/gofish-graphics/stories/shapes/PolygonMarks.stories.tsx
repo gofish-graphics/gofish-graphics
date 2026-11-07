@@ -55,7 +55,7 @@ export const DataDrivenFill: StoryObj<Args> = {
 // center on y (the Flower Chart's petal).
 const PETAL = "M0 0 L0 .468 Q.451 .809 .5 1 Q.549 .809 1 .468 L1 0 Z";
 
-// A polygon with `w` is drawn in its slot's box, and the polar coord bends
+// A polygon's `d` is drawn in its slot's box, and the polar coord bends
 // every point of its outline, curves included. Lake F's green slot spans 192
 // degrees, the widest of the Flower Chart's heads.
 export const PetalWideSlot: StoryObj<Args> = {

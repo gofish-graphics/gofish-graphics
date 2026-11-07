@@ -1,7 +1,7 @@
 /**
  * `polygon`'s outline (#1331): `d` is SVG path data (absolute M, L, Q, C,
- * Z), `w`/`h` stretch a unit-box outline to a box that lays out like a
- * rect's, and under a polar coord every point of the outline goes through
+ * Z), always in the unit box, stretched to a `w` by `h` box that lays out
+ * like a rect's (a side left out fills its slot), and under a polar coord every point of the outline goes through
  * the coord, curves included, so a box outline in a polar slot is a true pie
  * slice.
  *
@@ -221,7 +221,26 @@ async function main() {
         )
           .mark(polygon({ points: "ring", w: 10 }))
           .toDisplayList({ w: 100, h: 100 }),
-      /takes no `w` or `h`/
+      /take no `w` or `h`/
+    )
+  );
+  check(
+    "literal points take no h",
+    await rejects(
+      () =>
+        chart([{}], { axes: false })
+          .mark(
+            polygon({
+              points: [
+                [0, 0],
+                [1, 0],
+                [1, 1],
+              ],
+              h: 10,
+            })
+          )
+          .toDisplayList({ w: 100, h: 100 }),
+      /take no `w` or `h`/
     )
   );
 
@@ -328,6 +347,20 @@ async function main() {
       "a side left out with no room from the parent is a rect's default",
       sameBoxes(lone, loneRect) && lone[0].every(Number.isFinite),
       { lone, loneRect }
+    );
+    const slots = await boxes(polygon({ d: BOX }), signed, bars, size);
+    const slotRects = await boxes(rect({}), signed, bars, size);
+    check(
+      "polygon({ d }) with no w/h fills its slot, as rect({}) does",
+      sameBoxes(slots, slotRects) &&
+        slots.every((b) => b[2] > 16 && b[3] > 16),
+      { slots, slotRects }
+    );
+    const bare = await boxes(polygon({ d: BOX }), [{}], undefined, {});
+    check(
+      "no parent size: d takes the 16 px default box",
+      bare.length === 1 && close(bare[0][2], 16) && close(bare[0][3], 16),
+      bare
     );
   }
 

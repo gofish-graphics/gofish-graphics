@@ -196,7 +196,7 @@ How the re-walk lands descendants in absolute coordinates splits by boundary kin
   (`bakeChildren`), stopping at each bake boundary under it, and maps each
   entry through its coordinate transform then its own translate. A `coord` is the
   archetype: it lowers its whole subtree into resolved `path`/`rect`/`ellipse` items
-  whose coordinates are already warped (a petal polygon becomes a `path`, a polar bar a warped
+  whose coordinates are already warped (a petal becomes a `path`, a polar bar a warped
   `path`), so the backend never sees the polar mapping — just absolute pixel paths.
 - A **self-drawer** (`connect`, `arrow`) reads its own baked absolute translate
   (`displayTranslate`) to place the geometry it draws from its children's anchors.

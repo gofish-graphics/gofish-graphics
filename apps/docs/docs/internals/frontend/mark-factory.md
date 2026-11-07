@@ -14,8 +14,8 @@ covers:
 # `createMark`: turning a shape into a frontend mark
 
 `createMark` is the factory that wraps a low-level shape function (`Rect`,
-`Ellipse`, `Polygon`, `Text`, `Image`) and produces the frontend mark (`rect`,
-`ellipse`, `polygon`, `text`, `image`) used inside `chart(...).mark(...)`.
+`Ellipse`, `Petal`, `Text`, `Image`) and produces the frontend mark (`rect`,
+`ellipse`, `petal`, `text`, `image`) used inside `chart(...).mark(...)`.
 
 It lives at `src/ast/withGoFish.ts:419`.
 
@@ -658,7 +658,7 @@ overloaded on it. A `RelationalMark` gets `ChartBuilder | LayerBuilder`,
 because whether it fuses also depends on the chart's data, which the types do
 not track. An empty scope always gets the `ChartBuilder`, since it has not
 decided yet. Every other mark gets a plain `ChartBuilder`, so
-`chart(...).mark(polygon(...)).name("flower")` typechecks. The pairwise form
+`chart(...).mark(petal(...)).name("flower")` typechecks. The pairwise form
 carries the brand too, so its type is the wider union even though it never
 fuses.
 
@@ -851,7 +851,7 @@ positions.
 - The factory: `src/ast/withGoFish.ts:419`.
 - The channel helpers (`inferSize`, `inferPos`, `inferColor`) and the
   `DeriveMarkProps` conditional: `src/ast/channels.ts`.
-- The five existing call sites: `rect`, `ellipse`, `polygon`, `text`, `image`
+- The five existing call sites: `rect`, `ellipse`, `petal`, `text`, `image`
   in `src/ast/shapes/`.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).

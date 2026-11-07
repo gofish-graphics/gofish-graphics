@@ -11,6 +11,7 @@ import { black, color, color6, mix, white } from "../color";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { layer } from "../ast/graphicalOperators/layer";
+import { petal } from "../ast/shapes/petal";
 import _ from "lodash";
 import { balloon } from "./balloon";
 import { wavy } from "../ast/coordinateTransforms/wavy";

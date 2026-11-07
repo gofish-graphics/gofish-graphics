@@ -13,7 +13,7 @@
  * the generated output — add/fix descriptor entries instead.
  *
  * What gets generated, and what stays hand-written in `gofish/ast.py`:
- *  - Closed-signature **leaf mark** factories (rect, circle, ellipse,
+ *  - Closed-signature **leaf mark** factories (rect, circle, ellipse, petal,
  *    text, image, polygon, blank) — pure kwargs-collection + wire rename.
  *  - The five compositing operators + enclose/arrow **combinator-only**
  *    marks — pure kwargs-collection, named by their wire `type`.
@@ -528,6 +528,7 @@ const GENERATED_LEAF_MARKS = [
   "rect",
   "circle",
   "ellipse",
+  "petal",
   "text",
   "image",
   "polygon",

@@ -2313,6 +2313,123 @@ for the API.
         }
       }
     },
+    "PetalMark": {
+      "description": "A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "petal"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "dims": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/AxisDimsValue"
+          },
+          "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        },
+        "filter": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Filter"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color. Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "$ref": "#/$defs/Number",
+          "description": "Stroke width in pixels.",
+          "default": 0
+        },
+        "debug": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "relate": {
+          "$ref": "#/$defs/RelateIR"
+        },
+        "zOrder": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Number"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "hidden": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            }
+          ]
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
     "TextMark": {
       "description": "A text label. Box geometry via the shared dims channels positions the text anchor.",
       "type": "object",
@@ -2615,7 +2732,7 @@ for the API.
       }
     },
     "PolygonMark": {
-      "description": "A closed outline, given as `points` (straight edges) or as `d` (SVG path data, with curves). Pass exactly one of the two. Without `w` or `h` the outline is in the frame the polygon sits in (top-down on a plain canvas, upward inside a continuous y), and its box is the outline's extent. With `w` or `h` the outline is in the unit box, 0 to 1 on each axis, stretched to a `w` by `h` box that lays out like a rect's. A field-bound `points` is in data coordinates and places itself. Under a polar or other curved coordinate space every point of the outline goes through the space, curves included, so a box outline in a polar slot draws as a pie slice.",
+      "description": "A closed outline, given as `points` (straight edges) or as `d` (SVG path data, with curves). Pass exactly one of the two. `points` are coordinates in the frame; `d` is a shape drawn in its own box. Literal `points` are in the frame the polygon sits in (top-down on a plain canvas, upward inside a continuous y), and its box is their extent; a field-bound `points` is in data coordinates and places itself. `d` is in the unit box, 0 to 1 on each axis, stretched to a `w` by `h` box that lays out like a rect's, so `polygon({ d })` fills the space it is given. Under a polar or other curved coordinate space every point of the outline goes through the space, curves included, so a box outline in a polar slot draws as a pie slice.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2656,19 +2773,19 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). A field-bound ring takes no `w` or `h`."
+          "description": "Vertex list, at least 3 points: either a literal ring, or the name of a field holding one ring per row (which is how one mark draws a whole basemap). Takes no `w` or `h`."
         },
         "d": {
           "type": "string",
-          "description": "The outline as SVG path data: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands, such as `\"M0 0 L0 .5 Q.5 1.2 1 .5 L1 0 Z\"`. It closes back to its first point with or without `Z`."
+          "description": "The outline as SVG path data in the unit box, 0 to 1 on each axis, stretched to the `w` by `h` box: one ring of absolute `M`, `L`, `Q`, `C` and `Z` commands, such as `\"M0 0 L0 .5 Q.5 1.2 1 .5 L1 0 Z\"`. It closes back to its first point with or without `Z`."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Width of the box the outline is stretched to: a number (pixels), a field name, or an accessor, as on rect. With `w` or `h` given, the outline is in the unit box, and a side left out fills the space it is given."
+          "description": "Width of the box `d` is stretched to, sized as on rect: a number (pixels), a field name, or an accessor. Left out, it fills the space it is given, or 16 px when it is given none."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Height of the box the outline is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot."
+          "description": "Height of the box `d` is stretched to, as `w`. Provisional (#1038): the unit box's y runs top-down on a plain canvas and outward in a polar slot."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3300,6 +3417,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/EllipseMark"
+        },
+        {
+          "$ref": "#/$defs/PetalMark"
         },
         {
           "$ref": "#/$defs/TextMark"
