@@ -198,6 +198,83 @@ The stack in B reads a **profile**: each child's extent along `dir` as a functio
 
 The geometry interface (`geometry/index.ts`: box, enclosing circle, outline) is the pixel counterpart, and it answers after layout. An outline gives a pixel profile of any shape: its lowest and highest y at each x. Contour spacing needs exactly that, e.g., ridgelines that never overlap, or tidy trees. That is a `spread` with no sum. So there are two profiles. A stack adds data profiles. A spread can space shapes by pixel profiles. A shape that has only a pixel outline, e.g., a circle or an image, cannot be stacked this way, because its outline is not an amount.
 
+## Interval families and kinds of stacking
+
+Josh's direction (11-07): give lines and ribbons an **interval family** as a geometry query, the way a circle has an enclosing circle for packing. A ribbon is a family of intervals, one at each x. A line is the same kind of family, with each interval as wide as its stroke. The box is the hull of the family, so an interval family can be cast to a box. Then `stack` is one operator over boxes and interval families, and no mark needs a `.stack()` method.
+
+### What an interval family carries
+
+Edge routing shows what has to be in it (`research/edge-routing-and-stacking-kinds.md`). Graphviz dot already lays out a long edge as one interval per rank: a chain of placeholder nodes, each with a width. In ordered edge bundles (Bereg, Holroyd, Nachmanson and Pupyrev), a bundle is as wide as the sum of its edges plus the gaps between them. So the family needs:
+
+- **A parameter.** The intervals are indexed by x for a ribbon, by rank in a layered graph, or by distance along the path for a path that turns back in x.
+- **A cross-section direction.** A stacked area measures each interval vertically. A sankey link drawn as a thick stroke (d3-sankey) measures it at right angles to the curve. The two agree only where the curve is flat.
+- **A width at each point.** For a line this is its stroke. A box can be grown by half the stroke on every side, but a curved line cannot, because the stroke spreads at right angles to the curve. So the cast from a line's family to a box needs the stroke. This only affects the cast, not what gets stacked.
+
+![](img/k2-normal-vs-vertical.png)
+
+A 40 px link drawn both ways. In the steep middle the vertical band is about 17 px thick across the curve, and the stroke is about 94 px tall. Three strands of 10, 20 and 10 px stacked along the normal keep their width (left). Stacked vertically, they thin to about 0.43 of it in the middle (right).
+
+![](img/k2-strands-normal.png) ![](img/k2-strands-vertical.png)
+
+The stack in this proposal uses one setting: intervals over x, measured vertically. Sankey strands (#47, stacked ribbons) need the other setting.
+
+### Three kinds of stacking
+
+The clearest split is by how each child moves.
+
+- **Pointwise.** Each child gets its own offset at every x, so it takes the shape of the one below. The amounts add. The stack reads interval families. Examples are the stacked area and the streamgraph.
+- **Rigid contact.** Each child moves as a whole, by one offset: the largest overlap between its outline and the outline below. That is a maximum, not a sum, so the amounts do not add. It reads outlines or enclosing circles, after layout. Examples are the beeswarm (`Overlap.separate`, Plot's `dodge`), ridgelines that never overlap, and tidy trees.
+- **Boxes.** A box has the same height at every x, so both rules give the same answer. This is the one case where contact adds the amounts, which is why stacking bars felt like one idea. Examples are stacked bars and the Wilkinson dot plot.
+
+![](img/k2-box-stack.png) ![](img/k2-interval-stack.png)
+
+Box stacking and pointwise stacking, today's API.
+
+![](img/k2-dodge-varied.png) ![](img/k2-dodge-box-stack.png)
+
+Rigid contact (`Overlap.separate`, today) against box stacking of the same circles. The contact columns are 70 to 132 px tall. The box columns are the sums of the diameters, 101 to 172 px.
+
+![](img/k2-ridge-fixed.png) ![](img/k2-contact-ridgeline.png) ![](img/k2-ridge-sum.png)
+
+Ridgelines with fixed spacing (they overlap), with rigid contact (emulated), and as the pointwise sum (a stacked density). Here contact lands close to a box stack, and only one ridge slides down. A ridge with a flat base cannot go below the peak under it, so contact gains most for narrow ridges.
+
+Two cases that look new reduce to these:
+
+- **Along a curve's normal** (sankey strands, metro lines, bundled edges). This is pointwise stacking with distance along the path as the parameter. It holds between junctions, and only while the stack is thinner than the radius of the bend. A ribbon cannot draw it, because a strand's two edges sit at different x for the same point on the path, so the renders use polygons.
+- **Rings whose areas add.** This is box stacking with squared radius as the axis, which is `Coord.clock({ radius: "area" })` from the scale transforms proposal.
+
+![](img/k2-concentric-area.png) ![](img/k2-concentric-radius.png)
+
+Amounts 30, 50 and 20 as rings. Areas add (left), radii add (right).
+
+Tiling in 2D (Voronoi treemaps) and packing in 2D (circle packing, word clouds) are not stacking, because there is no single line to stack along.
+
+The closest precedent for "spread with glue" is TeX. A `\vbox` stacks boxes that each report a height, a depth and a baseline, and the glue between them has a natural size that can stretch or shrink. `\vbox to size` meets a given size by stretching the glue, not by rescaling the parts. TeX reads only boxes.
+
+### What this means for the operators
+
+- **`stack` is the additive kinds.** It reads a box or an interval family from each child, adds them over the shared parameter, and its axis is the sum, with CanSum checked. The interval family has to be in data units for this, e.g., from the ribbon's `h` channel.
+- **Rigid contact is not `stack`.** Its axis is not a sum, and it runs on pixel outlines after layout. It is a spacing rule of `spread` and `scatter`, as `Overlap.separate` already is for `scatter`. A contact rule on `spread` would draw ridgelines that never overlap.
+- **The third kind is not a reason for a `.stack()` method.** It belongs on the operators that lay children out without adding them.
+
+### Where the baseline goes
+
+When `stack` reads interval families, the stack owns the x parameter, so the baseline is the stack's own option and not sugar: `stack({ by, dir, baseline: Align.wiggle() })`.
+
+When `stack` reads boxes, it has no parameter inside it. Zero, center and diverging still apply to one stack and fit the same option. Wiggle needs the neighboring stacks, which only the outer `spread` sees, so it is that spread's `alignment: Align.wiggle()`.
+
+The rule is the same in both cases. The option goes on the operator that owns the parameter the baseline changes along.
+
+### Walls found while rendering
+
+1. A stroke on a polar band replaces its fill. A `rect` with one data dimension in a nonlinear space is drawn as a stroked midline (`rect.tsx:384`), colored by the user's `stroke` (`rect.tsx:322`), so `stroke: "white"` paints whole rings white.
+2. In `Coord.clock`, a `stack` along the angle with one child per ring and a constant `w` draws arcs of zero angle. The renders draw each ring as two halves, which leaves thin seams.
+3. With a fixed `h`, a stack of circles sized in pixels, or a dodge, floats at the top of the plot.
+4. `alignment: "start"` hangs those shapes down from the top, which contradicts the `OneSided` story's comment.
+5. `axes: false` on a `stack` inside a `scatter` does not remove its "id" axis.
+6. Two scatter layers placed only by `alignment` do not share a baseline.
+7. There is no way to fix a scale's domain (a missing option, not a bug).
+
 ## Where the "for each x" is written
 
 The flow already says where the loop over x is. This decides which knobs a spelling has.
