@@ -319,9 +319,9 @@
     </li>
     <li>
       A density is a profile given by a function:
-      <code>ribbon({ h: mass.density() })</code> needs no rows, no grid and no
-      <code>x</code>. The renderer samples a profile when it draws it, so no
-      spec names a grid.
+      <code>ribbon({ x: mass.support(), h: mass.density() })</code> needs no
+      rows and no grid. Both channels are functions of one hidden variable t,
+      and the renderer samples t when it draws, so no spec names a grid.
     </li>
   </ul>
   <div class="rec-box">
@@ -332,13 +332,13 @@
     <code>Baseline.middle()</code>, <code>Baseline.wiggle()</code>), and a
     parent's <code>alignment</code> lines up those 0 points.
     <code>spread</code>'s <code>spacing</code> takes a number or a
-    <code>Spacing</code> strategy (box, pitch, contour, optical), which replaces
-    its <code>anchor</code> option. <code>partition</code> on a profile
-    restricts it to cells, which draws the croissant with no
-    <code>intersect</code>. A density is a curve over its own field, so a ribbon
-    takes it with no <code>x</code>. A ribbon chart, whose order changes at each
-    x, stays the per-x spelling it is today. <b>Runner-up: B, per-x core.</b> It
-    is today's engine with fixes and costs least, but it keeps two concepts of
+    <code>Spacing</code> strategy (box, pitch, contour), which replaces its
+    <code>anchor</code> option. <code>partition</code> on a profile restricts it
+    to cells, which draws the croissant with no <code>intersect</code>. A
+    density's position is written explicitly as <code>support()</code> on the
+    same field expression. A ribbon chart, whose order changes at each x, stays
+    the per-x spelling it is today. <b>Runner-up: B, per-x core.</b> It is
+    today's engine with fixes and costs least, but it keeps two concepts of
     thickness and answers locality by never letting a stack see a ribbon.
   </div>
   <div class="toggle">
@@ -386,9 +386,12 @@
       link are plain stacks.
     </li>
     <li>
-      <b>A profile may be a function.</b> <code>mass.density()</code> is a
-      profile with no rows. The renderer samples it when it draws it. No spec
-      names a grid, and <code>repeat</code> stays discrete.
+      <b>A profile may be a function.</b> <code>x: mass.support()</code> and
+      <code>h: mass.density()</code> are both functions of one hidden variable
+      t: the support is t &#8614; t and the density is t &#8614; f(t). The
+      ribbon samples t and evaluates every channel that is a function of t at
+      each sample, as a parametric curve (x(t), y(t)) does. No spec names a
+      grid, and <code>repeat</code> stays discrete.
     </li>
   </ul>
   <details>
@@ -677,10 +680,11 @@ a === b                        -- diagrams: placed by envelopes</code></pre>
           stay a separate decision.
         </li>
         <li>
-          <b>Distributions (#980).</b> <code>x.density()</code> is a profile
-          with no rows. A cell of a Dist partition is the Dist over the cell
-          with its mass, which picks the mass reading the croissant page left
-          open. <code>repeat</code> stays discrete.
+          <b>Distributions (#980).</b> <code>x: mass.support()</code> with
+          <code>h: mass.density()</code> is a profile with no rows. A cell of a
+          Dist partition is the Dist over the cell with its mass, which picks
+          the mass reading the croissant page left open.
+          <code>repeat</code> stays discrete.
         </li>
         <li>
           <b>Choose (silhouette note).</b> A profile is the silhouette note's
@@ -1362,10 +1366,13 @@ stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.wiggle())</code
     <p>
       <code>mass.density()</code> is a curve over mass, one per species. Its
       area is the count of rows it is made from, so the stack adds up to the
-      density of all penguins. The ribbon takes no <code>x</code>: a density
-      carries its own axis, the one that shows mass. Giving the whole (<code
-        >size: normalize</code
-      >) turns the stack into a divide.
+      density of all penguins. The position is <code>mass.support()</code>.
+      <code>x: mass.support()</code> and <code>h: mass.density()</code> are both
+      functions of one hidden variable t: the support is t &#8614; t and the
+      density is t &#8614; f(t). The ribbon samples t and evaluates every
+      channel that is a function of t at each sample, as a parametric curve
+      (x(t), y(t)) does. Giving the whole (<code>size: normalize</code>) turns
+      the stack into a divide.
     </p>
     <p class="label">Proposed (A)</p>
     <pre
@@ -1373,12 +1380,12 @@ stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.wiggle())</code
     ><code class="language-javascript" data-hl="3">const mass = field(&quot;mass&quot;);
 chart(penguins)
   .flow(stack({ by: &quot;species&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ h: mass.density(), fill: &quot;species&quot; }));</code></pre>
+  .mark(ribbon({ x: mass.support(), h: mass.density(), fill: &quot;species&quot; }));</code></pre>
     <pre
       class="code lang-py"
     ><code class="language-python" data-hl="2">mass = field(&quot;mass&quot;)
 chart(penguins).flow(stack(by=&quot;species&quot;, dir=&quot;y&quot;)).mark(
-    ribbon(h=mass.density(), fill=&quot;species&quot;)
+    ribbon(x=mass.support(), h=mass.density(), fill=&quot;species&quot;)
 )</code></pre>
     <div class="today">
       <p class="label">Today (KDE grid and stack computed by hand)</p>
@@ -1436,7 +1443,7 @@ chart(penguins).flow(
             class="code lang-js"
           ><code class="language-javascript" data-hl="">const mass = field(&quot;mass&quot;);
 chart(penguins).mark(
-  ribbon({ h: mass.density(), fill: &quot;species&quot; }).cut({
+  ribbon({ x: mass.support(), h: mass.density(), fill: &quot;species&quot; }).cut({
     by: &quot;species&quot;,
     dir: &quot;y&quot;,
   })
@@ -1445,7 +1452,9 @@ chart(penguins).mark(
             class="code lang-py"
           ><code class="language-python" data-hl="">mass = field(&quot;mass&quot;)
 chart(penguins).mark(
-    ribbon(h=mass.density(), fill=&quot;species&quot;).cut(by=&quot;species&quot;, dir=&quot;y&quot;)
+    ribbon(x=mass.support(), h=mass.density(), fill=&quot;species&quot;).cut(
+        by=&quot;species&quot;, dir=&quot;y&quot;
+    )
 )</code></pre>
         </div>
       </div>
@@ -1480,7 +1489,7 @@ chart(penguins).mark(
       is a <code>spread</code>. Today the pitch is set by two options,
       <code>anchor: "baseline"</code> and <code>spacing: 70</code>. In A, how
       the gap is measured is the value of <code>spacing</code>: a pitch between
-      baselines here, or a contour or optical gap (see the next card).
+      baselines here, or a contour gap (see the next card).
     </p>
     <p class="label">Proposed (A)</p>
     <pre
@@ -1494,14 +1503,14 @@ chart(weather)
       spacing: Spacing.pitch(70, { at: &quot;baseline&quot; }),
     })
   )
-  .mark(ribbon({ h: high.density(), fill: &quot;month&quot; }));</code></pre>
+  .mark(ribbon({ x: high.support(), h: high.density(), fill: &quot;month&quot; }));</code></pre>
     <pre
       class="code lang-py"
     ><code class="language-python" data-hl="2,5">high = field(&quot;high&quot;)
 chart(weather).flow(
     spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.pitch(70, at=&quot;baseline&quot;))
 ).mark(
-    ribbon(h=high.density(), fill=&quot;month&quot;)
+    ribbon(x=high.support(), h=high.density(), fill=&quot;month&quot;)
 )</code></pre>
     <div class="today">
       <p class="label">Today (densities computed by hand)</p>
@@ -1565,17 +1574,14 @@ chart(weather).flow(
     </details>
   </article>
   <article class="card insert" id="spacing">
-    <h3>Spacing between outlines: box, contact or optical</h3>
+    <h3>Spacing between outlines: box or contact</h3>
     <p>
-      When shapes are irregular, the gap between them can be measured three
-      ways. A <b>box gap</b> is the gap between bounding boxes (today's
+      When shapes are irregular, the gap between them can be measured two ways.
+      A <b>box gap</b> is the gap between bounding boxes (today's
       <code>spread</code>). A <b>contact</b> gap is the smallest distance
       between the facing outlines: the shapes slide together until they would
-      touch. An <b>optical</b> gap sets the average white space between the
-      facing outlines to a target, where each column of white counts only up to
-      a depth, and never comes closer than contact. The renders compute the
-      three by hand (a throwaway helper, <code>spacingModels.ts</code>) and draw
-      the result with today's engine.
+      touch. The renders compute both by hand (a throwaway helper,
+      <code>spacingModels.ts</code>) and draw the result with today's engine.
     </p>
     <div class="figs">
       <figure>
@@ -1599,16 +1605,6 @@ chart(weather).flow(
       </figure>
       <figure>
         <img
-          src="img/ridge-optical.png"
-          alt="Optical (depth cap 40 px, target mean gap 32 px): ridges that sit over a high shoulder get more room, so the rhythm looks even."
-        />
-        <figcaption>
-          Optical (depth cap 40 px, target mean gap 32 px): ridges that sit over
-          a high shoulder get more room, so the rhythm looks even.
-        </figcaption>
-      </figure>
-      <figure>
-        <img
           src="img/glyph-box.png"
           alt="Box gap on letter-like outlines: T and A, A and V look far apart."
         />
@@ -1619,21 +1615,10 @@ chart(weather).flow(
       <figure>
         <img
           src="img/glyph-contact.png"
-          alt="Contact: A and V touch along their slopes and T tucks over A, so the word looks uneven."
+          alt="Contact: A and V touch along their slopes and T tucks over A."
         />
         <figcaption>
-          Contact: A and V touch along their slopes and T tucks over A, so the
-          word looks uneven.
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/glyph-optical.png"
-          alt="Optical (depth cap 30, target 14): even-looking white between every pair, which is what type spacing aims for."
-        />
-        <figcaption>
-          Optical (depth cap 30, target 14): even-looking white between every
-          pair, which is what type spacing aims for.
+          Contact: A and V touch along their slopes and T tucks over A.
         </figcaption>
       </figure>
     </div>
@@ -1648,18 +1633,12 @@ spread({
   dir: &quot;y&quot;,
   spacing: Spacing.pitch(70, { at: &quot;baseline&quot; }),
 }); // today&#x27;s anchor
-spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: Spacing.contour(4) });
-spread({
-  by: &quot;month&quot;,
-  dir: &quot;y&quot;,
-  spacing: Spacing.optical({ target: 32, depth: 40 }),
-});</code></pre>
+spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: Spacing.contour(4) });</code></pre>
     <pre
       class="code lang-py"
     ><code class="language-python" data-hl="">spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=4)
 spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.pitch(70, at=&quot;baseline&quot;))
-spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.contour(4))
-spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.optical(target=32, depth=40))</code></pre>
+spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.contour(4))</code></pre>
 
     <div class="table-wrap">
       <table>
@@ -1694,39 +1673,18 @@ spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.optical(target=3
             layout page's contour spacing
           </td>
         </tr>
-        <tr>
-          <td>Optical (equal area, depth cap)</td>
-          <td>
-            the mean white gap between facing outlines, each column capped at a
-            depth, equals a target; never closer than contact
-          </td>
-          <td>
-            type spacing: HT Letterspacer sets sidebearings from a target white
-            <i>area</i> measured only to a <i>depth</i> inward from the outline
-            (a percent of the x-height); Tim Ahrens (Kern On) notes that
-            perception works in terms of average distance or white area; Adobe
-            InDesign's optical kerning adjusts by shape but does not publish its
-            method
-          </td>
-        </tr>
       </table>
     </div>
     <p>
-      <b>Why minimum distance looks wrong for type.</b> Two letters that touch
-      at one point leave large open wedges of white (A and V above), while two
-      straight stems at the same minimum distance leave none, so the eye sees
-      uneven gaps. Type designers measure the white area instead. The depth cap
-      stops the area from counting white deep inside an open shape (the inside
-      of an L or a C), which would push those letters too far away. No vis tool
-      we found spaces marks by optical area; outline spacing in vis is contact
-      (tidy trees, d3-flextree).
-    </p>
-    <p>
-      <b>For charts.</b> Contact is right where the rule is "never overlap" and
-      nothing else is judged: trees and sankey node columns. Optical is right
-      where an even rhythm is the point: a ridgeline, a row of glyphs or icons.
-      Both read the same profile; they differ only in how they turn two profiles
-      into one gap.
+      <b>Optical spacing is left out.</b> Type tools space letters by white area
+      rather than by contact: HT Letterspacer sets sidebearings from a target
+      white area measured only to a depth inward from the outline, and Tim
+      Ahrens (Kern On) notes that perception works in terms of average distance
+      or white area. Our first emulation of that model looked less even than
+      contact on Josh's reading (the A to V gap grew larger than the V to O
+      gap), and no example here needs it, so the family leaves it out. It could
+      be added later as one more <code>Spacing</code> strategy without changing
+      the option.
     </p>
     <p>
       <b>Naming.</b> <code>measure</code> is out. Spread already has an option
@@ -1868,25 +1826,27 @@ spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.optical(target=3
     <p>
       <code>d</code> is a field expression over a distribution. Each method
       makes a different kind of value: <code>d.bin(Bin.quantiles(5))</code> is a
-      key that cuts d's axis into 5 cells, <code>d.density()</code> is a curve
-      over d's own axis, and <code>d.median()</code> is one number per cell. The
-      ribbon takes the curve with no <code>x</code>, because a density carries
-      its axis. <code>partition</code> on that axis restricts the curve to each
-      cell. A cell of a Dist is the Dist over that cell with its mass, so the
-      slices meet exactly. No <code>intersect</code>, hidden ribbon,
-      <code>relate</code>, grid or quantile rows. The next card gives the
-      formula and the callback behind each method.
+      key that cuts d's axis into 5 cells, <code>d.support()</code> and
+      <code>d.density()</code> are the position and the height of one curve over
+      a hidden variable t (t &#8614; t and t &#8614; f(t)), and
+      <code>d.median()</code> is one number per cell. The ribbon samples t and
+      evaluates both at each sample. <code>partition</code> on d's axis
+      restricts the curve to each cell. A cell of a Dist is the Dist over that
+      cell with its mass, so the slices meet exactly. No <code>intersect</code>,
+      hidden ribbon, <code>relate</code>, grid or quantile rows. The next card
+      gives the formula and the callback behind each method.
     </p>
     <p class="label">Proposed (A)</p>
     <pre
       class="code lang-js"
-    ><code class="language-javascript" data-hl="3,11">const params = [{ mean: 0, sd: 1 }];
+    ><code class="language-javascript" data-hl="3,12">const params = [{ mean: 0, sd: 1 }];
 const d = dist.normal({ mean: &quot;mean&quot;, sd: &quot;sd&quot; });
 chart(params)
   .flow(partition({ by: d.bin(Bin.quantiles(5)), dir: &quot;x&quot; }))
   .mark(
     layer([
       ribbon({
+        x: d.support(),
         h: d.density(),
         inset: 3,
         fill: PAPER_FILL,
@@ -1897,12 +1857,18 @@ chart(params)
   );</code></pre>
     <pre
       class="code lang-py"
-    ><code class="language-python" data-hl="2,5">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
+    ><code class="language-python" data-hl="2,11">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
 d = dist.normal(mean=&quot;mean&quot;, sd=&quot;sd&quot;)
 chart(params).flow(partition(by=d.bin(Bin.quantiles(5)), dir=&quot;x&quot;)).mark(
     layer(
         [
-            ribbon(h=d.density(), inset=3, fill=PAPER_FILL, stroke=PAPER_STROKE),
+            ribbon(
+                x=d.support(),
+                h=d.density(),
+                inset=3,
+                fill=PAPER_FILL,
+                stroke=PAPER_STROKE,
+            ),
             circle(cx=d.median(), cy=6, r=3, fill=PAPER_STROKE),
         ]
     )
@@ -2004,7 +1970,7 @@ chart(params).flow(
           ><code class="language-javascript" data-hl="">const params = [{ mean: 0, sd: 1 }];
 const d = dist.normal({ mean: &quot;mean&quot;, sd: &quot;sd&quot; });
 chart(params).mark(
-  ribbon({ h: d.density(), fill: PAPER_FILL }).cut({
+  ribbon({ x: d.support(), h: d.density(), fill: PAPER_FILL }).cut({
     by: d.bin(Bin.quantiles(5)),
     dir: &quot;x&quot;,
     spacing: 6,
@@ -2015,7 +1981,7 @@ chart(params).mark(
           ><code class="language-python" data-hl="">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
 d = dist.normal(mean=&quot;mean&quot;, sd=&quot;sd&quot;)
 chart(params).mark(
-    ribbon(h=d.density(), fill=PAPER_FILL).cut(
+    ribbon(x=d.support(), h=d.density(), fill=PAPER_FILL).cut(
         by=d.bin(Bin.quantiles(5)), dir=&quot;x&quot;, spacing=6
     )
 )</code></pre>
@@ -2047,6 +2013,7 @@ chart(params).mark(
 field(&quot;mass&quot;).sum(); // (_, xs) =&gt; sum(xs)
 field(&quot;mass&quot;).median(); // (_, xs) =&gt; median(xs)
 field(&quot;mass&quot;).normalize(); // (x, xs) =&gt; x / sum(xs)
+field(&quot;mass&quot;).support(); // (_, xs) =&gt; (t) =&gt; t, over the density&#x27;s range
 field(&quot;mass&quot;).density(); // (_, xs) =&gt; kde(xs), a function (t) =&gt; number
 
 // a custom method, used like a built-in one
@@ -2057,6 +2024,7 @@ const share = field(&quot;mass&quot;).then((x, xs) =&gt; x / max(xs), { unit: &q
 field(&quot;mass&quot;).sum()  # lambda _, xs: sum(xs)
 field(&quot;mass&quot;).median()  # lambda _, xs: median(xs)
 field(&quot;mass&quot;).normalize()  # lambda x, xs: x / sum(xs)
+field(&quot;mass&quot;).support()  # lambda _, xs: (lambda t: t), over the density&#x27;s range
 field(&quot;mass&quot;).density()  # lambda _, xs: kde(xs), a function of t
 
 share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio&quot;)</code></pre>
@@ -2113,7 +2081,18 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
           <td><code>(x, xs) =&gt; x / sum(xs)</code></td>
         </tr>
         <tr>
-          <td>Curve</td>
+          <td rowspan="2">Curve: a function of a hidden variable t</td>
+          <td><code>.support()</code></td>
+          <td>
+            t itself, over the range the expression's density uses. That range
+            is open (see the decisions); the lean follows ggdist: for rows, the
+            data's own range, with a bounded estimator; for a <code>Dist</code>,
+            its own range, or its 0.001 to 0.999 quantiles where that range is
+            unbounded
+          </td>
+          <td><code>(_, xs) =&gt; (t) =&gt; t</code></td>
+        </tr>
+        <tr>
           <td><code>.density()</code></td>
           <td>
             f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus;
@@ -2165,6 +2144,47 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
       axis. So a bin does not fit the one callback shape as written. How a bin's
       cells are shared is under review, so this page proposes no callback form
       for bins.
+    </p>
+    <p>
+      <b>Curves.</b> A density is drawn by two channels of one mark,
+      <code>x: mass.support()</code> (t &#8614; t) and
+      <code>h: mass.density()</code> (t &#8614; f(t)). The ribbon samples t and
+      evaluates every channel that is a function of t at each sample, as a
+      parametric curve (x(t), y(t)) does. The range of t belongs to the
+      expression, so no spec names it. Two curve channels over different
+      variables in one mark, such as <code>x: mass.support()</code> with
+      <code>h: length.density()</code>, are an error. Precedent: the closest is
+      ggdist (Matt Kay's R package for distributions), whose
+      <code>stat_slabinterval</code> computes <code>x</code> or
+      <code>y</code> (the slab's positions), <code>pdf</code>,
+      <code>cdf</code> and <code>n</code> (<code>Inf</code> for an analytic
+      distribution). Vega-Lite's density transform outputs two fields,
+      <code>value</code> and <code>density</code>, and ggplot2 maps
+      <code>after_stat(x)</code> and <code>after_stat(density)</code>.
+    </p>
+    <p>
+      <b>Area.</b> The area under <code>mass.density()</code> is its row count,
+      so stacked densities add up. ggdist users get the same curve by writing
+      <code>aes(thickness = after_stat(pdf * n))</code>. ggdist instead scales
+      thickness after the fact with <code>normalize</code> (<code>"all"</code>,
+      <code>"panels"</code>, <code>"xy"</code>, <code>"groups"</code> or
+      <code>"none"</code>); here that is the stack's or the spread's job, not
+      the curve's.
+    </p>
+    <p>
+      <b>The range of t.</b> Tools split. seaborn runs a KDE 3 bandwidths past
+      the data (<code>cut=3</code>), and ggplot2 also extends past it. ggdist,
+      for rows, uses <code>density_bounded()</code>, a reflection estimator, and
+      usually trims to the data's range; for an analytic distribution it uses
+      <code>p_limits</code>, the 0.001 and 0.999 quantiles, where the range is
+      unbounded. This is a decision below.
+    </p>
+    <p>
+      <b>Naming.</b> <code>support()</code> is the chosen name (Josh is checking
+      it with Matt Kay, author of ggdist). Rejected: <code>value()</code>, which
+      clashes with GoFish's <code>value(...)</code> constructor, and
+      <code>points()</code> or <code>grid()</code>, which name the sampling that
+      specs should not see.
     </p>
     <p><b>Consequences, stated plainly.</b></p>
     <ol>
@@ -2381,9 +2401,11 @@ rect(w=12, h=&quot;value&quot;).anchor(
       </figure>
     </div>
     <p>
-      The violin is a density of mass. <code>dir: "y"</code> says the ribbon
-      runs along y, so the density's own axis is y and <code>w</code> is its
-      thickness: there is no question which axis the density uses. Its
+      The violin is a density of mass drawn upright:
+      <code>y: mass.support()</code> is the position and
+      <code>w: mass.density()</code> the thickness, both functions of one hidden
+      variable t. The ribbon runs along the axis whose channel is a function of
+      t, so <code>dir: "y"</code> is no longer needed. Its
       <code>x-max</code> part is the flat side, whose length is the profile's
       domain. A <code>partition</code> slot flow cuts that domain into cells,
       the same partition as the croissant's, and the bar's
@@ -2393,12 +2415,17 @@ rect(w=12, h=&quot;value&quot;).anchor(
     <p class="label">Proposed (A)</p>
     <pre
       class="code lang-js"
-    ><code class="language-javascript" data-hl="5">const mass = field(&quot;mass&quot;);
+    ><code class="language-javascript" data-hl="10">const mass = field(&quot;mass&quot;);
 const massBins = mass.bin(Bin.thresholds([3000, 4000, 5000, 6000]));
 layer([
   spread({ dir: &quot;x&quot;, spacing: 160 }, [
     chart(penguins).mark(
-      ribbon({ w: mass.density(), dir: &quot;y&quot;, align: &quot;end&quot;, fill: &quot;#c4c4c4&quot; })
+      ribbon({
+        y: mass.support(),
+        w: mass.density(),
+        align: &quot;end&quot;,
+        fill: &quot;#c4c4c4&quot;,
+      })
         .anchor({
           name: &quot;out&quot;,
           position: &quot;x-max&quot;,
@@ -2437,7 +2464,7 @@ layer(
             [
                 chart(penguins).mark(
                     ribbon(
-                        w=mass.density(), dir=&quot;y&quot;, align=&quot;end&quot;, fill=&quot;#c4c4c4&quot;
+                        y=mass.support(), w=mass.density(), align=&quot;end&quot;, fill=&quot;#c4c4c4&quot;
                     )
                     .anchor(
                         name=&quot;out&quot;,
@@ -2971,11 +2998,11 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
     <li>
       <code
         >spread({ spacing: 4 | Spacing.box(4) | Spacing.pitch(70, { at }) |
-        Spacing.contour(4) | Spacing.optical(...) })</code
+        Spacing.contour(4) })</code
       >, replacing <code>anchor</code>.
     </li>
     <li>
-      <code>ribbon({ h: mass.density() })</code> with no <code>x</code>, and
+      <code>ribbon({ x: mass.support(), h: mass.density() })</code>, and
       <code>ribbon({ x, y: { min, max } })</code>.
     </li>
     <li>
@@ -3002,13 +3029,13 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
     <code>Baseline.middle()</code>, <code>Baseline.wiggle()</code>), and a
     parent's <code>alignment</code> lines up those 0 points.
     <code>spread</code>'s <code>spacing</code> takes a number or a
-    <code>Spacing</code> strategy (box, pitch, contour, optical), which replaces
-    its <code>anchor</code> option. <code>partition</code> on a profile
-    restricts it to cells, which draws the croissant with no
-    <code>intersect</code>. A density is a curve over its own field, so a ribbon
-    takes it with no <code>x</code>. A ribbon chart, whose order changes at each
-    x, stays the per-x spelling it is today. <b>Runner-up: B, per-x core.</b> It
-    is today's engine with fixes and costs least, but it keeps two concepts of
+    <code>Spacing</code> strategy (box, pitch, contour), which replaces its
+    <code>anchor</code> option. <code>partition</code> on a profile restricts it
+    to cells, which draws the croissant with no <code>intersect</code>. A
+    density's position is written explicitly as <code>support()</code> on the
+    same field expression. A ribbon chart, whose order changes at each x, stays
+    the per-x spelling it is today. <b>Runner-up: B, per-x core.</b> It is
+    today's engine with fixes and costs least, but it keeps two concepts of
     thickness and answers locality by never letting a stack see a ribbon.
   </div>
   <p>
@@ -3066,8 +3093,9 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
       <li>
         <b>A profile can come from rows or from a function.</b> From rows it is
         the mark's curve through them (each series is curved first, then added).
-        From a function (<code>x.density()</code>) it is evaluated on demand.
-        Outside its domain a part has thickness 0.
+        From a function (<code>x: mass.support()</code> with
+        <code>h: mass.density()</code>) it is evaluated at samples of the hidden
+        variable t. Outside its domain a part has thickness 0.
       </li>
       <li>
         <b>Under a coordinate transform</b> the profile stays in the layer's
@@ -3268,10 +3296,15 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
         (512) stands until screen-aware sampling, which Josh deferred.
       </li>
       <li>
-        <b>Continuum rows are not needed for any example here.</b> Densities are
-        function-valued channels. <code>repeat</code> stays discrete (draws,
-        quantile levels). <code>sweep</code> stays parked for curves that are
-        not a function of either axis, such as a spiral or a Lissajous figure.
+        <b>Continuum rows are not needed for any example here.</b> A density's
+        position and height are channels that are functions of one hidden
+        variable t, <code>support()</code> and <code>density()</code>; the range
+        of t belongs to the expression (below). Two such channels over different
+        fields in one mark, such as <code>x: mass.support()</code> with
+        <code>h: length.density()</code>, are an error.
+        <code>repeat</code> stays discrete (draws, quantile levels).
+        <code>sweep</code> stays parked for curves that are not a function of
+        either axis, such as a spiral or a Lissajous figure.
       </li>
     </ul>
 
@@ -3404,9 +3437,8 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
       <code>anchor</code> option?
     </li>
     <li>
-      Which outline spacing ships first: <code>Spacing.contour</code> only
-      (trees, sankey columns), or <code>Spacing.optical</code> too (ridgelines,
-      rows of glyphs)?
+      <code>Spacing</code> ships with box, pitch and contour only, and leaves
+      optical spacing out until an example needs it?
     </li>
     <li>
       <code>cut</code> takes the stack or partition that divides the shape,
@@ -3416,7 +3448,21 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
     <li>
       A density's area is the mass it is made from (the row count, or 1 for a
       Dist), so stacked densities add up to the density of all rows? The other
-      choice is area 1 for every curve.
+      choice is area 1 for every curve. ggdist reaches the same curve with
+      <code>after_stat(pdf * n)</code> and rescales thickness with
+      <code>normalize</code>; here rescaling is the parent's job.
+    </li>
+    <li>
+      The range of t: follow ggdist (rows trimmed to the data's range with a
+      bounded estimator; a Dist over its own range, or its 0.001 to 0.999
+      quantiles where unbounded), or seaborn (3 bandwidths past the data)? The
+      lean is ggdist.
+    </li>
+    <li>
+      Name: <code>support()</code> is chosen (Josh is checking it with Matt Kay,
+      ggdist). Rejected: <code>value()</code>, which clashes with GoFish's
+      <code>value(...)</code> constructor, and <code>points()</code> or
+      <code>grid()</code>, which name the sampling.
     </li>
     <li>
       One callback shape, <code>(x, xs) =&gt; result</code>, behind every field

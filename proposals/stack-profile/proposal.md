@@ -2,9 +2,9 @@
 
 1. Stacked areas, streamgraphs, stacked densities, croissants, ridgelines, sankey strands and anchor slots all read one thing from a shape: how thick it is at each position along the other axis. Call it the shape's **profile**. A box is the profile that does not change.
 2. With profiles, `stack` stays one local operator. It reads each child's profile, adds them, and places each child on the boundary below it. `spread` can read the same profile to space shapes by their outlines (`spacing: Spacing.contour(4)`), `partition` cuts a profile's domain into cells, and a divide is a stack whose whole is given.
-3. A density is a profile given by a function: `ribbon({ h: mass.density() })` needs no rows, no grid and no `x`. The renderer samples a profile when it draws it, so no spec names a grid.
+3. A density is a profile given by a function: `ribbon({ x: mass.support(), h: mass.density() })` needs no rows and no grid. Both channels are functions of one hidden variable t, and the renderer samples t when it draws, so no spec names a grid.
 
-**Recommendation: Approach A, profiles.** Add one geometry type, the profile, that every node can report (a box reports a constant one). Keep one flow `stack` that adds profiles. Its `baseline` option chooses where the stack's own 0 is (`Baseline.start()`, `Baseline.middle()`, `Baseline.wiggle()`), and a parent's `alignment` lines up those 0 points. `spread`'s `spacing` takes a number or a `Spacing` strategy (box, pitch, contour, optical), which replaces its `anchor` option. `partition` on a profile restricts it to cells, which draws the croissant with no `intersect`. A density is a curve over its own field, so a ribbon takes it with no `x`. A ribbon chart, whose order changes at each x, stays the per-x spelling it is today. **Runner-up: B, per-x core.** It is today's engine with fixes and costs least, but it keeps two concepts of thickness and answers locality by never letting a stack see a ribbon.
+**Recommendation: Approach A, profiles.** Add one geometry type, the profile, that every node can report (a box reports a constant one). Keep one flow `stack` that adds profiles. Its `baseline` option chooses where the stack's own 0 is (`Baseline.start()`, `Baseline.middle()`, `Baseline.wiggle()`), and a parent's `alignment` lines up those 0 points. `spread`'s `spacing` takes a number or a `Spacing` strategy (box, pitch, contour), which replaces its `anchor` option. `partition` on a profile restricts it to cells, which draws the croissant with no `intersect`. A density's position is written explicitly as `support()` on the same field expression. A ribbon chart, whose order changes at each x, stays the per-x spelling it is today. **Runner-up: B, per-x core.** It is today's engine with fixes and costs least, but it keeps two concepts of thickness and answers locality by never letting a stack see a ribbon.
 
 The review page is `page.html` beside this file.
 
@@ -16,7 +16,7 @@ The review page is `page.html` beside this file.
 - **Local means two things.** An operator reads only its children's summaries (a box or a profile), never their rows or vertices, and it writes only each child's frame. A profile stack's frame for a child is the boundary curve below it. When every part is a box, that curve is flat and the frame is today's translate.
 - **Only amounts stack.** A part of a profile stack must have a thickness along u. A line, a circle, text or an image has none, so it is an error in a profile stack, and the error names the fix.
 - **Profiles live in the layer's unbent space.** Polar, `Coord.along(spine)` and other coordinate transforms bend the result afterwards, so a radial stacked area and strands along a sankey link are plain stacks.
-- **A profile may be a function.** `mass.density()` is a profile with no rows. The renderer samples it when it draws it. No spec names a grid, and `repeat` stays discrete.
+- **A profile may be a function.** `x: mass.support()` and `h: mass.density()` are both functions of one hidden variable t: the support is t ↦ t and the density is t ↦ f(t). The ribbon samples t and evaluates every channel that is a function of t at each sample, as a parametric curve (x(t), y(t)) does. No spec names a grid, and `repeat` stays discrete.
 
 ## Terms
 
@@ -43,7 +43,7 @@ Composition:
 
 - **Coordinate transforms.** Profiles live in the layer's unbent space, so polar, `Coord.clock` and `Coord.along(spine)` bend the result after the stack. Every geometry reader already works on the unbent shape (#1342, #1298: outline readers ignore the coordinate bend), so this is the rule, not a new case. Contour spacing in the unbent space still prevents overlap on screen under any one-to-one transform. `Coord.along` is one-to-one only within its bend limit, and past it the layout raises an error.
 - **Anchors.** A part such as `x-max` of a violin is a one-dimensional space whose index is the profile's u. A slot flow is an ordinary flow there: `partition` slots are cells of u, `stack` slots are shares of the part's length. Part names stay a separate decision.
-- **Distributions (#980).** `x.density()` is a profile with no rows. A cell of a Dist partition is the Dist over the cell with its mass, which picks the mass reading the croissant page left open. `repeat` stays discrete.
+- **Distributions (#980).** `x: mass.support()` with `h: mass.density()` is a profile with no rows. A cell of a Dist partition is the Dist over the cell with its mass, which picks the mass reading the croissant page left open. `repeat` stays discrete.
 - **Choose (silhouette note).** A profile is the silhouette note's contour instance. On constant profiles the profile stack equals today's box stack, which is that note's Law 2 for the degenerate case, so every existing chart is unchanged. Its domination order has no bounded width, so a `choose` over profile layouts is first fit, which is already `choose`'s default.
 - **Layout engine.** A thickness is a size claim, a data amount times the scale factor plus pixels. The largest total over u is piecewise linear and increasing in the scale factor, the kind of claim the size pass already solves. This needs checking against the claim algebra.
 - **Animation.** A baseline is a value of the stack, so a transition from zero to wiggle tweens the baseline. Stacked to grouped stays an animation between two specs (#831).
@@ -336,7 +336,7 @@ _Stacked group densities, each with area equal to its group's count (emulated: K
 
 _The same with the whole given as 1 at every x: the conditional density, a divide._
 
-`mass.density()` is a curve over mass, one per species. Its area is the count of rows it is made from, so the stack adds up to the density of all penguins. The ribbon takes no `x`: a density carries its own axis, the one that shows mass. Giving the whole (`size: normalize`) turns the stack into a divide.
+`mass.density()` is a curve over mass, one per species. Its area is the count of rows it is made from, so the stack adds up to the density of all penguins. The position is `mass.support()`. `x: mass.support()` and `h: mass.density()` are both functions of one hidden variable t: the support is t ↦ t and the density is t ↦ f(t). The ribbon samples t and evaluates every channel that is a function of t at each sample, as a parametric curve (x(t), y(t)) does. Giving the whole (`size: normalize`) turns the stack into a divide.
 
 Proposed (A):
 
@@ -344,13 +344,13 @@ Proposed (A):
 const mass = field("mass");
 chart(penguins)
   .flow(stack({ by: "species", dir: "y" }))
-  .mark(ribbon({ h: mass.density(), fill: "species" }));
+  .mark(ribbon({ x: mass.support(), h: mass.density(), fill: "species" }));
 ```
 
 ```python
 mass = field("mass")
 chart(penguins).flow(stack(by="species", dir="y")).mark(
-    ribbon(h=mass.density(), fill="species")
+    ribbon(x=mass.support(), h=mass.density(), fill="species")
 )
 ```
 
@@ -393,7 +393,7 @@ C (works, cut must find each group's share):
 ```js
 const mass = field("mass");
 chart(penguins).mark(
-  ribbon({ h: mass.density(), fill: "species" }).cut({
+  ribbon({ x: mass.support(), h: mass.density(), fill: "species" }).cut({
     by: "species",
     dir: "y",
   })
@@ -403,7 +403,9 @@ chart(penguins).mark(
 ```python
 mass = field("mass")
 chart(penguins).mark(
-    ribbon(h=mass.density(), fill="species").cut(by="species", dir="y")
+    ribbon(x=mass.support(), h=mass.density(), fill="species").cut(
+        by="species", dir="y"
+    )
 )
 ```
 
@@ -417,7 +419,7 @@ _A fixed pitch between baselines: ridges overlap, as most ridgelines do (today's
 
 _For contrast, the same ridges stacked: a stacked density, a different chart._
 
-Ridges are separate spaces, since their areas do not add, so a ridgeline is a `spread`. Today the pitch is set by two options, `anchor: "baseline"` and `spacing: 70`. In A, how the gap is measured is the value of `spacing`: a pitch between baselines here, or a contour or optical gap (see the next card).
+Ridges are separate spaces, since their areas do not add, so a ridgeline is a `spread`. Today the pitch is set by two options, `anchor: "baseline"` and `spacing: 70`. In A, how the gap is measured is the value of `spacing`: a pitch between baselines here, or a contour gap (see the next card).
 
 Proposed (A):
 
@@ -431,7 +433,7 @@ chart(weather)
       spacing: Spacing.pitch(70, { at: "baseline" }),
     })
   )
-  .mark(ribbon({ h: high.density(), fill: "month" }));
+  .mark(ribbon({ x: high.support(), h: high.density(), fill: "month" }));
 ```
 
 ```python
@@ -439,7 +441,7 @@ high = field("high")
 chart(weather).flow(
     spread(by="month", dir="y", spacing=Spacing.pitch(70, at="baseline"))
 ).mark(
-    ribbon(h=high.density(), fill="month")
+    ribbon(x=high.support(), h=high.density(), fill="month")
 )
 ```
 
@@ -485,9 +487,9 @@ C (same as A: nothing is divided):
 
 The same as A.
 
-### Spacing between outlines: box, contact or optical
+### Spacing between outlines: box or contact
 
-When shapes are irregular, the gap between them can be measured three ways. A **box gap** is the gap between bounding boxes (today's `spread`). A **contact** gap is the smallest distance between the facing outlines: the shapes slide together until they would touch. An **optical** gap sets the average white space between the facing outlines to a target, where each column of white counts only up to a depth, and never comes closer than contact. The renders compute the three by hand (a throwaway helper, `spacingModels.ts`) and draw the result with today's engine.
+When shapes are irregular, the gap between them can be measured two ways. A **box gap** is the gap between bounding boxes (today's `spread`). A **contact** gap is the smallest distance between the facing outlines: the shapes slide together until they would touch. The renders compute both by hand (a throwaway helper, `spacingModels.ts`) and draw the result with today's engine.
 
 ![Box gap: each ridge starts above the previous one's box.](img/ridge-box.png)
 
@@ -497,21 +499,13 @@ _Box gap: each ridge starts above the previous one's box._
 
 _Contact: each ridge drops until its base would touch a ridge below. Where the ridge below has a long tail, it drops far._
 
-![Optical (depth cap 40 px, target mean gap 32 px): ridges that sit over a high shoulder get more room, so the rhythm looks even.](img/ridge-optical.png)
-
-_Optical (depth cap 40 px, target mean gap 32 px): ridges that sit over a high shoulder get more room, so the rhythm looks even._
-
 ![Box gap on letter-like outlines: T and A, A and V look far apart.](img/glyph-box.png)
 
 _Box gap on letter-like outlines: T and A, A and V look far apart._
 
-![Contact: A and V touch along their slopes and T tucks over A, so the word looks uneven.](img/glyph-contact.png)
+![Contact: A and V touch along their slopes and T tucks over A.](img/glyph-contact.png)
 
-_Contact: A and V touch along their slopes and T tucks over A, so the word looks uneven._
-
-![Optical (depth cap 30, target 14): even-looking white between every pair, which is what type spacing aims for.](img/glyph-optical.png)
-
-_Optical (depth cap 30, target 14): even-looking white between every pair, which is what type spacing aims for._
+_Contact: A and V touch along their slopes and T tucks over A._
 
 Proposed: how the gap is measured is the value of spacing:
 
@@ -523,18 +517,12 @@ spread({
   spacing: Spacing.pitch(70, { at: "baseline" }),
 }); // today's anchor
 spread({ by: "month", dir: "y", spacing: Spacing.contour(4) });
-spread({
-  by: "month",
-  dir: "y",
-  spacing: Spacing.optical({ target: 32, depth: 40 }),
-});
 ```
 
 ```python
 spread(by="month", dir="y", spacing=4)
 spread(by="month", dir="y", spacing=Spacing.pitch(70, at="baseline"))
 spread(by="month", dir="y", spacing=Spacing.contour(4))
-spread(by="month", dir="y", spacing=Spacing.optical(target=32, depth=40))
 ```
 
 <div class="table-wrap"><table>
@@ -542,10 +530,8 @@ spread(by="month", dir="y", spacing=Spacing.optical(target=32, depth=40))
 <tr><td>Box gap</td><td>gap between bounding boxes along the axis</td><td>today's <code>spread</code>; Graphviz <code>nodesep</code>; d3-sankey <code>nodePadding</code></td></tr>
 <tr><td>Pitch</td><td>a fixed distance between a named point on each child</td><td>today's <code>anchor: "baseline"</code>; ggridges' <code>scale</code></td></tr>
 <tr><td>Contact (minimum distance)</td><td>the smallest distance between facing outlines equals the gap</td><td>tidy trees (Reingold and Tilford, 1981: contours compared level by level), <code>d3.tree</code>, d3-flextree (van der Ploeg, 2014, nodes of different sizes), GoTree; skyline packing; the sankey layout page's contour spacing</td></tr>
-<tr><td>Optical (equal area, depth cap)</td><td>the mean white gap between facing outlines, each column capped at a depth, equals a target; never closer than contact</td><td>type spacing: HT Letterspacer sets sidebearings from a target white <i>area</i> measured only to a <i>depth</i> inward from the outline (a percent of the x-height); Tim Ahrens (Kern On) notes that perception works in terms of average distance or white area; Adobe InDesign's optical kerning adjusts by shape but does not publish its method</td></tr>
 </table></div>
-<p><b>Why minimum distance looks wrong for type.</b> Two letters that touch at one point leave large open wedges of white (A and V above), while two straight stems at the same minimum distance leave none, so the eye sees uneven gaps. Type designers measure the white area instead. The depth cap stops the area from counting white deep inside an open shape (the inside of an L or a C), which would push those letters too far away. No vis tool we found spaces marks by optical area; outline spacing in vis is contact (tidy trees, d3-flextree).</p>
-<p><b>For charts.</b> Contact is right where the rule is "never overlap" and nothing else is judged: trees and sankey node columns. Optical is right where an even rhythm is the point: a ridgeline, a row of glyphs or icons. Both read the same profile; they differ only in how they turn two profiles into one gap.</p>
+<p><b>Optical spacing is left out.</b> Type tools space letters by white area rather than by contact: HT Letterspacer sets sidebearings from a target white area measured only to a depth inward from the outline, and Tim Ahrens (Kern On) notes that perception works in terms of average distance or white area. Our first emulation of that model looked less even than contact on Josh's reading (the A to V gap grew larger than the V to O gap), and no example here needs it, so the family leaves it out. It could be added later as one more <code>Spacing</code> strategy without changing the option.</p>
 <p><b>Naming.</b> <code>measure</code> is out. Spread already has an option for how spacing is measured, <code>anchor: "edge" | "start" | "middle" | "end" | "baseline"</code> (facing edges, or a fixed pitch between named points). Contour is another answer to the same question, so it should not be a second option. The proposal makes the answer the value of <code>spacing</code>, as a strategy family (<code>Spacing</code>, uppercase, as the API rules ask for a choice among strategies). A plain number stays as sugar for <code>Spacing.box(n)</code>, so a default is still something a user can write, and <code>percent</code> and <code>fr</code> lengths still work. <code>Spacing.pitch(70, { at: "baseline" })</code> takes a required length, so it is a call only. This removes spread's <code>anchor</code> option, which frees the word for the anchors design's <code>.anchor()</code>. About 28 story, test and docs files use an <code>anchor</code> value today, and each moves mechanically.</p>
 
 ### 5. Ribbon chart: the order changes at each x
@@ -607,7 +593,7 @@ C (can't: crossings are not a division):
 
 _Today's gallery story `Forward Syntax/Croissant`: hand-made grid, quantile rows, partition and intersect._
 
-`d` is a field expression over a distribution. Each method makes a different kind of value: `d.bin(Bin.quantiles(5))` is a key that cuts d's axis into 5 cells, `d.density()` is a curve over d's own axis, and `d.median()` is one number per cell. The ribbon takes the curve with no `x`, because a density carries its axis. `partition` on that axis restricts the curve to each cell. A cell of a Dist is the Dist over that cell with its mass, so the slices meet exactly. No `intersect`, hidden ribbon, `relate`, grid or quantile rows. The next card gives the formula and the callback behind each method.
+`d` is a field expression over a distribution. Each method makes a different kind of value: `d.bin(Bin.quantiles(5))` is a key that cuts d's axis into 5 cells, `d.support()` and `d.density()` are the position and the height of one curve over a hidden variable t (t ↦ t and t ↦ f(t)), and `d.median()` is one number per cell. The ribbon samples t and evaluates both at each sample. `partition` on d's axis restricts the curve to each cell. A cell of a Dist is the Dist over that cell with its mass, so the slices meet exactly. No `intersect`, hidden ribbon, `relate`, grid or quantile rows. The next card gives the formula and the callback behind each method.
 
 Proposed (A):
 
@@ -619,6 +605,7 @@ chart(params)
   .mark(
     layer([
       ribbon({
+        x: d.support(),
         h: d.density(),
         inset: 3,
         fill: PAPER_FILL,
@@ -635,7 +622,13 @@ d = dist.normal(mean="mean", sd="sd")
 chart(params).flow(partition(by=d.bin(Bin.quantiles(5)), dir="x")).mark(
     layer(
         [
-            ribbon(h=d.density(), inset=3, fill=PAPER_FILL, stroke=PAPER_STROKE),
+            ribbon(
+                x=d.support(),
+                h=d.density(),
+                inset=3,
+                fill=PAPER_FILL,
+                stroke=PAPER_STROKE,
+            ),
             circle(cx=d.median(), cy=6, r=3, fill=PAPER_STROKE),
         ]
     )
@@ -710,7 +703,7 @@ C (works, as a second cut mode (cells)):
 const params = [{ mean: 0, sd: 1 }];
 const d = dist.normal({ mean: "mean", sd: "sd" });
 chart(params).mark(
-  ribbon({ h: d.density(), fill: PAPER_FILL }).cut({
+  ribbon({ x: d.support(), h: d.density(), fill: PAPER_FILL }).cut({
     by: d.bin(Bin.quantiles(5)),
     dir: "x",
     spacing: 6,
@@ -722,7 +715,7 @@ chart(params).mark(
 params = [{"mean": 0, "sd": 1}]
 d = dist.normal(mean="mean", sd="sd")
 chart(params).mark(
-    ribbon(h=d.density(), fill=PAPER_FILL).cut(
+    ribbon(x=d.support(), h=d.density(), fill=PAPER_FILL).cut(
         by=d.bin(Bin.quantiles(5)), dir="x", spacing=6
     )
 )
@@ -739,6 +732,7 @@ field("mass"); // (x) => x  (JS lets a callback drop xs)
 field("mass").sum(); // (_, xs) => sum(xs)
 field("mass").median(); // (_, xs) => median(xs)
 field("mass").normalize(); // (x, xs) => x / sum(xs)
+field("mass").support(); // (_, xs) => (t) => t, over the density's range
 field("mass").density(); // (_, xs) => kde(xs), a function (t) => number
 
 // a custom method, used like a built-in one
@@ -750,6 +744,7 @@ field("mass")  # lambda x, xs: x
 field("mass").sum()  # lambda _, xs: sum(xs)
 field("mass").median()  # lambda _, xs: median(xs)
 field("mass").normalize()  # lambda x, xs: x / sum(xs)
+field("mass").support()  # lambda _, xs: (lambda t: t), over the density's range
 field("mass").density()  # lambda _, xs: kde(xs), a function of t
 
 share = field("mass").then(lambda x, xs: x / max(xs), unit="ratio")
@@ -764,11 +759,16 @@ share = field("mass").then(lambda x, xs: x / max(xs), unit="ratio")
 <tr><td><code>.count()</code></td><td>n</td><td><code>(_, xs) =&gt; xs.length</code></td></tr>
 <tr><td><code>.distinct()</code></td><td>the number of different values</td><td><code>(_, xs) =&gt; new Set(xs).size</code></td></tr>
 <tr><td>Per row, reading the group</td><td><code>.normalize()</code></td><td>x &divide; the group's sum</td><td><code>(x, xs) =&gt; x / sum(xs)</code></td></tr>
-<tr><td>Curve</td><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is its exact density, with area 1</td><td><code>(_, xs) =&gt; kde(xs)</code>, whose result is a function <code>(t) =&gt; number</code></td></tr>
+<tr><td rowspan="2">Curve: a function of a hidden variable t</td><td><code>.support()</code></td><td>t itself, over the range the expression's density uses. That range is open (see the decisions); the lean follows ggdist: for rows, the data's own range, with a bounded estimator; for a <code>Dist</code>, its own range, or its 0.001 to 0.999 quantiles where that range is unbounded</td><td><code>(_, xs) =&gt; (t) =&gt; t</code></td></tr>
+<tr><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is its exact density, with area 1</td><td><code>(_, xs) =&gt; kde(xs)</code>, whose result is a function <code>(t) =&gt; number</code></td></tr>
 <tr><td>Key (bin)</td><td><code>.bin(Bin.step(500))</code>, <code>Bin.thresholds(n)</code>, <code>Bin.quantiles(n)</code></td><td>On main the cells come from the column's domain (its <code>HasDomain</code>), computed once where the data is typed, in <code>chart()</code> or the last <code>derive</code>, so every group of a split sees the same cells, empty ones included (#763; story <code>SharedBinsAcrossGroups</code>). <code>Bin.step(w)</code>: cells [k&times;w, (k+1)&times;w). <code>Bin.thresholds(n)</code>: a step from d3's <code>tickIncrement</code> over the domain, for about n cells. <code>Bin.quantiles(n)</code>: edges at the type-7 quantiles i/n of the column's values (<code>cells.ts</code>)</td><td>Open: how a bin's cells are shared is under review</td></tr>
 </table></div>
 <p><b>Precedent.</b> A fold that returns the same value for every row of its group is a window function: SQL's <code>median(x) OVER (PARTITION BY g)</code>, or polars' <code>pl.col("x").median().over("g")</code>. <code>normalize</code> fits the same shape with no change, <code>(x, xs) =&gt; x / sum(xs)</code>, as SQL's <code>x / sum(x) OVER (PARTITION BY g)</code> does.</p>
 <p><b>Bins are the open item.</b> A bin's cells do not come from the group's <code>xs</code>: on main they come from the column's domain, fixed where the data is typed, and the empty cells and their order are kept for the axis. So a bin does not fit the one callback shape as written. How a bin's cells are shared is under review, so this page proposes no callback form for bins.</p>
+<p><b>Curves.</b> A density is drawn by two channels of one mark, <code>x: mass.support()</code> (t &#8614; t) and <code>h: mass.density()</code> (t &#8614; f(t)). The ribbon samples t and evaluates every channel that is a function of t at each sample, as a parametric curve (x(t), y(t)) does. The range of t belongs to the expression, so no spec names it. Two curve channels over different variables in one mark, such as <code>x: mass.support()</code> with <code>h: length.density()</code>, are an error. Precedent: the closest is ggdist (Matt Kay's R package for distributions), whose <code>stat_slabinterval</code> computes <code>x</code> or <code>y</code> (the slab's positions), <code>pdf</code>, <code>cdf</code> and <code>n</code> (<code>Inf</code> for an analytic distribution). Vega-Lite's density transform outputs two fields, <code>value</code> and <code>density</code>, and ggplot2 maps <code>after_stat(x)</code> and <code>after_stat(density)</code>.</p>
+<p><b>Area.</b> The area under <code>mass.density()</code> is its row count, so stacked densities add up. ggdist users get the same curve by writing <code>aes(thickness = after_stat(pdf * n))</code>. ggdist instead scales thickness after the fact with <code>normalize</code> (<code>"all"</code>, <code>"panels"</code>, <code>"xy"</code>, <code>"groups"</code> or <code>"none"</code>); here that is the stack's or the spread's job, not the curve's.</p>
+<p><b>The range of t.</b> Tools split. seaborn runs a KDE 3 bandwidths past the data (<code>cut=3</code>), and ggplot2 also extends past it. ggdist, for rows, uses <code>density_bounded()</code>, a reflection estimator, and usually trims to the data's range; for an analytic distribution it uses <code>p_limits</code>, the 0.001 and 0.999 quantiles, where the range is unbounded. This is a decision below.</p>
+<p><b>Naming.</b> <code>support()</code> is the chosen name (Josh is checking it with Matt Kay, author of ggdist). Rejected: <code>value()</code>, which clashes with GoFish's <code>value(...)</code> constructor, and <code>points()</code> or <code>grid()</code>, which name the sampling that specs should not see.</p>
 <p><b>Consequences, stated plainly.</b></p>
 <ol>
 <li><b>A fold cannot be told from a per-row value without running it.</b> A channel that needs one value per group (a <code>circle</code>'s <code>cx</code> in a cell) checks that the value is the same across the group, and fails with the existing "not constant across the connected group" error.</li>
@@ -882,7 +882,7 @@ ref("link").cut(by="strand", size="width", dir="across")
 
 _Penguin body mass: the violin's flat side has one slot per mass bin, joined to a 100% bar (emulated anchors and KDE)._
 
-The violin is a density of mass. `dir: "y"` says the ribbon runs along y, so the density's own axis is y and `w` is its thickness: there is no question which axis the density uses. Its `x-max` part is the flat side, whose length is the profile's domain. A `partition` slot flow cuts that domain into cells, the same partition as the croissant's, and the bar's `stack` slots divide its height by share. The KDE helper and its grid go away.
+The violin is a density of mass drawn upright: `y: mass.support()` is the position and `w: mass.density()` the thickness, both functions of one hidden variable t. The ribbon runs along the axis whose channel is a function of t, so `dir: "y"` is no longer needed. Its `x-max` part is the flat side, whose length is the profile's domain. A `partition` slot flow cuts that domain into cells, the same partition as the croissant's, and the bar's `stack` slots divide its height by share. The KDE helper and its grid go away.
 
 Proposed (A):
 
@@ -892,7 +892,12 @@ const massBins = mass.bin(Bin.thresholds([3000, 4000, 5000, 6000]));
 layer([
   spread({ dir: "x", spacing: 160 }, [
     chart(penguins).mark(
-      ribbon({ w: mass.density(), dir: "y", align: "end", fill: "#c4c4c4" })
+      ribbon({
+        y: mass.support(),
+        w: mass.density(),
+        align: "end",
+        fill: "#c4c4c4",
+      })
         .anchor({
           name: "out",
           position: "x-max",
@@ -932,7 +937,7 @@ layer(
             [
                 chart(penguins).mark(
                     ribbon(
-                        w=mass.density(), dir="y", align="end", fill="#c4c4c4"
+                        y=mass.support(), w=mass.density(), align="end", fill="#c4c4c4"
                     )
                     .anchor(
                         name="out",
@@ -1245,8 +1250,8 @@ New syntax in A:
 
 - `stack` of ribbons with `x`: `.flow(stack({ by, dir }))` and `.mark(ribbon({ x, h }))`, no `scatter` by x.
 - `stack({ baseline: Baseline.start() | Baseline.middle() | Baseline.wiggle() | ... })`.
-- `spread({ spacing: 4 | Spacing.box(4) | Spacing.pitch(70, { at }) | Spacing.contour(4) | Spacing.optical(...) })`, replacing `anchor`.
-- `ribbon({ h: mass.density() })` with no `x`, and `ribbon({ x, y: { min, max } })`.
+- `spread({ spacing: 4 | Spacing.box(4) | Spacing.pitch(70, { at }) | Spacing.contour(4) })`, replacing `anchor`.
+- `ribbon({ x: mass.support(), h: mass.density() })`, and `ribbon({ x, y: { min, max } })`.
 - `line` loses `h`; a stacked line chart is a stack of ribbons with a line on each band's edge.
 - `shape.cut(stack(...))` and `shape.cut(partition(...))` replacing cut's sizes and `inset`.
 - `field("x").then((x, xs) => ..., { unit, fold })` for custom methods.
@@ -1269,7 +1274,7 @@ Facts that follow:
 
 - **Two profiles combine pointwise only on a shared index.** Siblings in a stack must place u on one scale. A ribbon's `x` does that. Profiles with different index scales are an error that names the two scales.
 
-- **A profile can come from rows or from a function.** From rows it is the mark's curve through them (each series is curved first, then added). From a function (`x.density()`) it is evaluated on demand. Outside its domain a part has thickness 0.
+- **A profile can come from rows or from a function.** From rows it is the mark's curve through them (each series is curved first, then added). From a function (`x: mass.support()` with `h: mass.density()`) it is evaluated at samples of the hidden variable t. Outside its domain a part has thickness 0.
 
 - **Under a coordinate transform** the profile stays in the layer's unbent space. Polar maps u to angle and d to radius. `Coord.along(spine)` maps u to distance along the spine and d to distance along its normal.
 
@@ -1333,7 +1338,7 @@ Cut's only remaining job is to turn the pieces into separate children, so the ne
 
 - **The renderer samples when it draws.** A boundary is drawn through the union of the breakpoints of the parts below it, plus extra points where a curve is not linear and for function profiles. A fixed count (512) stands until screen-aware sampling, which Josh deferred.
 
-- **Continuum rows are not needed for any example here.** Densities are function-valued channels. `repeat` stays discrete (draws, quantile levels). `sweep` stays parked for curves that are not a function of either axis, such as a spiral or a Lissajous figure.
+- **Continuum rows are not needed for any example here.** A density's position and height are channels that are functions of one hidden variable t, `support()` and `density()`; the range of t belongs to the expression (below). Two such channels over different fields in one mark, such as `x: mass.support()` with `h: length.density()`, are an error. `repeat` stays discrete (draws, quantile levels). `sweep` stays parked for curves that are not a function of either axis, such as a spiral or a Lissajous figure.
 
 ## Implementation path
 
@@ -1509,12 +1514,14 @@ TeX stacks boxes that report height, depth and a baseline. Haskell diagrams plac
 3. Only amounts stack: a part with no thickness along u (a line, circle, text or image) in a profile stack is an error that names the fix. For lines, the fix is a stack of ribbons with a line on each band's edge, which waits on part references.
 4. Keep the word `baseline`: the stack's option chooses its own 0 (`Baseline.start()`, `.end()`, `.middle()`, `.at(part, fraction)`, `.wiggle()`), and a parent's `alignment: "baseline"` lines up those 0 points. `StackOrigin` is the one model, and `Trait.diverging` is a default that desugars into `Baseline.at`?
 5. `spacing` takes a number (sugar for `Spacing.box(n)`) or a `Spacing` strategy, and `Spacing.pitch(n, { at })` replaces spread's `anchor` option?
-6. Which outline spacing ships first: `Spacing.contour` only (trees, sankey columns), or `Spacing.optical` too (ridgelines, rows of glyphs)?
+6. `Spacing` ships with box, pitch and contour only, and leaves optical spacing out until an example needs it?
 7. `cut` takes the stack or partition that divides the shape, drops its own sizes and `inset`, and only makes the pieces movable children?
-8. A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve.
-9. One callback shape, `(x, xs) => result`, behind every field method except `bin`, with `field("x").then(fn, { unit, fold })` for custom methods? (How a bin's cells are shared is under review separately.)
-10. Plan, not a question: each method's API reference entry (its descriptor `doc`) states its formula and the callback it stands for. This lands with the implementation.
-11. A cell of a Dist partition is the Dist over the cell with its mass, so `d.density()` in a cell is the parent's curve there?
-12. Outside its own x range a part has thickness 0 (ggplot2), rather than an error?
-13. Accept the per-x rewrite as a declared shortcut until the engine has a profile type?
-14. Name: "profile", or "contour" or "skyline" ("envelope" is taken by `Coord.envelope`, #1284)?
+8. A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve. ggdist reaches the same curve with `after_stat(pdf * n)` and rescales thickness with `normalize`; here rescaling is the parent's job.
+9. The range of t: follow ggdist (rows trimmed to the data's range with a bounded estimator; a Dist over its own range, or its 0.001 to 0.999 quantiles where unbounded), or seaborn (3 bandwidths past the data)? The lean is ggdist.
+10. Name: `support()` is chosen (Josh is checking it with Matt Kay, ggdist). Rejected: `value()`, which clashes with GoFish's `value(...)` constructor, and `points()` or `grid()`, which name the sampling.
+11. One callback shape, `(x, xs) => result`, behind every field method except `bin`, with `field("x").then(fn, { unit, fold })` for custom methods? (How a bin's cells are shared is under review separately.)
+12. Plan, not a question: each method's API reference entry (its descriptor `doc`) states its formula and the callback it stands for. This lands with the implementation.
+13. A cell of a Dist partition is the Dist over the cell with its mass, so `d.density()` in a cell is the parent's curve there?
+14. Outside its own x range a part has thickness 0 (ggplot2), rather than an error?
+15. Accept the per-x rewrite as a declared shortcut until the engine has a profile type?
+16. Name: "profile", or "contour" or "skyline" ("envelope" is taken by `Coord.envelope`, #1284)?

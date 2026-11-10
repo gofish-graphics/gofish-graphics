@@ -52,7 +52,6 @@ const ridges = (model: Model) =>
   );
 export const RidgeBox = show((el) => ridges("box").render(el));
 export const RidgeContact = show((el) => ridges("contact").render(el));
-export const RidgeOptical = show((el) => ridges("optical").render(el));
 
 const glyphs = (model: Model) =>
   pixels(470, 108).layer(
@@ -60,7 +59,6 @@ const glyphs = (model: Model) =>
   );
 export const GlyphBox = show((el) => glyphs("box").render(el));
 export const GlyphContact = show((el) => glyphs("contact").render(el));
-export const GlyphOptical = show((el) => glyphs("optical").render(el));
 
 // ---------------------------------------------------------------------------
 // Baseline (a node's own 0) against alignment (how a parent lines children up).
