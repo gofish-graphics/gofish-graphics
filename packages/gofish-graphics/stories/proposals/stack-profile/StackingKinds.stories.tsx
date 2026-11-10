@@ -172,7 +172,7 @@ export const DodgeBoxStack = show((el) =>
 
 // Ridgelines, one band [y0, y1] per point, emulated in derive.
 const ridges = (kind: "fixed" | "contact" | "sum") =>
-  chart(ridgeRows(kind), { w: 300, h: H })
+  chart(ridgeRows(kind), { w: 300, h: H, axes: { x: { title: "value" }, y: false } })
     .flow(
       group({ by: "c" }),
       scatter({ by: "x", x: "x", yMin: "y0", yMax: "y1" })

@@ -47,6 +47,8 @@ import {
  * [y0, y1] is placed by a scatter's yMin / yMax.
  */
 const meta: Meta = { title: "Proposals/Stack Profile/Stacking Baselines" };
+const AXES = { x: { title: "x" }, y: { title: "value" } };
+const DENSITY_AXES = { x: { title: "value" }, y: { title: "density (count per unit)" } };
 export default meta;
 
 const W = 480;
@@ -62,7 +64,7 @@ const show = (build: (container: HTMLElement) => void): StoryObj => ({
 
 /** The shared spec: stack in derive, then a scatter per x and per band. */
 const stacked = (rows: Row[], offset: Offset, order?: (r: Row[]) => Order) =>
-  chart(rows, { w: W, h: H })
+  chart(rows, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) =>
         stackRows(rows, { offset, order: order?.(rows) })
@@ -103,7 +105,7 @@ export const OPerXRankArea = show((el) =>
 
 // Re-sorted at each x, drawn as pieces then connect (the ribbon chart).
 export const OPerXRankRibbons = show((el) =>
-  chart(topics, { w: W, h: H })
+  chart(topics, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) =>
         stackRows(rows, { offset: "wiggle", order: orderRankPerX })
@@ -125,7 +127,7 @@ export const OPerXRankRibbons = show((el) =>
 
 // The samples themselves, as dots.
 export const SSamples = show((el) =>
-  chart(sampled, { w: W, h: H })
+  chart(sampled, { w: W, h: H, axes: AXES })
     .flow(group({ by: "c" }), scatter({ by: "x", x: "x", y: "y" }))
     .mark(circle({ r: 2.5, fill: "c" }))
     .render(el)
@@ -134,7 +136,7 @@ export const SSamples = show((el) =>
 // What today's flow does: a slice per x, a stack inside each. The rows are
 // sorted by x first.
 export const SNaive = show((el) =>
-  chart(sampledByX, { w: W, h: H })
+  chart(sampledByX, { w: W, h: H, axes: AXES })
     .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
     .mark(ribbon({ h: "y", fill: "c", curve: Curve.linear }))
     .render(el)
@@ -143,7 +145,7 @@ export const SNaive = show((el) =>
 // The same with the rows grouped by series (Maps' rows, then Sports', then
 // Games'): the ribbon threads the slices in the order their x first appears.
 export const SNaiveUnsorted = show((el) =>
-  chart(sampled, { w: W, h: H })
+  chart(sampled, { w: W, h: H, axes: AXES })
     .flow(scatter({ by: "x", x: "x" }), stack({ by: "c", dir: "y" }))
     .mark(ribbon({ h: "y", fill: "c", curve: Curve.linear }))
     .render(el)
@@ -151,7 +153,7 @@ export const SNaiveUnsorted = show((el) =>
 
 // ggplot2 stat_align: every series read at the union of all x, then stacked.
 export const SUnionLinear = show((el) =>
-  chart(sampled, { w: W, h: H })
+  chart(sampled, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) => stackRows(alignUnion(rows), {})),
       scatter({ by: "x", x: "x" }),
@@ -170,7 +172,7 @@ export const SBoundaryFunctions = show((el) => {
     .flatMap((b, k) =>
       b.map(([x, y], i) => ({ id: `${k}-${i}`, x, y, k: `B${k + 1}` }))
     );
-  chart(sampled, { w: W, h: H })
+  chart(sampled, { w: W, h: H, axes: AXES })
     .flow(derive((rows: Row[]) => boundaryBands(rows).bands))
     .mark(polygon({ points: "ring", fill: "c" }))
     .layer(
@@ -183,7 +185,7 @@ export const SBoundaryFunctions = show((el) => {
 
 // The same polygons, with no dots.
 export const SBoundaryFunctionsPlain = show((el) =>
-  chart(sampled, { w: W, h: H })
+  chart(sampled, { w: W, h: H, axes: AXES })
     .flow(derive((rows: Row[]) => boundaryBands(rows).bands))
     .mark(polygon({ points: "ring", fill: "c" }))
     .render(el)
@@ -191,7 +193,7 @@ export const SBoundaryFunctionsPlain = show((el) =>
 
 // Curve order (a): stack the points, then the ribbon curves each boundary.
 export const SCurveStackThenCurve = show((el) =>
-  chart(coarse, { w: W, h: H })
+  chart(coarse, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) => stackRows(rows, {})),
       scatter({ by: "x", x: "x" }),
@@ -203,7 +205,7 @@ export const SCurveStackThenCurve = show((el) =>
 
 // Curve order (b): curve each series, sample densely, then sum.
 export const SCurveCurveThenSum = show((el) =>
-  chart(coarse, { w: W, h: H })
+  chart(coarse, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) => stackRows(curveThenSum(rows), {})),
       scatter({ by: "x", x: "x" }),
@@ -215,7 +217,7 @@ export const SCurveCurveThenSum = show((el) =>
 
 // Overlay: (a)'s boundaries as solid lines, (b)'s as dashed.
 export const SCurveOverlay = show((el) =>
-  chart(coarse, { w: W, h: H })
+  chart(coarse, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) => stackRows(rows, {})),
       group({ by: "c" }),
@@ -239,7 +241,7 @@ export const SCurveOverlay = show((el) =>
 
 // The difference (a) minus (b) for each band's top boundary.
 export const SCurveDifference = show((el) =>
-  chart(coarse, { w: W, h: H })
+  chart(coarse, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) => curveOrderDifference(rows)),
       group({ by: "c" }),
@@ -251,7 +253,7 @@ export const SCurveDifference = show((el) =>
 
 // The top band's thickness (Games): (a) can go below zero, (b) cannot.
 export const SCurveThickness = show((el) =>
-  chart(coarse, { w: W, h: H })
+  chart(coarse, { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) => curveOrderThickness(rows)),
       group({ by: "c" }),
@@ -265,7 +267,7 @@ export const SCurveThickness = show((el) =>
 // Densities.
 
 const density = (offset: Offset) =>
-  chart(samples, { w: W, h: H })
+  chart(samples, { w: W, h: H, axes: DENSITY_AXES })
     .flow(
       derive((rows: { g: string; v: number }[]) =>
         stackRows(densityRows(rows), { offset })
@@ -279,7 +281,7 @@ export const DStackedDensity = show((el) => density("zero").render(el));
 export const DConditionalDensity = show((el) => density("expand").render(el));
 
 export const DRidgeline = show((el) =>
-  chart(samples, { w: W, h: H })
+  chart(samples, { w: W, h: H, axes: DENSITY_AXES })
     .flow(
       derive((rows: { g: string; v: number }[]) =>
         densityRows(rows, { weighted: false })
@@ -305,7 +307,7 @@ export const WSineStream = show((el) =>
 
 // Today: each lake's stack centered by the outer spread. Real, no emulation.
 export const RCenteredBars = show((el) =>
-  chart(seafood, { w: W, h: H })
+  chart(seafood, { w: W, h: H, axes: AXES })
     .flow(
       spread({ by: "lake", dir: "x", alignment: "middle" }),
       stack({ by: "species", dir: "y" })
@@ -318,7 +320,7 @@ export const RCenteredBars = show((el) =>
 // x sequence, and each lake's stack is offset by the weighted wiggle.
 const LAKES = [...new Set(seafood.map((d) => d.lake))];
 const wiggleBars = (w = 32, spacing?: number, order?: Order) =>
-  chart(seafoodRows(seafood), { w: W, h: H })
+  chart(seafoodRows(seafood), { w: W, h: H, axes: AXES })
     .flow(
       derive((rows: Row[]) =>
         stackRows(rows, { offset: "wiggle", order }).map((r) => ({

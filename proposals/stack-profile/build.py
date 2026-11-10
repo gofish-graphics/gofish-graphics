@@ -28,6 +28,8 @@ for ex in C.EXAMPLES:
         ex["_" + k + "_py"] = snip("python", ex[k + "_py"])
 for p in C.PRECEDENT:
     p["_code"] = snip(p["lang"], p["code"])
+for ins in C.INSERTS:
+    ins["_codes"] = [(label, snip("js", js), snip("python", py)) for label, js, py in ins["codes"]]
 
 res = subprocess.run(
     ["node", "proposals/_tools/format-snippets.mjs"],
@@ -44,10 +46,14 @@ HL = re.compile(r"\s*(//|#) @hl\s*$")
 def code_lines(i):
     """Formatted code with @hl markers removed, and the highlighted line numbers."""
     lines, hl = [], []
-    for n, line in enumerate(formatted[i]["code"].split("\n")):
+    for line in formatted[i]["code"].split("\n"):
         if HL.search(line):
-            hl.append(n)
             line = HL.sub("", line)
+            if not line.strip() and lines:
+                # prettier moved the marker onto its own line: mark the line above
+                hl.append(len(lines) - 1)
+                continue
+            hl.append(len(lines))
         lines.append(line)
     return "\n".join(lines), hl
 
@@ -104,12 +110,37 @@ def example_card(n, ex):
   <h3>{n}. {ex['title']}</h3>
   <div class="figs">{imgs}</div>
   <p>{ex['text']}</p>
-  <p class="label">Proposed (A)</p>
+  <p class="label">{ex.get('A_label', 'Proposed (A)')}</p>
   {both(ex['_A_js'], ex['_A_py'])}
   <div class="today">{today_html}</div>
   <table class="verdict">{verdict}</table>
   <details><summary>B and C spellings</summary><div class="two">{others}</div></details>
 </article>"""
+
+
+def insert_card(ins):
+    figs = "".join(
+        f'<figure><img src="img/{f}" alt="{html.escape(re.sub("<[^>]+>", "", cap))}">'
+        f"<figcaption>{cap}</figcaption></figure>"
+        for f, cap in ins["figs"]
+    )
+    codes = "".join(f'<p class="label">{label}</p>{both(j, p)}' for label, j, p in ins["_codes"])
+    return f"""
+<article class="card insert" id="{ins['id']}">
+  <h3>{ins['title']}</h3>
+  <p>{ins['intro']}</p>
+  {f'<div class="figs">{figs}</div>' if figs else ''}
+  {codes}
+  {ins['body']}
+</article>"""
+
+
+def cards_with_inserts():
+    out = []
+    for n, e in enumerate(examples):
+        out.append(example_card(n + 1, e))
+        out += [insert_card(i) for i in C.INSERTS if i["after"] == e["id"]]
+    return "".join(out)
 
 
 def precedent_card(p):
@@ -172,11 +203,14 @@ table{border-collapse:collapse;width:100%;font-size:.9rem}th,td{border:1px solid
 table.verdict{width:auto;margin:8px 0}table.verdict th{width:2.5em}
 td.bad{color:var(--bad)}
 details{margin:8px 0}summary{cursor:pointer;color:var(--accent);font-weight:600}
-.toggle{position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.toggle{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--line);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .toggle button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:6px;padding:3px 12px;cursor:pointer}
 .toggle button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 body.py .lang-js{display:none}body:not(.py) .lang-py{display:none}
 .decisions li{margin:.5em 0}
+.card.insert{border-left:4px solid var(--accent)}
+.insert .figs{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
+table.methods td{min-width:9em}
 .hljs-keyword,.hljs-built_in{color:var(--hk)}.hljs-string{color:var(--hs)}.hljs-number,.hljs-literal{color:var(--hn)}.hljs-comment{color:var(--hc);font-style:italic}.hljs-title,.hljs-attr,.hljs-property{color:var(--ht)}
 """
 
@@ -230,7 +264,7 @@ page = f"""<title>{C.TITLE}</title>
 
 <h2>Examples</h2>
 <p>Each card shows the render, the spelling in A, today's spelling, and how each approach fares. Highlighted lines are the ones that change. Renders marked emulated are drawn by today's engine from precomputed rows; the proposed code does not run yet.</p>
-{''.join(example_card(n + 1, e) for n, e in enumerate(examples))}
+{cards_with_inserts()}
 
 <h2>Trade-offs</h2>
 <div class="table-wrap"><table><tr><th>Example</th><th>A. Profiles</th><th>B. Per-x core</th><th>C. Divide a drawn whole</th></tr>{verdict_rows}</table></div>
@@ -297,7 +331,7 @@ for n, ex in enumerate(examples, 1):
     out += [f"### {n}. {md(ex['title'])}", ""]
     for f, cap in ex["imgs"]:
         out += [f"![{md(cap)}](img/{f})", "", f"*{md(cap)}*", ""]
-    out += [md(ex["text"]), "", "Proposed (A):", "", fence(ex["_A_js"], "js"), fence(ex["_A_py"], "python")]
+    out += [md(ex["text"]), "", md(ex.get("A_label", "Proposed (A)")) + ":", "", fence(ex["_A_js"], "js"), fence(ex["_A_py"], "python")]
     out += [f"{md(ex['today_label'])}:", "", fence(ex["_today"], "js")]
     for k in "BC":
         out += [f"{k} ({ex['verdict'][k]}):", ""]
@@ -305,6 +339,13 @@ for n, ex in enumerate(examples, 1):
             out += ["The same as A.", ""]
         else:
             out += [fence(ex["_" + k + "_js"], "js"), fence(ex["_" + k + "_py"], "python")]
+    for ins in [i for i in C.INSERTS if i["after"] == ex["id"]]:
+        out += [f"### {md(ins['title'])}", "", md(ins["intro"]), ""]
+        for f, cap in ins["figs"]:
+            out += [f"![{md(cap)}](img/{f})", "", f"*{md(cap)}*", ""]
+        for label, j, p in ins["_codes"]:
+            out += [f"{md(label)}:", "", fence(j, "js"), fence(p, "python")]
+        out += [ins["body"].strip(), ""]
 out += ["## Trade-offs", "", "| Example | A | B | C |", "| --- | --- | --- | --- |"]
 out += [f"| {md(e['title'])} | " + " | ".join(e["verdict"][k] for k in "ABC") + " |" for e in examples]
 out += ["", "New syntax in A:", ""] + [f"- {md(s)}" for s in C.SYNTAX_CHANGES]
