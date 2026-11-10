@@ -817,7 +817,7 @@ DECISIONS = [
     "Which outline spacing ships first: <code>Spacing.contour</code> only (trees, sankey columns), or <code>Spacing.optical</code> too (ridgelines, rows of glyphs)?",
     "<code>cut</code> takes the stack or partition that divides the shape, drops its own sizes and <code>inset</code>, and only makes the pieces movable children?",
     "A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve.",
-    "One callback shape, <code>(x, xs) =&gt; result</code>, behind every field method, with <code>field(\"x\").then(fn, { unit, fold })</code> for custom methods and <code>Bin.cells(fn)</code> as the one exception, because a bin's cells and empty cells come from the whole chart?",
+    "One callback shape, <code>(x, xs) =&gt; result</code>, behind every field method except <code>bin</code>, with <code>field(\"x\").then(fn, { unit, fold })</code> for custom methods? (How a bin's cells are shared is under review separately.)",
     "Plan, not a question: each method's API reference entry (its descriptor <code>doc</code>) states its formula and the callback it stands for. This lands with the implementation.",
     "A cell of a Dist partition is the Dist over the cell with its mass, so <code>d.density()</code> in a cell is the parent's curve there?",
     "Outside its own x range a part has thickness 0 (ggplot2), rather than an error?",
@@ -832,7 +832,7 @@ SYNTAX_CHANGES = [
     "<code>ribbon({ h: mass.density() })</code> with no <code>x</code>, and <code>ribbon({ x, y: { min, max } })</code>.",
     "<code>line</code> loses <code>h</code>; a stacked line chart is a stack of ribbons with a line on each band's edge.",
     "<code>shape.cut(stack(...))</code> and <code>shape.cut(partition(...))</code> replacing cut's sizes and <code>inset</code>.",
-    "<code>field(\"x\").then((x, xs) =&gt; ..., { unit, fold })</code> for custom methods, and <code>Bin.cells(fn)</code> for custom bins.",
+    "<code>field(\"x\").then((x, xs) =&gt; ..., { unit, fold })</code> for custom methods.",
 ]
 
 BUGS = [
@@ -948,15 +948,14 @@ spread(by="month", dir="y", spacing=Spacing.optical(target=32, depth=40))"""),
         id="methods",
         after="croissant",
         title="What the methods compute",
-        intro="A field expression like <code>field(\"mass\")</code> works like polars' <code>pl.col(\"mass\")</code>: it sees one column. Every named method on it is one named instance of one callback shape, <code>(x, xs) =&gt; result</code>. <code>x</code> is this row's value of the field, and <code>xs</code> is the values of that field over the rows of the current group: the rows the mark or operator reading the channel was given. A user can always write the callback instead of the method. Polars has the same two views of one column: <code>map_elements</code> gets one value, and <code>map_batches</code> gets the whole Series.",
+        intro="A field expression like <code>field(\"mass\")</code> works like polars' <code>pl.col(\"mass\")</code>: it sees one column. Every named method on it except <code>bin</code> is one named instance of one callback shape, <code>(x, xs) =&gt; result</code>. <code>x</code> is this row's value of the field, and <code>xs</code> is the values of that field over the rows of the current group: the rows the mark or operator reading the channel was given. A user can always write the callback instead of the method. Polars has the same two views of one column: <code>map_elements</code> gets one value, and <code>map_batches</code> gets the whole Series.",
         figs=[],
         codes=[
-            ("Each method and the callback it stands for", """field("mass"); // (x) => x  (JS lets a callback drop xs)
+            ("Each method and the callback it stands for (bins are open; see below)", """field("mass"); // (x) => x  (JS lets a callback drop xs)
 field("mass").sum(); // (_, xs) => sum(xs)
 field("mass").median(); // (_, xs) => median(xs)
 field("mass").normalize(); // (x, xs) => x / sum(xs)
 field("mass").density(); // (_, xs) => kde(xs), a function (t) => number
-field("mass").bin(Bin.step(500)); // a partition: cells, and the cell of each x
 
 // a custom method, used like a built-in one
 const share = field("mass").then((x, xs) => x / max(xs), { unit: "ratio" });""", """field("mass")  # lambda x, xs: x
@@ -964,7 +963,6 @@ field("mass").sum()  # lambda _, xs: sum(xs)
 field("mass").median()  # lambda _, xs: median(xs)
 field("mass").normalize()  # lambda x, xs: x / sum(xs)
 field("mass").density()  # lambda _, xs: kde(xs), a function of t
-field("mass").bin(Bin.step(500))  # a partition: cells, and the cell of each x
 
 share = field("mass").then(lambda x, xs: x / max(xs), unit="ratio")"""),
         ],
@@ -979,10 +977,10 @@ share = field("mass").then(lambda x, xs: x / max(xs), unit="ratio")"""),
 <tr><td><code>.distinct()</code></td><td>the number of different values</td><td><code>(_, xs) =&gt; new Set(xs).size</code></td></tr>
 <tr><td>Per row, reading the group</td><td><code>.normalize()</code></td><td>x &divide; the group's sum</td><td><code>(x, xs) =&gt; x / sum(xs)</code></td></tr>
 <tr><td>Curve</td><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is its exact density, with area 1</td><td><code>(_, xs) =&gt; kde(xs)</code>, whose result is a function <code>(t) =&gt; number</code></td></tr>
-<tr><td>Key (bin)</td><td><code>.bin(Bin.step(500))</code>, <code>Bin.thresholds(n)</code>, <code>Bin.quantiles(n)</code></td><td><code>Bin.step(w)</code>: cells [k&times;w, (k+1)&times;w) over the domain. <code>Bin.thresholds(n)</code>: a step from d3's <code>tickIncrement</code> for about n cells. <code>Bin.quantiles(n)</code>: edges at the type-7 quantiles i/n of the sorted values (<code>cells.ts</code>)</td><td><code>Bin.cells((all) =&gt; ({ cells, cellOf }))</code>: not the one shape; see below</td></tr>
+<tr><td>Key (bin)</td><td><code>.bin(Bin.step(500))</code>, <code>Bin.thresholds(n)</code>, <code>Bin.quantiles(n)</code></td><td>On main the cells come from the column's domain (its <code>HasDomain</code>), computed once where the data is typed, in <code>chart()</code> or the last <code>derive</code>, so every group of a split sees the same cells, empty ones included (#763; story <code>SharedBinsAcrossGroups</code>). <code>Bin.step(w)</code>: cells [k&times;w, (k+1)&times;w). <code>Bin.thresholds(n)</code>: a step from d3's <code>tickIncrement</code> over the domain, for about n cells. <code>Bin.quantiles(n)</code>: edges at the type-7 quantiles i/n of the column's values (<code>cells.ts</code>)</td><td>Open: how a bin's cells are shared is under review</td></tr>
 </table></div>
 <p><b>Precedent.</b> A fold that returns the same value for every row of its group is a window function: SQL's <code>median(x) OVER (PARTITION BY g)</code>, or polars' <code>pl.col(\"x\").median().over(\"g\")</code>. <code>normalize</code> fits the same shape with no change, <code>(x, xs) =&gt; x / sum(xs)</code>, as SQL's <code>x / sum(x) OVER (PARTITION BY g)</code> does.</p>
-<p><b>The one place one shape is not enough: bins.</b> The key fits, <code>(x) =&gt; cellOf(x)</code>, but two things cannot come back from a callback that runs once per row. Every group must get the same cells, so the cells come from the field's values over the whole chart, not from the group's <code>xs</code>. And the empty cells and their order must be known, because the axis shows them. So a bin's explicit form is a partition computed once from all the values, <code>Bin.cells((all) =&gt; ({ cells, cellOf }))</code>, where <code>all</code> is the field's values over the chart's data.</p>
+<p><b>Bins are the open item.</b> A bin's cells do not come from the group's <code>xs</code>: on main they come from the column's domain, fixed where the data is typed, and the empty cells and their order are kept for the axis. So a bin does not fit the one callback shape as written. How a bin's cells are shared is under review, so this page proposes no callback form for bins.</p>
 <p><b>Consequences, stated plainly.</b></p>
 <ol>
 <li><b>A fold cannot be told from a per-row value without running it.</b> A channel that needs one value per group (a <code>circle</code>'s <code>cx</code> in a cell) checks that the value is the same across the group, and fails with the existing \"not constant across the connected group\" error.</li>

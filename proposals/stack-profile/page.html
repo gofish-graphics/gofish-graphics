@@ -2028,7 +2028,7 @@ chart(params).mark(
     <p>
       A field expression like <code>field("mass")</code> works like polars'
       <code>pl.col("mass")</code>: it sees one column. Every named method on it
-      is one named instance of one callback shape,
+      except <code>bin</code> is one named instance of one callback shape,
       <code>(x, xs) =&gt; result</code>. <code>x</code> is this row's value of
       the field, and <code>xs</code> is the values of that field over the rows
       of the current group: the rows the mark or operator reading the channel
@@ -2038,7 +2038,9 @@ chart(params).mark(
       <code>map_batches</code> gets the whole Series.
     </p>
 
-    <p class="label">Each method and the callback it stands for</p>
+    <p class="label">
+      Each method and the callback it stands for (bins are open; see below)
+    </p>
     <pre
       class="code lang-js"
     ><code class="language-javascript" data-hl="">field(&quot;mass&quot;); // (x) =&gt; x  (JS lets a callback drop xs)
@@ -2046,7 +2048,6 @@ field(&quot;mass&quot;).sum(); // (_, xs) =&gt; sum(xs)
 field(&quot;mass&quot;).median(); // (_, xs) =&gt; median(xs)
 field(&quot;mass&quot;).normalize(); // (x, xs) =&gt; x / sum(xs)
 field(&quot;mass&quot;).density(); // (_, xs) =&gt; kde(xs), a function (t) =&gt; number
-field(&quot;mass&quot;).bin(Bin.step(500)); // a partition: cells, and the cell of each x
 
 // a custom method, used like a built-in one
 const share = field(&quot;mass&quot;).then((x, xs) =&gt; x / max(xs), { unit: &quot;ratio&quot; });</code></pre>
@@ -2057,7 +2058,6 @@ field(&quot;mass&quot;).sum()  # lambda _, xs: sum(xs)
 field(&quot;mass&quot;).median()  # lambda _, xs: median(xs)
 field(&quot;mass&quot;).normalize()  # lambda x, xs: x / sum(xs)
 field(&quot;mass&quot;).density()  # lambda _, xs: kde(xs), a function of t
-field(&quot;mass&quot;).bin(Bin.step(500))  # a partition: cells, and the cell of each x
 
 share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio&quot;)</code></pre>
 
@@ -2136,16 +2136,17 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
             <code>Bin.quantiles(n)</code>
           </td>
           <td>
-            <code>Bin.step(w)</code>: cells [k&times;w, (k+1)&times;w) over the
-            domain. <code>Bin.thresholds(n)</code>: a step from d3's
-            <code>tickIncrement</code> for about n cells.
-            <code>Bin.quantiles(n)</code>: edges at the type-7 quantiles i/n of
-            the sorted values (<code>cells.ts</code>)
+            On main the cells come from the column's domain (its
+            <code>HasDomain</code>), computed once where the data is typed, in
+            <code>chart()</code> or the last <code>derive</code>, so every group
+            of a split sees the same cells, empty ones included (#763; story
+            <code>SharedBinsAcrossGroups</code>). <code>Bin.step(w)</code>:
+            cells [k&times;w, (k+1)&times;w). <code>Bin.thresholds(n)</code>: a
+            step from d3's <code>tickIncrement</code> over the domain, for about
+            n cells. <code>Bin.quantiles(n)</code>: edges at the type-7
+            quantiles i/n of the column's values (<code>cells.ts</code>)
           </td>
-          <td>
-            <code>Bin.cells((all) =&gt; ({ cells, cellOf }))</code>: not the one
-            shape; see below
-          </td>
+          <td>Open: how a bin's cells are shared is under review</td>
         </tr>
       </table>
     </div>
@@ -2158,15 +2159,12 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
       SQL's <code>x / sum(x) OVER (PARTITION BY g)</code> does.
     </p>
     <p>
-      <b>The one place one shape is not enough: bins.</b> The key fits,
-      <code>(x) =&gt; cellOf(x)</code>, but two things cannot come back from a
-      callback that runs once per row. Every group must get the same cells, so
-      the cells come from the field's values over the whole chart, not from the
-      group's <code>xs</code>. And the empty cells and their order must be
-      known, because the axis shows them. So a bin's explicit form is a
-      partition computed once from all the values,
-      <code>Bin.cells((all) =&gt; ({ cells, cellOf }))</code>, where
-      <code>all</code> is the field's values over the chart's data.
+      <b>Bins are the open item.</b> A bin's cells do not come from the group's
+      <code>xs</code>: on main they come from the column's domain, fixed where
+      the data is typed, and the empty cells and their order are kept for the
+      axis. So a bin does not fit the one callback shape as written. How a bin's
+      cells are shared is under review, so this page proposes no callback form
+      for bins.
     </p>
     <p><b>Consequences, stated plainly.</b></p>
     <ol>
@@ -2991,7 +2989,7 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
     </li>
     <li>
       <code>field("x").then((x, xs) =&gt; ..., { unit, fold })</code> for custom
-      methods, and <code>Bin.cells(fn)</code> for custom bins.
+      methods.
     </li>
   </ul>
 
@@ -3422,9 +3420,9 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
     </li>
     <li>
       One callback shape, <code>(x, xs) =&gt; result</code>, behind every field
-      method, with <code>field("x").then(fn, { unit, fold })</code> for custom
-      methods and <code>Bin.cells(fn)</code> as the one exception, because a
-      bin's cells and empty cells come from the whole chart?
+      method except <code>bin</code>, with
+      <code>field("x").then(fn, { unit, fold })</code> for custom methods? (How
+      a bin's cells are shared is under review separately.)
     </li>
     <li>
       Plan, not a question: each method's API reference entry (its descriptor
