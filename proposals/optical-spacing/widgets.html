@@ -122,9 +122,12 @@
     filter: blur(var(--sp-blur, 0px));
   }
   .sp-squintbar {
+    white-space: nowrap;
     position: fixed;
-    right: max(12px, env(safe-area-inset-right));
-    bottom: calc(12px + env(safe-area-inset-bottom));
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 24px);
+    top: calc(10px + env(safe-area-inset-top));
     z-index: 20;
     display: flex;
     align-items: center;

@@ -115,12 +115,15 @@
         filter: blur(var(--blur, 0px));
       }
       main {
-        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+        padding-top: calc(56px + env(safe-area-inset-top));
       }
       .squintbar {
+        white-space: nowrap;
         position: fixed;
-        right: max(12px, env(safe-area-inset-right));
-        bottom: calc(12px + env(safe-area-inset-bottom));
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 24px);
+        top: calc(10px + env(safe-area-inset-top));
         z-index: 20;
         display: flex;
         align-items: center;
@@ -176,8 +179,8 @@
         Each picture below has one shape you can move. Drag it, or use the
         slider under it, until the spaces between the shapes look even to you.
         There is no right answer. Go by eye, not by measuring, and don't think
-        about it too long. Squinting can help; the Squint control in the corner
-        blurs the shapes, and its slider sets how much.
+        about it too long. Squinting can help. The Squint control at the top of
+        the screen blurs the shapes, and its slider sets how much.
       </p>
       <div class="tools">
         <label>Your name (optional) <input type="text" id="name" /></label>
