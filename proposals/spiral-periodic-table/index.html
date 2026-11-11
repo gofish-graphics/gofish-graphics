@@ -1,0 +1,1655 @@
+<title>Spiral Periodic Tables</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap"
+  rel="stylesheet"
+/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<style>
+  /* Layout: one reading column; examples as a gallery of cards (picture, proposed code, prototype); comparisons as grids that stack on phones. */
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --ink: #1d2430;
+    --muted: #5b6575;
+    --line: #dde2ea;
+    --accent: #2f6fa8;
+    --accent-soft: #e6eef7;
+    --warn: #9a5b00;
+    --warn-soft: #fbf1e1;
+    --code-bg: #f1f3f7;
+    --tok-key: #8a3ab9;
+    --tok-str: #2c7a3f;
+    --tok-num: #b0521b;
+    --tok-com: #6d7685;
+    --tok-fn: #2f6fa8;
+    --tok-attr: #1d2430;
+    --shade: rgba(16, 20, 28, 0.82);
+    --display: "Source Serif 4", Georgia, serif;
+    --body: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161d;
+      --surface: #1a1f28;
+      --ink: #e5e9f0;
+      --muted: #9aa4b4;
+      --line: #2c3340;
+      --accent: #7fb2e5;
+      --accent-soft: #1f2d3d;
+      --warn: #f0b860;
+      --warn-soft: #2e2516;
+      --code-bg: #151a22;
+      --tok-key: #c99be6;
+      --tok-str: #8fd19e;
+      --tok-num: #f0a46e;
+      --tok-com: #8a93a3;
+      --tok-fn: #7fb2e5;
+      --tok-attr: #e5e9f0;
+      --shade: rgba(0, 0, 0, 0.86);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161d;
+    --surface: #1a1f28;
+    --ink: #e5e9f0;
+    --muted: #9aa4b4;
+    --line: #2c3340;
+    --accent: #7fb2e5;
+    --accent-soft: #1f2d3d;
+    --warn: #f0b860;
+    --warn-soft: #2e2516;
+    --code-bg: #151a22;
+    --tok-key: #c99be6;
+    --tok-str: #8fd19e;
+    --tok-num: #f0a46e;
+    --tok-com: #8a93a3;
+    --tok-fn: #7fb2e5;
+    --tok-attr: #e5e9f0;
+    --shade: rgba(0, 0, 0, 0.86);
+    color-scheme: dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 16px/1.6 var(--body);
+  }
+  main {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding-block: 32px 80px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--display);
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+  h1 {
+    font-size: 2.1rem;
+    margin: 0 0 12px;
+  }
+  h2 {
+    font-size: 1.5rem;
+    margin: 56px 0 12px;
+  }
+  h3 {
+    font-size: 1.12rem;
+    margin: 0;
+  }
+  p,
+  li {
+    max-width: 72ch;
+  }
+  a {
+    color: var(--accent);
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  :not(pre) > code {
+    overflow-wrap: anywhere;
+  }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    display: block;
+    width: max-content;
+    min-width: 100%;
+    color: var(--ink);
+  }
+  .hljs-keyword,
+  .hljs-built_in {
+    color: var(--tok-key);
+  }
+  .hljs-string {
+    color: var(--tok-str);
+  }
+  .hljs-number,
+  .hljs-literal {
+    color: var(--tok-num);
+  }
+  .hljs-comment {
+    color: var(--tok-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_ {
+    color: var(--tok-fn);
+  }
+  .hljs-attr,
+  .hljs-variable,
+  .hljs-params,
+  .hljs-property {
+    color: var(--tok-attr);
+  }
+  .lede {
+    font-size: 1.05rem;
+    color: var(--muted);
+    margin: 0;
+  }
+  .rules {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 22px;
+    margin: 20px 0 8px;
+    max-width: 860px;
+  }
+  .rules h2 {
+    margin: 0 0 8px;
+    font-size: 1.15rem;
+  }
+  .rules ul {
+    margin: 0;
+    padding-left: 20px;
+  }
+  .rules li {
+    margin: 6px 0;
+  }
+  .small {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  .gallery {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 16px;
+    max-width: 860px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 0;
+  }
+  .card > p {
+    margin: 0;
+  }
+  .note {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin: 0;
+  }
+  .shot {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 8px;
+    margin: 0;
+  }
+  .shot img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    margin: 0 auto;
+    cursor: zoom-in;
+  }
+  .gallery .shot img {
+    max-height: 560px;
+    object-fit: contain;
+  }
+  .shot figcaption {
+    font-size: 0.8rem;
+    color: #4b5563;
+    padding: 6px 2px 0;
+  }
+  .shot figcaption a {
+    color: #2f6fa8;
+  }
+  .tag {
+    display: inline-block;
+    font: 500 0.7rem/1 var(--body);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 4px 7px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: 2px;
+  }
+  .tag.today {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+  .tag.proposed {
+    background: var(--warn-soft);
+    color: var(--warn);
+  }
+  .tag.emulated {
+    background: var(--code-bg);
+    color: var(--muted);
+    border: 1px solid var(--line);
+  }
+  .codetabs {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+  }
+  .tabbar {
+    display: flex;
+    gap: 2px;
+  }
+  .tabbar button {
+    font: 500 0.8rem var(--body);
+    color: var(--muted);
+    background: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    padding: 4px 12px;
+    border-radius: 5px 5px 0 0;
+    cursor: pointer;
+    margin-bottom: -1px;
+    position: relative;
+  }
+  .tabbar button[aria-selected="true"] {
+    color: var(--ink);
+    background: var(--code-bg);
+    border-color: var(--line);
+  }
+  .tabbar button:focus-visible,
+  summary:focus-visible,
+  .shot img:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .codetabs pre {
+    border-top-left-radius: 0;
+  }
+  details {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    margin: 12px 0;
+  }
+  details > summary {
+    cursor: pointer;
+    padding: 12px 16px;
+    font-weight: 600;
+  }
+  details > .inner {
+    padding: 0 18px 16px;
+    min-width: 0;
+  }
+  details.proto {
+    border: none;
+    background: none;
+    margin: 0;
+  }
+  details.proto > summary {
+    font-weight: 500;
+    font-size: 0.88rem;
+    padding: 2px 0;
+    color: var(--muted);
+  }
+  details.proto > .inner {
+    padding: 6px 0 0;
+  }
+  .grid3 {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .grid2 {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+  }
+  .card.rec {
+    border: 2px solid var(--accent);
+  }
+  .card ul {
+    margin: 0;
+    padding-left: 18px;
+    font-size: 0.92rem;
+  }
+  .card li {
+    margin: 4px 0;
+  }
+  .pitch {
+    display: grid;
+    grid-template-columns: 9rem repeat(2, minmax(0, 1fr));
+    gap: 14px;
+    margin: 16px 0;
+    align-items: start;
+  }
+  .pitch .head {
+    font: 600 1rem var(--display);
+  }
+  .pitch .head p {
+    font: 400 0.88rem/1.5 var(--body);
+    color: var(--muted);
+    margin: 4px 0 0;
+  }
+  .pitch .rowhead {
+    font: 600 0.95rem var(--display);
+    padding-top: 10px;
+  }
+  .pitch .cellcard {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .callout {
+    background: var(--accent-soft);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 16px 0;
+  }
+  .callout > :first-child {
+    margin-top: 0;
+  }
+  .callout > :last-child {
+    margin-bottom: 0;
+  }
+  .decisions {
+    counter-reset: d;
+    list-style: none;
+    padding: 0;
+    max-width: 860px;
+  }
+  .decisions li {
+    counter-increment: d;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 14px 10px 46px;
+    margin: 8px 0;
+    position: relative;
+    max-width: none;
+  }
+  .decisions li::before {
+    content: counter(d);
+    position: absolute;
+    left: 16px;
+    top: 10px;
+    font: 600 1rem var(--display);
+    color: var(--accent);
+  }
+  .tablewrap {
+    overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse;
+    font-size: 0.88rem;
+    min-width: 760px;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600;
+    color: var(--muted);
+  }
+  dialog {
+    border: none;
+    padding: 0;
+    background: transparent;
+    max-width: 96vw;
+    max-height: 94vh;
+  }
+  dialog::backdrop {
+    background: var(--shade);
+  }
+  dialog img {
+    display: block;
+    max-width: 96vw;
+    max-height: 94vh;
+    background: #fff;
+    border-radius: 6px;
+    padding: 10px;
+    cursor: zoom-out;
+  }
+  @media (max-width: 860px) {
+    .grid3,
+    .grid2 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pitch {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .pitch .corner {
+      display: none;
+    }
+    .pitch .rowhead {
+      padding-top: 18px;
+      font-size: 1.05rem;
+    }
+    .pitch .head {
+      display: none;
+    }
+    .pitch .cellcard::before {
+      content: attr(data-fix);
+      font: 600 0.9rem var(--display);
+      color: var(--muted);
+    }
+  }
+</style>
+
+<main>
+  <h1>Spiral and other periodic tables</h1>
+  <p class="lede">
+    Issue #1347 asks whether an unusual periodic table, e.g., Benfey's 1964
+    spiral, is a coordinate transform or a layout, and the answer is both. The
+    layout is the same grid in every table, and the coordinate transform is what
+    differs. The standard table, Janet's left-step table, rings, a spiral, a
+    race track and Benfey's lobes below all come from one flow with a different
+    <code>coord</code>.
+  </p>
+
+  <section class="rules" aria-labelledby="rec">
+    <h2 id="rec">Recommendation</h2>
+    <ul>
+      <li>
+        The layout is today's grid, a <code>table</code> with a column and a row
+        for each element. Each table differs only in its <code>coord</code>.
+      </li>
+      <li>
+        Add <code>Coord.spiral({ pitch, period })</code>. It is polar where the
+        radius also grows with the angle. The radius gains
+        <code>pitch</code> steps of the radial axis for every
+        <code>period</code> units of the angular axis.
+      </li>
+      <li>
+        Add <code>Coord.along(path)</code>. It lays the x axis along a guide
+        path and the y axis along the path's normal. It is the
+        <code>Coord.bend({ along })</code> of #1284, taken out of deferral.
+      </li>
+      <li>
+        Add no layout operator that places children along a path. Rigid marks
+        along a path are <code>scatter</code> inside <code>Coord.along</code>
+        with a glyph mark.
+      </li>
+      <li>
+        Ship <code>Coord.along</code> with a single path first, then a list of
+        pieces for lobes.
+      </li>
+      <li>
+        The scarcity table is a layout strategy for <code>table</code>, not a
+        coord. It should get its own issue.
+      </li>
+    </ul>
+    <p class="small">
+      Every picture is a GoFish render from
+      <code
+        >packages/gofish-graphics/stories/proposals/PeriodicTable.stories.tsx</code
+      >. The coords are prototype <code>CoordinateTransform</code> records in
+      <code>prototypeCoords.ts</code>, not library code. Each cell is a real
+      <code>rect</code> bent by a real coord. Three things are emulated and are
+      marked where they appear: labels are moved through the coord by a patch in
+      the story (#952), the table cartogram is solved in story code, and the
+      rigid squares are drawn as polygons. Click any picture to enlarge it.
+    </p>
+  </section>
+
+  <h2 id="examples">The examples</h2>
+  <p>The shared pieces are today's API:</p>
+  <div style="max-width: 860px">
+    <pre><code class="language-javascript">const grid = table({
+  by: { x: field("col").bin(Bin.step(1)), y: field("row").bin(Bin.step(1)) },
+});
+const cell = rect({ fill: field("block") }).label("symbol", {
+  position: "center",
+});</code></pre>
+  </div>
+
+  <div class="gallery">
+    <article class="card">
+      <h3>1. Standard table <span class="tag today">works today</span></h3>
+      <figure class="shot">
+        <img src="img/standard.png" alt="Standard 18-column table" />
+      </figure>
+      <pre><code class="language-javascript">chart(standardTable()).flow(grid).mark(cell);</code></pre>
+    </article>
+
+    <article class="card">
+      <h3>
+        2. Janet's left-step table <span class="tag today">works today</span>
+      </h3>
+      <p>
+        Rows are n + l, and the blocks run f, d, p, s. Only the data's
+        <code>col</code> and <code>row</code> differ from the standard table.
+      </p>
+      <figure class="shot">
+        <img src="img/left-step.png" alt="Left-step table" />
+      </figure>
+      <pre><code class="language-javascript">chart(leftStepTable()).flow(grid).mark(cell);</code></pre>
+    </article>
+
+    <article class="card">
+      <h3>3. Rings <span class="tag today">works today</span></h3>
+      <p>
+        The left-step table under <code>Coord.clock()</code>. Each row is a
+        closed ring, so a row does not lead into the next one.
+      </p>
+      <figure class="shot">
+        <img src="img/polar-grid.png" alt="Left-step table under Coord.clock" />
+      </figure>
+      <pre><code class="language-javascript">chart(leftStepTable(), { coord: Coord.clock() }).flow(grid).mark(cell);</code></pre>
+      <p class="note">
+        Real: the coord and the cells. Emulated: labels are moved through the
+        coord by a patch in the story (#952).
+      </p>
+    </article>
+
+    <article class="card">
+      <h3>4. Spiral <span class="tag proposed">proposed</span></h3>
+      <p>
+        The same flow. The end of each row meets the start of the next row. Ba
+        is followed by La, and Ra by Ac.
+      </p>
+      <figure class="shot">
+        <img src="img/pitch-table.png" alt="Left-step table as a spiral" />
+      </figure>
+      <div class="codetabs">
+        <pre><code class="language-javascript">chart(leftStepTable(), { coord: Coord.spiral({ pitch: 1 }) })
+  .flow(grid)
+  .mark(cell);</code></pre>
+        <pre><code class="language-python">chart(left_step_table(), coord=Coord.spiral(pitch=1)).flow(grid).mark(cell)</code></pre>
+      </div>
+      <p class="note">
+        Real: the cells, bent by a prototype coord. Emulated: the labels (#952).
+        The prototype has to be told the row count, the spacing and the radius,
+        because a coord cannot see them today. See "The pitch problem" below.
+      </p>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(leftStepTable(), {
+  coord: warpLabels(
+    spiralRows({
+      pitch: 1,
+      rows: 8,
+      spacing: 1,
+      innerRadius: 0.2,
+      outerRadius: 330,
+    })
+  ),
+})
+  .flow(grid([0, 1]))
+  .mark(cell());</code></pre>
+        </div>
+      </details>
+    </article>
+
+    <article class="card">
+      <h3>
+        5. Equal cells along a spiral <span class="tag proposed">proposed</span>
+      </h3>
+      <p>
+        All 118 elements in order, each cell the same arc length. Here the guide
+        is an Archimedean spiral given as points.
+      </p>
+      <figure class="shot">
+        <img
+          src="img/spiral-sequence.png"
+          alt="118 elements along an Archimedean spiral"
+        />
+      </figure>
+      <pre><code class="language-javascript">chart(elements, { coord: Coord.along(archimedean({ turns: 4 })) })
+  .flow(scatter({ x: "z" }))
+  .mark(cell);</code></pre>
+      <p class="note">
+        Real: the cells, bent by a prototype <code>along</code> coord. Emulated:
+        the labels (#952).
+      </p>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(sequence(), {
+  coord: warpLabels(
+    along(archimedean({ turns: 4, innerRadius: 2.25 }), {
+      width: 0.92,
+      x: [-0.5, 117.5],
+      y: [0, 1],
+    })
+  ),
+})
+  .flow(scatter({ x: "seq" }))
+  .mark(cell({ w: v(0.95), h: v(0.95) }));</code></pre>
+        </div>
+      </details>
+    </article>
+
+    <article class="card">
+      <h3>6. Race track <span class="tag proposed">proposed</span></h3>
+      <p>
+        The left-step rows as laps of a stadium outline. The guide is a rounded
+        rect passed inline. This is a loose version of Clark's 1933 table.
+      </p>
+      <figure class="shot">
+        <img
+          src="img/race-track.png"
+          alt="Left-step rows as laps of a stadium"
+        />
+      </figure>
+      <div class="codetabs">
+        <pre><code class="language-javascript">chart(leftStepTable(), {
+  coord: Coord.along(rect({ w: 480, h: 160, rx: 80 })),
+})
+  .flow(grid)
+  .mark(cell);</code></pre>
+        <pre><code class="language-python">chart(left_step_table(), coord=Coord.along(rect(w=480, h=160, rx=80))).flow(grid).mark(
+    cell
+)</code></pre>
+      </div>
+      <p class="note">
+        Real: the cells, bent by a prototype <code>along</code> coord. Emulated:
+        the labels (#952). The prototype uses <code>scatter</code>, because a
+        coord with its own fit rejects a <code>table</code> today.
+      </p>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(leftStepTable(), {
+  coord: warpLabels(
+    along(stadium({ w: 6, h: 2 }), {
+      closed: true,
+      width: 2.4,
+      x: [0.5, 32.5],
+      y: [0.5, 8.5],
+    })
+  ),
+})
+  .flow(scatter({ x: "col", y: "row" }))
+  .mark(cell({ w: v(0.95), h: v(0.92) }, 10));</code></pre>
+        </div>
+      </details>
+    </article>
+
+    <article class="card">
+      <h3>7. Benfey's spiral <span class="tag proposed">proposed</span></h3>
+      <p>
+        The hard example. In Benfey's table the band of cells leaves the core
+        after group 2, runs around a thin slit and returns at group 13. Periods
+        4 to 7 nest around the same slit.
+      </p>
+      <figure class="shot">
+        <img
+          src="img/ref/benfey-reference.png"
+          alt="Reference: Benfey's spiral"
+        />
+        <figcaption>
+          Reference:
+          <a href="https://commons.wikimedia.org/wiki/File:Elementspiral.svg"
+            >Elementspiral.svg, Wikimedia Commons, CC BY-SA 3.0</a
+          >
+        </figcaption>
+      </figure>
+      <p>
+        The flat picture that the coord starts from is the long-form table with
+        every column pushed against one edge:
+      </p>
+      <figure class="shot">
+        <img src="img/benfey-flat.png" alt="The same flow with no coord" />
+      </figure>
+      <p>
+        The guide is the inner edge of that table, drawn as four pieces. They
+        are the s arc, the f lobe, the d lobe and the p arc.
+      </p>
+      <figure class="shot">
+        <img src="img/benfey-guide.png" alt="The guide's four pieces" />
+      </figure>
+      <figure class="shot">
+        <img
+          src="img/benfey.png"
+          alt="Benfey's table through the prototype coord"
+        />
+      </figure>
+      <pre><code class="language-javascript">// track = period minus the first period of the column's block.
+chart(benfeyTable(), { coord: Coord.along([sArc, fLobe, dLobe, pArc]) })
+  .flow(table({ by: { x: "col", y: "track" } }))
+  .mark(cell);</code></pre>
+      <p>
+        No cells overlap and the sequence is unbroken (Ca is next to Sc, Zn next
+        to Ga, Ba next to La). Three things in this render need a decision. They
+        are listed under <a href="#lobes">Lobes</a> below.
+      </p>
+      <p class="note">
+        Real: the cells, bent by a prototype <code>along</code> coord with four
+        pieces. Emulated: the labels (#952), and a second path for the d piece's
+        outer tracks.
+      </p>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">// benfey.pieces: the four guide pieces built in benfeyGuide.ts.
+chart(benfeyTable(), {
+  coord: warpLabels(
+    along(benfey.pieces, { width: 7, x: [0.5, 32.5], y: [-0.5, 6.5] })
+  ),
+})
+  .flow(scatter({ x: "col", y: "track" }))
+  .mark(cell({ w: v(0.95), h: v(0.95) }, 10));</code></pre>
+        </div>
+      </details>
+    </article>
+  </div>
+
+  <h2 id="why-coord">Why a coord and not a layout operator</h2>
+  <p>Three approaches were considered.</p>
+  <div class="grid3">
+    <article class="card">
+      <h3>A. A layout operator that places children along a path</h3>
+      <figure class="shot">
+        <img
+          src="img/along-rigid.png"
+          alt="Rigid squares along the spiral (emulated)"
+        />
+      </figure>
+      <pre><code class="language-javascript">chart(elements)
+  .flow(spread({ by: "z", along: archimedean({ turns: 4 }) }))
+  .mark(cell);</code></pre>
+      <p class="note">
+        CSS <code>offset-path</code>, Illustrator's scatter brush and Blender's
+        "instance on points" all work this way. The operator puts each child at
+        a station along the path and turns it to the tangent. The child keeps
+        its shape.
+      </p>
+      <ul>
+        <li>
+          <b>How it composes.</b> The operator needs its own answer for the
+          second axis (tracks), for sizes along the path and for what a
+          <code>stack</code> inside it means. A coord already answers all three.
+        </li>
+        <li>
+          <b>Overlap check.</b> It overlaps <code>spread</code> under a coord
+          almost completely. The only difference is that children stay rigid.
+          That is a large partial overlap, which <code>api-design.md</code>
+          says to avoid.
+        </li>
+        <li>
+          <b>Trade-offs.</b> Wedge gaps open between rigid cells on tight turns.
+          Rigid placement is still useful for glyphs, and GoFish already has a
+          rule for it. Circles and text inside a coord are placed and not bent
+          (#1323). So rigid marks along a path are <code>scatter</code> inside
+          <code>Coord.along</code> with a glyph mark, with no new operator.
+        </li>
+      </ul>
+      <details class="proto">
+        <summary>Emulation: squares drawn as polygons</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">// Each square's corners are computed in the story at an equal arc-length
+// station of the spiral, turned to its tangent. GoFish only draws them.
+chart(rows)
+  .flow(group({ by: "z" }))
+  .mark(
+    polygon({ points: "ring", fill: field("block") }).label("symbol", {
+      position: "center",
+    })
+  );</code></pre>
+        </div>
+      </details>
+    </article>
+
+    <article class="card rec">
+      <h3>B. A coord <span class="tag today">recommended</span></h3>
+      <figure class="shot">
+        <img
+          src="img/spiral-sequence.png"
+          alt="Equal cells bent along the spiral"
+        />
+      </figure>
+      <pre><code class="language-javascript">chart(elements, { coord: Coord.along(archimedean({ turns: 4 })) })
+  .flow(scatter({ x: "z" }))
+  .mark(cell);</code></pre>
+      <p class="note">
+        The layout runs in a straight box. The coord then bends the box.
+        Blender's Array and Curve modifiers, Inkscape's Bend effect and
+        <code>spiralize</code> all split the work this way. Every example above
+        is this approach.
+      </p>
+      <ul>
+        <li>
+          <b>How it composes.</b> <code>table</code>, <code>spread</code>,
+          <code>stack</code> and <code>scatter</code> work unchanged inside it.
+          A <code>stack</code> along y stacks along the guide's normal, which is
+          what the stacking design space page wants for bundled edges.
+        </li>
+        <li>
+          <b>Overlap check.</b> <code>Coord.clock()</code> is
+          <code>Coord.spiral</code> at pitch 0, and it is
+          <code>Coord.along</code> a circle. Both overlaps are exact. The clock
+          stays its own coord and is not redefined through either.
+        </li>
+        <li>
+          <b>Trade-offs.</b> The user has to supply the guide. For Benfey that
+          is the hard part of the spec (150 lines of geometry in the prototype).
+          A guide drawn in a vector tool and pasted as a path would be the usual
+          way.
+        </li>
+      </ul>
+    </article>
+
+    <article class="card">
+      <h3>C. An envelope</h3>
+      <figure class="shot">
+        <img
+          src="img/polar-grid.png"
+          alt="Example 3, the envelope between two circles"
+        />
+        <figcaption>Example 3 is the envelope between two circles.</figcaption>
+      </figure>
+      <pre><code class="language-javascript">chart(leftStepTable(), { coord: Coord.clock() }).flow(grid).mark(cell);</code></pre>
+      <p class="note">
+        <code>Coord.envelope</code> maps the box into the region between two
+        curves. Josh asked whether it applies here.
+      </p>
+      <ul>
+        <li>
+          <b>Why it does not fit.</b> An envelope gives every row the same
+          number of columns. A periodic table's rows have 2, 8, 8, 18, 18, 32
+          and 32 cells, and the short rows leave holes.
+        </li>
+        <li>
+          <b>What along does instead.</b> Along a guide, the tracks farther out
+          are longer, and a lobe adds its block's cells to every track outside
+          it. That is why a lobe exists in these drawings, and it is what
+          <code>along</code> gives for free.
+        </li>
+        <li>
+          <b>Where it fits.</b> The envelope stays the right tool for the
+          bottle, where the box is full.
+        </li>
+      </ul>
+    </article>
+  </div>
+
+  <h2 id="pitch">The pitch problem, and two fixes</h2>
+  <p>
+    A spiral should let the user write "one row per turn". The prototype could
+    not, for two reasons found in <code>coord.tsx</code>.
+  </p>
+  <ul>
+    <li>
+      A coord's <code>transform</code> is fixed before the scale fit runs (line
+      403), so its options can only be in fitted units. These are radians and
+      pixels.
+    </li>
+    <li>
+      For a <code>table</code>, a row step is the band plus the table's
+      <code>spacing</code>. The coord can read the band after the fit. It cannot
+      read the spacing, which stays inside the grid constraint. The first
+      prototype passed a fraction of the radius by hand and drifted by one
+      eighth of the spacing on each turn.
+    </li>
+  </ul>
+  <p>
+    The two fixes below are shown on the same two examples. Neither needs the
+    scale-transforms work.
+  </p>
+
+  <div class="pitch">
+    <div class="corner"></div>
+    <div class="head">
+      Fix 1. Pitch in steps of the radial axis
+      <p>
+        The data keeps two axes. The radius advances <code>pitch</code> steps of
+        the radial axis per turn.
+      </p>
+    </div>
+    <div class="head">
+      Fix 2. One sequence axis and a period
+      <p>
+        The data has one long axis. The angle covers <code>period</code> data
+        units per turn. The radius advances by the thickness of the band plus a
+        gap, so turns touch by construction. There is no pitch.
+      </p>
+    </div>
+
+    <div class="rowhead">Periodic table</div>
+    <div class="cellcard" data-fix="Fix 1. Pitch in steps of the radial axis">
+      <figure class="shot">
+        <img src="img/pitch-table.png" alt="Fix 1, periodic table" />
+      </figure>
+      <pre><code class="language-javascript">chart(leftStepTable(), { coord: Coord.spiral({ pitch: 1 }) })
+  .flow(grid)
+  .mark(cell);</code></pre>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(leftStepTable(), {
+  coord: warpLabels(
+    spiralRows({
+      pitch: 1,
+      rows: 8,
+      spacing: 1,
+      innerRadius: 0.2,
+      outerRadius: 330,
+    })
+  ),
+})
+  .flow(grid([0, 1]))
+  .mark(cell());</code></pre>
+        </div>
+      </details>
+    </div>
+    <div class="cellcard" data-fix="Fix 2. One sequence axis and a period">
+      <figure class="shot">
+        <img src="img/period-table.png" alt="Fix 2, periodic table" />
+      </figure>
+      <pre><code class="language-javascript">// seq = (row - 1) * 32 + col
+chart(leftStepSequence(), { coord: Coord.spiral({ period: 32 }) })
+  .flow(scatter({ x: "seq" }))
+  .mark(cell);</code></pre>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(leftStepSequence(), {
+  coord: warpLabels(
+    spiralPeriod({
+      period: 32,
+      gap: 0.03,
+      innerRadius: 2,
+      x: [0.5, 8 * 32 + 0.5],
+      y: [0, 1],
+    })
+  ),
+})
+  .flow(scatter({ x: "seq" }))
+  .mark(cell({ w: v(1), h: v(1) }));</code></pre>
+        </div>
+      </details>
+    </div>
+
+    <div class="rowhead">Six years of monthly values</div>
+    <div class="cellcard" data-fix="Fix 1. Pitch in steps of the radial axis">
+      <figure class="shot">
+        <img
+          src="img/pitch-seasons.png"
+          alt="Fix 1, six years of monthly values"
+        />
+      </figure>
+      <pre><code class="language-javascript">chart(seasons, { coord: Coord.spiral({ pitch: 1 }) })
+  .flow(table({ by: { x: "month", y: "year" } }))
+  .mark(rect({ h: "value", fill: "year" }));</code></pre>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(seasons(), {
+  coord: spiralRows({
+    pitch: 1,
+    rows: 6,
+    spacing: 6,
+    innerRadius: 0.25,
+    outerRadius: 270,
+  }),
+})
+  .flow(
+    table({
+      by: {
+        x: field("month").bin(Bin.step(1)),
+        y: field("year").bin(Bin.step(1)),
+      },
+      spacing: [0, 6],
+    })
+  )
+  .mark(rect({ h: "value", fill: field("year") }));</code></pre>
+        </div>
+      </details>
+    </div>
+    <div class="cellcard" data-fix="Fix 2. One sequence axis and a period">
+      <figure class="shot">
+        <img
+          src="img/period-seasons.png"
+          alt="Fix 2, six years of monthly values"
+        />
+      </figure>
+      <pre><code class="language-javascript">chart(seasons, { coord: Coord.spiral({ period: 12 }) })
+  .flow(scatter({ x: "t" }))
+  .mark(rect({ h: "value", fill: "year" }));</code></pre>
+      <details class="proto">
+        <summary>Prototype form</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">chart(seasons(), {
+  coord: spiralPeriod({
+    period: 12,
+    gap: 0.15,
+    innerRadius: 1.2,
+    x: [-0.5, 71.5],
+    y: [0, top],
+  }),
+})
+  .flow(scatter({ x: "t" }))
+  .mark(rect({ w: v(0.9), h: "value", fill: field("year") }));</code></pre>
+        </div>
+      </details>
+    </div>
+  </div>
+  <p class="small">
+    The two table pictures have the same joins. They differ by a rotation, which
+    comes from an angle offset in
+    <code>Coord.clock</code> under a <code>table</code> that is not explained
+    yet.
+  </p>
+
+  <div class="grid2">
+    <article class="card">
+      <h3>Fix 1</h3>
+      <ul>
+        <li>
+          <b>What the engine needs.</b> The coord builds its transform after the
+          fit and reads the fitted radial scale. The carry is linear in that
+          scale, so the fit is still one solve. The analysis puts the change at
+          about 20 lines in <code>coord.tsx</code>. An ordinal axis also has to
+          expose its step (band plus spacing), the way a d3 band scale has
+          <code>step()</code>. Without that, the table must use zero spacing and
+          draw its gaps with <code>inset</code>.
+        </li>
+        <li>
+          <b>What it keeps.</b> Month and year, or group and period, stay data
+          axes. <code>table</code> works, and a period axis can be drawn.
+        </li>
+        <li>
+          <b>Where it is awkward.</b> A bar chart has to place its bars inside a
+          year band.
+        </li>
+      </ul>
+    </article>
+    <article class="card">
+      <h3>Fix 2</h3>
+      <ul>
+        <li>
+          <b>What the engine needs.</b> The polar budget rule has to read the
+          angular axis's data extent, so that the angular budget is 2π times the
+          extent divided by the period. Today that budget is a constant.
+        </li>
+        <li>
+          <b>What it keeps.</b> The spec for a time series is the shortest one.
+          It is the <code>spiralize</code> model.
+        </li>
+        <li>
+          <b>What it loses.</b> There is no row axis, so <code>table</code>
+          cannot be used and a period or year axis cannot be drawn. Holes in the
+          table become missing sequence values.
+        </li>
+      </ul>
+    </article>
+  </div>
+
+  <div class="callout">
+    <h3>Recommendation: one coord with both options</h3>
+    <p>
+      The two fixes are the two numbers of one rule. The radius gains
+      <code>pitch</code> for every <code>period</code> along the angle. So this
+      proposal recommends one <code>Coord.spiral</code> with both options.
+    </p>
+    <ul>
+      <li>
+        <code>period</code> is in the angular axis's data units. Its default is
+        the axis's whole extent, which is one turn.
+      </li>
+      <li>
+        <code>pitch</code> is in steps of the radial axis. Its default is the
+        radial axis's whole extent plus the gap, so that turns touch.
+      </li>
+    </ul>
+    <p>
+      The periodic table writes <code>Coord.spiral({ pitch: 1 })</code>. The
+      time series writes <code>Coord.spiral({ period: 12 })</code>. Fix 1 alone
+      is the runner-up, because it is the one that keeps both axes as data.
+    </p>
+  </div>
+
+  <h2 id="lobes">Lobes</h2>
+  <p>
+    The Benfey render shows that a guide of several pieces carries a whole
+    table. It also shows three limits.
+  </p>
+  <ul>
+    <li>
+      <b>A lobe that starts on another lobe's tracks.</b> The f lobe stands on
+      the d lobe's first two tracks. The d lobe's outer two tracks therefore
+      start later than its inner two. One path per piece cannot say that. The
+      prototype gives the d piece a second path for its outer tracks, which is
+      an emulation.
+    </li>
+    <li>
+      <b>Sharp inside corners.</b> Where the guide turns toward its own tracks,
+      the prototype joins the tracks with a miter. Nothing folds as long as the
+      straight run on each side of the corner is long enough. A curved run next
+      to such a corner folds. This is the bend radius rule from the stacking
+      design space page, and it is still open there (error, or force a minimum
+      radius).
+    </li>
+    <li>
+      <b>A wide mouth.</b> Because of the corner rule, a lobe's mouth is at
+      least twice its depth. Benfey's drawing avoids this by letting the inner
+      rings widen into the gap, which a circular core cannot do.
+    </li>
+  </ul>
+  <p>Three ways to write lobes:</p>
+  <div style="max-width: 860px">
+    <pre><code class="language-javascript">// (a) Pieces. Simple, and enough for one lobe, e.g., Clark's table.
+Coord.along([sArc, dLobe, pArc]);
+
+// (b) Pieces that say which track they start on. Needed for Benfey's f lobe.
+Coord.along([sArc, { path: fLobe, from: 2 }, dLobe, pArc]);
+
+// (c) A lobe is its own layer with its own coord, placed in the parent.
+layer({ coord: Coord.clock() }, [
+  core,
+  layer({ coord: Coord.along(dLobe) }, [dBlock]),
+]);</code></pre>
+  </div>
+  <p>
+    This proposal recommends shipping <code>Coord.along</code> with a single
+    path first, then (a). Whether (b) or (c) is the right way to nest lobes
+    should wait until a second real example needs it. Hyde's 1975 table is a
+    candidate.
+  </p>
+
+  <h2 id="scarcity">The scarcity table</h2>
+  <p>
+    The EuChemS table keeps the 18 columns and makes each cell's area show the
+    element's abundance on a log scale. It was drawn by hand. Three versions:
+  </p>
+  <div class="grid3">
+    <article class="card">
+      <h3>Glyph in a cell <span class="tag today">works today</span></h3>
+      <figure class="shot">
+        <img src="img/scarcity-glyphs.png" alt="Glyph in a cell" />
+      </figure>
+      <pre><code class="language-javascript">chart(withAbundance(standardTable()))
+  .flow(grid)
+  .mark(
+    layer([
+      rect({ w: 37, h: 37, fill: "#f2f2f2" }).name("box"),
+      circle({ area: "abundance", fill: field("block") }).name("dot"),
+    ]).relate(({ box, dot }) =&gt; [
+      Constraint.align({ x: "middle", y: "middle" }, [box, dot]),
+    ])
+  );</code></pre>
+    </article>
+    <article class="card">
+      <h3>Rows with exact areas <span class="tag today">works today</span></h3>
+      <figure class="shot">
+        <img src="img/scarcity-rows.png" alt="Rows with exact areas" />
+      </figure>
+      <pre><code class="language-javascript">// scarcityGrid adds blank cells for the empty stretches, so the gaps keep their width.
+chart(scarcityGrid())
+  .flow(
+    stack({ by: "row", dir: "y", size: "abundance" }),
+    stack({ by: "col", dir: "x", size: field("abundance").normalize() })
+  )
+  .mark(cell);</code></pre>
+      <p class="note">
+        The rows version has exact areas but the columns no longer line up.
+      </p>
+    </article>
+    <article class="card">
+      <h3>Table cartogram <span class="tag emulated">emulated</span></h3>
+      <figure class="shot">
+        <img src="img/scarcity-table.png" alt="Table cartogram (emulated)" />
+      </figure>
+      <pre><code class="language-javascript">// Proposed. The spelling of the weight option is open.
+chart(withAbundance(standardTable()))
+  .flow(table({ by: { x: "col", y: "row" }, size: "abundance" }))
+  .mark(cell);</code></pre>
+      <p class="note">
+        The table cartogram keeps every cell's four neighbors and gives up
+        straight rows and columns. Evans et al. prove one always exists with
+        exact areas, and their first figure is a periodic table. The emulation
+        here is a numeric solve with a worst area error of 5.8 percent.
+      </p>
+      <details class="proto">
+        <summary>Emulation: corners solved in story code</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">// tableCartogram (scarcity.ts) solves each cell's four corners.
+const cells = tableCartogram(scarcityGrid()).map((c, i) =&gt; ({ ...c, id: i }));
+chart(cells)
+  .flow(group({ by: "id" }))
+  .mark(polygon({ points: "ring", fill: field("block") }));</code></pre>
+        </div>
+      </details>
+    </article>
+  </div>
+  <p>
+    <b>Is it related to the coords?</b> Only loosely. In both cases the grid
+    keeps its neighbors and changes its geometry. The difference is where the
+    geometry comes from. A coord's map is fixed before the data arrives. A
+    cartogram's map is solved from the weights, the way
+    <code>treemap</code> solves its tiles. So it belongs with
+    <code>treemap</code> and the <code>Tile</code> family, as a way for
+    <code>table</code> to size its cells. It also composes with the coords
+    above. A cartogram table inside <code>Coord.spiral</code> would be a spiral
+    cartogram. This proposal recommends a separate issue for it.
+  </p>
+
+  <h2 id="decisions">Decisions</h2>
+  <ol class="decisions">
+    <li>
+      Is the factoring right? The layout is today's grid, the variation is the
+      coord, and there is no operator that places children along a path.
+    </li>
+    <li>
+      Take #1284 out of deferral as <code>Coord.along(path, options)</code>,
+      with the path as the first argument? I would then update #1284 and the
+      stacking page.
+    </li>
+    <li>
+      Is the spiral its own coord, <code>Coord.spiral</code>, or a
+      <code>pitch</code> option on <code>Coord.polar</code> and
+      <code>Coord.clock</code>? The spiral drops the angle's cycle trait, which
+      argues for its own name.
+    </li>
+    <li>
+      Fix 1, fix 2, or one coord with both <code>pitch</code> and
+      <code>period</code>?
+    </li>
+    <li>
+      Are the defaults right? <code>period</code> defaults to one turn for the
+      whole axis, and <code>pitch</code> to turns that touch.
+    </li>
+    <li>
+      Should an ordinal axis expose its step, so that <code>pitch: 1</code>
+      includes the table's spacing? The shortcut is zero spacing and
+      <code>inset</code>.
+    </li>
+    <li>
+      Equal angle or equal arc length. Is it right that this is two coords
+      (<code>Coord.spiral</code>, or <code>Coord.along</code> a spiral path) and
+      not an option?
+    </li>
+    <li>
+      How is a guide written? Candidates are an inline shape (<code
+        >rect({ rx })</code
+      >), a ref to a hidden mark as in #1284, and a list of points. Should
+      common guides such as an Archimedean spiral be named anywhere?
+    </li>
+    <li>
+      Lobes. Ship a single path first and decide between pieces with a starting
+      track and nested layers later?
+    </li>
+    <li>
+      The fold rule. When a track is farther from the guide than the bend
+      radius, is that an error or a miter join? The stacking page has the same
+      open question.
+    </li>
+    <li>
+      Should the scarcity table get its own issue as a weight option on
+      <code>table</code>?
+    </li>
+  </ol>
+
+  <details>
+    <summary>Prior work</summary>
+    <div class="inner">
+      <div class="tablewrap">
+        <table>
+          <thead>
+            <tr>
+              <th>System</th>
+              <th>Model</th>
+              <th>Names</th>
+              <th>Fit for GoFish</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Blender, Array and Curve modifiers</td>
+              <td>
+                Array repeats a mesh along a straight axis. Curve then maps that
+                axis onto a curve's arc length and the other axes onto its
+                normals.
+              </td>
+              <td>array, curve, deform axis</td>
+              <td>
+                The same split as this proposal. Layout first, then a coord.
+              </td>
+            </tr>
+            <tr>
+              <td>Inkscape, Bend and Pattern Along Path</td>
+              <td>One skeleton path. A point (x, y) goes to U(x) + y N(x).</td>
+              <td>bend, skeleton, along path</td>
+              <td>The map <code>Coord.along</code> uses (#1284).</td>
+            </tr>
+            <tr>
+              <td><code>spiralize</code> (R, Zuguang Gu)</td>
+              <td>
+                A spiral coordinate system with tracks. <code>scale_by</code> is
+                "angle" or "curve_length". <code>period</code> is the data per
+                loop.
+              </td>
+              <td>spiral, track, period</td>
+              <td>
+                The source of <code>period</code>, and of the choice between
+                equal angle and equal arc length.
+              </td>
+            </tr>
+            <tr>
+              <td>NetworkX <code>spiral_layout</code></td>
+              <td>
+                <code>equidistant</code> chooses equal arc length over equal
+                angle.
+              </td>
+              <td>equidistant</td>
+              <td>The same choice as a flag. Here it is two coords.</td>
+            </tr>
+            <tr>
+              <td>
+                ggplot2 <code>coord_polar</code>, <code>coord_radial</code>
+              </td>
+              <td>No spiral. Users plot year plus fraction on the radius.</td>
+              <td></td>
+              <td>A workaround. The user does the carry in the data.</td>
+            </tr>
+            <tr>
+              <td>ggraph <code>layout_linear(circular)</code></td>
+              <td>Lay nodes on a line, then bend the line into a circle.</td>
+              <td>linear, circular</td>
+              <td>A coord switch on a one-dimensional layout.</td>
+            </tr>
+            <tr>
+              <td>CSS <code>offset-path</code>, SVG <code>textPath</code></td>
+              <td>
+                Put a box at a distance along a path, turned to the tangent.
+              </td>
+              <td>offset-path, offset-distance, offset-rotate</td>
+              <td>Approach A. Rigid placement.</td>
+            </tr>
+            <tr>
+              <td>Illustrator brushes and Blend spine</td>
+              <td>
+                Scatter, art and pattern brushes place or stretch art along a
+                path. A blend follows a "spine".
+              </td>
+              <td>spine, on a path</td>
+              <td>Designers' words are "along a path" and "spine".</td>
+            </tr>
+            <tr>
+              <td>TikZ <code>markings</code>, MetaPost <code>arctime</code></td>
+              <td>Positions along a path by arc length are a primitive.</td>
+              <td>mark at position, along path</td>
+              <td>Supports "along" as the name.</td>
+            </tr>
+            <tr>
+              <td>Weber et al. (2001), Carlis and Konstan (1998)</td>
+              <td>
+                Time series on a spiral. One cycle per turn shows periodic
+                structure.
+              </td>
+              <td>spiral</td>
+              <td>The seasons example.</td>
+            </tr>
+            <tr>
+              <td>Brehmer et al., "Timelines revisited" (2017)</td>
+              <td>
+                Representation (linear, radial, grid, spiral, arbitrary) is a
+                design axis separate from scale and layout.
+              </td>
+              <td>representation</td>
+              <td>
+                Published support for making the path a parameter of its own.
+              </td>
+            </tr>
+            <tr>
+              <td>Evans et al., "Table cartograms" (2013)</td>
+              <td>
+                Cells are convex quadrilaterals with the grid's adjacency and
+                exact areas.
+              </td>
+              <td>table cartogram</td>
+              <td>The exact model for the scarcity table.</td>
+            </tr>
+            <tr>
+              <td>R <code>cartogram</code>, d3-cartogram, go-cart</td>
+              <td>
+                Contiguous, non-contiguous and Dorling cartograms of map
+                regions.
+              </td>
+              <td>cartogram</td>
+              <td>Map regions only. None takes a grid.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Mazurs sorted about 700 published periodic tables into types (short,
+        medium, long, helical, spiral and others). Read as a design space, the
+        tables differ in the order of the sequence, the guide it follows,
+        whether groups line up, how blocks attach (inline, lobe, inset or
+        separate grid), and what sets cell size. The first two and the last are
+        the flow, the coord and the cartogram of this proposal. How blocks
+        attach is the lobe question.
+      </p>
+    </div>
+  </details>
+
+  <details>
+    <summary>Related issues and pages</summary>
+    <div class="inner">
+      <ul>
+        <li>#1347 is this issue.</li>
+        <li>
+          #1284 records <code>Coord.bend({ along })</code> and
+          <code>Coord.envelope</code> as deferred coords that take a guide as an
+          operand. This proposal renames bend to <code>Coord.along</code> and
+          gives it its first real examples.
+        </li>
+        <li>
+          The stacking design space page writes the same coord as
+          <code>Coord.along(spine)</code> and defines the bend radius rule. The
+          two pages now agree on the name.
+        </li>
+        <li>
+          The bottle proposal uses <code>Coord.envelope</code> with an
+          <code>"area"</code> measure. It leaves open whether a bend gets an
+          area option. These tables do not need one.
+        </li>
+        <li>
+          #952: text and labels ignore the coord. Every coord picture here needs
+          a patch for it.
+        </li>
+        <li>
+          #605: a ref across a coord boundary reads the unbent box. A guide
+          passed as a ref to a sibling needs this.
+        </li>
+        <li>
+          #1342: outlines are unbent under a coord while the drawn shape is
+          bent.
+        </li>
+        <li>
+          #122: the wrap operator. A spiral's <code>period</code> and a wrap's
+          column count say the same thing in two geometries.
+        </li>
+        <li>
+          #1101: user-defined strategies. A guide given as a function would need
+          it.
+        </li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>Terminology</summary>
+    <div class="inner">
+      <ul>
+        <li>
+          <b>Guide</b>: the path a coord reads as an operand. The coord never
+          draws it (#1284).
+        </li>
+        <li>
+          <b>Track</b>: one row of cells along the guide, one cell thick. In
+          these tables a track is a period.
+        </li>
+        <li>
+          <b>Pitch</b>: how far the radius advances in one turn of a spiral.
+        </li>
+        <li>
+          <b>Period</b> (of a spiral): how much of the angular axis's data fits
+          in one turn. The R package <code>spiralize</code> uses the same word.
+        </li>
+        <li>
+          <b>Lobe</b>: a part of the guide that runs out from the core, turns
+          around a thin slit and comes back. The periodic table literature calls
+          it a peninsula.
+        </li>
+        <li>
+          <b>Bend radius</b>: the radius of curvature of the guide at its
+          tightest point (the stacking design space page uses the same term). A
+          track farther than this from the guide, on the inside of the bend,
+          folds over itself.
+        </li>
+        <li>
+          <b>Table cartogram</b>: a grid whose cells keep their neighbors while
+          each cell's area equals a weight (Evans et al., 2013).
+        </li>
+      </ul>
+    </div>
+  </details>
+
+  <details>
+    <summary>Found along the way</summary>
+    <div class="inner">
+      <ul>
+        <li>
+          A coord with its own <code>fit</code> rejects ordinal content
+          (<code>coord.tsx:356-373</code>), so <code>table</code> works only
+          under the polar budget rule and the <code>along</code> prototypes use
+          <code>scatter</code>.
+        </li>
+        <li>
+          Literal sizes inside a coord are in the coord's units. Spacing along
+          the angle is in radians.
+        </li>
+        <li>
+          Empty table cells still get the mark, and a string
+          <code>fill: "block"</code> on an empty cell is read as a color, which
+          paints the hole black. <code>field("block")</code> avoids it.
+        </li>
+        <li>
+          Under <code>Coord.clock</code>, a table's first column starts at about
+          2 o'clock, not 12.
+        </li>
+        <li>
+          The polar outer axis ring is a circle, which is wrong for a spiral.
+        </li>
+        <li>The stories are not type-checked.</li>
+      </ul>
+    </div>
+  </details>
+</main>
+
+<dialog id="lightbox" aria-label="Enlarged picture">
+  <img alt="" />
+</dialog>
+
+<script>
+  (function () {
+    document.querySelectorAll("pre code").forEach(function (el) {
+      try {
+        if (window.hljs) hljs.highlightElement(el);
+      } catch (e) {}
+    });
+
+    // A card's JS and Python blocks become two tabs.
+    document.querySelectorAll(".codetabs").forEach(function (box, n) {
+      var pres = Array.prototype.slice.call(box.querySelectorAll("pre"));
+      var bar = document.createElement("div");
+      bar.className = "tabbar";
+      bar.setAttribute("role", "tablist");
+      var names = ["JavaScript", "Python"];
+      var buttons = pres.map(function (pre, i) {
+        var b = document.createElement("button");
+        b.type = "button";
+        b.id = "codetab-" + n + "-" + i;
+        b.setAttribute("role", "tab");
+        b.textContent = names[i];
+        b.addEventListener("click", function () {
+          show(i);
+        });
+        bar.appendChild(b);
+        return b;
+      });
+      function show(k) {
+        pres.forEach(function (pre, i) {
+          pre.hidden = i !== k;
+          buttons[i].setAttribute("aria-selected", i === k ? "true" : "false");
+        });
+      }
+      box.insertBefore(bar, pres[0]);
+      show(0);
+    });
+
+    var box = document.getElementById("lightbox");
+    var big = box.querySelector("img");
+    document.querySelectorAll(".shot img").forEach(function (img) {
+      img.tabIndex = 0;
+      function open() {
+        big.src = img.src;
+        big.alt = img.alt;
+        if (box.showModal) box.showModal();
+        else window.location.href = img.src;
+      }
+      img.addEventListener("click", open);
+      img.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          open();
+        }
+      });
+    });
+    box.addEventListener("click", function () {
+      box.close();
+    });
+  })();
+</script>
