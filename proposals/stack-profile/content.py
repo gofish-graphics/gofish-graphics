@@ -20,7 +20,7 @@ SUMMARY = [
     "A stacked area is the limit of stacked bars. Draw it as bars of width dx and shrink dx. Each column is an ordinary stack of boxes, and the stack only moves each box. So the one new thing a stack needs is a child that reports many thin boxes, its <b>slices</b>, instead of one. The list of slices is the shape's <b>profile</b>.",
     "A stack's <code>baseline</code> option chooses where its own 0 is: <code>Baseline.start()</code>, <code>Baseline.middle()</code>, <code>Baseline.wiggle()</code> or <code>Baseline.at(part, fraction)</code>. Each one gives every slice an offset and never changes a thickness.",
     "A density is two channels over one hidden variable t, <code>ribbon({ x: mass.support(), h: mass.density() })</code>. <code>partition</code> cuts that profile into cells, which draws the croissant with no grid and no <code>intersect</code>.",
-    "A <code>spread</code> could read the same slices to place shapes by their outlines; how gaps should be measured so they look equal is designed on its own page, <a href=\"OPTICAL_SPACING_URL\">Optical spacing</a>.",
+    "A <code>spread</code> could read the same slices to place shapes by their outlines; how gaps should be measured so they look equal is designed on its own page, <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a>.",
 ]
 
 SUMMARY_TITLE = "Recommendation"
@@ -341,7 +341,7 @@ field("mass").transform(statistics.median, unit="g")"""],
         id="spacing",
         title="3. Spacing between shapes",
         blocks=[
-            ("p", """<p>A profile, the list of slices, is also one way a <code>spread</code> could measure the shapes it places. In a ridgeline, each ridge could drop until its base would touch the ridge below, instead of starting above the previous ridge's box. How spacing should be measured so that gaps look equal, between siblings and to a container's wall, is being designed separately: see <a href=\"OPTICAL_SPACING_URL\">Optical spacing</a>.</p>"""),
+            ("p", """<p>A profile, the list of slices, is also one way a <code>spread</code> could measure the shapes it places. In a ridgeline, each ridge could drop until its base would touch the ridge below, instead of starting above the previous ridge's box. How spacing should be measured so that gaps look equal, between siblings and to a container's wall, is being designed separately: see <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a>.</p>"""),
         ],
     ),
 ]

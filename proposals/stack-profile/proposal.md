@@ -5,7 +5,7 @@
 1. A stacked area is the limit of stacked bars. Draw it as bars of width dx and shrink dx. Each column is an ordinary stack of boxes, and the stack only moves each box. So the one new thing a stack needs is a child that reports many thin boxes, its **slices**, instead of one. The list of slices is the shape's **profile**.
 2. A stack's `baseline` option chooses where its own 0 is: `Baseline.start()`, `Baseline.middle()`, `Baseline.wiggle()` or `Baseline.at(part, fraction)`. Each one gives every slice an offset and never changes a thickness.
 3. A density is two channels over one hidden variable t, `ribbon({ x: mass.support(), h: mass.density() })`. `partition` cuts that profile into cells, which draws the croissant with no grid and no `intersect`.
-4. A `spread` could read the same slices to place shapes by their outlines; how gaps should be measured so they look equal is designed on its own page, [Optical spacing](OPTICAL_SPACING_URL).
+4. A `spread` could read the same slices to place shapes by their outlines; how gaps should be measured so they look equal is designed on its own page, [Optical spacing](https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty).
 
 ## Settled
 
@@ -463,7 +463,7 @@ field("mass").transform(statistics.median, unit="g")
 
 ## 3. Spacing between shapes
 
-A profile, the list of slices, is also one way a `spread` could measure the shapes it places. In a ridgeline, each ridge could drop until its base would touch the ridge below, instead of starting above the previous ridge's box. How spacing should be measured so that gaps look equal, between siblings and to a container's wall, is being designed separately: see [Optical spacing](OPTICAL_SPACING_URL).
+A profile, the list of slices, is also one way a `spread` could measure the shapes it places. In a ridgeline, each ridge could drop until its base would touch the ridge below, instead of starting above the previous ridge's box. How spacing should be measured so that gaps look equal, between siblings and to a container's wall, is being designed separately: see [Optical spacing](https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty).
 
 ## Rules
 
