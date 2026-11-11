@@ -1,5 +1,6 @@
-# Build page.html and proposal.md from content.py. Run from the repo root:
-#   python3 proposals/stack-profile/build.py
+# Build page.html and proposal.md from content.py beside this file. Run from
+# the repo root: python3 proposals/<name>/build.py. The same file builds
+# proposals/stack-profile and proposals/optical-spacing.
 import html, json, os, re, subprocess, sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -194,19 +195,28 @@ try { setLang(localStorage.getItem("sp-lang") === "py"); } catch (e) { setLang(f
 FONTS = '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap" rel="stylesheet">'
 
 terms = "".join(f"<tr><td><b>{t}</b></td><td>{d}</td></tr>" for t, d in C.TERMS)
+SUMMARY_TITLE = getattr(C, "SUMMARY_TITLE", "")
+SETTLED = getattr(C, "SETTLED", [])
+OPEN = getattr(C, "OPEN_QUESTIONS", [])
+RULES = getattr(C, "RULES", [])
+lst = lambda xs, tag="ul", cls="": f"<{tag}{cls}>{''.join(f'<li>{x}</li>' for x in xs)}</{tag}>"
+head = (f"<h2>{SUMMARY_TITLE}</h2>" if SUMMARY_TITLE else "") + lst(C.SUMMARY, "ul", ' class="summary"')
+if SETTLED:
+    head += "<h2>Settled</h2>" + lst(SETTLED)
+if OPEN:
+    head += "<h2>Open questions</h2>" + lst(OPEN, "ol")
 page = f"""<title>{C.TITLE}</title>
 <style>{CSS}</style>
 {FONTS}
 <main>
 <h1>{C.H1}</h1>
-<ul class="summary">{''.join(f'<li>{s}</li>' for s in C.SUMMARY)}</ul>
+{head}
 <p class="note">{C.FULL_LINK}</p>
 <div class="toggle"><span class="muted">Code in</span><button data-lang="js" aria-pressed="true">JavaScript</button><button data-lang="py" aria-pressed="false">Python</button></div>
 <details><summary>Terms used on this page</summary><div class="table-wrap"><table>{terms}</table></div></details>
 {sections}
-<h2>Rules</h2>
-<ul>{''.join(f'<li>{r}</li>' for r in C.RULES)}</ul>
-<h2>Decisions</h2>
+{"<h2>Rules</h2>" + lst(RULES) if RULES else ""}
+<h2>Open decisions</h2>
 <ol class="decisions">{''.join(f'<li>{d}</li>' for d in C.DECISIONS)}</ol>
 </main>
 {JS}
@@ -258,14 +268,19 @@ def block_md(b):
 
 
 out = [f"# {md(C.H1)}", ""]
-out += [f"{n}. {md(s)}" for n, s in enumerate(C.SUMMARY, 1)]
+out += ([f"## {SUMMARY_TITLE}", ""] if SUMMARY_TITLE else []) + [f"{n}. {md(s)}" for n, s in enumerate(C.SUMMARY, 1)]
+if SETTLED:
+    out += ["", "## Settled", ""] + [f"- {md(x)}" for x in SETTLED]
+if OPEN:
+    out += ["", "## Open questions", ""] + [f"{n}. {md(x)}" for n, x in enumerate(OPEN, 1)]
 out += ["", md(C.FULL_LINK), "", "The review page is `page.html` beside this file.", "", "## Terms", "", "| Term | Meaning |", "| --- | --- |"]
 out += [f"| {t} | {md(d)} |" for t, d in C.TERMS]
 for sec in C.SECTIONS:
     out += ["", f"## {md(sec['title'])}", ""]
     for b in sec["blocks"]:
         out += block_md(b)
-out += ["## Rules", ""] + [f"- {md(r)}" for r in C.RULES]
-out += ["", "## Decisions", ""] + [f"{n}. {md(d)}" for n, d in enumerate(C.DECISIONS, 1)] + [""]
+if RULES:
+    out += ["## Rules", ""] + [f"- {md(r)}" for r in RULES] + [""]
+out += ["## Open decisions", ""] + [f"{n}. {md(d)}" for n, d in enumerate(C.DECISIONS, 1)] + [""]
 open(os.path.join(HERE, "proposal.md"), "w").write("\n".join(out))
 print("ok", len(page), "bytes")
