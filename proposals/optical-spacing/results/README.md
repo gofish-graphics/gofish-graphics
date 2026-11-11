@@ -14,3 +14,4 @@ its rankings. Runs before the slider reset fix (2026-11-11) may have started fro
 a saved position instead of the far start.
 
 - 04-anon: fourth participant, no name given, 2026-11-11.
+- 05-anon: fifth participant, no name given, 2026-11-11 (after the slider reset fix).
