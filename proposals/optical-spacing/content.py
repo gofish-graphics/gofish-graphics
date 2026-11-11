@@ -5,6 +5,7 @@
 #   SpacingSdf.stories.tsx (sdfModels.ts, sdfRun.ts, sdfOffsets.json): candidates (g) to (j)
 #   widgetRun.ts writes widgets.json for the interactive.
 #   TidyTree.stories.tsx: the tidy tree, box against contour spacing.
+import json
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -12,6 +13,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 def read(name):
     return open(os.path.join(HERE, name)).read()
+
+
+def survey_results():
+    """Every saved survey block in results/, named by its file (01-anon, 02-josh, ...).
+    The page parses them with the paste box's rules, so a new file needs only a rebuild."""
+    d = os.path.join(HERE, "results")
+    files = sorted(f for f in os.listdir(d) if f.endswith(".txt"))
+    rows = [{"name": f[:-4], "text": open(os.path.join(d, f)).read()} for f in files]
+    return json.dumps(rows).replace("</", "<\\/")
+
+
+def widgets_fragment():
+    return read("widgets.html").replace("__WIDGET_DATA__", read("widgets.json")).replace("__SURVEY_RESULTS__", survey_results())
 
 
 TITLE = "Optical Spacing"
@@ -58,7 +72,7 @@ SECTIONS = [
         id='set-it-yourself',
         title='Set it yourself',
         blocks=[
-            ("raw", read("widgets.html").replace("__WIDGET_DATA__", read("widgets.json")), "The page has an interactive here: eight widgets (shapes, a notch, Georgia letters, an icon in a pill, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set."),
+            ("raw", widgets_fragment(),"The page has an interactive here: eight widgets (shapes, a notch, Georgia letters, an icon in a pill, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set."),
         ],
     ),
     dict(

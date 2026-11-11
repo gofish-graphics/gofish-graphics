@@ -9,6 +9,7 @@
   <label
     ><input type="checkbox" id="sp-ticks" /> Show the models' positions</label
   >
+  <label><input type="checkbox" id="sp-people" /> Show survey responses</label>
   <button type="button" id="sp-reset">Reset</button>
   <button type="button" id="sp-copy">Copy my results</button>
   <span id="sp-copied" class="sp-status" aria-live="polite"></span>
@@ -42,11 +43,17 @@
   <div id="sp-paste-out"></div>
 </details>
 <div id="sp-widgets"></div>
-<div class="sp-all">
-  <p class="label" id="sp-all-title">All the widgets you set</p>
-  <ol id="sp-all">
-    <li class="sp-empty">Set at least one widget.</li>
-  </ol>
+<div class="sp-all sp-cmp">
+  <div>
+    <p class="label" id="sp-all-title">All the widgets you set</p>
+    <ol id="sp-all">
+      <li class="sp-empty">Set at least one widget.</li>
+    </ol>
+  </div>
+  <div>
+    <p class="label" id="sp-survey-title">Survey responses</p>
+    <ol id="sp-survey-all"></ol>
+  </div>
 </div>
 <p class="note">
   Distances are in px of the shapes' own size (56 px). The combined ranking is
@@ -59,7 +66,11 @@
   gap (30 px for the shapes, Georgia's H to H gap for the letters, 12 px for the
   pill, 24 px for the densities): there the model sees almost no gap on either
   side. On the two Georgia widgets, a dashed tick marks Georgia's own spacing
-  (no kerning). The tables behind this are computed by
+  (no kerning). The survey responses are the "Spacing by eye" results saved in
+  <code>results/</code>: each person's position is an ink tick with a dot, on
+  the other side of the shapes from the models, and the bold tick is their mean.
+  Their ranking is each model's mean distance per person (over the widgets that
+  person set), averaged over the people. The tables behind this are computed by
   <code>widgetRun.ts</code> from the same code as the renders.
 </p>
 <style>
@@ -240,6 +251,9 @@
 <script id="sp-data" type="application/json">
   __WIDGET_DATA__
 </script>
+<script id="sp-results" type="application/json">
+  __SURVEY_RESULTS__
+</script>
 <script>
   (() => {
     const D = JSON.parse(document.getElementById("sp-data").textContent);
@@ -256,7 +270,17 @@
     ];
     const NS = "http://www.w3.org/2000/svg";
     const KEY = "optical-spacing-widgets-v2";
-    const state = { u: {}, ticks: false, squint: false, blur: 3 };
+    const state = {
+      u: {},
+      ticks: false,
+      people: false,
+      squint: false,
+      blur: 3,
+    };
+    // The saved survey results (results/*.txt), parsed like the paste box.
+    const PEOPLE = JSON.parse(
+      document.getElementById("sp-results").textContent
+    ).map((r) => ({ name: r.name, u: parse(r.text).u }));
     try {
       const old = JSON.parse(
         localStorage.getItem("stack-profile-spacing-v1") || "{}"
@@ -378,9 +402,22 @@
       const you = el("path", { fill: "var(--fg)" }, svg);
       const ticks = el(
         "g",
-        { "font-size": "7", "font-family": "Inter, system-ui, sans-serif" },
+        {
+          class: "sp-model-ticks",
+          "font-size": "7",
+          "font-family": "Inter, system-ui, sans-serif",
+        },
         svg
       );
+      // lines first, then labels with a halo, so no tick crosses a label
+      const halo = {
+        stroke: "var(--card)",
+        "stroke-width": 2.4,
+        "stroke-linejoin": "round",
+        "paint-order": "stroke",
+      };
+      const tLines = el("g", {}, ticks);
+      const tText = el("g", halo, ticks);
 
       // ticks: each model's position of the moving edge (and Georgia's own)
       const marks = w.preds.map((p, i) => ({
@@ -416,12 +453,12 @@
               "stroke-width": 1.4,
               "stroke-dasharray": m.dash ? "2 1.5" : "none",
             },
-            ticks
+            tLines
           );
           el(
             "text",
             { x: m.at + 1.5, y: y + 6, fill: m.color },
-            ticks
+            tText
           ).textContent = m.label;
         });
       } else {
@@ -439,26 +476,110 @@
               "stroke-width": 1.2,
               "stroke-dasharray": m.dash ? "2 1.5" : "none",
             },
-            ticks
+            tLines
           );
           el(
             "text",
             { x: base + 16, y: ly, fill: m.color },
-            ticks
+            tText
           ).textContent = m.label;
         });
       }
-      const fitTicks = (on) => {
-        if (X)
-          svg.setAttribute(
-            "viewBox",
-            `${x0} ${y0} ${vw} ${vh + 12 + (on ? extent * 11 : 0)}`
+      // survey responses: one ink tick with a dot per person, on the other
+      // side of the shapes from the models, plus a bold tick at their mean
+      const people = el(
+        "g",
+        {
+          class: "sp-people",
+          "font-size": "7",
+          "font-family": "Inter, system-ui, sans-serif",
+          fill: "var(--fg)",
+        },
+        svg
+      );
+      const pLines = el("g", {}, people);
+      const pText = el("g", halo, people);
+      const said = PEOPLE.filter((p) => p.u[w.n] != null).map((p) => ({
+        at: edge(p.u[w.n]),
+        label: p.name,
+      }));
+      if (said.length)
+        said.push({
+          at: said.reduce((s, m) => s + m.at, 0) / said.length,
+          label: `mean of ${said.length} people`,
+          mean: true,
+        });
+      said.sort((a, b) => a.at - b.at);
+      let pExtent = 0;
+      if (X) {
+        const ends = [];
+        said.forEach((m) => {
+          let lane = ends.findIndex((e) => e < m.at - 1);
+          if (lane < 0) lane = ends.length;
+          ends[lane] = m.at + m.label.length * 3.7 + 3;
+          pExtent = Math.max(pExtent, lane + 1);
+          const y = y0 - 4 - lane * 11;
+          el(
+            "line",
+            {
+              x1: m.at,
+              x2: m.at,
+              y1: y0 - 1,
+              y2: y - 7,
+              stroke: "var(--fg)",
+              "stroke-width": m.mean ? 2.2 : 0.9,
+            },
+            pLines
           );
-        else
-          svg.setAttribute(
-            "viewBox",
-            `${x0} ${y0} ${vw + (on ? 110 : 12)} ${Math.max(vh, on ? extent - y0 : 0)}`
+          el(
+            "circle",
+            { cx: m.at, cy: y0 - 1.5, r: m.mean ? 1.9 : 1.4 },
+            pLines
           );
+          const t = el("text", { x: m.at + 1.8, y }, pText);
+          if (m.mean) t.setAttribute("font-weight", "700");
+          t.textContent = m.label;
+        });
+      } else {
+        let last = -Infinity;
+        said.forEach((m) => {
+          const ly = Math.max(m.at + 2.5, last + 8.5);
+          last = ly;
+          pExtent = Math.max(pExtent, ly + 3);
+          el(
+            "polyline",
+            {
+              points: `${x0 - 3},${m.at} ${x0 - 10},${m.at} ${x0 - 14},${ly - 2.5}`,
+              fill: "none",
+              stroke: "var(--fg)",
+              "stroke-width": m.mean ? 2.2 : 0.9,
+            },
+            pLines
+          );
+          el("circle", { cx: x0 - 2, cy: m.at, r: m.mean ? 1.9 : 1.4 }, pLines);
+          const t = el(
+            "text",
+            { x: x0 - 16, y: ly, "text-anchor": "end" },
+            pText
+          );
+          if (m.mean) t.setAttribute("font-weight", "700");
+          t.textContent = m.label;
+        });
+      }
+
+      const fitTicks = (on, ppl) => {
+        people.style.display = ppl ? "" : "none";
+        let box;
+        if (X) {
+          const top = ppl ? y0 - pExtent * 11 - 10 : y0;
+          box = [x0, top, vw, y0 + vh + 12 + (on ? extent * 11 : 0) - top];
+        } else {
+          const left = ppl ? x0 - 84 : x0;
+          const bottom = Math.max(y0 + vh, on ? extent : 0, ppl ? pExtent : 0);
+          box = [left, y0, x0 + vw + (on ? 110 : 12) - left, bottom - y0];
+        }
+        svg.setAttribute("viewBox", box.join(" "));
+        svg.style.maxWidth = `${Math.round(box[2] * 1.6)}px`;
       };
 
       const set = (v, user) => {
@@ -671,15 +792,46 @@
       out.innerHTML = `<p class="label">${who}, per widget (closest first)</p>${lines}<div class="sp-cmp"><div><p class="label">${who}, ${set.length} of ${W.length} widgets, mean distance</p><ol>${combinedList(u)}</ol></div><div><p class="label">You, mean distance</p>${mine}</div></div>`;
     });
 
+    // Each model's mean distance per person, averaged over the people.
+    function surveyRanking() {
+      const per = PEOPLE.map((p) => combined(p.u));
+      return D.models
+        .map((_, i) => {
+          const ds = per
+            .map((rows) => rows.find((r) => r.i === i))
+            .filter((r) => r.n);
+          return {
+            i,
+            d: ds.length
+              ? ds.reduce((s, r) => s + r.d, 0) / ds.length
+              : Infinity,
+            people: ds.length,
+          };
+        })
+        .sort((a, b) => a.d - b.d);
+    }
+    document.getElementById("sp-survey-title").textContent =
+      `Survey responses (${PEOPLE.length} people), mean distance`;
+    document.getElementById("sp-survey-all").innerHTML = PEOPLE.length
+      ? surveyRanking()
+          .map(
+            (r) =>
+              `<li>${dot(r.i)}${D.models[r.i].label} <span class="sp-d">${r.people ? `${r.d.toFixed(1)} px (${r.people} people)` : "none"}</span></li>`
+          )
+          .join("")
+      : `<li class="sp-empty">No saved responses.</li>`;
+
     const ticksBox = document.getElementById("sp-ticks");
+    const peopleBox = document.getElementById("sp-people");
     const squintBox = document.getElementById("sp-squint");
     const blur = document.getElementById("sp-blur");
     const blurOut = document.getElementById("sp-blur-out");
     const apply = () => {
       W.forEach((w) => {
         w.ticks.style.display = state.ticks ? "" : "none";
-        w.fitTicks(state.ticks);
+        w.fitTicks(state.ticks, state.people);
       });
+      peopleBox.checked = !!state.people;
       document.documentElement.style.setProperty(
         "--sp-blur",
         state.squint ? `${state.blur}px` : "0px"
@@ -700,6 +852,11 @@
       save();
       apply();
     });
+    peopleBox.addEventListener("change", () => {
+      state.people = peopleBox.checked;
+      save();
+      apply();
+    });
     squintBox.addEventListener("change", () => {
       state.squint = squintBox.checked;
       save();
@@ -707,7 +864,7 @@
     });
     document.getElementById("sp-reset").addEventListener("click", () => {
       state.u = {};
-      state.ticks = state.squint = false;
+      state.ticks = state.people = state.squint = false;
       save();
       W.forEach((w) => w.reset());
       area.hidden = true;
