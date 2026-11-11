@@ -16,7 +16,7 @@ import {
   Trait,
   Unit,
 } from "../../../src/lib";
-import { glyphRows, ridgeRings, shapeRows, type Model } from "./spacingModels";
+import { glyphRows, ridgeRings, shapeRows, testRows, type Model, type TestModel } from "./spacingModels";
 
 const meta: Meta = { title: "Proposals/Stack Profile/Spacing Alignment" };
 export default meta;
@@ -57,6 +57,8 @@ export const RidgeContact = show((el) => ridges("contact").render(el));
 const inked = (w: number, h: number, rings: { c: string; ring: unknown }[]) =>
   pixels(w, h)
     .layer(chart(rings.filter((d) => d.c === "ink")).mark(polygon({ points: "ring", fill: "#333" })))
+    // the blurred outline, drawn over the ink: dark ink outside it was retracted
+    .layer(chart(rings.filter((d) => d.c === "halo")).mark(polygon({ points: "ring", fill: "#6baed6", opacity: 0.85 })))
     .layer(chart(rings.filter((d) => d.c === "hole")).mark(polygon({ points: "ring", fill: "white" })));
 const glyphs = (font: "serif" | "sans", model: Model) => inked(560, 230, glyphRows(font, model));
 export const SerifBox = show((el) => glyphs("serif", "box").render(el));
@@ -66,6 +68,8 @@ export const SansContact = show((el) => glyphs("sans", "contact").render(el));
 const shapes = (model: Model) => inked(330, 300, shapeRows(model));
 export const ShapesBox = show((el) => shapes("box").render(el));
 export const ShapesContact = show((el) => shapes("contact").render(el));
+export const ShapesArea = show((el) => shapes("area").render(el));
+export const SerifArea = show((el) => glyphs("serif", "area").render(el));
 
 // ---------------------------------------------------------------------------
 // Baseline (a node's own 0) against alignment (how a parent lines children up).
@@ -146,3 +150,32 @@ const ribbonChart = (sortBy: string) =>
     .layer(ribbon({ opacity: 0.8 }));
 export const RibbonPerLake = show((el) => ribbonChart("count").render(el));
 export const RibbonByTotal = show((el) => ribbonChart("total").render(el));
+
+// Josh's test rows
+// Josh's test rows at a tight target (10 px, floor 3) and a loose one (30 px, floor 3).
+const test = (m: TestModel, T: number, w = 0) => inked(420, 230, testRows(m, T, 3, w));
+export const TestBoxTight = show((el) => test("box", 10).render(el));
+export const TestBoxLoose = show((el) => test("box", 30).render(el));
+export const TestContactTight = show((el) => test("contact", 10).render(el));
+export const TestContactLoose = show((el) => test("contact", 30).render(el));
+export const TestEuclidTight = show((el) => test("euclid", 10).render(el));
+export const TestEuclidLoose = show((el) => test("euclid", 30).render(el));
+export const TestAreaSumTight = show((el) => test("areaSum", 10).render(el));
+export const TestAreaSumLoose = show((el) => test("areaSum", 30).render(el));
+export const TestAreaMaxTight = show((el) => test("areaMax", 10).render(el));
+export const TestAreaMaxLoose = show((el) => test("areaMax", 30).render(el));
+export const TestPairAreaTight = show((el) => test("pairArea", 10).render(el));
+export const TestPairAreaLoose = show((el) => test("pairArea", 30).render(el));
+// the tradeoff at the tight target: floor 0, so the base corners may touch
+export const TestPairAreaTouch = show((el) => inked(420, 230, testRows("pairArea", 10, 0)).render(el));
+// contact on an opened outline: parts thinner than w (8 or 16 px) are ignored
+export const TestOpened8Tight = show((el) => test("opened", 10, 8).render(el));
+export const TestOpened16Tight = show((el) => test("opened", 10, 16).render(el));
+export const TestOpened8Loose = show((el) => test("opened", 30, 8).render(el));
+export const TestOpened16Loose = show((el) => test("opened", 30, 16).render(el));
+// contact on a blurred outline: Gaussian of width 3 or 6 px, cut at 0.5
+export const TestBlur3Tight = show((el) => test("blur", 10, 3).render(el));
+export const TestBlur6Tight = show((el) => test("blur", 10, 6).render(el));
+export const TestBlur3Loose = show((el) => test("blur", 30, 3).render(el));
+export const TestBlur6Loose = show((el) => test("blur", 30, 6).render(el));
+export const TestBlur6Halo = show((el) => inked(420, 230, testRows("blur", 10, 3, 6, true)).render(el));
