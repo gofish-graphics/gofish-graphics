@@ -19,7 +19,7 @@ export type Model = "box" | "contact" | "area";
 export type AreaOpts = { margin: number; depth: number; floor: number; band: (i: number) => [number, number] };
 export type Pt = [number, number];
 
-const U = (lo: number, hi: number, n: number) =>
+export const U = (lo: number, hi: number, n: number) =>
   Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
 
 /**
@@ -101,7 +101,7 @@ export function ridgeRings(model: Model) {
 export type Shape = { contours: Pt[][]; holes: boolean[] };
 
 /** Leftmost and rightmost x of a set of rings on the line y = v. */
-function scan(rings: Pt[][], v: number): [number, number] | null {
+export function scan(rings: Pt[][], v: number): [number, number] | null {
   const xs: number[] = [];
   for (const ring of rings)
     ring.forEach((p, i) => {
