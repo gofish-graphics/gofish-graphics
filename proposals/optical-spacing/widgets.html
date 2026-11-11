@@ -73,6 +73,7 @@
   person set), averaged over the people. The tables behind this are computed by
   <code>widgetRun.ts</code> from the same code as the renders.
 </p>
+__FIT_SECTION__
 <style>
   .sp-tools {
     display: flex;
@@ -267,7 +268,13 @@
       "#76b7b2",
       "#edc948",
       "#ff9da7",
+      "#9c755f",
+      "#17becf",
+      "#bcbd22",
+      "#9467bd",
     ];
+    // room for the side stack of model labels: about 3.7 px a character at the tick font size
+    const LABEL_W = Math.max(...D.models.map((m) => m.label.length)) * 3.7 + 16;
     const NS = "http://www.w3.org/2000/svg";
     const KEY = "optical-spacing-widgets-v2";
     const state = {
@@ -576,7 +583,7 @@
         } else {
           const left = ppl ? x0 - 84 : x0;
           const bottom = Math.max(y0 + vh, on ? extent : 0, ppl ? pExtent : 0);
-          box = [left, y0, x0 + vw + (on ? 110 : 12) - left, bottom - y0];
+          box = [left, y0, x0 + vw + (on ? LABEL_W : 12) - left, bottom - y0];
         }
         svg.setAttribute("viewBox", box.join(" "));
         svg.style.maxWidth = `${Math.round(box[2] * 1.6)}px`;

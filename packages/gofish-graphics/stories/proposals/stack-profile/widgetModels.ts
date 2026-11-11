@@ -137,6 +137,32 @@ const lineGaps = (fp: Sides, a: number, nc: Sides, b: number) =>
   fp.map((s, k) => (s && nc[k] ? b + nc[k]![0] - a - s[1] : null));
 const minGap = (g: (number | null)[]) => Math.min(...(g.filter((x) => x !== null) as number[]));
 
+/** The gap profile d(s): the horizontal gap on each scanline of the band, null where a shape is absent. */
+export const gapProfile = (A: Shape, a: number, B: Shape, b: number, tv: Band) => lineGaps(sidesOf(A, tv), a, sidesOf(B, tv), b);
+
+/**
+ * (k) The power mean of a gap profile, (mean of d^p)^(1/p): p = -Infinity is
+ * the min (contact), p = 0 the geometric mean, p = 1 the mean (white area over
+ * the band). Each d is capped at `cap` first. With `union`, a line where a
+ * shape is absent counts as the cap; otherwise it is left out (the
+ * intersection band). A profile that touches or overlaps (some d <= 0) is
+ * its min, so every p agrees once the shapes meet.
+ */
+export function powerMean(g: (number | null)[], p: number, cap = Infinity, union = false) {
+  const ds: number[] = [];
+  for (const x of g) {
+    if (x === null) {
+      if (union && isFinite(cap)) ds.push(cap);
+    } else ds.push(Math.min(x, cap));
+  }
+  if (!ds.length) return NaN;
+  const lo = Math.min(...ds);
+  if (p === -Infinity || lo <= 0) return lo;
+  if (p === Infinity) return Math.max(...ds);
+  if (p === 0) return Math.exp(ds.reduce((s, d) => s + Math.log(d), 0) / ds.length);
+  return (ds.reduce((s, d) => s + d ** p, 0) / ds.length) ** (1 / p);
+}
+
 function polyDist(A: Shape, a: number, B: Shape, b: number) {
   const seg = (p: Pt, q: Pt, r: Pt) => {
     const [dx, dy] = [r[0] - q[0], r[1] - q[1]];
@@ -210,4 +236,9 @@ export const MODELS: { key: string; label: string; m: Measure }[] = [
   { key: "open8", label: "(g) opening r 8", m: (A, a, B, b, tv) => minGap(lineGaps(openedSides(A, 8, tv), a, openedSides(B, 8, tv), b)) },
   { key: "filletT", label: "(i) fillet R 30", m: (A, a, B, b, tv) => fillet(A, a, B, b, T, tv) },
   { key: "fillet2T", label: "(i) fillet R 60", m: (A, a, B, b, tv) => fillet(A, a, B, b, 2 * T, tv) },
+  // (k) the power mean of the gap profile (fitRun.ts fits p and the cap to the survey)
+  { key: "pm8", label: "(k) power mean p −8", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), -8) },
+  { key: "pm3c", label: "(k) power mean p −3, cap 40", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), -3, 40) },
+  { key: "pm1h", label: "(k) harmonic mean p −1", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), -1) },
+  { key: "pm1", label: "(k) mean gap p 1", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), 1) },
 ];

@@ -24,8 +24,109 @@ def survey_results():
     return json.dumps(rows).replace("</", "<\\/")
 
 
+def fit_section():
+    """'Fitting one model to the responses', from fit.json (fitRun.ts). Every number comes from the file."""
+    F = json.loads(read("fit.json"))
+    st = {int(k): v for k, v in F["stats"].items()}
+    ws = range(1, 9)
+    low, high = [2, 3, 6, 8], [1, 4, 5, 7]
+    f1 = lambda x: "none" if x is None else f"{x:.1f}".replace("-", "−")
+    sd1 = lambda z: "none" if z is None else f"{z:+.1f}".replace("-", "−")
+    pn = lambda p: p.replace("-inf", "−∞").replace("-", "−")
+    rms = lambda zs: (sum(z * z for z in zs) / len(zs)) ** 0.5
+    ex = {e["label"]: e for e in F["existing"]}
+    zs_of = lambda xs, wset: [(xs[n - 1] - st[n]["mean"]) / st[n]["sd"] for n in wset]
+
+    head = "<tr><th></th>" + "".join(f"<th>w{n}</th>" for n in ws) + "</tr>"
+    # how p moves each widget's answer; bold = the p nearest the people's mean
+    near = {n: min(F["byP"], key=lambda r: abs(r["xs"][n - 1] - st[n]["mean"]))["p"] for n in ws}
+    byp = "".join(
+        f"<tr><td>p {pn(r['p'])}</td>"
+        + "".join(
+            ("<td><b>{}</b></td>" if near[n] == r["p"] else "<td>{}</td>").format(f1(r["xs"][n - 1])) for n in ws
+        )
+        + "</tr>"
+        for r in F["byP"]
+    )
+    byp += "<tr><td><b>people</b>, mean ± sd</td>" + "".join(f"<td>{f1(st[n]['mean'])} ± {st[n]['sd']:.1f}</td>" for n in ws) + "</tr>"
+    per = "".join(
+        f"<tr><td>{name}</td>"
+        + "".join("<td>–</td>" if c is None else f"<td>{pn(c['p'])} <span class=\"sp-d\">({c['err']:.1f})</span></td>" for c in row)
+        + f"<td>{pn(pp['p'])}</td></tr>"
+        for name, row, pp in zip(F["people"], F["perCell"], F["perPerson"])
+    )
+    per = per.replace("<td>–</td>", "<td>no answer</td>")
+
+    def fitrow(label, rows):
+        return f"<tr><td>{label}</td>" + "".join(f"<td>{f1(r['x'])} <span class=\"sp-d\">({sd1(r['z'])})</span></td>" for r in rows) + "</tr>"
+
+    lowo_rows = F["lowo"]
+    cmp_rows = [
+        ("(k) p " + pn(F["bestPlain"]["p"]) + ", fit on w2 w3 w6 w8 with no cap", F["bestPlain"]["rows"]),
+        ("(k) " + pn(F["best"]["name"]) + ", fit on w2 w3 w6 w8", F["best"]["rows"]),
+        ("(k) each widget left out of its own fit", lowo_rows),
+    ]
+    for lab in ["contact", "(b) area model", "(d) pair white area"]:
+        xs = ex[lab]["xs"]
+        cmp_rows.append((lab, [{"x": xs[n - 1], "z": None if xs[n - 1] is None else (xs[n - 1] - st[n]["mean"]) / st[n]["sd"]} for n in ws]))
+    fits = "".join(fitrow(l, r) for l, r in cmp_rows)
+    fits += "<tr><td><b>people</b>, mean</td>" + "".join(f"<td>{f1(st[n]['mean'])}</td>" for n in ws) + "</tr>"
+
+    def rz(rows, wset):
+        return rms([rows[n - 1]["z"] for n in wset])
+
+    plain_r, best_r = F["bestPlain"]["rows"], F["best"]["rows"]
+    lowo_rms = rms([r["z"] for r in lowo_rows])
+    pw = rms(zs_of(ex["(d) pair white area"]["xs"], ws))
+    am = rms(zs_of(ex["(b) area model"]["xs"], ws))
+    ct = rms(zs_of(ex["contact"]["xs"], ws))
+    capAll = {r["cap"]: r["loss"] for r in F["curves"]["capAll"]}
+
+    return f"""
+<h3 id="sp-fit">Fitting one model to the responses</h3>
+<p>Josh's reading of the survey: some of the spread comes from people using different ways to judge a gap (on the first widget one person seems to compare the narrowest part of the gap, at the bottom of the triangle), and some widgets have almost no spread. This section tests that with one family of measures, fit to the five saved responses.</p>
+<p><b>(k) The power mean of the gap.</b> On each horizontal line of the band, d is the gap between the two shapes. The measure is M<sub>p</sub> = (mean of d<sup>p</sup>)<sup>1/p</sup>, one number for the pair. One setting p covers several earlier models:</p>
+<ul>
+<li>p = −∞ is the smallest gap, which is <b>contact</b>.</li>
+<li>p = −1 is the harmonic mean, p = 0 the geometric mean, and p = 1 the plain mean gap, the white area divided by the band.</li>
+<li>A <b>cap</b> c first clips each d to at most c, so a deep notch counts no more than c (the same idea as the 36 px cap in (d) pair white area, which is p = 1 with c = 36).</li>
+</ul>
+<p>Negative p leans toward the narrowest part of the gap; positive p toward the whole white area. The band is the lines both shapes cover; counting the other lines as the cap (their union) changed the fit very little. A widget's answer uses the same rule as every model: the place where the two compared gaps measure the same. If a shape touches or overlaps its neighbor on some line, M<sub>p</sub> is that smallest gap for every p.</p>
+
+<p><b>How much p moves each answer.</b> Bold is the p nearest the people's mean.</p>
+<div class="table-wrap"><table>{head}{byp}</table></div>
+<p>On w3, w6 and w8 every p gives nearly the same answer, and people agree. On w1, w4, w5 and w7, p moves the answer by 8 to 19 px, and people disagree. w2 breaks the pattern: p moves its answer by 19 px, yet all five people agree to within 2 px, near p −8.</p>
+
+<p><b>Each person's best p on each widget</b> (from −∞, −8, −4, −2, −1, −0.5, 0, 0.5, 1, 2; the miss in px is in brackets), and the one p that suits each person best over all their widgets.</p>
+<div class="table-wrap"><table><tr><th></th>{"".join(f"<th>w{n}</th>" for n in ws)}<th>own p</th></tr>{per}</table></div>
+<ul>
+<li><b>On w1 people split into groups</b> that match different p, as Josh guessed: three people sit at 14 to 15.5, the plain mean gap (p 1 to 2); one is at 23 (p −8); and 05-anon is at 28.5, close to contact (30).</li>
+<li><b>On w7</b> three people sit at 14, near contact (p −8), and one at 23 (p 2).</li>
+<li><b>On w4 no p fits anyone well.</b> Every p puts the triangle at or before contact (23.9), and people range from 20.5 to 28.5; the ones past contact are leaning toward the bounding box of the L (box gap 32), so they treat the notch as not there at all.</li>
+<li><b>People do not keep one p.</b> With one p for everyone (best p {pn(F["pooled"]["p"])}) the mean miss is {F["pooled"]["rms"]:.1f} px; with each person's own p it is {F["rmsPer"]:.1f} px. For scale, people miss each other's mean by {F["between"]:.1f} px. Only 05-anon is close to one p (near contact) on most widgets. The others switch: 02-josh, for example, matches the mean gap on w1 and w3 (p 1 and 2) but p −8 on w2, w7 and w8.</li>
+</ul>
+
+<p><b>The fit.</b> p and c were fit to the people's mean, weighting each widget by 1 / sd², over {F["searched"]} settings (17 values of p, 21 caps and none, the two bands). The table gives each answer and, in brackets, its distance from the people's mean in units of that widget's sd; within ±1 means inside the people's own spread.</p>
+<div class="table-wrap"><table>{head}{fits}</table></div>
+<ul>
+<li><b>Fit on the four low-spread widgets alone</b> (w2, w3, w6, w8), with no cap, p comes out sharply at −8. It is within 1 sd on {F["bestPlain"]["within"]} of the four, and misses the four high-spread widgets by {rz(plain_r, high):.1f} sd on average (w4 by {plain_r[3]['z']:.1f} sd).</li>
+<li>With a cap, the best is {pn(F["best"]["name"])}, inside 1 sd on all four low-spread widgets, which no earlier model manages (contact, the area model and pair white area each get 2 of 4). On the held-out widgets it misses by {rz(best_r, high):.1f} sd on average (w5 by {best_r[4]['z']:.1f} sd). With this cap the low-spread widgets barely choose p at all: every p from −4 to 2 does about as well.</li>
+<li><b>Leaving each widget out</b> and fitting on the other seven gives p −3 with a cap of 38 to 40 px every time, and the left-out widget lands within {max(abs(r["z"]) for r in lowo_rows):.1f} sd of the people's mean ({lowo_rms:.1f} sd on average). For comparison, with nothing fit to the survey, pair white area misses by {pw:.1f} sd on average, the area model by {am:.1f} and contact by {ct:.1f}.</li>
+</ul>
+<p><b>How much of this is overfitting.</b> A lot may be. There are 8 widgets and 5 people, and two numbers plus a band were chosen from {F["searched"]} settings. The cap does most of the work, and the result is very sensitive to it: at p −3 the loss over all eight widgets is {capAll[28]} at a cap of 28 px, {capAll[32]} at 32, {capAll[36]} at 36, {capAll[40]} at 40 and {capAll[48]} at 48. Part of the reason is w4: once every line of both compared gaps is past the cap, both measure exactly c, so the cap alone decides where w4 lands. Every widget uses shapes 56 px across, so a cap of 40 px cannot be told apart from "0.7 of the shape's size" here. Leaving widgets out tests p and c against new widgets, not against new people or new sizes.</p>
+<p><b>When the way of judging matters.</b> The answer depends on p only when the two compared gaps have different profiles: one is nearly even from top to bottom, and the other has a wedge or a notch, where its narrowest part and its mean differ a lot (w1's square to triangle, w4's notch, w7's plane against the curved wall). When both gaps have the same profile, every p agrees (w3, w6, w8). A different profile is needed for people to split, but not enough: on w2 the triangle's tip points at the circle, and everyone judges by the tip. One guess, untested, is that people agree on a single sharp point and split on a long slanted edge or a notch.</p>
+<p><b>Conclusion.</b> The narrowest-gap end of the family, p around −3, with deep parts of the gap capped at about 40 px, matches all eight widgets within the people's own spread when each is left out, but the cap is tuned to these shapes and to five people. People switch between judging by the narrowest part and judging by the whole white area from one widget to the next, so no single person's technique explains the spread. The fit needs new widgets at other sizes, and more responses, before it means more than that.</p>
+<p class="note">The ticks for the four (k) settings (p −8; p −3 with cap 40; p −1; p 1) appear with the other models when the model toggle is on, and they are in both rankings. The fit used the five responses saved in <code>results/</code> on 2026-11-11; <code>fitRun.ts</code> recomputes it and writes <code>fit.json</code>.</p>
+"""
+
+
 def widgets_fragment():
-    return read("widgets.html").replace("__WIDGET_DATA__", read("widgets.json")).replace("__SURVEY_RESULTS__", survey_results())
+    return (
+        read("widgets.html")
+        .replace("__WIDGET_DATA__", read("widgets.json"))
+        .replace("__SURVEY_RESULTS__", survey_results())
+        .replace("__FIT_SECTION__", fit_section())
+    )
 
 
 TITLE = "Optical Spacing"
