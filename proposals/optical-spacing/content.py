@@ -27,96 +27,102 @@ def survey_results():
 def fit_section():
     """'Fitting one model to the responses', from fit.json (fitRun.ts). Every number comes from the file."""
     F = json.loads(read("fit.json"))
+    ws = F["widgets"]
     st = {int(k): v for k, v in F["stats"].items()}
-    ws = range(1, 9)
-    low, high = [2, 3, 6, 8], [1, 4, 5, 7]
+    fam = F["families"]
+    hull, cap, shape, part = fam["hull"], fam["capped"], fam["shape"], fam["partial"]
     f1 = lambda x: "none" if x is None else f"{x:.1f}".replace("-", "−")
     sd1 = lambda z: "none" if z is None else f"{z:+.1f}".replace("-", "−")
-    pn = lambda p: p.replace("-inf", "−∞").replace("-", "−")
-    rms = lambda zs: (sum(z * z for z in zs) / len(zs)) ** 0.5
-    ex = {e["label"]: e for e in F["existing"]}
-    zs_of = lambda xs, wset: [(xs[n - 1] - st[n]["mean"]) / st[n]["sd"] for n in wset]
-
+    pn = lambda p: str(p).replace("-inf", "−∞").replace("-", "−")
     head = "<tr><th></th>" + "".join(f"<th>w{n}</th>" for n in ws) + "</tr>"
-    # how p moves each widget's answer; bold = the p nearest the people's mean
-    near = {n: min(F["byP"], key=lambda r: abs(r["xs"][n - 1] - st[n]["mean"]))["p"] for n in ws}
-    byp = "".join(
+    ex = {e["key"]: e for e in F["existing"]}
+    vals = F["values"]
+
+    # how p moves each answer between the hulls; bold = nearest the people's mean
+    byp = F["byP"]["hull"]
+    near = {n: min(byp, key=lambda r: abs(r["xs"][n - 1] - st[n]["mean"]))["p"] for n in ws}
+    rows_p = "".join(
         f"<tr><td>p {pn(r['p'])}</td>"
-        + "".join(
-            ("<td><b>{}</b></td>" if near[n] == r["p"] else "<td>{}</td>").format(f1(r["xs"][n - 1])) for n in ws
-        )
+        + "".join(("<td><b>{}</b></td>" if near[n] == r["p"] else "<td>{}</td>").format(f1(r["xs"][n - 1])) for n in ws)
         + "</tr>"
-        for r in F["byP"]
+        for r in byp
     )
-    byp += "<tr><td><b>people</b>, mean ± sd</td>" + "".join(f"<td>{f1(st[n]['mean'])} ± {st[n]['sd']:.1f}</td>" for n in ws) + "</tr>"
-    per = "".join(
-        f"<tr><td>{name}</td>"
-        + "".join("<td>–</td>" if c is None else f"<td>{pn(c['p'])} <span class=\"sp-d\">({c['err']:.1f})</span></td>" for c in row)
-        + f"<td>{pn(pp['p'])}</td></tr>"
-        for name, row, pp in zip(F["people"], F["perCell"], F["perPerson"])
+    rows_p += "<tr><td><b>people</b>, mean ± sd</td>" + "".join(f"<td>{f1(st[n]['mean'])} ± {st[n]['sd']:.1f}</td>" for n in ws) + "</tr>"
+    rng = {int(k): v for k, v in F["range"].items()}
+    rows_p += "<tr><td>range over p, shapes</td>" + "".join(f"<td>{rng[n]['shape']:.1f}</td>" for n in ws) + "</tr>"
+    rows_p += "<tr><td>range over p, hulls</td>" + "".join(f"<td>{rng[n]['hull']:.1f}</td>" for n in ws) + "</tr>"
+
+    def curve_row(label, c):
+        return f"<tr><td>{label}</td>" + "".join(f"<td>{pn(r['x'])}<br>{r['loss']:.1f}</td>" for r in c) + "</tr>"
+
+    hp = [r for r in F["curves"]["hullAll"] if r["x"] in ("-inf", "-16", "-12", "-8", "-6", "-4", "-3", "-2", "-1", "0", "1", "2")]
+    sp = [r for r in F["curves"]["shapeAll"] if r["x"] in ("-inf", "-16", "-12", "-8", "-6", "-4", "-3", "-2", "-1", "0", "1", "2")]
+    cp = [r for r in F["curves"]["capAll"] if r["x"] in ("20", "24", "28", "32", "34", "36", "38", "40", "42", "44", "48", "56")]
+    kp = F["curves"]["kAll"]
+    shp = F["curveShape"]
+
+    def fitrow(label, rws, extra):
+        return f"<tr><td>{label}</td>" + "".join(f"<td>{f1(r['x'])} <span class=\"sp-d\">({sd1(r['z'])})</span></td>" for r in rws) + f"<td>{extra}</td></tr>"
+
+    def zrow(key):
+        e = ex[key]
+        return [{"x": e["xs"][n - 1], "z": None if e["xs"][n - 1] is None else (e["xs"][n - 1] - st[n]["mean"]) / st[n]["sd"]} for n in ws]
+
+    cmp = "".join(
+        [
+            fitrow(f"(l) {pn(hull['pooled']['name'])}", hull["pooled"]["rows"], f"{hull['pooled']['rms']:.1f}; {hull['lowoRms']:.1f}"),
+            fitrow(f"(k) {pn(cap['pooled']['name'])}", cap["pooled"]["rows"], f"{cap['pooled']['rms']:.1f}; {cap['lowoRms']:.1f}"),
+            fitrow(f"shapes, {pn(shape['pooled']['name'])}", shape["pooled"]["rows"], f"{shape['pooled']['rms']:.1f}; {shape['lowoRms']:.1f}"),
+            fitrow(f"partial hull, {pn(part['pooled']['name'])}", part["pooled"]["rows"], f"{part['pooled']['rms']:.1f}; {part['lowoRms']:.1f}"),
+        ]
+        + [fitrow(ex[k]["label"], zrow(k), f"{ex[k]['rms']:.1f}") for k in ["box", "contact", "areaSum", "pairArea"]]
     )
-    per = per.replace("<td>–</td>", "<td>no answer</td>")
+    cmp += "<tr><td><b>people</b>, mean</td>" + "".join(f"<td>{f1(st[n]['mean'])}</td>" for n in ws) + "<td></td></tr>"
 
-    def fitrow(label, rows):
-        return f"<tr><td>{label}</td>" + "".join(f"<td>{f1(r['x'])} <span class=\"sp-d\">({sd1(r['z'])})</span></td>" for r in rows) + "</tr>"
+    tests = {t["n"]: t for t in F["tests"]}
+    trow = "<tr><td>box and profile models span</td>" + "".join(f"<td>{tests[n]['spread']:.1f}</td>" for n in ws) + "</tr>"
+    trow += "<tr><td>people's sd</td>" + "".join(f"<td>{st[n]['sd']:.1f}</td>" for n in ws) + "</tr>"
+    zb = lambda n, k: next(r for r in tests[n]["pick"] if r["key"] == k)
 
-    lowo_rows = F["lowo"]
-    cmp_rows = [
-        ("(k) p " + pn(F["bestPlain"]["p"]) + ", fit on w2 w3 w6 w8 with no cap", F["bestPlain"]["rows"]),
-        ("(k) " + pn(F["best"]["name"]) + ", fit on w2 w3 w6 w8", F["best"]["rows"]),
-        ("(k) each widget left out of its own fit", lowo_rows),
-    ]
-    for lab in ["contact", "(b) area model", "(d) pair white area"]:
-        xs = ex[lab]["xs"]
-        cmp_rows.append((lab, [{"x": xs[n - 1], "z": None if xs[n - 1] is None else (xs[n - 1] - st[n]["mean"]) / st[n]["sd"]} for n in ws]))
-    fits = "".join(fitrow(l, r) for l, r in cmp_rows)
-    fits += "<tr><td><b>people</b>, mean</td>" + "".join(f"<td>{f1(st[n]['mean'])}</td>" for n in ws) + "</tr>"
-
-    def rz(rows, wset):
-        return rms([rows[n - 1]["z"] for n in wset])
-
-    plain_r, best_r = F["bestPlain"]["rows"], F["best"]["rows"]
-    lowo_rms = rms([r["z"] for r in lowo_rows])
-    pw = rms(zs_of(ex["(d) pair white area"]["xs"], ws))
-    am = rms(zs_of(ex["(b) area model"]["xs"], ws))
-    ct = rms(zs_of(ex["contact"]["xs"], ws))
-    capAll = {r["cap"]: r["loss"] for r in F["curves"]["capAll"]}
+    hb = F["byP"]["hull"]
+    h4 = {r["p"]: r["xs"][3] for r in hb}
+    w4p = sorted(v["4"] for v in vals)
+    hr = {r["n"]: r for r in hull["pooled"]["rows"]}
+    w8in = sum(1 for r in hb if abs(r["xs"][7] - st[8]["mean"]) <= st[8]["sd"])
+    lo = {r["n"]: r for r in hull["lowo"]}
+    clo = {r["n"]: r for r in cap["lowo"]}
 
     return f"""
 <h3 id="sp-fit">Fitting one model to the responses</h3>
-<p>Josh's reading of the survey: some of the spread comes from people using different ways to judge a gap (on the first widget one person seems to compare the narrowest part of the gap, at the bottom of the triangle), and some widgets have almost no spread. This section tests that with one family of measures, fit to the five saved responses.</p>
-<p><b>(k) The power mean of the gap.</b> On each horizontal line of the band, d is the gap between the two shapes. The measure is M<sub>p</sub> = (mean of d<sup>p</sup>)<sup>1/p</sup>, one number for the pair. One setting p covers several earlier models:</p>
+<p>Josh's reading of the survey: some of the spread comes from people using different ways to judge a gap, and some widgets have almost no spread. This section fits one family of measures to the five saved responses. It uses seven widgets: padding against a container's wall (the airplane in a pill) was dropped as a separate problem; its five responses stay in <code>results/</code>.</p>
+<p><b>The family.</b> On each horizontal line of the band, d is the gap between the two shapes. The measure is M<sub>p</sub> = (mean of d<sup>p</sup>)<sup>1/p</sup>, one number for the pair. p = −∞ is the smallest gap (contact); p = −1 is the harmonic mean, p = 0 the geometric mean and p = 1 the plain mean gap, the white area divided by the band. Negative p leans toward the narrowest part of the gap. A widget's answer is the place where the two compared gaps measure the same, the rule every model here uses.</p>
+<p>A notch or an open corner makes the gap deep on some lines, and something has to say how much that depth counts. Two answers were tried:</p>
 <ul>
-<li>p = −∞ is the smallest gap, which is <b>contact</b>.</li>
-<li>p = −1 is the harmonic mean, p = 0 the geometric mean, and p = 1 the plain mean gap, the white area divided by the band.</li>
-<li>A <b>cap</b> c first clips each d to at most c, so a deep notch counts no more than c (the same idea as the 36 px cap in (d) pair white area, which is p = 1 with c = 36).</li>
-</ul>
-<p>Negative p leans toward the narrowest part of the gap; positive p toward the whole white area. The band is the lines both shapes cover; counting the other lines as the cap (their union) changed the fit very little. A widget's answer uses the same rule as every model: the place where the two compared gaps measure the same. If a shape touches or overlaps its neighbor on some line, M<sub>p</sub> is that smallest gap for every p.</p>
-
-<p><b>How much p moves each answer.</b> Bold is the p nearest the people's mean.</p>
-<div class="table-wrap"><table>{head}{byp}</table></div>
-<p>On w3, w6 and w8 every p gives nearly the same answer, and people agree. On w1, w4, w5 and w7, p moves the answer by 8 to 19 px, and people disagree. w2 breaks the pattern: p moves its answer by 19 px, yet all five people agree to within 2 px, near p −8.</p>
-
-<p><b>Each person's best p on each widget</b> (from −∞, −8, −4, −2, −1, −0.5, 0, 0.5, 1, 2; the miss in px is in brackets), and the one p that suits each person best over all their widgets.</p>
-<div class="table-wrap"><table><tr><th></th>{"".join(f"<th>w{n}</th>" for n in ws)}<th>own p</th></tr>{per}</table></div>
-<ul>
-<li><b>On w1 people split into groups</b> that match different p, as Josh guessed: three people sit at 14 to 15.5, the plain mean gap (p 1 to 2); one is at 23 (p −8); and 05-anon is at 28.5, close to contact (30).</li>
-<li><b>On w7</b> three people sit at 14, near contact (p −8), and one at 23 (p 2).</li>
-<li><b>On w4 no p fits anyone well.</b> Every p puts the triangle at or before contact (23.9), and people range from 20.5 to 28.5; the ones past contact are leaning toward the bounding box of the L (box gap 32), so they treat the notch as not there at all.</li>
-<li><b>People do not keep one p.</b> With one p for everyone (best p {pn(F["pooled"]["p"])}) the mean miss is {F["pooled"]["rms"]:.1f} px; with each person's own p it is {F["rmsPer"]:.1f} px. For scale, people miss each other's mean by {F["between"]:.1f} px. Only 05-anon is close to one p (near contact) on most widgets. The others switch: 02-josh, for example, matches the mean gap on w1 and w3 (p 1 and 2) but p −8 on w2, w7 and w8.</li>
+<li><b>(l) Hull.</b> Measure between the shapes' convex hulls (a letter's hull is the hull of the whole glyph), with p as the only setting. Hull with p = −∞ is contact between the hulls; with p = 1 it is the white area between them. The hull changes only shapes with a concavity: the L in w4, the letters in w5 and w6, and the densities in w8. The wedge between two convex shapes (w1, w2, w3) is the same with or without hulls, so there p alone has to decide.</li>
+<li><b>(k) Cap.</b> Measure between the shapes, but clip each d to at most c first, so a deep part counts no more than c.</li>
 </ul>
 
-<p><b>The fit.</b> p and c were fit to the people's mean, weighting each widget by 1 / sd², over {F["searched"]} settings (17 values of p, 21 caps and none, the two bands). The table gives each answer and, in brackets, its distance from the people's mean in units of that widget's sd; within ±1 means inside the people's own spread.</p>
-<div class="table-wrap"><table>{head}{fits}</table></div>
+<p><b>How p moves each answer, between the hulls.</b> Bold is the p nearest the people's mean.</p>
+<div class="table-wrap"><table>{head}{rows_p}</table></div>
+
+<p><b>The hull fit.</b> p alone, fit to the people's mean with each widget weighted by 1 / sd². The loss along p has one valley and no spikes, on all seven widgets and on the four low-spread ones (w2, w3, w6, w8) alike, and it bottoms out at p {pn(F["best"]["hullP"])} both times. The capped measure's loss along c, at p −3, jumps up and down; that is what made the cap fragile: its best value depends on where each widget's gaps happen to pass c, and every widget uses shapes 56 px across.</p>
+<div class="table-wrap"><table>{curve_row("hulls, by p", hp)}{curve_row("shapes, by p", sp)}{curve_row("capped at p −3, by c", cp)}{curve_row("partial hull at p −8, by fill", kp)}</table></div>
+
+<p><b>The comparison.</b> Each answer, with its distance from the people's mean in units of that widget's sd in brackets (within ±1 is inside the people's own spread). The last column is the mean of that distance over the seven widgets (root mean square), then the same when each widget is left out of its own fit.</p>
+<div class="table-wrap"><table><tr><th></th>{"".join(f"<th>w{n}</th>" for n in ws)}<th>sd off; left out</th></tr>{cmp}</table></div>
 <ul>
-<li><b>Fit on the four low-spread widgets alone</b> (w2, w3, w6, w8), with no cap, p comes out sharply at −8. It is within 1 sd on {F["bestPlain"]["within"]} of the four, and misses the four high-spread widgets by {rz(plain_r, high):.1f} sd on average (w4 by {plain_r[3]['z']:.1f} sd).</li>
-<li>With a cap, the best is {pn(F["best"]["name"])}, inside 1 sd on all four low-spread widgets, which no earlier model manages (contact, the area model and pair white area each get 2 of 4). On the held-out widgets it misses by {rz(best_r, high):.1f} sd on average (w5 by {best_r[4]['z']:.1f} sd). With this cap the low-spread widgets barely choose p at all: every p from −4 to 2 does about as well.</li>
-<li><b>Leaving each widget out</b> and fitting on the other seven gives p −3 with a cap of 38 to 40 px every time, and the left-out widget lands within {max(abs(r["z"]) for r in lowo_rows):.1f} sd of the people's mean ({lowo_rms:.1f} sd on average). For comparison, with nothing fit to the survey, pair white area misses by {pw:.1f} sd on average, the area model by {am:.1f} and contact by {ct:.1f}.</li>
+<li><b>The hull does not beat the cap.</b> Over all seven widgets its loss is {hull["pooled"]["loss"]:.1f}, against {shape["pooled"]["loss"]:.1f} for plain shapes and {cap["pooled"]["loss"]:.1f} for the capped measure. With each widget left out, the hull misses by {hull["lowoRms"]:.1f} sd on average, plain shapes by {shape["lowoRms"]:.1f} and the capped measure by {cap["lowoRms"]:.1f}. On the low-spread widgets alone the hull is within 1 sd on {hull["low"]["within"]} of 4, the capped measure on {cap["low"]["within"]}.</li>
+<li><b>w4, the notch.</b> The hull helps here: at p −8 it puts the triangle at {f1(hr[4]["x"])} ({sd1(hr[4]["z"])} sd), where plain shapes put it at {f1(F["byP"]["shape"][1]["xs"][3])}. It does not reach the three people who set 25 to 28.5 ({", ".join(f1(v) for v in w4p[2:])}); only contact between the hulls (p −∞, {f1(h4["-inf"])}) gets there, and that misses the other two (at {f1(w4p[0])} and {f1(w4p[1])}).</li>
+<li><b>w6 needs something other than the hull.</b> The hull of Georgia's L fills its open corner, but people let the T's crossbar reach over the L's foot, as kerning does: the hull puts the T at {f1(hr[6]["x"])} ({sd1(hr[6]["z"])} sd) against the people's {f1(st[6]["mean"])}. The hull of the abstract L in w4 is close to what people did; the hull of the letter L is not. One guess, untested, is that people kern familiar letter pairs into each other and do not do it for plain shapes.</li>
+<li><b>w3 needs the cap, or something like it.</b> Every family with p alone misses w3 by about 2 sd when it is left out ({sd1(lo[3]["z"])} sd for the hull): w2, a triangle's tip pointing at a circle, wants p near −8, and w3, a circle beside a flat square, wants p near 0. In w3 the gap opens wide above and below the circle, and people seem to ignore that far white; clipping it at c is what lets one p fit both.</li>
+<li><b>A partial hull</b>, each concavity filled a fraction of the way (a fraction of the shape, so it does not depend on size), fits best at {pn(part["pooled"]["name"])}. Its loss along the fraction has one valley, but it does not fix w6 out of sample: left out, w6 picks the full hull again and misses by {sd1(next(r for r in part["lowo"] if r["n"] == 6)["z"])} sd.</li>
 </ul>
-<p><b>How much of this is overfitting.</b> A lot may be. There are 8 widgets and 5 people, and two numbers plus a band were chosen from {F["searched"]} settings. The cap does most of the work, and the result is very sensitive to it: at p −3 the loss over all eight widgets is {capAll[28]} at a cap of 28 px, {capAll[32]} at 32, {capAll[36]} at 36, {capAll[40]} at 40 and {capAll[48]} at 48. Part of the reason is w4: once every line of both compared gaps is past the cap, both measure exactly c, so the cap alone decides where w4 lands. Every widget uses shapes 56 px across, so a cap of 40 px cannot be told apart from "0.7 of the shape's size" here. Leaving widgets out tests p and c against new widgets, not against new people or new sizes.</p>
-<p><b>When the way of judging matters.</b> The answer depends on p only when the two compared gaps have different profiles: one is nearly even from top to bottom, and the other has a wedge or a notch, where its narrowest part and its mean differ a lot (w1's square to triangle, w4's notch, w7's plane against the curved wall). When both gaps have the same profile, every p agrees (w3, w6, w8). A different profile is needed for people to split, but not enough: on w2 the triangle's tip points at the circle, and everyone judges by the tip. One guess, untested, is that people agree on a single sharp point and split on a long slanted edge or a notch.</p>
-<p><b>Conclusion.</b> The narrowest-gap end of the family, p around −3, with deep parts of the gap capped at about 40 px, matches all eight widgets within the people's own spread when each is left out, but the cap is tuned to these shapes and to five people. People switch between judging by the narrowest part and judging by the whole white area from one widget to the next, so no single person's technique explains the spread. The fit needs new widgets at other sizes, and more responses, before it means more than that.</p>
-<p class="note">The ticks for the four (k) settings (p −8; p −3 with cap 40; p −1; p 1) appear with the other models when the model toggle is on, and they are in both rankings. The fit used the five responses saved in <code>results/</code> on 2026-11-11; <code>fitRun.ts</code> recomputes it and writes <code>fit.json</code>.</p>
+
+<p><b>Which widgets test anything.</b> A widget can tell two models apart only if their answers differ by more than the people's sd. On w8 every box and profile model lands within {tests[8]["spread"]:.1f} px of the others, under the people's sd of {st[8]["sd"]:.1f}: box gap is {sd1(zb(8, "box")["z"])} sd from the people, the same as contact, and the area models and hull are closer still. So bounding boxes explain the ridgeline, and so does everything else. It tests p only weakly: between the hulls, p moves it by {rng[8]["hull"]:.1f} px from −∞ to 2, and {w8in} of those {len(hb)} values of p land within 1 sd. On w6 box gap is {sd1(zb(6, "box")["z"])} sd from the people and contact {sd1(zb(6, "contact")["z"])}; the area models ({sd1(zb(6, "areaSum")["z"])}) and the hull ({sd1(zb(6, "hull")["z"])}) are the ones it rules out. w1 to w5 are where the models really differ.</p>
+<div class="table-wrap"><table>{head}{trow}</table></div>
+
+<p><b>Conclusion.</b> The hull removes the cap's fragility, since its loss along p is smooth, but it fits worse: it fills Georgia's L, which people do not, and p alone cannot fit both the tip in w2 and the circle in w3. Both failures are about which white counts as part of a gap, and neither the hull nor a size-based cap answers that in a way that carries to new shapes. The capped p −3, c 40 still fits these seven widgets best and is still tuned to their size. Of the seven widgets, w6 and w8 barely separate box from contact, so new widgets should look like w1 to w5, at more than one size.</p>
+<p class="note">The tick for (l) at p −8 appears with the other models when the model toggle is on, and it is in both rankings. The fit used the five responses saved in <code>results/</code> on 2026-11-11; <code>fitRun.ts</code> recomputes it and writes <code>fit.json</code>.</p>
 """
 
 
@@ -173,7 +179,7 @@ SECTIONS = [
         id='set-it-yourself',
         title='Set it yourself',
         blocks=[
-            ("raw", widgets_fragment(),"The page has an interactive here: eight widgets (shapes, a notch, Georgia letters, an icon in a pill, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set."),
+            ("raw", widgets_fragment(),"The page has an interactive here: seven widgets (shapes, a notch, Georgia letters, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set."),
         ],
     ),
     dict(

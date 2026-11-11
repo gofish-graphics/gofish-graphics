@@ -295,4 +295,8 @@ const w8: Def = {
 };
 
 export const DEFS = [w1, w2, w3, w4, w5, w6, w7, w8];
+// Widget 7 (padding against the pill's wall) is dropped from the page, the
+// fits and the rankings: Josh judged it too noisy and a different problem.
+// Ids stay 1 to 8 so saved survey results, which have a w7 line, still parse.
+export const DROPPED = new Set([7]);
 export { square };

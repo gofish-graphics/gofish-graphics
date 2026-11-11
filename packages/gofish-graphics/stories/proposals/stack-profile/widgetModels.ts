@@ -141,6 +141,48 @@ const minGap = (g: (number | null)[]) => Math.min(...(g.filter((x) => x !== null
 export const gapProfile = (A: Shape, a: number, B: Shape, b: number, tv: Band) => lineGaps(sidesOf(A, tv), a, sidesOf(B, tv), b);
 
 /**
+ * The convex hull of a shape: of all its contours together (a whole glyph,
+ * counters filled). A wall (a shape with an explicit `box`, the outside of
+ * the pill) is not a figure and stays as it is.
+ */
+const hulls = new WeakMap<Shape, Shape>();
+export function hull(sh: Shape): Shape {
+  if ((sh as Wall).box) return sh;
+  if (!hulls.has(sh)) {
+    const pts = [...new Map(sh.contours.flat().map((p) => [`${p[0]},${p[1]}`, p])).values()].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+    const cross = (o: Pt, p: Pt, q: Pt) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+    const half = (ps: Pt[]) => {
+      const h: Pt[] = [];
+      for (const p of ps) {
+        while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop();
+        h.push(p);
+      }
+      return h.slice(0, -1);
+    };
+    const ring = [...half(pts), ...half([...pts].reverse())];
+    hulls.set(sh, { contours: [ring], holes: [false] });
+  }
+  return hulls.get(sh)!;
+}
+
+/**
+ * The gap profile with each shape's concavities filled by a fraction k: on
+ * each scanline a facing side moves k of the way from the shape's own side
+ * to its convex hull's (k = 0 the shape, k = 1 the hull). Where the shape is
+ * absent on a line and k > 0, the hull's side is used.
+ */
+export function gapProfileK(A: Shape, a: number, B: Shape, b: number, tv: Band, k: number) {
+  if (k === 0) return gapProfile(A, a, B, b, tv);
+  const [sA, hA, sB, hB] = [sidesOf(A, tv), sidesOf(hull(A), tv), sidesOf(B, tv), sidesOf(hull(B), tv)];
+  return tv.map((_, i) => {
+    if (!hA[i] || !hB[i]) return null;
+    const ra = sA[i] ? (1 - k) * sA[i]![1] + k * hA[i]![1] : hA[i]![1];
+    const lb = sB[i] ? (1 - k) * sB[i]![0] + k * hB[i]![0] : hB[i]![0];
+    return b + lb - a - ra;
+  });
+}
+
+/**
  * (k) The power mean of a gap profile, (mean of d^p)^(1/p): p = -Infinity is
  * the min (contact), p = 0 the geometric mean, p = 1 the mean (white area over
  * the band). Each d is capped at `cap` first. With `union`, a line where a
@@ -241,4 +283,6 @@ export const MODELS: { key: string; label: string; m: Measure }[] = [
   { key: "pm3c", label: "(k) power mean p −3, cap 40", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), -3, 40) },
   { key: "pm1h", label: "(k) harmonic mean p −1", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), -1) },
   { key: "pm1", label: "(k) mean gap p 1", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), 1) },
+  // (l) the same power mean between the shapes' convex hulls, no cap (fitRun.ts fits p)
+  { key: "hull", label: "(l) hull, p −8", m: (A, a, B, b, tv) => powerMean(gapProfileK(A, a, B, b, tv, 1), -8) },
 ];

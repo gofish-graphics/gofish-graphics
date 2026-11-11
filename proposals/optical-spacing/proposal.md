@@ -47,7 +47,7 @@ So the `Spacing` family likely needs both, chosen by what the visualization is f
 
 ## Set it yourself
 
-The page has an interactive here: eight widgets (shapes, a notch, Georgia letters, an icon in a pill, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set.
+The page has an interactive here: seven widgets (shapes, a notch, Georgia letters, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set.
 
 ## Josh's test rows and candidates (a) to (f)
 

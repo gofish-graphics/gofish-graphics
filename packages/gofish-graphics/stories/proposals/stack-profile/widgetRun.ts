@@ -7,7 +7,7 @@
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { B0, DEFS, square, type Def, type Item, type Pair } from "./widgetDefs";
+import { B0, DEFS, DROPPED, square, type Def, type Item, type Pair } from "./widgetDefs";
 import type { Shape } from "./spacingModels";
 import { extX, extY, MODELS, S } from "./widgetModels";
 // ---------------------------------------------------------------------------
@@ -50,7 +50,8 @@ function draw(def: Def) {
   };
 }
 
-const widgets = DEFS.map((def, n) => {
+const widgets = DEFS.flatMap((def, n) => {
+  if (DROPPED.has(n + 1)) return [];
   const t0 = Date.now();
   const w = {
     n: n + 1,
