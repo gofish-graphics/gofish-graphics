@@ -561,10 +561,14 @@
       </table>
     </div>
     <p>
-      Every baseline holds. What breaks the rule is a divide, a stack with a
-      given whole such as <code>size: normalize</code>: it rescales each slice's
-      thicknesses to the whole, so it resizes slices. That is why a divide is
-      not a baseline.
+      Every baseline holds, and nothing in layout resizes a slice. A 100%
+      stacked area is not a separate divide operation. It is
+      <code>normalize</code>, the callback
+      <code>(x, xs) =&gt; x / sum(xs)</code> with <code>xs</code> the values in
+      one x column, which changes the values before layout, followed by a plain
+      stack that only moves slices. When the whole is a drawn shape instead of 1
+      (a bottle filled by share), that is a size choice for the stack's total,
+      not a new operation.
     </p>
   </article>
   <h2 id="baselines">1. Stacked area, with each baseline</h2>
@@ -1345,7 +1349,8 @@ spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 70, anchor: &quot;b
     <li>
       <b>A stack moves slices and never resizes them.</b> Its frame for a child
       is one offset per slice. Every <code>baseline</code> is a choice of those
-      offsets. A divide (a given whole) resizes, so it is not a baseline.
+      offsets. A 100% stack is <code>normalize</code> on the values followed by
+      a plain stack, so there is no divide operation and no exception.
     </li>
     <li>
       <b>Each value is a size, not a pixel count.</b> It is a data amount times

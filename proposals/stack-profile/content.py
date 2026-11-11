@@ -68,7 +68,7 @@ SECTIONS = [
 <tr><td><code>Baseline.at(part, fraction)</code></td><td>minus (the start of <code>part</code> at u plus <code>fraction</code> times its thickness at u)</td><td>Yes</td></tr>
 <tr><td><code>Baseline.wiggle()</code></td><td>a running sum over the slices to the left, chosen to flatten the bands (d3's <code>stackOffsetWiggle</code>)</td><td>Yes, but its value depends on dx. d3 sums over the rows' x, so finer rows give a slightly different curve. In the limit the sum is an integral, so the proposal defines wiggle on the profile, not on the rows.</td></tr>
 </table></div>
-<p>Every baseline holds. What breaks the rule is a divide, a stack with a given whole such as <code>size: normalize</code>: it rescales each slice's thicknesses to the whole, so it resizes slices. That is why a divide is not a baseline.</p>"""),
+<p>Every baseline holds, and nothing in layout resizes a slice. A 100% stacked area is not a separate divide operation. It is <code>normalize</code>, the callback <code>(x, xs) =&gt; x / sum(xs)</code> with <code>xs</code> the values in one x column, which changes the values before layout, followed by a plain stack that only moves slices. When the whole is a drawn shape instead of 1 (a bottle filled by share), that is a size choice for the stack's total, not a new operation.</p>"""),
         ],
     ),
     dict(
@@ -324,7 +324,7 @@ spread({ by: "month", dir: "y", spacing: 70, anchor: "baseline" }); // @hl"""],
 
 RULES = [
     "<b>A shape reports its profile, a list of slices.</b> At each position u along the cross axis, a slice says how far the shape reaches below and above its baseline. A ribbon reports many slices; in the limit, a function of u. A rect reports one slice that does not change, its box.",
-    "<b>A stack moves slices and never resizes them.</b> Its frame for a child is one offset per slice. Every <code>baseline</code> is a choice of those offsets. A divide (a given whole) resizes, so it is not a baseline.",
+    "<b>A stack moves slices and never resizes them.</b> Its frame for a child is one offset per slice. Every <code>baseline</code> is a choice of those offsets. A 100% stack is <code>normalize</code> on the values followed by a plain stack, so there is no divide operation and no exception.",
     "<b>Each value is a size, not a pixel count.</b> It is a data amount times the scale factor plus fixed pixels, so a stack can still solve its scale before layout.",
     "<b>Local means two things.</b> An operator reads only its children's summaries (a box or a profile), never their rows or vertices, and it writes only each child's frame. When every part is a box, the offsets are all equal and the frame is today's translate.",
     "<b>A profile may be a function.</b> <code>x: mass.support()</code> and <code>h: mass.density()</code> are both functions of one hidden variable t. The ribbon samples t and evaluates every channel that is a function of t at each sample. The range of t belongs to the expression. Two curve channels over different variables in one mark, such as <code>x: mass.support()</code> with <code>h: length.density()</code>, are an error.",
