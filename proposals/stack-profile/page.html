@@ -266,8 +266,21 @@
   .decisions li {
     margin: 0.5em 0;
   }
-  .card.insert {
-    border-left: 4px solid var(--accent);
+  .item {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+    gap: 16px;
+    align-items: start;
+    border-top: 1px solid var(--line);
+    padding-top: 12px;
+    margin-top: 12px;
+  }
+  .wide img {
+    width: 100%;
+  }
+  .note {
+    font-size: 0.9rem;
+    color: var(--muted);
   }
   .insert .figs {
     grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr));
@@ -301,1545 +314,472 @@
   rel="stylesheet"
 />
 <main>
-  <h1>Stack profiles: one geometry for stacking and dividing</h1>
+  <h1>Stack profiles, in three examples</h1>
   <ul class="summary">
     <li>
-      Stacked areas, streamgraphs, stacked densities, croissants, ridgelines,
-      sankey strands and anchor slots all read one thing from a shape: how thick
-      it is at each position along the other axis. Call it the shape's
-      <b>profile</b>. A box is the profile that does not change.
+      A stacked area is the limit of stacked bars. Draw it as bars of width dx
+      and shrink dx. Each column is an ordinary stack of boxes, and the stack
+      only moves each box. So the one new thing a stack needs is a child that
+      reports many thin boxes, its <b>slices</b>, instead of one. The list of
+      slices is the shape's <b>profile</b>.
     </li>
     <li>
-      With profiles, <code>stack</code> stays one local operator. It reads each
-      child's profile, adds them, and places each child on the boundary below
-      it. <code>spread</code> can read the same profile to space shapes by their
-      outlines (<code>spacing: Spacing.contour(4)</code>),
-      <code>partition</code> cuts a profile's domain into cells, and a divide is
-      a stack whose whole is given.
+      A stack's <code>baseline</code> option chooses where its own 0 is:
+      <code>Baseline.start()</code>, <code>Baseline.middle()</code>,
+      <code>Baseline.wiggle()</code> or
+      <code>Baseline.at(part, fraction)</code>. Each one gives every slice an
+      offset and never changes a thickness.
     </li>
     <li>
-      A density is a profile given by a function:
-      <code>ribbon({ x: mass.support(), h: mass.density() })</code> needs no
-      rows and no grid. Both channels are functions of one hidden variable t,
-      and the renderer samples t when it draws, so no spec names a grid.
+      A density is two channels over one hidden variable t,
+      <code>ribbon({ x: mass.support(), h: mass.density() })</code>.
+      <code>partition</code> cuts that profile into cells, which draws the
+      croissant with no grid and no <code>intersect</code>.
+    </li>
+    <li>
+      <code>spread</code> can read the same slices to space shapes by their
+      outlines, <code>Spacing.contour(n)</code>. On traced glyphs and on
+      circles, triangles and squares, contact spacing does not look even. The
+      page shows where, and lists the choices.
     </li>
   </ul>
-  <div class="rec-box">
-    <b>Recommendation: Approach A, profiles.</b> Add one geometry type, the
-    profile, that every node can report (a box reports a constant one). Keep one
-    flow <code>stack</code> that adds profiles. Its <code>baseline</code> option
-    chooses where the stack's own 0 is (<code>Baseline.start()</code>,
-    <code>Baseline.middle()</code>, <code>Baseline.wiggle()</code>), and a
-    parent's <code>alignment</code> lines up those 0 points.
-    <code>spread</code>'s <code>spacing</code> takes a number or a
-    <code>Spacing</code> strategy (box, pitch, contour), which replaces its
-    <code>anchor</code> option. <code>partition</code> on a profile restricts it
-    to cells, which draws the croissant with no <code>intersect</code>. A
-    density's position is written explicitly as <code>support()</code> on the
-    same field expression. A ribbon chart, whose order changes at each x, stays
-    the per-x spelling it is today. <b>Runner-up: B, per-x core.</b> It is
-    today's engine with fixes and costs least, but it keeps two concepts of
-    thickness and answers locality by never letting a stack see a ribbon.
-  </div>
+  <p class="note">
+    This page is focused on three examples and the idea behind them. The full
+    survey of eleven examples is at commit
+    <a
+      href="https://github.com/gofish-graphics/gofish-graphics/blob/2f3b2a4bf/proposals/stack-profile/proposal.md"
+      >2f3b2a4bf</a
+    >.
+  </p>
   <div class="toggle">
     <span class="muted">Code in</span
     ><button data-lang="js" aria-pressed="true">JavaScript</button
     ><button data-lang="py" aria-pressed="false">Python</button>
   </div>
-
-  <h2>Rules</h2>
-  <ul>
-    <li>
-      <b>A profile is an extent that varies along the other axis.</b> For an
-      axis d (the stacking axis) and the cross axis u, a profile is a domain of
-      u and, at each u in it, a descent and an ascent around the node's
-      baseline. A box is the constant profile over its cross extent.
-    </li>
-    <li>
-      <b>Each value is a size, not a pixel count.</b> It is a data amount times
-      the scale factor plus fixed pixels (a stroke, a fixed-size rect), so a
-      stack can still solve its scale before layout.
-    </li>
-    <li>
-      <b>Readers differ only in how they combine profiles.</b>
-      <code>stack</code> adds them at each u. <code>spread</code> with contour
-      spacing takes the largest overlap. A divide adds them and rescales to a
-      given whole. <code>partition</code> restricts the domain to cells. An
-      anchor's slot flow runs along a part whose length is a profile's edge.
-    </li>
-    <li>
-      <b>Local means two things.</b> An operator reads only its children's
-      summaries (a box or a profile), never their rows or vertices, and it
-      writes only each child's frame. A profile stack's frame for a child is the
-      boundary curve below it. When every part is a box, that curve is flat and
-      the frame is today's translate.
-    </li>
-    <li>
-      <b>Only amounts stack.</b> A part of a profile stack must have a thickness
-      along u. A line, a circle, text or an image has none, so it is an error in
-      a profile stack, and the error names the fix.
-    </li>
-    <li>
-      <b>Profiles live in the layer's unbent space.</b> Polar,
-      <code>Coord.along(spine)</code> and other coordinate transforms bend the
-      result afterwards, so a radial stacked area and strands along a sankey
-      link are plain stacks.
-    </li>
-    <li>
-      <b>A profile may be a function.</b> <code>x: mass.support()</code> and
-      <code>h: mass.density()</code> are both functions of one hidden variable
-      t: the support is t &#8614; t and the density is t &#8614; f(t). The
-      ribbon samples t and evaluates every channel that is a function of t at
-      each sample, as a parametric curve (x(t), y(t)) does. No spec names a
-      grid, and <code>repeat</code> stays discrete.
-    </li>
-  </ul>
   <details>
     <summary>Terms used on this page</summary>
     <div class="table-wrap">
       <table>
         <tr>
+          <td><b>Slice</b></td>
+          <td>
+            A thin box of a shape at one position u along the cross axis: how
+            far the shape reaches below and above its baseline there.
+          </td>
+        </tr>
+        <tr>
           <td><b>Profile</b></td>
           <td>
-            The thickness of a shape along one axis (d) as a function of
-            position along the other (u): at each u, how far the shape reaches
-            below and above its baseline (its descent and ascent, the
-            font-metric words GoFish already uses). Precedents: a tidy tree's
-            contour, a skyline in computational geometry, and the calculus
-            region between two graphs, {(u, v): lo(u) &le; v &le; hi(u)}.
-          </td>
-        </tr>
-        <tr>
-          <td><b>Index</b></td>
-          <td>
-            The cross-axis position u that a profile is a function of. Two
-            profiles can be added at each u only if their indexes are positions
-            on one shared scale.
-          </td>
-        </tr>
-        <tr>
-          <td><b>Hull</b></td>
-          <td>
-            The box around a profile: from its lowest point to its highest. A
-            parent that reads only boxes sees the hull.
+            A shape's list of slices, or in the limit the function from u to its
+            reach below and above its baseline. A box is one slice that does not
+            change. Precedents: a tidy tree's contour, a skyline in
+            computational geometry, and the calculus region between two graphs.
           </td>
         </tr>
         <tr>
           <td><b>Baseline</b></td>
           <td>
-            A node's own 0 point. Today a rect's baseline is its bottom edge,
-            and it bubbles up: a parent with
-            <code>alignment: "baseline"</code> lines up its children's 0 points.
-            A stack's <code>baseline</code> option chooses where the stack's 0
-            is. In the code it is
+            A node's own 0 point. A rect's baseline is its bottom edge, and it
+            bubbles up: a parent with <code>alignment: "baseline"</code> lines
+            up its children's 0 points. A stack's <code>baseline</code> option
+            chooses where the stack's 0 is. In the code the model is
             <code>StackOrigin</code> (<code>constraints/distribute.ts</code>).
-          </td>
-        </tr>
-        <tr>
-          <td><b>Frame</b></td>
-          <td>
-            Where an operator puts a child's local 0. Today it is a point (a
-            translate). In a profile stack it is the boundary curve below the
-            child.
-          </td>
-        </tr>
-        <tr>
-          <td><b>Glue</b></td>
-          <td>
-            Neighboring parts share one boundary, so no gap or overlap opens
-            between them. The equations are g_i(u) &minus; g_(i&minus;1)(u) =
-            f_i(u).
-          </td>
-        </tr>
-        <tr>
-          <td><b>Given whole</b></td>
-          <td>
-            A total that the spec fixes before the parts are known: 100%, a
-            bottle's outline, a link's width. A stack with a given whole is a
-            divide.
           </td>
         </tr>
         <tr>
           <td><b>Per-x form</b></td>
           <td>
-            <code>spread</code> or <code>scatter</code> by x, then
-            <code>stack</code>. The stack runs once in each x slice and sees
-            only that slice.
+            <code>scatter</code> or <code>spread</code> by x, then
+            <code>stack</code>, which is today's spelling of a stacked area. The
+            stack runs once in each x slice and sees only that slice.
           </td>
         </tr>
         <tr>
           <td><b>Field expression</b></td>
           <td>
-            <code>field("mass")</code>: a column expression, like polars'
+            <code>field("mass")</code>, a column expression like polars'
             <code>pl.col("mass")</code>. Bare, it is a value per row. Its
             methods make other kinds of value (see "What the methods compute").
           </td>
         </tr>
         <tr>
-          <td><b>CanSum</b></td>
+          <td><b>Box gap and contact gap</b></td>
           <td>
-            The trait that says a unit's values add up. A stack checks it.
+            Two ways to measure the space between neighbors. A box gap is
+            between bounding boxes, as <code>spread</code> does today. A contact
+            gap is the smallest gap between facing outlines, measured slice by
+            slice.
           </td>
         </tr>
       </table>
     </div>
   </details>
-
-  <h2>Precedent</h2>
-  <p>
-    How other systems stack, align and divide. Images marked real are rendered
-    here from the code shown.
-  </p>
-  <div class="grid">
-    <article class="card small">
-      <h4>ggplot2</h4>
-      <img src="img/prec-ggplot2-area.png" alt="ggplot2 render" />
-      <pre
-        class="code"
-      ><code class="language-r" data-hl="">ggplot(sampled, aes(x, y, fill = series)) +
-  geom_area()  # stat = &quot;align&quot;, position = &quot;stack&quot; </code></pre>
-      <p>
-        <code>stat_align</code> (the default since 3.4.0) reads every series at
-        the union of all x by linear interpolation and pads 0 outside each
-        series' own range, then <code>position_stack</code> adds. Same
-        misaligned data as the first card. Real render.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>ggplot2, densities</h4>
-      <img src="img/prec-ggplot2-density.png" alt="ggplot2, densities render" />
-      <pre
-        class="code"
-      ><code class="language-r" data-hl="">ggplot(peng, aes(v, after_stat(count), fill = species)) +
-  geom_density(position = &quot;stack&quot;)  # &quot;fill&quot; gives the conditional density</code></pre>
-      <p>
-        Stacked densities are a position adjustment on a computed curve.
-        <code>after_stat(count)</code> scales each group by its size. Real
-        render.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>ggridges</h4>
-      <img src="img/prec-ggridges.png" alt="ggridges render" />
-      <pre
-        class="code"
-      ><code class="language-r" data-hl="">ggplot(peng, aes(v, species)) +
-  geom_density_ridges(scale = 1.6)</code></pre>
-      <p>
-        Ridges on a categorical y with an overlap <code>scale</code>: a spread
-        with a fixed pitch. No contour spacing. Real render.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>ggalluvial</h4>
-      <img src="img/prec-ggalluvial.png" alt="ggalluvial render" />
-      <pre
-        class="code"
-      ><code class="language-r" data-hl="">ggplot(al, aes(axis1 = Class, axis2 = Sex, y = Freq)) +
-  geom_alluvium(aes(fill = Survived)) +
-  geom_stratum()</code></pre>
-      <p>
-        Strata are stacks at each axis, and each flow's ends are slots in them.
-        The closest precedent for anchors with stacked slots. Real render.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>d3-shape</h4>
-      <img src="img/prec-d3.png" alt="d3-shape render" />
-      <pre class="code"><code class="language-javascript" data-hl="">d3
-  .stack()
-  .keys(keys)
-  .offset(d3.stackOffsetWiggle)
-  .order(d3.stackOrderInsideOut)(wide);</code></pre>
-      <p>
-        Offsets (none, expand, diverging, silhouette, wiggle) and orders are
-        functions over the whole table. Keys must share every x. Real render.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>Vega-Lite</h4>
-      <img src="img/prec-vegalite.png" alt="Vega-Lite render" />
-      <pre
-        class="code"
-      ><code class="language-json" data-hl="">{ &quot;mark&quot;: &quot;area&quot;,
-  &quot;encoding&quot;: { &quot;y&quot;: { &quot;field&quot;: &quot;value&quot;, &quot;stack&quot;: &quot;center&quot; } } }</code></pre>
-      <p>
-        <code>stack</code> is an encoding property: zero, center, normalize. A
-        missing x becomes 0. Real render.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>Observable Plot</h4>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="">Plot.areaY(data, {
-  x: &quot;x&quot;,
-  y: &quot;value&quot;,
-  fill: &quot;topic&quot;,
-  offset: &quot;wiggle&quot;,
-  order: &quot;inside-out&quot;,
-});</code></pre>
-      <p>
-        <code>stackY</code> is applied for you by <code>areaY</code>. Offset and
-        order are options of the stack transform. No alignment of x grids.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>ggstream</h4>
-      <pre
-        class="code"
-      ><code class="language-r" data-hl="">ggplot(d, aes(x, value, fill = topic)) +
-  geom_stream(type = &quot;mirror&quot;)  # &quot;ridge&quot;, &quot;proportional&quot; </code></pre>
-      <p>
-        Snaps every series to a 1000-point grid and smooths, then stacks. The
-        grid is hidden but fixed.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>matplotlib</h4>
-      <pre
-        class="code"
-      ><code class="language-python" data-hl="">ax.stackplot(x, ys, baseline=&quot;weighted_wiggle&quot;)</code></pre>
-      <p>
-        One x array for all series. Baselines zero, sym, wiggle,
-        weighted_wiggle.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>Mascot</h4>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="">// paraphrased from Mascot&#x27;s stacked area example
-let area = scene.mark(&quot;area&quot;, { x1, y1, x2, y2 });
-let areas = scene.densify(area, table, { attribute: &quot;date&quot; });
-let bands = scene.divide(areas, table, {
-  attribute: &quot;company&quot;,
-  orientation: &quot;vertical&quot;,
-});</code></pre>
-      <p>
-        Draw the whole, densify to common vertices, divide by group at each
-        vertex. The divide-first model of Approach C. Paraphrase, not verbatim.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>PiCCL</h4>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="">// paraphrased
-divide(circle, &quot;angular&quot;, { by: &quot;category&quot;, size: &quot;value&quot; });</code></pre>
-      <p>
-        Divides a drawn shape (a circle, a bottle) into parts by weight. A given
-        whole.
-      </p>
-    </article>
-    <article class="card small">
-      <h4>TeX and Haskell diagrams</h4>
-      <pre
-        class="code"
-      ><code class="language-plaintext" data-hl="">\vbox{\hbox{A}\hbox{B}}      % boxes report height and depth
-a === b                        -- diagrams: placed by envelopes</code></pre>
-      <p>
-        TeX stacks boxes that report height, depth and a baseline. Haskell
-        diagrams places shapes by their envelope, a support function. Both read
-        a summary richer than a box, as a profile is, and never the shape's
-        parts.
-      </p>
-    </article>
-  </div>
-
-  <h2>Approaches</h2>
-  <div class="grid3">
-    <article class="card approach rec">
-      <h3>A. Profiles (recommended)</h3>
-      <p>
-        Every node can report a profile. A box reports a constant one.
-        <code>stack</code> adds profiles at each u and gives each child the
-        boundary below it as its frame. <code>spread</code> with contour spacing
-        reads the same profile. A divide is a stack with a given whole.
-        <code>partition</code> on a profile's index restricts it. A density is a
-        profile given by a function.
-      </p>
-      <h4>Composition</h4>
-      <ul>
-        <li>
-          <b>Coordinate transforms.</b> Profiles live in the layer's unbent
-          space, so polar, <code>Coord.clock</code> and
-          <code>Coord.along(spine)</code> bend the result after the stack. Every
-          geometry reader already works on the unbent shape (#1342, #1298:
-          outline readers ignore the coordinate bend), so this is the rule, not
-          a new case. Contour spacing in the unbent space still prevents overlap
-          on screen under any one-to-one transform. <code>Coord.along</code> is
-          one-to-one only within its bend limit, and past it the layout raises
-          an error.
-        </li>
-        <li>
-          <b>Anchors.</b> A part such as <code>x-max</code> of a violin is a
-          one-dimensional space whose index is the profile's u. A slot flow is
-          an ordinary flow there: <code>partition</code> slots are cells of u,
-          <code>stack</code> slots are shares of the part's length. Part names
-          stay a separate decision.
-        </li>
-        <li>
-          <b>Distributions (#980).</b> <code>x: mass.support()</code> with
-          <code>h: mass.density()</code> is a profile with no rows. A cell of a
-          Dist partition is the Dist over the cell with its mass, which picks
-          the mass reading the croissant page left open.
-          <code>repeat</code> stays discrete.
-        </li>
-        <li>
-          <b>Choose (silhouette note).</b> A profile is the silhouette note's
-          contour instance. On constant profiles the profile stack equals
-          today's box stack, which is that note's Law 2 for the degenerate case,
-          so every existing chart is unchanged. Its domination order has no
-          bounded width, so a <code>choose</code> over profile layouts is first
-          fit, which is already <code>choose</code>'s default.
-        </li>
-        <li>
-          <b>Layout engine.</b> A thickness is a size claim, a data amount times
-          the scale factor plus pixels. The largest total over u is piecewise
-          linear and increasing in the scale factor, the kind of claim the size
-          pass already solves. This needs checking against the claim algebra.
-        </li>
-        <li>
-          <b>Animation.</b> A baseline is a value of the stack, so a transition
-          from zero to wiggle tweens the baseline. Stacked to grouped stays an
-          animation between two specs (#831).
-        </li>
-      </ul>
-      <p>
-        <b>Desugaring.</b> A profile stack whose parts share an order desugars
-        into today's per-x form: read every part at the union of its
-        breakpoints, stack each slice, connect. That rewrite is the shortcut
-        until the engine has a profile type.
-      </p>
-      <h4>Overlap check</h4>
-      <div class="table-wrap">
-        <table>
-          <tr>
-            <th>Pair</th>
-            <th>Overlap</th>
-          </tr>
-          <tr>
-            <td>stack of profiles vs per-x stack</td>
-            <td>
-              Exact composition when the order is one for all u. Defined by the
-              rewrite above.
-            </td>
-          </tr>
-          <tr>
-            <td>stack vs spread with contour spacing</td>
-            <td>
-              Small shared kernel. Both read the profile and share the split.
-              They differ in the combine (sum against largest overlap) and the
-              result (one space against separate spaces). On boxes with no
-              spacing they place shapes alike.
-            </td>
-          </tr>
-          <tr>
-            <td>divide vs stack</td>
-            <td>
-              Same operator, a different closing condition: a given whole
-              instead of a baseline. <code>field(f).normalize()</code> already
-              has this type.
-            </td>
-          </tr>
-          <tr>
-            <td><code>cut</code> by weight</td>
-            <td>
-              Exact composition: the regions of
-              <code>stack({ by, size })</code> intersected with the shape. So
-              <code>cut</code> takes the operator, not a mode.
-            </td>
-          </tr>
-          <tr>
-            <td><code>cut</code> by cells, croissant</td>
-            <td>
-              Exact composition: <code>partition</code> regions intersected with
-              the shape. On a profile mark, partition alone restricts the
-              profile, which draws the same picture with no intersect.
-            </td>
-          </tr>
-          <tr>
-            <td><code>Tile.slice</code>, <code>Tile.dice</code></td>
-            <td>Exact: a normalized stack (#1276 proposes deleting them).</td>
-          </tr>
-          <tr>
-            <td><code>baseline</code> vs <code>Trait.diverging</code></td>
-            <td>
-              One model, <code>StackOrigin</code>. The trait is a default that
-              desugars into it.
-            </td>
-          </tr>
-          <tr>
-            <td><code>.stack()</code> mark method (#290)</td>
-            <td>None: dropped.</td>
-          </tr>
-        </table>
-      </div>
-      <h4>Trade-offs</h4>
-      <ul>
-        <li>
-          Easy: one spelling for stacked area, streamgraph, stacked density,
-          polar and along-a-curve stacks; no rows or grids for densities; the
-          croissant and the half violin lose their helpers.
-        </li>
-        <li>
-          Awkward: a rigid shape (a circle, text, an image) as a part on a
-          curved boundary has no sensible frame, so it is an error. The ribbon
-          chart still needs the per-x form.
-        </li>
-        <li>
-          New terms: profile, index, frame (internal); <code>Baseline</code> and
-          <code>Spacing</code> on the surface.
-        </li>
-        <li>
-          Cost: a new geometry type in the engine (beside box, enclosing circle
-          and outline). Until then, the per-x rewrite is a declared shortcut.
-        </li>
-        <li>
-          Extension: custom baselines and custom profile readers are functions
-          over profiles, like the other strategy families (#1101).
-        </li>
-      </ul>
-    </article>
-    <article class="card approach">
-      <h3>B. Per-x core (runner-up)</h3>
-      <p>
-        The core has no profile. <code>stack</code> only ever reads boxes.
-        Continuous charts are written in the per-x form: rows over x (from data,
-        or from <code>sweep</code> for a density), <code>scatter</code> by x, a
-        stack in each slice, and a ribbon threading the pieces. A data helper
-        aligns misaligned series. The baseline is the <code>alignment</code> of
-        the outer scatter (<code>Align.wiggle()</code>). Contour spacing is a
-        separate pixel-outline query on <code>spread</code>.
-      </p>
-      <h4>Composition</h4>
-      <ul>
-        <li>
-          <b>Coordinates.</b> Works today in polar and would work in
-          <code>Coord.along</code>.
-        </li>
-        <li>
-          <b>Anchors.</b> Slots are flows over rows; a violin's side needs sweep
-          rows.
-        </li>
-        <li>
-          <b>Distributions.</b> Needs <code>sweep</code> (a continuum of rows)
-          for every density, and on-demand slice layout that no prototype has
-          built.
-        </li>
-        <li><b>Choose.</b> Nothing new: only boxes.</li>
-      </ul>
-      <p>
-        <b>Desugaring.</b> It is the core. Nothing desugars into it that is not
-        already there.
-      </p>
-      <h4>Overlap check</h4>
-      <div class="table-wrap">
-        <table>
-          <tr>
-            <th>Pair</th>
-            <th>Overlap</th>
-          </tr>
-          <tr>
-            <td>ribbon over per-x slices vs contour spacing</td>
-            <td>
-              Large partial overlap: two notions of a shape's thickness along x,
-              one made of rows, one of pixel outlines.
-            </td>
-          </tr>
-          <tr>
-            <td><code>align</code> helper vs stat</td>
-            <td>
-              A visible resample step that names a rule users must remember, or
-              a hidden one inside scatter, which is a heuristic.
-            </td>
-          </tr>
-          <tr>
-            <td><code>cut</code></td>
-            <td>Unchanged, with its modes.</td>
-          </tr>
-        </table>
-      </div>
-      <h4>Trade-offs</h4>
-      <ul>
-        <li>
-          Easy: costs least; it is today's engine with a resample helper and an
-          alignment strategy.
-        </li>
-        <li>
-          Awkward: every continuous chart carries <code>scatter</code> by x;
-          densities need <code>sweep</code> rows; series on different grids need
-          a step the user must remember.
-        </li>
-        <li>
-          Locality holds trivially: a stack never sees a ribbon. The cost is
-          that the ribbon is never one child.
-        </li>
-        <li>
-          New terms: <code>sweep</code>, <code>align</code>, <code>Align</code>.
-        </li>
-      </ul>
-    </article>
-    <article class="card approach">
-      <h3>C. Divide a drawn whole (Mascot)</h3>
-      <p>
-        Draw the whole first, then divide it. A stacked area is one area of the
-        total, cut by group at each x. The croissant is the density cut along x.
-        Sankey strands are the link cut across its width.
-        <code>stack</code> stays for boxes.
-      </p>
-      <h4>Composition</h4>
-      <ul>
-        <li><b>Coordinates.</b> Cut in the unbent space, as A.</li>
-        <li>
-          <b>Anchors.</b> No role: slots are not a division of a drawn shape.
-        </li>
-        <li>
-          <b>Distributions.</b> The density is the whole; cut needs each group's
-          share at each x, so it reaches into the groups anyway.
-        </li>
-      </ul>
-      <p>
-        <b>Desugaring.</b> <code>cut</code> by group is a stack of shares
-        intersected with the total, so the divide is the stack under another
-        name.
-      </p>
-      <h4>Overlap check</h4>
-      <div class="table-wrap">
-        <table>
-          <tr>
-            <th>Pair</th>
-            <th>Overlap</th>
-          </tr>
-          <tr>
-            <td>cut by group vs stack</td>
-            <td>Large partial overlap: two routes to every stacked area.</td>
-          </tr>
-          <tr>
-            <td>cut by weight vs cut by cells</td>
-            <td>
-              One name over two types (shares and positions). Josh found these
-              modes confusing.
-            </td>
-          </tr>
-        </table>
-      </div>
-      <h4>Trade-offs</h4>
-      <ul>
-        <li>
-          Easy: local by construction, since cut reads only its own mark's rows;
-          right for shapes the spec really draws first (a bottle, a horizon
-          chart).
-        </li>
-        <li>
-          Awkward: the user writes a total they do not have; stacked lines and
-          ribbon charts cannot be written; a texture per band cannot come from
-          one source.
-        </li>
-        <li>New terms: cut modes and an "across" direction.</li>
-      </ul>
-    </article>
-  </div>
-
-  <h2>Examples</h2>
-  <p>
-    Each card shows the render, the spelling in A, today's spelling, and how
-    each approach fares. Highlighted lines are the ones that change. Renders
-    marked emulated are drawn by today's engine from precomputed rows; the
-    proposed code does not run yet.
-  </p>
-
-  <article class="card" id="uneven">
-    <h3>1. Stacked area, series measured at different x</h3>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/uneven-profile.png"
-          alt="Proposed result (emulated: each series read as a linear function, added at every x)."
-        />
-        <figcaption>
-          Proposed result (emulated: each series read as a linear function,
-          added at every x).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/uneven-today.png"
-          alt="Today&#x27;s per-x spelling on the same rows: it stacks only rows that share an exact x, with no warning."
-        />
-        <figcaption>
-          Today's per-x spelling on the same rows: it stacks only rows that
-          share an exact x, with no warning.
-        </figcaption>
-      </figure>
-    </div>
+  <h2 id="limit">Why stacking may reshape an area</h2>
+  <article class="card">
     <p>
-      Maps is measured every 1, Sports every 1.5, Games at 15 jittered x. Each
-      ribbon's profile is its own curve through its own rows, so the stack adds
-      functions and needs no common sample points. Outside a series' own x range
-      its thickness is 0 (ggplot2's rule).
+      Stacking areas changes the shape of each area, which a box cannot do.
+      Josh's framing: "a ribbon's area is a limit of some AABBs. So if that
+      shape change can happen with the discrete AABB union I feel like it's more
+      acceptable and natural to have the ribbon behavior be guided by that." (An
+      AABB is an axis-aligned bounding box, the box every GoFish node reports
+      today.) This section makes that the explanation of stacking.
     </p>
-    <p class="label">Proposed (A)</p>
+    <figure class="wide">
+      <img
+        src="img/limit.png"
+        alt="Four series as stacked bars 5, 10, 20 and 60 bars wide, then the stacked area. Each bar reads its series at the bar&#x27;s middle. Real renders with today&#x27;s spread and stack; each panel scales to its own height."
+      />
+      <figcaption>
+        Four series as stacked bars 5, 10, 20 and 60 bars wide, then the stacked
+        area. Each bar reads its series at the bar's middle. Real renders with
+        today's <code>spread</code> and <code>stack</code>; each panel scales to
+        its own height.
+      </figcaption>
+    </figure>
+    <p class="label">Each bar panel, which runs today</p>
     <pre
       class="code lang-js"
-    ><code class="language-javascript" data-hl="1,2">chart(sampled)
-  .flow(stack({ by: &quot;series&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ x: &quot;x&quot;, h: &quot;y&quot;, fill: &quot;series&quot; }));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="0,1">chart(sampled).flow(stack(by=&quot;series&quot;, dir=&quot;y&quot;)).mark(
-    ribbon(x=&quot;x&quot;, h=&quot;y&quot;, fill=&quot;series&quot;)
-)</code></pre>
-    <div class="today">
-      <p class="label">Today (runs, draws the sawtooth above)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="1,2">chart(sampled)
-  .flow(scatter({ by: &quot;x&quot;, x: &quot;x&quot; }), stack({ by: &quot;series&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ h: &quot;y&quot;, fill: &quot;series&quot; }));</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, with a visible resample step</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>works, cut densifies</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works, with a visible resample step</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(sampled)
+    ><code class="language-javascript" data-hl="">chart(rows) // one row per series per bar
   .flow(
-    derive(align({ x: &quot;x&quot;, by: &quot;series&quot; })), // resample at the union of all x
-    scatter({ by: &quot;x&quot;, x: &quot;x&quot; }),
+    spread({ by: &quot;bar&quot;, dir: &quot;x&quot;, spacing: 0 }),
     stack({ by: &quot;series&quot;, dir: &quot;y&quot; })
   )
-  .mark(ribbon({ h: &quot;y&quot;, fill: &quot;series&quot; }));</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(sampled).flow(
-    derive(align(x=&quot;x&quot;, by=&quot;series&quot;)),
-    scatter(by=&quot;x&quot;, x=&quot;x&quot;),
-    stack(by=&quot;series&quot;, dir=&quot;y&quot;),
-).mark(ribbon(h=&quot;y&quot;, fill=&quot;series&quot;))</code></pre>
-        </div>
-        <div>
-          <p class="label">C: works, cut densifies</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(sampled).mark(
-  ribbon({ x: &quot;x&quot;, h: &quot;y&quot;, fill: &quot;series&quot; }).cut({ by: &quot;series&quot;, dir: &quot;y&quot; })
-);</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(sampled).mark(ribbon(x=&quot;x&quot;, h=&quot;y&quot;, fill=&quot;series&quot;).cut(by=&quot;series&quot;, dir=&quot;y&quot;))</code></pre>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card" id="streamgraph">
-    <h3>2. Streamgraph with a wiggle baseline</h3>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/stream-wiggle.png"
-          alt="Weighted wiggle, the d3 and Plot default (emulated: the baseline is computed in derive)."
-        />
-        <figcaption>
-          Weighted wiggle, the d3 and Plot default (emulated: the baseline is
-          computed in derive).
-        </figcaption>
-      </figure>
-    </div>
-    <p>
-      The baseline is a profile too: g_0(u), chosen to flatten the boundaries.
-      It needs every series over all x, which the whole-series stack sees.
-      <code>baseline</code> sets the stack's <code>StackOrigin</code>; the next
-      card shows how it meets a parent's <code>alignment</code>.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="1">chart(topics)
-  .flow(stack({ by: &quot;topic&quot;, dir: &quot;y&quot;, baseline: Baseline.wiggle() }))
-  .mark(ribbon({ x: &quot;x&quot;, h: &quot;value&quot;, fill: &quot;topic&quot; }));</code></pre>
+  .mark(rect({ w: barWidth, h: &quot;value&quot;, fill: &quot;series&quot; }));</code></pre>
     <pre
       class="code lang-py"
-    ><code class="language-python" data-hl="0">chart(topics).flow(stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.wiggle())).mark(
-    ribbon(x=&quot;x&quot;, h=&quot;value&quot;, fill=&quot;topic&quot;)
+    ><code class="language-python" data-hl="">chart(rows).flow(
+    spread(by=&quot;bar&quot;, dir=&quot;x&quot;, spacing=0),
+    stack(by=&quot;series&quot;, dir=&quot;y&quot;),
+).mark(rect(w=bar_width, h=&quot;value&quot;, fill=&quot;series&quot;))</code></pre>
+    <h4>The argument, checked step by step</h4>
+    <ol>
+      <li>
+        <b>A ribbon is the limit of a row of thin rects</b>, one per slice of x.
+        Correct. One detail: each rect reads the series at its slice, so the
+        limit is the series' curve through its rows. How a series is read
+        between its rows (its <code>curve</code>) is part of the shape.
+      </li>
+      <li>
+        <b>In the discrete case, stacking uses only what boxes allow.</b>
+        Correct. Each column is an ordinary stack of rects, as in the panels
+        above. The stack moves each rect and never changes its width or height.
+      </li>
+      <li>
+        <b
+          >One series' rects form a staircase band whose outline changes
+          shape</b
+        >, because each slice moves by a different amount, while no box is
+        reshaped. Correct. In the limit the staircase becomes the stacked
+        ribbon.
+      </li>
+      <li>
+        <b
+          >So the profile rule is: a child may report many boxes, and the parent
+          moves each one.</b
+        >
+        Correct. The thickness at each x never changes, only the offset, so
+        stacking is a translation per slice. This is what the full survey called
+        a frame that is a boundary curve: the curve is the list of offsets.
+      </li>
+      <li>
+        <b>Series sampled at different x fit too.</b> Splitting a slice in two
+        does not change the shape, so the columns can use the union of every
+        series' breakpoints. Correct, with one condition: the new slice's height
+        is the series' value at the new x, which comes from its curve (linear
+        between rows, as ggplot2 reads it). Outside its own x range a series'
+        slice is empty, so its thickness there is 0.
+      </li>
+      <li>
+        <b>Contour spacing reads the same slices.</b> The closest approach of
+        two shapes is the smallest gap over their shared slices, a skyline.
+        Correct, with a limit: the gap is measured along the spacing axis in
+        each slice, not as a straight-line distance. Example 3 shows what that
+        does to glyphs and shapes.
+      </li>
+      <li>
+        <b
+          >A rigid shape (a circle, text, a line with no thickness) is one box
+          that cannot be split, so it gets one translation.</b
+        >
+        This needs a correction. The full survey made a rigid part in a curved
+        stack an error. The slice picture gives a rigid part a defined place
+        instead: it rests on the highest point of the boundary below it across
+        its width, as a skyline does. But then the slices under it are no longer
+        glued, and a gap opens wherever the boundary below is lower. So the
+        picture turns the old rule into a choice, which is decision 2.
+      </li>
+    </ol>
+    <h4>How it relates to the approaches in the full survey</h4>
+    <p>
+      Runner-up B, the per-x form, is this argument at a fixed dx: the slices
+      are the rows' x positions, each slice is stacked on its own, and the
+      ribbon connects the stacked points. Approach A is the limit: a child
+      reports its profile as a function of x, so the stack does not depend on
+      where the rows happen to be. A can ship first as B, by choosing the slices
+      as the union of breakpoints. That is the declared shortcut in the full
+      survey.
+    </p>
+    <h4>Does every baseline only move slices?</h4>
+    <div class="table-wrap">
+      <table>
+        <tr>
+          <th>Baseline</th>
+          <th>Offset of slice u</th>
+          <th>Only moves slices?</th>
+        </tr>
+        <tr>
+          <td><code>Baseline.start()</code></td>
+          <td>0</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td><code>Baseline.middle()</code></td>
+          <td>minus half the total at u</td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td><code>Baseline.at(part, fraction)</code></td>
+          <td>
+            minus (the start of <code>part</code> at u plus
+            <code>fraction</code> times its thickness at u)
+          </td>
+          <td>Yes</td>
+        </tr>
+        <tr>
+          <td><code>Baseline.wiggle()</code></td>
+          <td>
+            a running sum over the slices to the left, chosen to flatten the
+            bands (d3's <code>stackOffsetWiggle</code>)
+          </td>
+          <td>
+            Yes, but its value depends on dx. d3 sums over the rows' x, so finer
+            rows give a slightly different curve. In the limit the sum is an
+            integral, so the proposal defines wiggle on the profile, not on the
+            rows.
+          </td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      Every baseline holds. What breaks the rule is a divide, a stack with a
+      given whole such as <code>size: normalize</code>: it rescales each slice's
+      thicknesses to the whole, so it resizes slices. That is why a divide is
+      not a baseline.
+    </p>
+  </article>
+  <h2 id="baselines">1. Stacked area, with each baseline</h2>
+  <article class="card">
+    <p>
+      US unemployment by industry, monthly from 2000 to 2010, 14 industries
+      (vega-datasets <code>unemployment-across-industries</code>, from the
+      Bureau of Labor Statistics). The stack's <code>baseline</code> chooses
+      where its own 0 is. Each choice is an offset per slice, so every band
+      keeps its thickness.
+    </p>
+    <div class="item">
+      <figure class="">
+        <img
+          src="img/jobs-start.png"
+          alt="Baseline.start(), the default: the first industry starts at 0. Real render of today&#x27;s spelling."
+        />
+        <figcaption>
+          <code>Baseline.start()</code>, the default: the first industry starts
+          at 0. Real render of today's spelling.
+        </figcaption>
+      </figure>
+      <div>
+        <p class="label">Proposed</p>
+        <pre
+          class="code lang-js"
+        ><code class="language-javascript" data-hl="1,2">chart(jobs)
+  .flow(stack({ by: &quot;series&quot;, dir: &quot;y&quot; }))
+  .mark(ribbon({ x: &quot;date&quot;, h: &quot;count&quot;, fill: &quot;series&quot; }));</code></pre>
+        <pre
+          class="code lang-py"
+        ><code class="language-python" data-hl="0,1">chart(jobs).flow(stack(by=&quot;series&quot;, dir=&quot;y&quot;)).mark(
+    ribbon(x=&quot;date&quot;, h=&quot;count&quot;, fill=&quot;series&quot;)
 )</code></pre>
-    <div class="today">
-      <p class="label">Today (wiggle computed by hand, about 20 lines)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="2,4">chart(topics)
+        <p class="label">Today (runs)</p>
+        <pre
+          class="code"
+        ><code class="language-javascript" data-hl="1">chart(jobs)
+  .flow(scatter({ by: &quot;date&quot;, x: &quot;date&quot; }), stack({ by: &quot;series&quot;, dir: &quot;y&quot; }))
+  .mark(ribbon({ h: &quot;count&quot;, fill: &quot;series&quot; }));</code></pre>
+      </div>
+    </div>
+    <div class="item">
+      <figure class="">
+        <img
+          src="img/jobs-middle.png"
+          alt="Baseline.middle(): the middle of the whole is at 0 (emulated: d3&#x27;s silhouette offset computed in derive). The y axis is dropped, because position no longer means an amount from 0."
+        />
+        <figcaption>
+          <code>Baseline.middle()</code>: the middle of the whole is at 0
+          (emulated: d3's silhouette offset computed in <code>derive</code>).
+          The y axis is dropped, because position no longer means an amount from
+          0.
+        </figcaption>
+      </figure>
+      <div>
+        <p class="label">Proposed</p>
+        <pre
+          class="code lang-js"
+        ><code class="language-javascript" data-hl="1">chart(jobs)
+  .flow(stack({ by: &quot;series&quot;, dir: &quot;y&quot;, baseline: Baseline.middle() }))
+  .mark(ribbon({ x: &quot;date&quot;, h: &quot;count&quot;, fill: &quot;series&quot; }));</code></pre>
+        <pre
+          class="code lang-py"
+        ><code class="language-python" data-hl="0">chart(jobs).flow(stack(by=&quot;series&quot;, dir=&quot;y&quot;, baseline=Baseline.middle())).mark(
+    ribbon(x=&quot;date&quot;, h=&quot;count&quot;, fill=&quot;series&quot;)
+)</code></pre>
+        <p class="label">Today (the offset computed by hand, about 20 lines)</p>
+        <pre
+          class="code"
+        ><code class="language-javascript" data-hl="2,4">chart(jobs)
+  .flow(
+    derive((rows) =&gt; stackRows(rows, { offset: &quot;silhouette&quot; })),
+    scatter({ by: &quot;date&quot;, x: &quot;date&quot; }),
+    scatter({ by: &quot;series&quot;, yMin: &quot;y0&quot;, yMax: &quot;y1&quot; })
+  )
+  .mark(ribbon({ fill: &quot;series&quot; }));</code></pre>
+      </div>
+    </div>
+    <div class="item">
+      <figure class="">
+        <img
+          src="img/jobs-wiggle.png"
+          alt="Baseline.wiggle(): the baseline curve that flattens the bands, a streamgraph (emulated: d3&#x27;s wiggle offset computed in derive)."
+        />
+        <figcaption>
+          <code>Baseline.wiggle()</code>: the baseline curve that flattens the
+          bands, a streamgraph (emulated: d3's wiggle offset computed in
+          <code>derive</code>).
+        </figcaption>
+      </figure>
+      <div>
+        <p class="label">Proposed</p>
+        <pre
+          class="code lang-js"
+        ><code class="language-javascript" data-hl="1">chart(jobs)
+  .flow(stack({ by: &quot;series&quot;, dir: &quot;y&quot;, baseline: Baseline.wiggle() }))
+  .mark(ribbon({ x: &quot;date&quot;, h: &quot;count&quot;, fill: &quot;series&quot; }));</code></pre>
+        <pre
+          class="code lang-py"
+        ><code class="language-python" data-hl="0">chart(jobs).flow(stack(by=&quot;series&quot;, dir=&quot;y&quot;, baseline=Baseline.wiggle())).mark(
+    ribbon(x=&quot;date&quot;, h=&quot;count&quot;, fill=&quot;series&quot;)
+)</code></pre>
+        <p class="label">Today (the offset computed by hand)</p>
+        <pre
+          class="code"
+        ><code class="language-javascript" data-hl="2,4">chart(jobs)
   .flow(
     derive((rows) =&gt; stackRows(rows, { offset: &quot;wiggle&quot; })),
-    scatter({ by: &quot;x&quot;, x: &quot;x&quot; }),
-    scatter({ by: &quot;topic&quot;, yMin: &quot;y0&quot;, yMax: &quot;y1&quot; })
+    scatter({ by: &quot;date&quot;, x: &quot;date&quot; }),
+    scatter({ by: &quot;series&quot;, yMin: &quot;y0&quot;, yMax: &quot;y1&quot; })
   )
-  .mark(ribbon({ fill: &quot;topic&quot; }));</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, baseline on the outer scatter</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>works, but the user writes a total</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works, baseline on the outer scatter</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(topics)
-  .flow(
-    scatter({ by: &quot;x&quot;, x: &quot;x&quot;, alignment: Align.wiggle() }),
-    stack({ by: &quot;topic&quot;, dir: &quot;y&quot; })
-  )
-  .mark(ribbon({ h: &quot;value&quot;, fill: &quot;topic&quot; }));</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(topics).flow(
-    scatter(by=&quot;x&quot;, x=&quot;x&quot;, alignment=Align.wiggle()),
-    stack(by=&quot;topic&quot;, dir=&quot;y&quot;),
-).mark(ribbon(h=&quot;value&quot;, fill=&quot;topic&quot;))</code></pre>
-        </div>
-        <div>
-          <p class="label">C: works, but the user writes a total</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(topics).mark(
-  ribbon({ x: &quot;x&quot;, h: &quot;value&quot;, fill: &quot;topic&quot; }).cut({
-    by: &quot;topic&quot;,
-    dir: &quot;y&quot;,
-    baseline: Baseline.wiggle(),
-  })
-);</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(topics).mark(
-    ribbon(x=&quot;x&quot;, h=&quot;value&quot;, fill=&quot;topic&quot;).cut(
-        by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.wiggle()
-    )
-)</code></pre>
-        </div>
+  .mark(ribbon({ fill: &quot;series&quot; }));</code></pre>
       </div>
-    </details>
-  </article>
-  <article class="card insert" id="baseline-alignment">
-    <h3>Baseline and alignment: one point, two sides of a handshake</h3>
-    <p>
-      In GoFish a node's <b>baseline</b> is its own 0 point, and it bubbles up:
-      a rect's baseline is its bottom edge, a stack of rects has the baseline of
-      its first part. A stack's <code>baseline</code> option is how the stack
-      chooses where its own 0 is along its own axis. <code>alignment</code> is
-      how a parent lines up its children on the other axis, and its value
-      <code>"baseline"</code> means "line up the children's 0 points". So the
-      two compose: the child says where its 0 is, and the parent decides whether
-      to line up those points or the children's boxes. The renders show where
-      the choice matters. Each Likert row's 0 is the middle of its Neutral bar
-      (set by <code>Trait.diverging</code>), and the stacked areas' 0 is the
-      bottom of each stack.
-    </p>
-    <div class="figs">
-      <figure>
+    </div>
+    <div class="item">
+      <figure class="">
         <img
           src="img/likert-baseline.png"
-          alt='alignment: "baseline" (the default): the rows&#x27; 0 points line up, so the Neutral middles form one line and one axis measures every row (real render).'
+          alt='Baseline.at("Neutral", 0.5): a diverging stack whose 0 is the middle of the Neutral bar. Real render of today&#x27;s spelling, on a small survey.'
         />
         <figcaption>
-          <code>alignment: "baseline"</code> (the default): the rows' 0 points
-          line up, so the Neutral middles form one line and one axis measures
-          every row (real render).
+          <code>Baseline.at("Neutral", 0.5)</code>: a diverging stack whose 0 is
+          the middle of the Neutral bar. Real render of today's spelling, on a
+          small survey.
         </figcaption>
       </figure>
-      <figure>
-        <img
-          src="img/likert-middle.png"
-          alt='alignment: "middle": the rows&#x27; boxes are centered instead, so the Neutral middles no longer line up, and no shared axis is left (real render; the axis labels are a bug).'
-        />
-        <figcaption>
-          <code>alignment: "middle"</code>: the rows' boxes are centered
-          instead, so the Neutral middles no longer line up, and no shared axis
-          is left (real render; the axis labels are a bug).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/areas-baseline.png"
-          alt='Two stacked areas spread side by side with alignment: "baseline": both start at 0, so one value axis serves both (real render).'
-        />
-        <figcaption>
-          Two stacked areas spread side by side with
-          <code>alignment: "baseline"</code>: both start at 0, so one value axis
-          serves both (real render).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/areas-middle.png"
-          alt='The same with alignment: "middle": the smaller one floats to the middle of the taller one (real render; the axis labels are the same bug).'
-        />
-        <figcaption>
-          The same with <code>alignment: "middle"</code>: the smaller one floats
-          to the middle of the taller one (real render; the axis labels are the
-          same bug).
-        </figcaption>
-      </figure>
-    </div>
-    <p class="label">The stack sets its 0; the parent lines 0 points up</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="">chart(survey, { schema: { response: Unit({ traits: [Trait.diverging()] }) } })
+      <div>
+        <p class="label">
+          Proposed (Trait.diverging stays the default and desugars to this)
+        </p>
+        <pre
+          class="code lang-js"
+        ><code class="language-javascript" data-hl="3">chart(survey)
   .flow(
-    spread({ by: &quot;question&quot;, dir: &quot;y&quot;, alignment: &quot;baseline&quot; }), // parent: line up 0 points
-    stack({ by: &quot;response&quot;, dir: &quot;x&quot; }) // child: 0 is the Neutral middle
+    spread({ by: &quot;question&quot;, dir: &quot;y&quot; }),
+    stack({ by: &quot;response&quot;, dir: &quot;x&quot;, baseline: Baseline.at(&quot;Neutral&quot;, 0.5) })
   )
   .mark(rect({ w: &quot;count&quot;, fill: &quot;response&quot; }));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="">chart(survey, schema={&quot;response&quot;: Unit(traits=[Trait.diverging()])}).flow(
-    spread(by=&quot;question&quot;, dir=&quot;y&quot;, alignment=&quot;baseline&quot;),  # parent: line up 0 points
-    stack(by=&quot;response&quot;, dir=&quot;x&quot;),  # child: 0 is the Neutral middle
+        <pre
+          class="code lang-py"
+        ><code class="language-python" data-hl="2">chart(survey).flow(
+    spread(by=&quot;question&quot;, dir=&quot;y&quot;),
+    stack(by=&quot;response&quot;, dir=&quot;x&quot;, baseline=Baseline.at(&quot;Neutral&quot;, 0.5)),
 ).mark(rect(w=&quot;count&quot;, fill=&quot;response&quot;))</code></pre>
-    <p class="label">Baseline values</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="">stack({ by: &quot;topic&quot;, dir: &quot;y&quot;, baseline: Baseline.start() }); // the default: the first part starts at 0
-stack({ by: &quot;topic&quot;, dir: &quot;y&quot;, baseline: Baseline.end() }); // the last part ends at 0: grows the other way
-stack({ by: &quot;topic&quot;, dir: &quot;y&quot;, baseline: Baseline.middle() }); // the middle of the whole is at 0
-stack({ by: &quot;answer&quot;, dir: &quot;x&quot;, baseline: Baseline.at(&quot;Neutral&quot;, 0.5) }); // what Trait.diverging desugars to
-stack({ by: &quot;topic&quot;, dir: &quot;y&quot;, baseline: Baseline.wiggle() }); // a computed curve</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="">stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.start())
-stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.end())
-stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.middle())
-stack(by=&quot;answer&quot;, dir=&quot;x&quot;, baseline=Baseline.at(&quot;Neutral&quot;, 0.5))
-stack(by=&quot;topic&quot;, dir=&quot;y&quot;, baseline=Baseline.wiggle())</code></pre>
-
-    <p>
-      The values name a place on the stack, like <code>alignment</code>'s values
-      do, so <code>center</code> becomes <code>middle</code> and
-      <code>zero</code> becomes <code>start</code>; "zero" named a data value,
-      not a place. For <code>Baseline.wiggle()</code> the 0 is the 0 of the
-      coordinates the wiggle curve is written in (d3 starts the curve at 0 at
-      the first x).
-    </p>
-    <h4>The other names, fairly</h4>
-    <div class="table-wrap">
-      <table>
-        <tr>
-          <th>Name</th>
-          <th>For it</th>
-          <th>Against it</th>
-        </tr>
-        <tr>
-          <td>
-            <b><code>baseline</code></b> (proposed)
-          </td>
-          <td>
-            It is already GoFish's word for a node's 0 point, and
-            <code>alignment: "baseline"</code> already reads it. The streamgraph
-            literature calls g_0 the baseline (Byron and Wattenberg, 2008). One
-            word names one thing in both places: the stack sets its baseline,
-            the parent lines baselines up.
-          </td>
-          <td>
-            Readers may first take <code>baseline</code> for an alignment value;
-            the handshake has to be explained once, as here.
-          </td>
-        </tr>
-        <tr>
-          <td><code>origin</code></td>
-          <td>
-            The code calls the model <code>StackOrigin</code>, and the option
-            name is free.
-          </td>
-          <td>
-            The axes note puts the origin on the measure type: it is the
-            identity or fixed point of the unit, as
-            <code>Trait.diverging</code> sets it. An option named
-            <code>origin</code> would read as overriding the measure's origin,
-            which that note rules out. The stack does not change what 0 means
-            for the data; it chooses where its own 0 sits among its parts.
-          </td>
-        </tr>
-        <tr>
-          <td>CSS <code>justify</code> and <code>align</code></td>
-          <td>
-            CSS splits the main axis (<code>justify-content</code>) from the
-            cross axis (<code>align-items</code>), which is the same split as
-            here.
-          </td>
-          <td>
-            <code>justify-content</code> distributes items in a container's free
-            space. A stack has no free space on its axis (its parts are glued),
-            so there is nothing to distribute. It would add a second word for a
-            different idea.
-          </td>
-        </tr>
-        <tr>
-          <td><code>alignment</code></td>
-          <td>One word for every "where does it sit" question.</td>
-          <td>
-            <code>alignment</code> is the parent's rule for its children on the
-            other axis. Giving <code>stack</code> an <code>alignment</code> for
-            its own axis would make one option mean two axes, depending on the
-            operator. Approach B used it only because each x slice there was a
-            child of an outer <code>scatter</code>.
-          </td>
-        </tr>
-      </table>
-    </div>
-    <p>
-      <b>Check against "origin lives on the measure type".</b> No conflict.
-      <code>Baseline.start()</code> puts the measure's own 0 at the start of the
-      first part, which is the bar chart's identity.
-      <code>Trait.diverging</code> is a fixed point read from the type, so it
-      stays the default and desugars to <code>Baseline.at</code>; an explicit
-      <code>baseline</code> over a diverging unit is an error. With
-      <code>Baseline.middle()</code> or <code>wiggle()</code>, positions on the
-      value axis no longer mean amounts from 0, so the axis can only measure
-      thickness, not position, which is why streamgraphs drop their y axis. The
-      bug in the <code>"middle"</code> renders is the same fact: once 0 points
-      stop lining up, there is no shared value axis to draw.
-    </p>
-    <p>
-      <b>A unit stack that should grow up.</b> Five stories
-      (<code>WaffleChart</code>, <code>UnitColumnChart</code>,
-      <code>UnitHistogram</code>, <code>TitanicFacet</code>,
-      <code>Violin</code>) use <code>reverse</code> or
-      <code>alignment: "end"</code> to mean bottom, because they are spreads in
-      a free space, which runs y-down. A waffle column is a count, so it is a
-      stack, and a stack grows from its baseline away from the measure's 0,
-      upward on a y-up value axis, with no <code>reverse</code>. That needs
-      stacks with spacing, which is still open.
-    </p>
-  </article>
-  <article class="card" id="density">
-    <h3>3. Stacked density curves</h3>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/density-stacked.png"
-          alt="Stacked group densities, each with area equal to its group&#x27;s count (emulated: KDE grid computed in derive)."
-        />
-        <figcaption>
-          Stacked group densities, each with area equal to its group's count
-          (emulated: KDE grid computed in derive).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/density-conditional.png"
-          alt="The same with the whole given as 1 at every x: the conditional density, a divide."
-        />
-        <figcaption>
-          The same with the whole given as 1 at every x: the conditional
-          density, a divide.
-        </figcaption>
-      </figure>
-    </div>
-    <p>
-      <code>mass.density()</code> is a curve over mass, one per species. Its
-      area is the count of rows it is made from, so the stack adds up to the
-      density of all penguins. The position is <code>mass.support()</code>.
-      <code>x: mass.support()</code> and <code>h: mass.density()</code> are both
-      functions of one hidden variable t: the support is t &#8614; t and the
-      density is t &#8614; f(t). The ribbon samples t and evaluates every
-      channel that is a function of t at each sample, as a parametric curve
-      (x(t), y(t)) does. Giving the whole (<code>size: normalize</code>) turns
-      the stack into a divide.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="3">const mass = field(&quot;mass&quot;);
-chart(penguins)
-  .flow(stack({ by: &quot;species&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ x: mass.support(), h: mass.density(), fill: &quot;species&quot; }));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="2">mass = field(&quot;mass&quot;)
-chart(penguins).flow(stack(by=&quot;species&quot;, dir=&quot;y&quot;)).mark(
-    ribbon(x=mass.support(), h=mass.density(), fill=&quot;species&quot;)
-)</code></pre>
-    <div class="today">
-      <p class="label">Today (KDE grid and stack computed by hand)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="2,4">chart(samples)
-  .flow(
-    derive((rows) =&gt; stackRows(densityRows(rows), { offset: &quot;zero&quot; })),
-    scatter({ by: &quot;x&quot;, x: &quot;x&quot; }),
-    scatter({ by: &quot;c&quot;, yMin: &quot;y0&quot;, yMax: &quot;y1&quot; })
-  )
-  .mark(ribbon({ fill: &quot;c&quot; }));</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works, no rows</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, needs sweep rows</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>works, cut must find each group's share</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works, needs sweep rows</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">const mass = field(&quot;mass&quot;);
-chart(penguins)
-  .flow(
-    sweep({ v: mass.range() }),
-    scatter({ by: &quot;v&quot;, x: &quot;v&quot; }),
-    stack({ by: &quot;species&quot;, dir: &quot;y&quot; })
-  )
-  .mark(ribbon({ h: mass.density(&quot;v&quot;), fill: &quot;species&quot; }));</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">mass = field(&quot;mass&quot;)
-chart(penguins).flow(
-    sweep(v=mass.range()),
-    scatter(by=&quot;v&quot;, x=&quot;v&quot;),
-    stack(by=&quot;species&quot;, dir=&quot;y&quot;),
-).mark(ribbon(h=mass.density(&quot;v&quot;), fill=&quot;species&quot;))</code></pre>
-        </div>
-        <div>
-          <p class="label">C: works, cut must find each group's share</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">const mass = field(&quot;mass&quot;);
-chart(penguins).mark(
-  ribbon({ x: mass.support(), h: mass.density(), fill: &quot;species&quot; }).cut({
-    by: &quot;species&quot;,
-    dir: &quot;y&quot;,
-  })
-);</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">mass = field(&quot;mass&quot;)
-chart(penguins).mark(
-    ribbon(x=mass.support(), h=mass.density(), fill=&quot;species&quot;).cut(
-        by=&quot;species&quot;, dir=&quot;y&quot;
-    )
-)</code></pre>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card" id="ridgeline">
-    <h3>4. Ridgeline (a spread, not a stack)</h3>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/ridgeline.png"
-          alt="A fixed pitch between baselines: ridges overlap, as most ridgelines do (today&#x27;s spread, densities computed in derive)."
-        />
-        <figcaption>
-          A fixed pitch between baselines: ridges overlap, as most ridgelines do
-          (today's spread, densities computed in derive).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/ridge-sum.png"
-          alt="For contrast, the same ridges stacked: a stacked density, a different chart."
-        />
-        <figcaption>
-          For contrast, the same ridges stacked: a stacked density, a different
-          chart.
-        </figcaption>
-      </figure>
-    </div>
-    <p>
-      Ridges are separate spaces, since their areas do not add, so a ridgeline
-      is a <code>spread</code>. Today the pitch is set by two options,
-      <code>anchor: "baseline"</code> and <code>spacing: 70</code>. In A, how
-      the gap is measured is the value of <code>spacing</code>: a pitch between
-      baselines here, or a contour gap (see the next card).
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="8,9">const high = field(&quot;high&quot;);
-chart(weather)
-  .flow(
-    spread({
-      by: &quot;month&quot;,
-      dir: &quot;y&quot;,
-      spacing: Spacing.pitch(70, { at: &quot;baseline&quot; }),
-    })
-  )
-  .mark(ribbon({ x: high.support(), h: high.density(), fill: &quot;month&quot; }));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="2,5">high = field(&quot;high&quot;)
-chart(weather).flow(
-    spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.pitch(70, at=&quot;baseline&quot;))
-).mark(
-    ribbon(x=high.support(), h=high.density(), fill=&quot;month&quot;)
-)</code></pre>
-    <div class="today">
-      <p class="label">Today (densities computed by hand)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="2,3,4">chart(samples)
-  .flow(
-    derive((rows) =&gt; densityRows(rows, { weighted: false })),
-    spread({ by: &quot;c&quot;, dir: &quot;y&quot;, anchor: &quot;baseline&quot;, spacing: 70 }),
-    scatter({ by: &quot;x&quot;, x: &quot;x&quot; })
-  )
-  .mark(ribbon({ h: &quot;y&quot;, fill: &quot;c&quot;, opacity: 0.85 }));</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, with sweep rows</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>same as A: nothing is divided</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works, with sweep rows</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">const high = field(&quot;high&quot;);
-chart(weather)
-  .flow(
-    spread({
-      by: &quot;month&quot;,
-      dir: &quot;y&quot;,
-      spacing: Spacing.pitch(70, { at: &quot;baseline&quot; }),
+        <p class="label">Today (runs; the unit's trait sets the 0)</p>
+        <pre
+          class="code"
+        ><code class="language-javascript" data-hl="4">chart(survey, {
+  schema: {
+    response: Unit({
+      domain: Domain.discrete(LEVELS),
+      traits: [Trait.diverging()],
     }),
-    sweep({ v: high.range() }),
-    scatter({ by: &quot;v&quot;, x: &quot;v&quot; })
-  )
-  .mark(ribbon({ h: high.density(&quot;v&quot;), fill: &quot;month&quot; }));</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">high = field(&quot;high&quot;)
-chart(weather).flow(
-    spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.pitch(70, at=&quot;baseline&quot;)),
-    sweep(v=high.range()),
-    scatter(by=&quot;v&quot;, x=&quot;v&quot;),
-).mark(ribbon(h=high.density(&quot;v&quot;), fill=&quot;month&quot;))</code></pre>
-        </div>
-        <div>
-          <p class="label">C: same as A: nothing is divided</p>
-          <p class="muted">The same as A.</p>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card insert" id="spacing">
-    <h3>Spacing between outlines: box or contact</h3>
-    <p>
-      When shapes are irregular, the gap between them can be measured two ways.
-      A <b>box gap</b> is the gap between bounding boxes (today's
-      <code>spread</code>). A <b>contact</b> gap is the smallest distance
-      between the facing outlines: the shapes slide together until they would
-      touch. The renders compute both by hand (a throwaway helper,
-      <code>spacingModels.ts</code>) and draw the result with today's engine.
-    </p>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/ridge-box.png"
-          alt="Box gap: each ridge starts above the previous one&#x27;s box."
-        />
-        <figcaption>
-          Box gap: each ridge starts above the previous one's box.
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/ridge-contact.png"
-          alt="Contact: each ridge drops until its base would touch a ridge below. Where the ridge below has a long tail, it drops far."
-        />
-        <figcaption>
-          Contact: each ridge drops until its base would touch a ridge below.
-          Where the ridge below has a long tail, it drops far.
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/glyph-box.png"
-          alt="Box gap on letter-like outlines: T and A, A and V look far apart."
-        />
-        <figcaption>
-          Box gap on letter-like outlines: T and A, A and V look far apart.
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/glyph-contact.png"
-          alt="Contact: A and V touch along their slopes and T tucks over A."
-        />
-        <figcaption>
-          Contact: A and V touch along their slopes and T tucks over A.
-        </figcaption>
-      </figure>
-    </div>
-    <p class="label">
-      Proposed: how the gap is measured is the value of spacing
-    </p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="">spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 4 }); // sugar for Spacing.box(4)
-spread({
-  by: &quot;month&quot;,
-  dir: &quot;y&quot;,
-  spacing: Spacing.pitch(70, { at: &quot;baseline&quot; }),
-}); // today&#x27;s anchor
-spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: Spacing.contour(4) });</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="">spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=4)
-spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.pitch(70, at=&quot;baseline&quot;))
-spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.contour(4))</code></pre>
-
-    <div class="table-wrap">
-      <table>
-        <tr>
-          <th>Model</th>
-          <th>Rule</th>
-          <th>Where it is used</th>
-        </tr>
-        <tr>
-          <td>Box gap</td>
-          <td>gap between bounding boxes along the axis</td>
-          <td>
-            today's <code>spread</code>; Graphviz <code>nodesep</code>;
-            d3-sankey <code>nodePadding</code>
-          </td>
-        </tr>
-        <tr>
-          <td>Pitch</td>
-          <td>a fixed distance between a named point on each child</td>
-          <td>
-            today's <code>anchor: "baseline"</code>; ggridges'
-            <code>scale</code>
-          </td>
-        </tr>
-        <tr>
-          <td>Contact (minimum distance)</td>
-          <td>the smallest distance between facing outlines equals the gap</td>
-          <td>
-            tidy trees (Reingold and Tilford, 1981: contours compared level by
-            level), <code>d3.tree</code>, d3-flextree (van der Ploeg, 2014,
-            nodes of different sizes), GoTree; skyline packing; the sankey
-            layout page's contour spacing
-          </td>
-        </tr>
-      </table>
-    </div>
-    <p>
-      <b>Optical spacing is left out.</b> Type tools space letters by white area
-      rather than by contact: HT Letterspacer sets sidebearings from a target
-      white area measured only to a depth inward from the outline, and Tim
-      Ahrens (Kern On) notes that perception works in terms of average distance
-      or white area. Our first emulation of that model looked less even than
-      contact on Josh's reading (the A to V gap grew larger than the V to O
-      gap), and no example here needs it, so the family leaves it out. It could
-      be added later as one more <code>Spacing</code> strategy without changing
-      the option.
-    </p>
-    <p>
-      <b>Naming.</b> <code>measure</code> is out. Spread already has an option
-      for how spacing is measured,
-      <code>anchor: "edge" | "start" | "middle" | "end" | "baseline"</code>
-      (facing edges, or a fixed pitch between named points). Contour is another
-      answer to the same question, so it should not be a second option. The
-      proposal makes the answer the value of <code>spacing</code>, as a strategy
-      family (<code>Spacing</code>, uppercase, as the API rules ask for a choice
-      among strategies). A plain number stays as sugar for
-      <code>Spacing.box(n)</code>, so a default is still something a user can
-      write, and <code>percent</code> and <code>fr</code> lengths still work.
-      <code>Spacing.pitch(70, { at: "baseline" })</code> takes a required
-      length, so it is a call only. This removes spread's
-      <code>anchor</code> option, which frees the word for the anchors design's
-      <code>.anchor()</code>. About 28 story, test and docs files use an
-      <code>anchor</code> value today, and each moves mechanically.
-    </p>
-  </article>
-  <article class="card" id="ribbon-chart">
-    <h3>5. Ribbon chart: the order changes at each x</h3>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/ribbon-per-lake.png"
-          alt="The ribbon chart: at each lake the bars are sorted by count, and each species&#x27; ribbon joins its bars, crossing the others where the ranking changes (today, the gallery story)."
-        />
-        <figcaption>
-          The ribbon chart: at each lake the bars are sorted by count, and each
-          species' ribbon joins its bars, crossing the others where the ranking
-          changes (today, the gallery story).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/ribbon-by-total.png"
-          alt="A profile stack sorted by each species&#x27; total: one order for every lake, so no ribbon crosses. A stacked area, not a ribbon chart (emulated with a total column)."
-        />
-        <figcaption>
-          A profile stack sorted by each species' total: one order for every
-          lake, so no ribbon crosses. A stacked area, not a ribbon chart
-          (emulated with a total column).
-        </figcaption>
-      </figure>
-    </div>
-    <p>
-      A ribbon chart (a Power BI chart type) sorts the bars at each x by value,
-      so the order of the series changes from x to x, and joins each series
-      across x with a ribbon that crosses the others. The way to write it is the
-      per-x spelling below, which is today's gallery code, unchanged: the bars
-      are spread by lake and stacked by count in each lake, and a layer draws a
-      ribbon through each species' bars. Each lake is its own stack, so each
-      lake has its own order. The ribbons are connectors between bars, not bands
-      with a thickness at every x. A profile stack is different: its children
-      are whole series, and it orders them the way any operator orders its
-      children, by a key with one value per child. So
-      <code>sort("count")</code> there sorts by each series' total and gives one
-      order for all x, the second render. Both are legal, and nothing needs an
-      error. <b>Known gap.</b> One order per stack rules out a ribbon chart over
-      series measured at different x, with the order changing at each x. Two
-      ways out: resample the series onto shared x positions first (the union of
-      their x values) and use the per-x spelling, or let a profile stack swap
-      two profiles where they cross, which breaks one order per stack and so
-      stays parked.
-    </p>
-    <p class="label">What you write (today's code, unchanged)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="">chart(seafood)
+  },
+})
   .flow(
-    spread({ by: &quot;lake&quot;, dir: &quot;x&quot;, spacing: 64 }),
-    stack({ by: field(&quot;species&quot;).sort(&quot;count&quot;), dir: &quot;y&quot; })
+    spread({ by: &quot;question&quot;, dir: &quot;y&quot; }),
+    stack({ by: &quot;response&quot;, dir: &quot;x&quot; })
   )
-  .mark(rect({ h: &quot;count&quot;, fill: &quot;species&quot; }))
-  .layer(ribbon({ opacity: 0.8 }));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="">chart(seafood).flow(
-    spread(by=&quot;lake&quot;, dir=&quot;x&quot;, spacing=64),
-    stack(by=field(&quot;species&quot;).sort(&quot;count&quot;), dir=&quot;y&quot;),
-).mark(rect(h=&quot;count&quot;, fill=&quot;species&quot;)).layer(ribbon(opacity=0.8))</code></pre>
-    <div class="today">
-      <p class="label">
-        The second render: a profile stack sorted by total (A)
-      </p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="1,2">chart(seafood)
-  .flow(stack({ by: field(&quot;species&quot;).sort(&quot;count&quot;), dir: &quot;y&quot; }))
-  .mark(ribbon({ x: &quot;lake&quot;, h: &quot;count&quot;, fill: &quot;species&quot; }));</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>per-x spelling (no change)</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>per-x spelling (no change)</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>can't: crossings are not a division</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: per-x spelling (no change)</p>
-          <p class="muted">The same as A.</p>
-        </div>
-        <div>
-          <p class="label">C: can't: crossings are not a division</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">// No spelling: crossings are not a division of one shape.</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl=""># No spelling: crossings are not a division of one shape.</code></pre>
-        </div>
+  .mark(rect({ w: &quot;count&quot;, fill: &quot;response&quot; }));</code></pre>
       </div>
-    </details>
+    </div>
+    <p>
+      The values name a place on the stack, as <code>alignment</code>'s values
+      do, so d3's <code>zero</code> becomes <code>start</code> and Vega-Lite's
+      <code>center</code> becomes <code>middle</code>.
+      <code>Baseline.end()</code> also exists, for a stack that grows the other
+      way. An explicit <code>baseline</code> over a unit with
+      <code>Trait.diverging</code> is an error, because the unit already fixes
+      the 0. With <code>middle</code> and <code>wiggle</code> a position on the
+      value axis is no longer an amount from 0, so the axis can only measure
+      thickness, which is why streamgraphs drop it.
+    </p>
+    <p>
+      <b>Precedent.</b> d3's <code>stackOffsetNone</code>,
+      <code>Silhouette</code>, <code>Wiggle</code> and <code>Diverging</code>;
+      Vega-Lite's <code>stack: "zero" | "center" | "normalize"</code>;
+      matplotlib's
+      <code
+        >stackplot(baseline="zero" | "sym" | "wiggle" | "weighted_wiggle")</code
+      >. Byron and Wattenberg (2008) call the bottom curve g<sub>0</sub> the
+      baseline.
+    </p>
+    <p>
+      <b>Naming.</b> <code>baseline</code> is already GoFish's word for a node's
+      0 point, and <code>alignment: "baseline"</code> already reads it, so one
+      word names one thing: the stack sets its baseline, and the parent lines
+      baselines up. <code>origin</code> is out because the origin lives on the
+      measure type, and an option by that name would read as overriding it.
+      <code>alignment</code> is out because it is the parent's rule for the
+      other axis.
+    </p>
   </article>
-  <article class="card" id="croissant">
-    <h3>6. Croissant: a density cut into equal-probability slices</h3>
-    <div class="figs">
-      <figure>
+  <h2 id="croissant">
+    2. Croissant: a density cut into equal-probability slices
+  </h2>
+  <article class="card">
+    <div class="item">
+      <figure class="">
         <img
           src="img/croissant-main.png"
-          alt="Today&#x27;s gallery story Forward Syntax/Croissant: hand-made grid, quantile rows, partition and intersect."
+          alt="Today&#x27;s gallery story Forward Syntax/Croissant (real render). The proposed code draws the same picture; it does not run yet."
         />
         <figcaption>
-          Today's gallery story <code>Forward Syntax/Croissant</code>: hand-made
-          grid, quantile rows, partition and intersect.
+          Today's gallery story <code>Forward Syntax/Croissant</code> (real
+          render). The proposed code draws the same picture; it does not run
+          yet.
         </figcaption>
       </figure>
-    </div>
-    <p>
-      <code>d</code> is a field expression over a distribution. Each method
-      makes a different kind of value: <code>d.bin(Bin.quantiles(5))</code> is a
-      key that cuts d's axis into 5 cells, <code>d.support()</code> and
-      <code>d.density()</code> are the position and the height of one curve over
-      a hidden variable t (t &#8614; t and t &#8614; f(t)), and
-      <code>d.median()</code> is one number per cell. The ribbon samples t and
-      evaluates both at each sample. <code>partition</code> on d's axis
-      restricts the curve to each cell. A cell of a Dist is the Dist over that
-      cell with its mass, so the slices meet exactly. No <code>intersect</code>,
-      hidden ribbon, <code>relate</code>, grid or quantile rows. The next card
-      gives the formula and the callback behind each method.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="3,12">const params = [{ mean: 0, sd: 1 }];
+      <div>
+        <p class="label">Proposed</p>
+        <pre
+          class="code lang-js"
+        ><code class="language-javascript" data-hl="3,12">const params = [{ mean: 0, sd: 1 }];
 const d = dist.normal({ mean: &quot;mean&quot;, sd: &quot;sd&quot; });
 chart(params)
   .flow(partition({ by: d.bin(Bin.quantiles(5)), dir: &quot;x&quot; }))
@@ -1855,9 +795,9 @@ chart(params)
       circle({ cx: d.median(), cy: 6, r: 3, fill: PAPER_STROKE }),
     ])
   );</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="2,11">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
+        <pre
+          class="code lang-py"
+        ><code class="language-python" data-hl="2,11">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
 d = dist.normal(mean=&quot;mean&quot;, sd=&quot;sd&quot;)
 chart(params).flow(partition(by=d.bin(Bin.quantiles(5)), dir=&quot;x&quot;)).mark(
     layer(
@@ -1873,12 +813,10 @@ chart(params).flow(partition(by=d.bin(Bin.quantiles(5)), dir=&quot;x&quot;)).mar
         ]
     )
 )</code></pre>
-    <div class="today">
-      <details>
-        <summary>
+        <p class="label">
           Today (stories/forwardsyntax/Croissant.stories.tsx; the sequence
-          repeats three times in the file) (39 lines)
-        </summary>
+          repeats three times in the file)
+        </p>
         <pre
           class="code"
         ><code class="language-javascript" data-hl="1,6,16,17,22,30,36">const normPdf = (x, mu = 0, sd = 1) =&gt;
@@ -1919,78 +857,23 @@ const croissant = (grid, { n = 10, fill = FILL, stroke = STROKE } = {}) =&gt;
 // on [-3, 3] the missing tails move the outer cells&#x27; medians
 const normalGrid = gridOf((x) =&gt; normPdf(x), -4, 4, 401);
 croissant(normalGrid, { n: 5, fill: PAPER_FILL, stroke: PAPER_STROKE });</code></pre>
-      </details>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works, partition restricts the profile</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, but each cell's rows must share boundary points</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>works, as a second cut mode (cells)</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">
-            B: works, but each cell's rows must share boundary points
-          </p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">const params = [{ mean: 0, sd: 1 }];
-const d = dist.normal({ mean: &quot;mean&quot;, sd: &quot;sd&quot; });
-chart(params)
-  .flow(
-    sweep({ v: d.range() }),
-    partition({ by: d.bin(Bin.quantiles(5)), dir: &quot;x&quot; }),
-    scatter({ by: &quot;v&quot;, x: &quot;v&quot; })
-  )
-  .mark(ribbon({ h: d.density(&quot;v&quot;), inset: 3, fill: PAPER_FILL }));</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
-d = dist.normal(mean=&quot;mean&quot;, sd=&quot;sd&quot;)
-chart(params).flow(
-    sweep(v=d.range()),
-    partition(by=d.bin(Bin.quantiles(5)), dir=&quot;x&quot;),
-    scatter(by=&quot;v&quot;, x=&quot;v&quot;),
-).mark(ribbon(h=d.density(&quot;v&quot;), inset=3, fill=PAPER_FILL))</code></pre>
-        </div>
-        <div>
-          <p class="label">C: works, as a second cut mode (cells)</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">const params = [{ mean: 0, sd: 1 }];
-const d = dist.normal({ mean: &quot;mean&quot;, sd: &quot;sd&quot; });
-chart(params).mark(
-  ribbon({ x: d.support(), h: d.density(), fill: PAPER_FILL }).cut({
-    by: d.bin(Bin.quantiles(5)),
-    dir: &quot;x&quot;,
-    spacing: 6,
-  })
-);</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">params = [{&quot;mean&quot;: 0, &quot;sd&quot;: 1}]
-d = dist.normal(mean=&quot;mean&quot;, sd=&quot;sd&quot;)
-chart(params).mark(
-    ribbon(x=d.support(), h=d.density(), fill=PAPER_FILL).cut(
-        by=d.bin(Bin.quantiles(5)), dir=&quot;x&quot;, spacing=6
-    )
-)</code></pre>
-        </div>
       </div>
-    </details>
-  </article>
-  <article class="card insert" id="methods">
-    <h3>What the methods compute</h3>
+    </div>
+    <p>
+      <code>d</code> is a field expression over a distribution. Each method
+      makes a different kind of value. <code>d.bin(Bin.quantiles(5))</code> is a
+      key that cuts d's axis into 5 cells. <code>d.support()</code> and
+      <code>d.density()</code> are the position and the height of one curve over
+      a hidden variable t: the support is t &#8614; t and the density is t
+      &#8614; f(t). The ribbon samples t and evaluates both channels at each
+      sample, as a parametric curve (x(t), y(t)) does.
+      <code>d.median()</code> is one number per cell. <code>partition</code> on
+      d's axis restricts the curve to each cell, which in the slice picture
+      keeps the slices inside the cell. A cell of a Dist is the Dist over that
+      cell with its mass, so the slices meet exactly. No <code>intersect</code>,
+      hidden ribbon, <code>relate</code>, grid or quantile rows.
+    </p>
+    <h4>What the methods compute</h4>
     <p>
       A field expression like <code>field("mass")</code> works like polars'
       <code>pl.col("mass")</code>: it sees one column. Every named method on it
@@ -2003,7 +886,6 @@ chart(params).mark(
       <code>map_elements</code> gets one value, and
       <code>map_batches</code> gets the whole Series.
     </p>
-
     <p class="label">
       Each method and the callback it stands for (bins are open; see below)
     </p>
@@ -2028,7 +910,6 @@ field(&quot;mass&quot;).support()  # lambda _, xs: (lambda t: t), over the densi
 field(&quot;mass&quot;).density()  # lambda _, xs: kde(xs), a function of t
 
 share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio&quot;)</code></pre>
-
     <div class="table-wrap">
       <table class="methods">
         <tr>
@@ -2177,7 +1058,7 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
       for rows, uses <code>density_bounded()</code>, a reflection estimator, and
       usually trims to the data's range; for an analytic distribution it uses
       <code>p_limits</code>, the 0.001 and 0.999 quantiles, where the range is
-      unbounded. This is a decision below.
+      unbounded. This is one of the decisions.
     </p>
     <p>
       <b>Naming.</b> <code>support()</code> is the chosen name (Josh is checking
@@ -2247,1203 +1128,279 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
       the table above. This lands with the implementation.
     </p>
   </article>
-  <article class="card" id="sankey">
-    <h3>
-      7. Sankey: strands stacked along a link's normal, ends stacked in anchors
-    </h3>
-    <div class="figs">
-      <figure>
-        <img
-          src="img/sankey-strands-normal.png"
-          alt="Strands of 12, 24 and 12 px stacked along the link&#x27;s normal: each keeps its width (emulated)."
-        />
-        <figcaption>
-          Strands of 12, 24 and 12 px stacked along the link's normal: each
-          keeps its width (emulated).
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/sankey-strands-vertical.png"
-          alt="The same strands stacked vertically: they thin where the link is steep."
-        />
-        <figcaption>
-          The same strands stacked vertically: they thin where the link is
-          steep.
-        </figcaption>
-      </figure>
-      <figure>
-        <img
-          src="img/sankey-energy.png"
-          alt="The energy sankey with ends stacked in anchors (emulated anchors, from the stacked ribbons page)."
-        />
-        <figcaption>
-          The energy sankey with ends stacked in anchors (emulated anchors, from
-          the stacked ribbons page).
-        </figcaption>
-      </figure>
-    </div>
+  <h2 id="spacing">3. Contour spacing: box gap against contact gap</h2>
+  <article class="card">
     <p>
-      Inside <code>Coord.along(link)</code>, x is distance along the link and y
-      is distance along its normal, so a plain profile stack draws strands that
-      keep their width. At a node the link leaves horizontally, the normal is
-      vertical, and the strand stack meets the anchor's slot stack exactly.
-      Slots are a flow along a part, so they are the same stack in a
-      one-dimensional space.
+      When shapes are irregular, the space between neighbors can be measured two
+      ways. A <b>box gap</b> is the gap between bounding boxes, which is today's
+      <code>spread</code>. A <b>contact gap</b> is the smallest gap between the
+      facing outlines, measured slice by slice: the shapes slide together until
+      the closest slice reaches the gap. Both renders in each pair use the same
+      gap. The offsets are computed by hand (a throwaway helper,
+      <code>spacingModels.ts</code>) and drawn with today's engine. The glyphs
+      are traced from Georgia (serif) and Arial (sans) with fontTools.
     </p>
-    <p class="label">Proposed (A)</p>
+    <p class="label">
+      Proposed: how the gap is measured is the value of spacing
+    </p>
     <pre
       class="code lang-js"
-    ><code class="language-javascript" data-hl="1,14">// strands along one link
-layer({ coord: Coord.along(link) }, [
-  chart(strands)
-    .flow(stack({ by: &quot;strand&quot;, dir: &quot;y&quot;, baseline: Baseline.center() }))
-    .mark(ribbon({ x: &quot;s&quot;, h: &quot;width&quot;, fill: &quot;strand&quot; })),
-]);
-
-// ends on the nodes (the agreed anchor spelling, unchanged)
-rect({ w: 12, h: &quot;value&quot; })
-  .anchor({
-    name: &quot;out&quot;,
-    position: &quot;x-max&quot;,
-    slots: data(links, { on: &quot;source&quot; }).flow(
-      stack({ by: &quot;target&quot;, size: &quot;value&quot; })
-    ),
-  })
-  .name(&quot;nodes&quot;);</code></pre>
+    ><code class="language-javascript" data-hl="6">spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 4 }); // sugar for Spacing.box(4)
+spread({
+  by: &quot;month&quot;,
+  dir: &quot;y&quot;,
+  spacing: Spacing.pitch(70, { at: &quot;baseline&quot; }),
+}); // today&#x27;s anchor
+spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: Spacing.contour(4) });</code></pre>
     <pre
       class="code lang-py"
-    ><code class="language-python" data-hl="6,12">layer(
-    [
-        chart(strands)
-        .flow(stack(by=&quot;strand&quot;, dir=&quot;y&quot;, baseline=Baseline.center()))
-        .mark(ribbon(x=&quot;s&quot;, h=&quot;width&quot;, fill=&quot;strand&quot;))
-    ],
-    coord=Coord.along(link),
-)
-
-rect(w=12, h=&quot;value&quot;).anchor(
-    name=&quot;out&quot;,
-    position=&quot;x-max&quot;,
-    slots=data(links, on=&quot;source&quot;).flow(stack(by=&quot;target&quot;, size=&quot;value&quot;)),
-).name(&quot;nodes&quot;)</code></pre>
-    <div class="today">
-      <p class="label">Today</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="">// No spelling: strands along a normal are drawn as hand-computed polygons.
-// d3-sankey draws each strand as its own stroke on its own centerline.</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works with Coord.along</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works with Coord.along</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>needs a new cut direction, "across"</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works with Coord.along</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">layer({ coord: Coord.along(link) }, [
-  chart(strands)
-    .flow(
-      scatter({ by: &quot;s&quot;, x: &quot;s&quot;, alignment: &quot;middle&quot; }),
-      stack({ by: &quot;strand&quot;, dir: &quot;y&quot; })
-    )
-    .mark(ribbon({ h: &quot;width&quot;, fill: &quot;strand&quot; })),
-]);</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">layer(
-    [
-        chart(strands)
-        .flow(scatter(by=&quot;s&quot;, x=&quot;s&quot;, alignment=&quot;middle&quot;), stack(by=&quot;strand&quot;, dir=&quot;y&quot;))
-        .mark(ribbon(h=&quot;width&quot;, fill=&quot;strand&quot;))
-    ],
-    coord=Coord.along(link),
-)</code></pre>
-        </div>
-        <div>
-          <p class="label">C: needs a new cut direction, "across"</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">ref(&quot;link&quot;).cut({ by: &quot;strand&quot;, size: &quot;width&quot;, dir: &quot;across&quot; });</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">ref(&quot;link&quot;).cut(by=&quot;strand&quot;, size=&quot;width&quot;, dir=&quot;across&quot;)</code></pre>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card" id="half-violin">
-    <h3>8. Half violin with slots</h3>
+    ><code class="language-python" data-hl="2">spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=4)
+spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.pitch(70, at=&quot;baseline&quot;))
+spread(by=&quot;month&quot;, dir=&quot;y&quot;, spacing=Spacing.contour(4))</code></pre>
+    <p class="label">Today (box gap, or a pitch with anchor)</p>
+    <pre
+      class="code"
+    ><code class="language-javascript" data-hl="1">spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 4 });
+spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 70, anchor: &quot;baseline&quot; });</code></pre>
     <div class="figs">
-      <figure>
+      <figure class="">
         <img
-          src="img/half-violin.png"
-          alt="Penguin body mass: the violin&#x27;s flat side has one slot per mass bin, joined to a 100% bar (emulated anchors and KDE)."
+          src="img/ridge-box.png"
+          alt="Ridgeline, box gap 4 px: each ridge starts above the previous one&#x27;s box."
         />
         <figcaption>
-          Penguin body mass: the violin's flat side has one slot per mass bin,
-          joined to a 100% bar (emulated anchors and KDE).
+          Ridgeline, box gap 4 px: each ridge starts above the previous one's
+          box.
+        </figcaption>
+      </figure>
+      <figure class="">
+        <img
+          src="img/ridge-contact.png"
+          alt="Ridgeline, contact gap 4 px: each ridge drops until its base would touch a ridge below, so it tucks over the long tails."
+        />
+        <figcaption>
+          Ridgeline, contact gap 4 px: each ridge drops until its base would
+          touch a ridge below, so it tucks over the long tails.
         </figcaption>
       </figure>
     </div>
-    <p>
-      The violin is a density of mass drawn upright:
-      <code>y: mass.support()</code> is the position and
-      <code>w: mass.density()</code> the thickness, both functions of one hidden
-      variable t. The ribbon runs along the axis whose channel is a function of
-      t, so <code>dir: "y"</code> is no longer needed. Its
-      <code>x-max</code> part is the flat side, whose length is the profile's
-      domain. A <code>partition</code> slot flow cuts that domain into cells,
-      the same partition as the croissant's, and the bar's
-      <code>stack</code> slots divide its height by share. The KDE helper and
-      its grid go away.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="10">const mass = field(&quot;mass&quot;);
-const massBins = mass.bin(Bin.thresholds([3000, 4000, 5000, 6000]));
-layer([
-  spread({ dir: &quot;x&quot;, spacing: 160 }, [
-    chart(penguins).mark(
-      ribbon({
-        y: mass.support(),
-        w: mass.density(),
-        align: &quot;end&quot;,
-        fill: &quot;#c4c4c4&quot;,
-      })
-        .anchor({
-          name: &quot;out&quot;,
-          position: &quot;x-max&quot;,
-          slots: data().flow(partition({ by: massBins })),
-        })
-        .name(&quot;violin&quot;)
-    ),
-    chart(penguins).mark(
-      rect({ w: 14, h: mass.count() })
-        .anchor({
-          name: &quot;in&quot;,
-          position: &quot;x-min&quot;,
-          slots: data().flow(stack({ by: massBins, size: mass.count() })),
-        })
-        .name(&quot;bar&quot;)
-    ),
-  ]),
-  chart(penguins)
-    .flow(group({ by: massBins }))
-    .mark(
-      ribbon({
-        from: &quot;violin.out&quot;,
-        to: &quot;bar.in&quot;,
-        fill: massBins,
-        opacity: 0.55,
-      })
-    ),
-]);</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="9">mass = field(&quot;mass&quot;)
-mass_bins = mass.bin(Bin.thresholds([3000, 4000, 5000, 6000]))
-layer(
-    [
-        spread(
-            [
-                chart(penguins).mark(
-                    ribbon(
-                        y=mass.support(), w=mass.density(), align=&quot;end&quot;, fill=&quot;#c4c4c4&quot;
-                    )
-                    .anchor(
-                        name=&quot;out&quot;,
-                        position=&quot;x-max&quot;,
-                        slots=data().flow(partition(by=mass_bins)),
-                    )
-                    .name(&quot;violin&quot;)
-                ),
-                chart(penguins).mark(
-                    rect(w=14, h=mass.count())
-                    .anchor(
-                        name=&quot;in&quot;,
-                        position=&quot;x-min&quot;,
-                        slots=data().flow(stack(by=mass_bins, size=mass.count())),
-                    )
-                    .name(&quot;bar&quot;)
-                ),
-            ],
-            dir=&quot;x&quot;,
-            spacing=160,
-        ),
-        chart(penguins)
-        .flow(group(by=mass_bins))
-        .mark(ribbon(from_=&quot;violin.out&quot;, to=&quot;bar.in&quot;, fill=mass_bins, opacity=0.55)),
-    ]
-)</code></pre>
-    <div class="today">
-      <details>
-        <summary>
-          The stacked ribbons page's target (a KDE helper makes grid rows) (13
-          lines)
-        </summary>
-        <pre
-          class="code"
-        ><code class="language-javascript" data-hl="1,3">chart(penguins)
-  .flow(derive(kde(&quot;mass&quot;, 200)), scatter({ by: &quot;mass&quot;, y: &quot;mass&quot; }))
-  .mark(
-    ribbon({ w: &quot;density&quot;, dir: &quot;y&quot;, align: &quot;end&quot;, fill: &quot;#c4c4c4&quot; })
-      .anchor({
-        name: &quot;out&quot;,
-        position: &quot;x-max&quot;,
-        slots: data(penguins).flow(partition({ by: massBins })),
-      })
-      .name(&quot;violin&quot;)
-  );
-// Today the render is emulated: slots are rects with h 0 in the violin&#x27;s
-// chart, sizes are written in mass units, and the KDE is hand-written.</code></pre>
-      </details>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works, slots are cells of the profile's index</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, slots on sweep rows</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>same as A or B: cut plays no part in slots</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works, slots on sweep rows</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">const mass = field(&quot;mass&quot;);
-chart(penguins)
-  .flow(sweep({ v: mass.range() }), scatter({ by: &quot;v&quot;, y: &quot;v&quot; }))
-  .mark(
-    ribbon({ w: mass.density(&quot;v&quot;), dir: &quot;y&quot;, align: &quot;end&quot;, fill: &quot;#c4c4c4&quot; })
-      .anchor({
-        name: &quot;out&quot;,
-        position: &quot;x-max&quot;,
-        slots: data(penguins).flow(partition({ by: massBins })),
-      })
-      .name(&quot;violin&quot;)
-  );</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">mass = field(&quot;mass&quot;)
-chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&quot;)).mark(
-    ribbon(w=mass.density(&quot;v&quot;), dir=&quot;y&quot;, align=&quot;end&quot;, fill=&quot;#c4c4c4&quot;)
-    .anchor(
-        name=&quot;out&quot;, position=&quot;x-max&quot;, slots=data(penguins).flow(partition(by=mass_bins))
-    )
-    .name(&quot;violin&quot;)
-)</code></pre>
-        </div>
-        <div>
-          <p class="label">C: same as A or B: cut plays no part in slots</p>
-          <p class="muted">The same as A.</p>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card" id="stacked-lines">
-    <h3>9. Stacked lines: stack the bands, draw their edges</h3>
     <div class="figs">
-      <figure>
-        <img
-          src="img/stacked-lines.png"
-          alt="Five series stacked, each line along the top of its band (today&#x27;s render, which gives line an h; the proposed spelling draws the same picture but does not run yet)."
-        />
-        <figcaption>
-          Five series stacked, each line along the top of its band (today's
-          render, which gives <code>line</code> an <code>h</code>; the proposed
-          spelling draws the same picture but does not run yet).
-        </figcaption>
+      <figure class="">
+        <img src="img/serif-box.png" alt="Georgia, box gap 6 px." />
+        <figcaption>Georgia, box gap 6 px.</figcaption>
+      </figure>
+      <figure class="">
+        <img src="img/serif-contact.png" alt="Georgia, contact gap 6 px." />
+        <figcaption>Georgia, contact gap 6 px.</figcaption>
       </figure>
     </div>
-    <p>
-      A line has no thickness, so it has no amount to add, and
-      <code>line</code> has no <code>h</code>. A line inside a stack is an
-      error: "line has no thickness, so a stack has nothing to add. Stack
-      ribbons and draw each band's edge with a line." What is stacked is the
-      bands. The lines are drawn on each band's top edge, the band's
-      <code>y-max</code> part. Reading that part from another chart needs a part
-      reference, so this spelling waits on the reference model;
-      <code>edge</code> below is a placeholder for it.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="2,4">chart(topics)
-  .flow(stack({ by: &quot;topic&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ x: &quot;x&quot;, h: &quot;value&quot; }).hidden().name(&quot;bands&quot;))
-  .layer(
-    chart(selectAll(&quot;bands&quot;)).mark(line({ edge: &quot;y-max&quot;, stroke: &quot;topic&quot; }))
-  );</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="1,4">chart(topics).flow(stack(by=&quot;topic&quot;, dir=&quot;y&quot;)).mark(
-    ribbon(x=&quot;x&quot;, h=&quot;value&quot;).hidden().name(&quot;bands&quot;)
-).layer(
-    chart(select_all(&quot;bands&quot;)).mark(line(edge=&quot;y-max&quot;, stroke=&quot;topic&quot;))
-)</code></pre>
-    <div class="today">
-      <p class="label">Today (runs, the render above; line takes h)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="4">chart(topics)
-  .flow(scatter({ by: &quot;x&quot;, x: &quot;x&quot; }), stack({ by: &quot;topic&quot;, dir: &quot;y&quot; }))
-  .mark(
-    line({
-      h: &quot;value&quot;,
-      stroke: &quot;topic&quot;,
-      source: { y: &quot;end&quot; },
-      target: { y: &quot;end&quot; },
-    })
-  );</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works, waits on part references</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works, lines join bar tops</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>can't</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works, lines join bar tops</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(topics)
-  .flow(scatter({ by: &quot;x&quot;, x: &quot;x&quot; }), stack({ by: &quot;topic&quot;, dir: &quot;y&quot; }))
-  .mark(rect({ w: 0, h: &quot;value&quot; }).name(&quot;bars&quot;))
-  .layer(
-    chart(selectAll(&quot;bars&quot;))
-      .flow(group({ by: &quot;topic&quot; }))
-      .mark(
-        line({ source: { y: &quot;end&quot; }, target: { y: &quot;end&quot; }, stroke: &quot;topic&quot; })
-      )
-  );</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(topics).flow(scatter(by=&quot;x&quot;, x=&quot;x&quot;), stack(by=&quot;topic&quot;, dir=&quot;y&quot;)).mark(
-    rect(w=0, h=&quot;value&quot;).name(&quot;bars&quot;)
-).layer(
-    chart(select_all(&quot;bars&quot;))
-    .flow(group(by=&quot;topic&quot;))
-    .mark(line(source={&quot;y&quot;: &quot;end&quot;}, target={&quot;y&quot;: &quot;end&quot;}, stroke=&quot;topic&quot;))
-)</code></pre>
-        </div>
-        <div>
-          <p class="label">C: can't</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">// No spelling: a divide needs a drawn total to divide.</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl=""># No spelling: a divide needs a drawn total to divide.</code></pre>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card" id="radial">
-    <h3>10. Hard example 1: radial stacked area in polar coordinates</h3>
     <div class="figs">
-      <figure>
-        <img
-          src="img/radial-stacked-area.png"
-          alt="Today&#x27;s per-x form in Coord.polar(); it already draws (real render)."
-        />
-        <figcaption>
-          Today's per-x form in <code>Coord.polar()</code>; it already draws
-          (real render).
-        </figcaption>
+      <figure class="">
+        <img src="img/sans-box.png" alt="Arial, box gap 6 px." />
+        <figcaption>Arial, box gap 6 px.</figcaption>
+      </figure>
+      <figure class="">
+        <img src="img/sans-contact.png" alt="Arial, contact gap 6 px." />
+        <figcaption>Arial, contact gap 6 px.</figcaption>
       </figure>
     </div>
-    <p>
-      Profiles live in the layer's unbent space, so the polar layer bends the
-      stacked area after the stack adds it. The radii add, not the areas. For
-      rings whose areas add, the radius axis is
-      <code>Coord.clock({ radius: "area" })</code> from the scale transforms
-      proposal.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="1,2">chart(topics, { coord: Coord.polar() })
-  .flow(stack({ by: &quot;topic&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ x: &quot;x&quot;, h: &quot;value&quot;, fill: &quot;topic&quot; }));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="0,1">chart(topics, coord=Coord.polar()).flow(stack(by=&quot;topic&quot;, dir=&quot;y&quot;)).mark(
-    ribbon(x=&quot;x&quot;, h=&quot;value&quot;, fill=&quot;topic&quot;)
-)</code></pre>
-    <div class="today">
-      <p class="label">Today (runs, the render above)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="1,2">chart(topics, { coord: Coord.polar() })
-  .flow(scatter({ by: &quot;x&quot;, x: &quot;x&quot; }), stack({ by: &quot;topic&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ h: &quot;value&quot;, fill: &quot;topic&quot; }));</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works (today)</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>works</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works (today)</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(topics, { coord: Coord.polar() })
-  .flow(scatter({ by: &quot;x&quot;, x: &quot;x&quot; }), stack({ by: &quot;topic&quot;, dir: &quot;y&quot; }))
-  .mark(ribbon({ h: &quot;value&quot;, fill: &quot;topic&quot; }));</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(topics, coord=Coord.polar()).flow(
-    scatter(by=&quot;x&quot;, x=&quot;x&quot;), stack(by=&quot;topic&quot;, dir=&quot;y&quot;)
-).mark(ribbon(h=&quot;value&quot;, fill=&quot;topic&quot;))</code></pre>
-        </div>
-        <div>
-          <p class="label">C: works</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(topics, { coord: Coord.polar() }).mark(
-  ribbon({ x: &quot;x&quot;, h: &quot;value&quot;, fill: &quot;topic&quot; }).cut({ by: &quot;topic&quot;, dir: &quot;y&quot; })
-);</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(topics, coord=Coord.polar()).mark(
-    ribbon(x=&quot;x&quot;, h=&quot;value&quot;, fill=&quot;topic&quot;).cut(by=&quot;topic&quot;, dir=&quot;y&quot;)
-)</code></pre>
-        </div>
-      </div>
-    </details>
-  </article>
-  <article class="card" id="fan">
-    <h3>11. Hard example 2: fan chart of nested forecast intervals</h3>
     <div class="figs">
-      <figure>
+      <figure class="">
         <img
-          src="img/fan-chart.png"
-          alt="Nested 50%, 80% and 95% intervals as position profiles (today, real render)."
+          src="img/shapes-box.png"
+          alt="Circles, triangles and squares, box gap 10 px. Rows: circle, left-pointing triangle, square; circle, right-pointing triangle, square; up, circle, down, square; square, up, down, up."
         />
         <figcaption>
-          Nested 50%, 80% and 95% intervals as position profiles (today, real
-          render).
+          Circles, triangles and squares, box gap 10 px. Rows: circle,
+          left-pointing triangle, square; circle, right-pointing triangle,
+          square; up, circle, down, square; square, up, down, up.
         </figcaption>
       </figure>
-      <figure>
+      <figure class="">
         <img
-          src="img/fan-chart-as-stack.png"
-          alt="The same fan as a stack of quantile gaps on a hidden base part: the axis is forced to 0, because a stack measures from its baseline (today, emulated baseline)."
+          src="img/shapes-contact.png"
+          alt="The same rows, contact gap 10 px."
         />
-        <figcaption>
-          The same fan as a stack of quantile gaps on a hidden base part: the
-          axis is forced to 0, because a stack measures from its baseline
-          (today, emulated baseline).
-        </figcaption>
+        <figcaption>The same rows, contact gap 10 px.</figcaption>
       </figure>
     </div>
-    <p>
-      An interval's ends are positions, not amounts, so a fan is a layer of
-      profiles placed by a span, and nothing adds. It can also be written as a
-      stack of the gaps between quantiles on a baseline that is itself a
-      profile, but then the axis must hold the baseline's 0, so the layered form
-      is right. The span is written <code>y: { min, max }</code>, nested as the
-      API rules ask (#1144, nest a role instead of prefixing it). On main the
-      nested form exists only under <code>scatter</code>'s <code>dims</code>,
-      and the flat <code>yMin</code> and <code>yMax</code> are still the channel
-      names, so letting <code>y</code> take <code>{ min, max }</code> belongs to
-      that audit.
-    </p>
-    <p class="label">Proposed (A)</p>
-    <pre
-      class="code lang-js"
-    ><code class="language-javascript" data-hl="2,3">chart(forecast)
-  .flow(group({ by: &quot;level&quot; }))
-  .mark(ribbon({ x: &quot;t&quot;, y: { min: &quot;lo&quot;, max: &quot;hi&quot; }, fill: &quot;level&quot; }))
-  .layer(chart(history).mark(line({ x: &quot;t&quot;, y: &quot;v&quot; })));</code></pre>
-    <pre
-      class="code lang-py"
-    ><code class="language-python" data-hl="1,4">chart(forecast).flow(group(by=&quot;level&quot;)).mark(
-    ribbon(x=&quot;t&quot;, y={&quot;min&quot;: &quot;lo&quot;, &quot;max&quot;: &quot;hi&quot;}, fill=&quot;level&quot;)
-).layer(
-    chart(history).mark(line(x=&quot;t&quot;, y=&quot;v&quot;))
-)</code></pre>
-    <div class="today">
-      <p class="label">Today (runs, the first render)</p>
-      <pre
-        class="code"
-      ><code class="language-javascript" data-hl="4,8">chart(forecast)
-  .flow(
-    group({ by: &quot;level&quot; }),
-    scatter({ by: &quot;t&quot;, x: &quot;t&quot;, yMin: &quot;lo&quot;, yMax: &quot;hi&quot; })
-  )
-  .mark(ribbon({ fill: &quot;level&quot; }))
-  .layer(
-    chart(history)
-      .flow(scatter({ by: &quot;t&quot;, x: &quot;t&quot;, y: &quot;v&quot; }))
-      .mark(line({ stroke: &quot;#333&quot;, strokeWidth: 2 }))
-  );</code></pre>
-    </div>
-    <table class="verdict">
-      <tr>
-        <th>A</th>
-        <td>works, positions not amounts</td>
-      </tr>
-      <tr>
-        <th>B</th>
-        <td>works (today)</td>
-      </tr>
-      <tr>
-        <th>C</th>
-        <td>same as A</td>
-      </tr>
-    </table>
-    <details>
-      <summary>B and C spellings</summary>
-      <div class="two">
-        <div>
-          <p class="label">B: works (today)</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">chart(forecast)
-  .flow(
-    group({ by: &quot;level&quot; }),
-    scatter({ by: &quot;t&quot;, x: &quot;t&quot;, y: { min: &quot;lo&quot;, max: &quot;hi&quot; } })
-  )
-  .mark(ribbon({ fill: &quot;level&quot; }))
-  .layer(
-    chart(history)
-      .flow(scatter({ by: &quot;t&quot;, x: &quot;t&quot;, y: &quot;v&quot; }))
-      .mark(line())
-  );</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl="">chart(forecast).flow(
-    group(by=&quot;level&quot;), scatter(by=&quot;t&quot;, x=&quot;t&quot;, y={&quot;min&quot;: &quot;lo&quot;, &quot;max&quot;: &quot;hi&quot;})
-).mark(ribbon(fill=&quot;level&quot;)).layer(
-    chart(history).flow(scatter(by=&quot;t&quot;, x=&quot;t&quot;, y=&quot;v&quot;)).mark(line())
-)</code></pre>
-        </div>
-        <div>
-          <p class="label">C: same as A</p>
-          <pre
-            class="code lang-js"
-          ><code class="language-javascript" data-hl="">// The same as A: nothing is divided.</code></pre>
-          <pre
-            class="code lang-py"
-          ><code class="language-python" data-hl=""># The same as A: nothing is divided.</code></pre>
-        </div>
-      </div>
-    </details>
-  </article>
-
-  <h2>Trade-offs</h2>
-  <div class="table-wrap">
-    <table>
-      <tr>
-        <th>Example</th>
-        <th>A. Profiles</th>
-        <th>B. Per-x core</th>
-        <th>C. Divide a drawn whole</th>
-      </tr>
-      <tr>
-        <td>
-          <a href="#uneven">Stacked area, series measured at different x</a>
-        </td>
-        <td class="">works</td>
-        <td class="">works, with a visible resample step</td>
-        <td class="">works, cut densifies</td>
-      </tr>
-      <tr>
-        <td><a href="#streamgraph">Streamgraph with a wiggle baseline</a></td>
-        <td class="">works</td>
-        <td class="">works, baseline on the outer scatter</td>
-        <td class="">works, but the user writes a total</td>
-      </tr>
-      <tr>
-        <td><a href="#density">Stacked density curves</a></td>
-        <td class="">works, no rows</td>
-        <td class="">works, needs sweep rows</td>
-        <td class="">works, cut must find each group's share</td>
-      </tr>
-      <tr>
-        <td><a href="#ridgeline">Ridgeline (a spread, not a stack)</a></td>
-        <td class="">works</td>
-        <td class="">works, with sweep rows</td>
-        <td class="">same as A: nothing is divided</td>
-      </tr>
-      <tr>
-        <td>
-          <a href="#ribbon-chart">Ribbon chart: the order changes at each x</a>
-        </td>
-        <td class="">per-x spelling (no change)</td>
-        <td class="">per-x spelling (no change)</td>
-        <td class="bad">can't: crossings are not a division</td>
-      </tr>
-      <tr>
-        <td>
-          <a href="#croissant"
-            >Croissant: a density cut into equal-probability slices</a
-          >
-        </td>
-        <td class="">works, partition restricts the profile</td>
-        <td class="">works, but each cell's rows must share boundary points</td>
-        <td class="">works, as a second cut mode (cells)</td>
-      </tr>
-      <tr>
-        <td>
-          <a href="#sankey"
-            >Sankey: strands stacked along a link's normal, ends stacked in
-            anchors</a
-          >
-        </td>
-        <td class="">works with Coord.along</td>
-        <td class="">works with Coord.along</td>
-        <td class="">needs a new cut direction, "across"</td>
-      </tr>
-      <tr>
-        <td><a href="#half-violin">Half violin with slots</a></td>
-        <td class="">works, slots are cells of the profile's index</td>
-        <td class="">works, slots on sweep rows</td>
-        <td class="">same as A or B: cut plays no part in slots</td>
-      </tr>
-      <tr>
-        <td>
-          <a href="#stacked-lines"
-            >Stacked lines: stack the bands, draw their edges</a
-          >
-        </td>
-        <td class="">works, waits on part references</td>
-        <td class="">works, lines join bar tops</td>
-        <td class="bad">can't</td>
-      </tr>
-      <tr>
-        <td>
-          <a href="#radial"
-            >Hard example 1: radial stacked area in polar coordinates</a
-          >
-        </td>
-        <td class="">works</td>
-        <td class="">works (today)</td>
-        <td class="">works</td>
-      </tr>
-      <tr>
-        <td>
-          <a href="#fan"
-            >Hard example 2: fan chart of nested forecast intervals</a
-          >
-        </td>
-        <td class="">works, positions not amounts</td>
-        <td class="">works (today)</td>
-        <td class="">same as A</td>
-      </tr>
-    </table>
-  </div>
-  <h4>New syntax in A</h4>
-  <ul>
-    <li>
-      <code>stack</code> of ribbons with <code>x</code>:
-      <code>.flow(stack({ by, dir }))</code> and
-      <code>.mark(ribbon({ x, h }))</code>, no <code>scatter</code> by x.
-    </li>
-    <li>
-      <code
-        >stack({ baseline: Baseline.start() | Baseline.middle() |
-        Baseline.wiggle() | ... })</code
-      >.
-    </li>
-    <li>
-      <code
-        >spread({ spacing: 4 | Spacing.box(4) | Spacing.pitch(70, { at }) |
-        Spacing.contour(4) })</code
-      >, replacing <code>anchor</code>.
-    </li>
-    <li>
-      <code>ribbon({ x: mass.support(), h: mass.density() })</code>, and
-      <code>ribbon({ x, y: { min, max } })</code>.
-    </li>
-    <li>
-      <code>line</code> loses <code>h</code>; a stacked line chart is a stack of
-      ribbons with a line on each band's edge.
-    </li>
-    <li>
-      <code>shape.cut(stack(...))</code> and
-      <code>shape.cut(partition(...))</code> replacing cut's sizes and
-      <code>inset</code>.
-    </li>
-    <li>
-      <code>field("x").then((x, xs) =&gt; ..., { unit, fold })</code> for custom
-      methods.
-    </li>
-  </ul>
-
-  <h2>Recommendation</h2>
-  <div class="rec-box">
-    <b>Recommendation: Approach A, profiles.</b> Add one geometry type, the
-    profile, that every node can report (a box reports a constant one). Keep one
-    flow <code>stack</code> that adds profiles. Its <code>baseline</code> option
-    chooses where the stack's own 0 is (<code>Baseline.start()</code>,
-    <code>Baseline.middle()</code>, <code>Baseline.wiggle()</code>), and a
-    parent's <code>alignment</code> lines up those 0 points.
-    <code>spread</code>'s <code>spacing</code> takes a number or a
-    <code>Spacing</code> strategy (box, pitch, contour), which replaces its
-    <code>anchor</code> option. <code>partition</code> on a profile restricts it
-    to cells, which draws the croissant with no <code>intersect</code>. A
-    density's position is written explicitly as <code>support()</code> on the
-    same field expression. A ribbon chart, whose order changes at each x, stays
-    the per-x spelling it is today. <b>Runner-up: B, per-x core.</b> It is
-    today's engine with fixes and costs least, but it keeps two concepts of
-    thickness and answers locality by never letting a stack see a ribbon.
-  </div>
-  <p>
-    A is the only approach that writes every example here as one local stack,
-    spread or partition, with one definition of a shape's thickness. B is its
-    shortcut: the rewrite from A to the per-x form is how A ships first. C is
-    the right reading for shapes the spec really draws first, and A keeps it as
-    <code>cut</code> with a region operator.
-  </p>
-
-  <details>
-    <summary>
-      <b>Rationale</b>: the profile, its readers, locality, baseline, cut,
-      sampling, implementation
-    </summary>
-    <h3>The profile</h3>
-    <p>
-      For a node, an axis d (the one a stack runs along) and the other axis u,
-      the node's <b>profile</b> along d is:
-    </p>
+    <h4>What the renders show</h4>
     <ul>
       <li>
-        a <b>domain</b>, an interval of u. When u is a position scale shared
-        with its siblings (a ribbon's <code>x</code>), the domain is in data
-        units. Otherwise it is the node's own extent in pixels.
+        <b>Ridgeline.</b> Contact does what it promises. Each ridge sits as low
+        as it can without touching, and the column is shorter.
       </li>
       <li>
-        at each u in the domain, a <b>descent</b> and an <b>ascent</b>: how far
-        the shape reaches below and above its baseline along d.
+        <b>Serif, "Hamburg".</b> Contact changes almost nothing, in either font.
+        Stems, serifs and round sides reach the bounding box, so the closest
+        slice is at the box edge. In Georgia the serifs set the closest point,
+        so the white between two stems is the gap plus two serifs, wider than
+        between Arial's stems, as expected. But every stem pair gets the same
+        serifs, so the word still looks even.
       </li>
       <li>
-        each descent and ascent is a <b>size</b>: a data amount times the scale
-        factor plus fixed pixels. A ribbon's <code>h: "value"</code> gives the
-        amount. A stroke or a fixed <code>h: 12</code> gives pixels.
+        <b>"AVOW".</b> Contact pulls A into V and V into O until their diagonals
+        are 6 px apart, so AVOW sets much tighter than Hamburg in both fonts,
+        and in Georgia the serifs of A and V interleave. The same smallest
+        distance is not the same white: two parallel diagonals 6 px apart leave
+        a thin strip, while a stem beside a bowl leaves wedges of white above
+        and below its closest point.
+      </li>
+      <li>
+        <b>Shapes.</b> In the first two rows contact and box are the same,
+        because the closest points lie on the box edges (a point meeting the
+        widest part of a circle, a flat side meeting a point). The circle and
+        the triangle that points at it touch at one point, so that gap still
+        looks larger than a flat-to-flat gap of the same 10 px. In the last two
+        rows contact slides the triangles under the circle and between each
+        other, so up, down, up closes into an even band, while the gap beside
+        the square stays wide. A row with nested and un-nested pairs looks less
+        even under contact than under box gaps.
       </li>
     </ul>
-    <p>Facts that follow:</p>
-    <ul>
+    <p>
+      So contact guarantees a minimum gap and nothing more. That is what tree
+      layouts, sankey node columns and the ridgeline need. It is not a model of
+      looking even, and on glyphs and mixed shapes it looks uneven.
+    </p>
+    <h4>The choices</h4>
+    <ol>
       <li>
-        <b>A box is the degenerate case.</b> Its ascent and descent are constant
-        over its cross extent. A rect with no <code>x</code> has no index of its
-        own, so its constant profile covers whatever domain its siblings share.
+        <b>Keep <code>Spacing.contour(n)</code> with a known limit.</b> Its docs
+        say it guarantees a minimum gap, not an even look.
       </li>
       <li>
-        <b>The hull is the box.</b> The box a parent reads today is the hull of
-        the profile: lowest point to highest point. So any parent that only
-        reads boxes keeps working.
+        <b
+          >Add a model later that keeps the minimum gap and also reads the white
+          area between outlines.</b
+        >
+        This is what type tools do: HT Letterspacer sets sidebearings from a
+        target white area measured only to a depth inward from the outline, and
+        Tim Ahrens (Kern On) notes that perception works in terms of average
+        distance or white area. It would be one more
+        <code>Spacing</code> strategy, so the option does not change. Our first
+        emulation of an area model looked less even than contact on Josh's
+        reading, so it is not proposed now.
       </li>
       <li>
-        <b>Two profiles combine pointwise only on a shared index.</b> Siblings
-        in a stack must place u on one scale. A ribbon's <code>x</code> does
-        that. Profiles with different index scales are an error that names the
-        two scales.
+        <b>Park contour spacing</b> until an example needs it, and ship
+        <code>Spacing.box</code> and <code>Spacing.pitch</code> only.
       </li>
-      <li>
-        <b>A profile can come from rows or from a function.</b> From rows it is
-        the mark's curve through them (each series is curved first, then added).
-        From a function (<code>x: mass.support()</code> with
-        <code>h: mass.density()</code>) it is evaluated at samples of the hidden
-        variable t. Outside its domain a part has thickness 0.
-      </li>
-      <li>
-        <b>Under a coordinate transform</b> the profile stays in the layer's
-        unbent space. Polar maps u to angle and d to radius.
-        <code>Coord.along(spine)</code> maps u to distance along the spine and d
-        to distance along its normal.
-      </li>
-      <li>
-        <b>A node's profile is computed bottom-up</b>, like its box: a stack's
-        profile is [g_0, g_n], a spread's is the union of its children's placed
-        profiles.
-      </li>
-    </ul>
-
-    <h3>Readers</h3>
+    </ol>
     <div class="table-wrap">
       <table>
         <tr>
-          <th>Reader</th>
-          <th>How it combines children's profiles</th>
-          <th>Result</th>
-          <th>Check</th>
+          <th>Model</th>
+          <th>Rule</th>
+          <th>Where it is used</th>
         </tr>
         <tr>
-          <td><code>stack</code></td>
+          <td>Box gap</td>
+          <td>the gap between bounding boxes along the axis</td>
           <td>
-            g_i(u) = g_(i&minus;1)(u) + thickness_i(u); child i's frame is the
-            curve g_(i&minus;1)
+            today's <code>spread</code>; Graphviz <code>nodesep</code>;
+            d3-sankey <code>nodePadding</code>
           </td>
-          <td>one space, the sum</td>
-          <td>CanSum, shared index</td>
         </tr>
         <tr>
-          <td>divide: <code>stack</code> with a given whole</td>
+          <td>Pitch</td>
+          <td>a fixed distance between a named point on each child</td>
           <td>
-            the same, with each part rescaled to f_i(u) / &Sigma;f(u) times W(u)
+            today's <code>anchor: "baseline"</code>; ggridges'
+            <code>scale</code>
           </td>
-          <td>one space, shares</td>
-          <td>CanSum, total not 0</td>
         </tr>
         <tr>
-          <td><code>spread</code>, <code>spacing: Spacing.contour(n)</code></td>
+          <td>Contact</td>
           <td>
-            gap_i = largest over u of (top_(i&minus;1)(u) &minus; bottom_i(u)) +
-            spacing; a rigid translate
+            the smallest gap between facing outlines, slice by slice, equals the
+            gap
           </td>
-          <td>separate spaces</td>
-          <td>none (no sum)</td>
-        </tr>
-        <tr>
-          <td><code>partition</code> along u</td>
-          <td>restricts a profile to each cell of its index</td>
-          <td>cells at their places</td>
-          <td>key is a cell</td>
-        </tr>
-        <tr>
-          <td>anchor slot flow</td>
-          <td>the same flows, in the one-dimensional space of a part</td>
-          <td>slots ribbons attach to</td>
-          <td>as the flow</td>
-        </tr>
-        <tr>
-          <td><code>choose</code></td>
-          <td>first fit over alternatives' hulls</td>
-          <td>one alternative</td>
-          <td>none</td>
+          <td>
+            tidy trees (Reingold and Tilford, 1981, compare contours level by
+            level), <code>d3.tree</code>, d3-flextree (van der Ploeg, 2014, for
+            nodes of different sizes), GoTree; skyline packing
+          </td>
         </tr>
       </table>
     </div>
-
-    <h3>What stays local, and why</h3>
     <p>
-      Josh's objection (croissant round 6) was that a flow
-      <code>stack</code> which reaches into a ribbon's vertices is not local.
-      Here is a definition that can be checked:
+      <b>Naming.</b> How the gap is measured becomes the value of
+      <code>spacing</code>, a strategy family (<code>Spacing</code>, uppercase,
+      as the API rules ask for a choice among strategies). A plain number stays
+      as sugar for <code>Spacing.box(n)</code>.
+      <code>Spacing.pitch(70, { at: "baseline" })</code> replaces spread's
+      <code>anchor</code> option, which about 28 story, test and docs files use
+      today, each a mechanical change.
     </p>
-    <ol>
-      <li>
-        an operator reads only its children's summaries (a box today, or a
-        profile), never their rows or vertices;
-      </li>
-      <li>
-        it writes only each child's frame, where the child's local 0 goes.
-      </li>
-    </ol>
-    <p>
-      The round 6 stack broke rule 1. It split each ribbon into per-x pieces,
-      stacked the pieces in separate slices, and joined them again, so the
-      ribbon stopped being one child. A profile stack keeps rule 1: it asks each
-      child for its profile, the way it asks a rect for its height, and it never
-      sees the child's rows or vertices. Series measured at different x show the
-      difference: there are no shared vertices to pair, and the stack still adds
-      the curves.
-    </p>
-    <p>
-      Rule 2 is where the answer has a cost, stated plainly: a profile stack's
-      frame for child i is not a point but the curve g_(i&minus;1)(u). The child
-      is drawn on that curve, like a shape drawn inside a coordinate transform.
-      That is the same kind of frame a layer gives its children under
-      <code>Coord.along(spine)</code>, so it is not a new power, but it is more
-      than a translate. When every part is a box the curve is flat, and the
-      frame is today's translate.
-    </p>
-    <p>Where it does not hold:</p>
-    <ul>
-      <li>
-        <b>Rigid parts on a curved boundary.</b> A line, a circle, text or an
-        image has no amount along u, and drawing it on a curve would bend it. In
-        a profile stack with a curved boundary such a part is a loud error that
-        points to <code>.label()</code> or <code>scatter</code>. With all boxes
-        there is no curve, so dot plots and stacked bars are unchanged.
-      </li>
-      <li>
-        <b>Order that changes with u.</b> One stack has one order, so the ribbon
-        chart stays the per-x form.
-      </li>
-      <li>
-        <b>Sharing an index means sharing a scale.</b> That is already true of
-        any two siblings on one axis, so it is no new reach.
-      </li>
-    </ul>
-
-    <h3>Baseline and StackOrigin</h3>
-    <p>
-      A stack's zero point already has one model in the code:
-      <code>StackOrigin { part, fraction, mirrored }</code>
-      (<code>constraints/distribute.ts:71</code>). Today only
-      <code>Trait.diverging(midpoint)</code> on the <code>by</code> column's
-      unit sets it (<code>families/trait.ts:42</code>). With profiles it becomes
-      a profile, g_0(u), because <code>Baseline.wiggle()</code> has no part and
-      fraction. <code>baseline</code> is how a spec writes it, and
-      <code>Trait.diverging</code> is the default that desugars to
-      <code>Baseline.at</code>. The card after the streamgraph shows how it
-      meets a parent's <code>alignment</code>.
-    </p>
-
-    <h3>Cut</h3>
-    <p>
-      <b>What cut is today.</b>
-      <code>shape.cut({ dir, size, inset })</code> slices one drawn shape (an
-      image or a rect) into strips along <code>dir</code>, one strip per row.
-      <code>size</code> gives each strip's length: a plain number is pixels, and
-      <code>datum(n)</code> is a relative weight, so the strips share the room
-      left after the fixed ones, as flexbox does. <code>inset</code> trims a gap
-      off each strip. The bottle story spreads the strips apart afterwards
-      (<code>cut.tsx</code>,
-      <code>stories/forwardsyntax/Cut.stories.tsx</code>).
-    </p>
-    <p>
-      <b>Why it should change.</b> The croissant divides a shape too, but a
-      different way: a hidden ribbon, <code>partition</code> and
-      <code>intersect</code>. So main has two ways to divide a shape with no
-      shared code. Cut's weights repeat <code>fr(n)</code>, the flexible length
-      GoFish already has (#1220). Its <code>inset</code> means a gap between
-      strips, while <code>rect</code>'s and <code>region</code>'s
-      <code>inset</code> shrink the outline.
-    </p>
-    <p>
-      <b>The proposal.</b> Cut stops having its own size rules. Instead it takes
-      the operator that would divide the shape:
-    </p>
-    <ul>
-      <li>
-        split this bottle the way this stack divides its whole:
-        <code>bottle.cut(stack({ by: "category", size: "amount" }))</code>;
-      </li>
-      <li>
-        split this density into these partition cells:
-        <code>density.cut(partition({ by: d.bin(Bin.quantiles(5)) }))</code>.
-      </li>
-    </ul>
-    <p>
-      Cut's only remaining job is to turn the pieces into separate children, so
-      the next operator can move them: the exploded bottle spreads them apart, a
-      horizon chart moves its bands down to one line. When the pieces stay where
-      they are, no cut is needed at all: <code>partition</code> or a divide
-      restricts a profile directly, as in the croissant and the stacked
-      densities.
-    </p>
-
-    <h3>Sampling and the continuum</h3>
-    <ul>
-      <li>
-        <b>No spec names a grid.</b> A profile is a function. Its curve is fixed
-        by the mark's rows (with the mark's <code>curve</code>) or by a function
-        such as <code>x.density()</code>.
-      </li>
-      <li>
-        <b>Curve, then add.</b> Each part is curved by itself, then the stack
-        adds functions. Today GoFish stacks points and then curves each
-        boundary, and with the default monotone curve that can give a band a
-        negative thickness (stacking page, 8% here).
-      </li>
-      <li>
-        <b>The renderer samples when it draws.</b> A boundary is drawn through
-        the union of the breakpoints of the parts below it, plus extra points
-        where a curve is not linear and for function profiles. A fixed count
-        (512) stands until screen-aware sampling, which Josh deferred.
-      </li>
-      <li>
-        <b>Continuum rows are not needed for any example here.</b> A density's
-        position and height are channels that are functions of one hidden
-        variable t, <code>support()</code> and <code>density()</code>; the range
-        of t belongs to the expression (below). Two such channels over different
-        fields in one mark, such as <code>x: mass.support()</code> with
-        <code>h: length.density()</code>, are an error.
-        <code>repeat</code> stays discrete (draws, quantile levels).
-        <code>sweep</code> stays parked for curves that are not a function of
-        either axis, such as a spiral or a Lissajous figure.
-      </li>
-    </ul>
-
-    <h3>Implementation path</h3>
-    <ol>
-      <li>
-        <b>Shortcut now.</b> A <code>stack</code> whose parts are collective
-        marks with <code>x</code> lowers to the per-x form: curve each part,
-        read it at the union of breakpoints, compute the baseline from all
-        parts, stack each slice, connect. This is a declared shortcut, because
-        the stack peeks at the mark kind to know a part is a profile.
-      </li>
-      <li>
-        <b>One geometry kernel.</b> The profile belongs in
-        <code>geometry/</code> beside box, enclosing circle and outline. That
-        module has duplicates to fold first: two
-        <code>simplifyRing</code> functions (<code>geometry/outline.ts</code>,
-        <code>geometry/clip.ts</code>), enclose's own point, box and hull
-        (<code>enclose/prims.ts</code>), and three inset paths.
-        <code>pack</code> reports its children's outlines while
-        <code>treemap</code> reports its box (#1233), which a profile query
-        should settle the same way for both.
-      </li>
-      <li>
-        <b>One divide kernel.</b> The glue solve with a closing condition
-        (baseline or whole) serves <code>stack</code>, <code>normalize</code>,
-        <code>Tile.slice</code> and <code>Tile.dice</code>, and
-        <code>cut</code>, and carries one CanSum check. Today the check is
-        placed by hand: <code>stack</code> uses the units' sum
-        (<code>distribute.ts:366</code>), <code>treemap</code>, the size channel
-        and <code>.sum()</code> call <code>checkSummable</code> (#1208), and
-        <code>cut</code> with a datum array and <code>pack</code> check nothing.
-      </li>
-      <li>
-        <b>Full fix.</b> Profiles in the size and placement passes, so the stack
-        reads them and the per-x rewrite goes away.
-      </li>
-    </ol>
-
-    <h3>Bugs seen while rendering</h3>
-    <ul>
-      <li>
-        A stack of ribbons over series measured at different x stacks only rows
-        that share an exact x, with no warning (card 1, today's render). Already
-        listed on the stacking page as bug 1.
-      </li>
-      <li>
-        <code>Stacking Matrix/ConditionalDensity</code> throws "Species is not
-        constant across the connected group" on a fused ribbon over
-        <code>stack({ size: normalize })</code>. Already listed as stacking bug
-        7.
-      </li>
-      <li>
-        With <code>alignment: "middle"</code> on a spread of stacks that share a
-        value axis, the axis still draws, with meaningless labels (50, 50, 50 in
-        the Likert render; 1, 1, 1 in the stacked areas). Repro:
-        <code>Proposals/Stack Profile/Spacing Alignment/LikertMiddle</code> and
-        <code>AreasMiddle</code>. Once the children's 0 points no longer line
-        up, there is no shared value axis to draw.
-      </li>
-      <li>
-        Today a curve is applied after stacking, so with the default monotone
-        curve a band can get a negative thickness (stacking page).
-      </li>
-    </ul>
-    <h3>Related issues</h3>
-    <ul>
-      <li><b>#47</b>: stacked and divided ribbons (sankey strands, anchors)</li>
-      <li><b>#290</b>: <code>.stack()</code> as a mark method (dropped)</li>
-      <li><b>#809</b>: wiggle as a stack-level baseline (Josh's idea)</li>
-      <li>
-        <b>#831</b>: update is connect on time (stacked to grouped is an
-        animation)
-      </li>
-      <li><b>#980</b>: first-class distributions (densities as profiles)</li>
-      <li><b>#1101</b>: custom strategies as functions</li>
-      <li><b>#1208</b>: <code>checkSummable</code>, the shared CanSum check</li>
-      <li>
-        <b>#1220</b>: <code>fr</code> lengths, which <code>cut</code>'s datum
-        sizes repeat
-      </li>
-      <li><b>#1233</b>: pack reports outlines, treemap reports a box</li>
-      <li>
-        <b>#1276</b>: delete <code>Tile.slice</code> and <code>Tile.dice</code>:
-        a normalized stack
-      </li>
-      <li>
-        <b>#1284</b>: <code>Coord.envelope</code> (the bottle fill by area)
-      </li>
-      <li>
-        <b>#1298, #1342</b>: geometry readers work on the unbent shape under
-        coordinates
-      </li>
-      <li><b>#1332</b>: croissant sampling</li>
-    </ul>
-  </details>
-
+  </article>
+  <h2>Rules</h2>
+  <ul>
+    <li>
+      <b>A shape reports its profile, a list of slices.</b> At each position u
+      along the cross axis, a slice says how far the shape reaches below and
+      above its baseline. A ribbon reports many slices; in the limit, a function
+      of u. A rect reports one slice that does not change, its box.
+    </li>
+    <li>
+      <b>A stack moves slices and never resizes them.</b> Its frame for a child
+      is one offset per slice. Every <code>baseline</code> is a choice of those
+      offsets. A divide (a given whole) resizes, so it is not a baseline.
+    </li>
+    <li>
+      <b>Each value is a size, not a pixel count.</b> It is a data amount times
+      the scale factor plus fixed pixels, so a stack can still solve its scale
+      before layout.
+    </li>
+    <li>
+      <b>Local means two things.</b> An operator reads only its children's
+      summaries (a box or a profile), never their rows or vertices, and it
+      writes only each child's frame. When every part is a box, the offsets are
+      all equal and the frame is today's translate.
+    </li>
+    <li>
+      <b>A profile may be a function.</b> <code>x: mass.support()</code> and
+      <code>h: mass.density()</code> are both functions of one hidden variable
+      t. The ribbon samples t and evaluates every channel that is a function of
+      t at each sample. The range of t belongs to the expression. Two curve
+      channels over different variables in one mark, such as
+      <code>x: mass.support()</code> with <code>h: length.density()</code>, are
+      an error.
+    </li>
+    <li>
+      <b>Contour spacing reads the same slices.</b> The gap between two shapes
+      is the smallest gap over their shared slices, measured along the spacing
+      axis.
+    </li>
+  </ul>
   <h2>Decisions</h2>
   <ol class="decisions">
     <li>
-      Is a profile (an extent that varies along the other axis, a box being the
-      constant case) the one geometry concept for stack, contour spacing,
-      divide, slots and densities?
+      Is "a ribbon is the limit of thin boxes, and a stack moves each slice" the
+      explanation of stacking, with the profile defined as the list of slices (a
+      function in the limit)?
     </li>
     <li>
-      Does the two-rule definition of local (read only summaries, write only
-      frames, where a frame may be a boundary curve) answer your locality
-      objection?
+      A rigid part (a circle, text, an image, a line) in a stack of profiles:
+      keep it an error that names the fix, or allow it, resting on the highest
+      point of the boundary below it with a gap underneath?
     </li>
     <li>
-      Only amounts stack: a part with no thickness along u (a line, circle, text
-      or image) in a profile stack is an error that names the fix. For lines,
-      the fix is a stack of ribbons with a line on each band's edge, which waits
-      on part references.
+      Keep the word <code>baseline</code>, with values
+      <code>Baseline.start()</code>, <code>.end()</code>,
+      <code>.middle()</code>, <code>.at(part, fraction)</code> and
+      <code>.wiggle()</code>? <code>Trait.diverging</code> stays the default and
+      desugars to <code>Baseline.at</code>, and an explicit
+      <code>baseline</code> over a diverging unit is an error.
     </li>
     <li>
-      Keep the word <code>baseline</code>: the stack's option chooses its own 0
-      (<code>Baseline.start()</code>, <code>.end()</code>,
-      <code>.middle()</code>, <code>.at(part, fraction)</code>,
-      <code>.wiggle()</code>), and a parent's
-      <code>alignment: "baseline"</code> lines up those 0 points.
-      <code>StackOrigin</code> is the one model, and
-      <code>Trait.diverging</code> is a default that desugars into
-      <code>Baseline.at</code>?
+      <code>Baseline.wiggle()</code> is defined on the profile (the limit), not
+      on the rows, so finer rows do not change the curve?
     </li>
     <li>
-      <code>spacing</code> takes a number (sugar for
-      <code>Spacing.box(n)</code>) or a <code>Spacing</code> strategy, and
-      <code>Spacing.pitch(n, { at })</code> replaces spread's
-      <code>anchor</code> option?
-    </li>
-    <li>
-      <code>Spacing</code> ships with box, pitch and contour only, and leaves
-      optical spacing out until an example needs it?
-    </li>
-    <li>
-      <code>cut</code> takes the stack or partition that divides the shape,
-      drops its own sizes and <code>inset</code>, and only makes the pieces
-      movable children?
+      Under <code>Baseline.middle()</code> and
+      <code>Baseline.wiggle()</code> the value axis is dropped, since it can
+      only measure thickness?
     </li>
     <li>
       A density's area is the mass it is made from (the row count, or 1 for a
@@ -3480,16 +1437,18 @@ chart(penguins).flow(sweep(v=mass.range()), scatter(by=&quot;v&quot;, y=&quot;v&
       <code>d.density()</code> in a cell is the parent's curve there?
     </li>
     <li>
-      Outside its own x range a part has thickness 0 (ggplot2), rather than an
-      error?
+      Contour spacing: keep <code>Spacing.contour(n)</code> with the known
+      limit, add a minimum-gap-plus-area model later, or park contour spacing?
     </li>
     <li>
-      Accept the per-x rewrite as a declared shortcut until the engine has a
-      profile type?
+      <code>spacing</code> takes a number (sugar for
+      <code>Spacing.box(n)</code>) or a <code>Spacing</code> strategy, and
+      <code>Spacing.pitch(n, { at })</code> replaces spread's
+      <code>anchor</code> option?
     </li>
     <li>
-      Name: "profile", or "contour" or "skyline" ("envelope" is taken by
-      <code>Coord.envelope</code>, #1284)?
+      Accept the per-x rewrite (B at the union of breakpoints) as a declared
+      shortcut until the engine has profiles?
     </li>
   </ol>
 </main>

@@ -1,36 +1,23 @@
-// Throwaway helpers for the stack-profile proposal: three ways to space
+// Throwaway helpers for the stack-profile proposal: two ways to space
 // irregular shapes along one axis, computed by hand so today's engine can
 // draw the result as polygons. Units are pixels.
 //
 //   box      gap between bounding boxes (today's spread)
-//   contact  smallest distance between outlines, plus a gap (tidy trees)
-//   optical  the mean white gap between outlines, each column capped at a
-//            depth, is set to a target (HT Letterspacer style), over the
-//            columns where both outlines exist; never closer
-//            than contact
-export type Model = "box" | "contact" | "optical";
-export type Pt = [number, number];
+//   contact  the smallest gap between facing outlines, measured along the
+//            spacing axis on each scanline, equals the gap (tidy trees, a
+//            skyline)
+import { GLYPHS } from "./glyphOutlines";
 
-/** A shape's extent across the spacing axis: lo(u) and hi(u) where it exists. */
-type Profile = { u: number[]; lo: (number | null)[]; hi: (number | null)[] };
+export type Model = "box" | "contact";
+export type Pt = [number, number];
 
 const U = (lo: number, hi: number, n: number) =>
   Array.from({ length: n }, (_, i) => lo + ((hi - lo) * i) / (n - 1));
 
-/** Solve f(b) = target for increasing f on [lo, hi] by bisection. */
-const solve = (f: (b: number) => number, target: number, lo: number, hi: number) => {
-  for (let k = 0; k < 60; k++) {
-    const m = (lo + hi) / 2;
-    if (f(m) < target) lo = m;
-    else hi = m;
-  }
-  return (lo + hi) / 2;
-};
-
 /**
- * Place shapes one after another along an axis. `prev` is the far side of
- * what is already placed (a function of u, null where nothing is), `near(i)`
- * is shape i's near side relative to its own origin. Returns each origin.
+ * Place shapes one after another along an axis. On each scanline u[k],
+ * `far(i)[k]` and `near(i)[k]` are shape i's far and near side relative to
+ * its own origin (null where the shape is absent). Returns each origin.
  */
 function place(
   n: number,
@@ -39,7 +26,7 @@ function place(
   near: (i: number) => (number | null)[],
   extent: (i: number) => [number, number],
   model: Model,
-  opt: { gap: number; depth: number; target: number }
+  gap: number
 ): number[] {
   const out: number[] = [];
   const sky: (number | null)[] = u.map(() => null);
@@ -48,23 +35,14 @@ function place(
     const nr = near(i);
     let b = 0;
     if (i > 0) {
-      const [e0] = extent(i);
-      const boxB = boxEnd + opt.gap - e0;
-      let contact = out[i - 1];
-      u.forEach((_, k) => {
-        if (sky[k] !== null && nr[k] !== null)
-          contact = Math.max(contact, (sky[k] as number) + opt.gap - (nr[k] as number));
-      });
-      if (model === "box") b = boxB;
-      else if (model === "contact") b = contact;
+      if (model === "box") b = boxEnd + gap - extent(i)[0];
       else {
-        const cols = u.map((_, k) => k).filter((k) => nr[k] !== null && sky[k] !== null);
-        const mean = (bb: number) =>
-          cols.reduce((s, k) => {
-            const w = bb + (nr[k] as number) - (sky[k] as number);
-            return s + Math.min(w, opt.depth);
-          }, 0) / cols.length;
-        b = Math.max(contact, solve(mean, opt.target, contact - 500, contact + 500));
+        b = -Infinity;
+        u.forEach((_, k) => {
+          if (sky[k] !== null && nr[k] !== null)
+            b = Math.max(b, (sky[k] as number) + gap - (nr[k] as number));
+        });
+        if (b === -Infinity) b = boxEnd + gap - extent(i)[0];
       }
     }
     out.push(b);
@@ -98,7 +76,7 @@ export function ridgeRings(model: Model) {
     (i) => RU.map((x) => (ridgeH(RIDGES[i], x) === null ? null : 0)),
     (i) => [0, RIDGES[i].amp],
     model,
-    { gap: 4, depth: 40, target: 32 }
+    4
   );
   return RIDGES.map((r, i) => {
     const xs = RU.filter((x) => ridgeH(r, x) !== null);
@@ -108,48 +86,91 @@ export function ridgeRings(model: Model) {
 }
 
 // ---------------------------------------------------------------------------
-// A row of glyph-like outlines, spaced along x. Counters are ignored.
+// Rows of shapes spaced along x: traced glyphs, and circles, triangles and
+// squares. A shape is a list of contours (holes marked); its side on a
+// scanline is the leftmost or rightmost crossing over all its contours.
 
-const ellipse = (w: number, h: number): Pt[] =>
-  Array.from({ length: 48 }, (_, i) => {
-    const t = (2 * Math.PI * i) / 48;
-    return [w / 2 + (w / 2) * Math.cos(t), h / 2 + (h / 2) * Math.sin(t)];
-  });
-const GLYPHS: Record<string, Pt[]> = {
-  T: [[24, 0], [40, 0], [40, 86], [64, 86], [64, 100], [0, 100], [0, 86], [24, 86]],
-  A: [[0, 0], [16, 0], [22, 26], [46, 26], [52, 0], [68, 0], [42, 100], [26, 100]],
-  V: [[26, 0], [42, 0], [68, 100], [52, 100], [34, 32], [16, 100], [0, 100]],
-  O: ellipse(70, 100),
-  L: [[0, 0], [56, 0], [56, 14], [16, 14], [16, 100], [0, 100]],
-  I: [[0, 0], [16, 0], [16, 100], [0, 100]],
-};
-export const WORD = ["T", "A", "V", "O", "L", "I"];
-const GV = U(0, 100, 101);
+export type Shape = { contours: Pt[][]; holes: boolean[] };
 
-/** Leftmost and rightmost x of a polygon on the horizontal line y = v. */
-function scan(ring: Pt[], v: number): [number, number] | null {
+/** Leftmost and rightmost x of a set of rings on the line y = v. */
+function scan(rings: Pt[][], v: number): [number, number] | null {
   const xs: number[] = [];
-  ring.forEach((p, i) => {
-    const q = ring[(i + 1) % ring.length];
-    if ((p[1] <= v && q[1] >= v) || (q[1] <= v && p[1] >= v)) {
-      xs.push(p[1] === q[1] ? Math.min(p[0], q[0]) : p[0] + ((v - p[1]) / (q[1] - p[1])) * (q[0] - p[0]));
-      if (p[1] === q[1]) xs.push(Math.max(p[0], q[0]));
-    }
-  });
+  for (const ring of rings)
+    ring.forEach((p, i) => {
+      const q = ring[(i + 1) % ring.length];
+      if ((p[1] <= v && q[1] > v) || (q[1] <= v && p[1] > v))
+        xs.push(p[0] + ((v - p[1]) / (q[1] - p[1])) * (q[0] - p[0]));
+    });
   return xs.length ? [Math.min(...xs), Math.max(...xs)] : null;
 }
 
-export function glyphRings(model: Model) {
-  const rings = WORD.map((g) => GLYPHS[g]);
-  const sides = rings.map((r) => GV.map((v) => scan(r, v)));
-  const x = place(
-    rings.length,
-    GV,
+/** x offsets for one row of shapes. */
+function rowOffsets(shapes: Shape[], model: Model, gap: number) {
+  const ys = shapes.flatMap((s) => s.contours.flat().map((p) => p[1]));
+  const V = U(Math.min(...ys), Math.max(...ys), 400);
+  const sides = shapes.map((s) => V.map((v) => scan(s.contours, v)));
+  return place(
+    shapes.length,
+    V,
     (i) => sides[i].map((s) => (s ? s[1] : null)),
     (i) => sides[i].map((s) => (s ? s[0] : null)),
-    (i) => [Math.min(...rings[i].map((p) => p[0])), Math.max(...rings[i].map((p) => p[0]))],
+    (i) => {
+      const xs = shapes[i].contours.flat().map((p) => p[0]);
+      return [Math.min(...xs), Math.max(...xs)];
+    },
     model,
-    { gap: 4, depth: 30, target: 14 }
+    gap
   );
-  return rings.map((r, i) => ({ c: WORD[i] + i, ring: r.map(([px, py]) => [px + x[i] + 4, py + 4] as Pt) }));
 }
+
+/** Polygons for several rows, outer contours first and holes after. */
+function rowsToRings(rows: Shape[][], model: Model, gap: number, pitch: number) {
+  const outer: { c: string; ring: Pt[] }[] = [];
+  const holes: { c: string; ring: Pt[] }[] = [];
+  rows.forEach((shapes, r) => {
+    const xs = rowOffsets(shapes, model, gap);
+    const x0 = Math.min(...shapes[0].contours.flat().map((p) => p[0]));
+    const dy = (rows.length - 1 - r) * pitch;
+    shapes.forEach((s, i) =>
+      s.contours.forEach((c, j) =>
+        (s.holes[j] ? holes : outer).push({
+          c: s.holes[j] ? "hole" : "ink",
+          ring: c.map(([px, py]) => [px + xs[i] - x0 + 6, py + dy] as Pt),
+        })
+      )
+    );
+  });
+  return [...outer, ...holes];
+}
+
+export const WORDS = ["Hamburg", "AVOW"];
+export const glyphRows = (font: "serif" | "sans", model: Model) =>
+  rowsToRings(
+    WORDS.map((w) => GLYPHS[font][w].map((g) => ({ contours: g.contours, holes: g.holes }))),
+    model,
+    6,
+    110
+  ).map((d) => ({ ...d, ring: d.ring.map(([x, y]) => [x, y + 30] as Pt) }));
+
+const S = 56;
+const circle: Shape = {
+  contours: [Array.from({ length: 72 }, (_, i) => {
+    const t = (2 * Math.PI * i) / 72;
+    return [S / 2 + (S / 2) * Math.cos(t), S / 2 + (S / 2) * Math.sin(t)] as Pt;
+  })],
+  holes: [false],
+};
+const square: Shape = { contours: [[[0, 0], [S, 0], [S, S], [0, S]]], holes: [false] };
+const tri = (pts: Pt[]): Shape => ({ contours: [pts], holes: [false] });
+const left = tri([[0, S / 2], [S, 0], [S, S]]); // points left
+const right = tri([[0, 0], [S, S / 2], [0, S]]); // points right
+const up = tri([[0, 0], [S, 0], [S / 2, S]]);
+const down = tri([[0, S], [S / 2, 0], [S, S]]);
+export const SHAPE_ROWS = ["○ ◁ □", "○ ▷ □", "△ ○ ▽ □", "□ △ ▽ △"];
+const ROWS: Shape[][] = [
+  [circle, left, square],
+  [circle, right, square],
+  [up, circle, down, square],
+  [square, up, down, up],
+];
+export const shapeRows = (model: Model) => rowsToRings(ROWS, model, 10, 76);

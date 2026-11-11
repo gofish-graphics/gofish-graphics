@@ -19,17 +19,15 @@ def snip(lang, code):
     return len(snips) - 1
 
 
-for ex in C.EXAMPLES:
-    ex["_A_js"] = snip("js", ex["A_js"])
-    ex["_A_py"] = snip("python", ex["A_py"])
-    ex["_today"] = snip("js", ex["today_js"])
-    for k in "BC":
-        ex["_" + k + "_js"] = snip("js", ex[k + "_js"])
-        ex["_" + k + "_py"] = snip("python", ex[k + "_py"])
-for p in C.PRECEDENT:
-    p["_code"] = snip(p["lang"], p["code"])
-for ins in C.INSERTS:
-    ins["_codes"] = [(label, snip("js", js), snip("python", py)) for label, js, py in ins["codes"]]
+for sec in C.SECTIONS:
+    for b in sec["blocks"]:
+        if b[0] == "item":
+            d = b[1]
+            d["_js"], d["_py"], d["_today"] = snip("js", d["js"]), snip("python", d["py"]), snip("js", d.get("today_js"))
+        elif b[0] == "code":
+            b.append((snip("js", b[2]), snip("python", b[3])))
+        elif b[0] == "today":
+            b.append(snip("js", b[2]))
 
 res = subprocess.run(
     ["node", "proposals/_tools/format-snippets.mjs"],
@@ -83,91 +81,40 @@ def nlines(i):
     return 0 if i is None else formatted[i]["code"].count("\n") + 1
 
 
-def example_card(n, ex):
-    imgs = "".join(
-        f'<figure><img src="img/{f}" alt="{html.escape(re.sub("<[^>]+>", "", cap))}">'
-        f"<figcaption>{cap}</figcaption></figure>"
-        for f, cap in ex["imgs"]
-    )
-    today = ex["_today"]
-    if today is None:
-        today_html = f'<p class="label">{ex["today_label"]}</p>'
-    else:
-        body = pre(today, "js")
-        if nlines(today) > 12:
-            body = f'<details><summary>{ex["today_label"]} ({nlines(today)} lines)</summary>{body}</details>'
-        else:
-            body = f'<p class="label">{ex["today_label"]}</p>{body}'
-        today_html = body
-    others = ""
-    for k in "BC":
-        ij, ip = ex["_" + k + "_js"], ex["_" + k + "_py"]
-        inner = both(ij, ip) if ij is not None else '<p class="muted">The same as A.</p>'
-        others += f'<div><p class="label">{k}: {ex["verdict"][k]}</p>{inner}</div>'
-    verdict = "".join(f'<tr><th>{k}</th><td>{ex["verdict"][k]}</td></tr>' for k in "ABC")
-    return f"""
-<article class="card" id="{ex['id']}">
-  <h3>{n}. {ex['title']}</h3>
-  <div class="figs">{imgs}</div>
-  <p>{ex['text']}</p>
-  <p class="label">{ex.get('A_label', 'Proposed (A)')}</p>
-  {both(ex['_A_js'], ex['_A_py'])}
-  <div class="today">{today_html}</div>
-  <table class="verdict">{verdict}</table>
-  <details><summary>B and C spellings</summary><div class="two">{others}</div></details>
-</article>"""
 
 
-def insert_card(ins):
-    figs = "".join(
-        f'<figure><img src="img/{f}" alt="{html.escape(re.sub("<[^>]+>", "", cap))}">'
-        f"<figcaption>{cap}</figcaption></figure>"
-        for f, cap in ins["figs"]
-    )
-    codes = "".join(f'<p class="label">{label}</p>{both(j, p)}' for label, j, p in ins["_codes"])
-    return f"""
-<article class="card insert" id="{ins['id']}">
-  <h3>{ins['title']}</h3>
-  <p>{ins['intro']}</p>
-  {f'<div class="figs">{figs}</div>' if figs else ''}
-  {codes}
-  {ins['body']}
-</article>"""
+def fig(f, cap, cls=""):
+    alt = html.escape(re.sub("<[^>]+>", "", cap))
+    return f'<figure class="{cls}"><img src="img/{f}" alt="{alt}"><figcaption>{cap}</figcaption></figure>'
 
 
-def cards_with_inserts():
-    out = []
-    for n, e in enumerate(examples):
-        out.append(example_card(n + 1, e))
-        out += [insert_card(i) for i in C.INSERTS if i["after"] == e["id"]]
-    return "".join(out)
+def block_html(b):
+    kind = b[0]
+    if kind == "p":
+        return b[1]
+    if kind == "figs":
+        return f'<div class="figs">{"".join(fig(f, c) for f, c in b[1])}</div>'
+    if kind == "wide":
+        return fig(b[1], b[2], "wide")
+    if kind == "code":
+        ij, ip = b[4]
+        return f'<p class="label">{b[1]}</p>{both(ij, ip)}'
+    if kind == "today":
+        return f'<p class="label">{b[1]}</p>{pre(b[3], "js")}'
+    if kind == "item":
+        d = b[1]
+        today = ""
+        if d["_today"] is not None:
+            today = f'<p class="label">{d["today_label"]}</p>{pre(d["_today"], "js")}'
+        elif d.get("today_label"):
+            today = f'<p class="label">{d["today_label"]}</p>'
+        return f"""<div class="item">{fig(d["img"], d["cap"])}<div><p class="label">{d.get("label", "Proposed")}</p>{both(d["_js"], d["_py"])}{today}</div></div>"""
+    raise ValueError(kind)
 
 
-def precedent_card(p):
-    img = f'<img src="img/{p["img"]}" alt="{p["name"]} render">' if p["img"] else ""
-    return f"""<article class="card small"><h4>{p['name']}</h4>{img}{pre(p['_code'], p['lang'])}<p>{p['note']}</p></article>"""
-
-
-def approach_card(a):
-    comp = "".join(f"<li>{c}</li>" for c in a["composes"])
-    ov = "".join(f"<tr><td>{x}</td><td>{y}</td></tr>" for x, y in a["overlaps"])
-    tr = "".join(f"<li>{t}</li>" for t in a["tradeoffs"])
-    return f"""<article class="card approach {'rec' if a['key']=='A' else ''}">
-  <h3>{a['name']}</h3><p>{a['idea']}</p>
-  <h4>Composition</h4><ul>{comp}</ul>
-  <p><b>Desugaring.</b> {a['desugar']}</p>
-  <h4>Overlap check</h4><div class="table-wrap"><table><tr><th>Pair</th><th>Overlap</th></tr>{ov}</table></div>
-  <h4>Trade-offs</h4><ul>{tr}</ul>
-</article>"""
-
-
-order = {e["id"]: e for e in C.EXAMPLES}
-examples = [order[i] for i in C.SIDE_BY_SIDE_ORDER]
-verdict_rows = "".join(
-    f'<tr><td><a href="#{e["id"]}">{e["title"]}</a></td>'
-    + "".join(f'<td class="{"bad" if v.startswith("can") else ""}">{v}</td>' for v in (e["verdict"][k] for k in "ABC"))
-    + "</tr>"
-    for e in examples
+sections = "".join(
+    f'<h2 id="{sec["id"]}">{sec["title"]}</h2><article class="card">{"".join(block_html(b) for b in sec["blocks"])}</article>'
+    for sec in C.SECTIONS
 )
 
 CSS = """
@@ -208,7 +155,9 @@ details{margin:8px 0}summary{cursor:pointer;color:var(--accent);font-weight:600}
 .toggle button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600}
 body.py .lang-js{display:none}body:not(.py) .lang-py{display:none}
 .decisions li{margin:.5em 0}
-.card.insert{border-left:4px solid var(--accent)}
+.item{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.wide img{width:100%}
+.note{font-size:.9rem;color:var(--muted)}
 .insert .figs{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
 table.methods td{min-width:9em}
 .hljs-keyword,.hljs-built_in{color:var(--hk)}.hljs-string{color:var(--hs)}.hljs-number,.hljs-literal{color:var(--hn)}.hljs-comment{color:var(--hc);font-style:italic}.hljs-title,.hljs-attr,.hljs-property{color:var(--ht)}
@@ -246,47 +195,14 @@ page = f"""<title>{C.TITLE}</title>
 <style>{CSS}</style>
 {FONTS}
 <main>
-<h1>Stack profiles: one geometry for stacking and dividing</h1>
+<h1>{C.H1}</h1>
 <ul class="summary">{''.join(f'<li>{s}</li>' for s in C.SUMMARY)}</ul>
-<div class="rec-box">{C.RECOMMENDATION}</div>
+<p class="note">{C.FULL_LINK}</p>
 <div class="toggle"><span class="muted">Code in</span><button data-lang="js" aria-pressed="true">JavaScript</button><button data-lang="py" aria-pressed="false">Python</button></div>
-
+<details><summary>Terms used on this page</summary><div class="table-wrap"><table>{terms}</table></div></details>
+{sections}
 <h2>Rules</h2>
 <ul>{''.join(f'<li>{r}</li>' for r in C.RULES)}</ul>
-<details><summary>Terms used on this page</summary><div class="table-wrap"><table>{terms}</table></div></details>
-
-<h2>Precedent</h2>
-<p>How other systems stack, align and divide. Images marked real are rendered here from the code shown.</p>
-<div class="grid">{''.join(precedent_card(p) for p in C.PRECEDENT)}</div>
-
-<h2>Approaches</h2>
-<div class="grid3">{''.join(approach_card(a) for a in C.APPROACHES)}</div>
-
-<h2>Examples</h2>
-<p>Each card shows the render, the spelling in A, today's spelling, and how each approach fares. Highlighted lines are the ones that change. Renders marked emulated are drawn by today's engine from precomputed rows; the proposed code does not run yet.</p>
-{cards_with_inserts()}
-
-<h2>Trade-offs</h2>
-<div class="table-wrap"><table><tr><th>Example</th><th>A. Profiles</th><th>B. Per-x core</th><th>C. Divide a drawn whole</th></tr>{verdict_rows}</table></div>
-<h4>New syntax in A</h4>
-<ul>{''.join(f'<li>{s}</li>' for s in C.SYNTAX_CHANGES)}</ul>
-
-<h2>Recommendation</h2>
-<div class="rec-box">{C.RECOMMENDATION}</div>
-<p>A is the only approach that writes every example here as one local stack, spread or partition, with one definition of a shape's thickness. B is its shortcut: the rewrite from A to the per-x form is how A ships first. C is the right reading for shapes the spec really draws first, and A keeps it as <code>cut</code> with a region operator.</p>
-
-<details><summary><b>Rationale</b>: the profile, its readers, locality, baseline, cut, sampling, implementation</summary>
-<h3>The profile</h3>{C.SECTIONS_PROFILE}
-<h3>Readers</h3>{C.SECTIONS_READERS}
-<h3>What stays local, and why</h3>{C.SECTIONS_LOCALITY}
-<h3>Baseline and StackOrigin</h3>{C.SECTIONS_BASELINE}
-<h3>Cut</h3>{C.SECTIONS_CUT}
-<h3>Sampling and the continuum</h3>{C.SECTIONS_SAMPLING}
-<h3>Implementation path</h3>{C.SECTIONS_IMPL}
-<h3>Bugs seen while rendering</h3><ul>{''.join(f'<li>{b}</li>' for b in C.BUGS)}</ul>
-<h3>Related issues</h3><ul>{''.join(f'<li><b>{n}</b>: {g}</li>' for n, g in C.RELATED)}</ul>
-</details>
-
 <h2>Decisions</h2>
 <ol class="decisions">{''.join(f'<li>{d}</li>' for d in C.DECISIONS)}</ol>
 </main>
@@ -299,7 +215,10 @@ open(os.path.join(HERE, "page.html"), "w").write(page)
 
 def md(s):
     s = re.sub(r"<b>(.*?)</b>", r"**\1**", s, flags=re.S)
+    s = re.sub(r"<i>(.*?)</i>", r"*\1*", s, flags=re.S)
     s = re.sub(r"<code>(.*?)</code>", r"`\1`", s, flags=re.S)
+    s = re.sub(r'<a href="([^"]+)">(.*?)</a>', r"[\2](\1)", s, flags=re.S)
+    s = re.sub(r"<h4>(.*?)</h4>", r"\n#### \1\n", s, flags=re.S)
     s = re.sub(r"<li>", "\n- ", s)
     s = re.sub(r"</?(ul|li|p|ol)>", "\n", s)
     s = re.sub(r"\n{3,}", "\n\n", s)
@@ -313,54 +232,35 @@ def fence(i, lang):
     return f"```{lang}\n{code}\n```\n"
 
 
-out = [f"# {C.TITLE}: one geometry for stacking and dividing\n"]
+def block_md(b):
+    kind = b[0]
+    if kind == "p":
+        return [b[1].strip() if "<table" in b[1] else md(b[1]), ""]
+    if kind == "figs":
+        return [x for f, c in b[1] for x in (f"![{md(c)}](img/{f})", "", f"*{md(c)}*", "")]
+    if kind == "wide":
+        return [f"![{md(b[2])}](img/{b[1]})", "", f"*{md(b[2])}*", ""]
+    if kind == "code":
+        ij, ip = b[4]
+        return [md(b[1]) + ":", "", fence(ij, "js"), fence(ip, "python")]
+    if kind == "today":
+        return [md(b[1]) + ":", "", fence(b[3], "js")]
+    d = b[1]
+    out = [f"![{md(d['cap'])}](img/{d['img']})", "", f"*{md(d['cap'])}*", "", md(d.get("label", "Proposed")) + ":", "", fence(d["_js"], "js"), fence(d["_py"], "python")]
+    if d.get("today_label"):
+        out += [md(d["today_label"]) + ":", "", fence(d["_today"], "js")]
+    return out
+
+
+out = [f"# {md(C.H1)}", ""]
 out += [f"{n}. {md(s)}" for n, s in enumerate(C.SUMMARY, 1)]
-out += ["", md(C.RECOMMENDATION), "", "The review page is `page.html` beside this file.", "", "## Rules", ""]
-out += [f"- {md(r)}" for r in C.RULES]
-out += ["", "## Terms", "", "| Term | Meaning |", "| --- | --- |"]
+out += ["", md(C.FULL_LINK), "", "The review page is `page.html` beside this file.", "", "## Terms", "", "| Term | Meaning |", "| --- | --- |"]
 out += [f"| {t} | {md(d)} |" for t, d in C.TERMS]
-out += ["", "## Approaches", ""]
-for a in C.APPROACHES:
-    out += [f"### {a['name']}", "", md(a["idea"]), "", "Composition:", ""]
-    out += [f"- {md(c)}" for c in a["composes"]]
-    out += ["", f"Desugaring: {md(a['desugar'])}", "", "| Pair | Overlap |", "| --- | --- |"]
-    out += [f"| {md(x)} | {md(y)} |" for x, y in a["overlaps"]]
-    out += ["", "Trade-offs:", ""] + [f"- {md(t)}" for t in a["tradeoffs"]] + [""]
-out += ["## Examples", ""]
-for n, ex in enumerate(examples, 1):
-    out += [f"### {n}. {md(ex['title'])}", ""]
-    for f, cap in ex["imgs"]:
-        out += [f"![{md(cap)}](img/{f})", "", f"*{md(cap)}*", ""]
-    out += [md(ex["text"]), "", md(ex.get("A_label", "Proposed (A)")) + ":", "", fence(ex["_A_js"], "js"), fence(ex["_A_py"], "python")]
-    out += [f"{md(ex['today_label'])}:", "", fence(ex["_today"], "js")]
-    for k in "BC":
-        out += [f"{k} ({ex['verdict'][k]}):", ""]
-        if ex["_" + k + "_js"] is None:
-            out += ["The same as A.", ""]
-        else:
-            out += [fence(ex["_" + k + "_js"], "js"), fence(ex["_" + k + "_py"], "python")]
-    for ins in [i for i in C.INSERTS if i["after"] == ex["id"]]:
-        out += [f"### {md(ins['title'])}", "", md(ins["intro"]), ""]
-        for f, cap in ins["figs"]:
-            out += [f"![{md(cap)}](img/{f})", "", f"*{md(cap)}*", ""]
-        for label, j, p in ins["_codes"]:
-            out += [f"{md(label)}:", "", fence(j, "js"), fence(p, "python")]
-        out += [ins["body"].strip(), ""]
-out += ["## Trade-offs", "", "| Example | A | B | C |", "| --- | --- | --- | --- |"]
-out += [f"| {md(e['title'])} | " + " | ".join(e["verdict"][k] for k in "ABC") + " |" for e in examples]
-out += ["", "New syntax in A:", ""] + [f"- {md(s)}" for s in C.SYNTAX_CHANGES]
-out += ["", "## The profile", "", md(C.SECTIONS_PROFILE), "", "## Readers", "", C.SECTIONS_READERS.strip(), ""]
-out += ["## What stays local, and why", "", md(C.SECTIONS_LOCALITY), "", "## Baseline and StackOrigin", "", md(C.SECTIONS_BASELINE)]
-out += ["", "## Cut", "", md(C.SECTIONS_CUT), "", "## Sampling and the continuum", "", md(C.SECTIONS_SAMPLING)]
-out += ["", "## Implementation path", "", re.sub(r"\n- ", "\n1. ", md(C.SECTIONS_IMPL.replace("<ol>", "<ul>").replace("</ol>", "</ul>")))]
-out += ["", "## Precedent", ""]
-for p in C.PRECEDENT:
-    out += [f"### {p['name']}", ""]
-    if p["img"]:
-        out += [f"![{p['name']}](img/{p['img']})", ""]
-    out += [fence(p["_code"], {"text": ""}.get(p["lang"], p["lang"])), md(p["note"]), ""]
-out += ["## Bugs seen while rendering", ""] + [f"- {md(b)}" for b in C.BUGS]
-out += ["", "## Related issues", ""] + [f"- {n}: {md(g)}" for n, g in C.RELATED]
+for sec in C.SECTIONS:
+    out += ["", f"## {md(sec['title'])}", ""]
+    for b in sec["blocks"]:
+        out += block_md(b)
+out += ["## Rules", ""] + [f"- {md(r)}" for r in C.RULES]
 out += ["", "## Decisions", ""] + [f"{n}. {md(d)}" for n, d in enumerate(C.DECISIONS, 1)] + [""]
 open(os.path.join(HERE, "proposal.md"), "w").write("\n".join(out))
 print("ok", len(page), "bytes")

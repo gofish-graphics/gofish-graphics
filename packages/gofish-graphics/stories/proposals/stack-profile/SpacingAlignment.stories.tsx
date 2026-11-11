@@ -16,7 +16,7 @@ import {
   Trait,
   Unit,
 } from "../../../src/lib";
-import { glyphRings, ridgeRings, type Model } from "./spacingModels";
+import { glyphRows, ridgeRings, shapeRows, type Model } from "./spacingModels";
 
 const meta: Meta = { title: "Proposals/Stack Profile/Spacing Alignment" };
 export default meta;
@@ -53,12 +53,19 @@ const ridges = (model: Model) =>
 export const RidgeBox = show((el) => ridges("box").render(el));
 export const RidgeContact = show((el) => ridges("contact").render(el));
 
-const glyphs = (model: Model) =>
-  pixels(470, 108).layer(
-    chart(glyphRings(model)).mark(polygon({ points: "ring", fill: "#333" }))
-  );
-export const GlyphBox = show((el) => glyphs("box").render(el));
-export const GlyphContact = show((el) => glyphs("contact").render(el));
+/** Ink polygons, then the holes (counters) painted white on top. */
+const inked = (w: number, h: number, rings: { c: string; ring: unknown }[]) =>
+  pixels(w, h)
+    .layer(chart(rings.filter((d) => d.c === "ink")).mark(polygon({ points: "ring", fill: "#333" })))
+    .layer(chart(rings.filter((d) => d.c === "hole")).mark(polygon({ points: "ring", fill: "white" })));
+const glyphs = (font: "serif" | "sans", model: Model) => inked(560, 230, glyphRows(font, model));
+export const SerifBox = show((el) => glyphs("serif", "box").render(el));
+export const SerifContact = show((el) => glyphs("serif", "contact").render(el));
+export const SansBox = show((el) => glyphs("sans", "box").render(el));
+export const SansContact = show((el) => glyphs("sans", "contact").render(el));
+const shapes = (model: Model) => inked(330, 300, shapeRows(model));
+export const ShapesBox = show((el) => shapes("box").render(el));
+export const ShapesContact = show((el) => shapes("contact").render(el));
 
 // ---------------------------------------------------------------------------
 // Baseline (a node's own 0) against alignment (how a parent lines children up).
