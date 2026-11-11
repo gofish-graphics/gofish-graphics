@@ -2,7 +2,7 @@
 
 ## What we know so far
 
-1. Contact spacing (the smallest gap between facing outlines) guarantees only a minimum. It does not make gaps look even: a wedge of white next to a square, or a circle next to a tip, reads wider than a parallel strip at the same minimum.
+1. Contact spacing (the smallest gap between facing outlines) and optical spacing serve different goals. Contact packs as tightly as possible without overlap, which tidy trees and ridgelines want. It does not make gaps look even: a wedge of white next to a square, or a circle next to a tip, reads wider than a parallel strip at the same minimum. So the open question is which model covers looking even, not whether contact should be replaced.
 2. The fillet area (the white a disc of radius 2 × the target cannot reach between two shapes) evens Josh's square, A, V, A row at loose spacing: 30, 30, 30 px.
 3. Nothing tried fixes the circle and tip row. The circle stays 13 px or more farther out than the target under every model.
 4. At tight spacing the floor is the limit: with the floor at 0 the base corners touch and the square still reads wider than the triangles.
@@ -10,11 +10,12 @@
 
 ## Open questions
 
-1. Which measure should GoFish use for gaps between siblings: contact, an area model, a pair measure such as fillet area or pair white area, or a softened outline (opening, blur)? Use the interactive below to compare against your own eye.
-2. Is a measure that compares pairs acceptable, since it gives up measuring each shape on its own?
-3. Is the same rule used for padding to a container's wall (the airplane in a pill)?
-4. Is there one "how this shape is measured" setting that spread, stack, alignment and padding all read?
-5. How do two neighbors' per-side margins combine, by sum or by max?
+1. Which measure covers the "look even" goal for gaps between siblings: an area model, a pair measure such as fillet area or pair white area, or a softened outline (opening, blur)? Use the interactive below to compare against your own eye.
+2. How does a user choose between the two goals: two `Spacing` strategies, contact for packing and another for looking even?
+3. Is a measure that compares pairs acceptable, since it gives up measuring each shape on its own?
+4. Is the same rule used for padding to a container's wall (the airplane in a pill)?
+5. Is there one "how this shape is measured" setting that spread, stack, alignment and padding all read?
+6. How do two neighbors' per-side margins combine, by sum or by max?
 
 This question is unresolved. It was split from the stack profiles proposal (`proposals/stack-profile/` on branch `api-proposal-stack-profile`), where a profile, the list of slices, was one way a spread could measure shapes.
 
@@ -27,6 +28,22 @@ The review page is `page.html` beside this file.
 | Slice                   | A thin box of a shape at one position u along the cross axis: how far the shape reaches below and above its baseline there.                                                                                                                                           |
 | Profile                 | A shape's list of slices, or in the limit the function from u to its reach below and above its baseline. A box is one slice that does not change. Precedents: a tidy tree's contour, a skyline in computational geometry, and the calculus region between two graphs. |
 | Box gap and contact gap | Two ways to measure the space between neighbors. A box gap is between bounding boxes, as `spread` does today. A contact gap is the smallest gap between facing outlines, measured slice by slice.                                                                     |
+
+## Two goals: packing and looking even
+
+Tidy tree layouts already space shapes by their outlines (Reingold and Tilford, 1981; `d3.tree`; d3-flextree). Each subtree reports its leftmost and rightmost x at each depth level, its **contour**. Sibling subtrees slide together until the closest shared level reaches the minimum separation. The contour is a profile whose slices are the depth levels (see [Stack profiles](https://claude.ai/artifact/SjYWQhuLNWW4zkJULuK4Me)), and the rule is contact.
+
+![Emulated: a small file tree laid out with each subtree as one block (box spacing), and with contact on its depth contours, where subtrees interlock. Main has no contour code, so the layout is computed in a throwaway story.](img/tidy-tree.png)
+
+_Emulated: a small file tree laid out with each subtree as one block (box spacing), and with contact on its depth contours, where subtrees interlock. Main has no contour code, so the layout is computed in a throwaway story._
+
+Contact and optical spacing serve different goals, so neither replaces the other.
+
+- **Packing.** Contact packs shapes as tightly as possible without overlap. Tidy trees and ridgelines want this, and readers expect it there.
+
+- **Looking even.** Optical spacing makes the gaps look equal. Rows of letter-like shapes, icons, and padding inside a container want this.
+
+So the `Spacing` family likely needs both, chosen by what the visualization is for. A tidy tree in GoFish would be `spread` with `Spacing.contour(n)` over subtree profiles, which makes it a test case for both pages.
 
 ## Set it yourself
 
@@ -272,7 +289,7 @@ The airplane Josh saw on Twitter (the Dynamic Island) is a different problem: th
 
 ## Open decisions
 
-1. Contour spacing: keep `Spacing.contour(n)` with the known limit, keep it as the floor and add the area model later as another strategy, or park contour spacing?
+1. Keep `Spacing.contour(n)` for packing (tidy trees, ridgelines), and add a separate `Spacing` strategy for looking even, chosen by what the visualization is for? Contact would also stay as the floor under the looking-even strategy.
 2. Optical centering for `alignment: "middle"`: center the ink's center of mass (Josh's pick on the play button; per shape, unchanged by blur), the blurred outline's box, or keep the box?
 3. If the fillet area model is kept: `Spacing.fillet(n, { radius })`, its own strategy, or `Spacing.contour(n, { fill: radius })`, an option of contact? It compares pairs, so it gives up per-shape locality; the SDF opening (g) keeps it but moves less. A default radius of 2n worked on the test rows.
 4. If the blurred outline is kept, is it an option of contact, `Spacing.contour(n, { blur: 6 })`, or its own strategy, `Spacing.blurred(n, 6)`?

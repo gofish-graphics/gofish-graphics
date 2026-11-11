@@ -4,6 +4,7 @@
 #   SpacingAlignment.stories.tsx (spacingModels.ts): box, contact, area model, test rows (a) to (f)
 #   SpacingSdf.stories.tsx (sdfModels.ts, sdfRun.ts, sdfOffsets.json): candidates (g) to (j)
 #   widgetRun.ts writes widgets.json for the interactive.
+#   TidyTree.stories.tsx: the tidy tree, box against contour spacing.
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -22,14 +23,15 @@ FULL_LINK = (
     "where a profile, the list of slices, was one way a spread could measure shapes."
 )
 SUMMARY = [
-    "Contact spacing (the smallest gap between facing outlines) guarantees only a minimum. It does not make gaps look even: a wedge of white next to a square, or a circle next to a tip, reads wider than a parallel strip at the same minimum.",
+    "Contact spacing (the smallest gap between facing outlines) and optical spacing serve different goals. Contact packs as tightly as possible without overlap, which tidy trees and ridgelines want. It does not make gaps look even: a wedge of white next to a square, or a circle next to a tip, reads wider than a parallel strip at the same minimum. So the open question is which model covers looking even, not whether contact should be replaced.",
     "The fillet area (the white a disc of radius 2 × the target cannot reach between two shapes) evens Josh's square, A, V, A row at loose spacing: 30, 30, 30 px.",
     "Nothing tried fixes the circle and tip row. The circle stays 13 px or more farther out than the target under every model.",
     "At tight spacing the floor is the limit: with the floor at 0 the base corners touch and the square still reads wider than the triangles.",
     "For centering, the ink's center of mass wins on Josh's reading of the play button; the box and the blurred outline both leave it looking off center.",
 ]
 OPEN_QUESTIONS = [
-    "Which measure should GoFish use for gaps between siblings: contact, an area model, a pair measure such as fillet area or pair white area, or a softened outline (opening, blur)? Use the interactive below to compare against your own eye.",
+    "Which measure covers the \"look even\" goal for gaps between siblings: an area model, a pair measure such as fillet area or pair white area, or a softened outline (opening, blur)? Use the interactive below to compare against your own eye.",
+    "How does a user choose between the two goals: two <code>Spacing</code> strategies, contact for packing and another for looking even?",
     "Is a measure that compares pairs acceptable, since it gives up measuring each shape on its own?",
     "Is the same rule used for padding to a container's wall (the airplane in a pill)?",
     "Is there one \"how this shape is measured\" setting that spread, stack, alignment and padding all read?",
@@ -38,6 +40,20 @@ OPEN_QUESTIONS = [
 TERMS = [('Slice', 'A thin box of a shape at one position u along the cross axis: how far the shape reaches below and above its baseline there.'), ('Profile', "A shape's list of slices, or in the limit the function from u to its reach below and above its baseline. A box is one slice that does not change. Precedents: a tidy tree's contour, a skyline in computational geometry, and the calculus region between two graphs."), ('Box gap and contact gap', 'Two ways to measure the space between neighbors. A box gap is between bounding boxes, as <code>spread</code> does today. A contact gap is the smallest gap between facing outlines, measured slice by slice.')]
 
 SECTIONS = [
+    dict(
+        id="two-goals",
+        title="Two goals: packing and looking even",
+        blocks=[
+            ("p", """<p>Tidy tree layouts already space shapes by their outlines (Reingold and Tilford, 1981; <code>d3.tree</code>; d3-flextree). Each subtree reports its leftmost and rightmost x at each depth level, its <b>contour</b>. Sibling subtrees slide together until the closest shared level reaches the minimum separation. The contour is a profile whose slices are the depth levels (see <a href=\"https://claude.ai/artifact/SjYWQhuLNWW4zkJULuK4Me\">Stack profiles</a>), and the rule is contact.</p>"""),
+            ("wide", "tidy-tree.png", "Emulated: a small file tree laid out with each subtree as one block (box spacing), and with contact on its depth contours, where subtrees interlock. Main has no contour code, so the layout is computed in a throwaway story."),
+            ("p", """<p>Contact and optical spacing serve different goals, so neither replaces the other.</p>
+<ul>
+<li><b>Packing.</b> Contact packs shapes as tightly as possible without overlap. Tidy trees and ridgelines want this, and readers expect it there.</li>
+<li><b>Looking even.</b> Optical spacing makes the gaps look equal. Rows of letter-like shapes, icons, and padding inside a container want this.</li>
+</ul>
+<p>So the <code>Spacing</code> family likely needs both, chosen by what the visualization is for. A tidy tree in GoFish would be <code>spread</code> with <code>Spacing.contour(n)</code> over subtree profiles, which makes it a test case for both pages.</p>"""),
+        ],
+    ),
     dict(
         id='set-it-yourself',
         title='Set it yourself',
@@ -106,4 +122,4 @@ SECTIONS = [
     ),
 ]
 
-DECISIONS = ['Contour spacing: keep <code>Spacing.contour(n)</code> with the known limit, keep it as the floor and add the area model later as another strategy, or park contour spacing?', 'Optical centering for <code>alignment: "middle"</code>: center the ink\'s center of mass (Josh\'s pick on the play button; per shape, unchanged by blur), the blurred outline\'s box, or keep the box?', 'If the fillet area model is kept: <code>Spacing.fillet(n, { radius })</code>, its own strategy, or <code>Spacing.contour(n, { fill: radius })</code>, an option of contact? It compares pairs, so it gives up per-shape locality; the SDF opening (g) keeps it but moves less. A default radius of 2n worked on the test rows.', 'If the blurred outline is kept, is it an option of contact, <code>Spacing.contour(n, { blur: 6 })</code>, or its own strategy, <code>Spacing.blurred(n, 6)</code>?', 'Is there one "how this shape is measured" setting (box, outline, blurred outline) that spread, stack, alignment and contact all read, instead of an option on each?', "If per-side margins come, do two neighbors' margins combine by sum (HT Letterspacer, CSS horizontal margins: each side's own white) or by max (SwiftUI <code>ViewSpacing</code>, CSS vertical margins: each side's minimum)?", "<code>spacing</code> takes a number (sugar for <code>Spacing.box(n)</code>) or a <code>Spacing</code> strategy, and <code>Spacing.pitch(n, { at })</code> replaces spread's <code>anchor</code> option?"]
+DECISIONS = ['Keep <code>Spacing.contour(n)</code> for packing (tidy trees, ridgelines), and add a separate <code>Spacing</code> strategy for looking even, chosen by what the visualization is for? Contact would also stay as the floor under the looking-even strategy.', 'Optical centering for <code>alignment: "middle"</code>: center the ink\'s center of mass (Josh\'s pick on the play button; per shape, unchanged by blur), the blurred outline\'s box, or keep the box?', 'If the fillet area model is kept: <code>Spacing.fillet(n, { radius })</code>, its own strategy, or <code>Spacing.contour(n, { fill: radius })</code>, an option of contact? It compares pairs, so it gives up per-shape locality; the SDF opening (g) keeps it but moves less. A default radius of 2n worked on the test rows.', 'If the blurred outline is kept, is it an option of contact, <code>Spacing.contour(n, { blur: 6 })</code>, or its own strategy, <code>Spacing.blurred(n, 6)</code>?', 'Is there one "how this shape is measured" setting (box, outline, blurred outline) that spread, stack, alignment and contact all read, instead of an option on each?', "If per-side margins come, do two neighbors' margins combine by sum (HT Letterspacer, CSS horizontal margins: each side's own white) or by max (SwiftUI <code>ViewSpacing</code>, CSS vertical margins: each side's minimum)?", "<code>spacing</code> takes a number (sugar for <code>Spacing.box(n)</code>) or a <code>Spacing</code> strategy, and <code>Spacing.pitch(n, { at })</code> replaces spread's <code>anchor</code> option?"]

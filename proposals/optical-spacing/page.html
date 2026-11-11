@@ -322,10 +322,13 @@
   <h2>What we know so far</h2>
   <ul class="summary">
     <li>
-      Contact spacing (the smallest gap between facing outlines) guarantees only
-      a minimum. It does not make gaps look even: a wedge of white next to a
-      square, or a circle next to a tip, reads wider than a parallel strip at
-      the same minimum.
+      Contact spacing (the smallest gap between facing outlines) and optical
+      spacing serve different goals. Contact packs as tightly as possible
+      without overlap, which tidy trees and ridgelines want. It does not make
+      gaps look even: a wedge of white next to a square, or a circle next to a
+      tip, reads wider than a parallel strip at the same minimum. So the open
+      question is which model covers looking even, not whether contact should be
+      replaced.
     </li>
     <li>
       The fillet area (the white a disc of radius 2 × the target cannot reach
@@ -348,10 +351,15 @@
   <h2>Open questions</h2>
   <ol>
     <li>
-      Which measure should GoFish use for gaps between siblings: contact, an
+      Which measure covers the "look even" goal for gaps between siblings: an
       area model, a pair measure such as fillet area or pair white area, or a
       softened outline (opening, blur)? Use the interactive below to compare
       against your own eye.
+    </li>
+    <li>
+      How does a user choose between the two goals: two
+      <code>Spacing</code> strategies, contact for packing and another for
+      looking even?
     </li>
     <li>
       Is a measure that compares pairs acceptable, since it gives up measuring
@@ -410,6 +418,53 @@
       </table>
     </div>
   </details>
+  <h2 id="two-goals">Two goals: packing and looking even</h2>
+  <article class="card">
+    <p>
+      Tidy tree layouts already space shapes by their outlines (Reingold and
+      Tilford, 1981; <code>d3.tree</code>; d3-flextree). Each subtree reports
+      its leftmost and rightmost x at each depth level, its <b>contour</b>.
+      Sibling subtrees slide together until the closest shared level reaches the
+      minimum separation. The contour is a profile whose slices are the depth
+      levels (see
+      <a href="https://claude.ai/artifact/SjYWQhuLNWW4zkJULuK4Me"
+        >Stack profiles</a
+      >), and the rule is contact.
+    </p>
+    <figure class="wide">
+      <img
+        src="img/tidy-tree.png"
+        alt="Emulated: a small file tree laid out with each subtree as one block (box spacing), and with contact on its depth contours, where subtrees interlock. Main has no contour code, so the layout is computed in a throwaway story."
+      />
+      <figcaption>
+        Emulated: a small file tree laid out with each subtree as one block (box
+        spacing), and with contact on its depth contours, where subtrees
+        interlock. Main has no contour code, so the layout is computed in a
+        throwaway story.
+      </figcaption>
+    </figure>
+    <p>
+      Contact and optical spacing serve different goals, so neither replaces the
+      other.
+    </p>
+    <ul>
+      <li>
+        <b>Packing.</b> Contact packs shapes as tightly as possible without
+        overlap. Tidy trees and ridgelines want this, and readers expect it
+        there.
+      </li>
+      <li>
+        <b>Looking even.</b> Optical spacing makes the gaps look equal. Rows of
+        letter-like shapes, icons, and padding inside a container want this.
+      </li>
+    </ul>
+    <p>
+      So the <code>Spacing</code> family likely needs both, chosen by what the
+      visualization is for. A tidy tree in GoFish would be
+      <code>spread</code> with <code>Spacing.contour(n)</code> over subtree
+      profiles, which makes it a test case for both pages.
+    </p>
+  </article>
   <h2 id="set-it-yourself">Set it yourself</h2>
   <article class="card">
     <p>
@@ -2694,9 +2749,10 @@ spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 70, anchor: &quot;b
   <h2>Open decisions</h2>
   <ol class="decisions">
     <li>
-      Contour spacing: keep <code>Spacing.contour(n)</code> with the known
-      limit, keep it as the floor and add the area model later as another
-      strategy, or park contour spacing?
+      Keep <code>Spacing.contour(n)</code> for packing (tidy trees, ridgelines),
+      and add a separate <code>Spacing</code> strategy for looking even, chosen
+      by what the visualization is for? Contact would also stay as the floor
+      under the looking-even strategy.
     </li>
     <li>
       Optical centering for <code>alignment: "middle"</code>: center the ink's
