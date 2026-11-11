@@ -99,9 +99,12 @@
         color: var(--muted);
         margin-right: 6px;
       }
+      .stage {
+        overflow-x: auto;
+      }
       svg {
-        width: 100%;
         height: auto;
+        max-width: none;
         display: block;
         margin: 4px auto 10px;
         touch-action: none;
@@ -137,7 +140,20 @@
         box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
       }
       .squintbar input[type="range"] {
-        width: 110px;
+        width: 80px;
+      }
+      @media (max-width: 480px) {
+        .squintbar {
+          gap: 5px;
+          padding: 6px 10px;
+          font-size: 13px;
+        }
+        .squintbar input[type="range"] {
+          width: 60px;
+        }
+        .squintbar output {
+          min-width: 2.4em;
+        }
       }
       .squintbar output {
         min-width: 3.2em;
@@ -184,7 +200,8 @@
         slider under it, until the spaces between the shapes look even to you.
         There is no right answer. Go by eye, not by measuring, and don't think
         about it too long. Squinting can help. The Squint control at the top of
-        the screen blurs the shapes, and its slider sets how much.
+        the screen blurs the shapes, and its slider sets how much. The Zoom
+        slider beside it makes the pictures larger or smaller.
       </p>
       <div class="tools">
         <label>Your name (optional) <input type="text" id="name" /></label>
@@ -200,6 +217,9 @@
           aria-label="Blur amount in px"
         />
         <output id="blur-out"></output>
+        <label for="zoom">Zoom</label>
+        <input type="range" id="zoom" min="0.5" max="3" step="0.25" />
+        <output id="zoom-out"></output>
       </div>
       <div id="widgets"></div>
       <div class="send">
@@ -395,7 +415,8 @@
         const D = JSON.parse(document.getElementById("data").textContent);
         const NS = "http://www.w3.org/2000/svg";
         const KEY = "spacing-by-eye-v1";
-        const state = { name: "", u: {}, squint: false, blur: 3 };
+        const state = { name: "", u: {}, squint: false, blur: 3, zoom: 1 };
+        const sizers = [];
         try {
           const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
           // Slider positions are not kept across loads, so every visit starts
@@ -429,6 +450,9 @@
           root.appendChild(p);
           const [x0, y0, vw, vh] = w.view;
           const X = w.axis === "x";
+          const stage = document.createElement("div");
+          stage.className = "stage";
+          root.appendChild(stage);
           const svg = el(
             "svg",
             {
@@ -436,9 +460,12 @@
               "aria-label": w.aria,
               viewBox: `${x0} ${y0} ${vw} ${vh}`,
             },
-            root
+            stage
           );
-          svg.style.maxWidth = `${Math.round(vw * 1.6)}px`;
+          // Zoom 1 is the old size: the drawing at 1.6x, shrunk to fit the
+          // card. Other zooms scale that size; past the card it scrolls.
+          svg.dataset.base = Math.round(vw * 1.6);
+          sizers.push(svg);
           const shapes = el(
             "g",
             { class: "shapes", fill: "var(--fg)", "fill-rule": "evenodd" },
@@ -532,11 +559,33 @@
         });
         apply();
 
+        const zoom = document.getElementById("zoom");
+        const zoomOut = document.getElementById("zoom-out");
+        const applyZoom = () => {
+          zoom.value = state.zoom;
+          zoomOut.textContent = `${state.zoom}x`;
+          for (const svg of sizers) {
+            const fit = Math.min(+svg.dataset.base, svg.parentNode.clientWidth);
+            svg.style.width = `${Math.round(fit * state.zoom)}px`;
+            // keep the middle of a zoomed picture in view
+            const st = svg.parentNode;
+            st.scrollLeft = (st.scrollWidth - st.clientWidth) / 2;
+          }
+        };
+        zoom.addEventListener("input", () => {
+          state.zoom = +zoom.value;
+          save();
+          applyZoom();
+        });
+        addEventListener("resize", applyZoom);
+        applyZoom();
+
         const results = () =>
           [
             "optical-spacing-survey v1",
             `name: ${(state.name || "").replace(/\s+/g, " ").trim()}`,
             `squint: ${state.squint ? `${state.blur}px` : "off"}`,
+            `zoom: ${state.zoom}x`,
             ...D.widgets.map(
               (w) =>
                 `w${w.n} ${w.key} ${state.u[w.n] != null ? (+state.u[w.n]).toFixed(1) : "unset"}`
