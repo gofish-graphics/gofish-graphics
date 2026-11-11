@@ -55,13 +55,24 @@ def start(lo, hi, v0, v1, far):
     return round(sides[side] * 2) / 2, side
 
 
+# The plane in the pill (w7) was dropped on 2026-11-11: padding against a
+# container wall is a separate problem. Old result files keep their w7 line.
+DROPPED = {7}
+# Starts are pinned to the values the first responses saw, so adding models to
+# widgets.json later does not move them. A new widget gets a computed start.
+PINNED = {1: 66, 2: 4, 3: 56.5, 4: -11, 5: 24.5, 6: -10.5, 8: 3}
+
 widgets, report = [], []
 for k, w in enumerate(D["widgets"]):
+    if w["n"] in DROPPED:
+        continue
     preds = [solve(w["p"], w["a"][m["key"]], w["b"][m["key"]], w["scale"][m["key"]]) for m in D["models"]]
     preds = [p for p in preds if p is not None]
     lo, hi = min(preds), max(preds)
     v0, v1 = w["p"][0], w["p"][-1]
     s, side = start(lo, hi, v0, v1, k % 2 == 0)
+    if w["n"] in PINNED:
+        s, side = PINNED[w["n"]], "pinned"
     key, text = INFO[w["n"]]
     report.append(
         f"w{w['n']} {key}: track {v0} to {v1}, {len(preds)} predictions {lo:.1f} to {hi:.1f}, start {s} ({side}, "
@@ -70,6 +81,7 @@ for k, w in enumerate(D["widgets"]):
     widgets.append(
         {
             "n": w["n"],
+            "num": len(widgets) + 1,
             "key": key,
             "text": text,
             "aria": w["aria"],

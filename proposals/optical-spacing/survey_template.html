@@ -267,7 +267,7 @@
           root.className = "widget";
           root.id = `w${w.n}`;
           const p = document.createElement("p");
-          p.innerHTML = `<span class="num">${w.n}.</span>`;
+          p.innerHTML = `<span class="num">${w.num}.</span>`;
           p.appendChild(document.createTextNode(w.text));
           root.appendChild(p);
           const [x0, y0, vw, vh] = w.view;
