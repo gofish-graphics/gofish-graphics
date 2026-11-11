@@ -108,7 +108,7 @@ function maskSides(m: Uint8Array, g: Grid) {
 }
 
 /** (g) Opening by a disc of radius r, from the exact distance: shrink by r, grow by r. */
-function openedSides(sh: Shape, r: number) {
+export function openedSides(sh: Shape, r: number) {
   const d = sdfOf(sh, 0);
   const g = gridOver(-4, S + 4, -4, S + 4);
   const eroded = new Uint8Array(g.nx * g.ny);
@@ -149,7 +149,7 @@ const contact = (pb: number, fp: Sides, nc: Sides, gap: number) =>
  * the region where Quilez's polynomial smooth minimum of the two distances,
  * radius k, is below 0.
  */
-function bridge(prev: Shape, pb: number, cur: Shape, b: number, kind: "fillet" | "smin", R: number) {
+export function bridge(prev: Shape, pb: number, cur: Shape, b: number, kind: "fillet" | "smin", R: number) {
   const [dA, dB] = [sdfOf(prev, pb), sdfOf(cur, b)];
   const g = gridOver(pb + extOf(prev)[0] - R - 2, b + extOf(cur)[1] + R + 2, -R - 2, S + R + 2);
   const n = g.nx * g.ny;

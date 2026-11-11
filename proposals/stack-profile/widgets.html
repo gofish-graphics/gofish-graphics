@@ -1,0 +1,436 @@
+<h4 id="set-it-yourself">Set it yourself</h4>
+<p>
+  Move the square, then the triangle, to where the gaps look even to you. Drag
+  the shape or use the slider. Each model predicts the position where its own
+  measure of the two compared gaps is equal; show the predictions when you are
+  ready, and the ranking says which model is closest to you.
+</p>
+<div class="sp-tools">
+  <label
+    ><input type="checkbox" id="sp-ticks" /> Show the models' positions</label
+  >
+  <label
+    ><input type="checkbox" id="sp-squint" /> Squint (blur the shapes)</label
+  >
+  <button type="button" id="sp-reset">Reset</button>
+</div>
+<div class="sp-widget" id="sp-w1">
+  <p class="label">
+    1. Square to triangles. The triangles are fixed 30 px apart.
+  </p>
+  <svg
+    class="sp-svg"
+    role="img"
+    aria-label="A square and three triangles; the square moves"
+  ></svg>
+  <label class="sp-slider"
+    >Square gap <input type="range" min="0" max="90" step="0.5" />
+    <output></output
+  ></label>
+</div>
+<div class="sp-widget" id="sp-w2">
+  <p class="label">
+    2. A triangle between a circle and a square, which are fixed.
+  </p>
+  <svg
+    class="sp-svg"
+    role="img"
+    aria-label="A circle, a triangle and a square; the triangle moves"
+  ></svg>
+  <label class="sp-slider"
+    >Tip gap <input type="range" min="0" max="64" step="0.5" /> <output></output
+  ></label>
+</div>
+<div class="sp-ranks">
+  <div>
+    <p class="label">Closest to you, widget 1</p>
+    <ol id="sp-r1">
+      <li class="sp-empty">Move the square first.</li>
+    </ol>
+  </div>
+  <div>
+    <p class="label">Closest to you, widget 2</p>
+    <ol id="sp-r2">
+      <li class="sp-empty">Move the triangle first.</li>
+    </ol>
+  </div>
+  <div>
+    <p class="label">Both (mean distance)</p>
+    <ol id="sp-r3">
+      <li class="sp-empty">Set both.</li>
+    </ol>
+  </div>
+</div>
+<p class="note">
+  Distances are in px of the shapes' own size (56 px). An asterisk marks a model
+  whose two measures never become equal; its position is where they come
+  closest. A dagger marks a model whose measures are equal only where both are
+  under a third of what it measures for the 30 px strip between A and V: the
+  fillet area on widget 2 never sees more than 15 px of gap next to the circle,
+  so it cannot place the triangle. The tables behind this are computed by
+  <code>widgetRun.ts</code> from the same code as the renders.
+</p>
+<style>
+  .sp-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    align-items: center;
+    margin: 8px 0 4px;
+  }
+  .sp-tools button {
+    font: inherit;
+    padding: 3px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  .sp-widget {
+    margin: 10px 0 14px;
+  }
+  .sp-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+    touch-action: none;
+    user-select: none;
+  }
+  .sp-svg .sp-move {
+    cursor: grab;
+  }
+  .sp-svg .sp-shapes {
+    transition: filter 0.2s;
+  }
+  .sp-squint .sp-svg .sp-shapes {
+    filter: blur(3px);
+  }
+  .sp-slider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+  }
+  .sp-slider input {
+    flex: 1;
+    min-width: 0;
+  }
+  .sp-slider output {
+    min-width: 4.5em;
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+  }
+  .sp-ranks {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 4px 20px;
+  }
+  .sp-ranks ol {
+    margin: 4px 0 8px;
+    padding-left: 1.6em;
+    font-size: 14px;
+  }
+  .sp-ranks li {
+    margin: 1px 0;
+  }
+  .sp-ranks .sp-empty {
+    list-style: none;
+    margin-left: -1.6em;
+    color: var(--muted);
+  }
+  .sp-ranks .sp-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: 0;
+  }
+  .sp-ranks .sp-d {
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+<script id="sp-data" type="application/json">
+  __WIDGET_DATA__
+</script>
+<script>
+  (() => {
+    const D = JSON.parse(document.getElementById("sp-data").textContent);
+    const S = D.S;
+    const COLORS = [
+      "#8c8c8c",
+      "#4e79a7",
+      "#f28e2b",
+      "#e15759",
+      "#59a14f",
+      "#b07aa1",
+      "#76b7b2",
+      "#edc948",
+      "#ff9da7",
+    ];
+    const KEY = "stack-profile-spacing-v1";
+    const NS = "http://www.w3.org/2000/svg";
+    const state = { u1: null, u2: null, ticks: false, squint: false };
+    try {
+      Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}"));
+    } catch (e) {}
+    const save = () => {
+      try {
+        localStorage.setItem(KEY, JSON.stringify(state));
+      } catch (e) {}
+    };
+
+    /**
+     * Where the two measures a and b are equal. Of several crossings, the one
+     * where the measures are largest; with none, where they come closest
+     * ("*"). A crossing where both are under a third of what the model
+     * measures for the 30 px strip between A and V is marked "†": the model
+     * sees almost no gap on either side there.
+     */
+    function solve(ps, a, b, scale) {
+      let best = null;
+      for (let i = 0; i + 1 < ps.length; i++) {
+        const [d0, d1] = [a[i] - b[i], a[i + 1] - b[i + 1]];
+        if (d0 === 0 || Math.sign(d0) !== Math.sign(d1)) {
+          const t = d0 === 0 ? 0 : d0 / (d0 - d1);
+          const level = a[i] + t * (a[i + 1] - a[i]);
+          if (!best || level > best.level)
+            best = { x: ps[i] + t * (ps[i + 1] - ps[i]), level };
+        }
+      }
+      if (best)
+        return { x: best.x, mark: best.level < scale / 3 ? "\u2020" : "" };
+      let k = 0;
+      ps.forEach(
+        (_, i) => Math.abs(a[i] - b[i]) < Math.abs(a[k] - b[k]) && (k = i)
+      );
+      return { x: ps[k], mark: "*" };
+    }
+    const scale = (m) => D.m1[m.key].ref;
+    const preds1 = D.models.map((m) =>
+      solve(
+        D.w1.p,
+        D.m1[m.key].gap,
+        D.m1[m.key].gap.map(() => D.m1[m.key].ref),
+        scale(m)
+      )
+    );
+    const preds2 = D.models.map((m) =>
+      solve(D.w2.p, D.m2[m.key].a, D.m2[m.key].b, scale(m))
+    );
+
+    const el = (tag, attrs, parent) => {
+      const e = document.createElementNS(NS, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (parent) parent.appendChild(e);
+      return e;
+    };
+    const pts = (ring, dx) =>
+      ring
+        .map(([x, y]) => `${(x + dx).toFixed(2)},${(S - y).toFixed(2)}`)
+        .join(" ");
+
+    function widget(root, cfg) {
+      const svg = root.querySelector("svg");
+      const slider = root.querySelector("input");
+      const out = root.querySelector("output");
+      const [x0, x1] = cfg.range;
+      const lanes = D.models.length;
+      const shapes = el("g", { class: "sp-shapes", fill: "var(--fg)" }, svg);
+      const fit = (n) =>
+        svg.setAttribute("viewBox", `${x0} -6 ${x1 - x0} ${S + 18 + n * 11}`);
+      cfg.fixed.forEach(([ring, dx]) =>
+        el("polygon", { points: pts(ring, dx) }, shapes)
+      );
+      const mover = el("polygon", { class: "sp-move" }, shapes);
+      const ticks = el(
+        "g",
+        { "font-size": "7", "font-family": "Inter, system-ui, sans-serif" },
+        svg
+      );
+      el(
+        "line",
+        { x1: x0, x2: x1, y1: S + 4, y2: S + 4, stroke: "var(--line)" },
+        svg
+      );
+      const you = el("path", { fill: "var(--fg)" }, svg);
+
+      // ticks: each model's position of the moving edge, labels in lanes
+      const order = cfg.preds
+        .map((p, i) => ({ i, x: cfg.edge(p.x) }))
+        .sort((a, b) => a.x - b.x);
+      const ends = Array(lanes).fill(-Infinity);
+      let used = 1;
+      order.forEach(({ i, x }) => {
+        const label = D.models[i].label + cfg.preds[i].mark;
+        const w = label.length * 3.7 + 3;
+        const lane = Math.max(
+          0,
+          ends.findIndex((e) => e < x - 1)
+        );
+        used = Math.max(used, lane + 1);
+        ends[lane] = x + w;
+        const y = S + 8 + lane * 11;
+        el(
+          "line",
+          {
+            x1: x,
+            x2: x,
+            y1: S + 1,
+            y2: y + 1,
+            stroke: COLORS[i],
+            "stroke-width": 1.4,
+          },
+          ticks
+        );
+        const t = el("text", { x: x + 1.5, y: y + 6, fill: COLORS[i] }, ticks);
+        t.textContent = label;
+      });
+
+      const fitTicks = (on) => fit(on ? used : 0);
+      const set = (v, user) => {
+        v = Math.max(+slider.min, Math.min(+slider.max, v));
+        mover.setAttribute("points", pts(cfg.ring, cfg.at(v)));
+        const e = cfg.edge(v);
+        you.setAttribute("d", `M${e} ${S + 4} l-2.5 4 h5 z`);
+        slider.value = v;
+        out.textContent = `${(+v).toFixed(1)} px`;
+        if (user) {
+          state[cfg.key] = +(+v).toFixed(1);
+          save();
+          rank();
+        }
+      };
+      slider.addEventListener("input", () => set(+slider.value, true));
+      let grab = null;
+      const toX = (ev) => {
+        const p = svg.createSVGPoint();
+        p.x = ev.clientX;
+        p.y = ev.clientY;
+        return p.matrixTransform(svg.getScreenCTM().inverse()).x;
+      };
+      mover.addEventListener("pointerdown", (ev) => {
+        grab = toX(ev) - cfg.edge(+slider.value);
+        mover.setPointerCapture(ev.pointerId);
+      });
+      mover.addEventListener("pointermove", (ev) => {
+        if (grab === null) return;
+        set(cfg.fromEdge(toX(ev) - grab), true);
+      });
+      const end = () => (grab = null);
+      mover.addEventListener("pointerup", end);
+      mover.addEventListener("pointercancel", end);
+      return { set, ticks, fitTicks, reset: () => set(cfg.start, false) };
+    }
+
+    const sh = D.shapes;
+    const w1 = widget(document.getElementById("sp-w1"), {
+      key: "u1",
+      range: [-S - 96, D.w1.xA2 + S + 4],
+      fixed: [
+        [sh.up, D.w1.xA],
+        [sh.down, D.w1.xV],
+        [sh.up, D.w1.xA2],
+      ],
+      ring: sh.square,
+      at: (p) => D.w1.xA - S - p,
+      edge: (p) => D.w1.xA - p,
+      fromEdge: (x) => D.w1.xA - x,
+      preds: preds1,
+      start: 60,
+    });
+    const w2 = widget(document.getElementById("sp-w2"), {
+      key: "u2",
+      range: [-4, D.w2.xSq + S + 4],
+      fixed: [
+        [sh.circle, 0],
+        [sh.square, D.w2.xSq],
+      ],
+      ring: sh.left,
+      at: (t) => D.w2.xT0 + t,
+      edge: (t) => D.w2.xT0 + t,
+      fromEdge: (x) => x - D.w2.xT0,
+      preds: preds2,
+      start: 50,
+    });
+
+    function list(ol, rows) {
+      ol.innerHTML = "";
+      rows.forEach(({ i, d, note }) => {
+        const li = document.createElement("li");
+        li.innerHTML = `<span class="sp-dot" style="background:${COLORS[i]}"></span>${D.models[i].label}${note} <span class="sp-d">${d.toFixed(1)} px</span>`;
+        ol.appendChild(li);
+      });
+    }
+    function rank() {
+      const r = (preds, u) =>
+        preds
+          .map((p, i) => ({ i, d: Math.abs(p.x - u), note: p.mark }))
+          .sort((a, b) => a.d - b.d);
+      const empty = (ol, text) =>
+        (ol.innerHTML = `<li class="sp-empty">${text}</li>`);
+      const [o1, o2, o3] = ["sp-r1", "sp-r2", "sp-r3"].map((id) =>
+        document.getElementById(id)
+      );
+      state.u1 === null
+        ? empty(o1, "Move the square first.")
+        : list(o1, r(preds1, state.u1));
+      state.u2 === null
+        ? empty(o2, "Move the triangle first.")
+        : list(o2, r(preds2, state.u2));
+      if (state.u1 === null || state.u2 === null) empty(o3, "Set both.");
+      else
+        list(
+          o3,
+          D.models
+            .map((_, i) => ({
+              i,
+              d:
+                (Math.abs(preds1[i].x - state.u1) +
+                  Math.abs(preds2[i].x - state.u2)) /
+                2,
+              note: preds1[i].mark || preds2[i].mark,
+            }))
+            .sort((a, b) => a.d - b.d)
+        );
+    }
+
+    const ticksBox = document.getElementById("sp-ticks");
+    const squintBox = document.getElementById("sp-squint");
+    const section = ticksBox.closest(".card") || document.body;
+    const apply = () => {
+      [w1, w2].forEach((w) => {
+        w.ticks.style.display = state.ticks ? "" : "none";
+        w.fitTicks(state.ticks);
+      });
+      section.classList.toggle("sp-squint", !!state.squint);
+      ticksBox.checked = !!state.ticks;
+      squintBox.checked = !!state.squint;
+    };
+    ticksBox.addEventListener("change", () => {
+      state.ticks = ticksBox.checked;
+      save();
+      apply();
+    });
+    squintBox.addEventListener("change", () => {
+      state.squint = squintBox.checked;
+      save();
+      apply();
+    });
+    document.getElementById("sp-reset").addEventListener("click", () => {
+      state.u1 = state.u2 = null;
+      state.ticks = state.squint = false;
+      save();
+      w1.reset();
+      w2.reset();
+      apply();
+      rank();
+    });
+    state.u1 === null ? w1.reset() : w1.set(state.u1, false);
+    state.u2 === null ? w2.reset() : w2.set(state.u2, false);
+    apply();
+    rank();
+  })();
+</script>

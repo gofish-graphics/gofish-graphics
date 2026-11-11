@@ -92,6 +92,8 @@ def block_html(b):
     kind = b[0]
     if kind == "p":
         return b[1]
+    if kind == "raw":  # ("raw", html, markdown note): an interactive, page only
+        return b[1]
     if kind == "figs":
         return f'<div class="figs">{"".join(fig(f, c) for f, c in b[1])}</div>'
     if kind == "wide":
@@ -158,6 +160,7 @@ body.py .lang-js{display:none}body:not(.py) .lang-py{display:none}
 .item{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:16px;align-items:start;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
 .wide img{width:100%}
 .note{font-size:.9rem;color:var(--muted)}
+.card p,.card li{overflow-wrap:break-word}
 .insert .figs{grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr))}
 table.methods td{min-width:9em}
 .hljs-keyword,.hljs-built_in{color:var(--hk)}.hljs-string{color:var(--hs)}.hljs-number,.hljs-literal{color:var(--hn)}.hljs-comment{color:var(--hc);font-style:italic}.hljs-title,.hljs-attr,.hljs-property{color:var(--ht)}
@@ -234,6 +237,8 @@ def fence(i, lang):
 
 def block_md(b):
     kind = b[0]
+    if kind == "raw":
+        return [md(b[2]), ""]
     if kind == "p":
         return [b[1].strip() if "<table" in b[1] else md(b[1]), ""]
     if kind == "figs":
