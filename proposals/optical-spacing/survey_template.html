@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spacing by eye</title>
+    <style>
+      :root {
+        --bg: #fbfaf7;
+        --card: #ffffff;
+        --fg: #1f2328;
+        --muted: #6a6f76;
+        --line: #d9d6cf;
+        --box: #f1efe9;
+        --accent: #2f6fde;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #15171a;
+          --card: #1d2024;
+          --fg: #e8e6e1;
+          --muted: #9aa0a6;
+          --line: #3a3e44;
+          --box: #272a2f;
+          --accent: #7aa7ff;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #15171a;
+        --card: #1d2024;
+        --fg: #e8e6e1;
+        --muted: #9aa0a6;
+        --line: #3a3e44;
+        --box: #272a2f;
+        --accent: #7aa7ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.5 Inter,
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      .intro {
+        margin: 0 0 16px;
+      }
+      .tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 18px;
+        align-items: center;
+        margin: 0 0 8px;
+      }
+      .tools input[type="text"] {
+        font: inherit;
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        width: 14em;
+        max-width: 100%;
+      }
+      button {
+        font: inherit;
+        padding: 6px 14px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      .widget {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px 10px;
+        margin: 14px 0;
+      }
+      .widget p {
+        margin: 0 0 8px;
+      }
+      .widget .num {
+        color: var(--muted);
+        margin-right: 6px;
+      }
+      svg {
+        width: 100%;
+        height: auto;
+        display: block;
+        margin: 4px auto 10px;
+        touch-action: none;
+        user-select: none;
+      }
+      .move {
+        cursor: grab;
+      }
+      .shapes {
+        transition: filter 0.2s;
+        filter: blur(var(--blur, 0px));
+      }
+      main {
+        padding-bottom: calc(80px + env(safe-area-inset-bottom));
+      }
+      .squintbar {
+        position: fixed;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        color: var(--fg);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .squintbar input[type="range"] {
+        width: 110px;
+      }
+      .squintbar output {
+        min-width: 3.2em;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .box {
+        fill: var(--box);
+        stroke: var(--line);
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      .send {
+        margin-top: 20px;
+      }
+      .status {
+        color: var(--muted);
+      }
+      textarea {
+        width: 100%;
+        font:
+          13px/1.4 ui-monospace,
+          monospace;
+        background: var(--card);
+        color: var(--fg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing by eye</h1>
+      <p class="intro">
+        Each picture below has one shape you can move. Drag it, or use the
+        slider under it, until the spaces between the shapes look even to you.
+        There is no right answer. Go by eye, not by measuring, and don't think
+        about it too long. Squinting can help; the Squint control in the corner
+        blurs the shapes, and its slider sets how much.
+      </p>
+      <div class="tools">
+        <label>Your name (optional) <input type="text" id="name" /></label>
+      </div>
+      <div class="squintbar" role="group" aria-label="Squint: blur the shapes">
+        <label><input type="checkbox" id="squint" /> Squint</label>
+        <input
+          type="range"
+          id="blur"
+          min="0"
+          max="8"
+          step="0.5"
+          aria-label="Blur amount in px"
+        />
+        <output id="blur-out"></output>
+      </div>
+      <div id="widgets"></div>
+      <div class="send">
+        <button type="button" id="copy">Copy my results</button>
+        <span id="status" class="status" aria-live="polite"></span>
+        <textarea id="copy-text" rows="12" hidden></textarea>
+        <p>When you are done, copy your results and send them to Josh.</p>
+      </div>
+    </main>
+    <script id="data" type="application/json">
+      __SURVEY_DATA__
+    </script>
+    <script>
+      (() => {
+        const D = JSON.parse(document.getElementById("data").textContent);
+        const NS = "http://www.w3.org/2000/svg";
+        const KEY = "spacing-by-eye-v1";
+        const state = { name: "", u: {}, squint: false, blur: 3 };
+        try {
+          Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}"));
+        } catch (e) {}
+        const save = () => {
+          try {
+            localStorage.setItem(KEY, JSON.stringify(state));
+          } catch (e) {}
+        };
+        const el = (tag, attrs, parent) => {
+          const e = document.createElementNS(NS, tag);
+          for (const k in attrs)
+            if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+          if (parent) parent.appendChild(e);
+          return e;
+        };
+
+        function widget(w) {
+          const root = document.createElement("div");
+          root.className = "widget";
+          root.id = `w${w.n}`;
+          const p = document.createElement("p");
+          p.innerHTML = `<span class="num">${w.n}.</span>`;
+          p.appendChild(document.createTextNode(w.text));
+          root.appendChild(p);
+          const [x0, y0, vw, vh] = w.view;
+          const X = w.axis === "x";
+          const svg = el(
+            "svg",
+            {
+              role: "img",
+              "aria-label": w.aria,
+              viewBox: `${x0} ${y0} ${vw} ${vh}`,
+            },
+            root
+          );
+          svg.style.maxWidth = `${Math.round(vw * 1.6)}px`;
+          const shapes = el(
+            "g",
+            { class: "shapes", fill: "var(--fg)", "fill-rule": "evenodd" },
+            svg
+          );
+          w.fixed.forEach((f) =>
+            el("path", { d: f.d, class: f.cls ? "box" : null }, shapes)
+          );
+          const mover = el("g", { class: "move" }, shapes);
+          const moving = w.moving.map((m) => el("path", { d: m.d }, mover));
+          const slider = document.createElement("input");
+          Object.assign(slider, {
+            type: "range",
+            min: w.range[0],
+            max: w.range[1],
+            step: 0.5,
+          });
+          slider.setAttribute("aria-label", w.text);
+          root.appendChild(slider);
+          const [e0, es] = w.edge;
+          const edge = (v) => e0 + es * v;
+          const set = (v, user) => {
+            v = Math.max(w.range[0], Math.min(w.range[1], v));
+            moving.forEach((path, i) => {
+              const t = w.moving[i].k * v;
+              path.setAttribute(
+                "transform",
+                X ? `translate(${t} 0)` : `translate(0 ${-t})`
+              );
+            });
+            slider.value = v;
+            if (user) {
+              state.u[w.n] = +(+v).toFixed(1);
+              save();
+            }
+          };
+          slider.addEventListener("input", () => set(+slider.value, true));
+          let grab = null;
+          const toAxis = (ev) => {
+            const pt = svg.createSVGPoint();
+            pt.x = ev.clientX;
+            pt.y = ev.clientY;
+            const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+            return X ? q.x : q.y;
+          };
+          mover.addEventListener("pointerdown", (ev) => {
+            grab = toAxis(ev) - edge(+slider.value);
+            mover.setPointerCapture(ev.pointerId);
+          });
+          mover.addEventListener("pointermove", (ev) => {
+            if (grab !== null) set((toAxis(ev) - grab - e0) / es, true);
+          });
+          const end = () => (grab = null);
+          mover.addEventListener("pointerup", end);
+          mover.addEventListener("pointercancel", end);
+          set(state.u[w.n] != null ? state.u[w.n] : w.start, false);
+          return root;
+        }
+        const host = document.getElementById("widgets");
+        D.widgets.forEach((w) => host.appendChild(widget(w)));
+
+        const name = document.getElementById("name");
+        name.value = state.name || "";
+        name.addEventListener("input", () => {
+          state.name = name.value;
+          save();
+        });
+        const squint = document.getElementById("squint");
+        const blur = document.getElementById("blur");
+        const blurOut = document.getElementById("blur-out");
+        const apply = () => {
+          document.documentElement.style.setProperty(
+            "--blur",
+            state.squint ? `${state.blur}px` : "0px"
+          );
+          squint.checked = !!state.squint;
+          blur.value = state.blur;
+          blurOut.textContent = state.squint ? `${state.blur} px` : "off";
+        };
+        // the toggle keeps the last amount; moving the slider turns it on
+        blur.addEventListener("input", () => {
+          state.blur = +blur.value;
+          state.squint = true;
+          save();
+          apply();
+        });
+        squint.addEventListener("change", () => {
+          state.squint = squint.checked;
+          save();
+          apply();
+        });
+        apply();
+
+        const results = () =>
+          [
+            "optical-spacing-survey v1",
+            `name: ${(state.name || "").replace(/\s+/g, " ").trim()}`,
+            `squint: ${state.squint ? `${state.blur}px` : "off"}`,
+            ...D.widgets.map(
+              (w) =>
+                `w${w.n} ${w.key} ${state.u[w.n] != null ? (+state.u[w.n]).toFixed(1) : "unset"}`
+            ),
+          ].join("\n");
+        const status = document.getElementById("status");
+        const area = document.getElementById("copy-text");
+        document.getElementById("copy").addEventListener("click", () => {
+          const text = results();
+          const fallback = () => {
+            area.hidden = false;
+            area.value = text;
+            area.focus();
+            area.select();
+            status.textContent = "Copy the text below.";
+          };
+          try {
+            navigator.clipboard.writeText(text).then(() => {
+              area.hidden = true;
+              status.textContent = "Copied.";
+            }, fallback);
+          } catch (e) {
+            fallback();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

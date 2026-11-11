@@ -480,15 +480,38 @@
         ><input type="checkbox" id="sp-ticks" /> Show the models'
         positions</label
       >
-      <label
-        ><input type="checkbox" id="sp-squint" /> Squint (blur the
-        shapes)</label
-      >
       <button type="button" id="sp-reset">Reset</button>
       <button type="button" id="sp-copy">Copy my results</button>
       <span id="sp-copied" class="sp-status" aria-live="polite"></span>
     </div>
     <textarea id="sp-copy-text" class="sp-copy-text" rows="8" hidden></textarea>
+    <div class="sp-squintbar" role="group" aria-label="Squint: blur the shapes">
+      <label><input type="checkbox" id="sp-squint" /> Squint</label>
+      <input
+        type="range"
+        id="sp-blur"
+        min="0"
+        max="8"
+        step="0.5"
+        aria-label="Blur amount in px"
+      />
+      <output id="sp-blur-out"></output>
+    </div>
+    <details class="sp-paste">
+      <summary>Paste someone's survey results</summary>
+      <p class="sp-georgia">
+        Paste the block the "Spacing by eye" survey copies. The rankings below
+        are theirs, beside yours.
+      </p>
+      <textarea
+        id="sp-paste"
+        class="sp-copy-text"
+        rows="6"
+        aria-label="Survey results"
+      ></textarea>
+      <button type="button" id="sp-paste-go">Show their rankings</button>
+      <div id="sp-paste-out"></div>
+    </details>
     <div id="sp-widgets"></div>
     <div class="sp-all">
       <p class="label" id="sp-all-title">All the widgets you set</p>
@@ -567,8 +590,61 @@
         fill: var(--code-bg);
         stroke: var(--line);
       }
-      .sp-squint .sp-svg .sp-shapes {
-        filter: blur(3px);
+      .sp-svg .sp-shapes {
+        filter: blur(var(--sp-blur, 0px));
+      }
+      .sp-squintbar {
+        position: fixed;
+        right: max(12px, env(safe-area-inset-right));
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        color: var(--fg);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .sp-squintbar input[type="range"] {
+        width: 110px;
+      }
+      .sp-squintbar output {
+        min-width: 3.2em;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .sp-paste {
+        margin: 6px 0 10px;
+        font-size: 14px;
+      }
+      .sp-paste summary {
+        cursor: pointer;
+      }
+      .sp-paste button {
+        font: inherit;
+        margin-top: 4px;
+        padding: 3px 12px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      .sp-cmp {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 4px 20px;
+      }
+      .sp-paste ol {
+        margin: 4px 0 8px;
+        padding-left: 1.8em;
+      }
+      .sp-paste .sp-line {
+        margin: 2px 0;
       }
       .sp-slider {
         display: flex;
@@ -2313,7 +2389,7 @@
         ];
         const NS = "http://www.w3.org/2000/svg";
         const KEY = "optical-spacing-widgets-v2";
-        const state = { u: {}, ticks: false, squint: false };
+        const state = { u: {}, ticks: false, squint: false, blur: 3 };
         try {
           const old = JSON.parse(
             localStorage.getItem("stack-profile-spacing-v1") || "{}"
@@ -2584,22 +2660,18 @@
         W.forEach((w) => host.appendChild(w.root));
 
         /** Each model's distance from the user's position on one widget, missing ones last. */
-        const ranking = (w) =>
+        const ranking = (w, u = state.u) =>
           w.preds
-            .map((p, i) => ({
-              i,
-              d: Math.abs(p.x - state.u[w.n]),
-              mark: p.mark,
-            }))
+            .map((p, i) => ({ i, d: Math.abs(p.x - u[w.n]), mark: p.mark }))
             .sort((a, b) => (a.mark === "*") - (b.mark === "*") || a.d - b.d);
-        const combined = () =>
+        const combined = (u = state.u) =>
           D.models
             .map((_, i) => {
               let [sum, n, miss, dag] = [0, 0, 0, 0];
-              W.filter(isSet).forEach((w) => {
+              W.filter((w) => u[w.n] != null).forEach((w) => {
                 const p = w.preds[i];
                 if (p.mark === "*") return miss++;
-                sum += Math.abs(p.x - state.u[w.n]);
+                sum += Math.abs(p.x - u[w.n]);
                 n++;
                 if (p.mark) dag++;
               });
@@ -2645,7 +2717,10 @@
         }
 
         function summary() {
-          const lines = ["Optical spacing widgets, my results"];
+          const lines = [
+            "Optical spacing widgets, my results",
+            `squint: ${state.squint ? `${state.blur}px` : "off"}`,
+          ];
           W.forEach((w) => {
             if (!isSet(w)) return lines.push(`${w.n}. not set`);
             lines.push(`${w.n}. ${w.slider}: ${fmtV(w, state.u[w.n])}`);
@@ -2689,18 +2764,78 @@
           }
         });
 
+        // Pasted survey results: "w<n> <key> <value|unset>" lines, plus "name:".
+        function parse(text) {
+          const u = {};
+          let name = "";
+          text.split(/\r?\n/).forEach((line) => {
+            const m = line
+              .trim()
+              .match(/^w(\d+)\s+\S+\s+(-?\d+(?:\.\d+)?|unset)$/);
+            if (m && m[2] !== "unset") u[+m[1]] = +m[2];
+            const n = line.match(/^\s*name:\s*(.*)$/);
+            if (n) name = n[1].trim();
+          });
+          return { u, name };
+        }
+        const esc = (s) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+        const combinedList = (u) =>
+          combined(u)
+            .map((r) =>
+              r.n
+                ? `<li>${dot(r.i)}${D.models[r.i].label} <span class="sp-d">${r.d.toFixed(1)} px (${cover(r)})</span></li>`
+                : `<li>${dot(r.i)}${D.models[r.i].label} <span class="sp-d">none</span></li>`
+            )
+            .join("");
+        document.getElementById("sp-paste-go").addEventListener("click", () => {
+          const { u, name } = parse(document.getElementById("sp-paste").value);
+          const out = document.getElementById("sp-paste-out");
+          const who = esc(name || "Them");
+          const set = W.filter((w) => u[w.n] != null);
+          if (!set.length) {
+            out.innerHTML = `<p class="sp-georgia">No widget positions found in that text.</p>`;
+            return;
+          }
+          const lines = W.map((w) =>
+            u[w.n] == null
+              ? `<p class="sp-line">${w.n}. not set</p>`
+              : `<p class="sp-line">${w.n}. ${fmtV(w, u[w.n])}: ${ranking(w, u)
+                  .map(
+                    (r) =>
+                      `${D.models[r.i].label}${r.mark} <span class="sp-d">${r.mark === "*" ? "no crossing" : r.d.toFixed(1)}</span>`
+                  )
+                  .join(", ")}</p>`
+          ).join("");
+          const mine = W.some(isSet)
+            ? `<ol>${combinedList(state.u)}</ol>`
+            : `<p class="sp-georgia">You have not set any widget.</p>`;
+          out.innerHTML = `<p class="label">${who}, per widget (closest first)</p>${lines}<div class="sp-cmp"><div><p class="label">${who}, ${set.length} of ${W.length} widgets, mean distance</p><ol>${combinedList(u)}</ol></div><div><p class="label">You, mean distance</p>${mine}</div></div>`;
+        });
+
         const ticksBox = document.getElementById("sp-ticks");
         const squintBox = document.getElementById("sp-squint");
-        const section = ticksBox.closest(".card") || document.body;
+        const blur = document.getElementById("sp-blur");
+        const blurOut = document.getElementById("sp-blur-out");
         const apply = () => {
           W.forEach((w) => {
             w.ticks.style.display = state.ticks ? "" : "none";
             w.fitTicks(state.ticks);
           });
-          section.classList.toggle("sp-squint", !!state.squint);
+          document.documentElement.style.setProperty(
+            "--sp-blur",
+            state.squint ? `${state.blur}px` : "0px"
+          );
+          blur.value = state.blur;
+          blurOut.textContent = state.squint ? `${state.blur} px` : "off";
           ticksBox.checked = !!state.ticks;
           squintBox.checked = !!state.squint;
         };
+        blur.addEventListener("input", () => {
+          state.blur = +blur.value;
+          state.squint = true;
+          save();
+          apply();
+        });
         ticksBox.addEventListener("change", () => {
           state.ticks = ticksBox.checked;
           save();
