@@ -902,8 +902,8 @@ field(&quot;mass&quot;).normalize(); // (x, xs) =&gt; x / sum(xs)
 field(&quot;mass&quot;).support(); // (_, xs) =&gt; (t) =&gt; t, over the density&#x27;s range
 field(&quot;mass&quot;).density(); // (_, xs) =&gt; kde(xs), a function (t) =&gt; number
 
-// a custom method, used like a built-in one
-const share = field(&quot;mass&quot;).then((x, xs) =&gt; x / max(xs), { unit: &quot;ratio&quot; });</code></pre>
+// a custom method, used like a built-in one (spelling: next section)
+const share = field(&quot;mass&quot;).map((x, i, xs) =&gt; x / max(xs), { unit: &quot;ratio&quot; });</code></pre>
     <pre
       class="code lang-py"
     ><code class="language-python" data-hl="">field(&quot;mass&quot;)  # lambda x, xs: x
@@ -913,7 +913,7 @@ field(&quot;mass&quot;).normalize()  # lambda x, xs: x / sum(xs)
 field(&quot;mass&quot;).support()  # lambda _, xs: (lambda t: t), over the density&#x27;s range
 field(&quot;mass&quot;).density()  # lambda _, xs: kde(xs), a function of t
 
-share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio&quot;)</code></pre>
+share = field(&quot;mass&quot;).map(lambda x, i, xs: x / max(xs), unit=&quot;ratio&quot;)</code></pre>
     <div class="table-wrap">
       <table class="methods">
         <tr>
@@ -1088,13 +1088,14 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
         A named method avoids it because the engine knows it is a fold and
         computes it once per group. For a callback, the engine memoizes the
         result per group (same <code>xs</code>, same result), or the user
-        declares it a fold, <code>.then(fn, { fold: true })</code>, and it is
-        called once per group.
+        declares it a fold and it is called once per group. The next section
+        compares declaring it with a verb (<code>.reduce</code>) and with a flag
+        (<code>{ fold: true }</code>).
       </li>
       <li>
         <b>A callback sees one field, so it cannot use two.</b> A mean of x
         weighted by w reads two fields, so it is a <code>derive</code> step, or
-        an expression over two fields, not a <code>.then</code>.
+        an expression over two fields, not a custom method.
       </li>
       <li>
         <b>Units get simpler.</b> The callback sees one field, so the unit it
@@ -1113,23 +1114,451 @@ share = field(&quot;mass&quot;).then(lambda x, xs: x / max(xs), unit=&quot;ratio
       </li>
     </ol>
     <p>
-      <b>Custom methods.</b> Main has no <code>.then</code> or similar on a
-      field expression; the closest are the <code>derive(fn)</code> flow step,
-      which sees whole rows, and the batch accessor above. The proposal is one
-      method, <code>field("x").then((x, xs) =&gt; ..., { unit, fold })</code>,
-      which returns a field expression, so it chains and reads like a built-in
-      method. Polars splits the same idea into <code>map_elements</code> (one
-      value), <code>map_batches</code> (the whole column) and
-      <code>pipe</code> (a function from expression to expression).
-      <code>.then</code> covers the first two with one shape.
-      <code>pipe</code> is plain function composition in JS
-      (<code>share(field("x"))</code>), so it needs no method. A named custom
-      method is just a function that returns <code>.then(...)</code>.
+      <b>Custom methods.</b> Main has no custom method on a field expression;
+      the closest are the <code>derive(fn)</code> flow step, which sees whole
+      rows, and the batch accessor above. A custom method returns a field
+      expression, so it chains and reads like a built-in one, and a named custom
+      method is just a function that returns one. The next section chooses its
+      name and signature.
     </p>
     <p>
       <b>Docs plan.</b> Each method's API reference entry (its descriptor
       <code>doc</code>) states its formula and the callback it stands for, as in
       the table above. This lands with the implementation.
+    </p>
+  </article>
+  <h2 id="custom-method">2b. Naming the custom method on a field expression</h2>
+  <article class="card">
+    <p>
+      The question here is only the name and signature of the method a user
+      writes when no named method fits. Josh chose the shape: the callback sees
+      <code>x</code>, this row's value of the field, and <code>xs</code>, the
+      group's values of that field. One callback then covers a per-row value, a
+      fold (the same value for every row of the group, which SQL calls a window
+      function), <code>normalize</code>, and a curve (a value that is a function
+      of t). Bins are open separately.
+    </p>
+    <p>
+      <b><code>.then</code> is out.</b> Any object with a
+      <code>then</code> method is a <i>thenable</i>: <code>await</code>,
+      <code>Promise.resolve</code>, <code>Promise.all</code> and the return of
+      an <code>async</code> function all call it as
+      <code>then(resolve, reject)</code>. GoFish resolves channels
+      asynchronously. <code>resolveValue</code> in
+      <code>ast/channels.ts</code> is an <code>async</code> function that
+      returns a channel value that is not a plain object as it is, and it runs
+      on every entry of a channel bag that holds a Python accessor, through
+      <code>Promise.all</code>. So in
+      <code>y: { min: field("a").then(f), max: pythonLambda }</code> the runtime
+      would call <code>f(resolve, reject)</code>, and the channel would never
+      resolve. Effect and fp-ts keep the word for promises too: their
+      <code>map</code> transforms a value inside a container, and
+      <code>then</code> is a <code>Promise</code> method that does both
+      <code>map</code> and <code>flatMap</code>.
+    </p>
+    <p>
+      <b>The other <code>map</code> in GoFish.</b> <code>lib.ts</code> exports a
+      top-level
+      <code>map(data, callback)</code> (<code>ast/iterators/map.ts</code>): an
+      async map over an array, a <code>Map</code> or an object that returns
+      <code>Promise&lt;R[]&gt;</code>, used inside
+      <code>createMark</code> bodies. A method <code>.map</code> on a field
+      expression does not clash with it in JS, because one is a function and the
+      other a method, and Python exports no <code>map</code>. Both mean "apply
+      this to each element", so the word keeps one meaning.
+    </p>
+    <h4>Precedent</h4>
+    <div class="table-wrap">
+      <table>
+        <tr>
+          <th>System</th>
+          <th>What the user writes</th>
+          <th>Callback gets</th>
+          <th>One call returns</th>
+          <th>Output type declared by</th>
+        </tr>
+        <tr>
+          <td>polars</td>
+          <td>
+            <code>map_elements(f)</code>, <code>map_batches(f)</code>,
+            <code>rolling_map(f, n)</code>, <code>pipe(f)</code>,
+            <code>.over("g")</code>
+          </td>
+          <td>one value; a whole Series; a window's Series; the expression</td>
+          <td>
+            one value per row; a column, or one value with
+            <code>returns_scalar=True</code>; one per window; an expression
+          </td>
+          <td><code>return_dtype=</code></td>
+        </tr>
+        <tr>
+          <td>pandas</td>
+          <td>
+            <code>Series.map(f)</code>, <code>apply(f)</code>,
+            <code>groupby().transform(f)</code>, <code>groupby().agg(f)</code>,
+            <code>pipe(f)</code>
+          </td>
+          <td>
+            one value; a row or column; a group's Series; a group's Series; the
+            frame
+          </td>
+          <td>
+            one per row; varies; same length, or a scalar broadcast to the
+            group; one per group; anything
+          </td>
+          <td>nothing; inferred</td>
+        </tr>
+        <tr>
+          <td>dplyr</td>
+          <td>
+            <code>group_by(g) |&gt; mutate(y = x / sum(x))</code>,
+            <code>summarise(m = median(x))</code>, <code>across(cols, f)</code>
+          </td>
+          <td>a vector expression over the group's columns</td>
+          <td>one per row (a length-1 result is recycled); one per group</td>
+          <td>the vector's type</td>
+        </tr>
+        <tr>
+          <td>SQL</td>
+          <td>
+            <code>median(x) OVER (PARTITION BY g)</code>;
+            <code>CREATE AGGREGATE</code> (Postgres) with <code>SFUNC</code> and
+            <code>FINALFUNC</code>
+          </td>
+          <td>an aggregate gets a state and one value at a time</td>
+          <td>one per group, or one per row with <code>OVER</code></td>
+          <td><code>STYPE</code> and the final function's type</td>
+        </tr>
+        <tr>
+          <td>DuckDB, Arrow</td>
+          <td>
+            <code>create_function(name, f, params, return_type)</code>;
+            <code>pc.register_scalar_function</code>,
+            <code>register_aggregate_function</code>
+          </td>
+          <td>a value, or an Arrow array</td>
+          <td>one per row; one per group</td>
+          <td>a declared return type</td>
+        </tr>
+        <tr>
+          <td>Spark, Beam</td>
+          <td>
+            <code>map</code>, <code>mapPartitions</code>;
+            <code>pandas_udf</code> (Series to Series, or Series to scalar);
+            Beam <code>Map</code>, <code>CombineFn</code>
+          </td>
+          <td>one record; a batch; a Series</td>
+          <td>one per row; one per group or window (Series to scalar)</td>
+          <td>a type string or Python type hints, which also pick the kind</td>
+        </tr>
+        <tr>
+          <td>Ibis</td>
+          <td>
+            <code>@ibis.udf.scalar.python</code>,
+            <code>@ibis.udf.agg.builtin</code>
+          </td>
+          <td>values or columns</td>
+          <td>one per row; one per group</td>
+          <td>type annotations; the decorator names the kind</td>
+        </tr>
+        <tr>
+          <td>JS arrays</td>
+          <td>
+            <code>xs.map((x, i, xs) =&gt; ...)</code>,
+            <code>xs.reduce((acc, x) =&gt; ..., init)</code>
+          </td>
+          <td>element, index, the whole array; accumulator and element</td>
+          <td>one per element; one</td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td>Arquero</td>
+          <td>
+            <code>derive({ y: d =&gt; d.x / op.sum(d.x) })</code>,
+            <code>rollup({ m: op.median("x") })</code>, <code>escape(f)</code>;
+            <code>addAggregateFunction</code>, <code>addWindowFunction</code>
+          </td>
+          <td>
+            a row proxy; <code>escape</code> gets a row and cannot use
+            <code>op</code>
+          </td>
+          <td>
+            one per row (an aggregate in <code>derive</code> is computed over
+            the group); one per group
+          </td>
+          <td>none; the kind is declared by which register call is used</td>
+        </tr>
+        <tr>
+          <td>danfo.js</td>
+          <td>
+            <code>series.map(f)</code>, <code>df.apply(f, { axis })</code>,
+            <code>groupby().agg()</code>
+          </td>
+          <td>one value; a row or column</td>
+          <td>one per row; varies; one per group</td>
+          <td>inferred</td>
+        </tr>
+        <tr>
+          <td>d3-array</td>
+          <td>
+            <code>d3.rollup(data, reduce, key)</code>, <code>d3.group</code>,
+            <code>d3.bin().value(f)</code>
+          </td>
+          <td>
+            <code>reduce</code> gets the group's values; an accessor gets
+            <code>(d, i, data)</code>
+          </td>
+          <td>one per group; one per row</td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td>Observable Plot</td>
+          <td>
+            <code>Plot.groupX({ y: (values) =&gt; ... })</code> or
+            <code>{ reduceIndex(index, values) }</code>;
+            <code>Plot.mapY((values) =&gt; ...)</code> or
+            <code>{ mapIndex }</code>
+          </td>
+          <td>
+            a reducer gets the group's values; a map gets the series' values
+          </td>
+          <td>one per group; a column of the same length</td>
+          <td>none; the transform names the kind</td>
+        </tr>
+        <tr>
+          <td>Vega, Vega-Lite</td>
+          <td>
+            expression strings; <code>aggregate</code> and
+            <code>joinaggregate</code> by op name
+          </td>
+          <td>no callbacks</td>
+          <td>one per group; one per row (<code>joinaggregate</code>)</td>
+          <td>the op</td>
+        </tr>
+        <tr>
+          <td>Lodash</td>
+          <td>
+            <code>_.map</code>, <code>_.sumBy(xs, f)</code>,
+            <code>_.meanBy</code>
+          </td>
+          <td>element, index, collection</td>
+          <td>one per element; one</td>
+          <td>none</td>
+        </tr>
+        <tr>
+          <td>ggplot2</td>
+          <td>
+            <code>after_stat(density)</code>; a custom <code>Stat</code> with
+            <code>compute_group</code> or <code>compute_panel</code>
+          </td>
+          <td>the group's (or panel's) data frame</td>
+          <td>a data frame of computed rows</td>
+          <td>the columns it returns</td>
+        </tr>
+        <tr>
+          <td>ggdist</td>
+          <td>
+            <code>after_stat(pdf * n)</code>;
+            <code>point_interval</code> functions
+          </td>
+          <td>
+            computed variables <code>x</code>, <code>pdf</code>,
+            <code>cdf</code>, <code>n</code>
+          </td>
+          <td>one per slab position</td>
+          <td>the computed variable</td>
+        </tr>
+        <tr>
+          <td>Mosaic (vgplot)</td>
+          <td>
+            SQL aggregate expressions such as <code>median("x")</code>, made
+            windows with a partition
+          </td>
+          <td>no callbacks; SQL runs in DuckDB</td>
+          <td>one per group, or per row as a window</td>
+          <td>SQL types</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      Two patterns stand out. Systems that run user functions over groups
+      declare the kind, either by a separate verb or registration call (Plot's
+      map and reduce transforms, Arquero's aggregate and window registration,
+      Ibis's scalar and agg decorators, Spark's pandas_udf kinds, Postgres'
+      <code>CREATE AGGREGATE</code>, Beam's <code>Map</code> and
+      <code>CombineFn</code>) or by a flag (polars'
+      <code>returns_scalar</code>). And polars renamed <code>apply</code> to
+      <code>map_elements</code> and <code>map</code> to
+      <code>map_batches</code> (0.19) because users could not tell which one got
+      a value and which got a column. Here the signature says it: the callback
+      is given both.
+    </p>
+    <p class="label">A. One verb, Array.map's arguments, a fold flag</p>
+    <pre
+      class="code lang-js"
+    ><code class="language-javascript" data-hl="">field(&quot;mass&quot;).map((x) =&gt; x / 1000, { unit: &quot;kg&quot; }); // per row
+field(&quot;mass&quot;).map((x, i, xs) =&gt; x / sum(xs), { unit: &quot;ratio&quot; }); // reads the group
+field(&quot;mass&quot;).map((x, i, xs) =&gt; median(xs), { fold: true, unit: &quot;g&quot; }); // once per group</code></pre>
+    <pre
+      class="code lang-py"
+    ><code class="language-python" data-hl="">field(&quot;mass&quot;).map(lambda x, i, xs: x / 1000, unit=&quot;kg&quot;)
+field(&quot;mass&quot;).map(lambda x, i, xs: x / sum(xs), unit=&quot;ratio&quot;)
+field(&quot;mass&quot;).map(lambda x, i, xs: median(xs), fold=True, unit=&quot;g&quot;)</code></pre>
+    <p class="label">
+      B. Two verbs: map for one value per row, reduce for one value per group
+      (recommended)
+    </p>
+    <pre
+      class="code lang-js"
+    ><code class="language-javascript" data-hl="">field(&quot;mass&quot;).map((x) =&gt; x / 1000, { unit: &quot;kg&quot; });
+field(&quot;mass&quot;).map((x, i, xs) =&gt; x / sum(xs), { unit: &quot;ratio&quot; });
+field(&quot;mass&quot;).reduce(median, { unit: &quot;g&quot; }); // (xs) =&gt; value, any existing function</code></pre>
+    <pre
+      class="code lang-py"
+    ><code class="language-python" data-hl="">field(&quot;mass&quot;).map(lambda x, i, xs: x / 1000, unit=&quot;kg&quot;)
+field(&quot;mass&quot;).map(lambda x, i, xs: x / sum(xs), unit=&quot;ratio&quot;)
+field(&quot;mass&quot;).reduce(statistics.median, unit=&quot;g&quot;)</code></pre>
+    <p class="label">C. One verb with Josh's exact shape, (x, xs)</p>
+    <pre
+      class="code lang-js"
+    ><code class="language-javascript" data-hl="">field(&quot;mass&quot;).apply((x) =&gt; x / 1000, { unit: &quot;kg&quot; });
+field(&quot;mass&quot;).apply((x, xs) =&gt; x / sum(xs), { unit: &quot;ratio&quot; });
+field(&quot;mass&quot;).apply((_, xs) =&gt; median(xs), { fold: true, unit: &quot;g&quot; });</code></pre>
+    <pre
+      class="code lang-py"
+    ><code class="language-python" data-hl="">field(&quot;mass&quot;).apply(lambda x, xs: x / 1000, unit=&quot;kg&quot;)
+field(&quot;mass&quot;).apply(lambda x, xs: x / sum(xs), unit=&quot;ratio&quot;)
+field(&quot;mass&quot;).apply(lambda _, xs: median(xs), fold=True, unit=&quot;g&quot;)</code></pre>
+    <p class="label">
+      D. A whole group in, a column or one value out (pandas transform, polars
+      map_batches)
+    </p>
+    <pre
+      class="code lang-js"
+    ><code class="language-javascript" data-hl="">field(&quot;mass&quot;).transform((xs) =&gt; xs.map((x) =&gt; x / 1000), { unit: &quot;kg&quot; });
+field(&quot;mass&quot;).transform(
+  (xs) =&gt; {
+    const t = sum(xs);
+    return xs.map((x) =&gt; x / t);
+  },
+  { unit: &quot;ratio&quot; }
+);
+field(&quot;mass&quot;).transform(median, { unit: &quot;g&quot; }); // a non-array result is one value per group</code></pre>
+    <pre
+      class="code lang-py"
+    ><code class="language-python" data-hl="">field(&quot;mass&quot;).transform(lambda xs: [x / 1000 for x in xs], unit=&quot;kg&quot;)
+field(&quot;mass&quot;).transform(lambda xs: [x / sum(xs) for x in xs], unit=&quot;ratio&quot;)
+field(&quot;mass&quot;).transform(statistics.median, unit=&quot;g&quot;)</code></pre>
+    <div class="table-wrap">
+      <table>
+        <tr>
+          <th></th>
+          <th>A. <code>.map</code> + flag</th>
+          <th>B. <code>.map</code> + <code>.reduce</code></th>
+          <th>C. <code>.apply((x, xs))</code></th>
+          <th>D. <code>.transform(xs)</code></th>
+        </tr>
+        <tr>
+          <td>Declares a fold</td>
+          <td>
+            <code>{ fold: true }</code>; without it a median runs n times,
+            O(n&sup2;), and the engine checks it is constant across the group
+          </td>
+          <td>
+            by the verb; <code>reduce</code> runs once per group and is constant
+            by construction, so neither the flag nor the check is needed
+          </td>
+          <td>as A</td>
+          <td>
+            by the result: a non-array is one value per group. A curve is a
+            function, so it reads as one value
+          </td>
+        </tr>
+        <tr>
+          <td>Normalize cost</td>
+          <td>
+            O(n&sup2;) unless <code>sum(xs)</code> is memoized; the engine
+            passes the same <code>xs</code> array to every row of a group, so a
+            memo keyed on it works
+          </td>
+          <td>as A</td>
+          <td>as A</td>
+          <td>O(n): the user computes the sum once</td>
+        </tr>
+        <tr>
+          <td>Declares its unit</td>
+          <td><code>unit</code> option</td>
+          <td><code>unit</code> option on both verbs</td>
+          <td><code>unit</code> option</td>
+          <td><code>unit</code> option</td>
+        </tr>
+        <tr>
+          <td>Crosses to Python</td>
+          <td>
+            one registered lambda; the bridge reads the flag to choose one call
+            per row or one per group
+          </td>
+          <td>
+            one registered lambda; the verb tells the bridge which:
+            <code>map</code> is today's batch call (<code>RESOLVE_ROWS</code>,
+            one value per row), <code>reduce</code> sends each group's values
+            and gets one value per group
+          </td>
+          <td>as A</td>
+          <td>one call per group, which returns a list or one value</td>
+        </tr>
+        <tr>
+          <td>Reads like precedent</td>
+          <td>
+            <code>Array.map</code>, polars' <code>returns_scalar</code> flag
+          </td>
+          <td>
+            <code>Array.map</code>; d3 <code>rollup</code> and Plot reducers for
+            <code>reduce</code>; the kind-per-verb split of Plot, Arquero, Ibis,
+            Spark and SQL
+          </td>
+          <td>
+            pandas <code>apply</code>, which is the ambiguity polars removed;
+            and every JS function already has an <code>apply</code> method
+          </td>
+          <td>
+            pandas <code>groupby.transform</code>; but <code>Transform</code> is
+            the name Josh endorsed for the coordinate and palette family (the
+            scale-transforms proposal)
+          </td>
+        </tr>
+        <tr>
+          <td>One shape</td>
+          <td>yes</td>
+          <td>
+            two shapes: <code>(x, i, xs)</code> and <code>(xs)</code>; a fold is
+            the map that ignores x, given its own verb
+          </td>
+          <td>yes, exactly Josh's</td>
+          <td>yes, but per group, not per row</td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <b>Recommendation: B, <code>.map</code> and <code>.reduce</code>.</b>
+      Josh's shape survives as <code>map</code>'s: this row's value and the
+      group's values, in <code>Array.prototype.map</code>'s positions, so a JS
+      user who writes <code>(x, i)</code> gets what they expect. A fold, the one
+      case where the shape needs a flag, gets the verb every group-aware system
+      uses for it, and the flag, the O(n&sup2;) trap and the "not constant"
+      check all go away for folds. <code>reduce</code> takes any existing
+      function of an array (<code>d3.median</code>,
+      <code>statistics.median</code>), and the named methods desugar to it:
+      <code>.median()</code> is <code>.reduce(median)</code>,
+      <code>.density()</code> is <code>.reduce(kde)</code>, whose value is a
+      function of t. <code>.normalize()</code> is a <code>map</code>. The cost
+      is two verbs where Josh asked for one shape, and <code>reduce</code> means
+      d3's <code>(values) =&gt; value</code>, not <code>Array.reduce</code>'s
+      accumulator. <b>Runner-up: A</b>, one <code>.map</code> with
+      <code>{ fold: true }</code>, which keeps one verb and matches polars'
+      <code>returns_scalar</code>. Josh valuing one shape over losing the flag
+      would flip the pick to A. D is the fastest for normalize, but its name is
+      taken and it gives up the per-row view.
     </p>
   </article>
   <h2 id="spacing">3. Contour spacing: box gap against contact gap</h2>
@@ -1428,9 +1857,34 @@ spread({ by: &quot;month&quot;, dir: &quot;y&quot;, spacing: 70, anchor: &quot;b
     </li>
     <li>
       One callback shape, <code>(x, xs) =&gt; result</code>, behind every field
-      method except <code>bin</code>, with
-      <code>field("x").then(fn, { unit, fold })</code> for custom methods? (How
-      a bin's cells are shared is under review separately.)
+      method except <code>bin</code>, with a custom method for everything else
+      (its spelling is decided in the next section)? (How a bin's cells are
+      shared is under review separately.)
+    </li>
+    <li>
+      Custom method: split verbs, <code>.map((x, i, xs) =&gt; ...)</code> for
+      one value per row and <code>.reduce((xs) =&gt; ...)</code> for one value
+      per group, or one <code>.map</code> with a
+      <code>{ fold: true }</code> flag?
+    </li>
+    <li>
+      <code>.map</code>'s callback keeps <code>Array.prototype.map</code>'s
+      argument order, <code>(x, i, xs)</code>, with the index, rather than
+      <code>(x, xs)</code>?
+    </li>
+    <li>
+      <code>.reduce</code> takes <code>(xs) =&gt; value</code>, as d3's
+      <code>rollup</code> and Plot's reducers do, not
+      <code>Array.prototype.reduce</code>'s <code>(acc, x)</code>?
+    </li>
+    <li>
+      A curve is a reduce whose value is a function of t, so
+      <code>.density()</code> is <code>.reduce(kde)</code> and a custom curve
+      needs no third verb?
+    </li>
+    <li>
+      An undeclared <code>unit</code> makes the result a plain number that
+      cannot be stacked, for both verbs?
     </li>
     <li>
       Plan, not a question: each method's API reference entry (its descriptor
