@@ -116,7 +116,9 @@
   }
   .sp-svg .sp-box {
     fill: var(--code-bg);
-    stroke: var(--line);
+    stroke: var(--fg, currentColor);
+    stroke-width: 6px;
+    paint-order: stroke fill;
   }
   .sp-svg .sp-shapes {
     filter: blur(var(--sp-blur, 0px));

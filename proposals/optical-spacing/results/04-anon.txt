@@ -1,0 +1,11 @@
+optical-spacing-survey v1
+name: 
+squint: 0px
+w1 square-gap 15.5
+w2 tip-gap 27.0
+w3 circle-gap 25.0
+w4 tip-gap 20.5
+w5 o-shift 1.0
+w6 t-shift -0.5
+w7 left-inset 23.0
+w8 gap-below 23.0

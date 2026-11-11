@@ -146,7 +146,11 @@
       }
       .box {
         fill: var(--box);
-        stroke: var(--line);
+        /* A thick outline in the ink color, drawn under the fill so only the
+           outer half shows and the inner wall stays where the models measure. */
+        stroke: var(--fg);
+        stroke-width: 6px;
+        paint-order: stroke fill;
       }
       input[type="range"] {
         width: 100%;
@@ -215,11 +219,18 @@
         const KEY = "spacing-by-eye-v1";
         const state = { name: "", u: {}, squint: false, blur: 3 };
         try {
-          Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}"));
+          const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+          // Slider positions are not kept across loads, so every visit starts
+          // from the far starting positions. Name and squint are kept.
+          delete saved.u;
+          Object.assign(state, saved);
         } catch (e) {}
         const save = () => {
           try {
-            localStorage.setItem(KEY, JSON.stringify(state));
+            localStorage.setItem(
+              KEY,
+              JSON.stringify({ ...state, u: undefined })
+            );
           } catch (e) {}
         };
         const el = (tag, attrs, parent) => {

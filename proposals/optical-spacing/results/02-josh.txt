@@ -1,0 +1,11 @@
+optical-spacing-survey v1
+name: Josh
+squint: 3.5px
+w1 square-gap 15.5
+w2 tip-gap 27.0
+w3 circle-gap 23.5
+w4 tip-gap 25.0
+w5 o-shift -1.0
+w6 t-shift 0.0
+w7 left-inset 14.0
+w8 gap-below 23.5
