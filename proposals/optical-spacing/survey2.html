@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Spacing by eye, part 2</title>
+    <style>
+      :root {
+        --bg: #fbfaf7;
+        --card: #ffffff;
+        --fg: #1f2328;
+        --muted: #6a6f76;
+        --line: #d9d6cf;
+        --box: #f1efe9;
+        --accent: #2f6fde;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #15171a;
+          --card: #1d2024;
+          --fg: #e8e6e1;
+          --muted: #9aa0a6;
+          --line: #3a3e44;
+          --box: #272a2f;
+          --accent: #7aa7ff;
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #15171a;
+        --card: #1d2024;
+        --fg: #e8e6e1;
+        --muted: #9aa0a6;
+        --line: #3a3e44;
+        --box: #272a2f;
+        --accent: #7aa7ff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font:
+          16px/1.5 Inter,
+          system-ui,
+          -apple-system,
+          sans-serif;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 24px 16px 48px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      .intro {
+        margin: 0 0 16px;
+      }
+      .tools {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 18px;
+        align-items: center;
+        margin: 0 0 8px;
+      }
+      .tools input[type="text"] {
+        font: inherit;
+        padding: 4px 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        width: 14em;
+        max-width: 100%;
+      }
+      button {
+        font: inherit;
+        padding: 6px 14px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--card);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      .widget {
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 12px 14px 10px;
+        margin: 14px 0;
+      }
+      .widget p {
+        margin: 0 0 8px;
+      }
+      .widget .num {
+        color: var(--muted);
+        margin-right: 6px;
+      }
+      .stage {
+        overflow-x: auto;
+      }
+      svg {
+        height: auto;
+        max-width: none;
+        display: block;
+        margin: 4px auto 10px;
+        touch-action: none;
+        user-select: none;
+      }
+      .move {
+        cursor: grab;
+      }
+      .shapes {
+        transition: filter 0.2s;
+        filter: blur(var(--blur, 0px));
+      }
+      main {
+        padding-top: calc(56px + env(safe-area-inset-top));
+      }
+      .squintbar {
+        white-space: nowrap;
+        position: fixed;
+        left: 50%;
+        transform: translateX(-50%);
+        max-width: calc(100vw - 24px);
+        top: calc(10px + env(safe-area-inset-top));
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 12px;
+        font-size: 14px;
+        color: var(--fg);
+        background: var(--card);
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+      }
+      .squintbar input[type="range"] {
+        width: 80px;
+      }
+      @media (max-width: 480px) {
+        .squintbar {
+          gap: 5px;
+          padding: 6px 10px;
+          font-size: 13px;
+        }
+        .squintbar input[type="range"] {
+          width: 60px;
+        }
+        .squintbar output {
+          min-width: 2.4em;
+        }
+      }
+      .squintbar output {
+        min-width: 3.2em;
+        color: var(--muted);
+        font-variant-numeric: tabular-nums;
+      }
+      .box {
+        fill: var(--box);
+        /* A thick outline in the ink color, drawn under the fill so only the
+           outer half shows and the inner wall stays where the models measure. */
+        stroke: var(--fg);
+        stroke-width: 6px;
+        paint-order: stroke fill;
+      }
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+      .send {
+        margin-top: 20px;
+      }
+      .status {
+        color: var(--muted);
+      }
+      textarea {
+        width: 100%;
+        font:
+          13px/1.4 ui-monospace,
+          monospace;
+        background: var(--card);
+        color: var(--fg);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px;
+        margin-top: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Spacing by eye, part 2</h1>
+      <p class="intro">
+        Each picture below has one shape you can move. Drag it, or use the
+        slider under it, until the spaces between the shapes look even to you.
+        There is no right answer. Go by eye, not by measuring, and don't think
+        about it too long. Squinting can help. The Squint control at the top of
+        the screen blurs the shapes, and its slider sets how much. The Zoom
+        slider beside it makes the pictures larger or smaller.
+      </p>
+      <div class="tools">
+        <label>Your name (optional) <input type="text" id="name" /></label>
+      </div>
+      <div class="squintbar" role="group" aria-label="Squint: blur the shapes">
+        <label><input type="checkbox" id="squint" /> Squint</label>
+        <input
+          type="range"
+          id="blur"
+          min="0"
+          max="8"
+          step="0.5"
+          aria-label="Blur amount in px"
+        />
+        <output id="blur-out"></output>
+        <label for="zoom">Zoom</label>
+        <input type="range" id="zoom" min="0.5" max="3" step="0.25" />
+        <output id="zoom-out"></output>
+      </div>
+      <div id="widgets"></div>
+      <div class="send">
+        <button type="button" id="copy">Copy my results</button>
+        <span id="status" class="status" aria-live="polite"></span>
+        <textarea id="copy-text" rows="12" hidden></textarea>
+        <p>When you are done, copy your results and send them to Josh.</p>
+      </div>
+    </main>
+    <script id="data" type="application/json">
+      {
+        "widgets": [
+          {
+            "n": 1,
+            "num": 1,
+            "key": "square-circle",
+            "text": "Move the circle until the two gaps look the same to you.",
+            "aria": "a square and a circle; the circle moves left and right",
+            "axis": "x",
+            "range": [-1.5, 55.5],
+            "start": 51,
+            "view": [-4, 0, 209.1, 153.6],
+            "fixed": [
+              { "d": "M0 60L56 60L56 4L0 4Z" },
+              { "d": "M86 60L142 60L142 4L86 4Z" },
+              { "d": "M33.6 149.6L89.6 149.6L89.6 93.6L33.6 93.6Z" }
+            ],
+            "moving": [
+              {
+                "d": "M145.6 121.6L145.54 119.77L145.36 117.95L145.06 116.14L144.65 114.35L144.11 112.6L143.47 110.88L142.71 109.22L141.85 107.6L140.88 106.04L139.81 104.55L138.65 103.14L137.4 101.8L136.06 100.55L134.65 99.39L133.16 98.32L131.6 97.35L129.98 96.49L128.32 95.73L126.6 95.09L124.85 94.55L123.06 94.14L121.25 93.84L119.43 93.66L117.6 93.6L115.77 93.66L113.95 93.84L112.14 94.14L110.35 94.55L108.6 95.09L106.88 95.73L105.22 96.49L103.6 97.35L102.04 98.32L100.55 99.39L99.14 100.55L97.8 101.8L96.55 103.14L95.39 104.55L94.32 106.04L93.35 107.6L92.49 109.22L91.73 110.88L91.09 112.6L90.55 114.35L90.14 116.14L89.84 117.95L89.66 119.77L89.6 121.6L89.66 123.43L89.84 125.25L90.14 127.06L90.55 128.85L91.09 130.6L91.73 132.32L92.49 133.98L93.35 135.6L94.32 137.16L95.39 138.65L96.55 140.06L97.8 141.4L99.14 142.65L100.55 143.81L102.04 144.88L103.6 145.85L105.22 146.71L106.88 147.47L108.6 148.11L110.35 148.65L112.14 149.06L113.95 149.36L115.77 149.54L117.6 149.6L119.43 149.54L121.25 149.36L123.06 149.06L124.85 148.65L126.6 148.11L128.32 147.47L129.98 146.71L131.6 145.85L133.16 144.88L134.65 143.81L136.06 142.65L137.4 141.4L138.65 140.06L139.81 138.65L140.88 137.16L141.85 135.6L142.71 133.98L143.47 132.32L144.11 130.6L144.65 128.85L145.06 127.06L145.36 125.25L145.54 123.43Z",
+                "k": 1
+              }
+            ],
+            "edge": [89.6, 1]
+          },
+          {
+            "n": 2,
+            "num": 2,
+            "key": "far-squares",
+            "text": "Move the square until the two gaps look the same to you.",
+            "aria": "two pairs of squares, the reference 90 px apart; the square moves left and right",
+            "axis": "x",
+            "range": [14.5, 115.5],
+            "start": 22.5,
+            "view": [-4, 0, 269.1, 153.6],
+            "fixed": [
+              { "d": "M0 60L56 60L56 4L0 4Z" },
+              { "d": "M146 60L202 60L202 4L146 4Z" },
+              { "d": "M33.6 149.6L89.6 149.6L89.6 93.6L33.6 93.6Z" }
+            ],
+            "moving": [
+              { "d": "M89.6 149.6L145.6 149.6L145.6 93.6L89.6 93.6Z", "k": 1 }
+            ],
+            "edge": [89.6, 1]
+          },
+          {
+            "n": 3,
+            "num": 3,
+            "key": "interlock",
+            "text": "Move the triangle until the two gaps look the same to you.",
+            "aria": "an up triangle and a down triangle, slanted sides parallel; the triangle moves left and right",
+            "axis": "x",
+            "range": [-23.5, 55.5],
+            "start": 49,
+            "view": [-4, 0, 209.1, 153.6],
+            "fixed": [
+              { "d": "M0 60L56 60L56 4L0 4Z" },
+              { "d": "M86 60L142 60L142 4L86 4Z" },
+              { "d": "M33.6 149.6L89.6 149.6L61.6 93.6Z" }
+            ],
+            "moving": [{ "d": "M89.6 93.6L117.6 149.6L145.6 93.6Z", "k": 1 }],
+            "edge": [89.6, 1]
+          },
+          {
+            "n": 4,
+            "num": 4,
+            "key": "triangles",
+            "text": "Move the square until the gaps look even to you.",
+            "aria": "A square and three triangles; the square moves",
+            "axis": "x",
+            "range": [-23.5, 55.5],
+            "start": -17,
+            "view": [-115.5, 0, 291.5, 64],
+            "fixed": [
+              { "d": "M0 60L56 60L28 4Z" },
+              { "d": "M58 4L86 60L114 4Z" },
+              { "d": "M116 60L172 60L144 4Z" }
+            ],
+            "moving": [{ "d": "M-56 60L0 60L0 4L-56 4Z", "k": -1 }],
+            "edge": [0, -1]
+          },
+          {
+            "n": 5,
+            "num": 5,
+            "key": "square-circle-double",
+            "text": "Move the circle until the two gaps look the same to you.",
+            "aria": "a square and a circle at 2x size (shapes 112 px, reference gap 60 px); the circle moves left and right",
+            "axis": "x",
+            "range": [-10.5, 110.5],
+            "start": 101,
+            "view": [-4, 0, 409.7, 299.2],
+            "fixed": [
+              { "d": "M0 116L112 116L112 4L0 4Z" },
+              { "d": "M172 116L284 116L284 4L172 4Z" },
+              { "d": "M67.2 295.2L179.2 295.2L179.2 183.2L67.2 183.2Z" }
+            ],
+            "moving": [
+              {
+                "d": "M291.2 239.2L291.08 235.54L290.72 231.89L290.12 228.27L289.29 224.71L288.23 221.2L286.94 217.77L285.42 214.43L283.7 211.2L281.76 208.09L279.63 205.11L277.3 202.28L274.8 199.6L272.12 197.1L269.29 194.77L266.31 192.64L263.2 190.7L259.97 188.98L256.63 187.46L253.2 186.17L249.69 185.11L246.13 184.28L242.51 183.68L238.86 183.32L235.2 183.2L231.54 183.32L227.89 183.68L224.27 184.28L220.71 185.11L217.2 186.17L213.77 187.46L210.43 188.98L207.2 190.7L204.09 192.64L201.11 194.77L198.28 197.1L195.6 199.6L193.1 202.28L190.77 205.11L188.64 208.09L186.7 211.2L184.98 214.43L183.46 217.77L182.17 221.2L181.11 224.71L180.28 228.27L179.68 231.89L179.32 235.54L179.2 239.2L179.32 242.86L179.68 246.51L180.28 250.13L181.11 253.69L182.17 257.2L183.46 260.63L184.98 263.97L186.7 267.2L188.64 270.31L190.77 273.29L193.1 276.12L195.6 278.8L198.28 281.3L201.11 283.63L204.09 285.76L207.2 287.7L210.43 289.42L213.77 290.94L217.2 292.23L220.71 293.29L224.27 294.12L227.89 294.72L231.54 295.08L235.2 295.2L238.86 295.08L242.51 294.72L246.13 294.12L249.69 293.29L253.2 292.23L256.63 290.94L259.97 289.42L263.2 287.7L266.31 285.76L269.29 283.63L272.12 281.3L274.8 278.8L277.3 276.12L279.63 273.29L281.76 270.31L283.7 267.2L285.42 263.97L286.94 260.63L288.23 257.2L289.29 253.69L290.12 250.13L290.72 246.51L291.08 242.86Z",
+                "k": 1
+              }
+            ],
+            "edge": [179.2, 1]
+          },
+          {
+            "n": 6,
+            "num": 6,
+            "key": "tip-circle",
+            "text": "Move the triangle until the two gaps look the same to you.",
+            "aria": "a circle and a triangle whose tip points at it; the triangle moves left and right",
+            "axis": "x",
+            "range": [-25, 55.5],
+            "start": -18.5,
+            "view": [-4, 0, 209.1, 153.6],
+            "fixed": [
+              { "d": "M0 60L56 60L56 4L0 4Z" },
+              { "d": "M86 60L142 60L142 4L86 4Z" },
+              {
+                "d": "M89.6 121.6L89.54 119.77L89.36 117.95L89.06 116.14L88.65 114.35L88.11 112.6L87.47 110.88L86.71 109.22L85.85 107.6L84.88 106.04L83.81 104.55L82.65 103.14L81.4 101.8L80.06 100.55L78.65 99.39L77.16 98.32L75.6 97.35L73.98 96.49L72.32 95.73L70.6 95.09L68.85 94.55L67.06 94.14L65.25 93.84L63.43 93.66L61.6 93.6L59.77 93.66L57.95 93.84L56.14 94.14L54.35 94.55L52.6 95.09L50.88 95.73L49.22 96.49L47.6 97.35L46.04 98.32L44.55 99.39L43.14 100.55L41.8 101.8L40.55 103.14L39.39 104.55L38.32 106.04L37.35 107.6L36.49 109.22L35.73 110.88L35.09 112.6L34.55 114.35L34.14 116.14L33.84 117.95L33.66 119.77L33.6 121.6L33.66 123.43L33.84 125.25L34.14 127.06L34.55 128.85L35.09 130.6L35.73 132.32L36.49 133.98L37.35 135.6L38.32 137.16L39.39 138.65L40.55 140.06L41.8 141.4L43.14 142.65L44.55 143.81L46.04 144.88L47.6 145.85L49.22 146.71L50.88 147.47L52.6 148.11L54.35 148.65L56.14 149.06L57.95 149.36L59.77 149.54L61.6 149.6L63.43 149.54L65.25 149.36L67.06 149.06L68.85 148.65L70.6 148.11L72.32 147.47L73.98 146.71L75.6 145.85L77.16 144.88L78.65 143.81L80.06 142.65L81.4 141.4L82.65 140.06L83.81 138.65L84.88 137.16L85.85 135.6L86.71 133.98L87.47 132.32L88.11 130.6L88.65 128.85L89.06 127.06L89.36 125.25L89.54 123.43Z"
+              }
+            ],
+            "moving": [{ "d": "M89.6 121.6L145.6 149.6L145.6 93.6Z", "k": 1 }],
+            "edge": [89.6, 1]
+          },
+          {
+            "n": 7,
+            "num": 7,
+            "key": "notch",
+            "text": "Move the triangle until the two gaps look the same to you.",
+            "aria": "a triangle's tip pointing into the notch of an L; the triangle moves left and right",
+            "axis": "x",
+            "range": [-41, 55.5],
+            "start": 48,
+            "view": [-4, 0, 209.1, 153.6],
+            "fixed": [
+              { "d": "M0 60L56 60L56 4L0 4Z" },
+              { "d": "M86 60L142 60L142 4L86 4Z" },
+              {
+                "d": "M33.6 149.6L89.6 149.6L89.6 129.44L53.76 129.44L53.76 93.6L33.6 93.6Z"
+              }
+            ],
+            "moving": [{ "d": "M89.6 121.6L145.6 149.6L145.6 93.6Z", "k": 1 }],
+            "edge": [89.6, 1]
+          },
+          {
+            "n": 8,
+            "num": 8,
+            "key": "stars",
+            "text": "Move the star until the two gaps look the same to you.",
+            "aria": "two pairs of thin stars, the reference 30 px apart; the star moves left and right",
+            "axis": "x",
+            "range": [4.5, 55.5],
+            "start": 9.5,
+            "view": [-2.63, 0, 203.62, 148.25],
+            "fixed": [
+              {
+                "d": "M28 4L22.73 24.75L1.37 23.35L19.48 34.77L11.54 54.65L28 40.96L44.46 54.65L36.52 34.77L54.63 23.35L33.27 24.75Z"
+              },
+              {
+                "d": "M111.26 4L105.99 24.75L84.63 23.35L102.74 34.77L94.8 54.65L111.26 40.96L127.72 54.65L119.78 34.77L137.89 23.35L116.53 24.75Z"
+              },
+              {
+                "d": "M61.6 93.6L56.33 114.35L34.97 112.95L53.08 124.37L45.14 144.25L61.6 130.56L78.06 144.25L70.12 124.37L88.23 112.95L66.87 114.35Z"
+              }
+            ],
+            "moving": [
+              {
+                "d": "M114.86 93.6L109.59 114.35L88.23 112.95L106.34 124.37L98.4 144.25L114.86 130.56L131.32 144.25L123.38 124.37L141.49 112.95L120.13 114.35Z",
+                "k": 1
+              }
+            ],
+            "edge": [88.2295824562643, 1]
+          },
+          {
+            "n": 9,
+            "num": 9,
+            "key": "square-circle-half",
+            "text": "Move the circle until the two gaps look the same to you.",
+            "aria": "a square and a circle at 0.5x size (shapes 28 px, reference gap 15 px); the circle moves left and right",
+            "axis": "x",
+            "range": [-1, 28],
+            "start": 25.5,
+            "view": [-4, 0, 108.8, 80.8],
+            "fixed": [
+              { "d": "M0 32L28 32L28 4L0 4Z" },
+              { "d": "M43 32L71 32L71 4L43 4Z" },
+              { "d": "M16.8 76.8L44.8 76.8L44.8 48.8L16.8 48.8Z" }
+            ],
+            "moving": [
+              {
+                "d": "M72.8 62.8L72.77 61.88L72.68 60.97L72.53 60.07L72.32 59.18L72.06 58.3L71.73 57.44L71.36 56.61L70.92 55.8L70.44 55.02L69.91 54.28L69.33 53.57L68.7 52.9L68.03 52.27L67.32 51.69L66.58 51.16L65.8 50.68L64.99 50.24L64.16 49.87L63.3 49.54L62.42 49.28L61.53 49.07L60.63 48.92L59.72 48.83L58.8 48.8L57.88 48.83L56.97 48.92L56.07 49.07L55.18 49.28L54.3 49.54L53.44 49.87L52.61 50.24L51.8 50.68L51.02 51.16L50.28 51.69L49.57 52.27L48.9 52.9L48.27 53.57L47.69 54.28L47.16 55.02L46.68 55.8L46.24 56.61L45.87 57.44L45.54 58.3L45.28 59.18L45.07 60.07L44.92 60.97L44.83 61.88L44.8 62.8L44.83 63.72L44.92 64.63L45.07 65.53L45.28 66.42L45.54 67.3L45.87 68.16L46.24 68.99L46.68 69.8L47.16 70.58L47.69 71.32L48.27 72.03L48.9 72.7L49.57 73.33L50.28 73.91L51.02 74.44L51.8 74.92L52.61 75.36L53.44 75.73L54.3 76.06L55.18 76.32L56.07 76.53L56.97 76.68L57.88 76.77L58.8 76.8L59.72 76.77L60.63 76.68L61.53 76.53L62.42 76.32L63.3 76.06L64.16 75.73L64.99 75.36L65.8 74.92L66.58 74.44L67.32 73.91L68.03 73.33L68.7 72.7L69.33 72.03L69.91 71.32L70.44 70.58L70.92 69.8L71.36 68.99L71.73 68.16L72.06 67.3L72.32 66.42L72.53 65.53L72.68 64.63L72.77 63.72Z",
+                "k": 1
+              }
+            ],
+            "edge": [44.8, 1]
+          },
+          {
+            "n": 10,
+            "num": 10,
+            "key": "tip-circle-mirror",
+            "text": "Move the triangle until the two gaps look the same to you.",
+            "aria": "a circle and a triangle whose tip points at it; the triangle moves left and right",
+            "axis": "x",
+            "range": [-25, 55.5],
+            "start": 49,
+            "view": [-205.1, 0, 209.1, 153.6],
+            "fixed": [
+              { "d": "M0 4L-56 4L-56 60L0 60Z" },
+              { "d": "M-86 4L-142 4L-142 60L-86 60Z" },
+              {
+                "d": "M-89.54 123.43L-89.36 125.25L-89.06 127.06L-88.65 128.85L-88.11 130.6L-87.47 132.32L-86.71 133.98L-85.85 135.6L-84.88 137.16L-83.81 138.65L-82.65 140.06L-81.4 141.4L-80.06 142.65L-78.65 143.81L-77.16 144.88L-75.6 145.85L-73.98 146.71L-72.32 147.47L-70.6 148.11L-68.85 148.65L-67.06 149.06L-65.25 149.36L-63.43 149.54L-61.6 149.6L-59.77 149.54L-57.95 149.36L-56.14 149.06L-54.35 148.65L-52.6 148.11L-50.88 147.47L-49.22 146.71L-47.6 145.85L-46.04 144.88L-44.55 143.81L-43.14 142.65L-41.8 141.4L-40.55 140.06L-39.39 138.65L-38.32 137.16L-37.35 135.6L-36.49 133.98L-35.73 132.32L-35.09 130.6L-34.55 128.85L-34.14 127.06L-33.84 125.25L-33.66 123.43L-33.6 121.6L-33.66 119.77L-33.84 117.95L-34.14 116.14L-34.55 114.35L-35.09 112.6L-35.73 110.88L-36.49 109.22L-37.35 107.6L-38.32 106.04L-39.39 104.55L-40.55 103.14L-41.8 101.8L-43.14 100.55L-44.55 99.39L-46.04 98.32L-47.6 97.35L-49.22 96.49L-50.88 95.73L-52.6 95.09L-54.35 94.55L-56.14 94.14L-57.95 93.84L-59.77 93.66L-61.6 93.6L-63.43 93.66L-65.25 93.84L-67.06 94.14L-68.85 94.55L-70.6 95.09L-72.32 95.73L-73.98 96.49L-75.6 97.35L-77.16 98.32L-78.65 99.39L-80.06 100.55L-81.4 101.8L-82.65 103.14L-83.81 104.55L-84.88 106.04L-85.85 107.6L-86.71 109.22L-87.47 110.88L-88.11 112.6L-88.65 114.35L-89.06 116.14L-89.36 117.95L-89.54 119.77L-89.6 121.6Z"
+              }
+            ],
+            "moving": [
+              { "d": "M-145.6 93.6L-145.6 149.6L-89.6 121.6Z", "k": -1 }
+            ],
+            "edge": [-89.6, -1]
+          },
+          {
+            "n": 11,
+            "num": 11,
+            "key": "tips",
+            "text": "Move the spike until the two gaps look the same to you.",
+            "aria": "two spikes, tip to tip; the spike moves left and right",
+            "axis": "x",
+            "range": [-26, 55.5],
+            "start": 49,
+            "view": [-4, 0, 253.9, 120],
+            "fixed": [
+              { "d": "M0 60L56 60L56 4L0 4Z" },
+              { "d": "M86 60L142 60L142 4L86 4Z" },
+              { "d": "M33.6 116L112 104.8L33.6 93.6Z" }
+            ],
+            "moving": [{ "d": "M112 104.8L190.4 116L190.4 93.6Z", "k": 1 }],
+            "edge": [112, 1]
+          },
+          {
+            "n": 12,
+            "num": 12,
+            "key": "triangles-mirror",
+            "text": "Move the square until the gaps look even to you.",
+            "aria": "A square and three triangles; the square moves",
+            "axis": "x",
+            "range": [-23.5, 55.5],
+            "start": 49,
+            "view": [-176, 0, 291.5, 64],
+            "fixed": [
+              { "d": "M-28 4L-56 60L0 60Z" },
+              { "d": "M-114 4L-86 60L-58 4Z" },
+              { "d": "M-144 4L-172 60L-116 60Z" }
+            ],
+            "moving": [{ "d": "M56 4L0 4L0 60L56 60Z", "k": 1 }],
+            "edge": [0, 1]
+          }
+        ]
+      }
+    </script>
+    <script>
+      (() => {
+        const D = JSON.parse(document.getElementById("data").textContent);
+        const NS = "http://www.w3.org/2000/svg";
+        const KEY = "spacing-by-eye-v2";
+        const state = { name: "", u: {}, squint: false, blur: 3, zoom: 1 };
+        const sizers = [];
+        try {
+          const saved = JSON.parse(localStorage.getItem(KEY) || "{}");
+          // Slider positions are not kept across loads, so every visit starts
+          // from the far starting positions. Name and squint are kept.
+          delete saved.u;
+          Object.assign(state, saved);
+        } catch (e) {}
+        const save = () => {
+          try {
+            localStorage.setItem(
+              KEY,
+              JSON.stringify({ ...state, u: undefined })
+            );
+          } catch (e) {}
+        };
+        const el = (tag, attrs, parent) => {
+          const e = document.createElementNS(NS, tag);
+          for (const k in attrs)
+            if (attrs[k] != null) e.setAttribute(k, attrs[k]);
+          if (parent) parent.appendChild(e);
+          return e;
+        };
+
+        function widget(w) {
+          const root = document.createElement("div");
+          root.className = "widget";
+          root.id = `w${w.n}`;
+          const p = document.createElement("p");
+          p.innerHTML = `<span class="num">${w.num}.</span>`;
+          p.appendChild(document.createTextNode(w.text));
+          root.appendChild(p);
+          const [x0, y0, vw, vh] = w.view;
+          const X = w.axis === "x";
+          const stage = document.createElement("div");
+          stage.className = "stage";
+          root.appendChild(stage);
+          const svg = el(
+            "svg",
+            {
+              role: "img",
+              "aria-label": w.aria,
+              viewBox: `${x0} ${y0} ${vw} ${vh}`,
+            },
+            stage
+          );
+          // Zoom 1 is the old size: the drawing at 1.6x, shrunk to fit the
+          // card. Other zooms scale that size; past the card it scrolls.
+          svg.dataset.base = Math.round(vw * 1.6);
+          sizers.push(svg);
+          const shapes = el(
+            "g",
+            { class: "shapes", fill: "var(--fg)", "fill-rule": "evenodd" },
+            svg
+          );
+          w.fixed.forEach((f) =>
+            el("path", { d: f.d, class: f.cls ? "box" : null }, shapes)
+          );
+          const mover = el("g", { class: "move" }, shapes);
+          const moving = w.moving.map((m) => el("path", { d: m.d }, mover));
+          const slider = document.createElement("input");
+          Object.assign(slider, {
+            type: "range",
+            min: w.range[0],
+            max: w.range[1],
+            step: 0.5,
+          });
+          slider.setAttribute("aria-label", w.text);
+          root.appendChild(slider);
+          const [e0, es] = w.edge;
+          const edge = (v) => e0 + es * v;
+          const set = (v, user) => {
+            v = Math.max(w.range[0], Math.min(w.range[1], v));
+            moving.forEach((path, i) => {
+              const t = w.moving[i].k * v;
+              path.setAttribute(
+                "transform",
+                X ? `translate(${t} 0)` : `translate(0 ${-t})`
+              );
+            });
+            slider.value = v;
+            if (user) {
+              state.u[w.n] = +(+v).toFixed(1);
+              save();
+            }
+          };
+          slider.addEventListener("input", () => set(+slider.value, true));
+          let grab = null;
+          const toAxis = (ev) => {
+            const pt = svg.createSVGPoint();
+            pt.x = ev.clientX;
+            pt.y = ev.clientY;
+            const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+            return X ? q.x : q.y;
+          };
+          mover.addEventListener("pointerdown", (ev) => {
+            grab = toAxis(ev) - edge(+slider.value);
+            mover.setPointerCapture(ev.pointerId);
+          });
+          mover.addEventListener("pointermove", (ev) => {
+            if (grab !== null) set((toAxis(ev) - grab - e0) / es, true);
+          });
+          const end = () => (grab = null);
+          mover.addEventListener("pointerup", end);
+          mover.addEventListener("pointercancel", end);
+          set(state.u[w.n] != null ? state.u[w.n] : w.start, false);
+          return root;
+        }
+        const host = document.getElementById("widgets");
+        D.widgets.forEach((w) => host.appendChild(widget(w)));
+
+        const name = document.getElementById("name");
+        name.value = state.name || "";
+        name.addEventListener("input", () => {
+          state.name = name.value;
+          save();
+        });
+        const squint = document.getElementById("squint");
+        const blur = document.getElementById("blur");
+        const blurOut = document.getElementById("blur-out");
+        const apply = () => {
+          document.documentElement.style.setProperty(
+            "--blur",
+            state.squint ? `${state.blur}px` : "0px"
+          );
+          squint.checked = !!state.squint;
+          blur.value = state.blur;
+          blurOut.textContent = state.squint ? `${state.blur} px` : "off";
+        };
+        // the toggle keeps the last amount; moving the slider turns it on
+        blur.addEventListener("input", () => {
+          state.blur = +blur.value;
+          state.squint = true;
+          save();
+          apply();
+        });
+        squint.addEventListener("change", () => {
+          state.squint = squint.checked;
+          save();
+          apply();
+        });
+        apply();
+
+        const zoom = document.getElementById("zoom");
+        const zoomOut = document.getElementById("zoom-out");
+        const applyZoom = () => {
+          zoom.value = state.zoom;
+          zoomOut.textContent = `${state.zoom}x`;
+          for (const svg of sizers) {
+            const fit = Math.min(+svg.dataset.base, svg.parentNode.clientWidth);
+            svg.style.width = `${Math.round(fit * state.zoom)}px`;
+            // keep the middle of a zoomed picture in view
+            const st = svg.parentNode;
+            st.scrollLeft = (st.scrollWidth - st.clientWidth) / 2;
+          }
+        };
+        zoom.addEventListener("input", () => {
+          state.zoom = +zoom.value;
+          save();
+          applyZoom();
+        });
+        addEventListener("resize", applyZoom);
+        applyZoom();
+
+        const results = () =>
+          [
+            "optical-spacing-survey v2",
+            `name: ${(state.name || "").replace(/\s+/g, " ").trim()}`,
+            `squint: ${state.squint ? `${state.blur}px` : "off"}`,
+            `zoom: ${state.zoom}x`,
+            // how wide the pictures could be drawn: on a narrow screen the 2x copy shrinks
+            `screen: ${innerWidth}px`,
+            ...D.widgets.map(
+              (w) =>
+                `w${w.n} ${w.key} ${state.u[w.n] != null ? (+state.u[w.n]).toFixed(1) : "unset"}`
+            ),
+          ].join("\n");
+        const status = document.getElementById("status");
+        const area = document.getElementById("copy-text");
+        document.getElementById("copy").addEventListener("click", () => {
+          const text = results();
+          const fallback = () => {
+            area.hidden = false;
+            area.value = text;
+            area.focus();
+            area.select();
+            status.textContent = "Copy the text below.";
+          };
+          try {
+            navigator.clipboard.writeText(text).then(() => {
+              area.hidden = true;
+              status.textContent = "Copied.";
+            }, fallback);
+          } catch (e) {
+            fallback();
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

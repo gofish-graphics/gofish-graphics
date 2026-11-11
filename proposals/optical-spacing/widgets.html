@@ -754,16 +754,20 @@ __FIT_SECTION__
     });
 
     // Pasted survey results: "w<n> <key> <value|unset>" lines, plus "name:".
+    // A block's first line names its survey: v1 ("Spacing by eye", these
+    // widgets) or v2 ("part 2", different widgets with their own w ids).
     function parse(text) {
       const u = {};
       let name = "";
+      const v = (text.match(/optical-spacing-survey v(\d+)/) || [0, "1"])[1];
+      if (v !== "1") return { u, name, v };
       text.split(/\r?\n/).forEach((line) => {
         const m = line.trim().match(/^w(\d+)\s+\S+\s+(-?\d+(?:\.\d+)?|unset)$/);
         if (m && m[2] !== "unset") u[+m[1]] = +m[2];
         const n = line.match(/^\s*name:\s*(.*)$/);
         if (n) name = n[1].trim();
       });
-      return { u, name };
+      return { u, name, v };
     }
     const esc = (s) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
     const combinedList = (u) =>
@@ -775,8 +779,12 @@ __FIT_SECTION__
         )
         .join("");
     document.getElementById("sp-paste-go").addEventListener("click", () => {
-      const { u, name } = parse(document.getElementById("sp-paste").value);
+      const { u, name, v } = parse(document.getElementById("sp-paste").value);
       const out = document.getElementById("sp-paste-out");
+      if (v !== "1") {
+        out.innerHTML = `<p class="sp-georgia">That is a result from part ${esc(v)} of the survey, whose widgets are not the ones on this page. It belongs in <code>results/v2/</code>.</p>`;
+        return;
+      }
       const who = esc(name || "Them");
       const set = W.filter((w) => u[w.n] != null);
       if (!set.length) {
