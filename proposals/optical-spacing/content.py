@@ -58,7 +58,7 @@ SECTIONS = [
         id='set-it-yourself',
         title='Set it yourself',
         blocks=[
-            ("raw", read("widgets.html").replace("__WIDGET_DATA__", read("widgets.json")), "The page has an interactive here: drag a square and a triangle to where the gaps look even, and see which spacing model is closest."),
+            ("raw", read("widgets.html").replace("__WIDGET_DATA__", read("widgets.json")), "The page has an interactive here: eight widgets (shapes, a notch, Georgia letters, an icon in a pill, stacked densities) where you drag one shape to where the gaps look even and see which spacing model is closest, per widget and averaged over all the widgets you set."),
         ],
     ),
     dict(

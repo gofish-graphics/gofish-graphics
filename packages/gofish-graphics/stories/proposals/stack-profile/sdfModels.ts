@@ -72,7 +72,7 @@ function edt1(f: Float64Array, n: number) {
   return d;
 }
 /** Distance (px) from each cell to the nearest cell of `mask`. */
-function distTo(mask: Uint8Array, nx: number, ny: number) {
+export function distTo(mask: Uint8Array, nx: number, ny: number) {
   const g = new Float64Array(nx * ny);
   const col = new Float64Array(ny);
   for (let i = 0; i < nx; i++) {

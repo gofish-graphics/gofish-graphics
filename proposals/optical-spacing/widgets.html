@@ -1,8 +1,9 @@
 <p>
-  Move the square, then the triangle, to where the gaps look even to you. Drag
-  the shape or use the slider. Each model predicts the position where its own
-  measure of the two compared gaps is equal; show the predictions when you are
-  ready, and the ranking says which model is closest to you.
+  In each widget, move the one loose shape to where its gaps look even to you.
+  Drag the shape or use the slider. Each model predicts the position where its
+  own measure of the two compared gaps is equal. Show the predictions when you
+  are ready; under each widget, the ranking says which model is closest to you,
+  and the last ranking averages over every widget you have set.
 </p>
 <div class="sp-tools">
   <label
@@ -12,61 +13,29 @@
     ><input type="checkbox" id="sp-squint" /> Squint (blur the shapes)</label
   >
   <button type="button" id="sp-reset">Reset</button>
+  <button type="button" id="sp-copy">Copy my results</button>
+  <span id="sp-copied" class="sp-status" aria-live="polite"></span>
 </div>
-<div class="sp-widget" id="sp-w1">
-  <p class="label">
-    1. Square to triangles. The triangles are fixed 30 px apart.
-  </p>
-  <svg
-    class="sp-svg"
-    role="img"
-    aria-label="A square and three triangles; the square moves"
-  ></svg>
-  <label class="sp-slider"
-    >Square gap <input type="range" min="0" max="90" step="0.5" />
-    <output></output
-  ></label>
-</div>
-<div class="sp-widget" id="sp-w2">
-  <p class="label">
-    2. A triangle between a circle and a square, which are fixed.
-  </p>
-  <svg
-    class="sp-svg"
-    role="img"
-    aria-label="A circle, a triangle and a square; the triangle moves"
-  ></svg>
-  <label class="sp-slider"
-    >Tip gap <input type="range" min="0" max="64" step="0.5" /> <output></output
-  ></label>
-</div>
-<div class="sp-ranks">
-  <div>
-    <p class="label">Closest to you, widget 1</p>
-    <ol id="sp-r1">
-      <li class="sp-empty">Move the square first.</li>
-    </ol>
-  </div>
-  <div>
-    <p class="label">Closest to you, widget 2</p>
-    <ol id="sp-r2">
-      <li class="sp-empty">Move the triangle first.</li>
-    </ol>
-  </div>
-  <div>
-    <p class="label">Both (mean distance)</p>
-    <ol id="sp-r3">
-      <li class="sp-empty">Set both.</li>
-    </ol>
-  </div>
+<textarea id="sp-copy-text" class="sp-copy-text" rows="8" hidden></textarea>
+<div id="sp-widgets"></div>
+<div class="sp-all">
+  <p class="label" id="sp-all-title">All the widgets you set</p>
+  <ol id="sp-all">
+    <li class="sp-empty">Set at least one widget.</li>
+  </ol>
 </div>
 <p class="note">
-  Distances are in px of the shapes' own size (56 px). An asterisk marks a model
-  whose two measures never become equal; its position is where they come
-  closest. A dagger marks a model whose measures are equal only where both are
-  under a third of what it measures for the 30 px strip between A and V: the
-  fillet area on widget 2 never sees more than 15 px of gap next to the circle,
-  so it cannot place the triangle. The tables behind this are computed by
+  Distances are in px of the shapes' own size (56 px). The combined ranking is
+  each model's mean distance over the widgets you set, and the count beside it
+  says how many widgets the mean covers. An asterisk marks a model whose two
+  measures never become equal in a widget; it has no position there, so that
+  widget counts as missing for it, not as a large distance. A dagger marks a
+  model whose measures are equal only where both are under a third of what it
+  measures for a plain strip between two squares at the widget's own scale of
+  gap (30 px for the shapes, Georgia's H to H gap for the letters, 12 px for the
+  pill, 24 px for the densities): there the model sees almost no gap on either
+  side. On the two Georgia widgets, a dashed tick marks Georgia's own spacing
+  (no kerning). The tables behind this are computed by
   <code>widgetRun.ts</code> from the same code as the renders.
 </p>
 <style>
@@ -86,13 +55,32 @@
     color: var(--fg);
     cursor: pointer;
   }
+  .sp-status {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  .sp-copy-text {
+    width: 100%;
+    box-sizing: border-box;
+    font:
+      12px/1.4 ui-monospace,
+      monospace;
+    background: var(--code-bg);
+    color: var(--fg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px;
+  }
   .sp-widget {
-    margin: 10px 0 14px;
+    margin: 14px 0 18px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
   }
   .sp-svg {
     width: 100%;
     height: auto;
     display: block;
+    margin: 0 auto;
     touch-action: none;
     user-select: none;
   }
@@ -101,6 +89,10 @@
   }
   .sp-svg .sp-shapes {
     transition: filter 0.2s;
+  }
+  .sp-svg .sp-box {
+    fill: var(--code-bg);
+    stroke: var(--line);
   }
   .sp-squint .sp-svg .sp-shapes {
     filter: blur(3px);
@@ -116,29 +108,31 @@
     min-width: 0;
   }
   .sp-slider output {
-    min-width: 4.5em;
+    min-width: 7.5em;
     font-variant-numeric: tabular-nums;
     color: var(--muted);
   }
-  .sp-ranks {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 4px 20px;
-  }
-  .sp-ranks ol {
-    margin: 4px 0 8px;
-    padding-left: 1.6em;
+  .sp-widget ol,
+  .sp-all ol {
+    margin: 6px 0 4px;
+    padding-left: 1.8em;
     font-size: 14px;
   }
-  .sp-ranks li {
-    margin: 1px 0;
+  .sp-widget ol {
+    columns: 3 200px;
+    column-gap: 20px;
   }
-  .sp-ranks .sp-empty {
+  .sp-widget li,
+  .sp-all li {
+    margin: 1px 0;
+    break-inside: avoid;
+  }
+  .sp-empty {
     list-style: none;
-    margin-left: -1.6em;
+    margin-left: -1.8em;
     color: var(--muted);
   }
-  .sp-ranks .sp-dot {
+  .sp-dot {
     display: inline-block;
     width: 9px;
     height: 9px;
@@ -146,9 +140,19 @@
     margin-right: 6px;
     vertical-align: 0;
   }
-  .sp-ranks .sp-d {
+  .sp-d,
+  .sp-georgia {
     color: var(--muted);
     font-variant-numeric: tabular-nums;
+  }
+  .sp-georgia {
+    font-size: 14px;
+    margin: 2px 0 0;
+  }
+  .sp-all {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
   }
 </style>
 <script id="sp-data" type="application/json">
@@ -157,7 +161,6 @@
 <script>
   (() => {
     const D = JSON.parse(document.getElementById("sp-data").textContent);
-    const S = D.S;
     const COLORS = [
       "#8c8c8c",
       "#4e79a7",
@@ -169,10 +172,15 @@
       "#edc948",
       "#ff9da7",
     ];
-    const KEY = "stack-profile-spacing-v1";
     const NS = "http://www.w3.org/2000/svg";
-    const state = { u1: null, u2: null, ticks: false, squint: false };
+    const KEY = "optical-spacing-widgets-v2";
+    const state = { u: {}, ticks: false, squint: false };
     try {
+      const old = JSON.parse(
+        localStorage.getItem("stack-profile-spacing-v1") || "{}"
+      );
+      if (old.u1 != null) state.u[1] = old.u1;
+      if (old.u2 != null) state.u[2] = old.u2;
       Object.assign(state, JSON.parse(localStorage.getItem(KEY) || "{}"));
     } catch (e) {}
     const save = () => {
@@ -180,18 +188,19 @@
         localStorage.setItem(KEY, JSON.stringify(state));
       } catch (e) {}
     };
+    const isSet = (w) => state.u[w.n] != null;
 
     /**
      * Where the two measures a and b are equal. Of several crossings, the one
      * where the measures are largest; with none, where they come closest
-     * ("*"). A crossing where both are under a third of what the model
-     * measures for the 30 px strip between A and V is marked "†": the model
-     * sees almost no gap on either side there.
+     * ("*", counted as missing). A crossing where both are under a third of
+     * the model's measure of the widget's reference strip is marked "†".
      */
     function solve(ps, a, b, scale) {
       let best = null;
       for (let i = 0; i + 1 < ps.length; i++) {
         const [d0, d1] = [a[i] - b[i], a[i + 1] - b[i + 1]];
+        if (!isFinite(d0) || !isFinite(d1)) continue;
         if (d0 === 0 || Math.sign(d0) !== Math.sign(d1)) {
           const t = d0 === 0 ? 0 : d0 / (d0 - d1);
           const level = a[i] + t * (a[i + 1] - a[i]);
@@ -199,26 +208,13 @@
             best = { x: ps[i] + t * (ps[i + 1] - ps[i]), level };
         }
       }
-      if (best)
-        return { x: best.x, mark: best.level < scale / 3 ? "\u2020" : "" };
+      if (best) return { x: best.x, mark: best.level < scale / 3 ? "†" : "" };
       let k = 0;
       ps.forEach(
         (_, i) => Math.abs(a[i] - b[i]) < Math.abs(a[k] - b[k]) && (k = i)
       );
       return { x: ps[k], mark: "*" };
     }
-    const scale = (m) => D.m1[m.key].ref;
-    const preds1 = D.models.map((m) =>
-      solve(
-        D.w1.p,
-        D.m1[m.key].gap,
-        D.m1[m.key].gap.map(() => D.m1[m.key].ref),
-        scale(m)
-      )
-    );
-    const preds2 = D.models.map((m) =>
-      solve(D.w2.p, D.m2[m.key].a, D.m2[m.key].b, scale(m))
-    );
 
     const el = (tag, attrs, parent) => {
       const e = document.createElementNS(NS, tag);
@@ -226,181 +222,329 @@
       if (parent) parent.appendChild(e);
       return e;
     };
-    const pts = (ring, dx) =>
-      ring
-        .map(([x, y]) => `${(x + dx).toFixed(2)},${(S - y).toFixed(2)}`)
-        .join(" ");
+    const html = (tag, attrs, parent, text) => {
+      const e = document.createElement(tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      if (text != null) e.textContent = text;
+      if (parent) parent.appendChild(e);
+      return e;
+    };
+    const fmtV = (w, v) =>
+      w.fmt === "shift"
+        ? `${v > 0 ? "+" : ""}${(+v).toFixed(1)} px from Georgia`
+        : `${(v + w.gap0).toFixed(1)} px`;
 
-    function widget(root, cfg) {
-      const svg = root.querySelector("svg");
-      const slider = root.querySelector("input");
-      const out = root.querySelector("output");
-      const [x0, x1] = cfg.range;
-      const lanes = D.models.length;
-      const shapes = el("g", { class: "sp-shapes", fill: "var(--fg)" }, svg);
-      const fit = (n) =>
-        svg.setAttribute("viewBox", `${x0} -6 ${x1 - x0} ${S + 18 + n * 11}`);
-      cfg.fixed.forEach(([ring, dx]) =>
-        el("polygon", { points: pts(ring, dx) }, shapes)
+    function widget(w) {
+      w.preds = D.models.map((m) =>
+        solve(w.p, w.a[m.key], w.b[m.key], w.scale[m.key])
       );
-      const mover = el("polygon", { class: "sp-move" }, shapes);
+      const [v0, v1] = [w.p[0], w.p[w.p.length - 1]];
+      const root = html("div", { class: "sp-widget", id: `sp-w${w.n}` });
+      html("p", { class: "label" }, root, w.title);
+      const svg = el(
+        "svg",
+        { class: "sp-svg", role: "img", "aria-label": w.aria },
+        root
+      );
+      const lab = html("label", { class: "sp-slider" }, root, w.slider + " ");
+      const slider = html(
+        "input",
+        { type: "range", min: v0, max: v1, step: 0.5 },
+        lab
+      );
+      const out = html("output", {}, lab);
+      const ol = html("ol", {}, root);
+      const georgia = w.georgia
+        ? html("p", { class: "sp-georgia" }, root)
+        : null;
+
+      const [x0, y0, vw, vh] = w.view;
+      const X = w.axis === "x";
+      svg.style.maxWidth = `${Math.round((vw + (X ? 0 : 110)) * 1.6)}px`;
+      const shapes = el(
+        "g",
+        { class: "sp-shapes", fill: "var(--fg)", "fill-rule": "evenodd" },
+        svg
+      );
+      w.fixed.forEach((f) =>
+        el("path", f.cls ? { d: f.d, class: f.cls } : { d: f.d }, shapes)
+      );
+      const mover = el("g", { class: "sp-move" }, shapes);
+      const moving = w.moving.map((m) => el("path", { d: m.d }, mover));
+      const [e0, es] = w.edge;
+      const edge = (v) => e0 + es * v;
+      const base = X ? y0 + vh : x0 + vw;
+      el(
+        "line",
+        X
+          ? {
+              x1: x0,
+              x2: x0 + vw,
+              y1: base + 2,
+              y2: base + 2,
+              stroke: "var(--line)",
+            }
+          : {
+              y1: y0,
+              y2: y0 + vh,
+              x1: base + 2,
+              x2: base + 2,
+              stroke: "var(--line)",
+            },
+        svg
+      );
+      const you = el("path", { fill: "var(--fg)" }, svg);
       const ticks = el(
         "g",
         { "font-size": "7", "font-family": "Inter, system-ui, sans-serif" },
         svg
       );
-      el(
-        "line",
-        { x1: x0, x2: x1, y1: S + 4, y2: S + 4, stroke: "var(--line)" },
-        svg
-      );
-      const you = el("path", { fill: "var(--fg)" }, svg);
 
-      // ticks: each model's position of the moving edge, labels in lanes
-      const order = cfg.preds
-        .map((p, i) => ({ i, x: cfg.edge(p.x) }))
-        .sort((a, b) => a.x - b.x);
-      const ends = Array(lanes).fill(-Infinity);
-      let used = 1;
-      order.forEach(({ i, x }) => {
-        const label = D.models[i].label + cfg.preds[i].mark;
-        const w = label.length * 3.7 + 3;
-        const lane = Math.max(
-          0,
-          ends.findIndex((e) => e < x - 1)
-        );
-        used = Math.max(used, lane + 1);
-        ends[lane] = x + w;
-        const y = S + 8 + lane * 11;
-        el(
-          "line",
-          {
-            x1: x,
-            x2: x,
-            y1: S + 1,
-            y2: y + 1,
-            stroke: COLORS[i],
-            "stroke-width": 1.4,
-          },
-          ticks
-        );
-        const t = el("text", { x: x + 1.5, y: y + 6, fill: COLORS[i] }, ticks);
-        t.textContent = label;
-      });
+      // ticks: each model's position of the moving edge (and Georgia's own)
+      const marks = w.preds.map((p, i) => ({
+        at: edge(p.x),
+        label: D.models[i].label + p.mark,
+        color: COLORS[i],
+      }));
+      if (w.georgia)
+        marks.push({
+          at: edge(0),
+          label: "Georgia",
+          color: "var(--muted)",
+          dash: true,
+        });
+      marks.sort((a, b) => a.at - b.at);
+      let extent = 0;
+      if (X) {
+        const ends = [];
+        marks.forEach((m) => {
+          let lane = ends.findIndex((e) => e < m.at - 1);
+          if (lane < 0) lane = ends.length;
+          ends[lane] = m.at + m.label.length * 3.7 + 3;
+          const y = base + 8 + lane * 11;
+          extent = Math.max(extent, lane + 1);
+          el(
+            "line",
+            {
+              x1: m.at,
+              x2: m.at,
+              y1: base + 3,
+              y2: y + 1,
+              stroke: m.color,
+              "stroke-width": 1.4,
+              "stroke-dasharray": m.dash ? "2 1.5" : "none",
+            },
+            ticks
+          );
+          el(
+            "text",
+            { x: m.at + 1.5, y: y + 6, fill: m.color },
+            ticks
+          ).textContent = m.label;
+        });
+      } else {
+        let last = -Infinity;
+        marks.forEach((m) => {
+          const ly = Math.max(m.at + 2.5, last + 8.5);
+          last = ly;
+          extent = Math.max(extent, ly + 3);
+          el(
+            "polyline",
+            {
+              points: `${base + 3},${m.at} ${base + 10},${m.at} ${base + 14},${ly - 2.5}`,
+              fill: "none",
+              stroke: m.color,
+              "stroke-width": 1.2,
+              "stroke-dasharray": m.dash ? "2 1.5" : "none",
+            },
+            ticks
+          );
+          el(
+            "text",
+            { x: base + 16, y: ly, fill: m.color },
+            ticks
+          ).textContent = m.label;
+        });
+      }
+      const fitTicks = (on) => {
+        if (X)
+          svg.setAttribute(
+            "viewBox",
+            `${x0} ${y0} ${vw} ${vh + 12 + (on ? extent * 11 : 0)}`
+          );
+        else
+          svg.setAttribute(
+            "viewBox",
+            `${x0} ${y0} ${vw + (on ? 110 : 12)} ${Math.max(vh, on ? extent - y0 : 0)}`
+          );
+      };
 
-      const fitTicks = (on) => fit(on ? used : 0);
       const set = (v, user) => {
-        v = Math.max(+slider.min, Math.min(+slider.max, v));
-        mover.setAttribute("points", pts(cfg.ring, cfg.at(v)));
-        const e = cfg.edge(v);
-        you.setAttribute("d", `M${e} ${S + 4} l-2.5 4 h5 z`);
+        v = Math.max(v0, Math.min(v1, v));
+        moving.forEach((p, i) => {
+          const t = w.moving[i].k * v;
+          p.setAttribute(
+            "transform",
+            X ? `translate(${t} 0)` : `translate(0 ${-t})`
+          );
+        });
+        const e = edge(v);
+        you.setAttribute(
+          "d",
+          X
+            ? `M${e} ${base + 2} l-2.5 4 h5 z`
+            : `M${base + 2} ${e} l4 -2.5 v5 z`
+        );
         slider.value = v;
-        out.textContent = `${(+v).toFixed(1)} px`;
+        out.textContent = fmtV(w, v);
         if (user) {
-          state[cfg.key] = +(+v).toFixed(1);
+          state.u[w.n] = +(+v).toFixed(1);
           save();
           rank();
         }
       };
       slider.addEventListener("input", () => set(+slider.value, true));
       let grab = null;
-      const toX = (ev) => {
+      const toAxis = (ev) => {
         const p = svg.createSVGPoint();
         p.x = ev.clientX;
         p.y = ev.clientY;
-        return p.matrixTransform(svg.getScreenCTM().inverse()).x;
+        const q = p.matrixTransform(svg.getScreenCTM().inverse());
+        return X ? q.x : q.y;
       };
       mover.addEventListener("pointerdown", (ev) => {
-        grab = toX(ev) - cfg.edge(+slider.value);
+        grab = toAxis(ev) - edge(+slider.value);
         mover.setPointerCapture(ev.pointerId);
       });
       mover.addEventListener("pointermove", (ev) => {
         if (grab === null) return;
-        set(cfg.fromEdge(toX(ev) - grab), true);
+        set((toAxis(ev) - grab - e0) / es, true);
       });
       const end = () => (grab = null);
       mover.addEventListener("pointerup", end);
       mover.addEventListener("pointercancel", end);
-      return { set, ticks, fitTicks, reset: () => set(cfg.start, false) };
-    }
-
-    const sh = D.shapes;
-    const w1 = widget(document.getElementById("sp-w1"), {
-      key: "u1",
-      range: [-S - 96, D.w1.xA2 + S + 4],
-      fixed: [
-        [sh.up, D.w1.xA],
-        [sh.down, D.w1.xV],
-        [sh.up, D.w1.xA2],
-      ],
-      ring: sh.square,
-      at: (p) => D.w1.xA - S - p,
-      edge: (p) => D.w1.xA - p,
-      fromEdge: (x) => D.w1.xA - x,
-      preds: preds1,
-      start: 60,
-    });
-    const w2 = widget(document.getElementById("sp-w2"), {
-      key: "u2",
-      range: [-4, D.w2.xSq + S + 4],
-      fixed: [
-        [sh.circle, 0],
-        [sh.square, D.w2.xSq],
-      ],
-      ring: sh.left,
-      at: (t) => D.w2.xT0 + t,
-      edge: (t) => D.w2.xT0 + t,
-      fromEdge: (x) => x - D.w2.xT0,
-      preds: preds2,
-      start: 50,
-    });
-
-    function list(ol, rows) {
-      ol.innerHTML = "";
-      rows.forEach(({ i, d, note }) => {
-        const li = document.createElement("li");
-        li.innerHTML = `<span class="sp-dot" style="background:${COLORS[i]}"></span>${D.models[i].label}${note} <span class="sp-d">${d.toFixed(1)} px</span>`;
-        ol.appendChild(li);
+      return Object.assign(w, {
+        root,
+        ol,
+        georgia,
+        ticks,
+        fitTicks,
+        set,
+        reset: () => set(w.start, false),
       });
     }
+
+    const host = document.getElementById("sp-widgets");
+    const W = D.widgets.map(widget);
+    W.forEach((w) => host.appendChild(w.root));
+
+    /** Each model's distance from the user's position on one widget, missing ones last. */
+    const ranking = (w) =>
+      w.preds
+        .map((p, i) => ({ i, d: Math.abs(p.x - state.u[w.n]), mark: p.mark }))
+        .sort((a, b) => (a.mark === "*") - (b.mark === "*") || a.d - b.d);
+    const combined = () =>
+      D.models
+        .map((_, i) => {
+          let [sum, n, miss, dag] = [0, 0, 0, 0];
+          W.filter(isSet).forEach((w) => {
+            const p = w.preds[i];
+            if (p.mark === "*") return miss++;
+            sum += Math.abs(p.x - state.u[w.n]);
+            n++;
+            if (p.mark) dag++;
+          });
+          return { i, d: n ? sum / n : Infinity, n, miss, dag };
+        })
+        .sort((a, b) => a.d - b.d || a.miss - b.miss);
+    const dist = (r) =>
+      r.mark === "*" ? "no crossing" : `${r.d.toFixed(1)} px`;
+    const cover = (r) =>
+      `${r.n} widget${r.n === 1 ? "" : "s"}${r.miss ? `, ${r.miss} missing` : ""}${r.dag ? `, † on ${r.dag}` : ""}`;
+    const dot = (i) =>
+      `<span class="sp-dot" style="background:${COLORS[i]}"></span>`;
+
     function rank() {
-      const r = (preds, u) =>
-        preds
-          .map((p, i) => ({ i, d: Math.abs(p.x - u), note: p.mark }))
-          .sort((a, b) => a.d - b.d);
-      const empty = (ol, text) =>
-        (ol.innerHTML = `<li class="sp-empty">${text}</li>`);
-      const [o1, o2, o3] = ["sp-r1", "sp-r2", "sp-r3"].map((id) =>
-        document.getElementById(id)
-      );
-      state.u1 === null
-        ? empty(o1, "Move the square first.")
-        : list(o1, r(preds1, state.u1));
-      state.u2 === null
-        ? empty(o2, "Move the triangle first.")
-        : list(o2, r(preds2, state.u2));
-      if (state.u1 === null || state.u2 === null) empty(o3, "Set both.");
-      else
-        list(
-          o3,
-          D.models
-            .map((_, i) => ({
-              i,
-              d:
-                (Math.abs(preds1[i].x - state.u1) +
-                  Math.abs(preds2[i].x - state.u2)) /
-                2,
-              note: preds1[i].mark || preds2[i].mark,
-            }))
-            .sort((a, b) => a.d - b.d)
-        );
+      W.forEach((w) => {
+        if (!isSet(w)) {
+          w.ol.innerHTML = `<li class="sp-empty">Not set yet.</li>`;
+          if (w.georgia) w.georgia.textContent = "";
+          return;
+        }
+        w.ol.innerHTML = ranking(w)
+          .map(
+            (r) =>
+              `<li>${dot(r.i)}${D.models[r.i].label}${r.mark} <span class="sp-d">${dist(r)}</span></li>`
+          )
+          .join("");
+        if (w.georgia)
+          w.georgia.textContent = `Georgia's own spacing is ${Math.abs(state.u[w.n]).toFixed(1)} px from yours.`;
+      });
+      const set = W.filter(isSet).length;
+      document.getElementById("sp-all-title").textContent =
+        `All the widgets you set (${set} of ${W.length}), mean distance`;
+      const ol = document.getElementById("sp-all");
+      ol.innerHTML = set
+        ? combined()
+            .map((r) =>
+              r.n
+                ? `<li>${dot(r.i)}${D.models[r.i].label} <span class="sp-d">${r.d.toFixed(1)} px (${cover(r)})</span></li>`
+                : `<li>${dot(r.i)}${D.models[r.i].label} <span class="sp-d">no crossing on any (${r.miss} missing)</span></li>`
+            )
+            .join("")
+        : `<li class="sp-empty">Set at least one widget.</li>`;
     }
+
+    function summary() {
+      const lines = ["Optical spacing widgets, my results"];
+      W.forEach((w) => {
+        if (!isSet(w)) return lines.push(`${w.n}. not set`);
+        lines.push(`${w.n}. ${w.slider}: ${fmtV(w, state.u[w.n])}`);
+        lines.push(
+          "   " +
+            ranking(w)
+              .map(
+                (r) =>
+                  `${D.models[r.i].label}${r.mark} ${r.mark === "*" ? "no crossing" : r.d.toFixed(1)}`
+              )
+              .join(", ")
+        );
+      });
+      lines.push(
+        `All set widgets (${W.filter(isSet).length} of ${W.length}), mean px:`
+      );
+      combined().forEach((r, k) =>
+        lines.push(
+          `   ${k + 1}. ${D.models[r.i].label} ${r.n ? r.d.toFixed(1) : "none"} (${cover(r)})`
+        )
+      );
+      return lines.join("\n");
+    }
+    const status = document.getElementById("sp-copied");
+    const area = document.getElementById("sp-copy-text");
+    document.getElementById("sp-copy").addEventListener("click", () => {
+      const text = summary();
+      const fallback = () => {
+        area.hidden = false;
+        area.value = text;
+        area.select();
+        status.textContent = "Copy the text below.";
+      };
+      try {
+        navigator.clipboard.writeText(text).then(() => {
+          area.hidden = true;
+          status.textContent = "Copied.";
+        }, fallback);
+      } catch (e) {
+        fallback();
+      }
+    });
 
     const ticksBox = document.getElementById("sp-ticks");
     const squintBox = document.getElementById("sp-squint");
     const section = ticksBox.closest(".card") || document.body;
     const apply = () => {
-      [w1, w2].forEach((w) => {
+      W.forEach((w) => {
         w.ticks.style.display = state.ticks ? "" : "none";
         w.fitTicks(state.ticks);
       });
@@ -419,16 +563,16 @@
       apply();
     });
     document.getElementById("sp-reset").addEventListener("click", () => {
-      state.u1 = state.u2 = null;
+      state.u = {};
       state.ticks = state.squint = false;
       save();
-      w1.reset();
-      w2.reset();
+      W.forEach((w) => w.reset());
+      area.hidden = true;
+      status.textContent = "";
       apply();
       rank();
     });
-    state.u1 === null ? w1.reset() : w1.set(state.u1, false);
-    state.u2 === null ? w2.reset() : w2.set(state.u2, false);
+    W.forEach((w) => (isSet(w) ? w.set(state.u[w.n], false) : w.reset()));
     apply();
     rank();
   })();
