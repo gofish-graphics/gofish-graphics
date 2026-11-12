@@ -249,6 +249,18 @@ _Georgia, area model, emulated: margin 3 px a flat side, depth 20% of the x-heig
 
 **Sum or max.** The precedents disagree about what a side's number means. In SwiftUI and CSS vertical margins each side states the minimum gap it needs, and the gap is the larger of the two. In HT Letterspacer and CSS horizontal margins each side contributes its own white, and the gap is the total. For margins measured from an outline, sum is the natural reading; for a declared minimum such as contact padding, max is. This is a decision.
 
+## Whitespace as one region
+
+Josh, on the notch row of survey 2: "I feel like I'm literally seeing the whitespace between the objects as a single object." That fits every candidate. What people match is the size of one white region between two shapes, and the strategies differ only in where that region's edges are. The figure takes the notch row (square, L, triangle) with the triangle where Josh set it, a box gap of 20.5 px.
+
+![Left: the white between the L and the triangle over the band the shapes share, beside the reference gap from the square to the L. Middle: the same white split at the L's convex hull (dashed) into the counter and the gap. Right: the part each strategy counts, and where it would put the triangle to make that part match the reference.](img/whitespace-regions.png)
+
+_Left: the white between the L and the triangle over the band the shapes share, beside the reference gap from the square to the L. Middle: the same white split at the L's convex hull (dashed) into the counter and the gap. Right: the part each strategy counts, and where it would put the triangle to make that part match the reference._
+
+Type designers call the white inside a letter's own outline, such as the inside of an n or the notch of an L, its **counter**. Here the counter is the white inside the L's convex hull, and the **gap** is the white between the two hulls. Box counts the white between the bounding boxes, which leaves out the notch and the white beside the tip. Contact counts only the narrowest line. Hull counts the gap and none of the counter, mean counts the whole region, and a partial hull counts the gap and some of the counter.
+
+So the open question is where the region ends. Inside a notch, it could end at the outline, at the hull, or somewhere between. On the open sides, above and below the triangle's tip, it could end at the band the shapes share, or shrink toward the tip. Josh's answer, 20.5, sits past every outline-based candidate here (the closest, hull, puts the triangle at 4.8), so on this row he left more white than any of them would. If he matched the size of one region, that region leaves out part of the gap too, such as the white above and below the tip. Survey 2 tests this with more people.
+
 ## Blurred outlines, optical centering and insets
 
 #### Blurred outlines: who does this
