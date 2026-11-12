@@ -142,7 +142,7 @@ So of the 24 specs that Vega-Lite can roughly express, a little under half are v
 
 The same is true of programs in general: few syntactically valid programs type-check. The useful reading is the one Haskell, Rust and Lean users know. The type of the data constrains the valid specs so strongly that a chart could nearly be synthesized from it: enumerate the operator compositions, let the types prune them, then rank what is left. Mackinlay's APT split the problem the same way, into expressiveness and effectiveness, over a fixed list of chart kinds.
 
-These counts were worked by hand from the rules, not run. The Vega-Lite column is from its documented behavior, not from running the specs, and "roughly express" covers some stretching for nested stacks.
+These counts were worked by hand from the rules, not run. The 24 specs Vega-Lite can express were compiled and drawn with Vega-Lite 5.23, and none printed a warning. Its pictures show the same totals as GoFish's. The single bar of nested stacks is a rough equivalent.
 
 All 32 are rendered below, as GoFish draws them today with undeclared columns, each with what its bar or axis really shows (the review page's "All 32" tab hides the verdicts until asked).
 
@@ -288,6 +288,47 @@ Why C. It keeps #1198's single declaration and its coverage of unforeseen keys. 
 What C makes awkward. A user who wants the draft's derivations (a running sum of a flow is a running total, and the first difference of a running total is a flow) gets them only if a later example forces a declared `Trait.snapshot({ along })`. I would wait for that example. The waterfall chart is the likely one.
 
 Runner-up: A, if Josh wants each kind visible in the schema. What would change my pick: a real chart that needs the snapshot declared to draw correctly, not only to explain an error.
+
+### `over` and `along`: two spellings of one check
+
+Along an ordered key, a value is one of two things, and they are opposites.
+
+|           | Attached to                                        | You can                           | Typical mark                         | Word    |
+| --------- | -------------------------------------------------- | --------------------------------- | ------------------------------------ | ------- |
+| Extensive | an interval of the key (sales during March)        | add intervals, bin them           | bars, areas where area is the amount | `over`  |
+| Snapshot  | a point of the key (inventory at the end of March) | read between points, connect them | lines                                | `along` |
+
+An extensive value is a measure on regions of the key. A snapshot is a function of points on it. Measures add and functions connect. An averaged value such as a price is also a function of points, which is why it connects and does not add. So "a reading along month" and "does not sum over month" are one fact seen from two sides.
+
+For inventory the distinctive key is month, and `canSum({ over: "warehouse" })` names the other one. When the table's `key` is declared, the two forms are complements:
+
+```js
+// names where it adds
+stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+
+// names where it is a reading, and adds everywhere else
+stock: { unit: Items, traits: [Trait.canSum(), Trait.snapshot({ along: "month" })] },
+```
+
+They differ on a key nobody foresaw, such as `product`:
+
+- With `over: "warehouse"`, the new key is not summable. That is wrong for inventory, which adds over products.
+- With `along: "month"`, the new key is summable. That matches Lenz and Shoshani's stock, which sums along every dimension except time.
+
+`over` is still the right form when the value belongs to an entity and no ordered key is involved, such as students in joint programs counted in two departments.
+
+"Connected" already means something about the key alone: `month` has `HasOrder`, so marks along it can be joined. `along` is about the field and the key together: the value is a reading at each point. An honest line needs both.
+
+Josh (11-12): two spellings seem fine, and more examples are needed to tell them apart. Examples to collect before deciding:
+
+- population per country per year (a snapshot along year that adds over countries)
+- account balances per account per month
+- open bugs per team per day, binned by week
+- students in joint programs per department (an entity, no ordered key)
+- lake area copied onto catch rows by a join (a copy, no ordered key)
+- river length across the countries it crosses (overlap along a key that is not time)
+- inventory with a `product` key added later (the unforeseen key)
+- a table that is already aggregated, with no entity column
 
 ### A key made of more than one field
 
@@ -729,7 +770,8 @@ Each step removes a wrong chart that renders today. Why this shape, against the 
 
 1. Is `Trait.canSum({ over })` the one declaration for additivity (approach C), or do you want each kind declared (approach A)?
 2. Settled 11-12: the key word is `over`, not `by` or #1198's `entity`. Line and ribbon use `along`, so there is no clash.
-3. Should a column that does not add up over an ordered key get a default fold (`.last()`), or an error that offers the choices? I recommend the error.
+3. Open: a snapshot can be declared by where it adds (`canSum({ over })`) or by where it is a reading (`snapshot({ along })`). Two spellings seem fine for now. Which examples tell them apart?
+   Also: Should a column that does not add up over an ordered key get a default fold (`.last()`), or an error that offers the choices? I recommend the error.
 4. Settled 11-12: operations are spelled as the trait, `Trait.canSum` and `Trait.canAverage`. Open: do the value-structure words stay adjectives (`ordered`, `cyclic`, `diverging`), and should today's `Trait.summable()` be renamed to match?
 5. Is `key` a chart option beside `schema`, or part of the schema?
 6. Do plain numbers have `HasZero` by default, with units such as °C opting out through a difference unit?

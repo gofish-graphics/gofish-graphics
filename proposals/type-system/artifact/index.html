@@ -808,6 +808,25 @@
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
   }
+  .shots {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+  .shot-fig {
+    margin: 0;
+    min-width: 0;
+  }
+  .shot-fig figcaption {
+    font: 600 0.75rem var(--f-display);
+    color: var(--muted);
+    margin-top: 2px;
+  }
+  @media (min-width: 561px) {
+    [data-panel="grid"].vl-on .shots {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
   .vl-part pre.code {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -1098,9 +1117,10 @@
         effectiveness, over a fixed list of chart kinds.
       </p>
       <p>
-        These counts were worked by hand from the rules, not run. The Vega-Lite
-        column is from its documented behavior, not from running the specs, and
-        "roughly express" covers some stretching for nested stacks.
+        These counts were worked by hand from the rules, not run. The 24 specs
+        Vega-Lite can express were compiled and drawn with Vega-Lite 5.23, and
+        none printed a warning. Its pictures show the same totals as GoFish's.
+        The single bar of nested stacks is a rough equivalent.
       </p>
       <p><a href="#grid">See all 32 rendered</a></p>
       <h2>Examples</h2>
@@ -1919,8 +1939,9 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
         </p>
       </div>
       <p class="small only-vl" hidden>
-        Pictures are GoFish's renders of the same spec. The Vega-Lite specs were
-        not run.
+        Each cell shows GoFish's render and Vega-Lite 5.23's render of the JSON
+        below it, drawn by vega 5.33 from the same 18 rows. Neither printed a
+        warning.
       </p>
       <div class="grid-block">
         <h3>
@@ -1947,12 +1968,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">month outside, warehouse inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/sold-month-1.png"
-              ><img
-                src="img/grid/sold-month-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = sold'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/sold-month-1.png"
+                  ><img
+                    src="img/grid/sold-month-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = sold'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/sold-month-1.svg"
+                  ><img
+                    src="img/vl/sold-month-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -1972,6 +2007,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "y": {
@@ -2027,12 +2063,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/sold-month-3.png"
-              ><img
-                src="img/grid/sold-month-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = sold'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/sold-month-3.png"
+                  ><img
+                    src="img/grid/sold-month-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = sold'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/sold-month-3.svg"
+                  ><img
+                    src="img/vl/sold-month-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -2053,6 +2103,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "xOffset": { "field": "warehouse" },
@@ -2076,12 +2127,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/sold-month-4.png"
-              ><img
-                src="img/grid/sold-month-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = sold'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/sold-month-4.png"
+                  ><img
+                    src="img/grid/sold-month-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = sold'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/sold-month-4.svg"
+                  ><img
+                    src="img/vl/sold-month-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2122,12 +2187,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">warehouse outside, month inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/sold-warehouse-1.png"
-              ><img
-                src="img/grid/sold-warehouse-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = sold'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/sold-warehouse-1.png"
+                  ><img
+                    src="img/grid/sold-warehouse-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = sold'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/sold-warehouse-1.svg"
+                  ><img
+                    src="img/vl/sold-warehouse-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2156,6 +2235,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -2202,12 +2282,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/sold-warehouse-3.png"
-              ><img
-                src="img/grid/sold-warehouse-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = sold'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/sold-warehouse-3.png"
+                  ><img
+                    src="img/grid/sold-warehouse-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = sold'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/sold-warehouse-3.svg"
+                  ><img
+                    src="img/vl/sold-warehouse-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -2230,13 +2324,17 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "warehouse",
       "type": "nominal"
     },
-    "xOffset": { "field": "month" },
+    "xOffset": {
+      "field": "month",
+      "sort": null
+    },
     "y": {
       "field": "sold",
       "type": "quantitative"
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -2251,12 +2349,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/sold-warehouse-4.png"
-              ><img
-                src="img/grid/sold-warehouse-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = sold'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/sold-warehouse-4.png"
+                  ><img
+                    src="img/grid/sold-warehouse-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = sold'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/sold-warehouse-4.svg"
+                  ><img
+                    src="img/vl/sold-warehouse-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2281,7 +2393,10 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "sold",
       "type": "quantitative"
     },
-    "color": { "field": "month" },
+    "color": {
+      "field": "month",
+      "sort": null
+    },
     "detail": { "field": "warehouse" }
   }
 }</code></pre>
@@ -2329,12 +2444,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">month outside, warehouse inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/stock-month-1.png"
-              ><img
-                src="img/grid/stock-month-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = stock'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/stock-month-1.png"
+                  ><img
+                    src="img/grid/stock-month-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = stock'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/stock-month-1.svg"
+                  ><img
+                    src="img/vl/stock-month-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2354,6 +2483,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "y": {
@@ -2409,12 +2539,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/stock-month-3.png"
-              ><img
-                src="img/grid/stock-month-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = stock'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/stock-month-3.png"
+                  ><img
+                    src="img/grid/stock-month-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = stock'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/stock-month-3.svg"
+                  ><img
+                    src="img/vl/stock-month-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -2435,6 +2579,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "xOffset": { "field": "warehouse" },
@@ -2458,12 +2603,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/stock-month-4.png"
-              ><img
-                src="img/grid/stock-month-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = stock'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/stock-month-4.png"
+                  ><img
+                    src="img/grid/stock-month-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = stock'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/stock-month-4.svg"
+                  ><img
+                    src="img/vl/stock-month-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2504,12 +2663,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">warehouse outside, month inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/stock-warehouse-1.png"
-              ><img
-                src="img/grid/stock-warehouse-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = stock'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/stock-warehouse-1.png"
+                  ><img
+                    src="img/grid/stock-warehouse-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = stock'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/stock-warehouse-1.svg"
+                  ><img
+                    src="img/vl/stock-warehouse-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2538,6 +2711,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -2584,12 +2758,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/stock-warehouse-3.png"
-              ><img
-                src="img/grid/stock-warehouse-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = stock'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/stock-warehouse-3.png"
+                  ><img
+                    src="img/grid/stock-warehouse-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = stock'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/stock-warehouse-3.svg"
+                  ><img
+                    src="img/vl/stock-warehouse-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -2612,13 +2800,17 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "warehouse",
       "type": "nominal"
     },
-    "xOffset": { "field": "month" },
+    "xOffset": {
+      "field": "month",
+      "sort": null
+    },
     "y": {
       "field": "stock",
       "type": "quantitative"
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -2633,12 +2825,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/stock-warehouse-4.png"
-              ><img
-                src="img/grid/stock-warehouse-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = stock'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/stock-warehouse-4.png"
+                  ><img
+                    src="img/grid/stock-warehouse-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = stock'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/stock-warehouse-4.svg"
+                  ><img
+                    src="img/vl/stock-warehouse-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2663,7 +2869,10 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "stock",
       "type": "quantitative"
     },
-    "color": { "field": "month" },
+    "color": {
+      "field": "month",
+      "sort": null
+    },
     "detail": { "field": "warehouse" }
   }
 }</code></pre>
@@ -2708,12 +2917,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">month outside, warehouse inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/price-month-1.png"
-              ><img
-                src="img/grid/price-month-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = price'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/price-month-1.png"
+                  ><img
+                    src="img/grid/price-month-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = price'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/price-month-1.svg"
+                  ><img
+                    src="img/vl/price-month-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2733,6 +2956,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "y": {
@@ -2788,12 +3012,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/price-month-3.png"
-              ><img
-                src="img/grid/price-month-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = price'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/price-month-3.png"
+                  ><img
+                    src="img/grid/price-month-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = price'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/price-month-3.svg"
+                  ><img
+                    src="img/vl/price-month-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -2814,6 +3052,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "xOffset": { "field": "warehouse" },
@@ -2837,12 +3076,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/price-month-4.png"
-              ><img
-                src="img/grid/price-month-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = price'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/price-month-4.png"
+                  ><img
+                    src="img/grid/price-month-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = price'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/price-month-4.svg"
+                  ><img
+                    src="img/vl/price-month-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2883,12 +3136,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">warehouse outside, month inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/price-warehouse-1.png"
-              ><img
-                src="img/grid/price-warehouse-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = price'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/price-warehouse-1.png"
+                  ><img
+                    src="img/grid/price-warehouse-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = price'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/price-warehouse-1.svg"
+                  ><img
+                    src="img/vl/price-warehouse-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -2917,6 +3184,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -2962,12 +3230,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/price-warehouse-3.png"
-              ><img
-                src="img/grid/price-warehouse-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = price'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/price-warehouse-3.png"
+                  ><img
+                    src="img/grid/price-warehouse-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = price'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/price-warehouse-3.svg"
+                  ><img
+                    src="img/vl/price-warehouse-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -2990,13 +3272,17 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "warehouse",
       "type": "nominal"
     },
-    "xOffset": { "field": "month" },
+    "xOffset": {
+      "field": "month",
+      "sort": null
+    },
     "y": {
       "field": "price",
       "type": "quantitative"
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -3011,12 +3297,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/price-warehouse-4.png"
-              ><img
-                src="img/grid/price-warehouse-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = price'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/price-warehouse-4.png"
+                  ><img
+                    src="img/grid/price-warehouse-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = price'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/price-warehouse-4.svg"
+                  ><img
+                    src="img/vl/price-warehouse-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -3041,7 +3341,10 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "price",
       "type": "quantitative"
     },
-    "color": { "field": "month" },
+    "color": {
+      "field": "month",
+      "sort": null
+    },
     "detail": { "field": "warehouse" }
   }
 }</code></pre>
@@ -3086,12 +3389,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">month outside, warehouse inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/temp-month-1.png"
-              ><img
-                src="img/grid/temp-month-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = temp'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/temp-month-1.png"
+                  ><img
+                    src="img/grid/temp-month-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = temp'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/temp-month-1.svg"
+                  ><img
+                    src="img/vl/temp-month-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -3111,6 +3428,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "y": {
@@ -3166,12 +3484,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/temp-month-3.png"
-              ><img
-                src="img/grid/temp-month-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = temp'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/temp-month-3.png"
+                  ><img
+                    src="img/grid/temp-month-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = temp'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/temp-month-3.svg"
+                  ><img
+                    src="img/vl/temp-month-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -3192,6 +3524,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   "encoding": {
     "x": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     },
     "xOffset": { "field": "warehouse" },
@@ -3216,12 +3549,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/temp-month-4.png"
-              ><img
-                src="img/grid/temp-month-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = temp'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/temp-month-4.png"
+                  ><img
+                    src="img/grid/temp-month-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = temp'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/temp-month-4.svg"
+                  ><img
+                    src="img/vl/temp-month-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -3262,12 +3609,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <h4 class="grid-row">warehouse outside, month inside</h4>
           <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
-            <a class="shot grid-shot" href="img/grid/temp-warehouse-1.png"
-              ><img
-                src="img/grid/temp-warehouse-1.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = temp'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/temp-warehouse-1.png"
+                  ><img
+                    src="img/grid/temp-warehouse-1.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = temp'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/temp-warehouse-1.svg"
+                  ><img
+                    src="img/vl/temp-warehouse-1.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -3296,6 +3657,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -3341,12 +3703,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
-            <a class="shot grid-shot" href="img/grid/temp-warehouse-3.png"
-              ><img
-                src="img/grid/temp-warehouse-3.png"
-                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = temp'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/temp-warehouse-3.png"
+                  ><img
+                    src="img/grid/temp-warehouse-3.png"
+                    alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = temp'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/temp-warehouse-3.svg"
+                  ><img
+                    src="img/vl/temp-warehouse-3.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre class="code"><code class="language-javascript">.flow(
@@ -3369,13 +3745,17 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "warehouse",
       "type": "nominal"
     },
-    "xOffset": { "field": "month" },
+    "xOffset": {
+      "field": "month",
+      "sort": null
+    },
     "y": {
       "field": "temp",
       "type": "quantitative"
     },
     "color": {
       "field": "month",
+      "sort": null,
       "type": "nominal"
     }
   }
@@ -3391,12 +3771,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
           <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
-            <a class="shot grid-shot" href="img/grid/temp-warehouse-4.png"
-              ><img
-                src="img/grid/temp-warehouse-4.png"
-                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = temp'
-                loading="lazy"
-            /></a>
+            <div class="shots">
+              <figure class="shot-fig">
+                <a class="shot grid-shot" href="img/grid/temp-warehouse-4.png"
+                  ><img
+                    src="img/grid/temp-warehouse-4.png"
+                    alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = temp'
+                    loading="lazy"
+                /></a>
+                <figcaption class="only-vl" hidden>GoFish</figcaption>
+              </figure>
+              <figure class="shot-fig only-vl" hidden>
+                <a class="shot grid-shot" href="img/vl/temp-warehouse-4.svg"
+                  ><img
+                    src="img/vl/temp-warehouse-4.svg"
+                    alt="Vega-Lite 5.23 render of the spec below"
+                    loading="lazy"
+                /></a>
+                <figcaption>Vega-Lite 5.23</figcaption>
+              </figure>
+            </div>
             <div class="pair">
               <div data-lang="js">
                 <pre
@@ -3421,7 +3815,10 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       "field": "temp",
       "type": "quantitative"
     },
-    "color": { "field": "month" },
+    "color": {
+      "field": "month",
+      "sort": null
+    },
     "detail": { "field": "warehouse" }
   }
 }</code></pre>
@@ -3870,6 +4267,113 @@ response: Unit({
             </div>
           </div>
         </div>
+        <h3>over and along: two spellings of one check</h3>
+        <p>
+          Along an ordered key, a value is one of two things, and they are
+          opposites.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">Attached to</th>
+                <th scope="col">You can</th>
+                <th scope="col">Typical mark</th>
+                <th scope="col">Word</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Extensive</th>
+                <td>an interval of the key (sales during March)</td>
+                <td>add intervals, bin them</td>
+                <td>bars, areas where area is the amount</td>
+                <td><code>over</code></td>
+              </tr>
+              <tr>
+                <th scope="row">Snapshot</th>
+                <td>a point of the key (inventory at the end of March)</td>
+                <td>read between points, connect them</td>
+                <td>lines</td>
+                <td><code>along</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          An extensive value is a measure on regions of the key. A snapshot is a
+          function of points on it. Measures add and functions connect. An
+          averaged value such as a price is also a function of points, which is
+          why it connects and does not add. So "a reading along month" and "does
+          not sum over month" are one fact seen from two sides.
+        </p>
+        <p>
+          For inventory the distinctive key is month, and
+          <code>canSum({ over: "warehouse" })</code> names the other one. When
+          the table's <code>key</code> is declared, the two forms are
+          complements:
+        </p>
+        <pre
+          class="code"
+        ><code class="language-javascript">// names where it adds
+stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+
+// names where it is a reading, and adds everywhere else
+stock: { unit: Items, traits: [Trait.canSum(), Trait.snapshot({ along: "month" })] },</code></pre>
+        <p>
+          They differ on a key nobody foresaw, such as <code>product</code>:
+        </p>
+        <ul>
+          <li>
+            With <code>over: "warehouse"</code>, the new key is not summable.
+            That is wrong for inventory, which adds over products.
+          </li>
+          <li>
+            With <code>along: "month"</code>, the new key is summable. That
+            matches Lenz and Shoshani's stock, which sums along every dimension
+            except time.
+          </li>
+        </ul>
+        <p>
+          <code>over</code> is still the right form when the value belongs to an
+          entity and no ordered key is involved, such as students in joint
+          programs counted in two departments.
+        </p>
+        <p>
+          "Connected" already means something about the key alone:
+          <code>month</code> has <code>HasOrder</code>, so marks along it can be
+          joined. <code>along</code> is about the field and the key together:
+          the value is a reading at each point. An honest line needs both.
+        </p>
+        <p>
+          Josh (11-12): two spellings seem fine, and more examples are needed to
+          tell them apart. Examples to collect before deciding:
+        </p>
+        <ul>
+          <li>
+            population per country per year (a snapshot along year that adds
+            over countries)
+          </li>
+          <li>account balances per account per month</li>
+          <li>open bugs per team per day, binned by week</li>
+          <li>
+            students in joint programs per department (an entity, no ordered
+            key)
+          </li>
+          <li>
+            lake area copied onto catch rows by a join (a copy, no ordered key)
+          </li>
+          <li>
+            river length across the countries it crosses (overlap along a key
+            that is not time)
+          </li>
+          <li>
+            inventory with a <code>product</code> key added later (the
+            unforeseen key)
+          </li>
+          <li>a table that is already aggregated, with no entity column</li>
+        </ul>
         <h3>A key made of more than one field</h3>
         <p>
           <code>over</code> takes a list, and the rule is about the tuple: a sum
