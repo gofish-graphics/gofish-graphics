@@ -39,6 +39,12 @@ def ts_verbatim(label, code):
     return ("raw", page, f"{label}:\n\n```ts\n{code}\n```")
 
 
+def swift_verbatim(label, code):
+    """Swift from another framework's docs, written out by hand in its style."""
+    page = f'<p class="label">{label}</p><pre class="code"><code class="language-swift">{_html.escape(code)}</code></pre>'
+    return ("raw", page, f"{label}:\n\n```swift\n{code}\n```")
+
+
 TITLE = "Stacking Areas"
 H1 = "Stacking areas and densities"
 
@@ -53,6 +59,7 @@ SUMMARY = [
     "A stack's <code>baseline</code> option chooses where its own 0 is: <code>Baseline.start()</code>, <code>.end()</code>, <code>.middle()</code>, <code>.wiggle()</code> or <code>.at(part, fraction)</code>. Each gives every cross-section an offset and never changes a length. <code>spread</code> takes it too, except <code>wiggle</code>; the strongest of four rendered examples is a Likert visualization with gaps between its segments. It does not replace <code>anchor</code>, which is a choice per pair of children.",
     "<code>StackOrigin</code>'s <code>mirrored</code> flag does not need to be stored. Whether an axis labels distances from 0 follows from the parts (every part is a nonnegative amount), so the stack can compute it, and <code>Baseline.at(part, fraction)</code> is all that <code>Trait.diverging</code> desugars to.",
     "A density is two channels of one mark read at one parameter t, <code>ribbon({ x: mass.support(), h: mass.density() })</code>, over a <code>Dist</code> type with typed methods. <code>partition</code> restricts the function to each cell, which draws the croissant with no grid and no <code>intersect</code>. A custom density is a <code>reduce</code> that returns a Dist, <code>reduce((xs) =&gt; kde(xs))</code>. Any other function is <code>fun(f, { domain })</code>, after Chebfun and Julia's <code>Fun</code>. Nothing is called <code>fn</code>.",
+    "A <code>reduce</code> may return any value, and one rule, <b>lifting</b>, turns it into an expression by its shape: a number into one value per group, a function value into one function per group, and a record into one method per member. A Dist is such a record, and so are a box plot's summary numbers, <code>s.lo()</code> and <code>s.hi()</code>. A channel takes only the two leaves.",
     "Before the scale factor σ is solved, a node can report only a box. The proposal gives every geometry query a claim form, a function of σ, so a stack can claim room by its cross-sections and <code>pack</code> can fit itself to its room (#967). Each claim is a closed form where one exists. Whether sizing may also run layout, for the cases with no closed form, is open.",
     "A <code>spread</code> could read the same cross-sections to place shapes by their outlines; how gaps should be measured so they look equal is designed on its own page, <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a>.",
 ]
@@ -573,6 +580,44 @@ SECTIONS = [
             ("p", """<p>So <code>alignment: \"start\" | \"middle\" | \"end\"</code> is a shorthand for giving every child the same baseline. <code>baseline</code> is the general form, because each row can choose a different point (the diverging bars above), and because the shared 0 is passed up to the parent, where the alignment form lines the children up but does not make that line the parent's own 0 (read from <code>constraints/align.ts</code> and <code>localAnchorPoint</code> in <code>ast/dims.ts</code>, not rendered). Nothing is proposed to change in <code>alignment</code>.</p>
 <p><b><code>anchor</code> itself.</b> Its future is on the <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a> page, where the earlier idea was that a pitch spacing absorbs it.</p>
 <p><b>The per-x spelling.</b> With today's per-x form, <code>stack({ baseline: Baseline.middle() })</code> inside each x column, plus the parent's baseline alignment, already gives the centered stack, because each column's offset depends only on that column. Only <code>wiggle</code> needs the whole series, because each offset depends on the neighbors.</p>"""),
+            ("p", """<h4>Precedent: alignment lines in UI frameworks</h4>
+<p>UI layout systems have the same idea under other names: an alignment guide, an alignment line, a baseline, a reference point. Each row was read from the current official docs (or, for TeX, from Eijkhout's <i>TeX by Topic</i>); the links are in the last column. A claim the docs did not confirm is marked \"not checked\".</p>
+<div class="table-wrap"><table>
+<tr><th>Framework</th><th>The line</th><th>Who declares it</th><th>Does it pass up to the parent</th><th>Source</th></tr>
+<tr><td>SwiftUI</td><td>Named alignment guides: <code>.leading</code>, <code>.center</code>, <code>.trailing</code> on the horizontal axis, <code>.top</code>, <code>.bottom</code>, <code>.firstTextBaseline</code> and others on the vertical axis, or a custom one: an <code>AlignmentID</code> with <code>defaultValue(in:)</code></td><td>Every view has a default value for every guide. The stack names the guide it aligns on, <code>HStack(alignment: .firstThird)</code>, and <code>.alignmentGuide(g) { d in ... }</code> on a child overrides that child's value</td><td>Yes. A custom <code>Layout</code> that does not say otherwise \"merges the subviews' guides\", and the docs' nested example sets a guide on a <code>Text</code> inside a <code>VStack</code> that the outer <code>HStack</code> lines up. The docs do not say how the values are merged</td><td><a href="https://developer.apple.com/documentation/swiftui/alignmentid">AlignmentID</a>, <a href="https://developer.apple.com/documentation/swiftui/horizontalalignment">HorizontalAlignment</a>, <a href="https://developer.apple.com/documentation/swiftui/layout/explicitalignment(of:in:proposal:subviews:cache:)-8ofeu">Layout.explicitAlignment</a>, <a href="https://developer.apple.com/documentation/swiftui/aligning-views-across-stacks">Aligning views across stacks</a></td></tr>
+<tr><td>Jetpack Compose</td><td><code>AlignmentLine</code>: <code>FirstBaseline</code> and <code>LastBaseline</code> (text provides them), or a custom <code>HorizontalAlignmentLine</code> or <code>VerticalAlignmentLine</code> with a merger</td><td>A layout reports its lines in <code>layout(width, height, alignmentLines)</code>, and a parent reads <code>placeable[line]</code>. A child of a <code>Row</code> joins with <code>Modifier.alignByBaseline()</code> or <code>alignBy(line)</code></td><td>Yes, automatically: a line \"will be automatically inherited by the layout's parent, which will offset the value by the position of the child\". Values from several children are combined by the merger (the docs' examples use min and max). A layout that sets the line itself wins</td><td><a href="https://developer.android.com/reference/kotlin/androidx/compose/ui/layout/AlignmentLine">AlignmentLine</a>, <a href="https://developer.android.com/develop/ui/compose/layouts/alignment-lines">Alignment lines</a>, <a href="https://developer.android.com/reference/kotlin/androidx/compose/foundation/layout/RowScope">RowScope</a></td></tr>
+<tr><td>CSS flexbox</td><td>A first and a last baseline set</td><td>The container: <code>align-items: baseline | first baseline | last baseline</code>, or an item with <code>align-self</code></td><td>Yes. The container's first or last baseline comes from the items on its first or last line that take part in baseline alignment, or else from its first or last item. The grid rules are in CSS Grid (not checked)</td><td><a href="https://www.w3.org/TR/css-flexbox-1/#flex-baselines">CSS Flexbox 8.5</a>, <a href="https://www.w3.org/TR/css-align-3/">CSS Box Alignment</a></td></tr>
+<tr><td>Flutter</td><td>A text baseline (<code>textBaseline</code> picks which one)</td><td>A render box computes its distance to the baseline in <code>computeDistanceToActualBaseline</code>. A <code>Row</code> with <code>CrossAxisAlignment.baseline</code> lines its children up on it; the <code>Baseline</code> widget puts a child's baseline at a given distance from the top</td><td>A box may defer to a child (the docs say to call <code>getDistanceToActualBaseline</code> on it). What a <code>Row</code> reports as its own baseline: not checked</td><td><a href="https://api.flutter.dev/flutter/rendering/RenderBox/computeDistanceToActualBaseline.html">computeDistanceToActualBaseline</a>, <a href="https://api.flutter.dev/flutter/rendering/CrossAxisAlignment.html">CrossAxisAlignment</a>, <a href="https://api.flutter.dev/flutter/widgets/Baseline-class.html">Baseline</a></td></tr>
+<tr><td>UIKit Auto Layout</td><td>A first and a last baseline</td><td>Constraints between the baselines of any two views. A view names the subview whose baseline it uses: <code>forFirstBaselineLayout</code> (\"Override this property to return a text-based subview\")</td><td>By naming. A vertical <code>UIStackView</code> returns its first arranged view for the first baseline and its last for the last; a horizontal one returns its tallest view. If that view is a stack view, the call goes on into it</td><td><a href="https://developer.apple.com/documentation/uikit/uistackview">UIStackView</a>, <a href="https://developer.apple.com/documentation/uikit/uiview/forfirstbaselinelayout">forFirstBaselineLayout</a></td></tr>
+<tr><td>Android views</td><td>The text baseline (<code>getBaseline()</code>); in <code>ConstraintLayout</code> also guidelines</td><td><code>ConstraintLayout</code>: a constraint between two widgets, <code>layout_constraintBaseline_toBaselineOf</code>. <code>LinearLayout</code>: <code>baselineAligned</code> lines its children up</td><td>By naming. A <code>LinearLayout</code> inside a baseline-aligned layout \"can specify which of its children to baseline align to\" with <code>baselineAlignedChildIndex</code></td><td><a href="https://developer.android.com/reference/android/widget/LinearLayout">LinearLayout</a>, <a href="https://developer.android.com/reference/androidx/constraintlayout/widget/ConstraintLayout">ConstraintLayout</a></td></tr>
+<tr><td>TeX</td><td>One reference point per box, on its baseline, with height above and depth below</td><td>An <code>\\hbox</code> lines its parts' reference points up on its baseline; <code>\\raise</code> and <code>\\lower</code> move one part</td><td>Yes. A <code>\\vbox</code> takes the reference point of its last component, a <code>\\vtop</code> that of its first, and <code>\\vcenter</code> centers on the math axis</td><td><a href="https://ctan.org/pkg/texbytopic">TeX by Topic</a>, chapter 5 (5.1 and 5.3)</td></tr>
+</table></div>
+<p><b>What is the same.</b> In every row a child reports a line and the parent lines its children's lines up. In SwiftUI, Compose, CSS flexbox, UIKit stack views, <code>LinearLayout</code> and TeX the line also passes up, so a grandparent can line up on a line set deep inside. GoFish's one baseline per axis is TeX's model: one reference point per box, which the enclosing list lines up and which passes up. SwiftUI's docs give <code>.leading</code>, <code>.center</code> and <code>.trailing</code> a default value that is a point of the view's box (\"the center guide appears at half the width of the view\"), and a stack lines its children up on one guide. That is the statement above that <code>alignment</code>'s start, middle and end are a shorthand for giving every child the same baseline. The diverging bars are the standard custom-guide example. In SwiftUI the guide is set on the Neutral bar, passes up through its row, and the outer stack lines the rows up on it (written from the docs above, not run):</p>"""),
+            swift_verbatim("SwiftUI: a custom guide, set on the Neutral bar of each row", """extension HorizontalAlignment {
+    private enum Zero: AlignmentID {
+        static func defaultValue(in d: ViewDimensions) -> CGFloat {
+            d[HorizontalAlignment.leading]
+        }
+    }
+    static let zero = HorizontalAlignment(Zero.self)
+}
+
+VStack(alignment: .zero) {
+    HStack(spacing: 3) {
+        Bar(disagree)
+        Bar(neutral).alignmentGuide(.zero) { d in d.width / 2 }
+        Bar(agree)
+    }
+    // ... one HStack per question
+}"""),
+            ["code", "The same in this proposal: the row names the part", """spread({ by: "response", dir: "x", baseline: Baseline.at("Neutral", 0.5) });""", """spread(by="response", dir="x", baseline=Baseline.at("Neutral", 0.5))"""],
+            ("p", """<p><b>What differs.</b> Three things.</p>
+<ul>
+<li><b>Who names the point.</b> In a UI framework the child marks its own line, and the container only reads it. In this proposal the container names the part, because a GoFish row's children come from data (<code>by: \"response\"</code>), and there is no child in the spec to put a modifier on. The container naming a child has precedent too: Android's <code>LinearLayout</code> names one by index with <code>baselineAlignedChildIndex</code>, a UIKit view names a subview with <code>forFirstBaselineLayout</code> (a vertical <code>UIStackView</code> names its first arranged view), and TeX's <code>\\vtop</code> and <code>\\vbox</code> name the first and the last component.</li>
+<li><b>One line per axis.</b> A GoFish node has one baseline per axis. SwiftUI and Compose have many named lines per axis, and the parent picks one by name. CSS has a first and a last baseline, and TeX has one reference point.</li>
+<li><b>What the line means.</b> A UI baseline is a position in pixels. A GoFish baseline is the data 0 of a scale, which also decides the axis labels, as in the Likert axis that reads 40 20 0 20 40. Nothing in a UI framework corresponds to that, or to <code>Baseline.wiggle()</code>, whose 0 changes along the axis.</li>
+</ul>
+<p><b>When no child gives the line.</b> In SwiftUI a view with no explicit value for a guide uses the guide's default (\"A guide without an explicit value behaves as it would for any other view\"), which <code>defaultValue(in:)</code> computes from that view's own box; the docs' custom guide says \"Default to bottom alignment if no guides are set.\" So a SwiftUI Likert row with no Neutral bar would line up on its leading edge, not where Neutral would be. In Compose a layout whose children give no value has no line, and reading it returns <code>AlignmentLine.Unspecified</code>; when several children give one, the merger combines them. The <code>RowScope</code> reference does not say where an <code>alignBy</code> child without the line is placed. Flutter's <code>Row</code> top-aligns \"children who report no baseline\", and the <code>Baseline</code> widget uses a child's bottom. So the UI frameworks fall back to a point of the box. None of them places a missing child's line by an order of the children, as decision 2 leans to do.</p>"""),
         ],
     ),
     dict(
@@ -669,7 +714,7 @@ top = field("mass").reduce(max, unit="g")"""],
 <tr><td><code>.count()</code></td><td>n</td><td><code>.reduce((xs) =&gt; xs.length)</code></td></tr>
 <tr><td><code>.distinct()</code></td><td>the number of different values</td><td><code>.reduce((xs) =&gt; new Set(xs).size)</code></td></tr>
 <tr><td>Per row, reading the group</td><td><code>.normalize()</code></td><td>x &divide; the group's sum</td><td><code>.map((x, i, xs) =&gt; x / sum(xs))</code></td></tr>
-<tr><td rowspan="2">A function value per group</td><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is mass &times; its exact density</td><td><code>.reduce((xs) =&gt; kde(xs)).density()</code>: a <code>reduce</code> that returns a Dist is a Dist expression</td></tr>
+<tr><td rowspan="2">A function value per group</td><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is mass &times; its exact density</td><td><code>.reduce((xs) =&gt; kde(xs)).density()</code>: a <code>reduce</code> that returns a Dist is a lifted Dist (\"Lifting\")</td></tr>
 <tr><td><code>.support()</code></td><td>t itself, over the domain of the density. How far that domain runs is open (see the decisions); the lean follows ggdist: for rows, the data's own range, with a bounded estimator; for a <code>Dist</code>, its own domain, or its 0.001 to 0.999 quantiles where that is unbounded</td><td><code>.reduce((xs) =&gt; kde(xs)).support()</code>: a Dist's <code>support()</code> is t &#8614; t over its own domain, with the same hidden parameter</td></tr>
 <tr><td>Key (bin)</td><td><code>.bin(Bin.step(500))</code>, <code>Bin.thresholds(n)</code>, <code>Bin.quantiles(n)</code></td><td>On main the cells come from the column's domain (its <code>HasDomain</code>), computed once where the data is typed, in <code>chart()</code> or the last <code>derive</code>, so every group of a split sees the same cells, empty ones included (#763; story <code>SharedBinsAcrossGroups</code>). <code>Bin.step(w)</code>: cells [k&times;w, (k+1)&times;w). <code>Bin.thresholds(n)</code>: a step from d3's <code>tickIncrement</code> over the domain, for about n cells. <code>Bin.quantiles(n)</code>: edges at the type-7 quantiles i/n of the column's values (<code>cells.ts</code>)</td><td>Open: how a bin's cells are shared is under review</td></tr>
 </table></div>
@@ -684,7 +729,7 @@ top = field("mass").reduce(max, unit="g")"""],
 <li><b>A one-value-per-group result is known by its verb.</b> <code>reduce</code> runs once per group, so its value is the same for every row by construction, and a channel that needs one value per group (a <code>circle</code>'s <code>cx</code> in a cell) needs no check. A <code>map</code> whose result happens to be the same for every row is still checked, with the existing \"not constant across the connected group\" error.</li>
 <li><b>A <code>map</code> that reads <code>xs</code> can cost O(n&sup2;).</b> <code>normalize</code> written as <code>map((x, i, xs) =&gt; x / sum(xs))</code> sums the group once per row. The engine passes the same <code>xs</code> array to every row of a group, so a memo keyed on it brings that back to O(n). A named method avoids it outright.</li>
 <li><b>A custom method sees one field, so it cannot use two.</b> A mean of x weighted by w reads two fields, so it is a <code>derive</code> step, or an expression over two fields, not a custom method.</li>
-<li><b>Units get simpler.</b> The custom method sees one field, so the unit it receives is known. It declares only what it returns: the same unit (<code>sum</code>, <code>median</code>), a ratio (<code>normalize</code>), a count, or a function whose values are that unit's density. Without the declaration, CanSum and the other checks cannot run, so an undeclared result is treated as a plain number that cannot be stacked.</li>
+<li><b>Units get simpler.</b> The custom method sees one field, so the unit it receives is known. It declares only what it returns: the same unit (<code>sum</code>, <code>median</code>), a ratio (<code>normalize</code>), a count, a function whose values are that unit's density, or a unit for each member of a record (\"Lifting\"). Without the declaration, CanSum and the other checks cannot run, so an undeclared result is treated as a plain number that cannot be stacked.</li>
 <li><b>Serialization.</b> A named method crosses to Python as data. A Python <code>map</code> reaches JS as a batch call (<code>RESOLVE_ROWS</code>, <code>channels.ts</code>), which today returns one value per row. A Python <code>reduce</code> would be called once per group, and a Python curve needs a new kind of call (see \"Where function values appear\").</li>
 </ol>
 <p><b>Docs plan.</b> Each method's API reference entry (its descriptor <code>doc</code>) states its formula and the custom method it stands for, as in the table above. This lands with the implementation.</p>
@@ -695,7 +740,7 @@ top = field("mass").reduce(max, unit="g")"""],
         id="custom-method",
         title="2b. Custom methods: map and reduce",
         blocks=[
-            ("p", """<p>Settled: a user who needs a method that is not built in writes <code>.map</code> for one value per row or <code>.reduce</code> for one value per group. Josh: \"it doesn't make sense to call a reduction/aggregation like sum/mean a map.\" This section records what each verb takes, why there is exactly one form of <code>reduce</code>, how a function value is made, and the two words that are taken.</p>"""),
+            ("p", """<p>Settled: a user who needs a method that is not built in writes <code>.map</code> for one value per row or <code>.reduce</code> for one value per group. Josh: \"it doesn't make sense to call a reduction/aggregation like sum/mean a map.\" This section records what each verb takes, why there is exactly one form of <code>reduce</code>, how a function value is made, and the two words that are taken. What a <code>reduce</code>'s result becomes in a spec is the next section, \"Lifting\".</p>"""),
             ["code", "The two verbs", """field("mass").map((x) => x / 1000, { unit: "kg" });
 field("mass").map((x, i, xs) => x / sum(xs), { unit: "ratio" });
 field("mass").reduce(median, { unit: "g" }); // (xs) => value, any existing function""", """field("mass").map(lambda x, i, xs: x / 1000, unit="kg")
@@ -705,14 +750,16 @@ field("mass").reduce(statistics.median, unit="g")"""],
 <p><code>reduce</code> takes the whole group, <code>reduce((xs) =&gt; value, { unit })</code>, and nothing else.</p>
 <ul>
 <li><b><code>Array.prototype.reduce</code>'s form, <code>(acc, x) =&gt; acc</code> with an initial value, is not proposed.</b> The incremental form exists where data streams or is spread over machines, so an aggregate must be built one value at a time and merged: Postgres <code>CREATE AGGREGATE</code> with a state function (<code>SFUNC</code>), Apache Beam's <code>CombineFn</code> (<code>add_input</code>, <code>merge_accumulators</code>, <code>extract_output</code>), and Spark's <code>Aggregator</code> (<code>zero</code>, <code>reduce</code>, <code>merge</code>, <code>finish</code>). Systems in our setting take the whole group: d3's <code>rollup(data, reduce, key)</code>, Observable Plot's reducers <code>(values) =&gt; value</code>, pandas' <code>groupby().agg(f)</code>, and polars' <code>map_batches(f, returns_scalar=True)</code> inside <code>group_by().agg</code>. Arquero is mixed: <code>rollup</code> takes whole-group aggregates such as <code>op.median(\"x\")</code>, but a custom one registered with <code>addAggregateFunction</code> is incremental (<code>init</code>, <code>add</code>, <code>rem</code>, <code>value</code>), because the same definition also runs over sliding windows.</li>
-<li><b>A curve is not a second form.</b> It is the same <code>reduce</code>, with a different kind of result. A <code>reduce</code> has three: a number (one value per group), a Dist (a Dist expression, with <code>support()</code> and <code>density()</code>), and a function value. A bare JS function cannot be a result: it has no domain, and <code>(d) =&gt; number</code> is already a legal channel value meaning a row accessor (<code>DeriveMarkProps</code> in <code>channels.ts</code>). The common case needs no constructor, because a density is a Dist. Any other function is made by <code>fun(f, { domain })</code>, below.</li>
+<li><b>A curve is not a second form.</b> It is the same <code>reduce</code>. Whatever the callback returns, a number, a function value, a Dist or a record of the user's own, is lifted by one rule, which the next section, \"Lifting\", states. A bare JS function cannot be a result: it has no domain, and <code>(d) =&gt; number</code> is already a legal channel value meaning a row accessor (<code>DeriveMarkProps</code> in <code>channels.ts</code>). The common case needs no constructor, because a density is a Dist. Any other function is made by <code>fun(f, { domain })</code>, below.</li>
 <li><b>A <code>map</code> that ignores <code>x</code> and returns <code>median(xs)</code> is legal, but it is not a way to write a reduce.</b> It is called once per row. The reference will point to <code>reduce</code>.</li>
 </ul>"""),
             ts_block("Their types (from the sketch)", "field"),
-            ["code", "A custom density: a reduce that returns a Dist (not run)", """const d = field("mass").reduce((xs) => kde(xs), { unit: "g" }); // @hl
-ribbon({ x: d.support(), h: d.density() });""", """d = field("mass").reduce(lambda xs: kde(xs), unit="g")  # @hl
+            ["code", "A custom density: a reduce that returns a Dist (not run)", """const d = field("mass").reduce((xs) => kde(xs), {
+  unit: dist.units("g", "count"), // @hl
+});
+ribbon({ x: d.support(), h: d.density() });""", """d = field("mass").reduce(lambda xs: kde(xs), unit=dist.units("g", "count"))  # @hl
 ribbon(x=d.support(), h=d.density())"""],
-            ("p", """<p><code>kde(xs)</code> is a Dist that carries its own domain, as the distribution objects of scipy.stats, distributional and Distributions.jl do. So the custom density reads like the built-in one, and no spec names a range. The density's unit follows from the variable's: the mass of a Dist built from rows is a count, so <code>d.density()</code> is in count per g (<code>Per&lt;Count, Grams&gt;</code> in the sketch). <code>unit</code> declares only the variable's unit.</p>
+            ("p", """<p><code>kde(xs)</code> is a Dist that carries its own domain, as the distribution objects of scipy.stats, distributional and Distributions.jl do. So the custom density reads like the built-in one, and no spec names a range. A Dist's members have different units: <code>d.support()</code> is in g, and <code>d.density()</code> in count per g (<code>Per&lt;Count, Grams&gt;</code> in the sketch), because the mass of a Dist built from rows is a count. <code>dist.units(\"g\", \"count\")</code> writes that record of units from the variable's unit and the mass's. How a reduce states the units of a record is decision 17, in \"Lifting\".</p>
 <h4>A function that is not a distribution</h4>
 <p>A fitted trend line is a function, but not a distribution, so it has no <code>pdf</code> or <code>cdf</code>. It is made by a lowercase factory that takes the function and its domain, in the style of Chebfun and Julia's <code>Fun</code>: <code>fun(f, { domain })</code>. The example below fits a least-squares line to a scatter of car weight against fuel economy. The fit reads two fields, which a custom method cannot do, so it runs before the visualization, here with simple-statistics. The line is then one mark with two function channels read at one t, over the same domain.</p>"""),
             ["code", "A least-squares trend line over a scatter (not run)", """const { m, b } = linearRegression(cars.map((d) => [d.weight, d.mpg]));
@@ -787,6 +834,93 @@ layer(
         ],
     ),
     dict(
+        id="lifting",
+        title="Lifting",
+        blocks=[
+            ("p", """<p>A spec is written once, but a mark is drawn once for each group of rows. So a value in a spec stands for \"this value, computed for each group\". Such a value is an <b>expression</b>: a description of a value that the engine computes later, once per group. A named method, such as <code>field(\"mass\").median()</code>, is an expression that crosses to Python as data. <b>Lifting</b> is the rule that turns a function on one group's values, <code>(xs) =&gt; V</code>, into an expression that gives a V for every group. <code>reduce</code> applies it.</p>
+<h4>The rule</h4>
+<p>The rule looks only at the shape of what the callback returns. The examples are the summary numbers of a box plot and a density.</p>
+<div class="table-wrap"><table>
+<tr><th>The callback returns</th><th>The spec holds</th><th>Example callback</th><th>How a channel uses it</th></tr>
+<tr><td>A number</td><td>A value expression: one number per group</td><td><code>(xs) =&gt; quantile(xs, 0.75)</code></td><td>Directly, in a channel that takes one value per group: <code>rect({ y2: hi })</code></td></tr>
+<tr><td>A function value, <code>Fun&lt;number&gt;</code></td><td>A function expression: one function per group</td><td><code>(xs) =&gt; fun((t) =&gt; share of xs at or below t, { domain: extent(xs) })</code></td><td>Directly, in a channel of a mark that draws along a path: <code>line({ x: f.support(), y: f })</code></td></tr>
+<tr><td>A method, <code>(...args) =&gt; W</code>, as a member of a record</td><td>A method with the same arguments, which returns the lift of W</td><td>A Dist's <code>quantile(p)</code></td><td>Call it, then use the result: <code>circle({ cx: d.quantile(0.9) })</code></td></tr>
+<tr><td>A record</td><td>An object with one method per member, each returning the lift of that member</td><td><code>(xs) =&gt; ({ lo: quantile(xs, 0.25), mid: median(xs), hi: quantile(xs, 0.75) })</code></td><td>Through its members: <code>rect({ y: s.lo(), y2: s.hi() })</code>. The record itself is not a channel value</td></tr>
+<tr><td>A record in a record</td><td>The same rule again, member by member</td><td><code>(xs) =&gt; ({ box: { lo: ..., hi: ... }, n: xs.length })</code></td><td><code>rect({ y: t.box().lo(), y2: t.box().hi() })</code></td></tr>
+<tr><td>A Dist, which is a record of numbers and functions</td><td><code>d.support()</code>, <code>d.density()</code>, <code>d.median()</code>, <code>d.quantile(p)</code>, ...</td><td><code>(xs) =&gt; kde(xs)</code></td><td><code>ribbon({ x: d.support(), h: d.density() })</code></td></tr>
+</table></div>
+<p><b>The law.</b> Lifting a record gives a record of lifted members: an expression of <code>{ lo, hi }</code> is the same thing as <code>{ lo: an expression, hi: an expression }</code>. In types, <code>Lift&lt;{ lo: number; hi: number }&gt;</code> is <code>{ lo(): Lift&lt;number&gt;; hi(): Lift&lt;number&gt; }</code>. A channel takes only the two leaves, a number and a <code>Fun&lt;number&gt;</code>. Members are methods, not properties, so a lifted record reads like today's named methods (<code>.median()</code>), and a member with arguments, <code>quantile(p)</code>, looks the same as one without.</p>"""),
+            ["code", "A box plot whose summary numbers are computed once per group (not run)", """const s = field("price").reduce(
+  (xs) => ({
+    lo: d3.quantile(xs, 0.25),
+    mid: d3.median(xs),
+    hi: d3.quantile(xs, 0.75),
+  }),
+  { unit: "USD" }
+);
+
+chart(sales)
+  .flow(spread({ by: "region", dir: "x", spacing: 24 }))
+  .mark(
+    layer([
+      rect({ w: 16, y: s.lo(), y2: s.hi(), fill: "region" }), // @hl
+      rect({ w: 16, h: 1.5, y: s.mid(), fill: "white" }), // @hl
+    ])
+  );""", """s = field("price").reduce(
+    lambda xs: {
+        "lo": np.quantile(xs, 0.25),
+        "mid": np.median(xs),
+        "hi": np.quantile(xs, 0.75),
+    },
+    unit="USD",
+)
+
+chart(sales).flow(spread(by="region", dir="x", spacing=24)).mark(
+    layer(
+        [
+            rect(w=16, y=s.lo(), y2=s.hi(), fill="region"),  # @hl
+            rect(w=16, h=1.5, y=s.mid(), fill="white"),  # @hl
+        ]
+    )
+)"""],
+            ("p", """<p>The marks are the ones the gallery's box plot uses today (<code>stories/forwardsyntax/BoxPlot.stories.tsx</code>), where the summary numbers are columns computed before the visualization. In Python a record is a dict, and its lift has the same methods.</p>
+<h4>The type</h4>
+<p>One definition, by the shape of V, and one signature of <code>reduce</code>. TypeScript accepts the recursive definition as written. The second block shows the type each example gets; it typechecks with the rest of the sketch.</p>"""),
+            ts_block("Lift, Units and the one signature of reduce (from the sketch)", "lift"),
+            ts_block("What each example gets", "lift-examples"),
+            ("p", """<h4>What is already a lifted value</h4>
+<p>The named methods are instances of the same rule. Today's methods are from <code>FieldExpr</code> in <code>ast/fieldExpr.ts</code>.</p>
+<div class="table-wrap"><table>
+<tr><th>Spelling</th><th>Today</th><th>In terms of lifting</th></tr>
+<tr><td><code>.sum()</code>, <code>.mean()</code>, <code>.median()</code>, <code>.count()</code>, <code>.distinct()</code></td><td>exist</td><td>Each is <code>reduce</code> of a function that returns a number</td></tr>
+<tr><td><code>.density()</code>, <code>.support()</code></td><td>proposed on this page</td><td>Members of the lifted empirical Dist of the group, <code>reduce((xs) =&gt; kde(xs))</code></td></tr>
+<tr><td><code>dist.normal({ mean: \"mean\", sd: \"sd\" })</code></td><td>proposed in #980</td><td>A lifted Dist, built for each group from the columns its parameters name</td></tr>
+<tr><td><code>field(\"mass\")</code>, <code>.normalize()</code></td><td>exist</td><td>Not lifts. Each gives one value per row: bare, the row's value; <code>normalize</code> is a <code>map</code></td></tr>
+<tr><td><code>.sort()</code>, <code>.reverse()</code>, <code>.dropNulls()</code>, <code>.between()</code>, <code>.bin()</code></td><td>exist</td><td>Not values. They order, filter or group the rows</td></tr>
+</table></div>
+<p><code>map</code> is the other verb. Its callback runs once per row and may read the group's values <code>xs</code>, so it gives one value per row, not one per group, and it is not a lift.</p>
+<h4>What lifting does not cover</h4>
+<ul>
+<li><b><code>bin</code>.</b> It is a grouping key: it decides what the groups are, so it is not a value per group. How a bin's cells are shared is still open on this page.</li>
+<li><b>A callback that needs two columns.</b> A custom method sees one field, so a mean of x weighted by w is a <code>derive</code> step, as \"What the methods compute\" says.</li>
+<li><b>Arrays.</b> Open (decision 18). TypeScript maps a mapped type over an array element by element, so the sketch's types would treat a returned array as a record indexed by position (<code>r[0]()</code>), which is not proposed. The lean is to make it an error, because a list of values per group is rows, which <code>derive</code> makes.</li>
+<li><b>Lifting again, or chaining.</b> A lifted value has no <code>map</code> or <code>reduce</code>, so <code>s.lo().map(...)</code> is a type error in the sketch. A value computed from <code>lo</code> and <code>hi</code> goes inside the callback, as another member.</li>
+</ul>
+<h4>Units</h4>
+<p>A number or a function value takes the <code>unit</code> option as today: one unit. A record needs a unit for each member, so the option mirrors the record's shape (<code>Units</code> in the sketch): one unit for all members, as <code>unit: \"USD\"</code> in the box plot, or a record of units, <code>unit: { box: \"USD\", n: \"count\" }</code>. A Dist's members have units that follow from two, the variable's and the mass's: the support is in g, the density in count per g, the cdf is a ratio. <code>dist.units(\"g\", \"count\")</code> writes that record, so a Dist needs only those two. Whether the option takes this shape is decision 17.</p>
+<h4>Crossing to Python</h4>
+<p>A named method is data: it crosses as a <code>FieldOp</code> in the IR, and the engine computes it. A <code>reduce</code> written in Python is a callback. Today a Python accessor reaches JS as one batch call over rows (<code>RESOLVE_ROWS</code>), which returns one value per row. A Python <code>reduce</code> needs a new kind of call that returns one result per group. A record of numbers comes back as plain data, a dict as a JSON object. A returned function cannot come back: it has to stay in Python and be called with a batch of t values in each resampling round, as \"Where function values appear\" says. Both calls are new bridge work. A Dist made by a GoFish constructor can cross as data once the IR has a dist node.</p>
+<h4>Precedent</h4>
+<div class="table-wrap"><table>
+<tr><th>System</th><th>What the user writes</th><th>What comes back</th><th>Source</th></tr>
+<tr><td>polars</td><td>An expression of type <code>Struct</code>, such as <code>pl.col(\"Theatre\").value_counts()</code>; one field is read with <code>.struct.field(...)</code>, and <code>DataFrame.unnest</code> turns every field into a column</td><td>\"<code>Struct</code> is the data type that allows us to ... output multiple columns from an expression\"</td><td><a href="https://docs.pola.rs/user-guide/expressions/structs/">polars user guide, Structs</a></td></tr>
+<tr><td>dplyr</td><td><code>summarise()</code> with an expression that returns \"A data frame with 1 row, to add multiple columns from a single expression\"</td><td>one column per member, one row per group</td><td><a href="https://dplyr.tidyverse.org/reference/summarise.html">summarise</a></td></tr>
+<tr><td>pandas</td><td><code>groupby().apply(f)</code>, where <code>f</code> returns a named Series</td><td>one row per group, with the Series' labels as columns</td><td><a href="https://pandas.pydata.org/docs/user_guide/groupby.html">Group by, \"Returning a Series to propagate names\"</a></td></tr>
+</table></div>
+<p>In programming-language terms, \"a value for each group\" is a functor, a type with a map that keeps its shape, and the law above says that a function from groups to records is the same as a record of functions from groups.</p>"""),
+        ],
+    ),
+    dict(
         id="dist",
         title="The distribution type",
         blocks=[
@@ -812,7 +946,9 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
   Array.from({ length: n }, (_, i) => ({ v: d.quantile((i + 0.5) / n) }));"""),
             ("p", """<p>It differs from this page in three ways. Its <code>kde</code> range is the data's extent plus 3 bandwidths on each side, as seaborn does, while the page's lean is ggdist's range trimmed to the data. Its bandwidth is <code>1.06 &times; sd &times; n<sup>&minus;0.2</sup></code> (the normal reference rule), while the page says Silverman's <code>0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;0.2</sup></code>, which <code>silvermanBandwidth</code> computes. And its pdf has area 1, while the page proposes area n for rows. All three are prototype shortcuts; the proposal below follows the page.</p>
 <h4>Proposed</h4>
-<p>Two levels, with one vocabulary. At run time, a <code>Dist</code> is what the engine asks questions of. #980's sketch has <code>DistRep</code>, which is how a Dist is held (a family with parameters, draws, a mixture, a truncation); this <code>Dist</code> is what every representation answers. Its members are <code>density</code> and <code>cdf</code> (each a <code>Fun&lt;number&gt;</code>), <code>quantile(p)</code>, <code>median</code>, <code>mean</code>, <code>support</code> (an interval), <code>mass</code> and <code>restrict</code>. It adds two things to the prototype: <code>mass</code>, so stacked densities add, and <code>restrict</code>, which is a cell of a partition. In a spec, a <code>DistExpr</code> is an expression over a Dist, as in #980. It is not written by hand: it is the run-time <code>Dist</code> lifted member by member with a mapped type (<code>Lifted</code> in the sketch), so the two cannot drift. A function member becomes a method that returns a function expression, a number member a method that returns a value expression, <code>quantile(p)</code> keeps its argument, and <code>support</code> becomes t &#8614; t over the support. <code>restrict</code> surfaces in a spec as <code>bin()</code> and <code>partition</code>. <code>field(\"mass\")</code> over a group of rows is the empirical Dist of those rows, so a field expression is the same lifted interface plus the row methods. Units are in the types: <code>support</code> is in the variable's unit V, <code>density</code> in mass per V, and <code>cdf</code> is a ratio. The sketch simplifies #980's types: a unit is a plain tag, and #980's dependence parameter (whether draws are joint) is left out.</p>
+<p>Two levels, with one vocabulary. At run time, a <code>Dist</code> is what the engine asks questions of. #980's sketch has <code>DistRep</code>, which is how a Dist is held (a family with parameters, draws, a mixture, a truncation); this <code>Dist</code> is what every representation answers. Its members are <code>density</code> and <code>cdf</code> (each a <code>Fun&lt;number&gt;</code>), <code>quantile(p)</code>, <code>median</code>, <code>mean</code>, <code>support</code> and <code>mass</code>. <code>support</code> is t &#8614; t, a <code>Fun&lt;number&gt;</code> whose domain is the support interval. It adds <code>mass</code> to the prototype, so stacked densities add. A cell of a partition is <code>restrictDist</code>, a function on a Dist rather than a member: it applies operation 4, <code>restrict</code>, to each function member and scales the mass. In a spec, a <code>DistExpr</code> is an expression over a Dist, as in #980. It is not written by hand: it is the run-time <code>Dist</code> lifted by the general rule in \"Lifting\", so the two cannot drift, plus <code>bin()</code>. <code>field(\"mass\")</code> over a group of rows is the empirical Dist of those rows, so a field expression is the same lifted interface plus the row methods.</p>
+<p><b>What is still specific to a Dist.</b> Two things. <code>bin</code>, a grouping key that cuts the Dist's axis into cells, with <code>restrictDist</code> giving each cell its Dist. Restricting to a cell is operation 4 on any <code>Fun</code>, so a key that cuts an axis into cells could be offered for any value that can be restricted, a <code>Fun</code> included; that is not designed here. And its units: each member's unit follows from the variable's unit V and the mass's unit M (<code>support</code> in V, <code>density</code> in M per V, <code>cdf</code> a ratio), which the record <code>DistUnits</code> states once, where a record of the user's own has to say them (decision 17).</p>
+<p>The sketch simplifies #980's types: a unit is a plain tag, and #980's dependence parameter (whether draws are joint) is left out.</p>
 <p><b>Why <code>density</code> and not <code>pdf</code>.</b> For rows, the density's area is the row count, so it is not a probability density; <code>pdf</code> would name something it is not. For a family the mass is 1 and the two agree. The names elsewhere:</p>
 <div class="table-wrap"><table>
 <tr><th>System</th><th>Density</th><th>Cumulative</th><th>Inverse</th><th>Where it is defined</th></tr>
@@ -836,7 +972,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 <tr><th>Place</th><th>Today</th><th>Proposed</th><th>Who sees it</th></tr>
 <tr><td>Channels of <code>ribbon</code> and <code>line</code> (<code>x</code>, <code>h</code>, <code>y</code>)</td><td>A channel takes <code>number | column name | (d) =&gt; number | Value | FieldExpr</code> (<code>DeriveMarkProps</code> in <code>channels.ts</code>). <code>ribbon</code> and <code>line</code> have no <code>x</code> option: they are connectors, and their own <code>w</code> and <code>h</code> only size the hidden anchor marks</td><td>Also a function value: <code>d.support()</code>, <code>d.density()</code>, or a <code>reduce</code> that returns one. A bare JS function keeps meaning a row accessor</td><td>spec author</td></tr>
 <tr><td>Other marks (<code>rect</code>, <code>circle</code>, <code>text</code>, ...)</td><td>as above</td><td>A function value in a channel is a type error, and a run-time error that names the fix. Issue #980's \"a bare Dist in a rect channel means its limit\" is a separate question</td><td>spec author</td></tr>
-<tr><td><code>FieldExpr</code></td><td><code>FieldExpr&lt;HasRegion, Binned&gt;</code>, with <code>sort</code>, <code>reverse</code>, <code>bin</code>, <code>dropNulls</code>, <code>normalize</code>, <code>sum</code>, <code>mean</code>, <code>median</code>, <code>count</code>, <code>distinct</code> (<code>fieldExpr.ts</code>)</td><td>New methods <code>support</code>, <code>density</code>, <code>map</code> and <code>reduce</code>. The type has to know the kind of result (one value per row, one per group, or a function) so the mark types can accept or reject it, as <code>RowExpr</code>, <code>ValueExpr</code>, <code>DistExpr</code> and <code>FunctionExpr</code> do in the sketch</td><td>spec author</td></tr>
+<tr><td><code>FieldExpr</code></td><td><code>FieldExpr&lt;HasRegion, Binned&gt;</code>, with <code>sort</code>, <code>reverse</code>, <code>bin</code>, <code>dropNulls</code>, <code>normalize</code>, <code>sum</code>, <code>mean</code>, <code>median</code>, <code>count</code>, <code>distinct</code> (<code>fieldExpr.ts</code>)</td><td>New methods <code>support</code>, <code>density</code>, <code>map</code> and <code>reduce</code>. The type has to know the kind of result (one value per row, one per group, or a function) so the mark types can accept or reject it, as <code>RowExpr</code>, <code>ValueExpr</code>, <code>DistExpr</code> and <code>FunctionExpr</code> do in the sketch. What a <code>reduce</code> returns is lifted by its shape (\"Lifting\")</td><td>spec author</td></tr>
 <tr><td><code>dist.*</code> constructors</td><td>none</td><td>New: <code>dist.normal({ mean, sd })</code> and the other #980 families</td><td>spec author</td></tr>
 <tr><td><code>stack</code></td><td>reads each child's box, writes one translate per child; <code>origin</code> is internal</td><td>Reads each child's cross-sections, writes an offset function per child. New <code>baseline</code> option</td><td>spec author (<code>baseline</code>), operator author (the offsets)</td></tr>
 <tr><td><code>partition</code></td><td>cuts rows into cells; the croissant clips a hidden ribbon with <code>intersect</code></td><td>Restricts function-valued children to each cell (<code>restrict</code>), which removes <code>intersect</code> and the hidden ribbon from the croissant</td><td>operator author</td></tr>
@@ -848,7 +984,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 <tr><td>Data rows</td><td>rows hold plain values</td><td>Rows do not hold functions. A Dist is built from columns, <code>dist.normal({ mean: \"mean\", sd: \"sd\" })</code></td><td>spec author</td></tr>
 </table></div>"""),
             ts_block("How a mark's types accept or reject a function value", "channels"),
-            ts_block("The three kinds of reduce result, a plain function value, and the type error in a rect", "custom-curve"),
+            ts_block("A reduce that returns a Dist, a number or a function value, a plain function value, and the type error in a rect", "custom-curve"),
         ],
     ),
     dict(
@@ -867,13 +1003,14 @@ RULES = [
     "<b>Sampling is internal.</b> It happens when a mark is drawn, when a geometry query is asked at a tolerance, and when a maximum or an integral of a function with a cubic curve or none is needed. A <code>linear</code> or <code>step</code> function needs none of the last kind.",
     "<b>A claim is geometry as a function of σ.</b> Every geometry query has a claim form with the same name, whose numbers are functions of σ. Each is a closed form where one exists, so there is one solve and then one layout.",
     "<b>A function value carries its domain. A mark that draws along a path has one parameter t.</b> Every function channel of it is read at the same t, and their domains must be equal, or it is an error. A bare JS function is a row accessor, never a function value.",
-    "<b>One verb per kind of result.</b> <code>map</code> gives one value per row. <code>reduce</code> gives one value per group, a Dist expression when it returns a Dist, and a function expression when it returns a function value.",
+    "<b>One verb per kind of result.</b> <code>map</code> gives one value per row. <code>reduce</code> gives one value per group.",
+    "<b>What a reduce returns is lifted by its shape.</b> A number becomes a value expression, a function value a function expression, and a record an object with one method per member, each the lift of that member. A channel takes only a number or a function value; a record is read through its members.",
     "<b>A baseline is a part and a fraction.</b> <code>Trait.diverging</code> desugars to <code>Baseline.at(part, fraction)</code>, and whether the axis labels distances from 0 is computed from the parts, not stored.",
 ]
 
 DECISIONS = [
     "A rigid part (a circle, text, an image, a line) in a stack of cross-sections: keep it an error that names the fix, or allow it, resting on the highest point of the boundary below it with a gap underneath?",
-    "What <code>Baseline.at(part, fraction)</code> does when the named part is absent from a row, and when the column has no declared order. The lean is to do what <code>Trait.diverging</code> does: the 0 is placed by the column's order, so a missing part moves nothing.",
+    "What <code>Baseline.at(part, fraction)</code> does when the named part is absent from a row, and when the column has no declared order. The lean is to do what <code>Trait.diverging</code> does: the 0 is placed by the column's order, so a missing part moves nothing. UI frameworks fall back to a point of the box when no child gives the line (SwiftUI's guide default, Flutter's top edge; Compose reports the line as unspecified), so this lean has no direct precedent there (\"Precedent: alignment lines in UI frameworks\").",
     "<code>Baseline.wiggle()</code> is defined on the function (the limit), not on the rows, so finer rows do not change the curve? It is the one baseline that needs the derivative, products and a running integral.",
     "Under <code>Baseline.middle()</code> and <code>Baseline.wiggle()</code> the value axis is dropped, since it can only measure thickness?",
     "A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve. ggdist reaches the same curve with <code>after_stat(pdf * n)</code> and rescales thickness with <code>normalize</code>; here rescaling is the parent's job.",
@@ -888,4 +1025,6 @@ DECISIONS = [
     "Add an opaque claim kind (a claim that runs the subtree's layout at a trial σ) only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout? The lean is closed forms everywhere else.",
     "Implement <code>pack</code>'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers? The lean is yes.",
     "Accept the per-x rewrite (B at the union of breakpoints) as a declared shortcut until the engine has cross-sections?",
+    "The <code>unit</code> option of a <code>reduce</code> mirrors the shape of what it returns: one unit for all members, or a record of units, with <code>dist.units(variable, mass)</code> writing a Dist's record from two units?",
+    "A <code>reduce</code> that returns an array: an error, or a record indexed by position, as TypeScript's types would read it? The lean is an error, because a list of values per group is rows, which <code>derive</code> makes.",
 ]
