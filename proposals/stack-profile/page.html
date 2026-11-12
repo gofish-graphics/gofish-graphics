@@ -447,7 +447,7 @@
       A density is drawn by a channel pair, <code>support()</code> for the
       position (Josh is checking the name with Matt Kay, ggdist) and the density
       for the height; whether that is <code>density()</code> or
-      <code>pdf()</code> is decision 6. Rejected for the position:
+      <code>pdf()</code> is decision 8. Rejected for the position:
       <code>value()</code>, which clashes with GoFish's
       <code>value(...)</code> constructor, and <code>points()</code> or
       <code>grid()</code>, which name the sampling.
@@ -1539,9 +1539,9 @@ const boxClaim = (cs: Fun&lt;Extent&gt;): Extent =&gt; {
       <b>The lean.</b> Closed forms for stacks, ribbons, densities and an
       all-data <code>pack</code>. Add the opaque kind only for the cases #967
       lists as having no closed form, as the single declared place where sizing
-      runs layout (decision 14). And implement <code>pack</code>'s radius claim
+      runs layout (decision 16). And implement <code>pack</code>'s radius claim
       in the same effort as cross-sections, so the claim design is tested by two
-      consumers (decision 15; lean yes).
+      consumers (decision 17; lean yes).
     </p>
   </article>
   <h2 id="baselines">1. Stacked area, with each baseline</h2>
@@ -2680,6 +2680,256 @@ VStack(alignment: .zero) {
       fall back to a point of the box. None of them places a missing child's
       line by an order of the children, as decision 2 leans to do.
     </p>
+    <h4>What the precedent means for <code>Baseline.at</code></h4>
+    <p>
+      <b>It confirms the form.</b> Where a UI container names a child
+      (<code>LinearLayout</code>'s <code>baselineAlignedChildIndex</code>, a
+      <code>UIStackView</code>'s first or last view, TeX's
+      <code>\vtop</code> and <code>\vbox</code>), it only picks which child, and
+      the line is then that child's own baseline. So a container that names a
+      child is an established form, and <code>baseline</code> as an option of
+      <code>stack</code> and <code>spread</code> needs no modifier on the child.
+      GoFish could not use such a modifier when the children come from data,
+      because there is no child in the spec to put it on.
+    </p>
+    <p>
+      <b>The second argument takes the anchor words.</b> In the precedents the
+      line is the named child's own baseline. Today's fraction says that only
+      for some parts. <code>StackOrigin</code>'s fraction is measured from the
+      part's tail to its head (<code>RelationAnchor</code> in
+      <code>constraints/placementFacts.ts</code>). The tail is the part's own 0
+      when that 0 is a data baseline, as for a bar or a nested stack, and the
+      part's start otherwise. The head is as far from the end as the tail is
+      from the start. So fraction 0 is already the own 0 of a bar or a nested
+      stack, and "that far through the part", as this page says above, is exact
+      only when the tail is the start, as for a bar of a positive amount. Two
+      kinds of point have no fraction:
+    </p>
+    <ul>
+      <li>
+        A point of the part's box when its 0 is not at its start: the middle of
+        a bar of a negative amount, or of a nested diverging stack.
+      </li>
+      <li>
+        The own 0 of a part whose 0 is not a data baseline, because its tail is
+        its start. A nested <code>spread</code> is such a part: a spread folds
+        to a space with no origin ("a spread packs boxes and has no origin",
+        <code>graphicalOperators/spread.tsx</code>), so a nested spread that
+        chooses its own 0 with <code>baseline</code> cannot be named by a
+        fraction. This is read from the code, not run.
+      </li>
+    </ul>
+    <p>
+      A block of text lines is not a case today. A GoFish
+      <code>text</code> draws one line and is placed like a rect of the same
+      size: its 0 along y is the start edge of its box, and the glyphs' baseline
+      sits inside the box (<code>shapes/text.tsx</code>). So
+      <code>alignment: "baseline"</code> on two texts lines up the starts of
+      their boxes, and no GoFish node reports a text baseline as its 0.
+    </p>
+    <p>
+      The proposal: the second argument is one of the words
+      <code>alignment</code> already uses, or a fraction. A word reads the part
+      as <code>alignment</code> does: <code>"start"</code>,
+      <code>"middle"</code> and <code>"end"</code> are points of its box, and
+      <code>"baseline"</code> is its own 0. A fraction keeps today's meaning,
+      from tail to head.
+    </p>
+    <p class="label">Proposed: the second argument</p>
+    <pre
+      class="code lang-js"
+    ><code class="language-javascript" data-hl="">Baseline.at(&quot;Neutral&quot;, &quot;middle&quot;); // for a bar of a positive count, the same point as 0.5
+Baseline.at(&quot;Female&quot;, &quot;start&quot;); // for such a bar, the same point as 0
+Baseline.at(1, &quot;baseline&quot;); // the second child&#x27;s own 0, which a fraction cannot always say</code></pre>
+    <pre
+      class="code lang-py"
+    ><code class="language-python" data-hl="">Baseline.at(&quot;Neutral&quot;, &quot;middle&quot;)  # for a bar of a positive count, the same point as 0.5
+Baseline.at(&quot;Female&quot;, &quot;start&quot;)  # for such a bar, the same point as 0
+Baseline.at(
+    1, &quot;baseline&quot;
+)  # the second child&#x27;s own 0, which a fraction cannot always say</code></pre>
+    <p>
+      Then <code>Baseline.start()</code> is the first part's
+      <code>"start"</code> and <code>Baseline.end()</code> is the last part's
+      <code>"end"</code>. TeX's <code>\vtop</code> and <code>\vbox</code> and a
+      UIKit stack's first and last views also choose by position, but then use
+      the child's own line, which is <code>"baseline"</code> on the first or
+      last part. The two agree when that part's 0 is at its start, as for a bar
+      of a positive amount or a text. Today's default origin is the first part's
+      tail, which for a bar is its own 0, so a stack whose first bar is negative
+      is the one case where the two differ.
+    </p>
+    <p>
+      If the second argument is left out, should it be <code>"baseline"</code>,
+      the part's own 0, as in every precedent, or should it be required? With
+      <code>"baseline"</code> as the default,
+      <code>Baseline.at("Female")</code> is the start of the Female bar, but
+      <code>Baseline.at("Neutral")</code> is not the middle of Neutral. This is
+      decision 5.
+    </p>
+    <p>
+      <code>Trait.diverging(midpoint)</code> still translates exactly.
+      <code>stackOrigin</code> gives a part and any fraction from 0 to 1 (the
+      midpoint minus the level's rank), which no word names, so the fraction
+      form stays. A diverging stack's parts are never negative (the stack
+      rejects a negative part today), so their tail is their start, and the
+      fraction is also that far through the box.
+    </p>
+    <p>
+      An example that needs <code>"baseline"</code>: the Likert rows with gaps
+      from above, each with its question to the left. Each row is a label and
+      the spread of bars, and the row's 0 is the bars' own 0, the middle of
+      Neutral. The parent's default <code>alignment: "baseline"</code> then
+      lines the rows up on Neutral, and each label sits just left of its row's
+      first bar. The middle of Neutral lies at a different fraction of the bars
+      in each row, and the bars are a spread, whose tail is its start, so no
+      fraction says it.
+    </p>
+    <p class="label">
+      Proposed (not run): question labels beside diverging bars with gaps
+    </p>
+    <pre
+      class="code lang-js"
+    ><code class="language-javascript" data-hl="3">chart(survey, { color: likertColors })
+  .flow(spread({ by: &quot;question&quot;, dir: &quot;y&quot;, spacing: 6 }))
+  .mark((rows) =&gt;
+    spread({ dir: &quot;x&quot;, spacing: 6, baseline: Baseline.at(1, &quot;baseline&quot;) }, [
+      text({ text: rows[0].question }),
+      chart(rows)
+        .flow(
+          spread({
+            by: &quot;response&quot;,
+            dir: &quot;x&quot;,
+            spacing: 3,
+            baseline: Baseline.at(&quot;Neutral&quot;, 0.5),
+          })
+        )
+        .mark(rect({ w: &quot;count&quot;, fill: &quot;response&quot; })),
+    ])
+  )
+  .render(root, { w: 560, h: 200 });</code></pre>
+    <pre
+      class="code lang-py"
+    ><code class="language-python" data-hl="19">chart(survey, color=likert_colors).flow(
+    spread(by=&quot;question&quot;, dir=&quot;y&quot;, spacing=6),
+).mark(
+    lambda rows: spread(
+        [
+            text(text=rows[0][&quot;question&quot;]),
+            chart(rows)
+            .flow(
+                spread(
+                    by=&quot;response&quot;,
+                    dir=&quot;x&quot;,
+                    spacing=3,
+                    baseline=Baseline.at(&quot;Neutral&quot;, 0.5),
+                )
+            )
+            .mark(rect(w=&quot;count&quot;, fill=&quot;response&quot;)),
+        ],
+        dir=&quot;x&quot;,
+        spacing=6,
+        baseline=Baseline.at(1, &quot;baseline&quot;),
+    )
+).render(
+    w=560, h=200
+)</code></pre>
+    <p>
+      <b
+        >The precedents name a child by position, and the proposal names it by
+        key.</b
+      >
+      <code>baselineAlignedChildIndex</code> is an index, and UIKit and TeX say
+      first or last. First and last exist in any container with children, and an
+      index names a place in the list, not a datum, so these systems do not meet
+      a named child that the data lacks. The absent part of decision 2 exists
+      only because <code>Baseline.at("Neutral", ...)</code> names a key.
+      <code>Trait.diverging(midpoint)</code> is the positional form: a
+      coordinate along the level order, which is defined whatever parts a row
+      has (<code>stackOrigin</code> in <code>ast/schema.ts</code>). So the
+      precedent supports the lean of decision 2: resolve the key to its place in
+      the order, so a missing part moves nothing.
+    </p>
+    <p>
+      <b>What a part is in the combinator form.</b> In a flow, a part is a value
+      of the <code>by</code> column. In the combinator form,
+      <code>spread({ ... }, [a, b, c])</code>, the children have no keys.
+      <code>createOperator</code> passes each child its index as the key
+      argument of the mark call (<code
+        >resolveMarkResult(mark, layerContext, d, i)</code
+      >), but only the flow form sets a node's key from its group
+      (<code>setKey</code>), so a combinator child is known only by its place in
+      the list. A child may carry <code>.name()</code>, but that name is for
+      <code>ref</code> and <code>selectAll</code>: it is looked up through the
+      scopes of its component, not only by the parent (the
+      <code>ref</code> reference page). Inside the stack, the part is already a
+      position: <code>StackOrigin</code>'s part is "a child index from the
+      split" (<code>constraints/distribute.ts</code>).
+    </p>
+    <p>
+      The page already has an ambiguity. The concordance and click-path examples
+      write <code>Baseline.at(0, 0.5)</code> and <code>Baseline.at(0, 0)</code>,
+      where <code>0</code> is a value of the <code>at</code> column, the
+      keyword's own place. It reads like an index, and in JavaScript
+      <code>Array.prototype.at(0)</code> is one.
+    </p>
+    <div class="table-wrap">
+      <table>
+        <tr>
+          <th>Option</th>
+          <th>Code</th>
+          <th>What it costs</th>
+        </tr>
+        <tr>
+          <td>(a) A key in a flow, an index in the combinator form</td>
+          <td>
+            <code
+              >spread({ dir: "x", baseline: Baseline.at(1, "baseline") },
+              [label, bars])</code
+            >
+          </td>
+          <td>
+            The same call means a key in one form and a position in the other,
+            and a numeric key such as the concordance's <code>0</code> reads
+            like an index. A flow cannot name a part by position.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            (b) The combinator form names a child by its <code>.name()</code>
+          </td>
+          <td>
+            <code
+              >spread({ dir: "x", baseline: Baseline.at("bars", "baseline") },
+              [label, bars.name("bars")])</code
+            >
+          </td>
+          <td>
+            <code>.name()</code> gets a second job. The spec carries a name used
+            only here, and a name is looked up beyond the parent, so a name
+            inside another child can match it.
+          </td>
+        </tr>
+        <tr>
+          <td>(c) Separate constructors for a key and a position</td>
+          <td>
+            <code>Baseline.at("Neutral", 0.5)</code> for a key, and a second
+            constructor that takes a position
+          </td>
+          <td>
+            Two constructors for one idea. GoFish has no word for a position
+            today (Android's is "child index"), and <code>at</code>, the key
+            form, is JavaScript's word for a position.
+          </td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      <b>Lean: (a).</b> It is how each form already knows its children, and the
+      form is visible at the call, because <code>baseline</code> sits on the
+      operator next to its <code>by</code> or its child list. This is decision
+      6.
+    </p>
   </article>
   <h2 id="croissant">
     2. Croissant: a density cut into equal-probability cells
@@ -3210,7 +3460,7 @@ ribbon(x=d.support(), h=d.density())</code></pre>
       in the sketch), because the mass of a Dist built from rows is a count.
       <code>dist.units("g", "count")</code> writes that record of units from the
       variable's unit and the mass's. How a reduce states the units of a record
-      is decision 17, in "Lifting".
+      is decision 19, in "Lifting".
     </p>
     <h4>A function that is not a distribution</h4>
     <p>
@@ -3262,7 +3512,7 @@ layer(
       cannot write it at all, because its domain differs per group; so a
       function expression has a <code>support()</code> method. That is a
       distribution word, so the name of this channel for a plain function is
-      decision 11. In Python, <code>fun</code> with a lambda needs the bridge
+      decision 13. In Python, <code>fun</code> with a lambda needs the bridge
       work in "Where function values appear".
     </p>
     <h4>Precedent for the function value</h4>
@@ -4007,7 +4257,7 @@ s.lo().map((x: number) =&gt; x);</code></pre>
         "What the methods compute" says.
       </li>
       <li>
-        <b>Arrays.</b> Open (decision 18). TypeScript maps a mapped type over an
+        <b>Arrays.</b> Open (decision 20). TypeScript maps a mapped type over an
         array element by element, so the sketch's types would treat a returned
         array as a record indexed by position (<code>r[0]()</code>), which is
         not proposed. The lean is to make it an error, because a list of values
@@ -4031,7 +4281,7 @@ s.lo().map((x: number) =&gt; x);</code></pre>
       have units that follow from two, the variable's and the mass's: the
       support is in g, the density in count per g, the cdf is a ratio.
       <code>dist.units("g", "count")</code> writes that record, so a Dist needs
-      only those two. Whether the option takes this shape is decision 17.
+      only those two. Whether the option takes this shape is decision 19.
     </p>
     <h4>Crossing to Python</h4>
     <p>
@@ -4183,7 +4433,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =&gt;
       member's unit follows from the variable's unit V and the mass's unit M
       (<code>support</code> in V, <code>density</code> in M per V,
       <code>cdf</code> a ratio), which the record <code>DistUnits</code> states
-      once, where a record of the user's own has to say them (decision 17).
+      once, where a record of the user's own has to say them (decision 19).
     </p>
     <p>
       The sketch simplifies #980's types: a unit is a plain tag, and #980's
@@ -4237,7 +4487,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =&gt;
     <p>
       Everyone says <code>cdf</code> and <code>support</code>, and most say
       <code>quantile</code>, so those stay. <code>density</code> against
-      <code>pdf</code> is decision 6, with the lean <code>density</code>.
+      <code>pdf</code> is decision 8, with the lean <code>density</code>.
     </p>
     <p class="label">Run time, and the spec level</p>
     <pre
@@ -4707,10 +4957,11 @@ rect({ h: trend });</code></pre>
       members.
     </li>
     <li>
-      <b>A baseline is a part and a fraction.</b>
+      <b>A baseline is a part and a point of it.</b>
       <code>Trait.diverging</code> desugars to
-      <code>Baseline.at(part, fraction)</code>, and whether the axis labels
-      distances from 0 is computed from the parts, not stored.
+      <code>Baseline.at(part, fraction)</code>; whether the point may also be
+      one of <code>alignment</code>'s words is decision 5. Whether the axis
+      labels distances from 0 is computed from the parts, not stored.
     </li>
   </ul>
   <h2>Open decisions</h2>
@@ -4728,7 +4979,11 @@ rect({ h: trend });</code></pre>
       to a point of the box when no child gives the line (SwiftUI's guide
       default, Flutter's top edge; Compose reports the line as unspecified), so
       this lean has no direct precedent there ("Precedent: alignment lines in UI
-      frameworks").
+      frameworks"). The precedents where a container names a child name it by
+      position (an index, first or last), which never meets an absent child;
+      resolving the key to its place in the order is that positional form, so
+      they support the lean ("What the precedent means for
+      <code>Baseline.at</code>").
     </li>
     <li>
       <code>Baseline.wiggle()</code> is defined on the function (the limit), not
@@ -4739,6 +4994,22 @@ rect({ h: trend });</code></pre>
       Under <code>Baseline.middle()</code> and
       <code>Baseline.wiggle()</code> the value axis is dropped, since it can
       only measure thickness?
+    </li>
+    <li>
+      Should <code>Baseline.at</code>'s second argument take the words
+      <code>"start" | "middle" | "end" | "baseline"</code> as well as a
+      fraction, with a word reading the part as <code>alignment</code> does and
+      a fraction kept from the part's tail to its head? And when it is left out,
+      is it <code>"baseline"</code>, the part's own 0, as in every precedent, or
+      is it required? ("What the precedent means for <code>Baseline.at</code>")
+    </li>
+    <li>
+      How is a part named in the combinator form, where the children have no
+      keys, and how is a numeric key told from an index? (a) A key in a flow and
+      an index in the combinator form; (b) a <code>.name()</code> on the child;
+      or (c) separate constructors for a key and a position. The lean is (a),
+      because it is how each form already knows its children and the form is
+      visible at the call.
     </li>
     <li>
       A density's area is the mass it is made from (the row count, or 1 for a

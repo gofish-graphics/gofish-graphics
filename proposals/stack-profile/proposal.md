@@ -21,7 +21,7 @@
 - `spread` takes `baseline` too, with `Baseline.start()`, `.end()`, `.middle()` and `.at(part, fraction)`. `Baseline.wiggle()` stays stack-only. `layer` and `scatter` do not take it.
 - Custom methods on a field expression are two verbs: `.map((x, i, xs) => value, { unit })` for one value per row, and `.reduce((xs) => value, { unit })` for one value per group. There is one form of `reduce`.
 - A 100% stack is `normalize` on the values followed by a plain stack: there is no divide operation.
-- A density is drawn by a channel pair, `support()` for the position (Josh is checking the name with Matt Kay, ggdist) and the density for the height; whether that is `density()` or `pdf()` is decision 6. Rejected for the position: `value()`, which clashes with GoFish's `value(...)` constructor, and `points()` or `grid()`, which name the sampling.
+- A density is drawn by a channel pair, `support()` for the position (Josh is checking the name with Matt Kay, ggdist) and the density for the height; whether that is `density()` or `pdf()` is decision 8. Rejected for the position: `value()`, which clashes with GoFish's `value(...)` constructor, and `points()` or `grid()`, which name the sampling.
 - `.then` cannot be the custom method's name: a field expression with a `then` method would be adopted as a promise by `resolveValue`.
 - How a bin's cells are shared stays under review, so no callback form is proposed for bins here.
 
@@ -480,7 +480,7 @@ const boxClaim = (cs: Fun<Extent>): Extent => {
 <li><b>Intertwine.</b> A claim may answer by running the subtree's layout at a trial σ and measuring it, and the solver searches for σ. This is what #967's comment planned for <code>pack</code> with mixed pixel and data radii, or with padding: bisection, at most 32 packs. That comment says <code>Monotonic</code> already has an <code>unknown</code> kind with a <code>run</code> function in <code>util/monotonic.ts</code>. That is no longer true. #1176 deleted <code>Monotonic</code> and wrote every claim as a <code>Pwl.Value</code> (commit e799b567a, which turned the unknown kind into a closure kind), and a later step removed the closures (77f80c776). Today <code>Pwl</code> has only <code>affine</code> and <code>piecewise</code>, and the fit inverts them exactly (<code>Pwl.solve</code>, <code>Pwl.fill</code>). So an opaque claim kind is new work, and it would bring back what #1176 removed on purpose. Its costs: up to N layouts of the subtree per solve; nested opaque claims multiply; and layout must be safe to run more than once, with no state carried from an earlier run.</li>
 </ul>
 <p><b>Josh's comparison to typing and elaboration.</b> (Elaboration is the pass that turns checked source into the explicit internal program; type checkers often do it in the same walk as checking.) The claim walk goes up the tree like inferring a type, with σ left as an unknown; the solve fixes σ; layout goes down, giving each child a size and a shape, and builds the placed tree. A closed-form claim keeps those walks apart. An opaque claim is the place where checking has to run the program to finish, which type checkers for dependent types do, and pay for.</p>
-<p><b>The lean.</b> Closed forms for stacks, ribbons, densities and an all-data <code>pack</code>. Add the opaque kind only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout (decision 14). And implement <code>pack</code>'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers (decision 15; lean yes).</p>
+<p><b>The lean.</b> Closed forms for stacks, ribbons, densities and an all-data <code>pack</code>. Add the opaque kind only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout (decision 16). And implement <code>pack</code>'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers (decision 17; lean yes).</p>
 
 ## 1. Stacked area, with each baseline
 
@@ -1029,6 +1029,105 @@ spread(by="response", dir="x", baseline=Baseline.at("Neutral", 0.5))
 
 **When no child gives the line.** In SwiftUI a view with no explicit value for a guide uses the guide's default ("A guide without an explicit value behaves as it would for any other view"), which `defaultValue(in:)` computes from that view's own box; the docs' custom guide says "Default to bottom alignment if no guides are set." So a SwiftUI Likert row with no Neutral bar would line up on its leading edge, not where Neutral would be. In Compose a layout whose children give no value has no line, and reading it returns `AlignmentLine.Unspecified`; when several children give one, the merger combines them. The `RowScope` reference does not say where an `alignBy` child without the line is placed. Flutter's `Row` top-aligns "children who report no baseline", and the `Baseline` widget uses a child's bottom. So the UI frameworks fall back to a point of the box. None of them places a missing child's line by an order of the children, as decision 2 leans to do.
 
+#### What the precedent means for `Baseline.at`
+
+**It confirms the form.** Where a UI container names a child (`LinearLayout`'s `baselineAlignedChildIndex`, a `UIStackView`'s first or last view, TeX's `\vtop` and `\vbox`), it only picks which child, and the line is then that child's own baseline. So a container that names a child is an established form, and `baseline` as an option of `stack` and `spread` needs no modifier on the child. GoFish could not use such a modifier when the children come from data, because there is no child in the spec to put it on.
+
+**The second argument takes the anchor words.** In the precedents the line is the named child's own baseline. Today's fraction says that only for some parts. `StackOrigin`'s fraction is measured from the part's tail to its head (`RelationAnchor` in `constraints/placementFacts.ts`). The tail is the part's own 0 when that 0 is a data baseline, as for a bar or a nested stack, and the part's start otherwise. The head is as far from the end as the tail is from the start. So fraction 0 is already the own 0 of a bar or a nested stack, and "that far through the part", as this page says above, is exact only when the tail is the start, as for a bar of a positive amount. Two kinds of point have no fraction:
+
+- A point of the part's box when its 0 is not at its start: the middle of a bar of a negative amount, or of a nested diverging stack.
+
+- The own 0 of a part whose 0 is not a data baseline, because its tail is its start. A nested `spread` is such a part: a spread folds to a space with no origin ("a spread packs boxes and has no origin", `graphicalOperators/spread.tsx`), so a nested spread that chooses its own 0 with `baseline` cannot be named by a fraction. This is read from the code, not run.
+
+A block of text lines is not a case today. A GoFish `text` draws one line and is placed like a rect of the same size: its 0 along y is the start edge of its box, and the glyphs' baseline sits inside the box (`shapes/text.tsx`). So `alignment: "baseline"` on two texts lines up the starts of their boxes, and no GoFish node reports a text baseline as its 0.
+
+The proposal: the second argument is one of the words `alignment` already uses, or a fraction. A word reads the part as `alignment` does: `"start"`, `"middle"` and `"end"` are points of its box, and `"baseline"` is its own 0. A fraction keeps today's meaning, from tail to head.
+
+Proposed: the second argument:
+
+```js
+Baseline.at("Neutral", "middle"); // for a bar of a positive count, the same point as 0.5
+Baseline.at("Female", "start"); // for such a bar, the same point as 0
+Baseline.at(1, "baseline"); // the second child's own 0, which a fraction cannot always say
+```
+
+```python
+Baseline.at("Neutral", "middle")  # for a bar of a positive count, the same point as 0.5
+Baseline.at("Female", "start")  # for such a bar, the same point as 0
+Baseline.at(
+    1, "baseline"
+)  # the second child's own 0, which a fraction cannot always say
+```
+
+Then `Baseline.start()` is the first part's `"start"` and `Baseline.end()` is the last part's `"end"`. TeX's `\vtop` and `\vbox` and a UIKit stack's first and last views also choose by position, but then use the child's own line, which is `"baseline"` on the first or last part. The two agree when that part's 0 is at its start, as for a bar of a positive amount or a text. Today's default origin is the first part's tail, which for a bar is its own 0, so a stack whose first bar is negative is the one case where the two differ.
+
+If the second argument is left out, should it be `"baseline"`, the part's own 0, as in every precedent, or should it be required? With `"baseline"` as the default, `Baseline.at("Female")` is the start of the Female bar, but `Baseline.at("Neutral")` is not the middle of Neutral. This is decision 5.
+
+`Trait.diverging(midpoint)` still translates exactly. `stackOrigin` gives a part and any fraction from 0 to 1 (the midpoint minus the level's rank), which no word names, so the fraction form stays. A diverging stack's parts are never negative (the stack rejects a negative part today), so their tail is their start, and the fraction is also that far through the box.
+
+An example that needs `"baseline"`: the Likert rows with gaps from above, each with its question to the left. Each row is a label and the spread of bars, and the row's 0 is the bars' own 0, the middle of Neutral. The parent's default `alignment: "baseline"` then lines the rows up on Neutral, and each label sits just left of its row's first bar. The middle of Neutral lies at a different fraction of the bars in each row, and the bars are a spread, whose tail is its start, so no fraction says it.
+
+Proposed (not run): question labels beside diverging bars with gaps:
+
+```js
+chart(survey, { color: likertColors })
+  .flow(spread({ by: "question", dir: "y", spacing: 6 }))
+  .mark((rows) =>
+    spread({ dir: "x", spacing: 6, baseline: Baseline.at(1, "baseline") }, [
+      text({ text: rows[0].question }),
+      chart(rows)
+        .flow(
+          spread({
+            by: "response",
+            dir: "x",
+            spacing: 3,
+            baseline: Baseline.at("Neutral", 0.5),
+          })
+        )
+        .mark(rect({ w: "count", fill: "response" })),
+    ])
+  )
+  .render(root, { w: 560, h: 200 });
+```
+
+```python
+chart(survey, color=likert_colors).flow(
+    spread(by="question", dir="y", spacing=6),
+).mark(
+    lambda rows: spread(
+        [
+            text(text=rows[0]["question"]),
+            chart(rows)
+            .flow(
+                spread(
+                    by="response",
+                    dir="x",
+                    spacing=3,
+                    baseline=Baseline.at("Neutral", 0.5),
+                )
+            )
+            .mark(rect(w="count", fill="response")),
+        ],
+        dir="x",
+        spacing=6,
+        baseline=Baseline.at(1, "baseline"),
+    )
+).render(
+    w=560, h=200
+)
+```
+
+<p><b>The precedents name a child by position, and the proposal names it by key.</b> <code>baselineAlignedChildIndex</code> is an index, and UIKit and TeX say first or last. First and last exist in any container with children, and an index names a place in the list, not a datum, so these systems do not meet a named child that the data lacks. The absent part of decision 2 exists only because <code>Baseline.at("Neutral", ...)</code> names a key. <code>Trait.diverging(midpoint)</code> is the positional form: a coordinate along the level order, which is defined whatever parts a row has (<code>stackOrigin</code> in <code>ast/schema.ts</code>). So the precedent supports the lean of decision 2: resolve the key to its place in the order, so a missing part moves nothing.</p>
+<p><b>What a part is in the combinator form.</b> In a flow, a part is a value of the <code>by</code> column. In the combinator form, <code>spread({ ... }, [a, b, c])</code>, the children have no keys. <code>createOperator</code> passes each child its index as the key argument of the mark call (<code>resolveMarkResult(mark, layerContext, d, i)</code>), but only the flow form sets a node's key from its group (<code>setKey</code>), so a combinator child is known only by its place in the list. A child may carry <code>.name()</code>, but that name is for <code>ref</code> and <code>selectAll</code>: it is looked up through the scopes of its component, not only by the parent (the <code>ref</code> reference page). Inside the stack, the part is already a position: <code>StackOrigin</code>'s part is "a child index from the split" (<code>constraints/distribute.ts</code>).</p>
+<p>The page already has an ambiguity. The concordance and click-path examples write <code>Baseline.at(0, 0.5)</code> and <code>Baseline.at(0, 0)</code>, where <code>0</code> is a value of the <code>at</code> column, the keyword's own place. It reads like an index, and in JavaScript <code>Array.prototype.at(0)</code> is one.</p>
+<div class="table-wrap"><table>
+<tr><th>Option</th><th>Code</th><th>What it costs</th></tr>
+<tr><td>(a) A key in a flow, an index in the combinator form</td><td><code>spread({ dir: "x", baseline: Baseline.at(1, "baseline") }, [label, bars])</code></td><td>The same call means a key in one form and a position in the other, and a numeric key such as the concordance's <code>0</code> reads like an index. A flow cannot name a part by position.</td></tr>
+<tr><td>(b) The combinator form names a child by its <code>.name()</code></td><td><code>spread({ dir: "x", baseline: Baseline.at("bars", "baseline") }, [label, bars.name("bars")])</code></td><td><code>.name()</code> gets a second job. The spec carries a name used only here, and a name is looked up beyond the parent, so a name inside another child can match it.</td></tr>
+<tr><td>(c) Separate constructors for a key and a position</td><td><code>Baseline.at("Neutral", 0.5)</code> for a key, and a second constructor that takes a position</td><td>Two constructors for one idea. GoFish has no word for a position today (Android's is "child index"), and <code>at</code>, the key form, is JavaScript's word for a position.</td></tr>
+</table></div>
+<p><b>Lean: (a).</b> It is how each form already knows its children, and the form is visible at the call, because <code>baseline</code> sits on the operator next to its <code>by</code> or its child list. This is decision 6.</p>
+
 ## 2. Croissant: a density cut into equal-probability cells
 
 ![Today's gallery story `Forward Syntax/Croissant` (real render). The proposed code draws the same picture; it does not run yet.](img/croissant-main.png)
@@ -1275,7 +1374,7 @@ d = field("mass").reduce(lambda xs: kde(xs), unit=dist.units("g", "count"))
 ribbon(x=d.support(), h=d.density())
 ```
 
-`kde(xs)` is a Dist that carries its own domain, as the distribution objects of scipy.stats, distributional and Distributions.jl do. So the custom density reads like the built-in one, and no spec names a range. A Dist's members have different units: `d.support()` is in g, and `d.density()` in count per g (`Per<Count, Grams>` in the sketch), because the mass of a Dist built from rows is a count. `dist.units("g", "count")` writes that record of units from the variable's unit and the mass's. How a reduce states the units of a record is decision 17, in "Lifting".
+`kde(xs)` is a Dist that carries its own domain, as the distribution objects of scipy.stats, distributional and Distributions.jl do. So the custom density reads like the built-in one, and no spec names a range. A Dist's members have different units: `d.support()` is in g, and `d.density()` in count per g (`Per<Count, Grams>` in the sketch), because the mass of a Dist built from rows is a count. `dist.units("g", "count")` writes that record of units from the variable's unit and the mass's. How a reduce states the units of a record is decision 19, in "Lifting".
 
 #### A function that is not a distribution
 
@@ -1310,7 +1409,7 @@ layer(
 ).render(w=480, h=300)
 ```
 
-<p><code>fun</code> makes a <code>Fun&lt;number&gt;</code>, the one generic type from "The interface": the function is stored as <code>at</code>, its interval as <code>domain</code>, and <code>knots</code> and <code>curve</code> are optional. A Dist's interval is its <code>support</code>, which is the density's domain, so one word names the interval of a function everywhere on this page. The x channel here is the identity over the same domain, which is all the parameter rule needs. Writing it out is long, and a <code>reduce</code> that returns a function cannot write it at all, because its domain differs per group; so a function expression has a <code>support()</code> method. That is a distribution word, so the name of this channel for a plain function is decision 11. In Python, <code>fun</code> with a lambda needs the bridge work in "Where function values appear".</p>
+<p><code>fun</code> makes a <code>Fun&lt;number&gt;</code>, the one generic type from "The interface": the function is stored as <code>at</code>, its interval as <code>domain</code>, and <code>knots</code> and <code>curve</code> are optional. A Dist's interval is its <code>support</code>, which is the density's domain, so one word names the interval of a function everywhere on this page. The x channel here is the identity over the same domain, which is all the parameter rule needs. Writing it out is long, and a <code>reduce</code> that returns a function cannot write it at all, because its domain differs per group; so a function expression has a <code>support()</code> method. That is a distribution word, so the name of this channel for a plain function is decision 13. In Python, <code>fun</code> with a lambda needs the bridge work in "Where function values appear".</p>
 <h4>Precedent for the function value</h4>
 <p>Each row was read from the system's current docs. Observable Plot has no function form (a maintainer says so in discussion 1999), and neither does plotly.</p>
 <div class="table-wrap"><table>
@@ -1529,11 +1628,11 @@ s.lo().map((x: number) => x);
 <ul>
 <li><b><code>bin</code>.</b> It is a grouping key: it decides what the groups are, so it is not a value per group. How a bin's cells are shared is still open on this page.</li>
 <li><b>A callback that needs two columns.</b> A custom method sees one field, so a mean of x weighted by w is a <code>derive</code> step, as "What the methods compute" says.</li>
-<li><b>Arrays.</b> Open (decision 18). TypeScript maps a mapped type over an array element by element, so the sketch's types would treat a returned array as a record indexed by position (<code>r[0]()</code>), which is not proposed. The lean is to make it an error, because a list of values per group is rows, which <code>derive</code> makes.</li>
+<li><b>Arrays.</b> Open (decision 20). TypeScript maps a mapped type over an array element by element, so the sketch's types would treat a returned array as a record indexed by position (<code>r[0]()</code>), which is not proposed. The lean is to make it an error, because a list of values per group is rows, which <code>derive</code> makes.</li>
 <li><b>Lifting again, or chaining.</b> A lifted value has no <code>map</code> or <code>reduce</code>, so <code>s.lo().map(...)</code> is a type error in the sketch. A value computed from <code>lo</code> and <code>hi</code> goes inside the callback, as another member.</li>
 </ul>
 <h4>Units</h4>
-<p>A number or a function value takes the <code>unit</code> option as today: one unit. A record needs a unit for each member, so the option mirrors the record's shape (<code>Units</code> in the sketch): one unit for all members, as <code>unit: "USD"</code> in the box plot, or a record of units, <code>unit: { box: "USD", n: "count" }</code>. A Dist's members have units that follow from two, the variable's and the mass's: the support is in g, the density in count per g, the cdf is a ratio. <code>dist.units("g", "count")</code> writes that record, so a Dist needs only those two. Whether the option takes this shape is decision 17.</p>
+<p>A number or a function value takes the <code>unit</code> option as today: one unit. A record needs a unit for each member, so the option mirrors the record's shape (<code>Units</code> in the sketch): one unit for all members, as <code>unit: "USD"</code> in the box plot, or a record of units, <code>unit: { box: "USD", n: "count" }</code>. A Dist's members have units that follow from two, the variable's and the mass's: the support is in g, the density in count per g, the cdf is a ratio. <code>dist.units("g", "count")</code> writes that record, so a Dist needs only those two. Whether the option takes this shape is decision 19.</p>
 <h4>Crossing to Python</h4>
 <p>A named method is data: it crosses as a <code>FieldOp</code> in the IR, and the engine computes it. A <code>reduce</code> written in Python is a callback. Today a Python accessor reaches JS as one batch call over rows (<code>RESOLVE_ROWS</code>), which returns one value per row. A Python <code>reduce</code> needs a new kind of call that returns one result per group. A record of numbers comes back as plain data, a dict as a JSON object. A returned function cannot come back: it has to stay in Python and be called with a batch of t values in each resampling round, as "Where function values appear" says. Both calls are new bridge work. A Dist made by a GoFish constructor can cross as data once the IR has a dist node.</p>
 <h4>Precedent</h4>
@@ -1577,7 +1676,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 <p>It differs from this page in three ways. Its <code>kde</code> range is the data's extent plus 3 bandwidths on each side, as seaborn does, while the page's lean is ggdist's range trimmed to the data. Its bandwidth is <code>1.06 &times; sd &times; n<sup>&minus;0.2</sup></code> (the normal reference rule), while the page says Silverman's <code>0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;0.2</sup></code>, which <code>silvermanBandwidth</code> computes. And its pdf has area 1, while the page proposes area n for rows. All three are prototype shortcuts; the proposal below follows the page.</p>
 <h4>Proposed</h4>
 <p>Two levels, with one vocabulary. At run time, a <code>Dist</code> is what the engine asks questions of. #980's sketch has <code>DistRep</code>, which is how a Dist is held (a family with parameters, draws, a mixture, a truncation); this <code>Dist</code> is what every representation answers. Its members are <code>density</code> and <code>cdf</code> (each a <code>Fun&lt;number&gt;</code>), <code>quantile(p)</code>, <code>median</code>, <code>mean</code>, <code>support</code> and <code>mass</code>. <code>support</code> is t &#8614; t, a <code>Fun&lt;number&gt;</code> whose domain is the support interval. It adds <code>mass</code> to the prototype, so stacked densities add. A cell of a partition is <code>restrictDist</code>, a function on a Dist rather than a member: it applies operation 4, <code>restrict</code>, to each function member and scales the mass. In a spec, a <code>DistExpr</code> is an expression over a Dist, as in #980. It is not written by hand: it is the run-time <code>Dist</code> lifted by the general rule in "Lifting", so the two cannot drift, plus <code>bin()</code>. <code>field("mass")</code> over a group of rows is the empirical Dist of those rows, so a field expression is the same lifted interface plus the row methods.</p>
-<p><b>What is still specific to a Dist.</b> Two things. <code>bin</code>, a grouping key that cuts the Dist's axis into cells, with <code>restrictDist</code> giving each cell its Dist. Restricting to a cell is operation 4 on any <code>Fun</code>, so a key that cuts an axis into cells could be offered for any value that can be restricted, a <code>Fun</code> included; that is not designed here. And its units: each member's unit follows from the variable's unit V and the mass's unit M (<code>support</code> in V, <code>density</code> in M per V, <code>cdf</code> a ratio), which the record <code>DistUnits</code> states once, where a record of the user's own has to say them (decision 17).</p>
+<p><b>What is still specific to a Dist.</b> Two things. <code>bin</code>, a grouping key that cuts the Dist's axis into cells, with <code>restrictDist</code> giving each cell its Dist. Restricting to a cell is operation 4 on any <code>Fun</code>, so a key that cuts an axis into cells could be offered for any value that can be restricted, a <code>Fun</code> included; that is not designed here. And its units: each member's unit follows from the variable's unit V and the mass's unit M (<code>support</code> in V, <code>density</code> in M per V, <code>cdf</code> a ratio), which the record <code>DistUnits</code> states once, where a record of the user's own has to say them (decision 19).</p>
 <p>The sketch simplifies #980's types: a unit is a plain tag, and #980's dependence parameter (whether draws are joint) is left out.</p>
 <p><b>Why <code>density</code> and not <code>pdf</code>.</b> For rows, the density's area is the row count, so it is not a probability density; <code>pdf</code> would name something it is not. For a family the mass is 1 and the two agree. The names elsewhere:</p>
 <div class="table-wrap"><table>
@@ -1587,7 +1686,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 <tr><td>distributional (R)</td><td><code>density</code></td><td><code>cdf</code></td><td><code>quantile</code></td><td><code>support</code></td></tr>
 <tr><td>ggdist (computed variables)</td><td><code>pdf</code></td><td><code>cdf</code></td><td></td><td></td></tr>
 </table></div>
-<p>Everyone says <code>cdf</code> and <code>support</code>, and most say <code>quantile</code>, so those stay. <code>density</code> against <code>pdf</code> is decision 6, with the lean <code>density</code>.</p>
+<p>Everyone says <code>cdf</code> and <code>support</code>, and most say <code>quantile</code>, so those stay. <code>density</code> against <code>pdf</code> is decision 8, with the lean <code>density</code>.</p>
 
 Run time, and the spec level:
 
@@ -1844,25 +1943,27 @@ A shape's cross-sections are also one way a `spread` could measure the shapes it
 - **A function value carries its domain. A mark that draws along a path has one parameter t.** Every function channel of it is read at the same t, and their domains must be equal, or it is an error. A bare JS function is a row accessor, never a function value.
 - **One verb per kind of result.** `map` gives one value per row. `reduce` gives one value per group.
 - **What a reduce returns is lifted by its shape.** A number becomes a value expression, a function value a function expression, and a record an object with one method per member, each the lift of that member. A channel takes only a number or a function value; a record is read through its members.
-- **A baseline is a part and a fraction.** `Trait.diverging` desugars to `Baseline.at(part, fraction)`, and whether the axis labels distances from 0 is computed from the parts, not stored.
+- **A baseline is a part and a point of it.** `Trait.diverging` desugars to `Baseline.at(part, fraction)`; whether the point may also be one of `alignment`'s words is decision 5. Whether the axis labels distances from 0 is computed from the parts, not stored.
 
 ## Open decisions
 
 1. A rigid part (a circle, text, an image, a line) in a stack of cross-sections: keep it an error that names the fix, or allow it, resting on the highest point of the boundary below it with a gap underneath?
-2. What `Baseline.at(part, fraction)` does when the named part is absent from a row, and when the column has no declared order. The lean is to do what `Trait.diverging` does: the 0 is placed by the column's order, so a missing part moves nothing. UI frameworks fall back to a point of the box when no child gives the line (SwiftUI's guide default, Flutter's top edge; Compose reports the line as unspecified), so this lean has no direct precedent there ("Precedent: alignment lines in UI frameworks").
+2. What `Baseline.at(part, fraction)` does when the named part is absent from a row, and when the column has no declared order. The lean is to do what `Trait.diverging` does: the 0 is placed by the column's order, so a missing part moves nothing. UI frameworks fall back to a point of the box when no child gives the line (SwiftUI's guide default, Flutter's top edge; Compose reports the line as unspecified), so this lean has no direct precedent there ("Precedent: alignment lines in UI frameworks"). The precedents where a container names a child name it by position (an index, first or last), which never meets an absent child; resolving the key to its place in the order is that positional form, so they support the lean ("What the precedent means for `Baseline.at`").
 3. `Baseline.wiggle()` is defined on the function (the limit), not on the rows, so finer rows do not change the curve? It is the one baseline that needs the derivative, products and a running integral.
 4. Under `Baseline.middle()` and `Baseline.wiggle()` the value axis is dropped, since it can only measure thickness?
-5. A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve. ggdist reaches the same curve with `after_stat(pdf * n)` and rescales thickness with `normalize`; here rescaling is the parent's job.
-6. `density` or `pdf` for the Dist member and method? The lean is `density`, because for rows its area is the row count, not 1.
-7. How far t runs for a density: follow ggdist (rows trimmed to the data's range with a bounded estimator; a Dist over its own support, or its 0.001 to 0.999 quantiles where unbounded), or seaborn (3 bandwidths past the data)? The lean is ggdist.
-8. A cell of a Dist partition is the Dist over the cell with its mass (the density unchanged inside, the mass the cell's share), so `d.density()` in a cell is the parent's curve there?
-9. `domain` or `range` for a function value's interval? `domain` has the most precedent (6 of 14), but in GoFish a unit already has a `Domain` (`families/domain.ts`: which values exist). My lean, a judgment and not a fact: they are the same concept, the set of values a variable takes, so `domain` fits, and a later `Domain.continuous` could be its value.
-10. The factory's name, `fun`? It matches ggplot2's `fun` argument and Julia's `Fun`, and the type `Fun<T>`. Alternatives: `func`, or `function` as Manim's argument is named (a reserved word in JS). `curve` is taken by the `Curve` family, and no surveyed system names it `fn`.
-11. What the x channel of a function that is not a distribution is called. `support()` is a distribution word. A reduce that returns a function needs a method, because its domain differs per group.
-12. `.map`'s callback keeps `Array.prototype.map`'s argument order, `(x, i, xs)`, with the index, rather than `(x, xs)`?
-13. An undeclared `unit` makes the result a plain number that cannot be stacked, for both verbs?
-14. Add an opaque claim kind (a claim that runs the subtree's layout at a trial σ) only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout? The lean is closed forms everywhere else.
-15. Implement `pack`'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers? The lean is yes.
-16. Accept the per-x rewrite (B at the union of breakpoints) as a declared shortcut until the engine has cross-sections?
-17. The `unit` option of a `reduce` mirrors the shape of what it returns: one unit for all members, or a record of units, with `dist.units(variable, mass)` writing a Dist's record from two units?
-18. A `reduce` that returns an array: an error, or a record indexed by position, as TypeScript's types would read it? The lean is an error, because a list of values per group is rows, which `derive` makes.
+5. Should `Baseline.at`'s second argument take the words `"start" | "middle" | "end" | "baseline"` as well as a fraction, with a word reading the part as `alignment` does and a fraction kept from the part's tail to its head? And when it is left out, is it `"baseline"`, the part's own 0, as in every precedent, or is it required? ("What the precedent means for `Baseline.at`")
+6. How is a part named in the combinator form, where the children have no keys, and how is a numeric key told from an index? (a) A key in a flow and an index in the combinator form; (b) a `.name()` on the child; or (c) separate constructors for a key and a position. The lean is (a), because it is how each form already knows its children and the form is visible at the call.
+7. A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve. ggdist reaches the same curve with `after_stat(pdf * n)` and rescales thickness with `normalize`; here rescaling is the parent's job.
+8. `density` or `pdf` for the Dist member and method? The lean is `density`, because for rows its area is the row count, not 1.
+9. How far t runs for a density: follow ggdist (rows trimmed to the data's range with a bounded estimator; a Dist over its own support, or its 0.001 to 0.999 quantiles where unbounded), or seaborn (3 bandwidths past the data)? The lean is ggdist.
+10. A cell of a Dist partition is the Dist over the cell with its mass (the density unchanged inside, the mass the cell's share), so `d.density()` in a cell is the parent's curve there?
+11. `domain` or `range` for a function value's interval? `domain` has the most precedent (6 of 14), but in GoFish a unit already has a `Domain` (`families/domain.ts`: which values exist). My lean, a judgment and not a fact: they are the same concept, the set of values a variable takes, so `domain` fits, and a later `Domain.continuous` could be its value.
+12. The factory's name, `fun`? It matches ggplot2's `fun` argument and Julia's `Fun`, and the type `Fun<T>`. Alternatives: `func`, or `function` as Manim's argument is named (a reserved word in JS). `curve` is taken by the `Curve` family, and no surveyed system names it `fn`.
+13. What the x channel of a function that is not a distribution is called. `support()` is a distribution word. A reduce that returns a function needs a method, because its domain differs per group.
+14. `.map`'s callback keeps `Array.prototype.map`'s argument order, `(x, i, xs)`, with the index, rather than `(x, xs)`?
+15. An undeclared `unit` makes the result a plain number that cannot be stacked, for both verbs?
+16. Add an opaque claim kind (a claim that runs the subtree's layout at a trial σ) only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout? The lean is closed forms everywhere else.
+17. Implement `pack`'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers? The lean is yes.
+18. Accept the per-x rewrite (B at the union of breakpoints) as a declared shortcut until the engine has cross-sections?
+19. The `unit` option of a `reduce` mirrors the shape of what it returns: one unit for all members, or a record of units, with `dist.units(variable, mass)` writing a Dist's record from two units?
+20. A `reduce` that returns an array: an error, or a record indexed by position, as TypeScript's types would read it? The lean is an error, because a list of values per group is rows, which `derive` makes.
