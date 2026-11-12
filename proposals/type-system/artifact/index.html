@@ -731,7 +731,7 @@
             <code>derive</code>, the checker looks at the rows.
           </li>
           <li>
-            Cumulative, Constant, Nominal and Ratio are derived from traits, not
+            Snapshot, Constant, Nominal and Ratio are derived from traits, not
             declared.
           </li>
           <li>Every default elaborates to code a user could write by hand.</li>
@@ -785,9 +785,12 @@
               a price. It combines by a mean weighted by its denominator.
             </li>
             <li>
-              <strong>Cumulative.</strong> A level at a point along an ordered
-              key, such as inventory at the end of a month. Summing it along
-              that key counts the same things again.
+              <strong>Snapshot.</strong> A reading at a point along an ordered
+              key, such as inventory at the end of a month. Adding snapshots
+              along that key counts the same things again. The draft called this
+              Cumulative, which sounds like it sums. A running total, such as
+              year-to-date sales, is the special case that really is a prefix
+              sum.
             </li>
             <li>
               <strong>Summarizability.</strong> The conditions under which a sum
@@ -857,8 +860,8 @@
               <span class="verdict v-ok">correct</span>
             </div>
             <p class="lead">
-              Months on x, warehouses stacked. Stock is a level per warehouse,
-              so adding warehouses within one month is right.
+              Months on x, warehouses stacked. Stock is a snapshot per
+              warehouse, so adding warehouses within one month is right.
             </p>
             <div class="label">
               Proposed schema (proposal section 1), used by every card below
@@ -949,7 +952,8 @@ const inv = chart(rows, {
             </div>
             <p class="lead">
               The same rows with the roles swapped. Each bar adds six
-              end-of-month levels, so it counts the same items once per month.
+              end-of-month snapshots, so it counts the same items once per
+              month.
             </p>
 
             <div class="label">Proposed spec</div>
@@ -970,7 +974,7 @@ const inv = chart(rows, {
             <div class="label">Checker error</div>
             <pre
               class="code plain msg msg-error"
-            ><code class="nohighlight">stock adds up over warehouse, not over month. Stacking it by month would count the same items once per month. Use one month, or field("stock").last() or .mean().</code></pre>
+            ><code class="nohighlight">stock is a snapshot along month. It adds up over warehouse, not over month. Stacking it by month would count the same items once per month. Use one month, or field("stock").last() or .mean().</code></pre>
 
             <details class="today">
               <summary>Today's code</summary>
@@ -1119,7 +1123,7 @@ chart(rows, { axes: true })
           <figure class="shot">
             <img
               src="img/daily-snapshots.png"
-              alt="Left: monthly stacks reaching about 50,000 items, each a sum of about 30 daily levels. Right: the same stacks from the last day of each month, about 1,600 items."
+              alt="Left: monthly stacks reaching about 50,000 items, each a sum of about 30 daily snapshots. Right: the same stacks from the last day of each month, about 1,600 items."
               loading="lazy"
             />
           </figure>
@@ -1130,9 +1134,9 @@ chart(rows, { axes: true })
               ><span class="verdict v-err">error under the proposal</span>
             </div>
             <p class="lead">
-              Daily stock levels per warehouse, binned by month. Today each bar
-              sums about 30 daily levels (left). The last day of each month,
-              filtered by hand, gives the right picture (right).
+              Daily stock snapshots per warehouse, binned by month. Today each
+              bar sums about 30 daily snapshots (left). The last day of each
+              month, filtered by hand, gives the right picture (right).
             </p>
 
             <div class="label">Proposed spec</div>
@@ -1172,7 +1176,7 @@ chart(rows, { axes: true })
             </div>
             <pre
               class="code plain msg msg-error"
-            ><code class="nohighlight">stock adds up over warehouse, not over day. Each bar would add about 30 daily levels. Use field("stock").last() or .mean().</code></pre>
+            ><code class="nohighlight">stock is a snapshot along day. It adds up over warehouse, not over day. Each bar would add about 30 daily snapshots. Use field("stock").last() or .mean().</code></pre>
             <p class="note">
               Rendered with
               <code>field("day").bin(Calendar.year).bin(Calendar.month)</code>:
@@ -1628,7 +1632,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   unit: Items,
   traits: [
     Trait.canSum({ over: "warehouse" }),
-    Trait.cumulative({ by: "month" }),
+    Trait.snapshot({ along: "month" }),
   ],
 },
 price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</code></pre>
@@ -1718,8 +1722,8 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
                 <ul>
                   <li>
                     A key not in <code>over</code>, along which the value
-                    changes, is a level. If that key has <code>HasOrder</code>,
-                    the error calls it a running level and offers
+                    changes, is a snapshot. If that key has
+                    <code>HasOrder</code>, the error says so and offers
                     <code>.last()</code> and <code>.mean()</code>. This is the
                     draft's Cumulative.
                   </li>
@@ -1789,7 +1793,7 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
                 <td>works through the static rule</td>
               </tr>
               <tr>
-                <th scope="row">Cumulative and Constant</th>
+                <th scope="row">Snapshot and Constant</th>
                 <td>declared</td>
                 <td>found by the check</td>
                 <td>derived and named in the error</td>
@@ -1808,18 +1812,18 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
           unforeseen keys. It keeps the draft's static errors. It names the key
           with <code>over</code>, which reads as a sum over warehouses and has
           no group-by reading. And it adds no trait whose only job is to name a
-          case: Cumulative and Constant come out of the check.
+          case: Snapshot and Constant come out of the check.
         </p>
         <p>
           What C makes awkward. A user who wants the draft's derivations (a
-          running sum of a flow is a level, and the first difference of a level
-          is a flow) gets them only if a later example forces a
-          <code>Trait.cumulative({ by })</code>. I would wait for that example.
-          The waterfall chart is the likely one.
+          running sum of a flow is a running total, and the first difference of
+          a running total is a flow) gets them only if a later example forces a
+          declared <code>Trait.snapshot({ along })</code>. I would wait for that
+          example. The waterfall chart is the likely one.
         </p>
         <p>
           Runner-up: A, if Josh wants each kind visible in the schema. What
-          would change my pick: a real chart that needs the level declared to
+          would change my pick: a real chart that needs the snapshot declared to
           draw correctly, not only to explain an error.
         </p>
         <h3>Names</h3>
@@ -1898,7 +1902,10 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
         </p>
         <p>
           Together these names are easier to hold than extensive, intensive and
-          cumulative. Those three stay as words for explaining, not as API.
+          cumulative. Extensive and intensive stay as words for explaining, not
+          as API. Cumulative is replaced by snapshot, because "cumulative"
+          sounds like "it sums", and most such values (inventory, population, a
+          balance) are readings at a moment, not running sums.
         </p>
         <h3>The two families side by side</h3>
         <p>The same four schema lines in each family.</p>
@@ -3682,12 +3689,13 @@ chart(
           </li>
         </ul>
         <p>
-          One correction to the draft. It says the cumulative case is the
-          disjointness condition. There are two disjointnesses. Groups of rows
-          are disjoint for any <code>by</code> on a column. What fails for
-          inventory over months is that the things each value counts overlap.
-          That check belongs on the column and the key, and on every sum, not
-          only on <code>stack</code>. Section 4's rule does this.
+          One correction to the draft. It says the cumulative case (a snapshot,
+          in this proposal's words) is the disjointness condition. There are two
+          disjointnesses. Groups of rows are disjoint for any <code>by</code> on
+          a column. What fails for inventory over months is that the things each
+          value counts overlap. That check belongs on the column and the key,
+          and on every sum, not only on <code>stack</code>. Section 4's rule
+          does this.
         </p>
         <p>
           Recommendation: no shared trait now. Keep the word
@@ -4280,7 +4288,7 @@ chart(
             <code>Domain.continuous</code>.
           </li>
           <li>
-            A type is added only where a chart forces it. Cumulative, Constant,
+            A type is added only where a chart forces it. Snapshot, Constant,
             <code>HasNeighbors</code>, <code>HasParent</code> and cells all
             wait.
           </li>
@@ -4299,7 +4307,7 @@ chart(
             A bin drops rows with a null key silently, while
             <code>by</code> keeps them as a group.
           </li>
-          <li>Daily level data binned by month is summed.</li>
+          <li>Daily snapshot data binned by month is summed.</li>
           <li><code>.normalize()</code> shares add up across groups.</li>
           <li>
             In a <code>.layer()</code> chain the first chart's coord covers

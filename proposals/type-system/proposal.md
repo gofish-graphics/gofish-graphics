@@ -25,7 +25,7 @@ Research behind each section is in [`research/`](research/):
 - **Fold.** Turning the several rows of one group into one value: sum, mean, last, and so on.
 - **Extensive.** A value that adds up over a key, such as units sold over stores. In this proposal it is the trait `CanSum` over that key.
 - **Intensive.** A value per unit of something, such as a price. It combines by a mean weighted by its denominator.
-- **Cumulative.** A level at a point along an ordered key, such as inventory at the end of a month. Summing it along that key counts the same things again.
+- **Snapshot.** A reading at a point along an ordered key, such as inventory at the end of a month. Adding snapshots along that key counts the same things again. The draft called this Cumulative, which sounds like it sums. A running total, such as year-to-date sales, is the special case that really is a prefix sum.
 - **Summarizability.** The conditions under which a sum over groups is correct: the groups do not overlap, they cover everything, and the value is of a kind that adds.
 - **Space fact.** Something layout computes about a space, not something a user declares. Examples: this axis has lengths that start at 0, or this mark is a glyph that a coord moves but does not bend.
 - **Elaboration.** Filling in a default from the types, so that the result is a spec the user could have written by hand.
@@ -96,7 +96,7 @@ What the checker then says:
 | Spec                                                                                               | Result                                                                                                                                                                                                                                                                                |
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `spread({ by: "month" })`, `stack({ by: "warehouse" })`, `rect({ h: "stock" })`                    | Draws. Stock adds up over warehouses.                                                                                                                                                                                                                                                 |
-| `spread({ by: "warehouse" })`, `stack({ by: "month" })`, `rect({ h: "stock" })`                    | Error: "`stock` adds up over `warehouse`, not over `month`. Stacking it by month would count the same items once per month. Use one month, or `field("stock").last()` or `.mean()`."                                                                                                  |
+| `spread({ by: "warehouse" })`, `stack({ by: "month" })`, `rect({ h: "stock" })`                    | Error: "`stock` is a snapshot along `month`. It adds up over `warehouse`, not over `month`. Stacking it by month would count the same items once per month. Use one month, or `field("stock").last()` or `.mean()`."                                                                  |
 | `spread({ by: "month" })`, `rect({ h: "price" })`                                                  | Draws. The bar height elaborates to `field("price").mean({ weight: "sold" })`. Today an undeclared `price` is summed, and a `price` with a declared unit is an error that says to call `.mean()`, which is unweighted.                                                                |
 | `stack({ by: "warehouse" })`, `rect({ h: "price" })`                                               | Error: "`price` is an average weighted by `sold`. It does not add up over `warehouse`."                                                                                                                                                                                               |
 | `spread({ by: "month" })`, `stack({ by: "warehouse" })`, `rect({ h: "sold" })` in a log coord on y | Error: "a stack draws lengths from 0, and a log axis has no 0" (#1326).                                                                                                                                                                                                               |
@@ -199,7 +199,7 @@ This is the main new API. The three kinds from the draft are the right way to ex
 ```js
 stock: {
   unit: Items,
-  traits: [Trait.canSum({ over: "warehouse" }), Trait.cumulative({ by: "month" })],
+  traits: [Trait.canSum({ over: "warehouse" }), Trait.snapshot({ along: "month" })],
 },
 price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
 ```
@@ -236,16 +236,16 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
 - **Static rule.** When the table's `key` is declared, the checker does not need the rows. `stack({ by: k })` needs `k` to be in the column's `over`. A channel fold needs every column of the rest key to be in `over`. This is A's rule, and it reports the error before any data is read.
 - **Fallback.** When a key is unknown (no declared `key`, a `by` that is a function, anything after `derive`), the checker uses the row check.
 - **The other kinds are derived, not declared.**
-  - A key not in `over`, along which the value changes, is a level. If that key has `HasOrder`, the error calls it a running level and offers `.last()` and `.mean()`. This is the draft's Cumulative.
+  - A key not in `over`, along which the value changes, is a snapshot. If that key has `HasOrder`, the error says so and offers `.last()` and `.mean()`. This is the draft's Cumulative.
   - A key not in `over`, along which the value is the same on every row, is a copy from a join. The error offers `.first()`. This is the fan trap, and the key-space research calls it Constant.
   - A bin of a key inherits the key's entry. `stock` does not add up over `month`, so it does not add up over quarters either.
 - **Unit-level `Trait.canSum()`** (today's `Trait.summable()`) stays as "sums over every key" for every column in that unit. A unit that declares it cannot also hold a column with a narrower `over`. That is an error when the schema is applied, so "one unit cannot both add up and not" still holds.
 
 Why C. It keeps #1198's single declaration and its coverage of unforeseen keys. It keeps the draft's static errors. It names the key with `over`, which reads as a sum over warehouses and has no group-by reading. And it adds no trait whose only job is to name a case: Cumulative and Constant come out of the check.
 
-What C makes awkward. A user who wants the draft's derivations (a running sum of a flow is a level, and the first difference of a level is a flow) gets them only if a later example forces a `Trait.cumulative({ by })`. I would wait for that example. The waterfall chart is the likely one.
+What C makes awkward. A user who wants the draft's derivations (a running sum of a flow is a running total, and the first difference of a running total is a flow) gets them only if a later example forces a declared `Trait.snapshot({ along })`. I would wait for that example. The waterfall chart is the likely one.
 
-Runner-up: A, if Josh wants each kind visible in the schema. What would change my pick: a real chart that needs the level declared to draw correctly, not only to explain an error.
+Runner-up: A, if Josh wants each kind visible in the schema. What would change my pick: a real chart that needs the snapshot declared to draw correctly, not only to explain an error.
 
 ### A key made of more than one field
 
@@ -303,7 +303,7 @@ Two changes from the first version of this proposal, both from Josh's review on 
 
 The split follows the trait names. A `Can<Verb>` trait is an operation, and its builder is the trait's own name, so the word in an error message is the word the user wrote. A `Has<Thing>` trait describes the values, and its builder is the adjective, because `diverging` has no good `has` form. This replaces the rule in `api-design.md` that every builder word is an adjective, and it renames today's `Trait.summable()`.
 
-Together these names are easier to hold than extensive, intensive and cumulative. Those three stay as words for explaining, not as API.
+Together these names are easier to hold than extensive, intensive and cumulative. Extensive and intensive stay as words for explaining, not as API. Cumulative is replaced by snapshot, because "cumulative" sounds like "it sums", and most such values (inventory, population, a balance) are readings at a moment, not running sums.
 
 ### Overlap check
 
@@ -477,7 +477,7 @@ Examples that decide it:
 - **Venn and UpSet.** The groups overlap, so sizes do not add. The fix is to group by the exact combination of sets.
 - **Top N before `.normalize()`.** Completeness is broken by `filter`. I would not add a "partial" type. A lint on `.normalize()` and on total labels is enough.
 
-One correction to the draft. It says the cumulative case is the disjointness condition. There are two disjointnesses. Groups of rows are disjoint for any `by` on a column. What fails for inventory over months is that the things each value counts overlap. That check belongs on the column and the key, and on every sum, not only on `stack`. Section 4's rule does this.
+One correction to the draft. It says the cumulative case (a snapshot, in this proposal's words) is the disjointness condition. There are two disjointnesses. Groups of rows are disjoint for any `by` on a column. What fails for inventory over months is that the things each value counts overlap. That check belongs on the column and the key, and on every sum, not only on `stack`. Section 4's rule does this.
 
 Recommendation: no shared trait now. Keep the word `partition` on the operator. The value-sized rule is section 4. The key-sized rule comes from units with "per" once #1142 lands.
 
@@ -668,7 +668,7 @@ Each step removes a wrong chart that renders today. Why this shape, against the 
 - One concept is one trait. `canSum` with `over` covers the unit flag, the entity key and the draft's Extensive.
 - Meaning lives on the data type, and a mismatch is a loud error that names the trait.
 - Few new terms: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic`, `key`, `Domain.continuous`.
-- A type is added only where a chart forces it. Cumulative, Constant, `HasNeighbors`, `HasParent` and cells all wait.
+- A type is added only where a chart forces it. Snapshot, Constant, `HasNeighbors`, `HasParent` and cells all wait.
 - The same shape in JS and Python, because the types are values on the wire.
 
 ## 14. Decisions for Josh
@@ -693,7 +693,7 @@ Syntax to review: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Tra
 
 - The schema docs list `.distinct()` among things that add up. Distinct counts do not add across groups.
 - A bin drops rows with a null key silently, while `by` keeps them as a group.
-- Daily level data binned by month is summed.
+- Daily snapshot data binned by month is summed.
 - `.normalize()` shares add up across groups.
 - In a `.layer()` chain the first chart's coord covers later tiers without saying so.
 - A spread of months in `Coord.clock()` with default spacing and no `w` draws wedges at uneven angles that overlap.
