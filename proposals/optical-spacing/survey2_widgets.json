@@ -1,5 +1,4 @@
 {
-  "seed": 1,
   "candidates": [
     {
       "key": "box",
@@ -22,29 +21,98 @@
       "label": "mean gap p 1"
     },
     {
+      "key": "size",
+      "label": "box gap ÷ mean neighbor size"
+    },
+    {
       "key": "pm3cRel",
       "label": "power mean p −3, cap 0.71 of the shape"
     }
   ],
-  "widgets": [
+  "ranking": [
     {
-      "n": 1,
+      "key": "notch",
+      "realism": 2,
+      "score": 27.24,
+      "decides": "rules out contact, pm3c, hull, mean (new: contact, pm3c, hull, mean)"
+    },
+    {
+      "key": "interlock-small",
+      "realism": 2,
+      "score": 12,
+      "decides": "rules out box, size (new: box, size)"
+    },
+    {
+      "key": "wedge",
+      "realism": 3,
+      "score": 13.97,
+      "decides": "rules out mean (all already covered)"
+    },
+    {
+      "key": "tip-circle",
+      "realism": 3,
+      "score": 11.83,
+      "decides": "rules out mean (all already covered)"
+    },
+    {
+      "key": "mixed-big",
+      "realism": 3,
+      "score": 8,
+      "decides": "rules out size (all already covered)"
+    },
+    {
+      "key": "mixed-small",
+      "realism": 3,
+      "score": 5,
+      "decides": "rules out size (all already covered)"
+    },
+    {
       "key": "square-circle",
-      "purpose": "discriminate",
-      "geometry": "a square and a circle",
-      "text": "Move the circle until the two gaps look the same to you.",
-      "aria": "a square and a circle; the circle moves left and right",
-      "axis": "x",
-      "range": [-1.5, 55.5],
-      "start": 51,
-      "side": "far",
+      "realism": 3,
+      "score": 2.71,
+      "decides": "isolates no candidate"
+    },
+    {
+      "key": "interlock",
+      "realism": 2,
+      "score": 0,
+      "decides": "isolates no candidate"
+    },
+    {
+      "key": "tips",
+      "realism": 1,
+      "score": 19.39,
+      "decides": "pathological; isolates pm3c, hull, mean"
+    },
+    {
+      "key": "spike-square",
+      "realism": 1,
+      "score": 15.27,
+      "decides": "pathological; isolates mean"
+    }
+  ],
+  "coveredBy": {
+    "box": "interlock-small",
+    "contact": "notch",
+    "pm3c": "notch",
+    "hull": "notch",
+    "mean": "notch",
+    "size": "interlock-small"
+  },
+  "uncovered": [],
+  "scaleOf": "notch",
+  "repeatOf": "interlock-small",
+  "wedgeSlopes": [
+    {
+      "depth": 14,
       "preds": {
         "box": 30,
         "contact": 30,
-        "pm3c": 25.94,
-        "hull": 26.99,
-        "mean": 23.97,
-        "pm3cRel": 25.94
+        "pm3c": 24.06,
+        "hull": 25.17,
+        "mean": 23,
+        "size": 22.5,
+        "pm3cRel": 24.06
       },
       "blind": {
         "box": false,
@@ -52,180 +120,217 @@
         "pm3c": false,
         "hull": false,
         "mean": false,
+        "size": false,
         "pm3cRel": false
-      },
-      "view": [-4, 0, 209.1, 153.6],
-      "fixed": [
-        {
-          "d": "M0 60L56 60L56 4L0 4Z"
-        },
-        {
-          "d": "M86 60L142 60L142 4L86 4Z"
-        },
-        {
-          "d": "M33.6 149.6L89.6 149.6L89.6 93.6L33.6 93.6Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M145.6 121.6L145.54 119.77L145.36 117.95L145.06 116.14L144.65 114.35L144.11 112.6L143.47 110.88L142.71 109.22L141.85 107.6L140.88 106.04L139.81 104.55L138.65 103.14L137.4 101.8L136.06 100.55L134.65 99.39L133.16 98.32L131.6 97.35L129.98 96.49L128.32 95.73L126.6 95.09L124.85 94.55L123.06 94.14L121.25 93.84L119.43 93.66L117.6 93.6L115.77 93.66L113.95 93.84L112.14 94.14L110.35 94.55L108.6 95.09L106.88 95.73L105.22 96.49L103.6 97.35L102.04 98.32L100.55 99.39L99.14 100.55L97.8 101.8L96.55 103.14L95.39 104.55L94.32 106.04L93.35 107.6L92.49 109.22L91.73 110.88L91.09 112.6L90.55 114.35L90.14 116.14L89.84 117.95L89.66 119.77L89.6 121.6L89.66 123.43L89.84 125.25L90.14 127.06L90.55 128.85L91.09 130.6L91.73 132.32L92.49 133.98L93.35 135.6L94.32 137.16L95.39 138.65L96.55 140.06L97.8 141.4L99.14 142.65L100.55 143.81L102.04 144.88L103.6 145.85L105.22 146.71L106.88 147.47L108.6 148.11L110.35 148.65L112.14 149.06L113.95 149.36L115.77 149.54L117.6 149.6L119.43 149.54L121.25 149.36L123.06 149.06L124.85 148.65L126.6 148.11L128.32 147.47L129.98 146.71L131.6 145.85L133.16 144.88L134.65 143.81L136.06 142.65L137.4 141.4L138.65 140.06L139.81 138.65L140.88 137.16L141.85 135.6L142.71 133.98L143.47 132.32L144.11 130.6L144.65 128.85L145.06 127.06L145.36 125.25L145.54 123.43Z",
-          "k": 1
-        }
-      ],
-      "edge": [89.6, 1]
+      }
     },
     {
-      "n": 2,
-      "key": "far-squares",
-      "purpose": "control: a far gap",
-      "geometry": "two pairs of squares, the reference 90 px apart",
-      "text": "Move the square until the two gaps look the same to you.",
-      "aria": "two pairs of squares, the reference 90 px apart; the square moves left and right",
-      "axis": "x",
-      "range": [14.5, 115.5],
-      "start": 22.5,
-      "side": "close",
+      "depth": 28,
       "preds": {
-        "box": 90,
-        "contact": 90,
-        "pm3c": 40,
-        "hull": 90,
-        "mean": 90
+        "box": 30,
+        "contact": 30,
+        "pm3c": 20.24,
+        "hull": 22.93,
+        "mean": 16,
+        "size": 25.6,
+        "pm3cRel": 20.24
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    },
+    {
+      "depth": 42,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 17.92,
+        "hull": 21.65,
+        "mean": 9,
+        "size": 27.99,
+        "pm3cRel": 17.92
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    },
+    {
+      "depth": 56,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 16.3,
+        "hull": 20.78,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 16.3
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    }
+  ],
+  "scales": [
+    {
+      "key": "tips",
+      "sep2x": 5.65,
+      "preds": {
+        "box": 60,
+        "contact": 60,
+        "pm3c": 39,
+        "hull": 35.91,
+        "mean": 0.38,
+        "size": 51.36,
+        "pm3cRel": 22.05
       },
       "blind": {
         "box": false,
         "contact": false,
         "pm3c": true,
         "hull": false,
-        "mean": false
-      },
-      "view": [-4, 0, 269.1, 153.6],
-      "fixed": [
-        {
-          "d": "M0 60L56 60L56 4L0 4Z"
-        },
-        {
-          "d": "M146 60L202 60L202 4L146 4Z"
-        },
-        {
-          "d": "M33.6 149.6L89.6 149.6L89.6 93.6L33.6 93.6Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M89.6 149.6L145.6 149.6L145.6 93.6L89.6 93.6Z",
-          "k": 1
-        }
-      ],
-      "edge": [89.6, 1]
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
     },
     {
-      "n": 3,
+      "key": "spike-square",
+      "sep2x": 0.57,
+      "preds": {
+        "box": 60,
+        "contact": 60,
+        "pm3c": 39,
+        "hull": 44.42,
+        "mean": 0.91,
+        "size": 52.46,
+        "pm3cRel": 37.29
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": true,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    },
+    {
+      "key": "notch",
+      "sep2x": 3.84,
+      "preds": {
+        "box": 60,
+        "contact": -7.2,
+        "pm3c": -28,
+        "hull": 9.66,
+        "mean": -67.01,
+        "size": 60,
+        "pm3cRel": -39.51
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": true,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    },
+    {
+      "key": "tip-circle",
+      "sep2x": 0,
+      "preds": {
+        "box": 60,
+        "contact": 60,
+        "pm3c": 39,
+        "hull": 46.37,
+        "mean": 4,
+        "size": 60,
+        "pm3cRel": 40.64
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": true,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    },
+    {
       "key": "interlock",
-      "purpose": "discriminate",
-      "geometry": "an up triangle and a down triangle, slanted sides parallel",
-      "text": "Move the triangle until the two gaps look the same to you.",
-      "aria": "an up triangle and a down triangle, slanted sides parallel; the triangle moves left and right",
-      "axis": "x",
-      "range": [-23.5, 55.5],
-      "start": 49,
-      "side": "far",
+      "sep2x": 0,
       "preds": {
-        "box": 30,
-        "contact": 2,
-        "pm3c": 2,
-        "hull": 2,
-        "mean": 2
+        "box": 60,
+        "contact": 4,
+        "pm3c": -16,
+        "hull": 4,
+        "mean": 4,
+        "size": 60,
+        "pm3cRel": 4
       },
       "blind": {
         "box": false,
         "contact": false,
-        "pm3c": false,
+        "pm3c": true,
         "hull": false,
-        "mean": false
-      },
-      "view": [-4, 0, 209.1, 153.6],
-      "fixed": [
-        {
-          "d": "M0 60L56 60L56 4L0 4Z"
-        },
-        {
-          "d": "M86 60L142 60L142 4L86 4Z"
-        },
-        {
-          "d": "M33.6 149.6L89.6 149.6L61.6 93.6Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M89.6 93.6L117.6 149.6L145.6 93.6Z",
-          "k": 1
-        }
-      ],
-      "edge": [89.6, 1]
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
     },
     {
-      "n": 4,
-      "key": "triangles",
-      "purpose": "repeat: v1 widget 1",
-      "geometry": "v1 widget 1: a square, then up, down and up triangles fixed 30 px apart",
-      "text": "Move the square until the gaps look even to you.",
-      "aria": "A square and three triangles; the square moves",
-      "axis": "x",
-      "range": [-23.5, 55.5],
-      "start": -17,
-      "side": "close",
+      "key": "interlock-small",
+      "sep2x": 0,
       "preds": {
-        "box": 2,
-        "contact": 30,
-        "pm3c": 20.26,
-        "hull": 22.96,
-        "mean": 16.02
+        "box": 60,
+        "contact": 20.8,
+        "pm3c": 1,
+        "hull": 20.8,
+        "mean": 20.8,
+        "size": 42,
+        "pm3cRel": 20.8
       },
       "blind": {
         "box": false,
         "contact": false,
-        "pm3c": false,
+        "pm3c": true,
         "hull": false,
-        "mean": false
-      },
-      "view": [-115.5, 0, 291.5, 64],
-      "fixed": [
-        {
-          "d": "M0 60L56 60L28 4Z"
-        },
-        {
-          "d": "M58 4L86 60L114 4Z"
-        },
-        {
-          "d": "M116 60L172 60L144 4Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M-56 60L0 60L0 4L-56 4Z",
-          "k": -1
-        }
-      ],
-      "edge": [0, -1]
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
     },
     {
-      "n": 5,
-      "key": "square-circle-double",
-      "purpose": "scale of square-circle, 2x",
-      "geometry": "a square and a circle at 2x size (shapes 112 px, reference gap 60 px)",
-      "text": "Move the circle until the two gaps look the same to you.",
-      "aria": "a square and a circle at 2x size (shapes 112 px, reference gap 60 px); the circle moves left and right",
-      "axis": "x",
-      "range": [-10.5, 110.5],
-      "start": 101,
-      "side": "far",
+      "key": "square-circle",
+      "sep2x": 0,
       "preds": {
         "box": 60,
         "contact": 60,
         "pm3c": 40,
         "hull": 53.97,
         "mean": 47.95,
+        "size": 60,
         "pm3cRel": 51.89
       },
       "blind": {
@@ -234,181 +339,413 @@
         "pm3c": true,
         "hull": false,
         "mean": false,
+        "size": false,
         "pm3cRel": false
-      },
-      "view": [-4, 0, 409.7, 299.2],
-      "fixed": [
-        {
-          "d": "M0 116L112 116L112 4L0 4Z"
-        },
-        {
-          "d": "M172 116L284 116L284 4L172 4Z"
-        },
-        {
-          "d": "M67.2 295.2L179.2 295.2L179.2 183.2L67.2 183.2Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M291.2 239.2L291.08 235.54L290.72 231.89L290.12 228.27L289.29 224.71L288.23 221.2L286.94 217.77L285.42 214.43L283.7 211.2L281.76 208.09L279.63 205.11L277.3 202.28L274.8 199.6L272.12 197.1L269.29 194.77L266.31 192.64L263.2 190.7L259.97 188.98L256.63 187.46L253.2 186.17L249.69 185.11L246.13 184.28L242.51 183.68L238.86 183.32L235.2 183.2L231.54 183.32L227.89 183.68L224.27 184.28L220.71 185.11L217.2 186.17L213.77 187.46L210.43 188.98L207.2 190.7L204.09 192.64L201.11 194.77L198.28 197.1L195.6 199.6L193.1 202.28L190.77 205.11L188.64 208.09L186.7 211.2L184.98 214.43L183.46 217.77L182.17 221.2L181.11 224.71L180.28 228.27L179.68 231.89L179.32 235.54L179.2 239.2L179.32 242.86L179.68 246.51L180.28 250.13L181.11 253.69L182.17 257.2L183.46 260.63L184.98 263.97L186.7 267.2L188.64 270.31L190.77 273.29L193.1 276.12L195.6 278.8L198.28 281.3L201.11 283.63L204.09 285.76L207.2 287.7L210.43 289.42L213.77 290.94L217.2 292.23L220.71 293.29L224.27 294.12L227.89 294.72L231.54 295.08L235.2 295.2L238.86 295.08L242.51 294.72L246.13 294.12L249.69 293.29L253.2 292.23L256.63 290.94L259.97 289.42L263.2 287.7L266.31 285.76L269.29 283.63L272.12 281.3L274.8 278.8L277.3 276.12L279.63 273.29L281.76 270.31L283.7 267.2L285.42 263.97L286.94 260.63L288.23 257.2L289.29 253.69L290.12 250.13L290.72 246.51L291.08 242.86Z",
-          "k": 1
-        }
-      ],
-      "edge": [179.2, 1]
+      }
     },
     {
-      "n": 6,
-      "key": "tip-circle",
-      "purpose": "discriminate",
-      "geometry": "a circle and a triangle whose tip points at it",
-      "text": "Move the triangle until the two gaps look the same to you.",
-      "aria": "a circle and a triangle whose tip points at it; the triangle moves left and right",
-      "axis": "x",
-      "range": [-25, 55.5],
-      "start": -18.5,
-      "side": "close",
+      "key": "wedge",
+      "sep2x": 2.13,
       "preds": {
-        "box": 30,
-        "contact": 30,
-        "pm3c": 16.05,
-        "hull": 20.69,
-        "mean": 0.43
+        "box": 60,
+        "contact": 60,
+        "pm3c": 39,
+        "hull": 41.56,
+        "mean": 4,
+        "size": 60,
+        "pm3cRel": 32.61
       },
       "blind": {
         "box": false,
         "contact": false,
-        "pm3c": false,
+        "pm3c": true,
         "hull": false,
-        "mean": false
-      },
-      "view": [-4, 0, 209.1, 153.6],
-      "fixed": [
-        {
-          "d": "M0 60L56 60L56 4L0 4Z"
-        },
-        {
-          "d": "M86 60L142 60L142 4L86 4Z"
-        },
-        {
-          "d": "M89.6 121.6L89.54 119.77L89.36 117.95L89.06 116.14L88.65 114.35L88.11 112.6L87.47 110.88L86.71 109.22L85.85 107.6L84.88 106.04L83.81 104.55L82.65 103.14L81.4 101.8L80.06 100.55L78.65 99.39L77.16 98.32L75.6 97.35L73.98 96.49L72.32 95.73L70.6 95.09L68.85 94.55L67.06 94.14L65.25 93.84L63.43 93.66L61.6 93.6L59.77 93.66L57.95 93.84L56.14 94.14L54.35 94.55L52.6 95.09L50.88 95.73L49.22 96.49L47.6 97.35L46.04 98.32L44.55 99.39L43.14 100.55L41.8 101.8L40.55 103.14L39.39 104.55L38.32 106.04L37.35 107.6L36.49 109.22L35.73 110.88L35.09 112.6L34.55 114.35L34.14 116.14L33.84 117.95L33.66 119.77L33.6 121.6L33.66 123.43L33.84 125.25L34.14 127.06L34.55 128.85L35.09 130.6L35.73 132.32L36.49 133.98L37.35 135.6L38.32 137.16L39.39 138.65L40.55 140.06L41.8 141.4L43.14 142.65L44.55 143.81L46.04 144.88L47.6 145.85L49.22 146.71L50.88 147.47L52.6 148.11L54.35 148.65L56.14 149.06L57.95 149.36L59.77 149.54L61.6 149.6L63.43 149.54L65.25 149.36L67.06 149.06L68.85 148.65L70.6 148.11L72.32 147.47L73.98 146.71L75.6 145.85L77.16 144.88L78.65 143.81L80.06 142.65L81.4 141.4L82.65 140.06L83.81 138.65L84.88 137.16L85.85 135.6L86.71 133.98L87.47 132.32L88.11 130.6L88.65 128.85L89.06 127.06L89.36 125.25L89.54 123.43Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M89.6 121.6L145.6 149.6L145.6 93.6Z",
-          "k": 1
-        }
-      ],
-      "edge": [89.6, 1]
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
     },
     {
-      "n": 7,
-      "key": "notch",
-      "purpose": "discriminate",
-      "geometry": "a triangle's tip pointing into the notch of an L",
-      "text": "Move the triangle until the two gaps look the same to you.",
-      "aria": "a triangle's tip pointing into the notch of an L; the triangle moves left and right",
-      "axis": "x",
-      "range": [-41, 55.5],
-      "start": 48,
-      "side": "far",
+      "key": "mixed-small",
+      "sep2x": 0,
       "preds": {
-        "box": 30,
-        "contact": 14.2,
-        "pm3c": -2.91,
-        "hull": 13.68,
-        "mean": -15.58
+        "box": 60,
+        "contact": 60,
+        "pm3c": 40,
+        "hull": 60,
+        "mean": 60,
+        "size": 45,
+        "pm3cRel": 60
       },
       "blind": {
         "box": false,
         "contact": false,
-        "pm3c": false,
+        "pm3c": true,
         "hull": false,
-        "mean": false
-      },
-      "view": [-4, 0, 209.1, 153.6],
-      "fixed": [
-        {
-          "d": "M0 60L56 60L56 4L0 4Z"
-        },
-        {
-          "d": "M86 60L142 60L142 4L86 4Z"
-        },
-        {
-          "d": "M33.6 149.6L89.6 149.6L89.6 129.44L53.76 129.44L53.76 93.6L33.6 93.6Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M89.6 121.6L145.6 149.6L145.6 93.6Z",
-          "k": 1
-        }
-      ],
-      "edge": [89.6, 1]
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
     },
     {
-      "n": 8,
+      "key": "mixed-big",
+      "sep2x": 0,
+      "preds": {
+        "box": 60,
+        "contact": 60,
+        "pm3c": 40,
+        "hull": 60,
+        "mean": 60,
+        "size": 90,
+        "pm3cRel": 60
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": true,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    },
+    {
       "key": "stars",
-      "purpose": "control: an odd shape",
-      "geometry": "two pairs of thin stars, the reference 30 px apart",
-      "text": "Move the star until the two gaps look the same to you.",
-      "aria": "two pairs of thin stars, the reference 30 px apart; the star moves left and right",
-      "axis": "x",
-      "range": [4.5, 55.5],
-      "start": 9.5,
-      "side": "close",
+      "sep2x": 0,
       "preds": {
-        "box": 30,
-        "contact": 30,
-        "pm3c": 30,
-        "hull": 30,
-        "mean": 30
+        "box": 60,
+        "contact": 60,
+        "pm3c": 39,
+        "hull": 60,
+        "mean": 60,
+        "size": 60,
+        "pm3cRel": 60
       },
       "blind": {
         "box": false,
         "contact": false,
-        "pm3c": false,
+        "pm3c": true,
         "hull": false,
-        "mean": false
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      }
+    }
+  ],
+  "matrix": [
+    {
+      "key": "notch",
+      "realism": 2,
+      "cells": {
+        "box": "bold",
+        "contact": "out",
+        "pm3c": "out",
+        "hull": "out",
+        "mean": "out",
+        "size": "bold"
       },
-      "view": [-2.63, 0, 203.62, 148.25],
-      "fixed": [
-        {
-          "d": "M28 4L22.73 24.75L1.37 23.35L19.48 34.77L11.54 54.65L28 40.96L44.46 54.65L36.52 34.77L54.63 23.35L33.27 24.75Z"
-        },
-        {
-          "d": "M111.26 4L105.99 24.75L84.63 23.35L102.74 34.77L94.8 54.65L111.26 40.96L127.72 54.65L119.78 34.77L137.89 23.35L116.53 24.75Z"
-        },
-        {
-          "d": "M61.6 93.6L56.33 114.35L34.97 112.95L53.08 124.37L45.14 144.25L61.6 130.56L78.06 144.25L70.12 124.37L88.23 112.95L66.87 114.35Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M114.86 93.6L109.59 114.35L88.23 112.95L106.34 124.37L98.4 144.25L114.86 130.56L131.32 144.25L123.38 124.37L141.49 112.95L120.13 114.35Z",
-          "k": 1
-        }
-      ],
-      "edge": [88.2295824562643, 1]
+      "iso": {
+        "box": 0,
+        "contact": 5.62,
+        "pm3c": 9.19,
+        "hull": 5.62,
+        "mean": 9.19,
+        "size": 0
+      }
     },
     {
-      "n": 9,
-      "key": "square-circle-half",
-      "purpose": "scale of square-circle, 0.5x",
-      "geometry": "a square and a circle at 0.5x size (shapes 28 px, reference gap 15 px)",
-      "text": "Move the circle until the two gaps look the same to you.",
-      "aria": "a square and a circle at 0.5x size (shapes 28 px, reference gap 15 px); the circle moves left and right",
-      "axis": "x",
-      "range": [-1, 28],
-      "start": 25.5,
-      "side": "far",
+      "key": "interlock-small",
+      "realism": 2,
+      "cells": {
+        "box": "out",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "out"
+      },
+      "iso": {
+        "box": 6,
+        "contact": 0,
+        "pm3c": 0,
+        "hull": 0,
+        "mean": 0,
+        "size": 6
+      }
+    },
+    {
+      "key": "wedge",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 2.99,
+        "hull": 2.99,
+        "mean": 9.53,
+        "size": 0
+      }
+    },
+    {
+      "key": "mixed-small",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "out"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 0,
+        "hull": 0,
+        "mean": 0,
+        "size": 5
+      }
+    },
+    {
+      "key": "stars",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 0,
+        "hull": 0,
+        "mean": 0,
+        "size": 0
+      }
+    },
+    {
+      "key": "notch-double",
+      "realism": 2,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "blind",
+        "hull": "bold",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 0,
+        "hull": 0,
+        "mean": 13,
+        "size": 0
+      }
+    },
+    {
+      "key": "mixed-big",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "out"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 0,
+        "hull": 0,
+        "mean": 0,
+        "size": 10
+      }
+    },
+    {
+      "key": "interlock-small-mirror",
+      "realism": 2,
+      "cells": {
+        "box": "out",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "out"
+      },
+      "iso": {
+        "box": 6,
+        "contact": 0,
+        "pm3c": 0,
+        "hull": 0,
+        "mean": 0,
+        "size": 6
+      }
+    },
+    {
+      "key": "square-circle",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 0.7,
+        "hull": 0.7,
+        "mean": 1.31,
+        "size": 0
+      }
+    },
+    {
+      "key": "notch-invert",
+      "realism": 2,
+      "cells": {
+        "box": "bold",
+        "contact": "out",
+        "pm3c": "out",
+        "hull": "out",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 5.62,
+        "pm3c": 9.19,
+        "hull": 5.62,
+        "mean": 9.19,
+        "size": 0
+      }
+    },
+    {
+      "key": "tip-circle",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 1.91,
+        "hull": 1.91,
+        "mean": 12.21,
+        "size": 0
+      }
+    },
+    {
+      "key": "square-circle-invert",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "bold",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 0.7,
+        "hull": 0.7,
+        "mean": 1.31,
+        "size": 0
+      }
+    },
+    {
+      "key": "notch-hue",
+      "realism": 2,
+      "cells": {
+        "box": "bold",
+        "contact": "out",
+        "pm3c": "out",
+        "hull": "out",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 5.62,
+        "pm3c": 9.19,
+        "hull": 5.62,
+        "mean": 9.19,
+        "size": 0
+      }
+    },
+    {
+      "key": "tip-circle-hue",
+      "realism": 3,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "bold",
+        "hull": "bold",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 1.91,
+        "hull": 1.91,
+        "mean": 12.21,
+        "size": 0
+      }
+    },
+    {
+      "key": "tips",
+      "realism": 1,
+      "cells": {
+        "box": "bold",
+        "contact": "bold",
+        "pm3c": "out",
+        "hull": "out",
+        "mean": "out",
+        "size": "bold"
+      },
+      "iso": {
+        "box": 0,
+        "contact": 0,
+        "pm3c": 4.63,
+        "hull": 4.63,
+        "mean": 7.25,
+        "size": 2.88
+      }
+    }
+  ],
+  "pool": [
+    {
+      "key": "tips",
+      "realism": 1,
       "preds": {
-        "box": 15,
-        "contact": 15,
-        "pm3c": 12.9,
-        "hull": 13.49,
-        "mean": 11.99,
-        "pm3cRel": 12.97
+        "box": 30,
+        "contact": 30,
+        "pm3c": 11.06,
+        "hull": 18.01,
+        "mean": 0.19,
+        "size": 25.68,
+        "pm3cRel": 11.06
       },
       "blind": {
         "box": false,
@@ -416,54 +753,656 @@
         "pm3c": false,
         "hull": false,
         "mean": false,
+        "size": false,
         "pm3cRel": false
       },
-      "view": [-4, 0, 108.8, 80.8],
-      "fixed": [
-        {
-          "d": "M0 32L28 32L28 4L0 4Z"
-        },
-        {
-          "d": "M43 32L71 32L71 4L43 4Z"
-        },
-        {
-          "d": "M16.8 76.8L44.8 76.8L44.8 48.8L16.8 48.8Z"
-        }
-      ],
-      "moving": [
-        {
-          "d": "M72.8 62.8L72.77 61.88L72.68 60.97L72.53 60.07L72.32 59.18L72.06 58.3L71.73 57.44L71.36 56.61L70.92 55.8L70.44 55.02L69.91 54.28L69.33 53.57L68.7 52.9L68.03 52.27L67.32 51.69L66.58 51.16L65.8 50.68L64.99 50.24L64.16 49.87L63.3 49.54L62.42 49.28L61.53 49.07L60.63 48.92L59.72 48.83L58.8 48.8L57.88 48.83L56.97 48.92L56.07 49.07L55.18 49.28L54.3 49.54L53.44 49.87L52.61 50.24L51.8 50.68L51.02 51.16L50.28 51.69L49.57 52.27L48.9 52.9L48.27 53.57L47.69 54.28L47.16 55.02L46.68 55.8L46.24 56.61L45.87 57.44L45.54 58.3L45.28 59.18L45.07 60.07L44.92 60.97L44.83 61.88L44.8 62.8L44.83 63.72L44.92 64.63L45.07 65.53L45.28 66.42L45.54 67.3L45.87 68.16L46.24 68.99L46.68 69.8L47.16 70.58L47.69 71.32L48.27 72.03L48.9 72.7L49.57 73.33L50.28 73.91L51.02 74.44L51.8 74.92L52.61 75.36L53.44 75.73L54.3 76.06L55.18 76.32L56.07 76.53L56.97 76.68L57.88 76.77L58.8 76.8L59.72 76.77L60.63 76.68L61.53 76.53L62.42 76.32L63.3 76.06L64.16 75.73L64.99 75.36L65.8 74.92L66.58 74.44L67.32 73.91L68.03 73.33L68.7 72.7L69.33 72.03L69.91 71.32L70.44 70.58L70.92 69.8L71.36 68.99L71.73 68.16L72.06 67.3L72.32 66.42L72.53 65.53L72.68 64.63L72.77 63.72Z",
-          "k": 1
-        }
-      ],
-      "edge": [44.8, 1]
+      "sd": 1.5
     },
     {
-      "n": 10,
-      "key": "tip-circle-mirror",
-      "purpose": "repeat of tip-circle, mirrored",
-      "geometry": "a circle and a triangle whose tip points at it, mirrored",
-      "text": "Move the triangle until the two gaps look the same to you.",
-      "aria": "a circle and a triangle whose tip points at it; the triangle moves left and right",
-      "axis": "x",
-      "range": [-25, 55.5],
-      "start": 49,
-      "side": "far",
+      "key": "spike-square",
+      "realism": 1,
       "preds": {
         "box": 30,
         "contact": 30,
-        "pm3c": 16.05,
-        "hull": 20.69,
-        "mean": 0.43
+        "pm3c": 18.65,
+        "hull": 22.22,
+        "mean": 0.45,
+        "size": 26.23,
+        "pm3cRel": 18.65
       },
       "blind": {
         "box": false,
         "contact": false,
         "pm3c": false,
         "hull": false,
-        "mean": false
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
       },
-      "view": [-205.1, 0, 209.1, 153.6],
+      "sd": 1.5
+    },
+    {
+      "key": "notch",
+      "realism": 2,
+      "preds": {
+        "box": 30,
+        "contact": -3.6,
+        "pm3c": -19.71,
+        "hull": 4.83,
+        "mean": -33.5,
+        "size": 30,
+        "pm3cRel": -19.71
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "tip-circle",
+      "realism": 3,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 20.32,
+        "hull": 23.19,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 20.32
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "interlock",
+      "realism": 2,
+      "preds": {
+        "box": 30,
+        "contact": 2,
+        "pm3c": 2,
+        "hull": 2,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 2
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "interlock-small",
+      "realism": 2,
+      "preds": {
+        "box": 30,
+        "contact": 10.4,
+        "pm3c": 10.4,
+        "hull": 10.4,
+        "mean": 10.4,
+        "size": 21,
+        "pm3cRel": 10.4
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "square-circle",
+      "realism": 3,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 25.94,
+        "hull": 26.99,
+        "mean": 23.97,
+        "size": 30,
+        "pm3cRel": 25.94
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "wedge",
+      "realism": 3,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 16.3,
+        "hull": 20.78,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 16.3
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "mixed-small",
+      "realism": 3,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 30,
+        "hull": 30,
+        "mean": 30,
+        "size": 22.5,
+        "pm3cRel": 30
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "mixed-big",
+      "realism": 3,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 30,
+        "hull": 30,
+        "mean": 30,
+        "size": 45,
+        "pm3cRel": 30
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    },
+    {
+      "key": "stars",
+      "realism": 3,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 30,
+        "hull": 30,
+        "mean": 30,
+        "size": 30,
+        "pm3cRel": 30
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "sd": 1.5
+    }
+  ],
+  "widgets": [
+    {
+      "n": 1,
+      "key": "notch",
+      "tier": "core",
+      "kind": "discriminate",
+      "realism": 2,
+      "purpose": "a triangle's tip into the notch of an L",
+      "shapes": "square, L, triangle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
+      "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
+      "axis": "x",
+      "range": [-43, 59],
+      "touch": -33.5,
+      "start": 51,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": -3.6,
+        "pm3c": -19.71,
+        "hull": 4.83,
+        "mean": -33.5,
+        "size": 30,
+        "pm3cRel": -19.71
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 265, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L142 60L142 48.8L97.2 48.8L97.2 4L86 4Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M142 32L198 60L198 4Z",
+          "k": 1
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 2,
+      "key": "interlock-small",
+      "tier": "core",
+      "kind": "discriminate",
+      "realism": 2,
+      "purpose": "smaller up and down triangles after two squares",
+      "shapes": "square, square, small triangle, small triangle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the small triangle until its gap to the small triangle looks the same as the gap between the two squares.",
+      "aria": "A row of shapes: square, square, small triangle, small triangle. The small triangle moves left and right.",
+      "axis": "x",
+      "range": [-27, 55.5],
+      "touch": -19.5,
+      "start": -19.5,
+      "side": "close",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 10.4,
+        "pm3c": 10.4,
+        "hull": 10.4,
+        "mean": 10.4,
+        "size": 21,
+        "pm3cRel": 10.4
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 313.9, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L142 60L142 4L86 4Z"
+        },
+        {
+          "d": "M172 60L211.2 60L191.6 20.8Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M211.2 20.8L230.8 60L250.4 20.8Z",
+          "k": 1
+        }
+      ],
+      "edge": [211.2, 1]
+    },
+    {
+      "n": 3,
+      "key": "wedge",
+      "tier": "core",
+      "kind": "discriminate",
+      "realism": 3,
+      "purpose": "diagnostic: a triangle after two squares; one feature, the wedge",
+      "shapes": "square, square, triangle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the triangle until its gap to the square looks the same as the gap between the two squares.",
+      "aria": "A row of shapes: square, square, triangle. The triangle moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 50.5,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 16.3,
+        "hull": 20.78,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 16.3
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 261.5, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L142 60L142 4L86 4Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M142 32L198 60L198 4Z",
+          "k": 1
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 4,
+      "key": "mixed-small",
+      "tier": "core",
+      "kind": "mixed",
+      "realism": 3,
+      "purpose": "mixed sizes: a small square after two big ones",
+      "shapes": "square, square, small square",
+      "color": "none",
+      "invert": false,
+      "text": "Move the small square until its gap to the square looks the same as the gap between the two squares.",
+      "aria": "A row of shapes: square, square, small square. The small square moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 0,
+      "side": "close",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 30,
+        "hull": 30,
+        "mean": 30,
+        "size": 22.5,
+        "pm3cRel": 30
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 233.5, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L142 60L142 4L86 4Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M142 60L170 60L170 32L142 32Z",
+          "k": 1
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 5,
+      "key": "stars",
+      "tier": "core",
+      "kind": "control",
+      "realism": 3,
+      "purpose": "control: three identical stars",
+      "shapes": "star, star, star",
+      "color": "none",
+      "invert": false,
+      "text": "Move the star until its gap to the star looks the same as the gap between the two stars.",
+      "aria": "A row of shapes: star, star, star. The star moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 50.5,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 30,
+        "hull": 30,
+        "mean": 30,
+        "size": 30,
+        "pm3cRel": 30
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 253.28, 58.65],
+      "fixed": [
+        {
+          "d": "M26.63 4L21.36 24.75L0 23.35L18.11 34.77L10.17 54.65L26.63 40.96L43.09 54.65L35.15 34.77L53.26 23.35L31.9 24.75Z"
+        },
+        {
+          "d": "M109.89 4L104.62 24.75L83.26 23.35L101.37 34.77L93.43 54.65L109.89 40.96L126.35 54.65L118.41 34.77L136.52 23.35L115.16 24.75Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M163.15 4L157.88 24.75L136.52 23.35L154.63 34.77L146.69 54.65L163.15 40.96L179.61 54.65L171.67 34.77L189.78 23.35L168.41 24.75Z",
+          "k": 1
+        }
+      ],
+      "edge": [136.5183298250572, 1]
+    },
+    {
+      "n": 6,
+      "key": "notch-double",
+      "tier": "core",
+      "kind": "scale",
+      "realism": 2,
+      "of": "notch",
+      "purpose": "scale: notch at 2x",
+      "shapes": "square, L, triangle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
+      "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
+      "axis": "x",
+      "range": [-85.5, 117.5],
+      "touch": -67,
+      "start": 101.5,
+      "side": "far",
+      "sd": 3,
+      "preds": {
+        "box": 60,
+        "contact": -7.2,
+        "pm3c": -28,
+        "hull": 9.66,
+        "mean": -67.01,
+        "size": 60,
+        "pm3cRel": -39.51
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": true,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 521.5, 120],
+      "fixed": [
+        {
+          "d": "M0 116L112 116L112 4L0 4Z"
+        },
+        {
+          "d": "M172 116L284 116L284 93.6L194.4 93.6L194.4 4L172 4Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M284 60L396 116L396 4Z",
+          "k": 1
+        }
+      ],
+      "edge": [284, 1]
+    },
+    {
+      "n": 7,
+      "key": "mixed-big",
+      "tier": "core",
+      "kind": "mixed",
+      "realism": 3,
+      "purpose": "mixed sizes: a big square after two small ones",
+      "shapes": "small square, small square, square",
+      "color": "none",
+      "invert": false,
+      "text": "Move the square until its gap to the small square looks the same as the gap between the two small squares.",
+      "aria": "A row of shapes: small square, small square, square. The square moves left and right.",
+      "axis": "x",
+      "range": [-7.5, 70.5],
+      "touch": 0,
+      "start": 64.5,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 30,
+        "hull": 30,
+        "mean": 30,
+        "size": 45,
+        "pm3cRel": 30
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 220.5, 64],
+      "fixed": [
+        {
+          "d": "M0 60L28 60L28 32L0 32Z"
+        },
+        {
+          "d": "M58 60L86 60L86 32L58 32Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M86 60L142 60L142 4L86 4Z",
+          "k": 1
+        }
+      ],
+      "edge": [86, 1]
+    },
+    {
+      "n": 8,
+      "key": "interlock-small-mirror",
+      "tier": "core",
+      "kind": "repeat",
+      "realism": 2,
+      "of": "interlock-small",
+      "purpose": "repeat of interlock-small, mirrored",
+      "shapes": "small triangle, small triangle, square, square",
+      "color": "none",
+      "invert": false,
+      "text": "Move the small triangle until its gap to the small triangle looks the same as the gap between the two squares.",
+      "aria": "A row of shapes: square, square, small triangle, small triangle. The small triangle moves left and right.",
+      "axis": "x",
+      "range": [-27, 55.5],
+      "touch": -19.5,
+      "start": 49,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 10.4,
+        "pm3c": 10.4,
+        "hull": 10.4,
+        "mean": 10.4,
+        "size": 21,
+        "pm3cRel": 10.4
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-309.9, 0, 313.9, 64],
       "fixed": [
         {
           "d": "M0 4L-56 4L-56 60L0 60Z"
@@ -472,106 +1411,397 @@
           "d": "M-86 4L-142 4L-142 60L-86 60Z"
         },
         {
-          "d": "M-89.54 123.43L-89.36 125.25L-89.06 127.06L-88.65 128.85L-88.11 130.6L-87.47 132.32L-86.71 133.98L-85.85 135.6L-84.88 137.16L-83.81 138.65L-82.65 140.06L-81.4 141.4L-80.06 142.65L-78.65 143.81L-77.16 144.88L-75.6 145.85L-73.98 146.71L-72.32 147.47L-70.6 148.11L-68.85 148.65L-67.06 149.06L-65.25 149.36L-63.43 149.54L-61.6 149.6L-59.77 149.54L-57.95 149.36L-56.14 149.06L-54.35 148.65L-52.6 148.11L-50.88 147.47L-49.22 146.71L-47.6 145.85L-46.04 144.88L-44.55 143.81L-43.14 142.65L-41.8 141.4L-40.55 140.06L-39.39 138.65L-38.32 137.16L-37.35 135.6L-36.49 133.98L-35.73 132.32L-35.09 130.6L-34.55 128.85L-34.14 127.06L-33.84 125.25L-33.66 123.43L-33.6 121.6L-33.66 119.77L-33.84 117.95L-34.14 116.14L-34.55 114.35L-35.09 112.6L-35.73 110.88L-36.49 109.22L-37.35 107.6L-38.32 106.04L-39.39 104.55L-40.55 103.14L-41.8 101.8L-43.14 100.55L-44.55 99.39L-46.04 98.32L-47.6 97.35L-49.22 96.49L-50.88 95.73L-52.6 95.09L-54.35 94.55L-56.14 94.14L-57.95 93.84L-59.77 93.66L-61.6 93.6L-63.43 93.66L-65.25 93.84L-67.06 94.14L-68.85 94.55L-70.6 95.09L-72.32 95.73L-73.98 96.49L-75.6 97.35L-77.16 98.32L-78.65 99.39L-80.06 100.55L-81.4 101.8L-82.65 103.14L-83.81 104.55L-84.88 106.04L-85.85 107.6L-86.71 109.22L-87.47 110.88L-88.11 112.6L-88.65 114.35L-89.06 116.14L-89.36 117.95L-89.54 119.77L-89.6 121.6Z"
+          "d": "M-191.6 20.8L-211.2 60L-172 60Z"
         }
       ],
       "moving": [
         {
-          "d": "M-145.6 93.6L-145.6 149.6L-89.6 121.6Z",
+          "d": "M-250.4 20.8L-230.8 60L-211.2 20.8Z",
           "k": -1
         }
       ],
-      "edge": [-89.6, -1]
+      "edge": [-211.2, -1]
     },
     {
-      "n": 11,
-      "key": "tips",
-      "purpose": "discriminate",
-      "geometry": "two spikes, tip to tip",
-      "text": "Move the spike until the two gaps look the same to you.",
-      "aria": "two spikes, tip to tip; the spike moves left and right",
+      "n": 9,
+      "key": "square-circle",
+      "tier": "extended",
+      "kind": "discriminate",
+      "realism": 3,
+      "purpose": "a circle after two squares (the simple row)",
+      "shapes": "square, square, circle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the circle until its gap to the square looks the same as the gap between the two squares.",
+      "aria": "A row of shapes: square, square, circle. The circle moves left and right.",
       "axis": "x",
-      "range": [-26, 55.5],
-      "start": 49,
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 50.5,
       "side": "far",
+      "sd": 1.5,
       "preds": {
         "box": 30,
         "contact": 30,
-        "pm3c": 11.06,
-        "hull": 18.01,
-        "mean": -0.31
+        "pm3c": 25.94,
+        "hull": 26.99,
+        "mean": 23.97,
+        "size": 30,
+        "pm3cRel": 25.94
       },
       "blind": {
         "box": false,
         "contact": false,
         "pm3c": false,
         "hull": false,
-        "mean": false
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
       },
-      "view": [-4, 0, 253.9, 120],
+      "view": [-4, 0, 261.5, 64],
       "fixed": [
         {
           "d": "M0 60L56 60L56 4L0 4Z"
         },
         {
           "d": "M86 60L142 60L142 4L86 4Z"
-        },
-        {
-          "d": "M33.6 116L112 104.8L33.6 93.6Z"
         }
       ],
       "moving": [
         {
-          "d": "M112 104.8L190.4 116L190.4 93.6Z",
+          "d": "M198 32L197.94 30.17L197.76 28.35L197.46 26.54L197.05 24.75L196.51 23L195.87 21.28L195.11 19.62L194.25 18L193.28 16.44L192.21 14.95L191.05 13.54L189.8 12.2L188.46 10.95L187.05 9.79L185.56 8.72L184 7.75L182.38 6.89L180.72 6.13L179 5.49L177.25 4.95L175.46 4.54L173.65 4.24L171.83 4.06L170 4L168.17 4.06L166.35 4.24L164.54 4.54L162.75 4.95L161 5.49L159.28 6.13L157.62 6.89L156 7.75L154.44 8.72L152.95 9.79L151.54 10.95L150.2 12.2L148.95 13.54L147.79 14.95L146.72 16.44L145.75 18L144.89 19.62L144.13 21.28L143.49 23L142.95 24.75L142.54 26.54L142.24 28.35L142.06 30.17L142 32L142.06 33.83L142.24 35.65L142.54 37.46L142.95 39.25L143.49 41L144.13 42.72L144.89 44.38L145.75 46L146.72 47.56L147.79 49.05L148.95 50.46L150.2 51.8L151.54 53.05L152.95 54.21L154.44 55.28L156 56.25L157.62 57.11L159.28 57.87L161 58.51L162.75 59.05L164.54 59.46L166.35 59.76L168.17 59.94L170 60L171.83 59.94L173.65 59.76L175.46 59.46L177.25 59.05L179 58.51L180.72 57.87L182.38 57.11L184 56.25L185.56 55.28L187.05 54.21L188.46 53.05L189.8 51.8L191.05 50.46L192.21 49.05L193.28 47.56L194.25 46L195.11 44.38L195.87 42.72L196.51 41L197.05 39.25L197.46 37.46L197.76 35.65L197.94 33.83Z",
           "k": 1
         }
       ],
-      "edge": [112, 1]
+      "edge": [142, 1]
     },
     {
-      "n": 12,
-      "key": "triangles-mirror",
-      "purpose": "repeat of triangles, mirrored",
-      "geometry": "v1 widget 1: a square, then up, down and up triangles fixed 30 px apart, mirrored",
-      "text": "Move the square until the gaps look even to you.",
-      "aria": "A square and three triangles; the square moves",
+      "n": 10,
+      "key": "notch-invert",
+      "tier": "extended",
+      "kind": "invert",
+      "realism": 2,
+      "of": "notch",
+      "purpose": "inversion: notch with shape and background swapped",
+      "shapes": "square, L, triangle",
+      "color": "none",
+      "invert": true,
+      "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
+      "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-23.5, 55.5],
-      "start": 49,
+      "range": [-43, 59],
+      "touch": -33.5,
+      "start": 51,
       "side": "far",
+      "sd": 1.5,
       "preds": {
-        "box": 2,
-        "contact": 30,
-        "pm3c": 20.26,
-        "hull": 22.96,
-        "mean": 16.02
+        "box": 30,
+        "contact": -3.6,
+        "pm3c": -19.71,
+        "hull": 4.83,
+        "mean": -33.5,
+        "size": 30,
+        "pm3cRel": -19.71
       },
       "blind": {
         "box": false,
         "contact": false,
         "pm3c": false,
         "hull": false,
-        "mean": false
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
       },
-      "view": [-176, 0, 291.5, 64],
+      "view": [-4, 0, 265, 64],
       "fixed": [
         {
-          "d": "M-28 4L-56 60L0 60Z"
+          "d": "M0 60L56 60L56 4L0 4Z"
         },
         {
-          "d": "M-114 4L-86 60L-58 4Z"
-        },
-        {
-          "d": "M-144 4L-172 60L-116 60Z"
+          "d": "M86 60L142 60L142 48.8L97.2 48.8L97.2 4L86 4Z"
         }
       ],
       "moving": [
         {
-          "d": "M56 4L0 4L0 60L56 60Z",
+          "d": "M142 32L198 60L198 4Z",
           "k": 1
         }
       ],
-      "edge": [0, 1]
+      "edge": [142, 1]
+    },
+    {
+      "n": 11,
+      "key": "tip-circle",
+      "tier": "extended",
+      "kind": "discriminate",
+      "realism": 3,
+      "purpose": "a triangle's tip toward a circle",
+      "shapes": "square, circle, triangle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the triangle until its gap to the circle looks the same as the gap between the square and the circle.",
+      "aria": "A row of shapes: square, circle, triangle. The triangle moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 50.5,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 20.32,
+        "hull": 23.19,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 20.32
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 261.5, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M142 32L141.94 30.17L141.76 28.35L141.46 26.54L141.05 24.75L140.51 23L139.87 21.28L139.11 19.62L138.25 18L137.28 16.44L136.21 14.95L135.05 13.54L133.8 12.2L132.46 10.95L131.05 9.79L129.56 8.72L128 7.75L126.38 6.89L124.72 6.13L123 5.49L121.25 4.95L119.46 4.54L117.65 4.24L115.83 4.06L114 4L112.17 4.06L110.35 4.24L108.54 4.54L106.75 4.95L105 5.49L103.28 6.13L101.62 6.89L100 7.75L98.44 8.72L96.95 9.79L95.54 10.95L94.2 12.2L92.95 13.54L91.79 14.95L90.72 16.44L89.75 18L88.89 19.62L88.13 21.28L87.49 23L86.95 24.75L86.54 26.54L86.24 28.35L86.06 30.17L86 32L86.06 33.83L86.24 35.65L86.54 37.46L86.95 39.25L87.49 41L88.13 42.72L88.89 44.38L89.75 46L90.72 47.56L91.79 49.05L92.95 50.46L94.2 51.8L95.54 53.05L96.95 54.21L98.44 55.28L100 56.25L101.62 57.11L103.28 57.87L105 58.51L106.75 59.05L108.54 59.46L110.35 59.76L112.17 59.94L114 60L115.83 59.94L117.65 59.76L119.46 59.46L121.25 59.05L123 58.51L124.72 57.87L126.38 57.11L128 56.25L129.56 55.28L131.05 54.21L132.46 53.05L133.8 51.8L135.05 50.46L136.21 49.05L137.28 47.56L138.25 46L139.11 44.38L139.87 42.72L140.51 41L141.05 39.25L141.46 37.46L141.76 35.65L141.94 33.83Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M142 32L198 60L198 4Z",
+          "k": 1
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 12,
+      "key": "square-circle-invert",
+      "tier": "extended",
+      "kind": "invert",
+      "realism": 3,
+      "of": "square-circle",
+      "purpose": "inversion: square-circle with shape and background swapped",
+      "shapes": "square, square, circle",
+      "color": "none",
+      "invert": true,
+      "text": "Move the circle until its gap to the square looks the same as the gap between the two squares.",
+      "aria": "A row of shapes: square, square, circle. The circle moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 0,
+      "side": "close",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 25.94,
+        "hull": 26.99,
+        "mean": 23.97,
+        "size": 30,
+        "pm3cRel": 25.94
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 261.5, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L142 60L142 4L86 4Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M198 32L197.94 30.17L197.76 28.35L197.46 26.54L197.05 24.75L196.51 23L195.87 21.28L195.11 19.62L194.25 18L193.28 16.44L192.21 14.95L191.05 13.54L189.8 12.2L188.46 10.95L187.05 9.79L185.56 8.72L184 7.75L182.38 6.89L180.72 6.13L179 5.49L177.25 4.95L175.46 4.54L173.65 4.24L171.83 4.06L170 4L168.17 4.06L166.35 4.24L164.54 4.54L162.75 4.95L161 5.49L159.28 6.13L157.62 6.89L156 7.75L154.44 8.72L152.95 9.79L151.54 10.95L150.2 12.2L148.95 13.54L147.79 14.95L146.72 16.44L145.75 18L144.89 19.62L144.13 21.28L143.49 23L142.95 24.75L142.54 26.54L142.24 28.35L142.06 30.17L142 32L142.06 33.83L142.24 35.65L142.54 37.46L142.95 39.25L143.49 41L144.13 42.72L144.89 44.38L145.75 46L146.72 47.56L147.79 49.05L148.95 50.46L150.2 51.8L151.54 53.05L152.95 54.21L154.44 55.28L156 56.25L157.62 57.11L159.28 57.87L161 58.51L162.75 59.05L164.54 59.46L166.35 59.76L168.17 59.94L170 60L171.83 59.94L173.65 59.76L175.46 59.46L177.25 59.05L179 58.51L180.72 57.87L182.38 57.11L184 56.25L185.56 55.28L187.05 54.21L188.46 53.05L189.8 51.8L191.05 50.46L192.21 49.05L193.28 47.56L194.25 46L195.11 44.38L195.87 42.72L196.51 41L197.05 39.25L197.46 37.46L197.76 35.65L197.94 33.83Z",
+          "k": 1
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 13,
+      "key": "notch-hue",
+      "tier": "extended",
+      "kind": "color",
+      "realism": 2,
+      "of": "notch",
+      "purpose": "color: notch with the moving triangle colored",
+      "shapes": "square, L, triangle",
+      "color": "the moving triangle",
+      "invert": false,
+      "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
+      "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
+      "axis": "x",
+      "range": [-43, 59],
+      "touch": -33.5,
+      "start": 51,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": -3.6,
+        "pm3c": -19.71,
+        "hull": 4.83,
+        "mean": -33.5,
+        "size": 30,
+        "pm3cRel": -19.71
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 265, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L142 60L142 48.8L97.2 48.8L97.2 4L86 4Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M142 32L198 60L198 4Z",
+          "k": 1,
+          "hue": true
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 14,
+      "key": "tip-circle-hue",
+      "tier": "extended",
+      "kind": "color",
+      "realism": 3,
+      "of": "tip-circle",
+      "purpose": "color: tip-circle with the fixed circle colored",
+      "shapes": "square, circle, triangle",
+      "color": "the fixed circle",
+      "invert": false,
+      "text": "Move the triangle until its gap to the circle looks the same as the gap between the square and the circle.",
+      "aria": "A row of shapes: square, circle, triangle. The triangle moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 50.5,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 20.32,
+        "hull": 23.19,
+        "mean": 2,
+        "size": 30,
+        "pm3cRel": 20.32
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 261.5, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M142 32L141.94 30.17L141.76 28.35L141.46 26.54L141.05 24.75L140.51 23L139.87 21.28L139.11 19.62L138.25 18L137.28 16.44L136.21 14.95L135.05 13.54L133.8 12.2L132.46 10.95L131.05 9.79L129.56 8.72L128 7.75L126.38 6.89L124.72 6.13L123 5.49L121.25 4.95L119.46 4.54L117.65 4.24L115.83 4.06L114 4L112.17 4.06L110.35 4.24L108.54 4.54L106.75 4.95L105 5.49L103.28 6.13L101.62 6.89L100 7.75L98.44 8.72L96.95 9.79L95.54 10.95L94.2 12.2L92.95 13.54L91.79 14.95L90.72 16.44L89.75 18L88.89 19.62L88.13 21.28L87.49 23L86.95 24.75L86.54 26.54L86.24 28.35L86.06 30.17L86 32L86.06 33.83L86.24 35.65L86.54 37.46L86.95 39.25L87.49 41L88.13 42.72L88.89 44.38L89.75 46L90.72 47.56L91.79 49.05L92.95 50.46L94.2 51.8L95.54 53.05L96.95 54.21L98.44 55.28L100 56.25L101.62 57.11L103.28 57.87L105 58.51L106.75 59.05L108.54 59.46L110.35 59.76L112.17 59.94L114 60L115.83 59.94L117.65 59.76L119.46 59.46L121.25 59.05L123 58.51L124.72 57.87L126.38 57.11L128 56.25L129.56 55.28L131.05 54.21L132.46 53.05L133.8 51.8L135.05 50.46L136.21 49.05L137.28 47.56L138.25 46L139.11 44.38L139.87 42.72L140.51 41L141.05 39.25L141.46 37.46L141.76 35.65L141.94 33.83Z",
+          "hue": true
+        }
+      ],
+      "moving": [
+        {
+          "d": "M142 32L198 60L198 4Z",
+          "k": 1
+        }
+      ],
+      "edge": [142, 1]
+    },
+    {
+      "n": 15,
+      "key": "tips",
+      "tier": "extended",
+      "kind": "discriminate",
+      "realism": 1,
+      "purpose": "pathological: two long spikes, tip to tip",
+      "shapes": "square, spike, spike, circle",
+      "color": "none",
+      "invert": false,
+      "text": "Move the spike until its gap to the spike looks the same as the gap between the square and the spike. The circle moves with it.",
+      "aria": "A row of shapes: square, spike, spike, circle. The spike moves left and right.",
+      "axis": "x",
+      "range": [-6, 55.5],
+      "touch": 0,
+      "start": 50.5,
+      "side": "far",
+      "sd": 1.5,
+      "preds": {
+        "box": 30,
+        "contact": 30,
+        "pm3c": 11.06,
+        "hull": 18.01,
+        "mean": 0.19,
+        "size": 25.68,
+        "pm3cRel": 11.06
+      },
+      "blind": {
+        "box": false,
+        "contact": false,
+        "pm3c": false,
+        "hull": false,
+        "mean": false,
+        "size": false,
+        "pm3cRel": false
+      },
+      "view": [-4, 0, 392.3, 64],
+      "fixed": [
+        {
+          "d": "M0 60L56 60L56 4L0 4Z"
+        },
+        {
+          "d": "M86 60L164.4 48.8L86 37.6Z"
+        }
+      ],
+      "moving": [
+        {
+          "d": "M164.4 48.8L242.8 60L242.8 37.6Z",
+          "k": 1
+        },
+        {
+          "d": "M328.8 32L328.74 30.17L328.56 28.35L328.26 26.54L327.85 24.75L327.31 23L326.67 21.28L325.91 19.62L325.05 18L324.08 16.44L323.01 14.95L321.85 13.54L320.6 12.2L319.26 10.95L317.85 9.79L316.36 8.72L314.8 7.75L313.18 6.89L311.52 6.13L309.8 5.49L308.05 4.95L306.26 4.54L304.45 4.24L302.63 4.06L300.8 4L298.97 4.06L297.15 4.24L295.34 4.54L293.55 4.95L291.8 5.49L290.08 6.13L288.42 6.89L286.8 7.75L285.24 8.72L283.75 9.79L282.34 10.95L281 12.2L279.75 13.54L278.59 14.95L277.52 16.44L276.55 18L275.69 19.62L274.93 21.28L274.29 23L273.75 24.75L273.34 26.54L273.04 28.35L272.86 30.17L272.8 32L272.86 33.83L273.04 35.65L273.34 37.46L273.75 39.25L274.29 41L274.93 42.72L275.69 44.38L276.55 46L277.52 47.56L278.59 49.05L279.75 50.46L281 51.8L282.34 53.05L283.75 54.21L285.24 55.28L286.8 56.25L288.42 57.11L290.08 57.87L291.8 58.51L293.55 59.05L295.34 59.46L297.15 59.76L298.97 59.94L300.8 60L302.63 59.94L304.45 59.76L306.26 59.46L308.05 59.05L309.8 58.51L311.52 57.87L313.18 57.11L314.8 56.25L316.36 55.28L317.85 54.21L319.26 53.05L320.6 51.8L321.85 50.46L323.01 49.05L324.08 47.56L325.05 46L325.91 44.38L326.67 42.72L327.31 41L327.85 39.25L328.26 37.46L328.56 35.65L328.74 33.83Z",
+          "k": 1
+        }
+      ],
+      "edge": [164.39999999999998, 1]
     }
   ]
 }

@@ -54,7 +54,15 @@ export const CANDIDATES: { key: string; label: string; m: Strategy }[] = [
   { key: "pm3c", label: "power mean p −3, cap 40", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), -3, 40) },
   { key: "hull", label: "hull, p −8", m: (A, a, B, b, tv) => powerMean(gapProfileK(A, a, B, b, tv, 1), -8) },
   { key: "mean", label: "mean gap p 1", m: (A, a, B, b, tv) => powerMean(gapProfile(A, a, B, b, tv), 1) },
+  // the gap grows with its neighbors: the box gap divided by their mean size
+  // (a shape's size is the square root of its box's area), times 56 px
+  { key: "size", label: "box gap ÷ mean neighbor size", m: (A, a, B, b) => ((b + extX(B)[0] - a - extX(A)[1]) * 56) / ((size(A) + size(B)) / 2) },
 ];
+function size(sh: Shape) {
+  const [x0, x1] = extX(sh);
+  const [y0, y1] = extY(sh);
+  return Math.sqrt((x1 - x0) * (y1 - y0));
+}
 
 /** The band of a pair: every line either shape covers. */
 export const pairBand = (A: Shape, B: Shape) => {
