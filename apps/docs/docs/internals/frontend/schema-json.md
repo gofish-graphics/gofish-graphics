@@ -1968,7 +1968,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "key": {
           "type": "string",
@@ -2100,7 +2100,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "r": {
           "$ref": "#/$defs/ChannelValue",
@@ -2248,7 +2248,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2378,7 +2378,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2495,7 +2495,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "key": {
           "type": "string",
@@ -2675,7 +2675,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "key": {
           "type": "string",
@@ -2749,7 +2749,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "points": {
           "anyOf": [
@@ -2949,7 +2949,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "inset": {
           "$ref": "#/$defs/Number",
@@ -3011,7 +3011,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3143,7 +3143,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3263,7 +3263,7 @@ for the API.
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"url(#shadow)\"`). WebKit ignores CSS filter functions such as `\"blur(2px)\"` on SVG; a `url(#…)` reference works."
         },
         "padding": {
           "$ref": "#/$defs/ChannelValue",

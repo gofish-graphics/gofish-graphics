@@ -6,8 +6,11 @@ title: Filter
 
 The `Filter` family holds the filters GoFish knows. A filter is a value of the
 `filter` option of every mark and of [`layer`](/js/api/core/layer), beside a
-raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`). The filter applies to
-the node's whole drawing, as one picture.
+raw CSS filter string (`"url(#shadow)"`). The filter applies to the node's
+whole drawing, as one picture. WebKit (Safari) ignores CSS filter functions
+such as `"blur(2px)"` on SVG, so there a raw function draws the node
+unfiltered. A `url(#…)` reference to an SVG `<filter>` on the page works in
+every browser, and so does every `Filter` strategy.
 
 ::: gofish
 

@@ -113,16 +113,21 @@ const maskKey = (m: CompositeMask): string =>
  * so they cannot drift.
  *
  * Each group of items in `defs` is written once, as a `<g id>` def. Each
- * mask in `masks` is a `<mask>` of `<use>`s of defs: an alpha mask
- * (`mask-type:alpha`) of their shapes, or, with `invert`, a white rect over
- * the item's bbox with their shapes drawn black on it. Each layer is a
+ * mask in `masks` is a `<mask>`: with `alpha`, an alpha mask
+ * (`mask-type:alpha`) of `<use>`s of those defs' shapes; with `outside`, a
+ * white rect over the item's bbox with a black rect over it, clipped by the
+ * alpha mask `outside` names, so it is one minus that mask. Every mask's
+ * region is the item's bbox, in user space (`maskUnits="userSpaceOnUse"`
+ * with its `x`, `y`, `width` and `height`): left out, a mask's region is
+ * SVG's default, -10% to 110% of the viewport, and a composite past it
+ * would not be masked. Each layer is a
  * `<use>` of a def, wrapped in a `<g mask>` per mask (the first mask
  * outermost), and, with a `blendMode`, in a group that mixes by it. The
  * layers sit in a group `isolate`d, so a blend mixes the layers only.
  */
 export interface CompositePlan {
   defs: { id: string; items: DisplayItem[] }[];
-  masks: { id: string; invert: boolean; uses: string[] }[];
+  masks: ({ id: string; alpha: string[] } | { id: string; outside: string })[];
   layers: { use: string; masks: string[]; blendMode?: string }[];
 }
 
@@ -145,9 +150,16 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
   const maskId = (m: CompositeMask): string => {
     const id = `${uid}-m-${maskKey(m)}`;
     if (!masks.has(id)) {
-      const uses = m.operands.map(shapeId);
-      for (const u of uses) used.add(u);
-      masks.set(id, { id, invert: m.invert, uses });
+      if (m.invert) {
+        masks.set(id, {
+          id,
+          outside: maskId({ operands: m.operands, invert: false }),
+        });
+      } else {
+        const uses = m.operands.map(shapeId);
+        for (const u of uses) used.add(u);
+        masks.set(id, { id, alpha: uses });
+      }
     }
     return id;
   };
@@ -178,35 +190,4 @@ export function compositePlan(item: CompositeItem, uid: string): CompositePlan {
   });
   def(fillId, item.fill);
   return { defs, masks: [...masks.values()], layers };
-}
-
-/** The `luminanceToAlpha` filter (`DisplayFilter`) as an SVG `<filter>` of
- *  one `feColorMatrix`: each pixel becomes black with an alpha of its
- *  luminance, computed in sRGB as a CSS mask would. A backend writes it
- *  once per render, when an item uses it ({@link usesLuminanceToAlpha}),
- *  under an id it draws from the counter its composite ids come from, so
- *  two visualizations on one page do not share it. */
-export const LUMINANCE_TO_ALPHA_FILTER = {
-  colorInterpolationFilters: "sRGB",
-  matrixType: "luminanceToAlpha",
-} as const;
-
-/** Whether any of `items`, looking inside groups and composites, is drawn
- *  under the `luminanceToAlpha` filter. */
-export function usesLuminanceToAlpha(items: readonly DisplayItem[]): boolean {
-  return items.some((item) => {
-    if (item.kind === "group")
-      return (
-        item.filter?.kind === "luminanceToAlpha" ||
-        usesLuminanceToAlpha(item.children)
-      );
-    if (item.kind === "composite")
-      return (
-        item.operands.some(
-          (o) =>
-            usesLuminanceToAlpha(o.paint) || usesLuminanceToAlpha(o.shape ?? [])
-        ) || usesLuminanceToAlpha(item.fill ?? [])
-      );
-    return false;
-  });
 }

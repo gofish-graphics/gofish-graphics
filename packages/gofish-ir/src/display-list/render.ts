@@ -20,11 +20,8 @@ import type {
   DisplayListDocument,
   Style,
 } from "./schema.js";
-import {
-  compositePlan,
-  LUMINANCE_TO_ALPHA_FILTER,
-  usesLuminanceToAlpha,
-} from "./composite.js";
+import { compositePlan } from "./composite.js";
+import { filterPlan, type FilterDef, type FilterPlan } from "./filter.js";
 
 const esc = (s: string): string =>
   s
@@ -54,9 +51,8 @@ const styleAttrs = (style: Style | undefined): string => {
   return parts.length ? " " + parts.join(" ") : "";
 };
 
-/** `item` as SVG. `filterId` is the id of the document's `luminanceToAlpha`
- *  filter def. */
-const itemToSVG = (item: DisplayItem, filterId: string): string => {
+/** `item` as SVG. `filters` is the document's {@link FilterPlan}. */
+const itemToSVG = (item: DisplayItem, filters: FilterPlan): string => {
   const s = styleAttrs(item.style);
   switch (item.kind) {
     case "rect": {
@@ -112,59 +108,50 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
-      const f = item.filter;
-      const fa =
-        f?.kind === "css"
-          ? ` filter="${esc(f.value)}"`
-          : f?.kind === "luminanceToAlpha"
-            ? ` filter="url(#${filterId})"`
-            : "";
-      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
+      const f = filters.attr(item.filter);
+      const fa = f !== undefined ? ` filter="${esc(f)}"` : "";
+      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filters)).join("")}</g>`;
     }
     case "composite":
-      return compositeToSVG(item, filterId);
+      return compositeToSVG(item, filters);
   }
 };
 
-/** Deterministic id counter for composite defs and the filter def (Math.random is both
+/** Deterministic id counter for composite defs and the filter defs (Math.random is both
  *  unavailable headlessly and non-reproducible). Reset per document by
  *  `displayListToSVG`; the JSX backend uses the same scheme so the two backends
  *  agree on id shape. */
 let compositeIdCounter = 0;
 
-/** The `<filter>` def of `LUMINANCE_TO_ALPHA_FILTER`, written once per
- *  document that uses it, under `id`. */
-const luminanceToAlphaFilterSVG = (id: string): string => {
-  const f = LUMINANCE_TO_ALPHA_FILTER;
-  return `<filter id="${id}" color-interpolation-filters="${f.colorInterpolationFilters}"><feColorMatrix type="${f.matrixType}"/></filter>`;
+/** A def of a {@link FilterPlan} as an SVG `<filter>`. */
+const filterSVG = (d: FilterDef): string => {
+  const values = d.type === "matrix" ? ` values="${esc(d.values)}"` : "";
+  return `<filter id="${d.id}" color-interpolation-filters="sRGB"><feColorMatrix type="${d.type}"${values}/></filter>`;
 };
 
 /** Draw a composite item as SVG masks and `mix-blend-mode` (no
  *  `<feImage>`: see `paintSVG.tsx` in gofish-graphics for why, issue #795):
  *  its `compositePlan` (composite.ts), which that backend writes too. */
-const compositeToSVG = (item: CompositeItem, filterId: string): string => {
+const compositeToSVG = (item: CompositeItem, filters: FilterPlan): string => {
   const { x, y, w, h } = item.bbox;
+  const region = `maskUnits="userSpaceOnUse" x="${x}" y="${y}" width="${w}" height="${h}" maskContentUnits="userSpaceOnUse"`;
   const plan = compositePlan(item, `gf-comp-${compositeIdCounter++}`);
   const defs =
     plan.defs
       .map(
         (d) =>
-          `<g id="${d.id}">${d.items.map((c) => itemToSVG(c, filterId)).join("")}</g>`
+          `<g id="${d.id}">${d.items.map((c) => itemToSVG(c, filters)).join("")}</g>`
       )
       .join("") +
     plan.masks
-      .map((m) => {
-        const uses = m.uses
-          .map(
-            (u) =>
-              `<use href="#${u}"${m.invert ? ` filter="brightness(0)"` : ""}/>`
-          )
-          .join("");
-        return m.invert
-          ? `<mask id="${m.id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
-              `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>${uses}</mask>`
-          : `<mask id="${m.id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha">${uses}</mask>`;
-      })
+      .map((m) =>
+        "outside" in m
+          ? `<mask id="${m.id}" ${region}>` +
+            `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#fff"/>` +
+            `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#000" mask="url(#${m.outside})"/></mask>`
+          : `<mask id="${m.id}" ${region} style="mask-type:alpha">` +
+            `${m.alpha.map((u) => `<use href="#${u}"/>`).join("")}</mask>`
+      )
       .join("");
   const drawn = plan.layers.map((l) => {
     let out = `<use href="#${l.use}"/>`;
@@ -184,10 +171,12 @@ const compositeToSVG = (item: CompositeItem, filterId: string): string => {
 export function displayListToSVG(doc: DisplayListDocument): string {
   compositeIdCounter = 0;
   const { w, h } = doc.viewport;
-  const filterId = `gf-luminance-to-alpha-${compositeIdCounter++}`;
-  const defs = usesLuminanceToAlpha(doc.items)
-    ? `<defs>${luminanceToAlphaFilterSVG(filterId)}</defs>`
+  const filters = filterPlan(`gf-filter-${compositeIdCounter++}`);
+  // The items first: drawing them registers the filters they use.
+  const items = doc.items.map((i) => itemToSVG(i, filters)).join("");
+  const defs = filters.defs.length
+    ? `<defs>${filters.defs.map(filterSVG).join("")}</defs>`
     : "";
-  const body = defs + doc.items.map((i) => itemToSVG(i, filterId)).join("");
+  const body = defs + items;
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;
 }
