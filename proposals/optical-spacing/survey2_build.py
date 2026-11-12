@@ -10,39 +10,41 @@ import os
 HERE = os.path.dirname(os.path.abspath(__file__))
 D = json.load(open(os.path.join(HERE, "survey2_widgets.json")))
 
-# Starts are pinned to the values the first responses will see (round 16's
-# rows, storage key v2b), so changing a candidate later does not move them. Each is outside every prediction and
-# at least 8% of the track from either end.
+# Each widget has two starts, (far, close), pinned so that changing a
+# candidate later does not move them (design v2c). The page picks one of the
+# two at random for each person. Each is at least 3 sd from every prediction
+# and at least 8% of the track from either end.
 PINNED = {
-    1: 51,
-    2: -19.5,
-    3: 50.5,
-    4: 0,
-    5: 50.5,
-    6: 101.5,
-    7: 64.5,
-    8: 49,
-    9: 50.5,
-    10: 51,
-    11: 50.5,
-    12: 0,
-    13: 51,
-    14: 50.5,
-    15: 50.5,
+    1: (50.5, -38),
+    2: (49, -19.5),
+    3: (50.5, -2.5),
+    4: (50.5, 0),
+    5: (50.5, 0),
+    6: (100.5, -76.5),
+    7: (64.5, 0),
+    8: (49, -19.5),
+    9: (50.5, 0),
+    10: (50.5, -38),
+    11: (50.5, -2.5),
+    12: (50.5, 0),
+    13: (50.5, -38),
+    14: (50.5, -2.5),
+    15: (50, -4.5),
 }
+KEY_N = {w["key"]: w["n"] for w in D["widgets"]}
 
 widgets, report = [], []
 for w in D["widgets"]:
-    s = PINNED.get(w["n"], w["start"])
+    far, close = PINNED.get(w["n"], (w["starts"]["far"], w["starts"]["close"]))
     v0, v1 = w["range"]
     xs = [x for x in w["preds"].values() if x is not None]
-    near = min(abs(s - x) for x in xs)
-    edge = min(s - v0, v1 - s) / (v1 - v0)
-    report.append(f"w{w['n']} {w['key']}: track {v0} to {v1}, start {s}, {near:.1f} px from the nearest prediction, {edge:.0%} from an end")
+    for side, s in (("far", far), ("close", close)):
+        near = min(abs(s - x) for x in xs) / w["sd"]
+        edge = min(s - v0, v1 - s) / (v1 - v0)
+        report.append(f"w{w['n']} {w['key']} {side}: track {v0} to {v1}, start {s}, {near:.1f} sd from the nearest prediction, {edge:.0%} from an end")
     widgets.append(
         {
             "n": w["n"],
-            "num": w["n"],
             "key": w["key"],
             "tier": w["tier"],
             "invert": w["invert"],
@@ -50,7 +52,9 @@ for w in D["widgets"]:
             "aria": w["aria"],
             "axis": w["axis"],
             "range": [v0, v1],
-            "start": s,
+            "starts": {"far": far, "close": close},
+            # a repeat names its original, so the shuffle can keep them apart
+            "rep": KEY_N[w["of"]] if w["kind"] == "repeat" else None,
             "view": w["view"],
             "fixed": [{k: v for k, v in f.items() if v is not None} for f in w["fixed"]],
             "moving": [{k: v for k, v in m.items() if v is not None} for m in w["moving"]],

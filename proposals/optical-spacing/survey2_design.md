@@ -65,30 +65,40 @@ Core widgets show first. The extended ones wait behind a "Keep going
 marks untouched widgets `unset`, and records whether the extended tier was
 opened (`extended:`).
 
-| id                        | tier     | purpose                                                          | realism | shapes                                         | color               | box  | contact | pm3c    | hull | mean  | size | start         |
-| ------------------------- | -------- | ---------------------------------------------------------------- | ------- | ---------------------------------------------- | ------------------- | ---- | ------- | ------- | ---- | ----- | ---- | ------------- |
-| w1 notch                  | core     | a triangle's tip into the notch of an L                          | 2       | square, L, triangle                            | none                | 30.0 | −3.6    | −19.7   | 4.8  | −33.5 | 30.0 | 51.0 (far)    |
-| w2 interlock-small        | core     | smaller up and down triangles after two squares                  | 2       | square, square, small triangle, small triangle | none                | 30.0 | 10.4    | 10.4    | 10.4 | 10.4  | 21.0 | −19.5 (close) |
-| w3 wedge                  | core     | diagnostic: a triangle after two squares; one feature, the wedge | 3       | square, square, triangle                       | none                | 30.0 | 30.0    | 16.3    | 20.8 | 2.0   | 30.0 | 50.5 (far)    |
-| w4 mixed-small            | core     | mixed sizes: a small square after two big ones                   | 3       | square, square, small square                   | none                | 30.0 | 30.0    | 30.0    | 30.0 | 30.0  | 22.5 | 0.0 (close)   |
-| w5 stars                  | core     | control: three identical stars                                   | 3       | star, star, star                               | none                | 30.0 | 30.0    | 30.0    | 30.0 | 30.0  | 30.0 | 50.5 (far)    |
-| w6 notch-double           | core     | scale: notch at 2x                                               | 2       | square, L, triangle                            | none                | 60.0 | −7.2    | ≥ −28.0 | 9.7  | −67.0 | 60.0 | 101.5 (far)   |
-| w7 mixed-big              | core     | mixed sizes: a big square after two small ones                   | 3       | small square, small square, square             | none                | 30.0 | 30.0    | 30.0    | 30.0 | 30.0  | 45.0 | 64.5 (far)    |
-| w8 interlock-small-mirror | core     | repeat of interlock-small, mirrored                              | 2       | small triangle, small triangle, square, square | none                | 30.0 | 10.4    | 10.4    | 10.4 | 10.4  | 21.0 | 49.0 (far)    |
-| w9 square-circle          | extended | a circle after two squares (the simple row)                      | 3       | square, square, circle                         | none                | 30.0 | 30.0    | 25.9    | 27.0 | 24.0  | 30.0 | 50.5 (far)    |
-| w10 notch-invert          | extended | inversion: notch with shape and background swapped               | 2       | square, L, triangle                            | inverted            | 30.0 | −3.6    | −19.7   | 4.8  | −33.5 | 30.0 | 51.0 (far)    |
-| w11 tip-circle            | extended | a triangle's tip toward a circle                                 | 3       | square, circle, triangle                       | none                | 30.0 | 30.0    | 20.3    | 23.2 | 2.0   | 30.0 | 50.5 (far)    |
-| w12 square-circle-invert  | extended | inversion: square-circle with shape and background swapped       | 3       | square, square, circle                         | inverted            | 30.0 | 30.0    | 25.9    | 27.0 | 24.0  | 30.0 | 0.0 (close)   |
-| w13 notch-hue             | extended | color: notch with the moving triangle colored                    | 2       | square, L, triangle                            | the moving triangle | 30.0 | −3.6    | −19.7   | 4.8  | −33.5 | 30.0 | 51.0 (far)    |
-| w14 tip-circle-hue        | extended | color: tip-circle with the fixed circle colored                  | 3       | square, circle, triangle                       | the fixed circle    | 30.0 | 30.0    | 20.3    | 23.2 | 2.0   | 30.0 | 50.5 (far)    |
-| w15 tips                  | extended | pathological: two long spikes, tip to tip                        | 1       | square, spike, spike, circle                   | none                | 30.0 | 30.0    | 11.1    | 18.0 | 0.2   | 25.7 | 50.5 (far)    |
+| id                        | tier     | purpose                                                          | realism | shapes                                         | color               | box  | contact | pm3c    | hull | mean  | size | starts (far, close)    |
+| ------------------------- | -------- | ---------------------------------------------------------------- | ------- | ---------------------------------------------- | ------------------- | ---- | ------- | ------- | ---- | ----- | ---- | ---------------------- |
+| w1 notch                  | core     | a triangle's tip into the notch of an L                          | 2       | square, L, triangle                            | none                | 30.0 | −3.6    | −19.7   | 4.8  | −33.5 | 30.0 | 50.5, −38.0 (overlap)  |
+| w2 interlock-small        | core     | smaller up and down triangles after two squares                  | 2       | square, square, small triangle, small triangle | none                | 30.0 | 10.4    | 10.4    | 10.4 | 10.4  | 21.0 | 49.0, −19.5            |
+| w3 wedge                  | core     | diagnostic: a triangle after two squares; one feature, the wedge | 3       | square, square, triangle                       | none                | 30.0 | 30.0    | 16.3    | 20.8 | 2.0   | 30.0 | 50.5, −2.5 (overlap)   |
+| w4 mixed-small            | core     | mixed sizes: a small square after two big ones                   | 3       | square, square, small square                   | none                | 30.0 | 30.0    | 30.0    | 30.0 | 30.0  | 22.5 | 50.5, 0.0              |
+| w5 stars                  | core     | control: three identical stars                                   | 3       | star, star, star                               | none                | 30.0 | 30.0    | 30.0    | 30.0 | 30.0  | 30.0 | 50.5, 0.0              |
+| w6 notch-double           | core     | scale: notch at 2x                                               | 2       | square, L, triangle                            | none                | 60.0 | −7.2    | ≥ −28.0 | 9.7  | −67.0 | 60.0 | 100.5, −76.5 (overlap) |
+| w7 mixed-big              | core     | mixed sizes: a big square after two small ones                   | 3       | small square, small square, square             | none                | 30.0 | 30.0    | 30.0    | 30.0 | 30.0  | 45.0 | 64.5, 0.0              |
+| w8 interlock-small-mirror | core     | repeat of interlock-small, mirrored                              | 2       | small triangle, small triangle, square, square | none                | 30.0 | 10.4    | 10.4    | 10.4 | 10.4  | 21.0 | 49.0, −19.5            |
+| w9 square-circle          | extended | a circle after two squares (the simple row)                      | 3       | square, square, circle                         | none                | 30.0 | 30.0    | 25.9    | 27.0 | 24.0  | 30.0 | 50.5, 0.0              |
+| w10 notch-invert          | extended | inversion: notch with shape and background swapped               | 2       | square, L, triangle                            | inverted            | 30.0 | −3.6    | −19.7   | 4.8  | −33.5 | 30.0 | 50.5, −38.0 (overlap)  |
+| w11 tip-circle            | extended | a triangle's tip toward a circle                                 | 3       | square, circle, triangle                       | none                | 30.0 | 30.0    | 20.3    | 23.2 | 2.0   | 30.0 | 50.5, −2.5 (overlap)   |
+| w12 square-circle-invert  | extended | inversion: square-circle with shape and background swapped       | 3       | square, square, circle                         | inverted            | 30.0 | 30.0    | 25.9    | 27.0 | 24.0  | 30.0 | 50.5, 0.0              |
+| w13 notch-hue             | extended | color: notch with the moving triangle colored                    | 2       | square, L, triangle                            | the moving triangle | 30.0 | −3.6    | −19.7   | 4.8  | −33.5 | 30.0 | 50.5, −38.0 (overlap)  |
+| w14 tip-circle-hue        | extended | color: tip-circle with the fixed circle colored                  | 3       | square, circle, triangle                       | the fixed circle    | 30.0 | 30.0    | 20.3    | 23.2 | 2.0   | 30.0 | 50.5, −2.5 (overlap)   |
+| w15 tips                  | extended | pathological: two long spikes, tip to tip                        | 1       | square, spike, spike, circle                   | none                | 30.0 | 30.0    | 11.1    | 18.0 | 0.2   | 25.7 | 50.0, −4.5 (overlap)   |
 
-Starts: a far start sits 40% of the track past every prediction. A close
-start has the moving shape just touching its neighbor, never overlapping it.
-Sides alternate down the page and a matched widget starts on the side
-opposite its original, except where the touching start would sit within
-3 sd of a prediction (mean predicts touching on the notch, wedge and tip
-rows): those start far.
+Starts and order. Every widget has two pinned starts. The far start sits
+40% of the track past every prediction. The close start has the moving
+shape just touching its neighbor; where touching would sit within 3 sd of a
+prediction (mean predicts touching on the notch, wedge and tip rows), it
+sits 3 sd past the lowest prediction instead, so the shapes overlap by a few
+px (marked overlap). On each page load, every widget draws one of its two
+starts at random, and the order is shuffled within the core and within the
+extended tier. A repeat sits at least 3 places from its original when the
+draw allows it, and never next to it. Each result line records the start
+side and the position: `w1 notch 20.5 start=far pos=3`.
+
+Why: Josh's first result (01-josh, design v2b, starts pinned to one side
+and a fixed order) set interlock-small at 7.5 from a touching start and its
+mirror at 20.5 from a far start. Every far start landed wide. With the side
+drawn at random, the start effect can be measured and averaged out, and
+the intro asks people to move past the spot that looks right and come back.
 
 ## Ranking
 
@@ -111,7 +121,7 @@ comes first because every other comparison is read against it.
 | 8    | interlock              | an up and a down triangle, slanted sides parallel                | 2       | 0     | isolates no candidate                                                | cut      |
 | 9    | tips                   | pathological: two long spikes, tip to tip                        | 1       | 19.39 | pathological; isolates pm3c, hull, mean                              | extended |
 | 10   | spike-square           | pathological: a long spike's tip at a flat side                  | 1       | 15.27 | pathological; isolates mean                                          | cut      |
-| 11   | interlock-small-mirror | repeat of interlock-small, mirrored                              | 2       | n/a   | repeat: within-person noise, opposite start                          | core     |
+| 11   | interlock-small-mirror | repeat of interlock-small, mirrored                              | 2       | n/a   | repeat: within-person noise                                          | core     |
 | 12   | notch-double           | scale: notch at 2x                                               | 2       | n/a   | scale: does the gap scale with the shapes                            | core     |
 | 13   | stars                  | control: three identical stars                                   | 3       | n/a   | control: execution noise where every candidate agrees                | core     |
 | 14   | notch-invert           | inversion: notch with shape and background swapped               | 2       | n/a   | inversion: does light on dark change the gap                         | extended |
@@ -193,17 +203,28 @@ square's; at shallower depths the triangle's box is narrower.
 
 ## Analysis plan
 
-Each result block has a `theme:` line (light or dark, from the page's color
-scheme), an `extended:` line (shown or hidden), the window width
-(`screen:`), and one line per widget, `unset` if untouched.
+Each result block (header `optical-spacing-survey v2c`) has a `theme:` line
+(light or dark, from the page's color scheme), an `extended:` line (shown or
+hidden), an `invert:` line (the Invert toggle), the window width
+(`screen:`), and one line per widget with its value (`unset` if untouched),
+its start side and its position on the page.
 
-- **Noise.** Within-person noise comes from interlock-small and its mirror:
-  half the squared difference of a person's two answers, averaged. One
-  starts with the shapes touching, the other far, so a difference that keeps
-  its sign across people is a start bias. The stars' spread across people
-  is execution noise on an easy row where every candidate agrees.
+- **Start effect.** For each widget, the mean answer from far starts minus
+  the mean from close starts, across people. Its sign says whether answers
+  stop short of where they would settle; its size, against the noise, says
+  whether one pass is enough. Position (`pos=`) enters the same way, as a
+  check for fatigue or learning down the page.
+- **Comparing strategies.** Every comparison below uses, per widget, the
+  mean of the two sides' means, so a start effect that is the same in both
+  directions cancels. Where a widget has only a few answers on one side,
+  say so rather than leaning on that mean.
+- **Noise.** Within-person noise comes from interlock-small and its mirror,
+  using only people who drew the same start side for both: half the squared
+  difference of their two answers, averaged. People who drew opposite sides
+  give the start effect plus noise. The stars' spread across people is
+  execution noise on an easy row where every candidate agrees.
 - **Ruling out.** For each candidate, on each core widget where it is
-  marked out, compare the people's mean with its prediction. A miss of more
+  marked out, compare the mean of the two sides with its prediction. A miss of more
   than 3 sd (the noise above, or 1.5 px until it is measured) rules it out.
   A candidate that survives every one of its widgets stays in. On tips
   (realism 1), a miss means people switch strategy on extreme spikes.

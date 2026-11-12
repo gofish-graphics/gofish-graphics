@@ -1003,10 +1003,13 @@
       "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
       "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-43, 59],
+      "range": [-48, 59],
       "touch": -33.5,
-      "start": 51,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": -38
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1058,8 +1061,11 @@
       "axis": "x",
       "range": [-27, 55.5],
       "touch": -19.5,
-      "start": -19.5,
-      "side": "close",
+      "starts": {
+        "far": 49,
+        "close": -19.5
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1112,10 +1118,13 @@
       "text": "Move the triangle until its gap to the square looks the same as the gap between the two squares.",
       "aria": "A row of shapes: square, square, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-6, 55.5],
+      "range": [-8.5, 55.5],
       "touch": 0,
-      "start": 50.5,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": -2.5
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1167,8 +1176,11 @@
       "axis": "x",
       "range": [-6, 55.5],
       "touch": 0,
-      "start": 0,
-      "side": "close",
+      "starts": {
+        "far": 50.5,
+        "close": 0
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1220,8 +1232,11 @@
       "axis": "x",
       "range": [-6, 55.5],
       "touch": 0,
-      "start": 50.5,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": 0
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1272,10 +1287,13 @@
       "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
       "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-85.5, 117.5],
+      "range": [-96, 117.5],
       "touch": -67,
-      "start": 101.5,
-      "side": "far",
+      "starts": {
+        "far": 100.5,
+        "close": -76.5
+      },
+      "closeTouches": false,
       "sd": 3,
       "preds": {
         "box": 60,
@@ -1327,8 +1345,11 @@
       "axis": "x",
       "range": [-7.5, 70.5],
       "touch": 0,
-      "start": 64.5,
-      "side": "far",
+      "starts": {
+        "far": 64.5,
+        "close": 0
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1381,8 +1402,11 @@
       "axis": "x",
       "range": [-27, 55.5],
       "touch": -19.5,
-      "start": 49,
-      "side": "far",
+      "starts": {
+        "far": 49,
+        "close": -19.5
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1437,8 +1461,11 @@
       "axis": "x",
       "range": [-6, 55.5],
       "touch": 0,
-      "start": 50.5,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": 0
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1489,10 +1516,13 @@
       "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
       "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-43, 59],
+      "range": [-48, 59],
       "touch": -33.5,
-      "start": 51,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": -38
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1542,10 +1572,13 @@
       "text": "Move the triangle until its gap to the circle looks the same as the gap between the square and the circle.",
       "aria": "A row of shapes: square, circle, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-6, 55.5],
+      "range": [-8.5, 55.5],
       "touch": 0,
-      "start": 50.5,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": -2.5
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1598,8 +1631,11 @@
       "axis": "x",
       "range": [-6, 55.5],
       "touch": 0,
-      "start": 0,
-      "side": "close",
+      "starts": {
+        "far": 50.5,
+        "close": 0
+      },
+      "closeTouches": true,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1650,10 +1686,13 @@
       "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
       "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-43, 59],
+      "range": [-48, 59],
       "touch": -33.5,
-      "start": 51,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": -38
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1705,10 +1744,13 @@
       "text": "Move the triangle until its gap to the circle looks the same as the gap between the square and the circle.",
       "aria": "A row of shapes: square, circle, triangle. The triangle moves left and right.",
       "axis": "x",
-      "range": [-6, 55.5],
+      "range": [-8.5, 55.5],
       "touch": 0,
-      "start": 50.5,
-      "side": "far",
+      "starts": {
+        "far": 50.5,
+        "close": -2.5
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,
@@ -1759,10 +1801,13 @@
       "text": "Move the spike until its gap to the spike looks the same as the gap between the square and the spike. The circle moves with it.",
       "aria": "A row of shapes: square, spike, spike, circle. The spike moves left and right.",
       "axis": "x",
-      "range": [-6, 55.5],
+      "range": [-10.5, 55.5],
       "touch": 0,
-      "start": 50.5,
-      "side": "far",
+      "starts": {
+        "far": 50,
+        "close": -4.5
+      },
+      "closeTouches": false,
       "sd": 1.5,
       "preds": {
         "box": 30,

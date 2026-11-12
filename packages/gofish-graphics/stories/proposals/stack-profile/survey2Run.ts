@@ -384,11 +384,17 @@ function track(d: Def) {
   const xs = Object.values(preds).filter((x) => x != null) as number[];
   const [lo, hi] = [Math.min(...xs), Math.max(...xs)];
   const touch = touchAt(d);
+  const sd = sdOf(d);
   const v1 = Math.min(Math.ceil((hi + Math.max(0.45 * (hi - lo), 0.45 * d.s)) * 2) / 2, d.vmax);
-  const base = Math.min(touch, lo);
+  const closeOk = xs.every((x) => Math.abs(x - touch) >= 3 * sd);
+  // the close start: the shapes just touching, or, where touching sits within
+  // 3 sd of a prediction (mean predicts touching on tip rows), 3 sd past the
+  // lowest prediction, which overlaps the shapes by a few px
+  const close = closeOk ? touch : Math.floor((Math.min(touch, lo - 3 * sd)) * 2) / 2;
+  const base = Math.min(close, lo);
   const v0 = Math.floor((base - 0.1 * (v1 - base)) * 2) / 2;
-  const closeOk = xs.every((x) => Math.abs(x - touch) >= 3 * sdOf(d));
-  return { lo, hi, v0, v1, touch, closeOk };
+  const far = Math.round(Math.min(hi + 0.4 * (v1 - v0), v1 - 0.08 * (v1 - v0)) * 2) / 2;
+  return { lo, hi, v0, v1, touch, closeOk, close, far };
 }
 
 // --- the survey ----------------------------------------------------------------
@@ -445,20 +451,13 @@ const draw = (d: Def, v0: number, v1: number) => {
     moving: d.items.filter((it) => it.k).map((it) => ({ d: path(it), k: it.k, hue: it.hue })),
   };
 };
-// starts: the far start sits 40% of the track past the predictions, at
-// least 8% from the end; the close start has the moving shape just touching
-// its neighbor, never overlapping it. Sides alternate down the page, a matched
-// widget starts on the side opposite its original, and a widget whose
-// touching start would sit within 3 sd of a prediction starts far.
-const side: Record<string, boolean> = {};
+// starts: every widget has two, and the page picks one at random for each
+// person. The far start sits 40% of the track past the predictions, at least
+// 8% from the end; the close start is the shapes just touching, or 3 sd past
+// the lowest prediction where touching would sit on a prediction.
 const widgets = [...CORE.map((d) => ({ d, tier: "core" })), ...EXT.map((d) => ({ d, tier: "extended" }))].map(({ d, tier }, i) => {
   const { preds, blind } = predict(d);
-  const { lo, hi, v0, v1, touch, closeOk } = track(d);
-  let far = d.of && d.of in side ? !side[d.of] : i % 2 === 0;
-  if (!far && !closeOk) far = true;
-  side[d.key] = far;
-  const L = v1 - v0;
-  const start = far ? Math.round(Math.min(hi + 0.4 * L, v1 - 0.08 * L) * 2) / 2 : touch;
+  const { v0, v1, touch, closeOk, close, far } = track(d);
   return {
     n: i + 1,
     key: d.key,
@@ -474,9 +473,9 @@ const widgets = [...CORE.map((d) => ({ d, tier: "core" })), ...EXT.map((d) => ({
     aria: d.aria,
     axis: "x",
     range: [v0, v1],
-    touch: track(d).touch,
-    start,
-    side: far ? "far" : "close",
+    touch,
+    starts: { far, close },
+    closeTouches: closeOk, // false: the close start overlaps the shapes a little
     sd: r2(sdOf(d)),
     preds,
     blind,

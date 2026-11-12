@@ -239,11 +239,13 @@
       <p class="intro">
         Each picture below is a row of shapes, and one of them moves. Drag it,
         or use the slider under it, until the gap the text names looks the same
-        as the other one. There is no right answer. Go by eye, not by measuring,
-        and don't think about it too long. Squinting can help. The Squint
-        control at the top of the screen blurs the shapes, and its slider sets
-        how much. The Zoom slider beside it makes the pictures larger or
-        smaller, and the Invert box shows white shapes on black.
+        as the other one. Move it past the spot where it looks right, then come
+        back, and stop where it looks right from both sides. There is no right
+        answer. Go by eye, not by measuring, and don't think about it too long.
+        Squinting can help. The Squint control at the top of the screen blurs
+        the shapes, and its slider sets how much. The Zoom slider beside it
+        makes the pictures larger or smaller, and the Invert box shows white
+        shapes on black.
       </p>
       <div class="tools">
         <label>Your name (optional) <input type="text" id="name" /></label>
@@ -277,15 +279,15 @@
         "widgets": [
           {
             "n": 1,
-            "num": 1,
             "key": "notch",
             "tier": "core",
             "invert": false,
             "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
             "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-43, 59],
-            "start": 51,
+            "range": [-48, 59],
+            "starts": { "far": 50.5, "close": -38 },
+            "rep": null,
             "view": [-4, 0, 265, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -296,7 +298,6 @@
           },
           {
             "n": 2,
-            "num": 2,
             "key": "interlock-small",
             "tier": "core",
             "invert": false,
@@ -304,7 +305,8 @@
             "aria": "A row of shapes: square, square, small triangle, small triangle. The small triangle moves left and right.",
             "axis": "x",
             "range": [-27, 55.5],
-            "start": -19.5,
+            "starts": { "far": 49, "close": -19.5 },
+            "rep": null,
             "view": [-4, 0, 313.9, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -316,15 +318,15 @@
           },
           {
             "n": 3,
-            "num": 3,
             "key": "wedge",
             "tier": "core",
             "invert": false,
             "text": "Move the triangle until its gap to the square looks the same as the gap between the two squares.",
             "aria": "A row of shapes: square, square, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-6, 55.5],
-            "start": 50.5,
+            "range": [-8.5, 55.5],
+            "starts": { "far": 50.5, "close": -2.5 },
+            "rep": null,
             "view": [-4, 0, 261.5, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -335,7 +337,6 @@
           },
           {
             "n": 4,
-            "num": 4,
             "key": "mixed-small",
             "tier": "core",
             "invert": false,
@@ -343,7 +344,8 @@
             "aria": "A row of shapes: square, square, small square. The small square moves left and right.",
             "axis": "x",
             "range": [-6, 55.5],
-            "start": 0,
+            "starts": { "far": 50.5, "close": 0 },
+            "rep": null,
             "view": [-4, 0, 233.5, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -354,7 +356,6 @@
           },
           {
             "n": 5,
-            "num": 5,
             "key": "stars",
             "tier": "core",
             "invert": false,
@@ -362,7 +363,8 @@
             "aria": "A row of shapes: star, star, star. The star moves left and right.",
             "axis": "x",
             "range": [-6, 55.5],
-            "start": 50.5,
+            "starts": { "far": 50.5, "close": 0 },
+            "rep": null,
             "view": [-4, 0, 253.28, 58.65],
             "fixed": [
               {
@@ -382,15 +384,15 @@
           },
           {
             "n": 6,
-            "num": 6,
             "key": "notch-double",
             "tier": "core",
             "invert": false,
             "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
             "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-85.5, 117.5],
-            "start": 101.5,
+            "range": [-96, 117.5],
+            "starts": { "far": 100.5, "close": -76.5 },
+            "rep": null,
             "view": [-4, 0, 521.5, 120],
             "fixed": [
               { "d": "M0 116L112 116L112 4L0 4Z" },
@@ -401,7 +403,6 @@
           },
           {
             "n": 7,
-            "num": 7,
             "key": "mixed-big",
             "tier": "core",
             "invert": false,
@@ -409,7 +410,8 @@
             "aria": "A row of shapes: small square, small square, square. The square moves left and right.",
             "axis": "x",
             "range": [-7.5, 70.5],
-            "start": 64.5,
+            "starts": { "far": 64.5, "close": 0 },
+            "rep": null,
             "view": [-4, 0, 220.5, 64],
             "fixed": [
               { "d": "M0 60L28 60L28 32L0 32Z" },
@@ -420,7 +422,6 @@
           },
           {
             "n": 8,
-            "num": 8,
             "key": "interlock-small-mirror",
             "tier": "core",
             "invert": false,
@@ -428,7 +429,8 @@
             "aria": "A row of shapes: square, square, small triangle, small triangle. The small triangle moves left and right.",
             "axis": "x",
             "range": [-27, 55.5],
-            "start": 49,
+            "starts": { "far": 49, "close": -19.5 },
+            "rep": 2,
             "view": [-309.9, 0, 313.9, 64],
             "fixed": [
               { "d": "M0 4L-56 4L-56 60L0 60Z" },
@@ -440,7 +442,6 @@
           },
           {
             "n": 9,
-            "num": 9,
             "key": "square-circle",
             "tier": "extended",
             "invert": false,
@@ -448,7 +449,8 @@
             "aria": "A row of shapes: square, square, circle. The circle moves left and right.",
             "axis": "x",
             "range": [-6, 55.5],
-            "start": 50.5,
+            "starts": { "far": 50.5, "close": 0 },
+            "rep": null,
             "view": [-4, 0, 261.5, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -464,15 +466,15 @@
           },
           {
             "n": 10,
-            "num": 10,
             "key": "notch-invert",
             "tier": "extended",
             "invert": true,
             "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
             "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-43, 59],
-            "start": 51,
+            "range": [-48, 59],
+            "starts": { "far": 50.5, "close": -38 },
+            "rep": null,
             "view": [-4, 0, 265, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -483,15 +485,15 @@
           },
           {
             "n": 11,
-            "num": 11,
             "key": "tip-circle",
             "tier": "extended",
             "invert": false,
             "text": "Move the triangle until its gap to the circle looks the same as the gap between the square and the circle.",
             "aria": "A row of shapes: square, circle, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-6, 55.5],
-            "start": 50.5,
+            "range": [-8.5, 55.5],
+            "starts": { "far": 50.5, "close": -2.5 },
+            "rep": null,
             "view": [-4, 0, 261.5, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -504,7 +506,6 @@
           },
           {
             "n": 12,
-            "num": 12,
             "key": "square-circle-invert",
             "tier": "extended",
             "invert": true,
@@ -512,7 +513,8 @@
             "aria": "A row of shapes: square, square, circle. The circle moves left and right.",
             "axis": "x",
             "range": [-6, 55.5],
-            "start": 0,
+            "starts": { "far": 50.5, "close": 0 },
+            "rep": null,
             "view": [-4, 0, 261.5, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -528,15 +530,15 @@
           },
           {
             "n": 13,
-            "num": 13,
             "key": "notch-hue",
             "tier": "extended",
             "invert": false,
             "text": "Move the triangle until its gap to the L looks the same as the gap between the square and the L.",
             "aria": "A row of shapes: square, L, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-43, 59],
-            "start": 51,
+            "range": [-48, 59],
+            "starts": { "far": 50.5, "close": -38 },
+            "rep": null,
             "view": [-4, 0, 265, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -547,15 +549,15 @@
           },
           {
             "n": 14,
-            "num": 14,
             "key": "tip-circle-hue",
             "tier": "extended",
             "invert": false,
             "text": "Move the triangle until its gap to the circle looks the same as the gap between the square and the circle.",
             "aria": "A row of shapes: square, circle, triangle. The triangle moves left and right.",
             "axis": "x",
-            "range": [-6, 55.5],
-            "start": 50.5,
+            "range": [-8.5, 55.5],
+            "starts": { "far": 50.5, "close": -2.5 },
+            "rep": null,
             "view": [-4, 0, 261.5, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -569,15 +571,15 @@
           },
           {
             "n": 15,
-            "num": 15,
             "key": "tips",
             "tier": "extended",
             "invert": false,
             "text": "Move the spike until its gap to the spike looks the same as the gap between the square and the spike. The circle moves with it.",
             "aria": "A row of shapes: square, spike, spike, circle. The spike moves left and right.",
             "axis": "x",
-            "range": [-6, 55.5],
-            "start": 50.5,
+            "range": [-10.5, 55.5],
+            "starts": { "far": 50, "close": -4.5 },
+            "rep": null,
             "view": [-4, 0, 392.3, 64],
             "fixed": [
               { "d": "M0 60L56 60L56 4L0 4Z" },
@@ -599,7 +601,7 @@
       (() => {
         const D = JSON.parse(document.getElementById("data").textContent);
         const NS = "http://www.w3.org/2000/svg";
-        const KEY = "spacing-by-eye-v2b";
+        const KEY = "spacing-by-eye-v2c";
         const state = { name: "", u: {}, squint: false, blur: 3, zoom: 1 };
         const sizers = [];
         try {
@@ -617,6 +619,47 @@
             );
           } catch (e) {}
         };
+        // Each load draws a start side for every widget and an order within
+        // each tier. A ?seed= in the URL fixes the draw (for testing).
+        const seedParam = new URLSearchParams(location.search).get("seed");
+        const rand = (() => {
+          if (seedParam == null) return Math.random;
+          let a = +seedParam | 0;
+          return () => {
+            a = (a + 0x6d2b79f5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        })();
+        const side = {};
+        D.widgets.forEach((w) => (side[w.n] = rand() < 0.5 ? "far" : "close"));
+        const shuffle = (list) => {
+          const a = list.slice();
+          for (let i = a.length - 1; i > 0; i--) {
+            const j = Math.floor(rand() * (i + 1));
+            [a[i], a[j]] = [a[j], a[i]];
+          }
+          return a;
+        };
+        // a repeat sits at least 3 places from its original if the draw
+        // allows it within 200 tries, and never next to it
+        const apart = (list, d) =>
+          list.every((w, i) => {
+            if (w.rep == null) return true;
+            const j = list.findIndex((x) => x.n === w.rep);
+            return j < 0 || Math.abs(i - j) >= d;
+          });
+        const order = (list) => {
+          let best = null;
+          for (let k = 0; k < 200; k++) {
+            const a = shuffle(list);
+            if (apart(a, 3)) return a;
+            if (!best && apart(a, 2)) best = a;
+          }
+          return best || shuffle(list);
+        };
+        const pos = {};
         const el = (tag, attrs, parent) => {
           const e = document.createElementNS(NS, tag);
           for (const k in attrs)
@@ -630,7 +673,7 @@
           root.className = w.invert ? "widget invert" : "widget";
           root.id = `w${w.n}`;
           const p = document.createElement("p");
-          p.innerHTML = `<span class="num">${w.num}.</span>`;
+          p.innerHTML = `<span class="num">${pos[w.n]}.</span>`;
           p.appendChild(document.createTextNode(w.text));
           root.appendChild(p);
           const [x0, y0, vw, vh] = w.view;
@@ -708,15 +751,15 @@
           const end = () => (grab = null);
           mover.addEventListener("pointerup", end);
           mover.addEventListener("pointercancel", end);
-          set(state.u[w.n] != null ? state.u[w.n] : w.start, false);
+          set(state.u[w.n] != null ? state.u[w.n] : w.starts[side[w.n]], false);
           return root;
         }
         // the core tier shows first; the extended tier waits behind a button
         const host = document.getElementById("widgets");
-        const ext = D.widgets.filter((w) => w.tier === "extended");
-        D.widgets
-          .filter((w) => w.tier !== "extended")
-          .forEach((w) => host.appendChild(widget(w)));
+        const core = order(D.widgets.filter((w) => w.tier !== "extended"));
+        const ext = order(D.widgets.filter((w) => w.tier === "extended"));
+        [...core, ...ext].forEach((w, i) => (pos[w.n] = i + 1));
+        core.forEach((w) => host.appendChild(widget(w)));
         const extHost = document.createElement("div");
         extHost.hidden = true;
         ext.forEach((w) => extHost.appendChild(widget(w)));
@@ -799,7 +842,7 @@
 
         const results = () =>
           [
-            "optical-spacing-survey v2",
+            "optical-spacing-survey v2c",
             `name: ${(state.name || "").replace(/\s+/g, " ").trim()}`,
             `squint: ${state.squint ? `${state.blur}px` : "off"}`,
             `zoom: ${state.zoom}x`,
@@ -811,7 +854,7 @@
             `invert: ${state.invert ? "on" : "off"}`,
             ...D.widgets.map(
               (w) =>
-                `w${w.n} ${w.key} ${state.u[w.n] != null ? (+state.u[w.n]).toFixed(1) : "unset"}`
+                `w${w.n} ${w.key} ${state.u[w.n] != null ? (+state.u[w.n]).toFixed(1) : "unset"} start=${side[w.n]} pos=${pos[w.n]}`
             ),
           ].join("\n");
         const status = document.getElementById("status");
