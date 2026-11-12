@@ -303,6 +303,18 @@ Two changes from the first version of this proposal, both from Josh's review on 
 
 The split follows the trait names. A `Can<Verb>` trait is an operation, and its builder is the trait's own name, so the word in an error message is the word the user wrote. A `Has<Thing>` trait describes the values, and its builder is the adjective, because `diverging` has no good `has` form. This replaces the rule in `api-design.md` that every builder word is an adjective, and it renames today's `Trait.summable()`.
 
+**`canSum` with no `over`.** `Trait.canSum()` means the value sums over every key of its table, so any set of its rows may be added. This is a flow, such as units sold, where each row is its own event. When the table's `key` is declared, it is the same as listing every key column in `over`. Unit-level and column-level `Trait.canSum()` mean the same thing. The unit form applies it to every column in that unit.
+
+| Declaration                           | Meaning                                                                                          |
+| ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `Trait.canSum()`                      | sums over every key                                                                              |
+| `Trait.canSum({ over: "warehouse" })` | sums over `warehouse` only                                                                       |
+| `Trait.canSum({ over: [] })`          | sums over no key. This should be an error, since it only says "not summable" in a confusing way. |
+| a declared unit with no `canSum`      | not summable, as today                                                                           |
+| an undeclared column                  | unknown, so every check passes                                                                   |
+
+"Every key" means every key of the table the column was declared in. If a join copies the column onto many rows, a sum along the new key is still wrong. The join rule catches that, not `canSum`: the joined column remembers its own key, and the error offers `.first()`.
+
 Together these names are easier to hold than extensive, intensive and cumulative. Extensive and intensive stay as words for explaining, not as API. Cumulative is replaced by snapshot, because "cumulative" sounds like "it sums", and most such values (inventory, population, a balance) are readings at a moment, not running sums.
 
 ### Overlap check
