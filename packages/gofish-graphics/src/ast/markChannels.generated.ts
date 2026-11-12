@@ -85,6 +85,8 @@ export const MARK_CHANNELS = {
     dims: "dims",
   },
   polygon: {
+    w: "size",
+    h: "size",
     fill: "color",
     stroke: "color",
   },

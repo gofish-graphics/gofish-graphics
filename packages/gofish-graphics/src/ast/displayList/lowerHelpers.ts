@@ -5,7 +5,8 @@
 /**
  * Shared helpers for per-primitive `lower` bodies — the IR counterparts of the
  * small JSX-emitting snippets each shape's `render` uses. Keeping them here
- * means rect/ellipse/petal/connect/coord lower their warped paths identically.
+ * means rect/ellipse/petal/polygon/connect/coord lower their warped paths
+ * identically.
  */
 
 import type { DisplayList } from "gofish-ir";
@@ -14,7 +15,6 @@ import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import {
-  path,
   transformPath,
   type Path,
   type Point,
@@ -61,18 +61,20 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** A closed ring of layout points as a path item, drawn straight under a
- *  linear coordinate space and adaptively resampled under any other, so a
- *  straight edge in data space draws as the curve the space makes of it.
- *  Shared by the polygon and region lower bodies. */
-export const ringItem = (
-  points: Point[],
+/** A closed outline of layout points, straight edges and curves alike, as a
+ *  path item. It is drawn as it is under a linear coordinate space. Under any
+ *  other, every point of it goes through the space: the whole outline is
+ *  adaptively resampled, curves included, so a straight edge in data space
+ *  draws as the curve the space makes of it, as a `line` does. Used by the
+ *  polygon, region and Porter-Duff lower bodies. Rect's nonlinear branch and
+ *  connect still resample their own paths with `transformPath`. */
+export const outlineItem = (
+  ring: Path,
   coordinateTransform: CoordinateTransform | undefined,
   toPixel: ToPixel,
   datum: Record<string, unknown>[] | undefined,
   style: DisplayList.Style
 ): DisplayList.PathItem => {
-  const ring = path(points, { closed: true });
   const drawn =
     coordinateTransform === undefined || coordinateTransform.type === "linear"
       ? ring
