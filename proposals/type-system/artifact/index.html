@@ -677,6 +677,130 @@
       transition: none !important;
     }
   }
+
+  /* All 32 grid */
+  .grid-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 16px;
+    margin: 14px 0 4px;
+  }
+  .grid-controls p {
+    margin: 0;
+  }
+  #grid-verdicts {
+    font: 600 0.9rem var(--f-body);
+    padding: 6px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--accent);
+    background: var(--surface);
+    color: var(--accent);
+  }
+  #grid-verdicts[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--surface);
+  }
+  .grid-block {
+    margin-top: 26px;
+  }
+  .grid-block h3 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 12px;
+    margin: 0 0 6px;
+  }
+  .grid-kind {
+    font-family: var(--f-body);
+    font-weight: 400;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+  .grid-count {
+    font: 600 0.8rem var(--f-body);
+    color: var(--accent);
+  }
+  .grid4 {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 14px;
+    align-items: start;
+  }
+  .grid-head {
+    font: 600 0.92rem var(--f-display);
+    border-bottom: 2px solid var(--rule-strong);
+    padding-bottom: 4px;
+  }
+  .grid-head span {
+    font: 400 0.82rem var(--f-body);
+    color: var(--muted);
+  }
+  .grid-row {
+    grid-column: 1 / -1;
+    margin: 8px 0 0;
+    font-size: 0.92rem;
+    color: var(--muted);
+  }
+  .grid-cell {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+    align-content: start;
+  }
+  .grid-cell > * {
+    min-width: 0;
+  }
+  .grid-cell .cell-arr {
+    display: none;
+    font: 600 0.82rem var(--f-display);
+    color: var(--muted);
+  }
+  .grid-shot {
+    display: flex;
+    justify-content: center;
+    background: var(--shot-bg);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 6px;
+  }
+  .grid-shot img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  .grid-cell pre.code {
+    font-size: 0.72rem;
+    padding: 6px 8px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .grid-cell .verdict-part {
+    font-size: 0.86rem;
+    line-height: 1.4;
+  }
+  .grid-foot {
+    margin: 8px 0 0;
+    font-weight: 600;
+  }
+  @media (max-width: 960px) {
+    .grid4 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .grid-head {
+      display: none;
+    }
+    .grid-cell .cell-arr {
+      display: block;
+    }
+  }
+  @media (max-width: 560px) {
+    .grid4 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -820,6 +944,7 @@
   <nav class="tabs" aria-label="Sections">
     <div class="links">
       <a href="#examples">Examples</a>
+      <a href="#grid">All 32</a>
       <a href="#additivity">Additivity</a>
       <a href="#rules">Rules</a>
       <a href="#keys">Keys</a>
@@ -966,6 +1091,7 @@
         column is from its documented behavior, not from running the specs, and
         "roughly express" covers some stretching for nested stacks.
       </p>
+      <p><a href="#grid">See all 32 rendered</a></p>
       <h2>Examples</h2>
       <p class="intro">
         Each picture is what GoFish draws today from small example data. The
@@ -1746,6 +1872,1057 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
         </article>
       </div>
     </section>
+    <section class="panel" data-panel="grid" hidden>
+      <h2>All 32 specs, rendered</h2>
+      <p class="intro">
+        32 specs, and every one renders today. Under the proposal 11 are valid.
+        Before you reveal the verdicts, look at the y axis and ask what its
+        number is the total of.
+      </p>
+      <p class="small">
+        Example data: 3 warehouses and 6 months. Every spec is
+        <code
+          >chart(rows, { axes: true }).flow(...).mark(rect({ h: value, fill:
+          inner }))</code
+        >
+        with no schema. Click a chart to open it at full size.
+      </p>
+      <div class="grid-controls">
+        <button type="button" id="grid-verdicts" aria-pressed="false">
+          Show verdicts
+        </button>
+        <p class="grid-total verdict-part" hidden>
+          Valid under the proposal: <strong>11 of 32</strong>.
+        </p>
+      </div>
+      <div class="grid-block">
+        <h3>
+          <code>sold</code>
+          <span class="grid-kind">units sold: sums over every key</span>
+          <span class="grid-count verdict-part" hidden>6 of 8 valid</span>
+        </h3>
+        <div class="grid4">
+          <div class="grid-head">
+            1. spread, stack<br /><span>stacked bars</span>
+          </div>
+          <div class="grid-head">
+            2. stack, spread<br /><span>a stack outside a spread</span>
+          </div>
+          <div class="grid-head">
+            3. spread, spread<br /><span>grouped bars</span>
+          </div>
+          <div class="grid-head">
+            4. stack, stack<br /><span>nested stacks, one bar</span>
+          </div>
+          <h4 class="grid-row">month outside, warehouse inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/sold-month-1.png"
+              ><img
+                src="img/grid/sold-month-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one month's units sold, added over the three
+                warehouses</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/sold-month-2.png"
+              ><img
+                src="img/grid/sold-month-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one month group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/sold-month-3.png"
+              ><img
+                src="img/grid/sold-month-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "month", dir: "x" }),
+  spread({ by: "warehouse", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's units sold in one month</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/sold-month-4.png"
+              ><img
+                src="img/grid/sold-month-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >valid spec, but today's render overlaps the six month stacks at
+                0: the bar shows about 600 while the axis runs to 3,500</span
+              >
+            </div>
+          </div>
+          <h4 class="grid-row">warehouse outside, month inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/sold-warehouse-1.png"
+              ><img
+                src="img/grid/sold-warehouse-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's units sold, added over the six
+                months</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/sold-warehouse-2.png"
+              ><img
+                src="img/grid/sold-warehouse-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one warehouse group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/sold-warehouse-3.png"
+              ><img
+                src="img/grid/sold-warehouse-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "warehouse", dir: "x" }),
+  spread({ by: "month", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's units sold in one month</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/sold-warehouse-4.png"
+              ><img
+                src="img/grid/sold-warehouse-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = sold'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >valid spec, but today's render overlaps the three warehouse
+                stacks at 0: the bar shows about 1,200 of a total near
+                3,300</span
+              >
+            </div>
+          </div>
+        </div>
+        <p class="grid-foot verdict-part" hidden>
+          6 of 8 valid for <code>sold</code>.
+        </p>
+      </div>
+      <div class="grid-block">
+        <h3>
+          <code>stock</code>
+          <span class="grid-kind"
+            >month-end inventory: a snapshot along month</span
+          >
+          <span class="grid-count verdict-part" hidden>3 of 8 valid</span>
+        </h3>
+        <div class="grid4">
+          <div class="grid-head">
+            1. spread, stack<br /><span>stacked bars</span>
+          </div>
+          <div class="grid-head">
+            2. stack, spread<br /><span>a stack outside a spread</span>
+          </div>
+          <div class="grid-head">
+            3. spread, spread<br /><span>grouped bars</span>
+          </div>
+          <div class="grid-head">
+            4. stack, stack<br /><span>nested stacks, one bar</span>
+          </div>
+          <h4 class="grid-row">month outside, warehouse inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/stock-month-1.png"
+              ><img
+                src="img/grid/stock-month-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one month-end inventory, added over the three
+                warehouses</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/stock-month-2.png"
+              ><img
+                src="img/grid/stock-month-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one month group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/stock-month-3.png"
+              ><img
+                src="img/grid/stock-month-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "month", dir: "x" }),
+  spread({ by: "warehouse", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's inventory at one month end</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/stock-month-4.png"
+              ><img
+                src="img/grid/stock-month-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >one bar of 18 month-end inventories added (the axis runs to
+                10,000), and today the month stacks also overlap at 0</span
+              >
+            </div>
+          </div>
+          <h4 class="grid-row">warehouse outside, month inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/stock-warehouse-1.png"
+              ><img
+                src="img/grid/stock-warehouse-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >bar height = six month-end inventories added together, so the
+                same items are counted up to six times</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/stock-warehouse-2.png"
+              ><img
+                src="img/grid/stock-warehouse-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one warehouse group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/stock-warehouse-3.png"
+              ><img
+                src="img/grid/stock-warehouse-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "warehouse", dir: "x" }),
+  spread({ by: "month", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's inventory at one month end</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/stock-warehouse-4.png"
+              ><img
+                src="img/grid/stock-warehouse-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = stock'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >one bar of 18 month-end inventories added (the axis runs to
+                10,000), and today the warehouse stacks also overlap at 0</span
+              >
+            </div>
+          </div>
+        </div>
+        <p class="grid-foot verdict-part" hidden>
+          3 of 8 valid for <code>stock</code>.
+        </p>
+      </div>
+      <div class="grid-block">
+        <h3>
+          <code>price</code>
+          <span class="grid-kind">average price per unit: an average</span>
+          <span class="grid-count verdict-part" hidden>2 of 8 valid</span>
+        </h3>
+        <div class="grid4">
+          <div class="grid-head">
+            1. spread, stack<br /><span>stacked bars</span>
+          </div>
+          <div class="grid-head">
+            2. stack, spread<br /><span>a stack outside a spread</span>
+          </div>
+          <div class="grid-head">
+            3. spread, spread<br /><span>grouped bars</span>
+          </div>
+          <div class="grid-head">
+            4. stack, stack<br /><span>nested stacks, one bar</span>
+          </div>
+          <h4 class="grid-row">month outside, warehouse inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/price-month-1.png"
+              ><img
+                src="img/grid/price-month-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >bar height = three prices added, about 30 USD, a price no
+                customer pays</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/price-month-2.png"
+              ><img
+                src="img/grid/price-month-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one month group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/price-month-3.png"
+              ><img
+                src="img/grid/price-month-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "month", dir: "x" }),
+  spread({ by: "warehouse", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's price in one month</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/price-month-4.png"
+              ><img
+                src="img/grid/price-month-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >one bar of 18 prices added (the axis runs to 200 USD), and
+                today the month stacks also overlap at 0</span
+              >
+            </div>
+          </div>
+          <h4 class="grid-row">warehouse outside, month inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/price-warehouse-1.png"
+              ><img
+                src="img/grid/price-warehouse-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >bar height = six monthly prices added, about 60 USD</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/price-warehouse-2.png"
+              ><img
+                src="img/grid/price-warehouse-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one warehouse group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/price-warehouse-3.png"
+              ><img
+                src="img/grid/price-warehouse-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "warehouse", dir: "x" }),
+  spread({ by: "month", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-ok">valid</span>
+              <span class="reading"
+                >each bar is one warehouse's price in one month</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/price-warehouse-4.png"
+              ><img
+                src="img/grid/price-warehouse-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = price'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >one bar of 18 prices added (the axis runs to 200 USD), and
+                today the warehouse stacks also overlap at 0</span
+              >
+            </div>
+          </div>
+        </div>
+        <p class="grid-foot verdict-part" hidden>
+          2 of 8 valid for <code>price</code>.
+        </p>
+      </div>
+      <div class="grid-block">
+        <h3>
+          <code>temp</code>
+          <span class="grid-kind">mean temperature in °C: no zero</span>
+          <span class="grid-count verdict-part" hidden>0 of 8 valid</span>
+        </h3>
+        <div class="grid4">
+          <div class="grid-head">
+            1. spread, stack<br /><span>stacked bars</span>
+          </div>
+          <div class="grid-head">
+            2. stack, spread<br /><span>a stack outside a spread</span>
+          </div>
+          <div class="grid-head">
+            3. spread, spread<br /><span>grouped bars</span>
+          </div>
+          <div class="grid-head">
+            4. stack, stack<br /><span>nested stacks, one bar</span>
+          </div>
+          <h4 class="grid-row">month outside, warehouse inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/temp-month-1.png"
+              ><img
+                src="img/grid/temp-month-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >three temperatures added, measured from 0 °C: June reaches 69
+                °C</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/temp-month-2.png"
+              ><img
+                src="img/grid/temp-month-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), spread({ by: "warehouse", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one month group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/temp-month-3.png"
+              ><img
+                src="img/grid/temp-month-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "month", dir: "x" }), spread({ by: "warehouse", dir: "x" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "month", dir: "x" }),
+  spread({ by: "warehouse", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >a bar length from 0 °C: in °F or kelvin the same data draws
+                different ratios</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/temp-month-4.png"
+              ><img
+                src="img/grid/temp-month-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "month", dir: "y" }), stack({ by: "warehouse", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >18 temperatures added from 0 °C (the axis runs to 220), and
+                today the month stacks also overlap at 0</span
+              >
+            </div>
+          </div>
+          <h4 class="grid-row">warehouse outside, month inside</h4>
+          <div class="grid-cell">
+            <div class="cell-arr">1. spread, stack (stacked bars)</div>
+            <a class="shot grid-shot" href="img/grid/temp-warehouse-1.png"
+              ><img
+                src="img/grid/temp-warehouse-1.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >six monthly temperatures added, measured from 0 °C</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">
+              2. stack, spread (a stack outside a spread)
+            </div>
+            <a class="shot grid-shot" href="img/grid/temp-warehouse-2.png"
+              ><img
+                src="img/grid/temp-warehouse-2.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), spread({ by: "month", dir: "x" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >each row of bars is one warehouse group, as tall as its tallest
+                bar, and the stack adds those heights, which is the total of
+                nothing</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">3. spread, spread (grouped bars)</div>
+            <a class="shot grid-shot" href="img/grid/temp-warehouse-3.png"
+              ><img
+                src="img/grid/temp-warehouse-3.png"
+                alt='Today&apos;s render of .flow(spread({ by: "warehouse", dir: "x" }), spread({ by: "month", dir: "x" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">.flow(
+  spread({ by: "warehouse", dir: "x" }),
+  spread({ by: "month", dir: "x" })
+)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >a bar length from 0 °C: in °F or kelvin the same data draws
+                different ratios</span
+              >
+            </div>
+          </div>
+          <div class="grid-cell">
+            <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
+            <a class="shot grid-shot" href="img/grid/temp-warehouse-4.png"
+              ><img
+                src="img/grid/temp-warehouse-4.png"
+                alt='Today&apos;s render of .flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" })) with h = temp'
+                loading="lazy"
+            /></a>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">.flow(stack({ by: "warehouse", dir: "y" }), stack({ by: "month", dir: "y" }))</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
+              </div>
+            </div>
+            <div class="verdict-part" hidden>
+              <span class="verdict v-bad">wrong</span>
+              <span class="reading"
+                >18 temperatures added from 0 °C (the axis runs to 220), and
+                today the warehouse stacks also overlap at 0</span
+              >
+            </div>
+          </div>
+        </div>
+        <p class="grid-foot verdict-part" hidden>
+          0 of 8 valid for <code>temp</code>.
+        </p>
+      </div>
+    </section>
     <section class="panel" data-panel="additivity" hidden>
       <section class="prose wide">
         <h2>Additivity: three ways to declare it</h2>
@@ -2419,7 +3596,11 @@ chart(
                 <th scope="row"><code>stack({ by, dir })</code></th>
                 <td>
                   the stacked size has <code>CanSum</code> over <code>by</code>,
-                  has <code>HasZero</code>, and its parts share a unit
+                  has <code>HasZero</code>, and its parts share a unit. Each
+                  child is one length along <code>dir</code>. A spread or layer
+                  of several lengths has an extent there, its tallest bar, but
+                  no amount to add, so a stack outside a spread is an error
+                  (#992).
                 </td>
                 <td>adds <code>by</code></td>
                 <td>
@@ -4598,6 +5779,7 @@ chart(
   (function () {
     var TABS = [
       "examples",
+      "grid",
       "additivity",
       "rules",
       "keys",
@@ -4642,6 +5824,28 @@ chart(
         setLang(b.dataset.set);
       });
     });
+
+    var gridBtn = document.getElementById("grid-verdicts");
+    function setVerdicts(on) {
+      gridBtn.setAttribute("aria-pressed", String(on));
+      gridBtn.textContent = on ? "Hide verdicts" : "Show verdicts";
+      document.querySelectorAll(".verdict-part").forEach(function (el) {
+        el.hidden = !on;
+      });
+      try {
+        localStorage.setItem("gofish-ts-verdicts", on ? "1" : "0");
+      } catch (e) {}
+    }
+    var verdictsOn = false;
+    try {
+      verdictsOn = localStorage.getItem("gofish-ts-verdicts") === "1";
+    } catch (e) {}
+    if (gridBtn) {
+      setVerdicts(verdictsOn);
+      gridBtn.addEventListener("click", function () {
+        setVerdicts(gridBtn.getAttribute("aria-pressed") !== "true");
+      });
+    }
 
     if (window.hljs) {
       document
