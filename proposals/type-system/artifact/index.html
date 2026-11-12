@@ -839,6 +839,134 @@
 
   <main>
     <section class="panel" data-panel="examples">
+      <h2>Most specs on this small example are wrong</h2>
+      <p>
+        Take the four value columns, the two orders of <code>month</code> and
+        <code>warehouse</code>, and the four ways to arrange two operators, all
+        with <code>rect({ h })</code>. That is 32 specs. Every one of them
+        renders today when the columns are undeclared. Under the rules in this
+        proposal, 11 are valid.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Value</th>
+              <th scope="col">spread, stack</th>
+              <th scope="col">stack, spread</th>
+              <th scope="col">spread, spread</th>
+              <th scope="col">stack, stack</th>
+              <th scope="col">Valid</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row"><code>sold</code> (sums over every key)</th>
+              <td>2</td>
+              <td>0</td>
+              <td>2</td>
+              <td>2</td>
+              <td>6 of 8</td>
+            </tr>
+            <tr>
+              <th scope="row"><code>stock</code> (a snapshot along month)</th>
+              <td>1</td>
+              <td>0</td>
+              <td>2</td>
+              <td>0</td>
+              <td>3 of 8</td>
+            </tr>
+            <tr>
+              <th scope="row"><code>price</code> (an average)</th>
+              <td>0</td>
+              <td>0</td>
+              <td>2</td>
+              <td>0</td>
+              <td>2 of 8</td>
+            </tr>
+            <tr>
+              <th scope="row"><code>temp</code> (no zero)</th>
+              <td>0</td>
+              <td>0</td>
+              <td>0</td>
+              <td>0</td>
+              <td>0 of 8</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <ul>
+        <li>
+          <strong>Switching the fields</strong> goes wrong whenever the value
+          does not sum over both keys. For <code>stock</code>, exactly one order
+          is valid.
+        </li>
+        <li>
+          <strong>Switching <code>spread</code> and <code>stack</code></strong>
+          always goes wrong for a real stacked bar. A stack outside a spread
+          adds the tallest bar of each group, which is the total of nothing. The
+          only exceptions are one bar per group, or equal bars.
+        </li>
+      </ul>
+      <p>
+        This is not special to GoFish. The errors are of two kinds, and a fixed
+        grammar rules out only one.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              <th scope="col">Structural: a stack outside a spread</th>
+              <th scope="col">Data: the wrong field or key</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Specs out of the 32</th>
+              <td>8, all wrong</td>
+              <td>24, of which 13 are wrong</td>
+            </tr>
+            <tr>
+              <th scope="row">Vega-Lite</th>
+              <td>cannot be written</td>
+              <td>can be written, and render</td>
+            </tr>
+            <tr>
+              <th scope="row">GoFish today</th>
+              <td>render</td>
+              <td>render</td>
+            </tr>
+            <tr>
+              <th scope="row">With these types</th>
+              <td>error</td>
+              <td>error</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        So of the 24 specs that Vega-Lite can roughly express, a little under
+        half are valid, against about a third of GoFish's 32. Stacking month-end
+        inventory over months, summing prices, stacking means, and drawing °C as
+        bars from zero are all ordinary Vega-Lite specs. Its types (nominal,
+        ordinal, quantitative, temporal) cannot tell them apart.
+      </p>
+      <p>
+        The same is true of programs in general: few syntactically valid
+        programs type-check. The useful reading is the one Haskell, Rust and
+        Lean users know. The type of the data constrains the valid specs so
+        strongly that a chart could nearly be synthesized from it: enumerate the
+        operator compositions, let the types prune them, then rank what is left.
+        Mackinlay's APT split the problem the same way, into expressiveness and
+        effectiveness, over a fixed list of chart kinds.
+      </p>
+      <p>
+        These counts were worked by hand from the rules, not run. The Vega-Lite
+        column is from its documented behavior, not from running the specs, and
+        "roughly express" covers some stretching for nested stacks.
+      </p>
+      <h2>Examples</h2>
       <p class="intro">
         Each picture is what GoFish draws today from small example data. The
         proposal is about charts like these, which render and say something

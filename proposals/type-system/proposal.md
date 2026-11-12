@@ -115,6 +115,35 @@ What the checker then says:
 
 ![What GoFish draws today: bar lengths from 0 °C](img/temp-bars.png)
 
+### Most specs on this small example are wrong
+
+Take the four value columns, the two orders of `month` and `warehouse`, and the four ways to arrange two operators, all with `rect({ h })`. That is 32 specs. Every one of them renders today when the columns are undeclared. Under the rules in this proposal, 11 are valid.
+
+| Value                            | spread, stack | stack, spread | spread, spread | stack, stack | Valid  |
+| -------------------------------- | ------------- | ------------- | -------------- | ------------ | ------ |
+| `sold` (sums over every key)     | 2             | 0             | 2              | 2            | 6 of 8 |
+| `stock` (a snapshot along month) | 1             | 0             | 2              | 0            | 3 of 8 |
+| `price` (an average)             | 0             | 0             | 2              | 0            | 2 of 8 |
+| `temp` (no zero)                 | 0             | 0             | 0              | 0            | 0 of 8 |
+
+- **Switching the fields** goes wrong whenever the value does not sum over both keys. For `stock`, exactly one order is valid.
+- **Switching `spread` and `stack`** always goes wrong for a real stacked bar. A stack outside a spread adds the tallest bar of each group, which is the total of nothing. The only exceptions are one bar per group, or equal bars.
+
+This is not special to GoFish. The errors are of two kinds, and a fixed grammar rules out only one.
+
+|                     | Structural: a stack outside a spread | Data: the wrong field or key |
+| ------------------- | ------------------------------------ | ---------------------------- |
+| Specs out of the 32 | 8, all wrong                         | 24, of which 13 are wrong    |
+| Vega-Lite           | cannot be written                    | can be written, and render   |
+| GoFish today        | render                               | render                       |
+| With these types    | error                                | error                        |
+
+So of the 24 specs that Vega-Lite can roughly express, a little under half are valid, against about a third of GoFish's 32. Stacking month-end inventory over months, summing prices, stacking means, and drawing °C as bars from zero are all ordinary Vega-Lite specs. Its types (nominal, ordinal, quantitative, temporal) cannot tell them apart.
+
+The same is true of programs in general: few syntactically valid programs type-check. The useful reading is the one Haskell, Rust and Lean users know. The type of the data constrains the valid specs so strongly that a chart could nearly be synthesized from it: enumerate the operator compositions, let the types prune them, then rank what is left. Mackinlay's APT split the problem the same way, into expressiveness and effectiveness, over a fixed list of chart kinds.
+
+These counts were worked by hand from the rules, not run. The Vega-Lite column is from its documented behavior, not from running the specs, and "roughly express" covers some stretching for nested stacks.
+
 ## 2. What GoFish has today, next to the draft
 
 The full table with file references is in [current-types](research/current-types.md). The short version:
