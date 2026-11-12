@@ -1,0 +1,4274 @@
+<title>GoFish Type System</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<style>
+  /* Layout: one column document; header, sticky tab bar, one panel per tab; the examples panel is a two-up card gallery. */
+  :root {
+    --bg: #f4f6f8;
+    --surface: #ffffff;
+    --ink: #18202a;
+    --muted: #566272;
+    --rule: #d6dce3;
+    --rule-strong: #b9c2cc;
+    --accent: #1c5a8c;
+    --accent-soft: #e3edf6;
+    --code-bg: #eef1f4;
+    --code-ink: #1f2933;
+    --shot-bg: #ffffff;
+    --ok: #1d6b3a;
+    --ok-bg: #e2f2e7;
+    --bad: #9b2420;
+    --bad-bg: #f9e3e1;
+    --err: #8a5300;
+    --err-bg: #fbeed6;
+    --def: #1c5a8c;
+    --def-bg: #e3edf6;
+    --none: #566272;
+    --none-bg: #e8ecf0;
+    --hl-kw: #8a3b9e;
+    --hl-str: #1d6b3a;
+    --hl-num: #a14d00;
+    --hl-com: #6b7785;
+    --hl-fn: #1c5a8c;
+    --hl-attr: #6a4b00;
+    --hl-lit: #a14d00;
+    --f-display:
+      "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+    --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --f-mono:
+      "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11151a;
+      --surface: #182029;
+      --ink: #e3e8ed;
+      --muted: #9ba7b4;
+      --rule: #2a333d;
+      --rule-strong: #3a4552;
+      --accent: #82b6e4;
+      --accent-soft: #1b2b3b;
+      --code-bg: #0c1014;
+      --code-ink: #dbe2e8;
+      --shot-bg: #f4f5f6;
+      --ok: #7fd19b;
+      --ok-bg: #173323;
+      --bad: #f19a93;
+      --bad-bg: #3a1c1b;
+      --err: #f0c070;
+      --err-bg: #3a2c12;
+      --def: #82b6e4;
+      --def-bg: #1b2b3b;
+      --none: #9ba7b4;
+      --none-bg: #232c36;
+      --hl-kw: #d39be3;
+      --hl-str: #8fd3a5;
+      --hl-num: #f0b072;
+      --hl-com: #7d8a98;
+      --hl-fn: #82b6e4;
+      --hl-attr: #e6c27a;
+      --hl-lit: #f0b072;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11151a;
+    --surface: #182029;
+    --ink: #e3e8ed;
+    --muted: #9ba7b4;
+    --rule: #2a333d;
+    --rule-strong: #3a4552;
+    --accent: #82b6e4;
+    --accent-soft: #1b2b3b;
+    --code-bg: #0c1014;
+    --code-ink: #dbe2e8;
+    --shot-bg: #f4f5f6;
+    --ok: #7fd19b;
+    --ok-bg: #173323;
+    --bad: #f19a93;
+    --bad-bg: #3a1c1b;
+    --err: #f0c070;
+    --err-bg: #3a2c12;
+    --def: #82b6e4;
+    --def-bg: #1b2b3b;
+    --none: #9ba7b4;
+    --none-bg: #232c36;
+    --hl-kw: #d39be3;
+    --hl-str: #8fd3a5;
+    --hl-num: #f0b072;
+    --hl-com: #7d8a98;
+    --hl-fn: #82b6e4;
+    --hl-attr: #e6c27a;
+    --hl-lit: #f0b072;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 var(--f-body);
+  }
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--surface);
+  }
+  .page {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 64px;
+  }
+  a {
+    color: var(--accent);
+  }
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--f-display);
+    text-wrap: balance;
+    line-height: 1.2;
+    margin: 0;
+  }
+  h1 {
+    font-size: 2.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-top: 2.4rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid var(--rule);
+  }
+  h3 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin-top: 1.8rem;
+  }
+  h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin-top: 1.2rem;
+  }
+  p,
+  li {
+    max-width: 72ch;
+  }
+  code {
+    font-family: var(--f-mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 0.05em 0.3em;
+    border-radius: 3px;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+  }
+
+  /* Header */
+  header.top {
+    display: grid;
+    gap: 14px;
+    padding-bottom: 20px;
+  }
+  .top-cols {
+    display: grid;
+    gap: 14px 40px;
+  }
+  .top-cols > div {
+    display: grid;
+    gap: 14px;
+    align-content: start;
+    min-width: 0;
+  }
+  @media (min-width: 1000px) {
+    .top-cols {
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    }
+  }
+  p code,
+  li code,
+  td code,
+  th code {
+    overflow-wrap: anywhere;
+  }
+  .status {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+  .summary,
+  .rec {
+    margin: 0;
+    font-size: 1.02rem;
+  }
+  .rec strong,
+  .summary strong {
+    font-family: var(--f-display);
+    font-weight: 600;
+  }
+  .rules {
+    margin: 0;
+    padding-left: 1.2em;
+    display: grid;
+    gap: 4px;
+  }
+  .terms summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .terms ul {
+    padding-left: 1.2em;
+  }
+
+  /* Tabs */
+  nav.tabs {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 5;
+    background: var(--bg);
+    border-bottom: 1px solid var(--rule-strong);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    padding: 8px 0 0;
+  }
+  nav.tabs .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 2px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  nav.tabs a {
+    font-family: var(--f-display);
+    font-weight: 500;
+    font-size: 1rem;
+    text-decoration: none;
+    color: var(--muted);
+    padding: 6px 10px 8px;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+  }
+  nav.tabs a:hover {
+    color: var(--ink);
+  }
+  nav.tabs a[aria-current="page"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+  .langswitch {
+    display: inline-flex;
+    border: 1px solid var(--rule-strong);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 6px;
+  }
+  .langswitch button {
+    font: 500 0.82rem var(--f-mono);
+    padding: 4px 10px;
+    border: 0;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  .langswitch button[aria-pressed="true"] {
+    background: var(--accent);
+    color: var(--surface);
+  }
+  :root[data-code="js"] .pair [data-lang="py"],
+  :root[data-code="py"] .pair [data-lang="js"] {
+    display: none;
+  }
+
+  .panel {
+    padding-top: 8px;
+  }
+  .panel > .intro {
+    color: var(--muted);
+    max-width: 80ch;
+    margin: 18px 0 0;
+  }
+
+  /* Gallery */
+  .gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 540px), 1fr));
+    gap: 20px;
+    margin-top: 18px;
+    align-items: start;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    overflow: hidden;
+    min-width: 0;
+  }
+  .card .shot {
+    margin: 0;
+    background: var(--shot-bg);
+    padding: 12px;
+    border-bottom: 1px solid var(--rule);
+    display: flex;
+    justify-content: center;
+  }
+  .card.wide {
+    grid-column: 1 / -1;
+  }
+  .card.wide .shot img {
+    max-height: 420px;
+  }
+  .card pre.code {
+    font-size: 0.76rem;
+  }
+  .card .shot img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    max-height: 360px;
+    object-fit: contain;
+  }
+  .card-body {
+    padding: 14px 16px 16px;
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+  .card-body > * {
+    min-width: 0;
+  }
+  .card h3 {
+    margin: 0;
+    font-size: 1.2rem;
+  }
+  .verdicts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .verdict {
+    font: 600 0.76rem/1 var(--f-body);
+    letter-spacing: 0.02em;
+    padding: 5px 8px;
+    border-radius: 3px;
+  }
+  .verdict code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+  .v-ok {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+  .v-bad {
+    color: var(--bad);
+    background: var(--bad-bg);
+  }
+  .v-err {
+    color: var(--err);
+    background: var(--err-bg);
+  }
+  .v-def {
+    color: var(--def);
+    background: var(--def-bg);
+  }
+  .v-none {
+    color: var(--none);
+    background: var(--none-bg);
+  }
+  .lead {
+    margin: 0;
+  }
+  .label {
+    font: 600 0.78rem var(--f-body);
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-top: 6px;
+  }
+  .label code {
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .label .draft {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+    color: var(--muted);
+    border: 1px solid var(--rule-strong);
+    border-radius: 3px;
+    padding: 0 5px;
+    margin-left: 4px;
+  }
+  .note {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--muted);
+    border-left: 2px solid var(--rule-strong);
+    padding-left: 10px;
+  }
+  .small {
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  details.today summary,
+  details.rationale summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+  }
+  details.today[open] summary {
+    margin-bottom: 6px;
+  }
+
+  /* Code */
+  pre.code {
+    margin: 0;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border-radius: 4px;
+    padding: 10px 12px;
+    overflow-x: auto;
+    font: 0.82rem/1.5 var(--f-mono);
+    tab-size: 2;
+  }
+  .prose pre.code {
+    margin: 12px 0;
+  }
+  pre.msg {
+    white-space: pre-wrap;
+    border-left: 3px solid var(--rule-strong);
+  }
+  pre.msg-error {
+    border-left-color: var(--err);
+  }
+  pre.msg-lint {
+    border-left-color: var(--def);
+  }
+  pre.msg-message {
+    border-left-color: var(--ok);
+  }
+  .hljs-keyword,
+  .hljs-built_in {
+    color: var(--hl-kw);
+  }
+  .hljs-string {
+    color: var(--hl-str);
+  }
+  .hljs-number {
+    color: var(--hl-num);
+  }
+  .hljs-literal {
+    color: var(--hl-lit);
+  }
+  .hljs-comment {
+    color: var(--hl-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_ {
+    color: var(--hl-fn);
+  }
+  .hljs-attr,
+  .hljs-property,
+  .hljs-params {
+    color: var(--hl-attr);
+  }
+  .hljs-variable,
+  .hljs-subst {
+    color: var(--code-ink);
+  }
+
+  /* Prose panels */
+  .prose {
+    max-width: 1240px;
+  }
+  .prose p,
+  .prose ul,
+  .prose ol,
+  .prose blockquote {
+    margin: 0.8rem 0;
+  }
+  .prose ul,
+  .prose ol {
+    padding-left: 1.3em;
+  }
+  .prose li {
+    margin: 0.25rem 0;
+  }
+  .prose blockquote {
+    border-left: 3px solid var(--accent);
+    padding: 4px 0 4px 14px;
+    font-family: var(--f-display);
+    font-size: 1.1rem;
+    max-width: 72ch;
+  }
+  details.rationale {
+    margin: 1.2rem 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 10px;
+  }
+  details.rationale > summary {
+    font-family: var(--f-display);
+    font-size: 1.1rem;
+  }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    max-height: 80vh;
+    margin: 12px 0;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--surface);
+  }
+  table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    font-size: 0.88rem;
+    line-height: 1.45;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--rule);
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--accent-soft);
+    font-family: var(--f-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  tbody th {
+    font-weight: 500;
+    min-width: 9rem;
+  }
+  tbody tr:last-child > * {
+    border-bottom: 0;
+  }
+  td {
+    min-width: 10rem;
+  }
+  .chip {
+    display: inline-block;
+    font: 600 0.72rem/1 var(--f-body);
+    padding: 4px 6px;
+    border-radius: 3px;
+    text-transform: lowercase;
+  }
+  .now-yes,
+  .now-exists {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+  .now-part {
+    color: var(--err);
+    background: var(--err-bg);
+  }
+  .now-no,
+  .now-wrong {
+    color: var(--bad);
+    background: var(--bad-bg);
+  }
+  .now-proposed,
+  .now-new {
+    color: var(--def);
+    background: var(--def-bg);
+  }
+  .now-rest {
+    color: var(--muted);
+    font-size: 0.84rem;
+  }
+
+  /* Additivity */
+  .approaches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 330px), 1fr));
+    gap: 16px;
+    margin-top: 12px;
+  }
+  .approach {
+    min-width: 0;
+    border-top: 3px solid var(--rule-strong);
+    padding-top: 6px;
+  }
+  .approach.rec {
+    border-top-color: var(--accent);
+  }
+  .approach h3 {
+    margin-top: 6px;
+    font-size: 1.05rem;
+  }
+  .approach ul {
+    padding-left: 1.1em;
+  }
+  .approach li,
+  .approach p {
+    font-size: 0.92rem;
+  }
+
+  /* Coord options */
+  .opts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+    gap: 8px 20px;
+  }
+  .opt {
+    min-width: 0;
+  }
+  .opt h4 {
+    margin: 12px 0 6px;
+  }
+  .paths li {
+    font-size: 0.9rem;
+  }
+
+  @media (max-width: 560px) {
+    h1 {
+      font-size: 1.7rem;
+    }
+    td {
+      min-width: 8rem;
+    }
+    tbody th {
+      min-width: 7rem;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      scroll-behavior: auto !important;
+      transition: none !important;
+    }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap"
+/>
+
+<div class="page">
+  <header class="top">
+    <h1>A type system for GoFish</h1>
+    <div class="status">
+      Design proposal, version 2. Nothing is implemented. Every spelling marked
+      "new" is hypothetical until signed off.
+    </div>
+    <div class="top-cols">
+      <div>
+        <p class="summary">
+          <strong>Summary.</strong> GoFish already has most of the type system
+          that the "GoFish Goes to School" draft describes. The draft's one new
+          idea is that adding up is a fact about a column and a key together,
+          and that idea fixes real charts that GoFish draws wrong today. This
+          proposal writes the whole system in GoFish's own words and gives a
+          typing rule for every operator, channel and coord.
+        </p>
+        <p class="rec">
+          <strong>Recommendation.</strong> Keep types as run-time values in the
+          existing <code>Unit</code>, <code>Trait</code> and
+          <code>Domain</code> families. Add one keyed trait,
+          <code>Trait.summable({ by })</code>, on the column, plus a
+          <code>weight</code> for averages and a declared table
+          <code>key</code>. Derive everything else. Treat the draft's Nominal,
+          Ratio, Extensive and so on as names for bundles, not as primitives.
+          Keep <code>coord</code> at the chart boundary, and if it becomes a
+          method, put it at the start of the chain. Mirror a small part of the
+          checks in TypeScript later.
+        </p>
+      </div>
+      <div>
+        <ul class="rules">
+          <li>
+            Adding up is a fact about a column and a key:
+            <code>Trait.summable({ by: "warehouse" })</code>.
+          </li>
+          <li>
+            An average names its weight:
+            <code>Trait.weighted({ weight: "sold" })</code> fills in
+            <code>.mean({ weight: "sold" })</code>.
+          </li>
+          <li>
+            The table declares its <code>key</code>. Without one, or after
+            <code>derive</code>, the checker looks at the rows.
+          </li>
+          <li>
+            Cumulative, Constant, Nominal and Ratio are derived from traits, not
+            declared.
+          </li>
+          <li>Every default elaborates to code a user could write by hand.</li>
+          <li>
+            Types are values on the wire, so JS and Python check the same way.
+          </li>
+          <li><code>coord</code> stays an option at the chart boundary.</li>
+        </ul>
+        <details class="terms">
+          <summary>Terms used on this page</summary>
+          <ul>
+            <li>
+              <strong>Trait.</strong> A named fact about a type that says what
+              can be done with its values. GoFish names them
+              <code>Has&lt;Thing&gt;</code> or <code>Can&lt;Verb&gt;</code>:
+              <code>HasOrder</code>, <code>HasZero</code>, <code>CanSum</code>.
+            </li>
+            <li>
+              <strong>Unit.</strong> A unit of measure such as USD or items. Two
+              amounts can share an axis or be added only when their units match.
+            </li>
+            <li>
+              <strong>Domain.</strong> The set of values a column can take, such
+              as a list of levels or the interval from 0 to 1.
+            </li>
+            <li>
+              <strong>Key.</strong> A column, or a set of columns, that says
+              which thing a row is about. In a table of inventory per warehouse
+              per month, the key is (warehouse, month).
+            </li>
+            <li>
+              <strong>Key context.</strong> The keys that the operators so far
+              have split by, at a given point in a <code>.flow(...)</code>.
+            </li>
+            <li>
+              <strong>Rest key.</strong> The key columns that are not yet split.
+              A mark draws one group of rows, and those rows differ only in the
+              rest key.
+            </li>
+            <li>
+              <strong>Fold.</strong> Turning the several rows of one group into
+              one value: sum, mean, last, and so on.
+            </li>
+            <li>
+              <strong>Extensive.</strong> A value that adds up over a key, such
+              as units sold over stores. In this proposal it is the trait
+              <code>CanSum</code> over that key.
+            </li>
+            <li>
+              <strong>Intensive.</strong> A value per unit of something, such as
+              a price. It combines by a mean weighted by its denominator.
+            </li>
+            <li>
+              <strong>Cumulative.</strong> A level at a point along an ordered
+              key, such as inventory at the end of a month. Summing it along
+              that key counts the same things again.
+            </li>
+            <li>
+              <strong>Summarizability.</strong> The conditions under which a sum
+              over groups is correct: the groups do not overlap, they cover
+              everything, and the value is of a kind that adds.
+            </li>
+            <li>
+              <strong>Space fact.</strong> Something layout computes about a
+              space, not something a user declares. Examples: this axis has
+              lengths that start at 0, or this mark is a glyph that a coord
+              moves but does not bend.
+            </li>
+            <li>
+              <strong>Elaboration.</strong> Filling in a default from the types,
+              so that the result is a spec the user could have written by hand.
+            </li>
+            <li>
+              <strong>Gradual typing.</strong> A column with no declaration
+              passes every check. Declaring more catches more.
+            </li>
+          </ul>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <div class="links">
+      <a href="#examples">Examples</a>
+      <a href="#additivity">Additivity</a>
+      <a href="#rules">Rules</a>
+      <a href="#keys">Keys</a>
+      <a href="#coord">Coord</a>
+      <a href="#embedding">Embedding</a>
+      <a href="#decisions">Decisions</a>
+    </div>
+    <div class="langswitch" role="group" aria-label="Code language">
+      <button type="button" id="lang-js" data-set="js" aria-pressed="true">
+        JS
+      </button>
+      <button type="button" id="lang-py" data-set="py" aria-pressed="false">
+        Python
+      </button>
+    </div>
+  </nav>
+
+  <main>
+    <section class="panel" data-panel="examples">
+      <p class="intro">
+        Each picture is what GoFish draws today from small example data. The
+        proposal is about charts like these, which render and say something
+        false. Messages marked "draft wording" follow the proposal's rules, and
+        their wording is new. The rest are quoted from proposal section 1.
+      </p>
+      <div class="gallery">
+        <article class="card" id="ex-inventory-by-warehouse">
+          <figure class="shot">
+            <img
+              src="img/inventory-by-warehouse.png"
+              alt="Stacked bars: six months on x, each bar stacks the stock of three warehouses."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Inventory by warehouse</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">correct</span>
+            </div>
+            <p class="lead">
+              Months on x, warehouses stacked. Stock is a level per warehouse,
+              so adding warehouses within one month is right.
+            </p>
+            <div class="label">
+              Proposed schema (proposal section 1), used by every card below
+            </div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">const Items = Unit("items");
+const Month = Unit({
+  domain: Domain.discrete(MONTHS),
+  traits: [Trait.cyclic()], // new: HasCycle on a column (#1052)
+});
+
+const inv = chart(rows, {
+  key: ["warehouse", "month"], // new: the table's key
+  schema: {
+    month: Month,
+    // new: traits on a column, keyed with `by`
+    stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
+    sold: { unit: Items, traits: [Trait.summable()] },
+    price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },
+    temp: { unit: Celsius },
+  },
+});</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">inv = chart(
+    rows,
+    key=["warehouse", "month"],
+    schema={
+        "month": Month,
+        "stock": {"unit": Items, "traits": [Trait.summable(by="warehouse")]},
+        "sold": {"unit": Items, "traits": [Trait.summable()]},
+        "price": {"unit": "USD/items", "traits": [Trait.weighted(weight="sold")]},
+        "temp": {"unit": Celsius},
+    },
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "warehouse" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y")).mark(
+    rect(h="stock", fill="warehouse")
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker</div>
+            <pre
+              class="code plain msg msg-message"
+            ><code class="nohighlight">Draws. Stock adds up over warehouses.</code></pre>
+
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre class="code"><code class="language-javascript">chart(rows, {
+  schema: { stock: Unit("items", { traits: [Trait.summable()] }) },
+  axes: true,
+})
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "warehouse" }));</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-inventory-by-month">
+          <figure class="shot">
+            <img
+              src="img/inventory-by-month.png"
+              alt="Stacked bars: three warehouses on x, each bar stacks six months of stock, reaching about 3000 items."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Inventory by month</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, wrong</span
+              ><span class="verdict v-err">error under the proposal</span>
+            </div>
+            <p class="lead">
+              The same rows with the roles swapped. Each bar adds six
+              end-of-month levels, so it counts the same items once per month.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "month" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y")).mark(
+    rect(h="stock", fill="month")
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker error</div>
+            <pre
+              class="code plain msg msg-error"
+            ><code class="nohighlight">stock adds up over warehouse, not over month. Stacking it by month would count the same items once per month. Use one month, or field("stock").last() or .mean().</code></pre>
+
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre class="code"><code class="language-javascript">chart(rows, {
+  schema: { stock: Unit("items", { traits: [Trait.summable()] }) },
+  axes: true,
+})
+  .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "month" }));</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card wide" id="ex-price-summed">
+          <figure class="shot">
+            <img
+              src="img/price-summed.png"
+              alt="Left: bars near 30 USD, the sum of three warehouse prices. Right: bars near 10 USD, the mean weighted by units sold."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Average price per month</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, wrong</span
+              ><span class="verdict v-def">default filled in</span>
+            </div>
+            <p class="lead">
+              One bar per month over three warehouse rows. Left is today's
+              default fold, a sum of prices. Right is the weighted mean, written
+              by hand with <code>derive</code>.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">inv.flow(spread({ by: "month", dir: "x" })).mark(rect({ h: "price" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="month", dir="x")).mark(rect(h="price"))</code></pre>
+              </div>
+            </div>
+            <div class="label">Elaborates to</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "month", dir: "x" }))
+  .mark(rect({ h: field("price").mean({ weight: "sold" }) }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="month", dir="x")).mark(rect(h=field("price").mean(weight="sold")))</code></pre>
+              </div>
+            </div>
+            <p class="note">
+              Today an undeclared <code>price</code> is summed, as drawn above.
+              With a declared unit, today's check is an error that says to call
+              <code>.mean()</code>, which is unweighted. The proposal fills in
+              the weighted mean instead.
+            </p>
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre
+                class="code"
+              ><code class="language-javascript">// left: no schema for price
+chart(rows, { axes: true })
+  .flow(spread({ by: "month", dir: "x" }))
+  .mark(rect({ h: "price" }));
+
+// right: the weighted mean by hand
+const weightedPrice = (rs) =&gt;
+  MONTHS.map((month) =&gt; {
+    const g = rs.filter((r) =&gt; r.month === month);
+    const sold = g.reduce((s, r) =&gt; s + r.sold, 0);
+    return { month, price: g.reduce((s, r) =&gt; s + r.price * r.sold, 0) / sold };
+  });
+chart(rows, { axes: true })
+  .flow(derive(weightedPrice), spread({ by: "month", dir: "x" }))
+  .mark(rect({ h: "price" }));</code></pre>
+              <div class="label">
+                Today, with a declared unit:
+                <code
+                  >chart(rows, { schema: { price: Unit("USD/item") } })</code
+                >
+              </div>
+              <pre
+                class="code plain msg msg-error"
+              ><code class="nohighlight">A size channel sums the column "price", in the unit "USD/item", which cannot be summed: it has no CanSum. If its amounts add up (money, counts, lengths), declare it with Unit("USD/item", { traits: [Trait.summable()] }). If they do not (temperatures, prices, rates), average them instead, e.g. field("price").mean().</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-price-stacked">
+          <figure class="shot">
+            <img
+              src="img/price-stacked.png"
+              alt="Stacked bars of three warehouse prices per month, reaching about 32 USD."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Prices stacked by warehouse</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, wrong</span
+              ><span class="verdict v-err">error under the proposal</span>
+            </div>
+            <p class="lead">
+              A stack adds its parts. Three prices of around 10 USD stack to a
+              bar of 30 USD that no customer pays.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "price", fill: "warehouse" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y")).mark(
+    rect(h="price", fill="warehouse")
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker error</div>
+            <pre
+              class="code plain msg msg-error"
+            ><code class="nohighlight">price is an average weighted by sold. It does not add up over warehouse.</code></pre>
+
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre
+                class="code"
+              ><code class="language-javascript">chart(rows, { axes: true })
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "price", fill: "warehouse" }));</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card wide" id="ex-daily-snapshots">
+          <figure class="shot">
+            <img
+              src="img/daily-snapshots.png"
+              alt="Left: monthly stacks reaching about 50,000 items, each a sum of about 30 daily levels. Right: the same stacks from the last day of each month, about 1,600 items."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Daily snapshots binned by month</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, wrong</span
+              ><span class="verdict v-err">error under the proposal</span>
+            </div>
+            <p class="lead">
+              Daily stock levels per warehouse, binned by month. Today each bar
+              sums about 30 daily levels (left). The last day of each month,
+              filtered by hand, gives the right picture (right).
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(daily, {
+  key: ["warehouse", "day"],
+  schema: {
+    stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
+  },
+})
+  .flow(
+    spread({ by: field("day").bin(Calendar.month), dir: "x" }),
+    stack({ by: "warehouse", dir: "y" })
+  )
+  .mark(rect({ h: "stock", fill: "warehouse" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(
+        daily,
+        key=["warehouse", "day"],
+        schema={"stock": {"unit": Items, "traits": [Trait.summable(by="warehouse")]}},
+    )
+    .flow(
+        spread(by=field("day").bin(Calendar.month), dir="x"),
+        stack(by="warehouse", dir="y"),
+    )
+    .mark(rect(h="stock", fill="warehouse"))
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">
+              Checker error <span class="draft">draft wording</span>
+            </div>
+            <pre
+              class="code plain msg msg-error"
+            ><code class="nohighlight">stock adds up over warehouse, not over day. Each bar would add about 30 daily levels. Use field("stock").last() or .mean().</code></pre>
+            <p class="note">
+              Rendered with
+              <code>field("day").bin(Calendar.year).bin(Calendar.month)</code>:
+              with <code>Calendar.month</code> alone the axis keeps all twelve
+              months and squeezes the six empty ones into overlapping labels.
+            </p>
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre
+                class="code"
+              ><code class="language-javascript">chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
+  .flow(
+    spread({
+      by: field("day").bin(Calendar.year).bin(Calendar.month),
+      dir: "x",
+    }),
+    stack({ by: "warehouse", dir: "y" })
+  )
+  .mark(rect({ h: "stock", fill: "warehouse" }));
+
+// right: keep the last day of each month by hand
+chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
+  .flow(
+    derive((rs) =&gt; rs.filter((r) =&gt; r.lastDay)),
+    spread({
+      by: field("day").bin(Calendar.year).bin(Calendar.month),
+      dir: "x",
+    }),
+    stack({ by: "warehouse", dir: "y" })
+  )
+  .mark(rect({ h: "stock", fill: "warehouse" }));</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-months-clock">
+          <figure class="shot">
+            <img
+              src="img/months-clock.png"
+              alt="Twelve wedges of units sold around a circle. The gap between December and January is about four times the gap between other months."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Months around a clock</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, uneven</span
+              ><span class="verdict v-def">default filled in</span>
+            </div>
+            <p class="lead">
+              Units sold per month in <code>Coord.clock()</code>. Today the user
+              picks an angular width and a spacing by hand. Twelve widths and
+              eleven spacings leave a wider gap between December and January.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">inv.flow(spread({ by: "month", dir: "theta" })).mark(rect({ h: "sold" }));
+// with chart(rows, { coord: Coord.clock(), ... })</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="month", dir="theta")).mark(rect(h="sold"))</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker</div>
+            <pre
+              class="code plain msg msg-message"
+            ><code class="nohighlight">Draws. Month has HasCycle, so the spread closes the loop with the same gap between December and January as between other months (#1052).</code></pre>
+            <p class="note">
+              Today, with no <code>w</code> on the rect and the default spacing,
+              the twelve wedges come out with uneven angles and overlap. The
+              render above sets <code>w: 0.4, emX: true</code> and
+              <code>spacing: 0.1</code>, as the Nightingale rose story does.
+            </p>
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre class="code"><code class="language-javascript">chart(rows, {
+  coord: Coord.clock(),
+  schema: {
+    month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.ordered()] }),
+  },
+  axes: true,
+  padding: 60,
+})
+  .flow(spread({ by: "month", dir: "x", spacing: 0.1 }))
+  .mark(rect({ w: 0.4, emX: true, h: "sold" }));</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-temp-bars">
+          <figure class="shot">
+            <img
+              src="img/temp-bars.png"
+              alt="Bars of mean monthly temperature in degrees Celsius, three of them below zero."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Temperature as bar length</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, wrong</span
+              ><span class="verdict v-err">error under the proposal</span>
+            </div>
+            <p class="lead">
+              Mean monthly temperature in °C as bars. A bar's length from 0 °C
+              means nothing: at 0 °F or in kelvin the same data draws different
+              ratios.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(temps, { schema: { temp: { unit: Celsius } } })
+  .flow(spread({ by: "month", dir: "x" }))
+  .mark(rect({ h: "temp" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(temps, schema={"temp": {"unit": Celsius}})
+    .flow(spread(by="month", dir="x"))
+    .mark(rect(h="temp"))
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker error</div>
+            <pre
+              class="code plain msg msg-error"
+            ><code class="nohighlight">temp is in °C, which has no zero, so a bar length means nothing. Subtract a reference, or use a position. (#1051)</code></pre>
+            <p class="note">
+              Today an undeclared <code>temp</code> draws, as above. A declared
+              °C is already an error, but for the wrong reason: the message says
+              it has no <code>CanSum</code>, even with one row per bar. The
+              proposal's error names the missing zero (<code>HasZero</code>).
+            </p>
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre
+                class="code"
+              ><code class="language-javascript">chart(temps, { axes: true })
+  .flow(spread({ by: "month", dir: "x" }))
+  .mark(rect({ h: "temp" }));</code></pre>
+              <div class="label">
+                Today, with a declared unit:
+                <code>chart(temps, { schema: { temp: Unit("°C") } })</code>
+              </div>
+              <pre
+                class="code plain msg msg-error"
+              ><code class="nohighlight">A size channel sums the column "temp", in the unit "°C", which cannot be summed: it has no CanSum. If its amounts add up (money, counts, lengths), declare it with Unit("°C", { traits: [Trait.summable()] }). If they do not (temperatures, prices, rates), average them instead, e.g. field("temp").mean().</code></pre>
+            </details>
+          </div>
+        </article>
+        <article class="card noimg" id="ex-log">
+          <div class="card-body">
+            <h3>Stacked bars in a log coord</h3>
+            <div class="verdicts">
+              <span class="verdict v-none"
+                >no render: <code>Coord.log</code> does not exist yet</span
+              ><span class="verdict v-err">error under the proposal</span>
+            </div>
+            <p class="lead">
+              From the section 1 table. A stack draws lengths from 0, and a log
+              axis has no 0.
+            </p>
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "sold" }));
+// in a coord with a log y axis (#1326)</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre
+                  class="code"
+                ><code class="language-python">inv.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y")).mark(
+    rect(h="sold")
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker error</div>
+            <pre
+              class="code plain msg msg-error"
+            ><code class="nohighlight">a stack draws lengths from 0, and a log axis has no 0 (#1326).</code></pre>
+          </div>
+        </article>
+        <article class="card wide" id="ex-likert">
+          <figure class="shot">
+            <img
+              src="img/likert.png"
+              alt="Diverging stacked bars of survey answers, centered on the middle of the Neutral segment."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Likert survey</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">correct</span
+              ><span class="verdict v-def">default filled in</span>
+            </div>
+            <p class="lead">
+              The existing Diverging Likert story. The midpoint is a trait of
+              the response key, not of the count. A stack over a key with
+              <code>HasMidpoint</code> puts its origin there.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(survey, {
+  schema: {
+    response: Unit({
+      domain: Domain.discrete(LEVELS),
+      traits: [Trait.diverging()],
+    }),
+  },
+})
+  .flow(
+    spread({ by: "question", dir: "y" }),
+    stack({ by: "response", dir: "x" })
+  )
+  .mark(rect({ w: "count", fill: "response" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(
+        survey,
+        schema={
+            "response": Unit(domain=Domain.discrete(LEVELS), traits=[Trait.diverging()])
+        },
+    )
+    .flow(spread(by="question", dir="y"), stack(by="response", dir="x"))
+    .mark(rect(w="count", fill="response"))
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">Checker</div>
+            <pre
+              class="code plain msg msg-message"
+            ><code class="nohighlight">Draws, as today. HasMidpoint on the stack key fills in the stack's origin. That default has no public spelling yet (a stack option naming the origin is internal only, #1289).</code></pre>
+
+            <details class="today">
+              <summary>Today's code</summary>
+              <p class="small">
+                same as the proposed spec: story Forward
+                Syntax/Bar/Diverging/Likert
+              </p>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-mosaic">
+          <figure class="shot">
+            <img
+              src="img/mosaic.png"
+              alt="A mosaic of car counts: column widths by region of origin, segments by cylinder share within each region."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Mosaic</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">correct</span>
+            </div>
+            <p class="lead">
+              The existing Mosaic Chart story. Column widths sum
+              <code>count</code> over each region. Within a column,
+              <code>field("count").normalize()</code> gives each cylinder group
+              its share of that region.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">chart(cars)
+  .flow(
+    stack({ by: "origin", dir: "x", size: "count" }),
+    stack({ by: "cylinders", dir: "y", size: field("count").normalize() })
+  )
+  .mark(rect({ fill: "origin" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(cars)
+    .flow(
+        stack(by="origin", dir="x", size="count"),
+        stack(by="cylinders", dir="y", size=field("count").normalize()),
+    )
+    .mark(rect(fill="origin"))
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">
+              Checker <span class="draft">draft wording</span>
+            </div>
+            <pre
+              class="code plain msg msg-message"
+            ><code class="nohighlight">Draws. A share adds up within its group, so stacking it over cylinders inside one origin passes. Across groups a share is an average weighted by the group total, so stacking it across origin would fail. One unit-level flag cannot say both. A keyed trait can.</code></pre>
+
+            <details class="today">
+              <summary>Today's code</summary>
+              <p class="small">
+                same as the proposed spec: story Forward Syntax/Mosaic
+                Chart/Default
+              </p>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-lakes-ribbon">
+          <figure class="shot">
+            <img
+              src="img/lakes-ribbon.png"
+              alt="Stacked bars of fish catch per species at six lakes, joined by ribbons from one lake to the next."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Ribbons between lakes</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today</span
+              ><span class="verdict v-err">error under the proposal</span>
+            </div>
+            <p class="lead">
+              The existing Ribbon Chart story. Ribbons join each lake to the
+              next one in the data's order. The lakes have no order, so the
+              ribbons say that Lake B lies between Lake A and Lake C.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 64 }),
+    stack({ by: field("species").sort("count"), dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "species" }))
+  .layer(ribbon({ opacity: 0.8 }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(seafood)
+    .flow(
+        spread(by="lake", dir="x", spacing=64),
+        stack(by=field("species").sort("count"), dir="y"),
+    )
+    .mark(rect(h="count", fill="species"))
+    .layer(ribbon(opacity=0.8))
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">
+              Checker error <span class="draft">draft wording</span>
+            </div>
+            <pre
+              class="code plain msg msg-error"
+            ><code class="nohighlight">a ribbon along lake needs HasOrder or HasCycle on lake. Declare an order, or say how the lakes connect.</code></pre>
+
+            <details class="today">
+              <summary>Today's code</summary>
+              <p class="small">
+                same as the proposed spec: story Forward Syntax/Ribbon/Basic
+              </p>
+            </details>
+          </div>
+        </article>
+        <article class="card" id="ex-histogram-unequal">
+          <figure class="shot">
+            <img
+              src="img/histogram-unequal.png"
+              alt="A histogram of ages with bins 8-18, 18-25, 25-35, 35-65 and 65-75. The 35-65 bar is tallest because its bin is widest."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Histogram with unequal bins</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws today, misleading</span
+              ><span class="verdict v-def">lint under the proposal</span>
+            </div>
+            <p class="lead">
+              Ages of 400 people in bins of unequal width, with bar height =
+              count. The widest bin looks densest only because it is widest. Bar
+              area is the count, and bar height should be the density.
+            </p>
+
+            <div class="label">Proposed spec</div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">chart(ages)
+  .flow(
+    partition({
+      by: field("age").bin(Bin.thresholds([18, 25, 35, 65])),
+      dir: "x",
+    })
+  )
+  .mark(rect({ h: field("age").count() }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(ages)
+    .flow(partition(by=field("age").bin(Bin.thresholds([18, 25, 35, 65])), dir="x"))
+    .mark(rect(h=field("age").count()))
+)</code></pre>
+              </div>
+            </div>
+            <div class="label">
+              Checker lint <span class="draft">draft wording</span>
+            </div>
+            <pre
+              class="code plain msg msg-lint"
+            ><code class="nohighlight">lint: a size channel read as an amount inside a cell should be per unit of the cell. Divide the count by the bin width.</code></pre>
+            <p class="note">
+              Section 9 makes this a lint, not an error, and it arrives with
+              unit algebra (#1142).
+            </p>
+            <details class="today">
+              <summary>Today's code</summary>
+              <pre
+                class="code"
+              ><code class="language-javascript">chart(ages, { axes: true })
+  .flow(
+    partition({
+      by: field("age").bin(Bin.thresholds([18, 25, 35, 65])),
+      dir: "x",
+    })
+  )
+  .mark(rect({ h: field("age").count(), inset: 0.5 }));</code></pre>
+            </details>
+          </div>
+        </article>
+      </div>
+    </section>
+    <section class="panel" data-panel="additivity" hidden>
+      <section class="prose wide">
+        <h2>Additivity: three ways to declare it</h2>
+        <p>
+          This is the main new API. The three kinds from the draft are the right
+          way to explain it. The question is what the user writes.
+        </p>
+        <div class="approaches">
+          <div class="approach">
+            <h3>A. One trait per kind, each keyed (the draft)</h3>
+            <pre class="code"><code class="language-javascript">stock: {
+  unit: Items,
+  traits: [
+    Trait.summable({ by: "warehouse" }),
+    Trait.cumulative({ by: "month" }),
+  ],
+},
+price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</code></pre>
+            <ul>
+              <li>The user states every kind for every key.</li>
+              <li>The check is static: it reads the schema only.</li>
+              <li>
+                A key the user did not foresee, such as a later bin, has no tag.
+              </li>
+              <li>
+                Precedent: <code>cell_methods</code> in the CF conventions for
+                climate data (<code>time: point area: sum</code>), and Kimball's
+                additive, semi-additive and non-additive facts.
+              </li>
+            </ul>
+          </div>
+          <div class="approach">
+            <h3>
+              B. One entity key, checked on the rows (#1198's recommendation)
+            </h3>
+            <pre
+              class="code"
+            ><code class="language-javascript">stock: { unit: Items, entity: "warehouse" },</code></pre>
+            <ul>
+              <li>
+                The user states one fact: which thing the value belongs to.
+              </li>
+              <li>
+                A sum is valid only when that key is unique among the rows being
+                summed.
+              </li>
+              <li>
+                It catches double counting along any key, including keys made
+                later, and it catches values copied by a join.
+              </li>
+              <li>
+                It cannot check data that is already aggregated and has no
+                entity column.
+              </li>
+              <li>
+                The check runs on the data, so it costs a pass over each summed
+                group.
+              </li>
+              <li>
+                Precedent: Lenz and Shoshani's disjointness read as a key
+                constraint, Looker's symmetric aggregates, dbt MetricFlow's
+                entities.
+              </li>
+            </ul>
+          </div>
+          <div class="approach rec">
+            <h3>
+              C. One keyed trait, whose meaning is B and whose fast path is A
+              (recommended)
+            </h3>
+            <p>
+              <code>Trait.summable({ by: "warehouse" })</code> and
+              <code>entity: "warehouse"</code> say the same thing. Both name the
+              keys the value may be summed across. So there is one declaration:
+            </p>
+            <pre
+              class="code"
+            ><code class="language-javascript">stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
+sold: { unit: Items, traits: [Trait.summable()] }, // sums over every key
+price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</code></pre>
+            <ul>
+              <li>
+                <strong>Meaning.</strong> A sum of <code>stock</code> over a set
+                of rows is valid when no two of those rows share a
+                <code>warehouse</code>. This is B's rule.
+              </li>
+              <li>
+                <strong>Static rule.</strong> When the table's
+                <code>key</code> is declared, the checker does not need the
+                rows. <code>stack({ by: k })</code> needs <code>k</code> to be
+                in the column's <code>by</code>. A channel fold needs every
+                column of the rest key to be in <code>by</code>. This is A's
+                rule, and it reports the error before any data is read.
+              </li>
+              <li>
+                <strong>Fallback.</strong> When a key is unknown (no declared
+                <code>key</code>, a <code>by</code> that is a function, anything
+                after <code>derive</code>), the checker uses the row check.
+              </li>
+              <li>
+                <strong>The other kinds are derived, not declared.</strong>
+                <ul>
+                  <li>
+                    A key not in <code>by</code>, along which the value changes,
+                    is a level. If that key has <code>HasOrder</code>, the error
+                    calls it a running level and offers <code>.last()</code> and
+                    <code>.mean()</code>. This is the draft's Cumulative.
+                  </li>
+                  <li>
+                    A key not in <code>by</code>, along which the value is the
+                    same on every row, is a copy from a join. The error offers
+                    <code>.first()</code>. This is the fan trap, and the
+                    key-space research calls it Constant.
+                  </li>
+                  <li>
+                    A bin of a key inherits the key's entry.
+                    <code>stock</code> does not add up over <code>month</code>,
+                    so it does not add up over quarters either.
+                  </li>
+                </ul>
+              </li>
+              <li>
+                <strong>Unit-level <code>Trait.summable()</code> stays</strong>
+                as "sums over every key" for every column in that unit. A unit
+                that declares it cannot also hold a column with a narrower
+                <code>by</code>. That is an error when the schema is applied, so
+                "one unit cannot both add up and not" still holds.
+              </li>
+            </ul>
+          </div>
+        </div>
+        <h3>Comparison</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">A. One trait per kind</th>
+                <th scope="col">B. Entity key, row check</th>
+                <th scope="col">C. Keyed trait (recommended)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">What the user writes</th>
+                <td>every kind for every key</td>
+                <td>one fact: which thing the value belongs to</td>
+                <td>one keyed trait, <code>Trait.summable({ by })</code></td>
+              </tr>
+              <tr>
+                <th scope="row">When the error comes</th>
+                <td>static, from the schema</td>
+                <td>on the data, one pass per summed group</td>
+                <td>
+                  static when <code>key</code> is declared, row check otherwise
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Keys made later (a bin, a join)</th>
+                <td>no tag</td>
+                <td>caught</td>
+                <td>
+                  caught: a bin inherits its key's entry, a join falls back to
+                  the row check
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Data already aggregated</th>
+                <td>works</td>
+                <td>cannot check without an entity column</td>
+                <td>works through the static rule</td>
+              </tr>
+              <tr>
+                <th scope="row">Cumulative and Constant</th>
+                <td>declared</td>
+                <td>found by the check</td>
+                <td>derived and named in the error</td>
+              </tr>
+              <tr>
+                <th scope="row">Precedent</th>
+                <td>CF <code>cell_methods</code>, Kimball</td>
+                <td>Lenz and Shoshani, Looker, MetricFlow</td>
+                <td>both</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Why C. It keeps #1198's single declaration and its coverage of
+          unforeseen keys. It keeps the draft's static errors. It uses the
+          family's one key word, <code>by</code>. And it adds no trait whose
+          only job is to name a case: Cumulative and Constant come out of the
+          check.
+        </p>
+        <p>
+          What C makes awkward. A user who wants the draft's derivations (a
+          running sum of a flow is a level, and the first difference of a level
+          is a flow) gets them only if a later example forces a
+          <code>Trait.cumulative({ by })</code>. I would wait for that example.
+          The waterfall chart is the likely one.
+        </p>
+        <h3>A key made of more than one field</h3>
+        <p>
+          <code>by</code> takes a list, and the rule is about the tuple: a sum
+          over a set of rows is valid when no two of those rows agree on every
+          column in <code>by</code>.
+        </p>
+        <div class="pair">
+          <div data-lang="js">
+            <pre
+              class="code"
+            ><code class="language-javascript">// one row per (store, product, month)
+key: ["store", "product", "month"],
+schema: {
+  on_hand: {
+    unit: Items,
+    traits: [Trait.summable({ by: ["store", "product"] })],
+  },
+  floor_area: {
+    unit: SquareMeter,
+    traits: [Trait.summable({ by: "store" })],
+  },
+  units_sold: { unit: Items, traits: [Trait.summable()] },
+},</code></pre>
+          </div>
+          <div data-lang="py">
+            <pre
+              class="code"
+            ><code class="language-python"># one row per (store, product, month)
+chart(
+    rows,
+    key=["store", "product", "month"],
+    schema={
+        "on_hand": {"unit": Items, "traits": [Trait.summable(by=["store", "product"])]},
+        "floor_area": {"unit": SquareMeter, "traits": [Trait.summable(by="store")]},
+        "units_sold": {"unit": Items, "traits": [Trait.summable()]},
+    },
+)</code></pre>
+          </div>
+        </div>
+        <ul>
+          <li>
+            The static rule: a sum is valid when every key column that varies
+            among the summed rows is in <code>by</code>.
+          </li>
+          <li>
+            <code>stack({ by: "store" })</code> inside one month with
+            <code>h: "on_hand"</code> draws. The rows vary in store and product,
+            and both are in <code>by</code>.
+          </li>
+          <li>
+            <code>stack({ by: "month" })</code> is an error. Month is not in
+            <code>by</code>.
+          </li>
+          <li>
+            <code>h: "floor_area"</code> in a bar per store is an error. The
+            rows vary in product and month. The values are copies, so the
+            message offers <code>.first()</code>.
+          </li>
+          <li>
+            Listing two fields means each one adds on its own too, with the
+            other fixed. So the list is a set of dimensions, not one indivisible
+            composite. I could not construct a value that adds over a pair
+            jointly but not over either member. That is an argument, not a
+            proof.
+          </li>
+          <li>
+            Nested keys are why the row check is the definition. With
+            <code>by: ["county"]</code> and a stack by state, the static rule
+            passes only if it knows that state is a function of county.
+            Otherwise it checks the rows, and they pass.
+          </li>
+          <li>
+            What it cannot say: a counted thing that is not a column, such as
+            students in joint programs in a table that is already aggregated by
+            department. That is #1198's open question 2, and it stays open.
+          </li>
+        </ul>
+        <h3>A rate: the unit says "per", the column says which weight</h3>
+        <p>
+          Neither the unit nor the column can hold both facts about an averaged
+          value.
+        </p>
+        <ul>
+          <li>
+            The unit can say that the value is a rate. A quotient unit such as
+            <code>USD/items</code> never sums, so once unit algebra lands,
+            stacking a price is an error from the unit alone.
+          </li>
+          <li>
+            The unit cannot name the weight. A unit is shared across columns and
+            tables, and the weight is a column. Price per store is weighted by
+            that store's units sold. A list price in the same unit has no
+            weight. In the inventory table both <code>stock</code> and
+            <code>sold</code> are in items, so the unit cannot pick one.
+          </li>
+          <li>
+            Some weights have no quotient at all: mean temperature weighted by
+            area, or a rating weighted by the number of reviews. And some rates
+            cancel: an unemployment rate is persons over persons.
+          </li>
+          <li>
+            Together they give a check that neither gives alone. The unit says
+            "per items", so the weight must be a summable column in items.
+            Naming <code>revenue</code> as the weight of a price is a type
+            error.
+          </li>
+        </ul>
+        <div class="pair">
+          <div data-lang="js">
+            <pre class="code"><code class="language-javascript">price: {
+  unit: Unit.per(USD, Items),
+  traits: [Trait.weighted({ weight: "sold" })],
+},</code></pre>
+          </div>
+          <div data-lang="py">
+            <pre
+              class="code"
+            ><code class="language-python">{"price": {"unit": Unit.per(USD, Items), "traits": [Trait.weighted(weight="sold")]}}</code></pre>
+          </div>
+        </div>
+        <p>
+          A rate with no declared weight still cannot be stacked. A fold of it
+          is an error that asks for the weight column or an explicit
+          <code>.mean()</code>. A <code>derive</code> helper that computes
+          <code>revenue / sold</code> supplies both the unit and the weight.
+        </p>
+        <p>
+          Since the weight answers "per which items", a name such as
+          <code>Trait.per("sold")</code>, or a plain
+          <code>weight: "sold"</code> key on the column record, may read better
+          than <code>weighted</code>. That is decision 4.
+        </p>
+        <p>
+          Runner-up: A, if Josh wants each kind visible in the schema. What
+          would change my pick: a real chart that needs the level declared to
+          draw correctly, not only to explain an error.
+        </p>
+        <h3>Overlap check</h3>
+        <ul>
+          <li>
+            <code>Trait.summable()</code> on a unit and
+            <code>Trait.summable({ by })</code> on a column: the first is the
+            second with every key. Exact composition, one mechanism.
+          </li>
+          <li>
+            <code>Trait.weighted</code> and <code>.mean()</code>: the trait
+            supplies the default fold, and <code>.mean({ weight })</code> is
+            that fold written out. Exact composition.
+          </li>
+          <li>
+            <code>entity</code> from #1198: the same fact as <code>by</code>.
+            One of the two names goes.
+          </li>
+        </ul>
+        <h3>Real charts this changes</h3>
+        <ul>
+          <li>
+            <strong>Daily inventory snapshots binned by month.</strong>
+            <code>spread({ by: field("day").bin(Calendar.month) })</code>,
+            <code>stack({ by: "warehouse" })</code>,
+            <code>rect({ h: "stock" })</code>. Today GoFish sums about 30 daily
+            snapshots per bar. With C, the rest key is <code>day</code>, which
+            is not in <code>by</code>, so the mark is an error that offers
+            <code>.last()</code>.
+          </li>
+          <li>
+            <strong>Melted quantiles.</strong> The box plot story keeps five
+            quantile columns in USD. Melt them into a <code>quantile</code> key
+            and stack, and the chart type-checks today whenever USD is summable.
+            With C, the melted value has no <code>by</code> that contains
+            <code>quantile</code>.
+          </li>
+          <li>
+            <strong>Mosaic.</strong> The story normalizes the share of
+            <code>cylinders</code> within each <code>origin</code>. That share
+            adds up over <code>cylinders</code> and is an average across
+            <code>origin</code>. One unit-level flag cannot say that. A keyed
+            trait can.
+          </li>
+          <li>
+            <strong>County rates rolled up to states.</strong> A choropleth of
+            unemployment by state from county rows needs the mean weighted by
+            labor force. A plain mean or sum is wrong.
+          </li>
+          <li>
+            <strong>Lake area after a join.</strong>
+            <code>area_km2</code> repeats on every catch row. Summing it counts
+            each lake once per species. The check finds the repeat and offers
+            <code>.first()</code>.
+          </li>
+        </ul>
+        <p class="small">
+          Renders of the first and third charts are on the Examples tab:
+          <a href="#examples">daily snapshots</a> and
+          <a href="#examples">mosaic</a>.
+        </p>
+      </section>
+    </section>
+    <section class="panel" data-panel="rules" hidden>
+      <section class="prose wide">
+        <h2>Typing every operator, channel and coord</h2>
+        <p>How to read the tables:</p>
+        <ul>
+          <li>
+            <strong>Needs</strong> is what the construct requires. A failed need
+            is an error unless it says lint.
+          </li>
+          <li><strong>Keys</strong> is what it does to the key context.</li>
+          <li><strong>Gives</strong> is the space fact it produces.</li>
+          <li><strong>Fills in</strong> is the default it elaborates.</li>
+          <li>
+            <strong>Now</strong> says whether GoFish checks it today: yes, part,
+            or no.
+          </li>
+        </ul>
+        <h3>Flow operators</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Operator</th>
+                <th scope="col">Needs</th>
+                <th scope="col">Keys</th>
+                <th scope="col">Gives</th>
+                <th scope="col">Fills in</th>
+                <th scope="col">Now</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>spread({ by, dir })</code></th>
+                <td>nothing of the value</td>
+                <td>adds <code>by</code></td>
+                <td>
+                  one slot per key along <code>dir</code>. Children keep their
+                  own spaces. The axis is a list of keys.
+                </td>
+                <td>
+                  slot order from <code>HasOrder</code>. Closes the loop if the
+                  key has <code>HasCycle</code> and the axis does too.
+                </td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>stack({ by, dir })</code></th>
+                <td>
+                  the stacked size has <code>CanSum</code> over <code>by</code>,
+                  has <code>HasZero</code>, and its parts share a unit
+                </td>
+                <td>adds <code>by</code></td>
+                <td>
+                  one continuous space along <code>dir</code> with lengths from
+                  a fixed origin
+                </td>
+                <td>
+                  origin at the midpoint if <code>by</code> has
+                  <code>HasMidpoint</code>
+                </td>
+                <td>
+                  <span class="chip now-part">part</span>
+                  <span class="now-rest"
+                    >(unit-level <code>CanSum</code> only)</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>scatter({ by, x, y })</code></th>
+                <td>
+                  <code>x</code> and <code>y</code> are numbers or instants. A
+                  unit clash on a shared axis is an error.
+                </td>
+                <td>adds <code>by</code></td>
+                <td>
+                  positions at data values. Marks are glyphs unless their sizes
+                  are in the axis unit.
+                </td>
+                <td>
+                  position fold: mean, weighted if the column has a weight
+                </td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>group({ by })</code></th>
+                <td>nothing</td>
+                <td>adds <code>by</code></td>
+                <td>a layer of children</td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>table({ by: { x, y } })</code></th>
+                <td>nothing of the value</td>
+                <td>adds both keys</td>
+                <td>a grid. Both axes are lists of keys.</td>
+                <td>fills missing pairs with empty cells</td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>treemap({ by, size, tile })</code></th>
+                <td>
+                  <code>size</code> has <code>CanSum</code> over
+                  <code>by</code>, has <code>HasZero</code>, and is not negative
+                </td>
+                <td>adds <code>by</code></td>
+                <td>areas that add up to the parent's area. No axis.</td>
+                <td></td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>pack({ by })</code></th>
+                <td>
+                  the circle size has <code>HasZero</code> and is not negative
+                </td>
+                <td>adds <code>by</code></td>
+                <td>
+                  circles with no axis. Areas compare and do not add up to the
+                  parent.
+                </td>
+                <td></td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>partition({ by })</code></th>
+                <td><code>by</code> has <code>HasRegion</code></td>
+                <td>adds <code>by</code></td>
+                <td>each key's own region on a shared scale</td>
+                <td>
+                  lint: a size channel read as an amount inside a cell should be
+                  per unit of the cell
+                </td>
+                <td>
+                  <span class="chip now-part">part</span>
+                  <span class="now-rest">(<code>HasRegion</code> only)</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>enclose</code> (flow step)</th>
+                <td>nothing</td>
+                <td>none</td>
+                <td>an outline around the children</td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>derive(fn)</code></th>
+                <td>nothing</td>
+                <td>unknown after it, unless the helper is typed</td>
+                <td></td>
+                <td>checks after it use the row check</td>
+                <td>
+                  <span class="chip now-no">no</span>
+                  <span class="now-rest">(#999)</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>filter(pred)</code></th>
+                <td>nothing</td>
+                <td>same keys, fewer rows</td>
+                <td></td>
+                <td>
+                  lint on a later <code>.normalize()</code> or total label
+                </td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>join(right, { on })</code></th>
+                <td><code>on</code> exists on both sides</td>
+                <td>
+                  same keys if <code>on</code> is a key of the right table.
+                  Otherwise adds a key.
+                </td>
+                <td></td>
+                <td>joined columns remember their own key</td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>resolve</code></th>
+                <td>the name exists in scope</td>
+                <td>the key context of the named marks</td>
+                <td></td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>log</code></th>
+                <td>
+                  nothing. It is a debug pass-through and should be renamed
+                  before a log coord ships.
+                </td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Data helpers and field methods</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Construct</th>
+                <th scope="col">Needs</th>
+                <th scope="col">Result type</th>
+                <th scope="col">Now</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>.sum()</code></th>
+                <td><code>CanSum</code> over the rest key</td>
+                <td>
+                  same unit, <code>CanSum</code> over the keys split so far
+                </td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>.mean()</code></th>
+                <td>
+                  a unit, or a difference unit. With <code>{ weight }</code>,
+                  the weight has <code>CanSum</code>.
+                </td>
+                <td>same unit, no <code>CanSum</code></td>
+                <td>
+                  <span class="chip now-no">no</span>
+                  <span class="now-rest">weight today</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>.median()</code>, <code>.min()</code>,
+                  <code>.max()</code>
+                </th>
+                <td><code>HasOrder</code></td>
+                <td>same unit, no <code>CanSum</code></td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>.last()</code>, <code>.first()</code> (new)
+                </th>
+                <td><code>.last()</code> needs an ordered rest key</td>
+                <td>same type</td>
+                <td><span class="chip now-new">new</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>.count()</code></th>
+                <td>nothing</td>
+                <td>
+                  count unit, <code>CanSum</code> over every key,
+                  <code>HasZero</code>, whole numbers
+                </td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>.distinct()</code></th>
+                <td>nothing</td>
+                <td>
+                  count unit, <code>HasZero</code>, and no
+                  <code>CanSum</code> across groups
+                </td>
+                <td>
+                  <span class="chip now-wrong">wrong</span>
+                  <span class="now-rest">today: the docs say it adds up</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>.normalize()</code></th>
+                <td>
+                  <code>CanSum</code> over the key it shares across, not
+                  negative
+                </td>
+                <td>
+                  a share in [0, 1]. Adds up within its group. Across groups it
+                  is an average weighted by the group total.
+                </td>
+                <td>
+                  <span class="chip now-part">part</span>
+                  <span class="now-rest">(adds up everywhere today)</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>.bin(Bin.*)</code>, <code>.bin(Calendar.*)</code>
+                </th>
+                <td>a number or an instant</td>
+                <td>
+                  a key with <code>HasRegion</code> and <code>HasOrder</code>.
+                  Calendar parts also get <code>HasCycle</code>. It inherits
+                  additivity from the column it bins.
+                </td>
+                <td>
+                  <span class="chip now-yes">yes</span>
+                  <span class="now-rest">except the last part</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>.sort()</code>, <code>.reverse()</code>
+                </th>
+                <td><code>HasOrder</code>, or a field to sort by</td>
+                <td>
+                  same key in a new order. A reordered key loses a midpoint that
+                  no longer splits it.
+                </td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>.dropNulls()</code></th>
+                <td>nothing</td>
+                <td>same type with no nulls</td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>repeat</code></th>
+                <td>a count: whole numbers with <code>CanSum</code></td>
+                <td>one row per unit</td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>unpivot</code> (new)</th>
+                <td>the melted columns share one unit</td>
+                <td>a new key over the column names</td>
+                <td><span class="chip now-new">new</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Mark channels</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Channel</th>
+                <th scope="col">On</th>
+                <th scope="col">Needs</th>
+                <th scope="col">Fold over the rest key</th>
+                <th scope="col">Now</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  size (<code>w</code>, <code>h</code>, <code>r</code>)
+                </th>
+                <td>rect, ellipse, petal, polygon, image, circle</td>
+                <td><code>HasZero</code>. A fold that suits the rest key.</td>
+                <td>
+                  sum if <code>CanSum</code>. Weighted mean if there is a
+                  weight. Otherwise an error that offers folds.
+                </td>
+                <td>
+                  <span class="chip now-part">part</span>
+                  <span class="now-rest">always sums, unit-level check</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">area (<code>area</code>)</th>
+                <td>circle (rect and ribbon are proposed)</td>
+                <td>same as size</td>
+                <td>same, then the square root</td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  position (<code>x</code>, <code>y</code>, <code>cx</code>,
+                  <code>x2</code>, and so on)
+                </th>
+                <td>every box mark</td>
+                <td>
+                  a number or an instant. <code>x</code> and
+                  <code>w</code> together need <code>w</code> in the difference
+                  unit of <code>x</code>.
+                </td>
+                <td>mean, weighted if there is a weight</td>
+                <td>
+                  <span class="chip now-no">no</span>
+                  <span class="now-rest">check</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  color (<code>fill</code>, <code>stroke</code>)
+                </th>
+                <td>every mark</td>
+                <td>one value per group, or an explicit fold</td>
+                <td>none: the value must agree across the group</td>
+                <td>
+                  <span class="chip now-no">no</span>
+                  <span class="now-rest">check</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">raw (<code>text</code>, <code>href</code>)</th>
+                <td>text, image</td>
+                <td>one value per group, or an explicit fold</td>
+                <td>none</td>
+                <td>
+                  <span class="chip now-no">no</span>
+                  <span class="now-rest">check</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>dims</code></th>
+                <td>rect</td>
+                <td>each slot follows its own kind</td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The palette a color channel gets follows the type: categorical for no
+          order, sequential for <code>HasOrder</code> or a number, diverging
+          around the midpoint or the zero when the data spans it, cyclic for
+          <code>HasCycle</code>.
+        </p>
+        <h3>Relational marks and combinators</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Construct</th>
+                <th scope="col">Needs</th>
+                <th scope="col">Gives</th>
+                <th scope="col">Fills in</th>
+                <th scope="col">Now</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>line</code> along a key</th>
+                <td>
+                  the key has <code>HasOrder</code> or <code>HasCycle</code>.
+                  Lint: a smooth <code>Curve</code> needs a continuous key.
+                </td>
+                <td>a path through the marks</td>
+                <td>
+                  closes if <code>HasCycle</code> in a cyclic axis. Breaks at a
+                  missing key.
+                </td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>ribbon</code> along a key</th>
+                <td>
+                  as <code>line</code>. If it fills down to a baseline, the
+                  value has <code>HasZero</code>.
+                </td>
+                <td>a band</td>
+                <td>
+                  a missing pair is zero if the value has
+                  <code>CanSum</code> and <code>HasZero</code>. Otherwise a gap.
+                </td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>arrow</code>, <code>position</code>, <code>offset</code>
+                </th>
+                <td>the referenced marks exist</td>
+                <td>a glyph between placed marks. A coord does not bend it.</td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>layer([...])</code></th>
+                <td>children that share an axis agree on its unit</td>
+                <td>
+                  the union of the children's spaces. With <code>coord</code>, a
+                  new space that the parent places as one glyph.
+                </td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>enclose</code></th>
+                <td>nothing</td>
+                <td>an outline. Its size is not a data length.</td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>union</code>, <code>intersect</code>,
+                  <code>subtract</code>, <code>exclude</code>, <code>atop</code>
+                </th>
+                <td>nothing of the data</td>
+                <td>
+                  one region. Its sizes are no longer data lengths, so a parent
+                  stack cannot add them.
+                </td>
+                <td></td>
+                <td><span class="chip now-no">no</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>cut</code></th>
+                <td>
+                  the weights have <code>CanSum</code>, <code>HasZero</code>,
+                  and are not negative
+                </td>
+                <td>pieces whose sizes add up to the shape</td>
+                <td></td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>ref</code>, <code>selectAll</code></th>
+                <td>the name is in scope</td>
+                <td>
+                  the marks with their keys. A later <code>by</code> may use any
+                  key in their context.
+                </td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>text</code>, <code>image</code>, <code>blank</code>,
+                  <code>ellipse</code>, <code>petal</code>,
+                  <code>polygon</code>, <code>region</code>
+                </th>
+                <td>the channel rules above</td>
+                <td>a box like a rect of the same size</td>
+                <td></td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>Coords</h3>
+        <p>
+          A coord is checked against the space facts of what is inside it. For
+          each axis it says which data operation becomes addition on screen
+          (#1326), and what it does to lengths and to glyphs.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Coord</th>
+                <th scope="col">Axis traits</th>
+                <th scope="col">Needs from its content</th>
+                <th scope="col">Lengths</th>
+                <th scope="col">Glyphs</th>
+                <th scope="col">Fills in</th>
+                <th scope="col">Now</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">linear (internal)</th>
+                <td>none</td>
+                <td>nothing</td>
+                <td>kept</td>
+                <td>moved</td>
+                <td>
+                  zero baseline for <code>HasZero</code>, midpoint for
+                  <code>HasMidpoint</code>
+                </td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>Coord.polar()</code>, <code>Coord.clock()</code>
+                </th>
+                <td>
+                  angle: <code>HasCycle</code>. Radius: <code>HasZero</code>.
+                </td>
+                <td>
+                  Lint: a radius with no zero (dates) leaves an arbitrary hole.
+                  Lint: a filled mark whose radius shows an amount reads as
+                  area, so it wants <code>radius: "area"</code>.
+                </td>
+                <td>bent into arcs and wedges</td>
+                <td>moved, not bent</td>
+                <td>
+                  a key with <code>HasCycle</code> on the angle closes the loop.
+                  Data 0 sits at the start angle.
+                </td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Coord.wavy()</code></th>
+                <td>none</td>
+                <td>Lint: lengths are no longer comparable</td>
+                <td>bent</td>
+                <td>moved</td>
+                <td></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Coord.geo({ projection })</code></th>
+                <td>longitude: <code>HasCycle</code>. Both axes in degrees.</td>
+                <td>Lint: a filled amount needs an equal-area projection</td>
+                <td>
+                  not kept. Areas are kept only by equal-area projections.
+                </td>
+                <td>moved</td>
+                <td></td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Coord.log</code> (proposed)</th>
+                <td>no zero. Screen addition is data multiplication.</td>
+                <td>
+                  The domain is above 0. No length is pinned at 0 on that axis.
+                  An additive <code>stack</code> is an error unless overridden
+                  (#1326).
+                </td>
+                <td>become ratios</td>
+                <td>moved</td>
+                <td>tick ladder</td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>Coord.clock({ radius: "area" })</code> (proposed)
+                </th>
+                <td>radius: <code>HasZero</code></td>
+                <td>the radius value has <code>HasZero</code></td>
+                <td>wedge area follows the value</td>
+                <td>moved</td>
+                <td></td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>Coord.envelope</code> (#1284, proposed)
+                </th>
+                <td>one axis measures area</td>
+                <td>the fill value has <code>HasZero</code></td>
+                <td>follow the outline's area</td>
+                <td>moved</td>
+                <td></td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>Coord.along</code>,
+                  <code>Coord.spiral({ period })</code> (proposed)
+                </th>
+                <td>
+                  one axis runs along a curve. Spiral: the period acts as a
+                  cycle.
+                </td>
+                <td>
+                  Lint: a key laid along a spiral period should have
+                  <code>HasCycle</code> or a calendar part
+                </td>
+                <td>bent along the curve</td>
+                <td>moved</td>
+                <td>lines up equal phases</td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Embedding, refined from the draft. It is a space fact computed from
+          two inputs, as today (<code>foreignPlaced</code> and
+          <code>isGlyph</code> in <code>_node.ts</code>): how the operator
+          places the child, and whether the units match. A size is a glyph,
+          moved by a coord and not bent, when its parent places it at a datum (a
+          point or a cell, as <code>scatter</code> and
+          <code>partition</code> do) and its unit differs from that axis's unit.
+          A mark's own position in another unit counts the same way. Every other
+          data size is a length of the space and is bent. So a bubble in a
+          scatter is a glyph, a bar in a spread slot is a length, and a Gantt
+          bar in a scatter, whose width is in the x axis's unit, is also a
+          length. The draft's rule (spread embeds, scatter attaches) is the
+          common case. The exception applies only inside a coord, and an
+          explicit <code>emX</code> or <code>emY</code> forces embedding.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Case</th>
+                <th scope="col">How it is placed</th>
+                <th scope="col">Units</th>
+                <th scope="col">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Bubble in a scatter, radius by population</th>
+                <td>at a datum</td>
+                <td>differ</td>
+                <td>glyph</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  Bar in a scatter with <code>w</code> in the x axis's unit (a
+                  Gantt bar)
+                </th>
+                <td>at a datum</td>
+                <td>same</td>
+                <td>length, bent</td>
+              </tr>
+              <tr>
+                <th scope="row">Circle or bar in a spread slot</th>
+                <td>in a slot</td>
+                <td>not consulted</td>
+                <td>length, bent</td>
+              </tr>
+              <tr>
+                <th scope="row">Circle in a binned cell</th>
+                <td>across a cell</td>
+                <td>differ</td>
+                <td>glyph</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>The rules as judgments</h3>
+        <p>
+          <code>Γ</code> gives each column its type. <code>S</code> is the set
+          of keys split so far and <code>R</code> is the rest key.
+          <code>Φ</code> is the set of space facts. <code>⇝</code> means
+          "elaborates to".
+        </p>
+        <pre class="code plain"><code class="nohighlight">              k ∈ R
+(Spread)  ─────────────────────────────────────────────────────────
+          Γ; S; R ⊢ spread(k) ⇒ S ∪ {k}; R ∖ {k}
+                    ▷ slots along dir, closed if Γ ⊢ k : HasCycle
+
+          k ∈ R    Γ ⊢ f : CanSum[k]    Γ ⊢ f : HasZero
+(Stack)   ─────────────────────────────────────────────────────────
+          Γ; S; R ⊢ stack(k) over f ⇒ S ∪ {k}; R ∖ {k}
+                    ▷ lengths from the origin along dir
+
+              R = ∅
+(One row) ──────────────────────────────
+          Γ; S; R ⊢ h: f ⇝ h: field(f)
+
+              Γ ⊢ f : CanSum[R]
+(Sum)     ──────────────────────────────────────
+          Γ; S; R ⊢ h: f ⇝ h: field(f).sum()
+
+              Γ ⊢ f : CanAverage[w]
+(Mean)    ──────────────────────────────────────────────────────
+          Γ; S; R ⊢ h: f ⇝ h: field(f).mean({ weight: w })
+
+              Γ ⊢ a : CanSum[k]    Γ ⊢ b : CanSum[k]
+(Ratio)   ──────────────────────────────────────────────────
+          Γ ⊢ a / b : unit(a)/unit(b), CanAverage[b]
+
+          dom(f) ⊆ (0, ∞)    Φ(axis) has no length pinned at 0
+(Log)     ──────────────────────────────────────────────────
+          Φ ⊢ log(axis) ok</code></pre>
+        <p>
+          The check runs in two directions. Types and the key context flow down
+          the pipeline. Space facts flow back up from the marks, and the coord
+          is checked against them. Then the solved traits fill in the defaults.
+        </p>
+        <h2>What GoFish has today, next to the draft</h2>
+        <p>
+          The full table with file references is in current-types. The short
+          version:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Draft</th>
+                <th scope="col">GoFish today</th>
+                <th scope="col">Verdict</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  Units (<code>USD</code>, <code>items</code>)
+                </th>
+                <td>
+                  <code>HasUnit</code>, declared with <code>Unit(...)</code>,
+                  unified across the figure, gradual
+                </td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <th scope="row">Unit algebra (<code>USD / items</code>)</th>
+                <td>None (#1142 follow-up)</td>
+                <td>Draft has more</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Nominal</code></th>
+                <td><code>Domain.discrete(levels)</code> with no order</td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Ordered</code></th>
+                <td><code>HasOrder</code> from <code>Trait.ordered()</code></td>
+                <td>Same</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Diverging(mid)</code></th>
+                <td>
+                  <code>HasMidpoint { at }</code> from
+                  <code>Trait.diverging(mid?)</code>, on an ordered key
+                </td>
+                <td>
+                  Same. The draft puts it on the value. GoFish puts it on the
+                  stack's key, which is right for Likert.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Cyclic(n)</code></th>
+                <td>
+                  <code>HasCycle</code> on coord axes and on calendar parts. Not
+                  on plain columns (#1052).
+                </td>
+                <td>Partly there</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Affine&lt;u&gt;</code></th>
+                <td>Only time: an instant minus an instant is a duration</td>
+                <td>Draft has more</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Ratio&lt;u&gt;</code></th>
+                <td>
+                  <code>HasZero</code> exists on coord axes only (#1051 for
+                  columns)
+                </td>
+                <td>Draft has more</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>Bounded[lo, hi]</code>, <code>Positive</code>
+                </th>
+                <td>
+                  Only a computed <code>HasDomain</code>.
+                  <code>Domain.continuous</code> is a TODO.
+                </td>
+                <td>Draft has more. These are domains, not traits.</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  The ladder Nominal &lt; Ordered &lt; Affine &lt; Ratio
+                </th>
+                <td>Facts that compose, with no ladder</td>
+                <td>
+                  Conflicts with a decision on #1195: Stevens's names are
+                  allowed only as bundles
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Extensive&lt;k&gt;</code></th>
+                <td><code>CanSum</code> on the unit, with no key</td>
+                <td>Draft is finer, and this is the part worth taking</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Intensive&lt;k, w&gt;</code></th>
+                <td>
+                  No <code>CanSum</code>. <code>.mean()</code> is unweighted.
+                </td>
+                <td>Draft has more</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Cumulative&lt;k&gt;</code></th>
+                <td>Nothing. #1198 is the open design.</td>
+                <td>Draft only</td>
+              </tr>
+              <tr>
+                <th scope="row">Key structure</th>
+                <td>
+                  <code>HasOrder</code>, binned cells, the
+                  <code>HasRegion</code> flag that
+                  <code>partition</code> requires, calendar
+                  <code>HasCycle</code>
+                </td>
+                <td>Mostly there</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  Embedded versus attached, decided by spread versus scatter
+                </th>
+                <td>
+                  Decided by the operator and the units together: a size that
+                  its parent places at a datum, in a unit other than that
+                  axis's, is a glyph (#972)
+                </td>
+                <td>
+                  GoFish is finer. The draft's rule is the common case. It is
+                  wrong for a bar in a scatter whose width is in the x axis's
+                  unit (a Gantt bar), which is still embedded.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">(nothing)</th>
+                <td>
+                  Quantity apart from unit, time zones, origin state of a space
+                  (pinned, free, none), mirrored axes
+                </td>
+                <td>GoFish only</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Which is better. Where the two differ in kind, GoFish's version is
+          better, because it is made of small facts that compose and it matches
+          decisions already taken. Where the draft has more, it is naming a real
+          gap. The one place the draft changes the design is additivity per key.
+        </p>
+        <p>
+          Two memory notes turned out to be wrong and I corrected them: PR #1268
+          only renamed terms to "trait" and did not add <code>HasVector</code>,
+          and <code>CanAdd</code> was renamed <code>CanSum</code> by #1311.
+        </p>
+        <h2>Are traits needed?</h2>
+        <p>
+          Yes. They looked buried in the draft because the draft names bundles
+          of traits instead of the traits.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Draft name</th>
+                <th scope="col">Written as traits</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>Nominal</code></th>
+                <td>no <code>HasOrder</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Ordered</code></th>
+                <td><code>HasOrder</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Affine&lt;u&gt;</code></th>
+                <td>
+                  <code>HasUnit</code> with a difference unit, and no
+                  <code>HasZero</code>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Ratio&lt;u&gt;</code></th>
+                <td><code>HasUnit</code> plus <code>HasZero</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Diverging(mid)</code></th>
+                <td><code>HasMidpoint { at }</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Cyclic(n)</code></th>
+                <td><code>HasCycle</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Bounded</code>, <code>Positive</code></th>
+                <td>a domain: <code>Domain.continuous([lo, hi])</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Count&lt;u&gt;</code></th>
+                <td>
+                  <code>HasZero</code>, <code>CanSum</code> over every key,
+                  whole numbers
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Extensive&lt;k&gt;</code></th>
+                <td><code>CanSum { by: k }</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Intensive&lt;k, w&gt;</code></th>
+                <td><code>CanAverage { weight: w }</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Cumulative&lt;k&gt;</code></th>
+                <td>
+                  no <code>CanSum</code> over <code>k</code>, where
+                  <code>k</code> has <code>HasOrder</code>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">units</th>
+                <td>the parameter of <code>HasUnit</code>, not a trait</td>
+              </tr>
+              <tr>
+                <th scope="row">coordinate frame</th>
+                <td>space facts that operators compute, not a data trait</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>So the trait list is short:</p>
+        <ul>
+          <li>
+            <strong>Value traits:</strong> <code>HasZero</code> (#1051),
+            <code>HasOrder</code>, <code>HasMidpoint</code>,
+            <code>HasCycle</code> (#1052 for columns), and
+            <code>HasUnit</code> with its difference unit.
+          </li>
+          <li>
+            <strong>Domains:</strong> <code>Domain.discrete(levels)</code> and
+            <code>Domain.continuous([lo, hi])</code> (new).
+          </li>
+          <li>
+            <strong>Keyed traits on a column:</strong>
+            <code>CanSum { by }</code> and
+            <code>CanAverage { weight }</code> (both new in this form).
+          </li>
+          <li>
+            <strong>Key traits:</strong> the same value traits on a key column,
+            plus <code>HasRegion</code>.
+          </li>
+          <li><strong>Space facts:</strong> computed, never declared.</li>
+        </ul>
+        <p>
+          Two corrections to the draft's rules fall out of writing them this
+          way:
+        </p>
+        <ul>
+          <li>
+            <strong><code>HasZero</code> and summing are separate.</strong> A
+            price has a zero and does not add up across stores. So Ratio must
+            not imply Extensive. Today <code>Trait.summable()</code> on a unit
+            mixes the two.
+          </li>
+          <li>
+            <strong>Log needs two facts, not one.</strong> The values must be
+            above 0, which is a domain fact. And no mark on that axis may draw a
+            length from 0, which is a space fact that a stack or a bar produces.
+            A concentration has a meaningful zero and still plots well as dots
+            on a log axis. The draft's rule would reject it.
+          </li>
+        </ul>
+        <p>
+          Traits also carry elaboration. Each trait supplies the code its
+          default expands to, so every default has a spelling the user could
+          write (the "a default is sugar" rule in <code>api-design.md</code>):
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Trait found</th>
+                <th scope="col">Default it supplies</th>
+                <th scope="col">Written by hand</th>
+                <th scope="col">Public today?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>CanSum</code> over the rest key</th>
+                <td>the fold of a size channel</td>
+                <td><code>h: field("sold").sum()</code></td>
+                <td><span class="chip now-yes">yes</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>CanAverage { weight }</code></th>
+                <td>the fold</td>
+                <td><code>h: field("price").mean({ weight: "sold" })</code></td>
+                <td>needs <code>weight</code> on <code>.mean()</code></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  no <code>CanSum</code> over an ordered rest key
+                </th>
+                <td>none: an error that offers choices</td>
+                <td><code>h: field("stock").last()</code></td>
+                <td>needs <code>.last()</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasMidpoint</code> on a stack key</th>
+                <td>the stack's origin</td>
+                <td>a stack option naming the origin</td>
+                <td>internal only</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>HasMidpoint</code> or <code>HasZero</code> on a color
+                  field
+                </th>
+                <td>a diverging palette centered there</td>
+                <td>a palette with a middle stop</td>
+                <td>needs a midpoint option</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasCycle</code> on a spread key</th>
+                <td>a closed spread in polar</td>
+                <td>a spread option that closes the loop</td>
+                <td>not built</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Four of these need a public spelling first. That is #1289.</p>
+      </section>
+    </section>
+    <section class="panel" data-panel="keys" hidden>
+      <section class="prose">
+        <h2>Keys</h2>
+        <h3>Keys and values in graphical space</h3>
+        <p>
+          The draft asked how keys and values show up in the picture. The answer
+          that held on ten chart types:
+        </p>
+        <blockquote>
+          The key always gives a mark its identity. On each axis, a mark's
+          position comes from its key or from a value, and so does its size.
+        </blockquote>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Operator</th>
+                <th scope="col">Position along its axis</th>
+                <th scope="col">Size along its axis</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>spread</code></th>
+                <td>key (a slot)</td>
+                <td>value, or the mark's own size</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>table</code></th>
+                <td>key (row and column)</td>
+                <td>key (the cell)</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>partition</code></th>
+                <td>key (its region)</td>
+                <td>key (its region)</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>scatter</code></th>
+                <td>value</td>
+                <td>value, or the mark's own size</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>stack</code></th>
+                <td>running sum of values over earlier keys</td>
+                <td>value</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>treemap</code></th>
+                <td>the tiling, from values</td>
+                <td>value (area)</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <code>stack</code> is the only operator that turns a key into a
+          position by adding values. That is why <code>stack</code> needs
+          <code>CanSum</code> over its key and <code>spread</code> does not. It
+          matches the rule that <code>stack</code> glues its children's spaces
+          into one and <code>spread</code> keeps them apart.
+        </p>
+        <h3>Key traits</h3>
+        <p>
+          A key column uses the same traits as any column. No second vocabulary
+          is needed.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Trait on the key</th>
+                <th scope="col">What it allows</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">none</th>
+                <td>bars and points. No connectors.</td>
+                <td><span class="chip now-exists">exists</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasOrder</code></th>
+                <td>
+                  sorted slots, a line or ribbon between neighbors, a stack
+                  origin at a midpoint
+                </td>
+                <td><span class="chip now-exists">exists</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasCycle</code></th>
+                <td>a closed line, a closed polar spread</td>
+                <td>
+                  <span class="chip now-exists">exists</span>
+                  <span class="now-rest"
+                    >for calendar parts, #1052 for columns</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasRegion</code></th>
+                <td><code>partition</code></td>
+                <td>
+                  <span class="chip now-exists">exists</span>
+                  <span class="now-rest"
+                    >as a TypeScript flag on binned fields</span
+                  >
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">a continuous column as the key</th>
+                <td>values between neighbors, so smooth curves and areas</td>
+                <td>follows from the column, no name needed</td>
+              </tr>
+              <tr>
+                <th scope="row">a grid</th>
+                <td>the product of two keys</td>
+                <td>
+                  <span class="chip now-no">no</span>
+                  <span class="now-rest">trait needed</span>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>HasParent</code> (trees),
+                  <code>HasNeighbors</code> (graphs)
+                </th>
+                <td>links to a parent, links along edges</td>
+                <td>
+                  <span class="chip now-new">new</span>
+                  <span class="now-rest">names. Wait for an example.</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Examples the key traits decide:</p>
+        <ul>
+          <li>
+            <strong>Ribbons between lakes.</strong> <code>lake</code> has no
+            order, so a ribbon between lake groups is an error unless the data
+            says how the lakes connect. This is the question from the PyData
+            talk.
+          </li>
+          <li>
+            <strong>Radar chart over unordered attributes.</strong> The
+            polygon's area depends on an order the attributes do not have.
+            Error: "a closed line over <code>attribute</code> needs
+            <code>HasCycle</code>".
+          </li>
+          <li>
+            <strong>Smooth curve over Likert levels.</strong> A lint: the curve
+            reads values between levels, and there are none.
+          </li>
+        </ul>
+        <h3>The key context</h3>
+        <p>
+          Each <code>by</code> adds a key to the context. The checker tracks two
+          sets: the keys split so far, and the rest key. Additivity is looked up
+          in two places:
+        </p>
+        <ol>
+          <li>
+            <code>stack({ by: k })</code> and <code>treemap</code> add their
+            children over <code>k</code>. They need <code>CanSum</code> over
+            <code>k</code>.
+          </li>
+          <li>
+            A channel folds the rows of one group. It needs a fold that suits
+            every column of the rest key.
+          </li>
+        </ol>
+        <p>
+          Disjoint and complete, the first two summarizability conditions, cost
+          almost nothing on <code>by</code>. A column has one value per row, so
+          groups never overlap. Completeness fails only for a null key. Today a
+          null becomes an unlabeled group in <code>by</code> and is dropped
+          silently by a bin. Those should agree.
+        </p>
+        <h3>Product keys and missing pairs</h3>
+        <p>
+          After <code>spread({ by: "lake" })</code> and
+          <code>stack({ by: "species" })</code>, some species are missing from
+          some lakes. For a ribbon between stacks, the value's type decides what
+          a missing pair means:
+        </p>
+        <ul>
+          <li>
+            If the value adds up and has a zero, a missing pair is zero. The
+            ribbon narrows to nothing.
+          </li>
+          <li>
+            Otherwise a missing pair is unknown, and the ribbon shows a gap.
+          </li>
+        </ul>
+        <p>GoFish has no rule for this today.</p>
+        <details class="rationale">
+          <summary>Multi-table inputs (smallest useful piece)</summary>
+          <ul>
+            <li>
+              A foreign key is a function from one table's key to another's.
+            </li>
+            <li>
+              A join along a foreign key keeps the key context. Each joined
+              column remembers the key of the table it came from.
+            </li>
+            <li>
+              A join on a column that is not a key of the right table adds a
+              key, the same way <code>by</code> does.
+            </li>
+            <li>
+              A joined column summed along a key it does not depend on is the
+              fan trap, caught by the check in section 4.
+            </li>
+          </ul>
+        </details>
+        <details class="rationale">
+          <summary>Hannah's model, in type theory</summary>
+          <p>
+            Hannah Aizenman's papers ("Mind Your νs and Qs", GUGOG 2026, and the
+            longer TopoInVis 2026 version) model a dataset as a bundle over a
+            base space of keys, and a visualization as a structure-preserving
+            map. Each piece has a type-theory reading:
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Her model</th>
+                  <th scope="col">Type theory</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">A section of the bundle</th>
+                  <td>A dependent function from keys to records</td>
+                </tr>
+                <tr>
+                  <th scope="row">The base space K and its topology</th>
+                  <td>
+                    A key type with traits. On finite data a topology carries no
+                    more than a neighbor relation.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">The sheaf conditions</th>
+                  <td>
+                    They hold for any function. They only become a check when a
+                    key has duplicate rows, which is a uniqueness check.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">Equivariance of an artist</th>
+                  <td>
+                    Parametricity: an operator that is generic in the key type,
+                    given some traits, commutes with every relabeling of the
+                    keys that keeps those traits
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row">The map from graphic back to data</th>
+                  <td>Every node knows its key, which GoFish already does</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            That last row gives a statement worth keeping. Each trait fixes the
+            relabelings that must not change the picture's meaning: any renaming
+            for a plain key, order-keeping renamings for <code>HasOrder</code>,
+            rotations for <code>HasCycle</code>, changes of unit for a unit.
+            Kennedy proved the unit case this way in 1997. It is also a testing
+            recipe: change the data in an allowed way and measure that the marks
+            change to match.
+          </p>
+          <p>
+            I found no strong reason to prefer the categorical form. Sheaf
+            gluing says something new only for covers that overlap, and GoFish
+            has none. TypeScript does not enforce parametricity, so the
+            statement becomes a rule for operator authors plus property tests.
+          </p>
+        </details>
+        <h2>Equality of types and of data shapes</h2>
+        <p>
+          The draft deferred "long versus wide and sparse versus dense should
+          type the same". The recommendation is the smallest thing that works:
+        </p>
+        <ol>
+          <li>
+            <strong
+              >One canonical form, which is a type and not a copy of the
+              data.</strong
+            >
+            Rows stay a list. The schema gains a declared <code>key</code>. The
+            checker checks that the key is unique only where an operator relies
+            on it.
+          </li>
+          <li>
+            <strong>Equality is up to field order and key order only.</strong>
+            No search over isomorphisms and no e-graph. Nesting needs no rule,
+            because <code>spread</code> then <code>stack</code> already turns a
+            flat key into a nested one.
+          </li>
+          <li>
+            <strong
+              >Every other reshape is a named conversion that states what it
+              needs:</strong
+            >
+            <ul>
+              <li>
+                <code>unpivot</code> (wide to long) needs the melted columns to
+                share one unit. The new key gets
+                <code>Domain.discrete(columns)</code>.
+              </li>
+              <li>
+                <code>pivot</code> (long to wide) needs a unique key or an
+                allowed fold.
+              </li>
+              <li>
+                Filling missing keys needs a value that adds up and has a zero,
+                or an explicit fill. A rate has no honest fill.
+              </li>
+              <li>Aggregating needs <code>CanSum</code>, or a weight.</li>
+            </ul>
+          </li>
+          <li>
+            <strong>Grids, trees and positional indexes</strong> stay in
+            <code>derive</code> or polars.
+          </li>
+        </ol>
+        <p>
+          Only <code>unpivot</code> has stories that need it now. The population
+          pyramid, the heatmap, the Likert data and the ridgeline all reshape by
+          hand before <code>chart</code>, so no check sees the reshape.
+        </p>
+        <p>
+          Declared shortcut: <code>unpivot</code> rejects columns with different
+          units. The right fix is a value type that depends on the key, so that
+          a spread over the new key passes and a stack fails. That needs new
+          design.
+        </p>
+        <p>
+          Things that must not be equal: wide columns in different units, row
+          order when the key has no order (today groups come out in
+          first-appearance order when no levels are declared, so order is part
+          of the input), a bag with several rows per key, and raw rows versus an
+          aggregate.
+        </p>
+        <h2>Summarizability and partitioning</h2>
+        <p>
+          They connect, through the regions of a key. But the rule is not "a
+          partition needs Extensive". There are two families of partition-shaped
+          layout, and they need opposite things.
+        </p>
+        <ul>
+          <li>
+            <strong>Value-sized pieces:</strong> <code>stack</code>,
+            <code>treemap</code>, <code>.normalize()</code>, pie,
+            <code>cut</code>. The value sets each piece's size. This is plain
+            summarizability: the groups split the parent, the size adds up over
+            the key, and it is not negative when the whole is given. Then the
+            whole's size is the parent's total.
+          </li>
+          <li>
+            <strong>Key-sized pieces:</strong> <code>partition</code>, bins,
+            calendar cells, map regions. The key sets each piece's size. A
+            channel read as an amount should then be a value per unit of the
+            cell: a count per unit width, or per km². This is Bertin's rule, and
+            it is the classic choropleth mistake when broken.
+          </li>
+        </ul>
+        <p>Examples that decide it:</p>
+        <ul>
+          <li>
+            <strong>Histogram with unequal bins.</strong> Bar area is the count.
+            Bar height is the density. With equal bins the two agree, which is
+            why the mistake hides.
+          </li>
+        </ul>
+        <ul>
+          <li>
+            <strong>Choropleth.</strong> Regions split the map, and color shows
+            a value. An extensive value such as population colored by state
+            mostly shows state size.
+          </li>
+          <li>
+            <strong>Monthly sales on true month widths.</strong> It looks right
+            and is slightly wrong, since months differ in length. So the
+            key-sized rule should be a lint, not an error.
+          </li>
+          <li>
+            <strong>Venn and UpSet.</strong> The groups overlap, so sizes do not
+            add. The fix is to group by the exact combination of sets.
+          </li>
+          <li>
+            <strong>Top N before <code>.normalize()</code>.</strong>
+            Completeness is broken by <code>filter</code>. I would not add a
+            "partial" type. A lint on <code>.normalize()</code> and on total
+            labels is enough.
+          </li>
+        </ul>
+        <p>
+          One correction to the draft. It says the cumulative case is the
+          disjointness condition. There are two disjointnesses. Groups of rows
+          are disjoint for any <code>by</code> on a column. What fails for
+          inventory over months is that the things each value counts overlap.
+          That check belongs on the column and the key, and on every sum, not
+          only on <code>stack</code>. Section 4's rule does this.
+        </p>
+        <p>
+          Recommendation: no shared trait now. Keep the word
+          <code>partition</code> on the operator. The value-sized rule is
+          section 4. The key-sized rule comes from units with "per" once #1142
+          lands.
+        </p>
+      </section>
+    </section>
+    <section class="panel" data-panel="coord" hidden>
+      <section class="prose wide">
+        <h2>The <code>.coord()</code> method</h2>
+        <p>
+          Today a coord is one option on the two boundaries:
+          <code>chart(data, { coord })</code> and
+          <code>layer({ coord }, [...])</code>. The full study, with each option
+          written on six stories in JS and Python, is in coord-method.
+        </p>
+        <p>
+          A fact that settles a lot: in GoFish, layout always runs in the
+          space's own coordinates, and operators resolve
+          <code>dir: "theta"</code> against the coord around them. So the
+          position of a <code>.coord()</code> call in the chain can never change
+          what the flow computes. A coord is a scope, not a last step.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Option</th>
+                <th scope="col">Spelling</th>
+                <th scope="col">For</th>
+                <th scope="col">Against</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">A. Keep the option</th>
+                <td><code>chart(data, { coord: Coord.clock() })</code></td>
+                <td>
+                  One spelling on both boundaries. Sits beside
+                  <code>axes</code>, <code>padding</code>, <code>w</code>,
+                  <code>h</code>. No IR or Python change.
+                </td>
+                <td>Not a method.</td>
+              </tr>
+              <tr>
+                <th scope="row">B. Method at the end (the draft)</th>
+                <td>
+                  <code
+                    >chart(data).flow(...).mark(...).coord(Coord.clock())</code
+                  >
+                </td>
+                <td>Reads like ggplot2's <code>+ coord_polar()</code>.</td>
+                <td>
+                  Teaches "lay out, then view in polar", which is not what
+                  happens. A misplaced parenthesis changes the picture with no
+                  error: a pie per group becomes one whole-chart polar space, or
+                  a map overlay gets its own projection.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">C. Method at the start</th>
+                <td>
+                  <code
+                    >chart(data).coord(Coord.clock()).flow(...).mark(...)</code
+                  >
+                </td>
+                <td>
+                  Same meaning as A. Reads as a scope. Names such as
+                  <code>theta</code> are declared before they are used. Python
+                  gets <code>.coord(y=Coord.log())</code>.
+                </td>
+                <td>
+                  Two spellings, since <code>layer([...])</code> keeps the
+                  option. Frame settings split between the options and the
+                  method.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">D. Anywhere</th>
+                <td>either</td>
+                <td>Honest about order not mattering.</td>
+                <td>Three spellings, and B's trap.</td>
+              </tr>
+              <tr>
+                <th scope="row">E. A wrapper</th>
+                <td><code>Coord.clock(chart(...))</code></td>
+                <td></td>
+                <td><code>layer({ coord }, ...)</code> already says this.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Why the start and not the end. The chain already reads from the
+          outside in, not in the order things run. In
+          <code>.flow(spread(...), stack(...)).mark(rect(...))</code> the spread
+          contains the stack, which contains the rect, and the mark, written
+          last, is the innermost thing. A coord is the outermost scope, so by
+          the chain's own convention it comes first. It is true that the coord's
+          map to the screen runs after layout. That is function application,
+          <code>coord(layout(...))</code>, where the function applied last is
+          written first. The coord also declares the names <code>r</code> and
+          <code>theta</code> that the flow's <code>dir</code> uses, and a name
+          should be declared before it is used. Josh's first guess was the end,
+          and he reached the same conclusion from the code and from the names.
+        </p>
+        <p>Layer rules that hold under any spelling:</p>
+        <ol>
+          <li>
+            One coord per boundary. It covers the flow, the mark, every
+            <code>.layer()</code> tier and every child of
+            <code>layer([...])</code>.
+          </li>
+          <li>A boundary with no coord is in its parent's space.</li>
+          <li>
+            A boundary with its own coord, inside another, is a separate space
+            that the outer one places as a glyph. The two do not compose and
+            neither overrides the other.
+          </li>
+          <li>
+            Sibling charts in different coords are separate boxes. Two sibling
+            <code>geo</code> charts do not share a projection, so an overlay
+            goes inside the map's boundary.
+          </li>
+          <li>
+            Combining transforms happens inside one coord value: per-axis warps,
+            then one 2D map, as in <code>Coord.clock({ r: Coord.log() })</code>.
+            A second <code>.coord()</code> call on one boundary is an error.
+          </li>
+        </ol>
+        <p>
+          The type rule does not pick a position by itself. Axis names and
+          traits flow down from the coord, and space facts flow up to it.
+        </p>
+        <p>
+          Recommendation: A, with C as the form to take if Josh wants the
+          method. B is the one to avoid. I would move to C if axes and legends
+          also become methods as part of the chrome work, so that the chain is
+          the one place frame settings live.
+        </p>
+        <p>
+          One oddity found on the way: in a <code>.layer()</code> chain, the
+          first chart's coord silently covers every later tier. That should be
+          documented or made explicit. How a <code>selectAll</code> reference
+          behaves across a coord boundary was not verified in the code.
+        </p>
+        <h3>Each option on the pie chart</h3>
+        <p>
+          The pie story from <code>Pie.stories.tsx</code>, written in each
+          spelling. D's other two orders are in the research file. C writes
+          <code>dir: "theta"</code>, which is legal today.
+        </p>
+        <div class="opts">
+          <div class="opt">
+            <h4>A. Keep the option (recommended)</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(seafood, {
+  coord: Coord.clock(),
+  axes: true,
+  padding: 60,
+  w: 400,
+  h: 400,
+})
+  .flow(stack({ by: "species", dir: "x" }))
+  .mark(rect({ w: "count", fill: "species" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(SEAFOOD, coord=Coord.clock(), axes=True, padding=60, w=400, h=400)
+    .flow(stack(by="species", dir="x"))
+    .mark(rect(w="count", fill="species"))
+)</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="opt">
+            <h4>B. Method at the end (the draft; avoid)</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(seafood, { axes: true, padding: 60, w: 400, h: 400 })
+  .flow(stack({ by: "species", dir: "x" }))
+  .mark(rect({ w: "count", fill: "species" }))
+  .coord(Coord.clock());</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(SEAFOOD, axes=True, padding=60, w=400, h=400)
+    .flow(stack(by="species", dir="x"))
+    .mark(rect(w="count", fill="species"))
+    .coord(Coord.clock())
+)</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="opt">
+            <h4>C. Method at the start (if you want a method)</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(seafood, { axes: true, padding: 60, w: 400, h: 400 })
+  .coord(Coord.clock())
+  .flow(stack({ by: "species", dir: "theta" }))
+  .mark(rect({ w: "count", fill: "species" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(SEAFOOD, axes=True, padding=60, w=400, h=400)
+    .coord(Coord.clock())
+    .flow(stack(by="species", dir="theta"))
+    .mark(rect(w="count", fill="species"))
+)</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="opt">
+            <h4>D. Anywhere</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(seafood)
+  .flow(stack({ by: "species", dir: "theta" }))
+  .coord(Coord.clock())
+  .mark(rect({ w: "count" }));</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">(
+    chart(SEAFOOD)
+    .flow(stack(by="species", dir="theta"))
+    .coord(Coord.clock())
+    .mark(rect(w="count"))
+)</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="opt">
+            <h4>E. A wrapper</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre class="code"><code class="language-javascript">Coord.clock(
+  chart(seafood)
+    .flow(stack({ by: "species", dir: "theta" }))
+    .mark(rect({ w: "count", fill: "species" }))
+);</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">Coord.clock(
+    chart(SEAFOOD)
+    .flow(stack(by="species", dir="theta"))
+    .mark(rect(w="count", fill="species"))
+)</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </section>
+    <section class="panel" data-panel="embedding" hidden>
+      <section class="prose wide">
+        <h2>Where the types live: the DSL, TypeScript, or both</h2>
+        <p>
+          The draft's syntax (<code
+            >Count&lt;items&gt; &amp; Cumulative&lt;month&gt;</code
+          >) reads as TypeScript types. Three options:
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">TypeScript types only</th>
+                <th scope="col">Run-time values in the DSL (recommended)</th>
+                <th scope="col">Both, from one definition (later)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Reasoning and elaboration</th>
+                <td>No. Types are erased before the engine runs.</td>
+                <td>Yes</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <th scope="row">Errors that name the data</th>
+                <td>No</td>
+                <td>Yes</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <th scope="row">Python</th>
+                <td>No</td>
+                <td>Yes, through the IR</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  Facts that depend on data (domains, dependent keys, the row
+                  check)
+                </th>
+                <td>No</td>
+                <td>Yes</td>
+                <td>Run-time side only</td>
+              </tr>
+              <tr>
+                <th scope="row">Errors in the editor before running</th>
+                <td>Yes</td>
+                <td>No</td>
+                <td>Yes, for a subset</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          GoFish already does the middle column: <code>Unit</code>,
+          <code>Trait</code> and <code>Domain</code> build values, and the wire
+          carries the traits. So the DSL is the source of truth.
+        </p>
+        <p>
+          A TypeScript mirror is possible. One value can give both the wire
+          record and a static type, the way Zod, Effect Schema and ArkType do.
+          Experiments against the repo's TypeScript 5.9 (in
+          traits-and-embedding, Part 3) showed:
+        </p>
+        <ul>
+          <li>
+            A stack over a key the field does not add up over is caught with a
+            readable message.
+          </li>
+          <li>
+            A stack of an averaged field is caught. Log after a stack is caught.
+            A misspelled column gets a "did you mean" hint.
+          </li>
+          <li>
+            The red underline lands on the mark, not on the stack, because the
+            field is only known at the mark.
+          </li>
+          <li>
+            Untyped rows, dynamic field names and undeclared columns compile
+            with no error, so the static side never blocks a chart.
+          </li>
+          <li>
+            Unit equality is easy. Unit arithmetic works for small exponents,
+            but the editor shows an unreadable type.
+          </li>
+          <li>
+            300 checked pipelines added about 0.06 seconds to a compile. That
+            was a toy builder, so the real cost is unmeasured.
+          </li>
+        </ul>
+        <p>
+          Today <code>by</code> accepts any string and
+          <code>stack</code> returns <code>Operator&lt;any[], any[]&gt;</code>,
+          so TypeScript does not even check field names. The cheap first step is
+          to check channel names and <code>by</code> against the row type.
+          Mirror the trait checks later, generated from the same definitions, if
+          the LLM benchmark (#941) shows that editor errors help.
+        </p>
+        <h2>Units</h2>
+        <ul>
+          <li>
+            Keep units as they are: gradual, unified across the figure, a clash
+            between two declared units is an error.
+          </li>
+          <li>
+            Add unit algebra (#1142): products, quotients and "per".
+            <code>revenue / units</code> has unit <code>USD/items</code>.
+          </li>
+          <li>
+            A quotient of two columns that both add up over a key is an average
+            weighted by its denominator. So <code>derive</code> helpers that
+            divide can supply <code>Trait.weighted</code> without the user
+            writing it.
+          </li>
+          <li>
+            Points and differences: a unit with no zero has a difference unit,
+            as time has duration. <code>20 °C + 20 °C</code> fails because a
+            point plus a point is not defined, and <code>°C − °C</code> is in
+            Δ°C. The same split serves geometry, where a position is a point and
+            a size is a difference.
+          </li>
+          <li>
+            Named types such as <code>Month</code>, <code>Temperature</code> and
+            <code>Revenue</code> are aliases over these parts, like chart
+            templates over operators. They come after the parts.
+          </li>
+        </ul>
+        <p>
+          Open: whether unit conversion (°C to °F) and area-preserving maps
+          belong here. The scale-transforms proposal already places the second
+          with coords (<code>Coord.clock({ radius: "area" })</code>), and I
+          would leave it there.
+        </p>
+        <h2>Comparison with Flint</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Flint</th>
+                <th scope="col">Here</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  Aggregation role per field (additive, intensive, and so on)
+                </th>
+                <td>
+                  <code>CanSum { by }</code> and a weight, per column and key.
+                  Flint cannot say "adds over warehouses, not over months".
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  Zero baseline: meaningful, arbitrary, contextual, none
+                </th>
+                <td>
+                  <code>HasZero</code> is a data fact. Whether to show the zero
+                  is an operator choice.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Diverging: none, conditional, inherent</th>
+                <td>
+                  <code>HasMidpoint { at }</code>, which carries the point.
+                  "Conditional" becomes: the palette diverges when the data
+                  spans the midpoint.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Domain shape: open, bounded, fixed, cyclic</th>
+                <td>
+                  <code>Domain.continuous([lo, hi])</code> and
+                  <code>HasCycle</code>. Flint draws no working line between
+                  bounded and fixed.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">A silent mean when a sum is invalid</th>
+                <td>
+                  An error that names the trait, per the "units are types" rule.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">44 named types</th>
+                <td>Aliases over traits.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          What Flint has that this does not yet: an identifier role (a key that
+          must never be folded), and signed-additive (profit). Signed amounts
+          already stack both ways from zero in GoFish (#773).
+        </p>
+      </section>
+    </section>
+    <section class="panel" data-panel="decisions" hidden>
+      <section class="prose">
+        <h2>Decisions for Josh</h2>
+        <p>Answer by number.</p>
+        <ol>
+          <li>
+            Is <code>Trait.summable({ by })</code> the one declaration for
+            additivity (approach C), or do you want each kind declared (approach
+            A)?
+          </li>
+          <li>
+            Is the word <code>by</code>, or <code>entity</code> as #1198 wrote
+            it?
+          </li>
+          <li>
+            Should a column that does not add up over an ordered key get a
+            default fold (<code>.last()</code>), or an error that offers the
+            choices? I recommend the error.
+          </li>
+          <li>
+            What is the builder word for an averaged value:
+            <code>Trait.weighted({ weight: "sold" })</code>, or something like
+            <code>Trait.rate({ per: "sold" })</code>?
+          </li>
+          <li>
+            Is <code>key</code> a chart option beside <code>schema</code>, or
+            part of the schema?
+          </li>
+          <li>
+            Do plain numbers have <code>HasZero</code> by default, with units
+            such as °C opting out through a difference unit?
+          </li>
+          <li>
+            Does <code>HasMidpoint</code> go on amounts too (profit around 0),
+            as well as on ordered keys?
+          </li>
+          <li>
+            Are the key-sized checks (histogram density, choropleth of counts)
+            lints and not errors?
+          </li>
+          <li>
+            <code>.coord()</code>: keep the option, or add the method at the
+            start of the chain?
+          </li>
+          <li>
+            Should a null <code>by</code> value be an error, a visible "missing"
+            group, or stay an unlabeled group? Bins drop nulls silently today.
+          </li>
+          <li>Should declared levels keep empty groups, as cells do?</li>
+          <li>Is the TypeScript mirror worth starting with field names now?</li>
+          <li>
+            Should <code>log</code>, the debug pass-through, be renamed before
+            <code>Coord.log</code> exists?
+          </li>
+        </ol>
+        <h3>Syntax to review</h3>
+        <p>
+          <code>Trait.summable({ by })</code>,
+          <code>Trait.weighted({ weight })</code>, <code>Trait.cyclic()</code>,
+          <code>key: [...]</code>, <code>traits</code> on a column record,
+          <code>Domain.continuous([lo, hi])</code>,
+          <code>.mean({ weight })</code>, <code>.last()</code>,
+          <code>.first()</code>, <code>unpivot</code>.
+        </p>
+        <h3>Recommendation, in order of work</h3>
+        <ol>
+          <li>
+            <strong>Column traits that are already open issues:</strong>
+            <code>HasZero</code> (#1051), <code>HasCycle</code> (#1052),
+            <code>Domain.continuous</code>.
+          </li>
+          <li>
+            <strong
+              ><code>Trait.summable({ by })</code> on the column, a declared
+              <code>key</code>, and the row check</strong
+            >
+            (this closes #1198). Public <code>.last()</code>,
+            <code>.first()</code>, and <code>weight</code> on
+            <code>.mean()</code>.
+          </li>
+          <li>
+            <strong><code>Trait.weighted({ weight })</code></strong> and the
+            schema-driven default fold.
+          </li>
+          <li>
+            <strong>Key checks for connectors:</strong> <code>line</code> and
+            <code>ribbon</code> need <code>HasOrder</code> or
+            <code>HasCycle</code>.
+          </li>
+          <li>
+            <strong>Unit algebra</strong> (#1142), then the key-sized lint.
+          </li>
+          <li>
+            <strong><code>unpivot</code>.</strong>
+          </li>
+          <li><strong>Field-name checks in TypeScript.</strong></li>
+        </ol>
+        <p>
+          Each step removes a wrong chart that renders today. Why this shape,
+          against the principles in <code>api-design.md</code>:
+        </p>
+        <ul>
+          <li>
+            It desugars into the core. Every default expands to a fold or an
+            option a user can write.
+          </li>
+          <li>
+            One concept is one trait. <code>summable</code> with
+            <code>by</code> covers the unit flag, the entity key and the draft's
+            Extensive.
+          </li>
+          <li>
+            Meaning lives on the data type, and a mismatch is a loud error that
+            names the trait.
+          </li>
+          <li>
+            Few new terms: <code>by</code> on <code>Trait.summable</code>,
+            <code>Trait.weighted</code>, <code>Trait.cyclic</code>,
+            <code>key</code>, <code>Domain.continuous</code>.
+          </li>
+          <li>
+            A type is added only where a chart forces it. Cumulative, Constant,
+            <code>HasNeighbors</code>, <code>HasParent</code> and cells all
+            wait.
+          </li>
+          <li>
+            The same shape in JS and Python, because the types are values on the
+            wire.
+          </li>
+        </ul>
+        <h3>Gaps found on main (not filed)</h3>
+        <ul>
+          <li>
+            The schema docs list <code>.distinct()</code> among things that add
+            up. Distinct counts do not add across groups.
+          </li>
+          <li>
+            A bin drops rows with a null key silently, while
+            <code>by</code> keeps them as a group.
+          </li>
+          <li>Daily level data binned by month is summed.</li>
+          <li><code>.normalize()</code> shares add up across groups.</li>
+          <li>
+            In a <code>.layer()</code> chain the first chart's coord covers
+            later tiers without saying so.
+          </li>
+          <li>
+            A spread of months in <code>Coord.clock()</code> with default
+            spacing and no <code>w</code> draws wedges at uneven angles that
+            overlap.
+          </li>
+          <li>
+            <code>field("day").bin(Calendar.month)</code> over half a year keeps
+            all 12 months on the axis and overlaps the labels of the empty ones.
+          </li>
+          <li>
+            A declared °C bar is rejected for having no <code>CanSum</code>,
+            even with one row per bar. The reason should be the missing zero.
+          </li>
+          <li>
+            <code>CLAUDE.md</code> lists a <code>keyContext</code> that is not
+            in the source. Keys live on nodes.
+          </li>
+        </ul>
+        <p>
+          Not verified: whether <code>treemap</code> drops negative sizes
+          silently, and whether <code>cut</code> weights skip the
+          <code>CanSum</code> check. The Lenz and Shoshani paper was read
+          through #1198 and secondary sources, not in full.
+        </p>
+        <h3>Research files</h3>
+        <ul class="paths">
+          <li><code>proposals/type-system/research/current-types.md</code></li>
+          <li>
+            <code>proposals/type-system/research/traits-and-embedding.md</code>
+          </li>
+          <li><code>proposals/type-system/research/key-space.md</code></li>
+          <li><code>proposals/type-system/research/type-equality.md</code></li>
+          <li>
+            <code
+              >proposals/type-system/research/summarizability-partition.md</code
+            >
+          </li>
+          <li><code>proposals/type-system/research/coord-method.md</code></li>
+        </ul>
+        <h3>Related issues</h3>
+        <ul>
+          <li>#1199: tracker for the type system.</li>
+          <li>
+            #1198: stocks, flows and values per unit. It compares per-dimension
+            tags with one entity key and recommends the entity key. This
+            proposal joins the two.
+          </li>
+          <li>
+            #1195: an axis is described by facts that name what layout must
+            keep. It rejected Stevens's levels as primitives.
+          </li>
+          <li>
+            #1142: a unit is one definition (domain plus traits). Unit algebra
+            such as USD/item is still open there.
+          </li>
+          <li>
+            #1051 and #1052: <code>HasZero</code> and <code>HasCycle</code> on
+            data columns. Both open.
+          </li>
+          <li>
+            #1326: stacking in a log coord is an error unless the user
+            overrides. Proposed.
+          </li>
+          <li>
+            #984 and #992: rebuild space kinds from traits, and the net amount
+            of a signed stack.
+          </li>
+          <li>
+            #48: binning and cells. <code>partition</code> requires a key that
+            has a region.
+          </li>
+          <li>
+            #1208: sums taken while a chart is built see only that chart's
+            units.
+          </li>
+          <li>#1281: tag operators by the traits they keep.</li>
+          <li>#999: column types through <code>derive</code>.</li>
+          <li>#1120: strict mode.</li>
+          <li>
+            #941: the LLM authoring benchmark, which could measure whether type
+            errors help agents.
+          </li>
+          <li>
+            #1289: make internal operands public so that defaults can expand
+            into user code.
+          </li>
+        </ul>
+        <p>
+          Earlier design work this builds on: the space-traits research
+          (artifact N6YYcKQM), the scale-transforms proposal (artifact
+          TduMB8U1), the stacking design space (3uB2dfsd) and the Flint notes
+          (<code>internals/design/flint-chart-notes.md</code>).
+        </p>
+      </section>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  (function () {
+    var TABS = [
+      "examples",
+      "additivity",
+      "rules",
+      "keys",
+      "coord",
+      "embedding",
+      "decisions",
+    ];
+    function show() {
+      var h = location.hash.replace("#", "");
+      if (TABS.indexOf(h) < 0) h = "examples";
+      document.querySelectorAll(".panel").forEach(function (p) {
+        p.hidden = p.dataset.panel !== h;
+      });
+      document.querySelectorAll("nav.tabs a").forEach(function (a) {
+        if (a.getAttribute("href") === "#" + h)
+          a.setAttribute("aria-current", "page");
+        else a.removeAttribute("aria-current");
+      });
+    }
+    window.addEventListener("hashchange", function () {
+      show();
+      window.scrollTo(0, 0);
+    });
+    show();
+
+    function setLang(l) {
+      document.documentElement.dataset.code = l;
+      document.querySelectorAll(".langswitch button").forEach(function (b) {
+        b.setAttribute("aria-pressed", String(b.dataset.set === l));
+      });
+      try {
+        localStorage.setItem("gofish-ts-lang", l);
+      } catch (e) {}
+    }
+    var saved = "js";
+    try {
+      saved = localStorage.getItem("gofish-ts-lang") || "js";
+    } catch (e) {}
+    setLang(saved === "py" ? "py" : "js");
+    document.querySelectorAll(".langswitch button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        setLang(b.dataset.set);
+      });
+    });
+
+    if (window.hljs) {
+      document
+        .querySelectorAll("pre code[class^='language-']")
+        .forEach(function (el) {
+          window.hljs.highlightElement(el);
+        });
+    }
+  })();
+</script>
