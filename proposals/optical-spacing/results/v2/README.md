@@ -21,3 +21,5 @@ Not built yet: the analysis in `survey2_design.md` (noise from the repeat,
 ruling candidates out, the wedge slope, mixed sizes, scale, inversion and
 color). It needs a script that reads these files,
 which is worth writing once a few responses are in.
+
+- 01-josh: Josh, 2026-11-12, design v2b before the Invert toggle (name line filled in afterward; it was blank). Josh: "definitely least confident about all the < shape ones".

@@ -1,0 +1,22 @@
+optical-spacing-survey v2
+name: Josh
+squint: off
+zoom: 1x
+screen: 1728px
+theme: light
+extended: hidden
+w1 notch 20.5
+w2 interlock-small 7.5
+w3 wedge 33.5
+w4 mixed-small 32.0
+w5 stars 33.0
+w6 notch-double 34.0
+w7 mixed-big 35.5
+w8 interlock-small-mirror 20.5
+w9 square-circle unset
+w10 notch-invert unset
+w11 tip-circle unset
+w12 square-circle-invert unset
+w13 notch-hue unset
+w14 tip-circle-hue unset
+w15 tips unset

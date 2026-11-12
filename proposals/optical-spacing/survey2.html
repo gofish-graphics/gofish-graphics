@@ -129,6 +129,27 @@
       .invert .shapes {
         fill: var(--card);
       }
+      /* the Invert toggle: white shapes on a black picture, whatever the theme.
+         The widgets that are inverted on their own flip back to black on white. */
+      .inv-all .widget:not(.invert) .stage {
+        background: #000;
+        border-radius: 8px;
+      }
+      .inv-all .widget:not(.invert) .shapes {
+        fill: #fff;
+      }
+      .inv-all .widget:not(.invert) .shapes .hue {
+        fill: #00ffff;
+      }
+      .inv-all .widget.invert .stage {
+        background: #fff;
+      }
+      .inv-all .widget.invert .shapes {
+        fill: #000;
+      }
+      .inv-all .widget.invert .shapes .hue {
+        fill: #000090;
+      }
       .more {
         margin: 20px 0 0;
       }
@@ -170,8 +191,9 @@
         .squintbar input[type="range"] {
           width: 60px;
         }
+        /* the readouts are dropped on phones so the Invert box fits */
         .squintbar output {
-          min-width: 2.4em;
+          display: none;
         }
       }
       .squintbar output {
@@ -221,7 +243,7 @@
         and don't think about it too long. Squinting can help. The Squint
         control at the top of the screen blurs the shapes, and its slider sets
         how much. The Zoom slider beside it makes the pictures larger or
-        smaller.
+        smaller, and the Invert box shows white shapes on black.
       </p>
       <div class="tools">
         <label>Your name (optional) <input type="text" id="name" /></label>
@@ -240,6 +262,7 @@
         <label for="zoom">Zoom</label>
         <input type="range" id="zoom" min="0.5" max="3" step="0.25" />
         <output id="zoom-out"></output>
+        <label><input type="checkbox" id="invert" /> Invert</label>
       </div>
       <div id="widgets"></div>
       <div class="send">
@@ -762,6 +785,18 @@
         addEventListener("resize", applyZoom);
         applyZoom();
 
+        const invert = document.getElementById("invert");
+        const applyInvert = () => {
+          invert.checked = !!state.invert;
+          document.body.classList.toggle("inv-all", !!state.invert);
+        };
+        invert.addEventListener("change", () => {
+          state.invert = invert.checked;
+          save();
+          applyInvert();
+        });
+        applyInvert();
+
         const results = () =>
           [
             "optical-spacing-survey v2",
@@ -773,6 +808,7 @@
             // the page's color scheme: in dark mode the plain widgets are light on dark
             `theme: ${document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")}`,
             `extended: ${extHost.hidden ? "hidden" : "shown"}`,
+            `invert: ${state.invert ? "on" : "off"}`,
             ...D.widgets.map(
               (w) =>
                 `w${w.n} ${w.key} ${state.u[w.n] != null ? (+state.u[w.n]).toFixed(1) : "unset"}`
