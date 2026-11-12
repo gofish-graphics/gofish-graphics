@@ -49,9 +49,11 @@ FULL_LINK = (
 
 SUMMARY = [
     "A stacked area is the limit of stacked bars. A stack only moves each bar and never resizes one, so in the limit it moves each <b>cross-section</b> of an area (its interval at one position u on the other axis) and keeps its length. That argument fixes the rules. It is not the interface: a shape gives its cross-sections as a <b>function</b> of u, and no spec or operator sees a list of samples. Sampling happens only inside the engine, at a tolerance.",
-    "An operator may use a small, closed set of operations on those functions (evaluate, add, scale, restrict, maximum and minimum, integrate), and writes back one offset function per child. A box answers with a constant function, so every node has cross-sections and nothing asks whether a child is a box. <code>crossSection</code> joins <code>geometry()</code> as one more query.",
-    "A stack's <code>baseline</code> option chooses where its own 0 is: <code>Baseline.start()</code>, <code>.end()</code>, <code>.middle()</code>, <code>.wiggle()</code> or <code>.at(part, fraction)</code>. Each gives every cross-section an offset and never changes a length. <code>spread</code> should take it too, except <code>wiggle</code>. It does not replace <code>anchor</code>, which is a choice per pair of children.",
-    "A density is two channels over one hidden variable t, <code>ribbon({ x: mass.support(), h: mass.density() })</code>, over a <code>Dist</code> type with typed methods. <code>partition</code> restricts the function to each cell, which draws the croissant with no grid and no <code>intersect</code>. A custom curve is a <code>reduce</code> whose result is a function value with its range.",
+    "Every function is one generic type, <code>Fun&lt;T&gt;</code>: a function of one parameter with its domain, its knots, and a <code>Curve</code> (linear, step, monotone or smooth) for how it runs between them. An operator may use a small, closed set of operations on those functions (map, zip, evaluate, add, scale, restrict, maximum and minimum, integrate), and writes back one offset function per child. A box answers with a constant function, so every node has cross-sections and nothing asks whether a child is a box. <code>crossSection</code> joins <code>geometry()</code> as one more query.",
+    "A stack's <code>baseline</code> option chooses where its own 0 is: <code>Baseline.start()</code>, <code>.end()</code>, <code>.middle()</code>, <code>.wiggle()</code> or <code>.at(part, fraction)</code>. Each gives every cross-section an offset and never changes a length. <code>spread</code> takes it too, except <code>wiggle</code>; the strongest of four rendered examples is a Likert visualization with gaps between its segments. It does not replace <code>anchor</code>, which is a choice per pair of children.",
+    "<code>StackOrigin</code>'s <code>mirrored</code> flag does not need to be stored. Whether an axis labels distances from 0 follows from the parts (every part is a nonnegative amount), so the stack can compute it, and <code>Baseline.at(part, fraction)</code> is all that <code>Trait.diverging</code> desugars to.",
+    "A density is two channels of one mark read at one parameter t, <code>ribbon({ x: mass.support(), h: mass.density() })</code>, over a <code>Dist</code> type with typed methods. <code>partition</code> restricts the function to each cell, which draws the croissant with no grid and no <code>intersect</code>. A custom density is a <code>reduce</code> that returns a Dist, <code>reduce((xs) =&gt; kde(xs))</code>. Any other function is <code>fun(f, { domain })</code>, after Chebfun and Julia's <code>Fun</code>. Nothing is called <code>fn</code>.",
+    "Before the scale factor σ is solved, a node can report only a box. The proposal gives every geometry query a claim form, a function of σ, so a stack can claim room by its cross-sections and <code>pack</code> can fit itself to its room (#967). Each claim is a closed form where one exists. Whether sizing may also run layout, for the cases with no closed form, is open.",
     "A <code>spread</code> could read the same cross-sections to place shapes by their outlines; how gaps should be measured so they look equal is designed on its own page, <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a>.",
 ]
 
@@ -60,9 +62,12 @@ SETTLED = [
     "The stacked area is spelled <code>chart(jobs).flow(stack({ by: \"series\", dir: \"y\" })).mark(ribbon({ x: \"date\", h: \"count\", fill: \"series\" }))</code>: a stack, then one ribbon per series.",
     "The thin-box limit is the argument that sets the rules, not the interface. The interface is a function of u, and sampling stays inside the engine.",
     "The stack's option is <code>baseline</code>, with values <code>Baseline.start()</code>, <code>.end()</code>, <code>.middle()</code>, <code>.at(part, fraction)</code> and <code>.wiggle()</code>. <code>Trait.diverging</code> stays the default and desugars to <code>Baseline.at</code>, and an explicit <code>baseline</code> over a diverging unit is an error.",
+    "The cross-section interface (a shape's cross-sections are a function, read with a closed set of operations) and the custom methods (<code>map</code> and one <code>reduce</code>) are the agreed direction. Details under them stay open where listed below.",
+    "The value at one u is a <b>cross-section</b>, the function from u to it is \"a shape's cross-sections\", and the trait is <code>HasCrossSection</code>. Users never write the word.",
+    "<code>spread</code> takes <code>baseline</code> too, with <code>Baseline.start()</code>, <code>.end()</code>, <code>.middle()</code> and <code>.at(part, fraction)</code>. <code>Baseline.wiggle()</code> stays stack-only. <code>layer</code> and <code>scatter</code> do not take it.",
     "Custom methods on a field expression are two verbs: <code>.map((x, i, xs) =&gt; value, { unit })</code> for one value per row, and <code>.reduce((xs) =&gt; value, { unit })</code> for one value per group. There is one form of <code>reduce</code>.",
     "A 100% stack is <code>normalize</code> on the values followed by a plain stack: there is no divide operation.",
-    "The density channel pair is spelled <code>support()</code> and <code>density()</code> (Josh is checking the name with Matt Kay, ggdist). Rejected: <code>value()</code>, which clashes with GoFish's <code>value(...)</code> constructor, and <code>points()</code> or <code>grid()</code>, which name the sampling.",
+    "A density is drawn by a channel pair, <code>support()</code> for the position (Josh is checking the name with Matt Kay, ggdist) and the density for the height; whether that is <code>density()</code> or <code>pdf()</code> is decision 6. Rejected for the position: <code>value()</code>, which clashes with GoFish's <code>value(...)</code> constructor, and <code>points()</code> or <code>grid()</code>, which name the sampling.",
     "<code>.then</code> cannot be the custom method's name: a field expression with a <code>then</code> method would be adopted as a promise by <code>resolveValue</code>.",
     "How a bin's cells are shared stays under review, so no callback form is proposed for bins here.",
 ]
@@ -70,10 +75,13 @@ SETTLED = [
 TERMS = [
     ("Cross-section", "A shape's interval along one axis at one position u on the other axis: how far it reaches below and above its baseline there. It is two-sided, and it is a query at a point, not a sample. \"A shape's cross-sections\" means the function from u to that interval. A box's cross-section is the same at every u."),
     ("Slice", "Used only in the limit argument: one of the thin boxes a stacked bar visualization is made of."),
-    ("Function value", "A value that is a function of one hidden parameter, with its range (the <code>Fn</code> type). A density's height over t is one."),
-    ("Knot", "A point where a function value has a corner. A function built from rows has one knot per row, and between knots it is a straight line or its <code>curve</code>."),
+    ("Function value", "A function of one parameter t, with its domain, the interval of t it is defined over (the generic type <code>Fun&lt;T&gt;</code>). A density's height over t is one, and so is a cross-section."),
+    ("Parameter of a mark", "The one variable t that a mark which draws along a path is read at. Every channel of it that holds a function is read at the same t. The user never writes t."),
+    ("Knot", "A point where a function value starts a new piece. A function built from rows has one knot per row, and between knots it runs by its <code>curve</code>, one of <code>Curve.linear()</code>, <code>.step()</code>, <code>.monotone()</code> and <code>.smooth()</code>."),
     ("Baseline", "A node's own 0 point. A rect's baseline is its bottom edge, and it bubbles up: a parent with <code>alignment: \"baseline\"</code> lines up its children's 0 points. A stack's <code>baseline</code> option chooses where the stack's 0 is. In the code the model is <code>StackOrigin</code> (<code>constraints/distribute.ts</code>)."),
     ("Lowering", "The last step of rendering, which turns a laid-out node into drawing commands (paths, in pixels)."),
+    ("Scale factor (σ)", "Pixels per data unit in one scope. It is solved once, from the root's claim against the canvas, before any node is laid out."),
+    ("Claim", "What a node reports up the tree before σ is solved: how much room it needs, with every number a function of σ. Today a claim is a box: one <code>Extent</code> per axis (<code>ast/extent.ts</code>)."),
     ("Per-x form", "<code>scatter</code> or <code>spread</code> by x, then <code>stack</code>, which is today's spelling of a stacked area. The stack runs once in each x column and sees only that column."),
     ("Field expression", "<code>field(\"mass\")</code>, a column expression like polars' <code>pl.col(\"mass\")</code>. Bare, it is a value per row. Its methods make other kinds of value (see \"What the methods compute\")."),
 ]
@@ -102,7 +110,7 @@ SECTIONS = [
 <li><b>So in the limit a stack moves each cross-section and never resizes it.</b> Correct. The thickness at each x never changes, only the offset, so stacking is a translation at each u. Three invariants follow. Thickness is kept at every u, so every band keeps its area (this is Cavalieri's principle: two regions whose cross-sections have equal length at every u have equal area). The order of the bands is kept at every u. A baseline is only an offset, the same for every band at one u.</li>
 <li><b>Series sampled at different x fit too.</b> Splitting a slice in two does not change the shape, so the columns can use the union of every series' breakpoints. Correct, with one condition: the new slice's height is the series' value at the new x, which comes from its curve (linear between rows, as ggplot2 reads it). Outside its own x range a series' thickness is 0. In the function form this is just evaluation: a series' cross-section can be asked at any u.</li>
 <li><b>Contour spacing reads the same cross-sections.</b> The closest approach of two shapes is the smallest gap over their shared positions, a skyline. Correct, with a limit: the gap is measured along the spacing axis at each u, not as a straight-line distance. The optical spacing page shows what that does to glyphs and shapes.</li>
-<li><b>A rigid shape (a circle, text, a line with no thickness) is one box that cannot be split, so it gets one translation.</b> This needs a correction. The full survey made a rigid part in a curved stack an error. The limit gives a rigid part a defined place instead: it rests on the highest point of the boundary below it across its width, as a skyline does. But then the cross-sections under it are no longer glued, and a gap opens wherever the boundary below is lower. So the argument turns the old rule into a choice, which is decision 2.</li>
+<li><b>A rigid shape (a circle, text, a line with no thickness) is one box that cannot be split, so it gets one translation.</b> This needs a correction. The full survey made a rigid part in a curved stack an error. The limit gives a rigid part a defined place instead: it rests on the highest point of the boundary below it across its width, as a skyline does. But then the cross-sections under it are no longer glued, and a gap opens wherever the boundary below is lower. So the argument turns the old rule into a choice, which is decision 1.</li>
 </ol>
 <p><b>What the argument does not say.</b> It does not say a shape is stored as slices, or that an operator should see them. The slices are the thin boxes of the argument. Shrinking them gives a function of u, and the next section makes that function the interface.</p>
 <h4>How it relates to the approaches in the full survey</h4>
@@ -124,29 +132,36 @@ SECTIONS = [
         blocks=[
             ("p", """<p>This section says what a shape reports, what an operator may do with it, what the operator writes back, and how this fits the <code>geometry()</code> queries that exist today. Every type shown here is in <code>types-sketch.ts</code>, which typechecks with <code>tsc --noEmit --strict</code>.</p>
 <h4>A function value</h4>
-<p>A function value has its own range, so a spec never names one. It also lists its knots, which is what makes most queries exact. A function built from rows is a straight line between rows (or its <code>curve</code>), so its sum, maximum and integral come from the knots alone, with no sampling. A function with no closed form, such as a kernel density, is marked <code>\"smooth\"</code>, and a query on it runs to a tolerance.</p>"""),
-            ts_block("The function value", "fn"),
+<p>Every function on this page is one generic type, <code>Fun&lt;T&gt;</code>: a function of one parameter, with the interval it is defined over (its <i>domain</i>), so a spec never names one. A cross-section is a <code>Fun&lt;Interval&gt;</code>, an edge, a thickness or a density is a <code>Fun&lt;number&gt;</code>, an operator's offset is a <code>Fun&lt;number&gt;</code>, and the claim in \"Geometry before layout\" is a <code>Fun&lt;Extent&gt;</code>.</p>
+<p>A function also lists its knots and how it runs between them. That is the <code>Curve</code> family GoFish already has: <code>Curve.linear()</code>, <code>.step()</code>, <code>.monotone()</code> and <code>.smooth()</code> are read over the parameter of a run (<code>families/curve.ts</code>), and they are the same values a ribbon's <code>curve</code> option takes, so a ribbon's cross-sections carry the ribbon's own curve. <code>catmullRom</code> is a shape on screen and the routers (<code>bezier</code>, <code>orthogonal</code>, <code>arc</code>, <code>perfectArrows</code>) join pairs of points, so neither is allowed here. What the curve makes exact:</p>
+<ul>
+<li><b><code>linear</code> and <code>step</code></b>: sums, maxima and integrals come from the knots alone. A sum of two linear functions over the union of their knots is linear again, and so is a sum of two steps.</li>
+<li><b><code>monotone</code> and <code>smooth</code></b>: both are cubic Hermite splines, one cubic per interval between knots (<code>src/spline.ts</code>: Steffen's cubic and the modified Akima cubic). A sum over the union of knots is still one cubic per piece, so a maximum (a root of a quadratic) and an integral have a closed form per piece. But the sum is not the curve <code>Curve.monotone</code> would draw through the summed values, because each curve's slopes come from its own values. So the engine has to keep the cubic pieces, not a curve name. Until it does, these are read to a tolerance.</li>
+<li><b>No curve</b>: a function with no knots, such as a kernel density, is read to a tolerance.</li>
+</ul>"""),
+            ts_block("The function value", "function-value"),
             ("p", """<h4>The cross-section query</h4>
-<p>A shape's cross-sections are one query: given an axis, the function from u (the position on the other axis) to the interval the shape covers there, measured from its baseline. A box answers with a constant function, the same way <code>defaultGeometry</code> falls back to the box for the other queries. So every node has cross-sections, and no operator dispatches on whether a child is a box or a ribbon.</p>"""),
+<p>A shape's cross-sections are one query: given an axis, a <code>Fun&lt;Interval&gt;</code> from u (the position on the other axis) to the interval the shape covers there, measured from its baseline. A box answers with a constant function, the same way <code>defaultGeometry</code> falls back to the box for the other queries. So every node has cross-sections, and no operator dispatches on whether a child is a box or a ribbon.</p>"""),
             ts_block("The query, and the helper every reader calls", "cross-section"),
             ("p", """<h4>What an operator may do</h4>
-<p>An operator may use only these operations. Each one takes functions and returns a function or a number, written as composing closures, so none of them samples. The sketch file has a short implementation of each.</p>
+<p>An operator may use only these operations. Each one takes functions and returns a function or a number, written as composing closures, so none of them samples. Two are generic: <code>map</code> applies a function to every value (an edge and a thickness are <code>map</code>s of a cross-section), and <code>zip</code> combines two functions pointwise over the hull of their domains (a sum is a <code>zip</code>). The sketch file has a short implementation of each.</p>
 <div class="table-wrap"><table>
-<tr><th>Operation</th><th>What it gives</th><th>Exact for rows?</th></tr>
-<tr><td>Evaluate at u</td><td>a thickness or an edge at one position; 0 outside the range</td><td>yes</td></tr>
-<tr><td>Add two, pointwise</td><td>the stack's running sum; the knots are the union</td><td>yes, the result is still linear</td></tr>
+<tr><th>Operation</th><th>What it gives</th><th>Exact for <code>linear</code> and <code>step</code>?</th></tr>
+<tr><td><code>map</code>, <code>zip</code></td><td>an edge, a thickness, a sum, a claim's sum</td><td>yes, when the function applied is linear</td></tr>
+<tr><td>Evaluate at u</td><td>a thickness or an edge at one position; 0 outside the domain</td><td>yes</td></tr>
+<tr><td>Add two, pointwise</td><td>the stack's running sum; the knots are the union</td><td>yes, the curve is kept</td></tr>
 <tr><td>Scale by a number</td><td>minus half the total for <code>Baseline.middle()</code>; minus an edge</td><td>yes</td></tr>
 <tr><td>Restrict to a cell</td><td>what <code>partition</code> does</td><td>yes</td></tr>
-<tr><td>Maximum and minimum over the range</td><td>the box, and the scale domain</td><td>yes: at a knot or an end</td></tr>
-<tr><td>Integrate over the range</td><td>area</td><td>yes: the trapezoid rule on the knots</td></tr>
+<tr><td>Maximum and minimum over the domain</td><td>the box, and the scale domain</td><td>yes: at a knot or an end</td></tr>
+<tr><td>Integrate over the domain</td><td>area</td><td>yes: trapezoids on the knots for <code>linear</code>; each value held to the next knot for <code>step</code></td></tr>
 </table></div>
-<p>What it writes back: one offset per child, <code>offset: (u: number) =&gt; number</code>. Today it writes one number, the translate. For a box child the function is constant, which is today's translate. What it may not do: read a child's rows, vertices or samples, or change the size of a cross-section.</p>
-<p><b><code>Baseline.wiggle()</code> needs more.</b> d3's wiggle chooses the baseline's slope at u from each band's thickness and its slope there, weighted by thickness. So it needs the derivative of each thickness, products of functions, and a running integral (an integral from the start up to u, which is a function, not a number). For functions built from rows these are still exact: the derivative of a straight line is a constant between knots. These three operations join the set only for wiggle, which is part of decision 5.</p>"""),
+<p>What it writes back: one offset per child, a <code>Fun&lt;number&gt;</code>. Today it writes one number, the translate. For a box child the function is constant, which is today's translate. What it may not do: read a child's rows, vertices or samples, or change the size of a cross-section.</p>
+<p><b><code>Baseline.wiggle()</code> needs more.</b> d3's wiggle chooses the baseline's slope at u from each band's thickness and its slope there, weighted by thickness. So it needs the derivative of each thickness, products of functions, and a running integral (an integral from the start up to u, which is a function, not a number). For functions built from rows these are still exact: the derivative of a straight line is a constant between knots. These three operations join the set only for wiggle, which is part of decision 3.</p>"""),
             ts_block("The operations, and what an operator writes back", "operations"),
             ts_block("A stack, written with those operations", "stack"),
             ("p", """<h4>How it relates to <code>geometry()</code></h4>
 <p>Today <code>Geometry</code> is <code>HasBox &amp; HasEnclosingCircle &amp; HasOutline</code> (<code>ast/geometry/index.ts</code>). Every query except <code>box</code> is optional, each has a helper that falls back to the box, and <code>GoFishNode.geometry()</code> answers only after layout, in the node's local pixel frame. Its header comment says the form that answers while sizing is issue #967. <code>crossSection</code> joins <code>Geometry</code> as one more optional query, with the helper above. The other queries can be read from it: <code>box</code> is the cross-section's minimum and maximum, and an outline is the upper edge followed by the lower edge reversed, sampled to the outline's tolerance.</p>
-<p>A stack, though, needs the function before layout, in data units. It gives the scale its own space, which is the largest total over u, and the scale must be solved before anything has pixels. The prototype shows the split: its <code>resolveUnderlyingSpace</code> uses the function in data units, and its <code>layout</code> uses it in pixels (<code>_prototypeFnCurve.tsx</code>). So the same function is asked twice: before layout, as the child's size along the stack axis (a function of u instead of one number), and after layout, as the geometry query. The form before layout is the same open problem as #967, and this page does not design it in detail (decision 13).</p>
+<p>A stack, though, needs the function before layout, in data units. It gives the scale its own space, which is the largest total over u, and the scale must be solved before anything has pixels. The prototype shows the split: its <code>resolveUnderlyingSpace</code> uses the function in data units, and its <code>layout</code> uses it in pixels (<code>_prototypeFnCurve.tsx</code>). So the same function is asked twice: before σ is solved, as the child's claim along the stack axis (a function of u instead of one number), and after layout, as the geometry query. \"Geometry before layout (#967)\" below designs the claim form.</p>
 <p><b>Does a function-valued size fit how a stack folds its children's spaces?</b> On main, PR #1268 is merged, and it names the properties traits; the trait a stack checks is <code>CanSum</code> on the units it adds. The stack's fold is <code>distributeSpaceFold</code> in <code>constraints/distribute.ts</code>: it needs every part's space to be continuous with an origin (pinned or free), unifies their units, checks with <code>Units.sum</code> that the units of the free parts can be summed, and lays the parts end to end, each part's interval about its baseline added to the running sum. A function-valued size fits that: the sum is pointwise, the unit check reads units and not values so it does not change, and the stack's space becomes the minimum of its lowest edge and the maximum of its highest edge over u, which are two queries in the set above. I have not built it, so this is a reading of the code, not a test.</p>
 <h4>What changes for <code>ribbon</code></h4>
 <p>On main, <code>ribbon</code> and <code>line</code> are relational marks (<code>createRelationalMark</code> in <code>ast/marks/chart.ts</code>): each builds a <code>Connect</code> node that joins consecutive marks, and in <code>.mark()</code> position it adds an invisible <code>blank()</code> per row for the connector to join. A ribbon there has no <code>x</code> channel and no shape of its own. In the proposal a ribbon is one node per series that owns its function, built from its rows (one knot per row) or given as a function value, and it answers <code>crossSection</code>, so the stack above it moves the whole band at once.</p>
@@ -155,11 +170,11 @@ SECTIONS = [
 <ol>
 <li><b>When a mark is drawn (lowering).</b> The function is resampled adaptively, in pixels, composed with the coordinate transform, to half a pixel. The prototype does this with the existing <code>adaptive-resampling.ts</code>.</li>
 <li><b>When a geometry query is asked at a tolerance.</b> This is how <code>outline(tolerance)</code> works today: \"a polyline that is never farther from the true shape than the tolerance asked for\" (<code>ast/geometry/outline.ts</code>).</li>
-<li><b>When a maximum or an integral of a function with no closed form is needed</b>, such as a kernel density's peak for the scale domain, or the integral inside <code>Baseline.wiggle()</code>. For functions built from rows none is needed, since the knots give exact answers.</li>
+<li><b>When a maximum or an integral of a function with no closed form is needed</b>, such as a kernel density's peak for the scale domain, or the integral inside <code>Baseline.wiggle()</code>. For a <code>linear</code> or <code>step</code> function none is needed, since the knots give exact answers.</li>
 </ol>
-<p>One honest exception: the prototype's <code>dataExtent</code> finds a curve's maximum with 512 even samples plus golden-section refinement, when the mark is built, before layout. That is the one place it samples early. In the proposal it is case 3, and it runs only for a function marked <code>\"smooth\"</code>.</p>
+<p>One honest exception: the prototype's <code>dataExtent</code> finds a curve's maximum with 512 even samples plus golden-section refinement, when the mark is built, before layout. That is the one place it samples early. In the proposal it is case 3, and it runs only for a function with a cubic curve or none. \"Geometry before layout (#967)\" below gives it one named place.</p>
 <h4>Naming: cross-section</h4>
-<p>Josh was unsure about \"profile\" for the cumulative slices, because it suggests one side only. The precedents agree with him. The recommendation is <b>cross-section</b> for the value at one u: an interval, so two-sided by construction, and a query at a point rather than a sample. The trait is <code>HasCrossSection</code>. Users never write the word in a spec.</p>
+<p>Settled: <b>cross-section</b>, and the trait <code>HasCrossSection</code>. It names an interval, so it is two-sided, where \"profile\" suggests one side. The names that were compared:</p>
 <div class="table-wrap"><table>
 <tr><th>Name</th><th>Where</th><th>What it names</th><th>Sides</th></tr>
 <tr><td>profile</td><td>elevation profile, lathe profile, depth profile</td><td>one curve</td><td>one, which is Josh's concern</td></tr>
@@ -172,7 +187,48 @@ SECTIONS = [
 <tr><td>ribbon, area</td><td>ggplot2 <code>geom_ribbon(ymin, ymax)</code>, d3 <code>area().y0().y1()</code></td><td>a band given by its two edges</td><td>two</td></tr>
 <tr><td>ascent, descent</td><td>typography; GoFish's own words</td><td>reach above and below a baseline (GoFish never says height and depth for this)</td><td>two, named separately</td></tr>
 </table></div>
-<p>Runners-up: \"extent\" (d3's <code>extent</code> returns <code>[min, max]</code>, but GoFish already uses it for a box's extent) and \"band\" (it clashes with a kernel's bandwidth on this same page, and with d3's band scale).</p>"""),
+<p>Not chosen: \"extent\" (d3's <code>extent</code> returns <code>[min, max]</code>, but GoFish already uses <code>Extent</code> for a size claim) and \"band\" (it clashes with a kernel's bandwidth on this same page, and with d3's band scale).</p>"""),
+        ],
+    ),
+    dict(
+        id="before-layout",
+        title="Geometry before layout (#967)",
+        blocks=[
+            ("p", """<p>A stack needs its children's cross-sections before σ is solved, and <code>pack</code> needs its children's circles at the same moment (#967). This section proposes one design for both. (An AABB is an axis-aligned bounding box, the box every node reports today.)</p>
+<h4>Where the gap is</h4>
+<div class="table-wrap"><table>
+<tr><th>Moment</th><th>What flows</th><th>What a node can know about a child</th></tr>
+<tr><td>1. Before σ is solved (<code>resolveExtent</code>, a walk after the types)</td><td>Each node's claim, up the tree: one <code>Extent</code> per axis (<code>ascent</code>, <code>descent</code>, <code>width</code>), each a <code>Pwl.Value</code>, a piecewise linear function of σ (<code>ast/extent.ts</code>, <code>solver/pwl.ts</code>), or none for content that takes the room it is given. The scope fit (<code>ScopeRegistry.fit</code>, <code>solver/scopes.ts</code>) then solves σ from the root's claim against the canvas.</td><td>Its box, as functions of σ. Nothing else.</td></tr>
+<tr><td>2. Inside a parent's <code>layout()</code></td><td>Down: a size, the scales, and optionally a shape (a convex ring; <code>partition</code>, <code>treemap</code> and <code>enclose</code> make one). Up: the laid-out child.</td><td>Its full <code>geometry()</code>: box, enclosing circle, outline at a tolerance. <code>pack</code> places its circles this way today.</td></tr>
+<tr><td>3. Drawing (lowering)</td><td>The same laid-out tree, in pixels.</td><td>The same laid-out nodes.</td></tr>
+</table></div>
+<p>So moments 2 and 3 already share one laid-out tree: layout and drawing are as close as Josh guessed. The one place where a node knows only a box is moment 1, before σ. That is why <code>pack</code> cannot fit itself to its room (#967), and why a stack cannot yet be given cross-sections. The dividing line is the scale solve, not the line between layout and drawing.</p>
+<h4>The proposal: a claim is geometry as a function of σ</h4>
+<p>Every geometry query gets a claim form with the same name, whose numbers are functions of σ in place of pixels. After σ is solved, each claim evaluated at σ is the after-layout query for a node that is sized by its data.</p>"""),
+            ts_block("The claim, and a stack's claim written with map and zip", "claim"),
+            ("p", """<div class="table-wrap"><table>
+<tr><th>Consumer</th><th>Claim it reads</th><th>Closed form</th></tr>
+<tr><td>A stack of ribbons</td><td><code>crossSection</code></td><td>Each child's thickness at u is <code>a(u) &times; σ + b(u)</code>: a data amount times σ, plus fixed pixels. The stack's claim at u is the sum (<code>Pwl.add</code>). Its box claim is the largest total over u; for functions built from rows that is the envelope over the knots (<code>Pwl.envelope</code>), which is piecewise linear in σ, so the existing fit solves it with no change. When every part is data only it is <code>σ &times; max<sub>u</sub> &Sigma; a(u)</code>: linear, with one maximum taken in data units.</td></tr>
+<tr><td><code>pack</code> (#967)</td><td><code>enclosingRadius</code></td><td>When every radius is data, the enclosing radius is <code>R(1) &times; σ</code>: one pack at σ = 1, because packing scales exactly. When every radius is in pixels, it is a constant.</td></tr>
+<tr><td>A smooth function (a kernel density)</td><td><code>crossSection</code></td><td><code>σ &times; f(u)</code>, with the maximum of f found once in data units, to a tolerance. This is the sampling the prototype's <code>dataExtent</code> does, now in one named place.</td></tr>
+</table></div>
+<p>u is in the cross axis's data units, so a cross-section claim does not depend on the cross axis's own scale. A child whose cross extent is in pixels (a rigid part) is the rigid-part decision.</p>
+<h4>Who else wants more than a box</h4>
+<ul>
+<li><b><code>pack</code></b> wants <code>enclosingRadius</code> at moment 1 (#967; <code>pack.tsx</code> has <code>TODO(#967)</code> and throws for a child with no pixel size). The bubble treemap (#1221) needs it too: its PR, #1226, declared #967 and #1233 as shortcuts and sizes the countries in pixels.</li>
+<li><b><code>spread</code> spacing by outline</b> (the optical spacing page) would want cross-sections at moment 1, because spacing is part of a spread's claim. Not checked in code; it is still a design.</li>
+<li><b><code>Overlap.separate</code> and beeswarms</b> read each child's <code>enclosingCircle</code> at moment 2, after the solve (<code>constraints/overlap.ts</code>). The scatter claims no size on its free axis, so a beeswarm takes the room its dots need and does not shrink to fit. A claim would need the swarm itself: no closed form.</li>
+<li><b>Labels placed against outlines</b> read outlines at moment 2, in the <code>labelPlace</code> step, which runs last. Whether placed labels should claim room before σ: not checked.</li>
+<li><b><code>enclose</code></b> claims the hull of its members' box claims grown by its padding (<code>enclose.tsx</code>), but draws around their outlines. A claim that hugs the outlines would need outline claims (see #974).</li>
+<li><b>Text that wraps to a proposed width</b> would need its width before its height. GoFish text does not wrap today. Not checked further.</li>
+</ul>
+<h4>Should layout and sizing intertwine?</h4>
+<ul>
+<li><b>Keep them separate</b> (the lean, for every case that has a closed form). Claims are closed-form functions of σ, there is one solve, and then one layout. The cost: every query needs a claim form that someone derives by hand, and some queries have none.</li>
+<li><b>Intertwine.</b> A claim may answer by running the subtree's layout at a trial σ and measuring it, and the solver searches for σ. This is what #967's comment planned for <code>pack</code> with mixed pixel and data radii, or with padding: bisection, at most 32 packs. That comment says <code>Monotonic</code> already has an <code>unknown</code> kind with a <code>run</code> function in <code>util/monotonic.ts</code>. That is no longer true. #1176 deleted <code>Monotonic</code> and wrote every claim as a <code>Pwl.Value</code> (commit e799b567a, which turned the unknown kind into a closure kind), and a later step removed the closures (77f80c776). Today <code>Pwl</code> has only <code>affine</code> and <code>piecewise</code>, and the fit inverts them exactly (<code>Pwl.solve</code>, <code>Pwl.fill</code>). So an opaque claim kind is new work, and it would bring back what #1176 removed on purpose. Its costs: up to N layouts of the subtree per solve; nested opaque claims multiply; and layout must be safe to run more than once, with no state carried from an earlier run.</li>
+</ul>
+<p><b>Josh's comparison to typing and elaboration.</b> (Elaboration is the pass that turns checked source into the explicit internal program; type checkers often do it in the same walk as checking.) The claim walk goes up the tree like inferring a type, with σ left as an unknown; the solve fixes σ; layout goes down, giving each child a size and a shape, and builds the placed tree. A closed-form claim keeps those walks apart. An opaque claim is the place where checking has to run the program to finish, which type checkers for dependent types do, and pay for.</p>
+<p><b>The lean.</b> Closed forms for stacks, ribbons, densities and an all-data <code>pack</code>. Add the opaque kind only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout (decision 14). And implement <code>pack</code>'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers (decision 15; lean yes).</p>"""),
         ],
     ),
     dict(
@@ -270,27 +326,252 @@ SECTIONS = [
 <tr><td><code>anchor</code></td><td>along the axis</td><td>which point of each child the spacing is measured between</td><td>one rule for each pair of neighbors</td><td><code>\"edge\"</code> (the default): a gap between facing edges. <code>\"start\" | \"middle\" | \"end\" | \"baseline\"</code>: a fixed pitch between those points. A stack ignores it: glued parts always chain head to tail</td></tr>
 <tr><td><code>baseline</code> (new)</td><td>along the axis</td><td>which point of the whole result is its own 0</td><td>one for the whole</td><td>internal only: <code>StackOrigin</code> (<code>{ part, fraction, mirrored }</code>), passed as <code>origin</code> and only with <code>glue</code>. The code says \"a spread packs boxes and has no origin\"</td></tr>
 </table></div>
-<p>So <code>baseline</code> does not replace <code>anchor</code>: one is a choice for each pair of neighbors, the other one choice for the whole. What <code>baseline</code> replaces is the internal <code>StackOrigin</code> and the <code>origin</code> field, and the implicit behavior of <code>Trait.diverging</code>, which becomes a default that desugars to <code>Baseline.at(...)</code>. One detail: <code>StackOrigin</code> has a third field, <code>mirrored</code>, which a diverging unit sets so that the parts on both sides are amounts measured away from the 0. <code>Baseline.at</code> alone sets only the 0, so whether it carries <code>mirrored</code> is decision 4.</p>
-<p><b>On <code>spread</code>.</b> A stack is a spread with <code>glue</code>; they are one node, <code>Spread</code>. The recommendation is to allow <code>baseline</code> on <code>spread</code> too, with <code>start</code>, <code>end</code>, <code>middle</code> and <code>at(part, fraction)</code>. \"Which point is my 0\" is a question every operator that places children along an axis can answer, and a parent's <code>alignment: \"baseline\"</code> already reads it. <code>Baseline.wiggle()</code> stays stack-only, because it needs glued cross-sections. <code>layer</code> and <code>scatter</code> do not take it: their children are placed in one shared space, whose 0 is the space's own. This is decision 3. Two uses (proposed code, not run):</p>"""),
-            ["code", "A diverging bar visualization with gaps between the bars (not run)", """chart(survey)
+<p>So <code>baseline</code> does not replace <code>anchor</code>: one is a choice for each pair of neighbors, the other one choice for the whole. What <code>baseline</code> replaces is the internal <code>StackOrigin</code> and the <code>origin</code> field, and the implicit behavior of <code>Trait.diverging</code>, which becomes a default that desugars to <code>Baseline.at(...)</code>.</p>
+<p><b>No <code>mirrored</code> field.</b> <code>StackOrigin</code> has a third field, <code>mirrored</code>, which a diverging unit sets (<code>stackOrigin</code> in <code>ast/schema.ts</code>). It does two things today. An axis over a mirrored space labels each tick with its distance from 0 (<code>elaborateContinuousAxis</code> in <code>ast/axes/elaborate.tsx</code>), so a Likert axis reads 40 20 0 20 40. And a stack with it rejects a negative part (<code>distributeSpaceFold</code> in <code>ast/constraints/distribute.ts</code>). Both rest on one fact the stack can already see: every part is a nonnegative amount, that is, every part's descent is 0. So the field is not needed. The proposal is that the stack computes the flag from its parts instead of storing it on the origin. <code>Baseline.at(part, fraction)</code> is then exactly the two remaining fields of <code>StackOrigin</code>, and <code>Trait.diverging</code> desugars to it with nothing left over. With the 0 at the start, the distance from 0 is the value, so nothing changes for a plain stack. With <code>Baseline.end()</code> the labels read as distances too, which suits bars that grow the other way. A stack with a negative part keeps signed labels, as today.</p>
+<p>Three details. A computed flag cannot reject a negative part, since a negative part only makes the labels signed. If that error should stay, it becomes a check that <code>Trait.diverging</code> makes on its parts, and it needs no flag. A union already follows the same rule: <code>overlay</code> in <code>graphicalOperators/alignment.ts</code> keeps the flag only when every child has it (<code>allMirrored</code>) and the result has a 0, so a layer of two stacks keeps distances and a layer of a stack and a signed line gets signed labels. And the code drops the flag in some places today (<code>TODO(#995)</code> in <code>underlyingSpace.ts</code>: layer axis merging, a coord's declared window, and <code>anchorAt</code>). This is a reading of the code. It has not been run.</p>
+<h4>From <code>Trait.diverging</code> to <code>Baseline.at</code></h4>
+<p><code>Trait.diverging(midpoint?)</code> already desugars to a part and a fraction. Its midpoint is a point along the level order, where level i spans [i, i + 1]; the default is n / 2 for n levels (<code>families/trait.ts</code>). <code>stackOrigin</code> in <code>ast/schema.ts</code> turns it into <code>{ part, fraction }</code>: inside a level, that far through the part; on a boundary, the tail of the first part laid out past it (fraction 0), or the head of the last part when every part lies before it. In general, midpoint = rank(level) + fraction.</p>
+<div class="table-wrap"><table>
+<tr><th>Trait</th><th>Levels</th><th>Midpoint</th><th>Baseline</th></tr>
+<tr><td><code>Trait.diverging()</code></td><td>5 Likert levels</td><td>2.5</td><td><code>Baseline.at(\"Neutral\", 0.5)</code></td></tr>
+<tr><td><code>Trait.diverging()</code></td><td>Male, Female</td><td>1</td><td><code>Baseline.at(\"Female\", 0)</code></td></tr>
+<tr><td><code>Trait.diverging(3)</code></td><td>5 Likert levels</td><td>3</td><td><code>Baseline.at(\"Agree\", 0)</code>, the 4th level</td></tr>
+</table></div>
+<p>So a population pyramid with a gap and no label in it is <code>Baseline.at(\"Female\", 0)</code> on a spread. With the same <code>spacing</code> in every row, the start of Female and the middle of the gap differ by half a gap in every row alike, so the picture is the same.</p>
+<p><b>A part the data lacks.</b> The trait keeps one rule that <code>Baseline.at</code> must keep too: the 0 is defined by the level order, not by the parts present, so \"a group the data lacks moves nothing\" (<code>stackOrigin</code>'s comment). <code>Baseline.at(\"Neutral\", 0.5)</code> in a row with no Neutral answers puts the 0 on the boundary where Neutral would be. That needs the column's order: its declared levels (<code>Domain.discrete</code>), which <code>stackOrigin</code> reads today, or, with none declared, the order the split puts groups in. What <code>Baseline.at</code> does when the named part is absent, and when the column has no declared order, is decision 2; the lean is to do what the trait does.</p>
+<p><b>On <code>spread</code>.</b> A stack is a spread with <code>glue</code>; they are one node, <code>Spread</code>. Settled: <code>spread</code> takes <code>baseline</code> too, with <code>start</code>, <code>end</code>, <code>middle</code> and <code>at(part, fraction)</code>. A parent's <code>alignment: \"baseline\"</code> already reads a child's 0. <code>Baseline.wiggle()</code> stays stack-only, because it needs glued cross-sections. <code>layer</code> and <code>scatter</code> do not take it: their children are placed in one shared space, whose 0 is the space's own.</p>
+<p>Four examples follow, strongest first, and then the gallery's population pyramid. Each image is a real render of an emulation in today's API (<code>stories/proposals/stack-profile/BaselineSpread.stories.tsx</code>). The proposed code does not run yet.</p>"""),
+            ("item", dict(
+                img="baseline-spread-likert-gaps.png",
+                cap="Five survey questions with 200 answers each, from the gallery Likert story's made-up survey. Each row's segments have gaps between them and are centered on the middle of Neutral. Emulated: each segment's ends are computed in <code>derive</code>, with the gap in data units, so the x axis shows negative numbers on the disagree side. <b>Judgment:</b> the strongest. Where 0 falls depends on each row's data, so cutting the rows into columns cannot do it, and the only other way today is a stack with a white stroke, which fakes the gaps by eating into each bar.",
+                label="Proposed",
+                js="""chart(survey, { color: likertColors })
   .flow(
     spread({ by: "question", dir: "y" }),
-    spread({ by: "response", dir: "x", spacing: 2, baseline: Baseline.at("Neutral", 0.5) }) // @hl
+    spread({
+      by: "response",
+      dir: "x",
+      spacing: 3,
+      baseline: Baseline.at("Neutral", 0.5), // @hl
+    })
   )
-  .mark(rect({ w: "count", fill: "response" }));""", """chart(survey).flow(
+  .mark(rect({ w: "count", fill: "response" }))
+  .render(root, { w: 480, h: 200 });""",
+                py="""chart(survey, color=likert_colors).flow(
     spread(by="question", dir="y"),
-    spread(by="response", dir="x", spacing=2, baseline=Baseline.at("Neutral", 0.5)),  # @hl
-).mark(rect(w="count", fill="response"))"""],
-            ["code", "Rows of small groups lined up on a chosen member: each patient's visits, with the treatment visit at 0 (not run)", """chart(visits)
+    spread(by="response", dir="x", spacing=3, baseline=Baseline.at("Neutral", 0.5)),  # @hl
+).mark(rect(w="count", fill="response")).render(w=480, h=200)""",
+                today_label="Today (runs; <code>fromNeutral</code> is about 20 lines of offset arithmetic)",
+                today_js="""chart(survey, { w: 480, h: 200, color: LIKERT })
   .flow(
-    spread({ by: "patient", dir: "y" }), // alignment: "baseline" is the default
-    spread({ by: "step", dir: "x", spacing: 4, baseline: Baseline.at("treatment", 0) }) // @hl
+    derive(fromNeutral), // @hl
+    spread({ by: "question", dir: "y", spacing: 6 }),
+    scatter({ by: "response", xMin: "lo", xMax: "hi" }) // @hl
   )
-  .mark(rect({ w: 12, h: 12, fill: "kind" }));""", """chart(visits).flow(
-    spread(by="patient", dir="y"),  # alignment="baseline" is the default
-    spread(by="step", dir="x", spacing=4, baseline=Baseline.at("treatment", 0)),  # @hl
-).mark(rect(w=12, h=12, fill="kind"))"""],
-            ("p", """<p><b><code>anchor</code> itself.</b> Its future is on the <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a> page, where the earlier idea was that a pitch spacing absorbs it.</p>
+  .mark(rect({ fill: "response" }));""",
+            )),
+            ("item", dict(
+                img="baseline-spread-concordance.png",
+                cap="Six hand-made sentences that contain \"spread\", each lined up on the keyword, as a concordance (a keyword-in-context listing from corpus linguistics) prints them. Emulated with three hand-built columns. <code>at</code> is each word's position counted from the keyword, so the keyword is part <code>0</code>. <b>Judgment:</b> good. The words have different widths, so no <code>derive</code> can compute the offsets, and today the data must be cut into columns by hand, which leaves the <code>chart(data)</code> flow and needs a blank placeholder when a row has nothing on one side.",
+                label="Proposed",
+                js="""chart(words)
+  .flow(
+    spread({ by: "line", dir: "y", spacing: 6 }),
+    spread({ by: "at", dir: "x", spacing: 4, baseline: Baseline.at(0, 0.5) }) // @hl
+  )
+  .mark(text({ text: "word" }))
+  .render(root, { w: 480, h: 150 });""",
+                py="""chart(words).flow(
+    spread(by="line", dir="y", spacing=6),
+    spread(by="at", dir="x", spacing=4, baseline=Baseline.at(0, 0.5)),  # @hl
+).mark(text(text="word")).render(w=480, h=150)""",
+                today_label="Today (runs; <code>side</code> is a helper of about 10 lines that builds one column)",
+                today_js="""spread({ dir: "x", spacing: 4 }, [
+  side((w) => w.at < 0, "end"), // @hl
+  side((w) => w.at === 0, "start"), // @hl
+  side((w) => w.at > 0, "start"), // @hl
+]).render(c, { w: 480, h: 150 });""",
+            )),
+            ("item", dict(
+                img="baseline-spread-click-paths.png",
+                cap="Six hand-made shopping sessions drawn as page chips, lined up on the start of the Cart step, like the path views in web analytics tools. Emulated with the same three columns. <b>Judgment:</b> the same structure as the concordance. With chips of one fixed width it would not need <code>baseline</code>, because a <code>scatter</code> on the step index already lines them up.",
+                label="Proposed",
+                js="""chart(steps)
+  .flow(
+    spread({ by: "session", dir: "y", spacing: 6 }),
+    spread({ by: "at", dir: "x", spacing: 4, baseline: Baseline.at(0, 0) }) // @hl
+  )
+  .mark((d) =>
+    enclose({ padding: 3, fill: pageColor(d[0].page) }, [
+      text({ text: d[0].page }),
+    ])
+  )
+  .render(root, { w: 480, h: 170 });""",
+                py="""chart(steps).flow(
+    spread(by="session", dir="y", spacing=6),
+    spread(by="at", dir="x", spacing=4, baseline=Baseline.at(0, 0)),  # @hl
+).mark(
+    lambda d: enclose([text(text=d[0]["page"])], padding=3, fill=page_color(d[0]["page"]))
+).render(w=480, h=170)""",
+                today_label="Today (runs; <code>pathSide</code> is the same helper with chips, about 15 lines)",
+                today_js="""spread({ dir: "x", spacing: 4 }, [
+  pathSide((s) => s.at < 0, "end"), // @hl
+  pathSide((s) => s.at === 0, "start"), // @hl
+  pathSide((s) => s.at > 0, "start"), // @hl
+]).render(c, { w: 480, h: 170 });""",
+            )),
+            ("item", dict(
+                img="baseline-spread-pyramid-labels.png",
+                cap="Approximate US 2020 census counts by age and sex, in millions, rounded and entered by hand. Each row is a male bar, the age label and a female bar, centered on the label. Emulated: <code>derive</code> puts the label in a gap 6 million wide. <b>Judgment:</b> a visualization people publish, but the weakest case. Every row has the same three parts, so three columns (male bars aligned to their end, labels, female bars aligned to their start) already draw it today.",
+                label="Proposed",
+                js="""chart(people, { color: sexColors })
+  .flow(
+    spread({ by: "age", dir: "y", spacing: 3, reverse: true }),
+    spread({
+      by: "part",
+      dir: "x",
+      spacing: 6,
+      baseline: Baseline.at("Age", 0.5), // @hl
+    })
+  )
+  .mark((d) =>
+    d[0].part === "Age"
+      ? text({ text: d[0].age })
+      : rect({ w: "millions", fill: "part" })(d)
+  )
+  .render(root, { w: 480, h: 260 });""",
+                py="""chart(people, color=sex_colors).flow(
+    spread(by="age", dir="y", spacing=3, reverse=True),
+    spread(by="part", dir="x", spacing=6, baseline=Baseline.at("Age", 0.5)),  # @hl
+).mark(
+    lambda d: (
+        text(text=d[0]["age"])
+        if d[0]["part"] == "Age"
+        else rect(w="millions", fill="part")(d)
+    )
+).render(w=480, h=260)""",
+                today_label="Today (runs)",
+                today_js="""chart(people, { w: 480, h: 260, color: SEX })
+  .flow(
+    derive(aroundLabel), // @hl
+    spread({ by: "age", dir: "y", spacing: 3, reverse: true }),
+    scatter({ by: "part", xMin: "lo", xMax: "hi" }) // @hl
+  )
+  .mark((d) =>
+    d[0].part === "Age"
+      ? // a box as wide as the gap, the label centered in it
+        spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+          rect({ h: 0, fill: "none" }),
+          text({ text: d[0].age, fontSize: 11 }),
+        ])
+      : rect({ fill: d[0].part === "Male" ? "#5b8db8" : "#d9776b" })
+  );""",
+            )),
+            ("item", dict(
+                img="pyramid-diverging.png",
+                cap="The gallery's <code>Population Pyramid</code> (real render of today's spelling): women and men in each age band, drawn out from a shared center. The proposed code names the same 0 with <code>Baseline.at</code> in place of the unit's trait; it does not run yet. A <code>spread</code> with <code>spacing</code> in place of the <code>stack</code> gives the same picture with a gap at the center.",
+                label="Proposed",
+                js="""chart(population, { color: sexColors })
+  .flow(
+    spread({ by: field("age").reverse(), dir: "y", spacing: 1 }),
+    stack({ by: "sex", dir: "x", baseline: Baseline.at("Men", 0) }) // @hl
+  )
+  .mark(rect({ w: "people", fill: "sex" }));""",
+                py="""chart(population, color=sex_colors).flow(
+    spread(by=field("age").reverse(), dir="y", spacing=1),
+    stack(by="sex", dir="x", baseline=Baseline.at("Men", 0)),  # @hl
+).mark(rect(w="people", fill="sex"))""",
+                today_label="Today (runs; <code>stories/forwardsyntax/Bar/Diverging.stories.tsx</code>)",
+                today_js="""chart(population, {
+  schema: {
+    sex: Unit({
+      domain: Domain.discrete(["Women", "Men"]),
+      traits: [Trait.diverging()], // @hl
+    }),
+  },
+  color: Color.palette({ Women: "#c05780", Men: "#3b75af" }),
+})
+  .flow(
+    spread({ by: field("age").reverse(), dir: "y", spacing: 1 }),
+    stack({ by: "sex", dir: "x" })
+  )
+  .mark(rect({ w: "people", fill: "sex" }));""",
+            )),
+            ("p", """<h4>What the examples showed</h4>
+<ul>
+<li><b>Candidates that were dropped</b>, because today's API says them as simply. Numbers lined up on the decimal point, and equations on the equals sign: every row has the same parts, so columns do it, as tables and LaTeX <code>align</code> do. A swimmer plot, and sequences lined up on a motif: the events have times or a fixed pitch, so a <code>scatter</code> with an offset does it. A parent over the middle of its children: <code>Baseline.middle()</code> gives what the parent's <code>alignment: \"middle\"</code> gives today.</li>
+<li><b>Out of scope.</b> The rule of Reingold and Tilford's tidy trees, a parent midway between its first and last children's own 0 points, is not a baseline of the children's spread.</li>
+</ul>
+<h4>Alignment is a shorthand for a shared baseline</h4>
+<p>Three rows of bars with gaps, lined up by the parent. Each image is a real render of today's code (the <code>Claim*</code> stories in the same file). Beside it is the proposed spelling of the same picture, not run: each row says where its own 0 is, and the parent keeps its default, <code>alignment: \"baseline\"</code>, and lines the 0s up.</p>"""),
+            ("item", dict(
+                img="alignment-sugar-start.png",
+                cap="<code>alignment: \"start\"</code>. Today's default, <code>\"baseline\"</code>, renders the same geometry, because a spread's 0 is its start today, so <code>Baseline.start()</code> as the default changes nothing.",
+                label="Proposed: each row sets its baseline",
+                js="""chart(bars)
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 6 }),
+    spread({ by: "part", dir: "x", spacing: 4, baseline: Baseline.start() }) // @hl
+  )
+  .mark(rect({ w: "w", fill: "part" }));""",
+                py="""chart(bars).flow(
+    spread(by="row", dir="y", spacing=6),
+    spread(by="part", dir="x", spacing=4, baseline=Baseline.start()),  # @hl
+).mark(rect(w="w", fill="part"))""",
+                today_label="Today (runs): the parent says where the rows line up",
+                today_js="""chart(bars)
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 6, alignment: "start" }), // @hl
+    spread({ by: "part", dir: "x", spacing: 4 })
+  )
+  .mark(rect({ w: "w", fill: "part" }));""",
+            )),
+            ("item", dict(
+                img="alignment-sugar-middle.png",
+                cap="<code>alignment: \"middle\"</code>: the rows are centered.",
+                label="Proposed: each row sets its baseline",
+                js="""chart(bars)
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 6 }),
+    spread({ by: "part", dir: "x", spacing: 4, baseline: Baseline.middle() }) // @hl
+  )
+  .mark(rect({ w: "w", fill: "part" }));""",
+                py="""chart(bars).flow(
+    spread(by="row", dir="y", spacing=6),
+    spread(by="part", dir="x", spacing=4, baseline=Baseline.middle()),  # @hl
+).mark(rect(w="w", fill="part"))""",
+                today_label="Today (runs): the parent says where the rows line up",
+                today_js="""chart(bars)
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 6, alignment: "middle" }), // @hl
+    spread({ by: "part", dir: "x", spacing: 4 })
+  )
+  .mark(rect({ w: "w", fill: "part" }));""",
+            )),
+            ("item", dict(
+                img="alignment-sugar-end.png",
+                cap="<code>alignment: \"end\"</code>: the rows end together.",
+                label="Proposed: each row sets its baseline",
+                js="""chart(bars)
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 6 }),
+    spread({ by: "part", dir: "x", spacing: 4, baseline: Baseline.end() }) // @hl
+  )
+  .mark(rect({ w: "w", fill: "part" }));""",
+                py="""chart(bars).flow(
+    spread(by="row", dir="y", spacing=6),
+    spread(by="part", dir="x", spacing=4, baseline=Baseline.end()),  # @hl
+).mark(rect(w="w", fill="part"))""",
+                today_label="Today (runs): the parent says where the rows line up",
+                today_js="""chart(bars)
+  .flow(
+    spread({ by: "row", dir: "y", spacing: 6, alignment: "end" }), // @hl
+    spread({ by: "part", dir: "x", spacing: 4 })
+  )
+  .mark(rect({ w: "w", fill: "part" }));""",
+            )),
+            ("p", """<p>So <code>alignment: \"start\" | \"middle\" | \"end\"</code> is a shorthand for giving every child the same baseline. <code>baseline</code> is the general form, because each row can choose a different point (the diverging bars above), and because the shared 0 is passed up to the parent, where the alignment form lines the children up but does not make that line the parent's own 0 (read from <code>constraints/align.ts</code> and <code>localAnchorPoint</code> in <code>ast/dims.ts</code>, not rendered). Nothing is proposed to change in <code>alignment</code>.</p>
+<p><b><code>anchor</code> itself.</b> Its future is on the <a href=\"https://claude.ai/artifact/FKyrky9FQNxPkQactid7Ty\">Optical spacing</a> page, where the earlier idea was that a pitch spacing absorbs it.</p>
 <p><b>The per-x spelling.</b> With today's per-x form, <code>stack({ baseline: Baseline.middle() })</code> inside each x column, plus the parent's baseline alignment, already gives the centered stack, because each column's offset depends only on that column. Only <code>wiggle</code> needs the whole series, because each offset depends on the neighbors.</p>"""),
         ],
     ),
@@ -352,14 +633,20 @@ const croissant = (grid, { n = 10, fill = FILL, stroke = STROKE } = {}) =>
 const normalGrid = gridOf((x) => normPdf(x), -4, 4, 401); // @hl
 croissant(normalGrid, { n: 5, fill: PAPER_FILL, stroke: PAPER_STROKE });""",
             )),
-            ("p", """<p><code>d</code> is an expression over a distribution. Each method makes a different kind of value. <code>d.bin(Bin.quantiles(5))</code> is a key that cuts d's axis into 5 cells. <code>d.support()</code> and <code>d.density()</code> are the position and the height of one curve over a hidden variable t: the support is t &#8614; t and the density is t &#8614; f(t). The ribbon evaluates both channels as functions of t, as a parametric curve (x(t), y(t)) does, and only lowering samples them. <code>d.median()</code> is one number per cell. <code>partition</code> on d's axis restricts the function to each cell. A cell of a Dist is the Dist over that cell with its mass, so the cells meet exactly. No <code>intersect</code>, hidden ribbon, <code>relate</code>, grid or quantile rows. The types of each method are in \"The distribution type\" below.</p>"""),
+            ("p", """<p><code>d</code> is an expression over a distribution. Each method makes a different kind of value. <code>d.bin(Bin.quantiles(5))</code> is a key that cuts d's axis into 5 cells. <code>d.support()</code> and <code>d.density()</code> are the position and the height of one curve over the mark's parameter t: the support is t &#8614; t and the density is t &#8614; f(t). The ribbon evaluates both channels as functions of t, as a parametric curve (x(t), y(t)) does, and only lowering samples them. <code>d.median()</code> is one number per cell. <code>partition</code> on d's axis restricts the function to each cell. A cell of a Dist is the Dist over that cell with its mass, so the cells meet exactly. No <code>intersect</code>, hidden ribbon, <code>relate</code>, grid or quantile rows. The types of each method are in \"The distribution type\" below.</p>"""),
+            ("p", """<h4>Why a mark has a parameter</h4>
+<p>A ribbon or a line draws along a path, so it has one parameter t. Every channel of it that holds a function is read at the same t, and the mark draws the points it gets. The rule: those functions' domains must be equal, or it is an error. The user never writes t. Three examples (proposed code, not run):</p>"""),
+            ["code", "1. A density: x is t itself and h is f(t), so the mark draws the points (t, f(t))", """ribbon({ x: d.support(), h: d.density() });""", """ribbon(x=d.support(), h=d.density())"""],
+            ["code", "2. The same density sideways, for a violin: nothing in the spec says which channel is the x", """ribbon({ y: d.support(), w: d.density() });""", """ribbon(y=d.support(), w=d.density())"""],
+            ["code", "3. A P-P plot (probability-probability plot: one distribution's cdf against another's): neither channel is t", """line({ x: a.cdf(), y: b.cdf() });""", """line(x=a.cdf(), y=b.cdf())"""],
+            ("p", """<p>Without a shared parameter, <code>h</code> would have to be a function of the x channel. The mark would have to guess which channel that is, which example 2 shows it cannot, and example 3 could not be written at all. An earlier draft gave each function an identity, a hidden parameter symbol, and made two channels with different symbols an error. That was wrong: the P-P plot reads two different distributions at one t, and it is legitimate. Equal domains is the whole rule.</p>"""),
             ("p", "<h4>What the methods compute</h4><p>" + """A field expression like <code>field("mass")</code> works like polars' <code>pl.col("mass")</code>: it sees one column. Every named method on it except <code>bin</code> is one named instance of one of the two custom methods. <code>map((x, i, xs) =&gt; value)</code> is called once per row: <code>x</code> is this row's value of the field, <code>i</code> its index, and <code>xs</code> the values of that field over the rows of the current group (the rows the mark or operator reading the channel was given). <code>reduce((xs) =&gt; value)</code> is called once per group. A user can always write the custom method instead of the named one.""" + "</p>"),
             ["code", "Each method and the custom method it stands for (bins are open; see below)", """field("mass"); // a value per row
 field("mass").sum(); // .reduce(sum)
 field("mass").median(); // .reduce(median)
 field("mass").normalize(); // .map((x, i, xs) => x / sum(xs))
-field("mass").density(); // .reduce((xs) => fn(kde(xs), { over: extent(xs) }))
-field("mass").support(); // field("mass").density().support()
+field("mass").density(); // .reduce((xs) => kde(xs)).density()
+field("mass").support(); // .reduce((xs) => kde(xs)).support()
 
 // custom methods, used like built-in ones
 const share = field("mass").map((x, i, xs) => x / max(xs), { unit: "ratio" });
@@ -367,8 +654,8 @@ const top = field("mass").reduce((xs) => max(xs), { unit: "g" });""", """field("
 field("mass").sum()  # .reduce(sum)
 field("mass").median()  # .reduce(median)
 field("mass").normalize()  # .map(lambda x, i, xs: x / sum(xs))
-field("mass").density()  # .reduce(lambda xs: fn(kde(xs), over=extent(xs)))
-field("mass").support()  # field("mass").density().support()
+field("mass").density()  # .reduce(lambda xs: kde(xs)).density()
+field("mass").support()  # .reduce(lambda xs: kde(xs)).support()
 
 share = field("mass").map(lambda x, i, xs: x / max(xs), unit="ratio")
 top = field("mass").reduce(max, unit="g")"""],
@@ -382,15 +669,15 @@ top = field("mass").reduce(max, unit="g")"""],
 <tr><td><code>.count()</code></td><td>n</td><td><code>.reduce((xs) =&gt; xs.length)</code></td></tr>
 <tr><td><code>.distinct()</code></td><td>the number of different values</td><td><code>.reduce((xs) =&gt; new Set(xs).size)</code></td></tr>
 <tr><td>Per row, reading the group</td><td><code>.normalize()</code></td><td>x &divide; the group's sum</td><td><code>.map((x, i, xs) =&gt; x / sum(xs))</code></td></tr>
-<tr><td rowspan="2">A function value per group</td><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is mass &times; its exact density</td><td><code>.reduce((xs) =&gt; fn(kde(xs), { over }))</code>, whose result is a function value with its range</td></tr>
-<tr><td><code>.support()</code></td><td>t itself, over the range of the density. That range is open (see the decisions); the lean follows ggdist: for rows, the data's own range, with a bounded estimator; for a <code>Dist</code>, its own range, or its 0.001 to 0.999 quantiles where that range is unbounded</td><td><code>.density().support()</code>: a function value's <code>support()</code> is t &#8614; t over its own range, with the same hidden parameter</td></tr>
+<tr><td rowspan="2">A function value per group</td><td><code>.density()</code></td><td>f(t) = (1 &divide; bw) &Sigma;<sub>i</sub> K((t &minus; x<sub>i</sub>) &divide; bw), K the standard normal density, bw = 0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;1/5</sup> (Silverman's rule, R's <code>bw.nrd0</code>; <code>silvermanBandwidth</code> in <code>overlap.ts</code> computes it). The area under f is n. For a <code>Dist</code>, f is mass &times; its exact density</td><td><code>.reduce((xs) =&gt; kde(xs)).density()</code>: a <code>reduce</code> that returns a Dist is a Dist expression</td></tr>
+<tr><td><code>.support()</code></td><td>t itself, over the domain of the density. How far that domain runs is open (see the decisions); the lean follows ggdist: for rows, the data's own range, with a bounded estimator; for a <code>Dist</code>, its own domain, or its 0.001 to 0.999 quantiles where that is unbounded</td><td><code>.reduce((xs) =&gt; kde(xs)).support()</code>: a Dist's <code>support()</code> is t &#8614; t over its own domain, with the same hidden parameter</td></tr>
 <tr><td>Key (bin)</td><td><code>.bin(Bin.step(500))</code>, <code>Bin.thresholds(n)</code>, <code>Bin.quantiles(n)</code></td><td>On main the cells come from the column's domain (its <code>HasDomain</code>), computed once where the data is typed, in <code>chart()</code> or the last <code>derive</code>, so every group of a split sees the same cells, empty ones included (#763; story <code>SharedBinsAcrossGroups</code>). <code>Bin.step(w)</code>: cells [k&times;w, (k+1)&times;w). <code>Bin.thresholds(n)</code>: a step from d3's <code>tickIncrement</code> over the domain, for about n cells. <code>Bin.quantiles(n)</code>: edges at the type-7 quantiles i/n of the column's values (<code>cells.ts</code>)</td><td>Open: how a bin's cells are shared is under review</td></tr>
 </table></div>
 <p><b>Precedent.</b> A value per group that every row of the group reads is a window function: SQL's <code>median(x) OVER (PARTITION BY g)</code>, or polars' <code>pl.col("x").median().over("g")</code>. <code>normalize</code> is SQL's <code>x / sum(x) OVER (PARTITION BY g)</code>.</p>
 <p><b>Bins are the open item.</b> A bin's cells do not come from the group's <code>xs</code>: on main they come from the column's domain, fixed where the data is typed, and the empty cells and their order are kept for the axis. So a bin fits neither custom method as written. How a bin's cells are shared is under review, so this page proposes no custom form for bins.</p>
-<p><b>Curves.</b> A density is drawn by two channels of one mark, <code>x: mass.support()</code> (t &#8614; t) and <code>h: mass.density()</code> (t &#8614; f(t)). The ribbon evaluates every channel that is a function of t as a function of t, as a parametric curve (x(t), y(t)) does. The range of t belongs to the value, so no spec names it. Two function channels over different hidden variables in one mark, such as <code>x: mass.support()</code> with <code>h: length.density()</code>, are an error. Precedent: the closest is ggdist (Matt Kay's R package for distributions), whose <code>stat_slabinterval</code> computes <code>x</code> or <code>y</code> (the slab's positions), <code>pdf</code>, <code>cdf</code> and <code>n</code> (<code>Inf</code> for an analytic distribution). Vega-Lite's density transform outputs two fields, <code>value</code> and <code>density</code>, and ggplot2 maps <code>after_stat(x)</code> and <code>after_stat(density)</code>.</p>
+<p><b>Curves.</b> A density is drawn by two channels of one mark, <code>x: mass.support()</code> (t &#8614; t) and <code>h: mass.density()</code> (t &#8614; f(t)). The ribbon reads every function channel at its one parameter t, as a parametric curve (x(t), y(t)) does (\"Why a mark has a parameter\" above). The domain of t belongs to the value, so no spec names it. Two function channels of one mark whose domains differ, such as <code>x: mass.support()</code> with <code>h: length.density()</code>, are an error. Precedent: the closest is ggdist (Matt Kay's R package for distributions), whose <code>stat_slabinterval</code> computes <code>x</code> or <code>y</code> (the slab's positions), <code>pdf</code>, <code>cdf</code> and <code>n</code> (<code>Inf</code> for an analytic distribution). Vega-Lite's density transform outputs two fields, <code>value</code> and <code>density</code>, and ggplot2 maps <code>after_stat(x)</code> and <code>after_stat(density)</code>.</p>
 <p><b>Area.</b> The area under <code>mass.density()</code> is its row count, so stacked densities add up. ggdist users get the same curve by writing <code>aes(thickness = after_stat(pdf * n))</code>. ggdist instead scales thickness after the fact with <code>normalize</code> (<code>"all"</code>, <code>"panels"</code>, <code>"xy"</code>, <code>"groups"</code> or <code>"none"</code>); here that is the stack's or the spread's job, not the curve's.</p>
-<p><b>The range of t.</b> Tools split. seaborn runs a KDE 3 bandwidths past the data (<code>cut=3</code>), and ggplot2 also extends past it. ggdist, for rows, uses <code>density_bounded()</code>, a reflection estimator, and usually trims to the data's range; for an analytic distribution it uses <code>p_limits</code>, the 0.001 and 0.999 quantiles, where the range is unbounded. This is one of the decisions.</p>
+<p><b>How far t runs.</b> Tools split. seaborn runs a KDE 3 bandwidths past the data (<code>cut=3</code>), and ggplot2 also extends past it. ggdist, for rows, uses <code>density_bounded()</code>, a reflection estimator, and usually trims to the data's range; for an analytic distribution it uses <code>p_limits</code>, the 0.001 and 0.999 quantiles, where the range is unbounded. This is one of the decisions.</p>
 <p><b>Naming.</b> <code>support()</code> is the chosen name (Josh is checking it with Matt Kay, author of ggdist). Rejected: <code>value()</code>, which clashes with GoFish's <code>value(...)</code> constructor, and <code>points()</code> or <code>grid()</code>, which name the sampling that specs should not see.</p>
 <p><b>Consequences, stated plainly.</b></p>
 <ol>
@@ -408,7 +695,7 @@ top = field("mass").reduce(max, unit="g")"""],
         id="custom-method",
         title="2b. Custom methods: map and reduce",
         blocks=[
-            ("p", """<p>Settled: a user who needs a method that is not built in writes <code>.map</code> for one value per row or <code>.reduce</code> for one value per group. Josh: \"it doesn't make sense to call a reduction/aggregation like sum/mean a map.\" This section records what each verb takes, why there is exactly one form of <code>reduce</code>, and the two words that are taken.</p>"""),
+            ("p", """<p>Settled: a user who needs a method that is not built in writes <code>.map</code> for one value per row or <code>.reduce</code> for one value per group. Josh: \"it doesn't make sense to call a reduction/aggregation like sum/mean a map.\" This section records what each verb takes, why there is exactly one form of <code>reduce</code>, how a function value is made, and the two words that are taken.</p>"""),
             ["code", "The two verbs", """field("mass").map((x) => x / 1000, { unit: "kg" });
 field("mass").map((x, i, xs) => x / sum(xs), { unit: "ratio" });
 field("mass").reduce(median, { unit: "g" }); // (xs) => value, any existing function""", """field("mass").map(lambda x, i, xs: x / 1000, unit="kg")
@@ -418,19 +705,60 @@ field("mass").reduce(statistics.median, unit="g")"""],
 <p><code>reduce</code> takes the whole group, <code>reduce((xs) =&gt; value, { unit })</code>, and nothing else.</p>
 <ul>
 <li><b><code>Array.prototype.reduce</code>'s form, <code>(acc, x) =&gt; acc</code> with an initial value, is not proposed.</b> The incremental form exists where data streams or is spread over machines, so an aggregate must be built one value at a time and merged: Postgres <code>CREATE AGGREGATE</code> with a state function (<code>SFUNC</code>), Apache Beam's <code>CombineFn</code> (<code>add_input</code>, <code>merge_accumulators</code>, <code>extract_output</code>), and Spark's <code>Aggregator</code> (<code>zero</code>, <code>reduce</code>, <code>merge</code>, <code>finish</code>). Systems in our setting take the whole group: d3's <code>rollup(data, reduce, key)</code>, Observable Plot's reducers <code>(values) =&gt; value</code>, pandas' <code>groupby().agg(f)</code>, and polars' <code>map_batches(f, returns_scalar=True)</code> inside <code>group_by().agg</code>. Arquero is mixed: <code>rollup</code> takes whole-group aggregates such as <code>op.median(\"x\")</code>, but a custom one registered with <code>addAggregateFunction</code> is incremental (<code>init</code>, <code>add</code>, <code>rem</code>, <code>value</code>), because the same definition also runs over sliding windows.</li>
-<li><b>A curve is not a second form.</b> It is the same <code>reduce</code>, whose result is a function value instead of a number. A bare JS function cannot be that result: it has no range, and <code>(d) =&gt; number</code> is already a legal channel value meaning a row accessor (<code>DeriveMarkProps</code> in <code>channels.ts</code>). So a custom curve returns a function value with its range, made by <code>fn(at, { over })</code> or written as a plain <code>{ at, over }</code> object. Its <code>support()</code> gives the x channel over the same range. The spelling is decision 10.</li>
+<li><b>A curve is not a second form.</b> It is the same <code>reduce</code>, with a different kind of result. A <code>reduce</code> has three: a number (one value per group), a Dist (a Dist expression, with <code>support()</code> and <code>density()</code>), and a function value. A bare JS function cannot be a result: it has no domain, and <code>(d) =&gt; number</code> is already a legal channel value meaning a row accessor (<code>DeriveMarkProps</code> in <code>channels.ts</code>). The common case needs no constructor, because a density is a Dist. Any other function is made by <code>fun(f, { domain })</code>, below.</li>
 <li><b>A <code>map</code> that ignores <code>x</code> and returns <code>median(xs)</code> is legal, but it is not a way to write a reduce.</b> It is called once per row. The reference will point to <code>reduce</code>.</li>
 </ul>"""),
             ts_block("Their types (from the sketch)", "field"),
-            ["code", "A custom curve (not run)", """const curve = field("mass").reduce(
-  (xs) => fn(kde(xs), { over: extent(xs) }), // @hl
-  { unit: "count per g" }
-);
-chart(penguins).mark(ribbon({ x: curve.support(), h: curve }));""", """curve = field("mass").reduce(
-    lambda xs: fn(kde(xs), over=extent(xs)),  # @hl
-    unit="count per g",
-)
-chart(penguins).mark(ribbon(x=curve.support(), h=curve))"""],
+            ["code", "A custom density: a reduce that returns a Dist (not run)", """const d = field("mass").reduce((xs) => kde(xs), { unit: "g" }); // @hl
+ribbon({ x: d.support(), h: d.density() });""", """d = field("mass").reduce(lambda xs: kde(xs), unit="g")  # @hl
+ribbon(x=d.support(), h=d.density())"""],
+            ("p", """<p><code>kde(xs)</code> is a Dist that carries its own domain, as the distribution objects of scipy.stats, distributional and Distributions.jl do. So the custom density reads like the built-in one, and no spec names a range. The density's unit follows from the variable's: the mass of a Dist built from rows is a count, so <code>d.density()</code> is in count per g (<code>Per&lt;Count, Grams&gt;</code> in the sketch). <code>unit</code> declares only the variable's unit.</p>
+<h4>A function that is not a distribution</h4>
+<p>A fitted trend line is a function, but not a distribution, so it has no <code>pdf</code> or <code>cdf</code>. It is made by a lowercase factory that takes the function and its domain, in the style of Chebfun and Julia's <code>Fun</code>: <code>fun(f, { domain })</code>. The example below fits a least-squares line to a scatter of car weight against fuel economy. The fit reads two fields, which a custom method cannot do, so it runs before the visualization, here with simple-statistics. The line is then one mark with two function channels read at one t, over the same domain.</p>"""),
+            ["code", "A least-squares trend line over a scatter (not run)", """const { m, b } = linearRegression(cars.map((d) => [d.weight, d.mpg]));
+const trend = fun((t) => m * t + b, { domain: extent(cars, (d) => d.weight) }); // @hl
+
+layer([
+  chart(cars)
+    .flow(scatter({ x: "weight", y: "mpg" }))
+    .mark(circle({ r: 3 })),
+  line({ x: fun((t) => t, { domain: trend.domain }), y: trend }), // @hl
+]).render(root, { w: 480, h: 300 });""", """weights = [d["weight"] for d in cars]
+fit = linregress(weights, [d["mpg"] for d in cars])  # scipy.stats
+trend = fun(lambda t: fit.slope * t + fit.intercept, domain=(min(weights), max(weights)))  # @hl
+
+layer(
+    [
+        chart(cars).flow(scatter(x="weight", y="mpg")).mark(circle(r=3)),
+        line(x=fun(lambda t: t, domain=trend.domain), y=trend),  # @hl
+    ]
+).render(w=480, h=300)"""],
+            ("p", """<p><code>fun</code> makes a <code>Fun&lt;number&gt;</code>, the one generic type from \"The interface\": the function is stored as <code>at</code>, its interval as <code>domain</code>, and <code>knots</code> and <code>curve</code> are optional. A Dist's interval is its <code>support</code>, which is the density's domain, so one word names the interval of a function everywhere on this page. The x channel here is the identity over the same domain, which is all the parameter rule needs. Writing it out is long, and a <code>reduce</code> that returns a function cannot write it at all, because its domain differs per group; so a function expression has a <code>support()</code> method. That is a distribution word, so the name of this channel for a plain function is decision 11. In Python, <code>fun</code> with a lambda needs the bridge work in \"Where function values appear\".</p>
+<h4>Precedent for the function value</h4>
+<p>Each row was read from the system's current docs. Observable Plot has no function form (a maintainer says so in discussion 1999), and neither does plotly.</p>
+<div class="table-wrap"><table>
+<tr><th>System</th><th>What the user writes</th><th>The interval is called</th></tr>
+<tr><td>Chebfun</td><td><code>chebfun(@(t) besselj(0,t), [0,100])</code>, <code>F.domain</code></td><td>domain</td></tr>
+<tr><td>ApproxFun.jl</td><td><code>Fun(exp, -1..1)</code></td><td>positional</td></tr>
+<tr><td>Mathematica</td><td><code>InterpolatingFunction</code>, <code>f[\"Domain\"]</code>; <code>ParametricPlot[{fx, fy}, {u, umin, umax}]</code></td><td>Domain</td></tr>
+<tr><td>numpy</td><td><code>Polynomial(coef, domain=None, window=None)</code></td><td>domain</td></tr>
+<tr><td>Interpolations.jl</td><td><code>bounds(itp)</code></td><td>domain</td></tr>
+<tr><td>Mafs</td><td><code>&lt;Plot.OfX y={Math.sin} /&gt;</code>, <code>&lt;Plot.Parametric domain={[0, k]} xy={...} /&gt;</code> (its <code>t</code> prop is deprecated for <code>domain</code>)</td><td>domain</td></tr>
+<tr><td>Desmos</td><td><code>parametricDomain: { min, max }</code></td><td>domain</td></tr>
+<tr><td>scipy.stats</td><td><code>rv_continuous.support()</code></td><td>support</td></tr>
+<tr><td>distributional (R)</td><td><code>support()</code></td><td>support</td></tr>
+<tr><td>Distributions.jl</td><td><code>extrema(d)</code>, <code>pdf(d, x)</code></td><td>support</td></tr>
+<tr><td>function-plot</td><td><code>{ fn: \"x^2\", range: [a, b] }</code> (parametric data use <code>x</code> and <code>y</code>)</td><td>range</td></tr>
+<tr><td>SymPy</td><td><code>plot(x**2, (x, -5, 5))</code>, <code>plot_parametric</code></td><td>range</td></tr>
+<tr><td>ggplot2</td><td><code>geom_function(fun = dnorm, xlim = c(-1, 1))</code></td><td>xlim</td></tr>
+<tr><td>R</td><td><code>curve(expr, from, to)</code>; <code>approxfun</code> keeps its range in the closure</td><td>from, to</td></tr>
+<tr><td>Manim</td><td><code>FunctionGraph(function, x_range=)</code>, <code>ParametricFunction(function, t_range=(0, 1))</code></td><td>x_range, t_range</td></tr>
+<tr><td>Vega</td><td>density transform</td><td>extent</td></tr>
+<tr><td>scipy</td><td><code>PPoly(c, x)</code></td><td>its breakpoints</td></tr>
+<tr><td>Plots.jl</td><td><code>plot(sin, cos, tmin, tmax)</code></td><td>positional</td></tr>
+</table></div>
+<p>Over the 14 systems that name the interval: <code>domain</code> 6, <code>support</code> 3 (all distribution libraries), <code>range</code> 2, and <code>xlim</code>, <code>from</code>/<code>to</code>, <code>x_range</code>/<code>t_range</code> and <code>extent</code> 1 each. The function itself is mostly positional; ggplot2 calls it <code>fun</code> and Manim <code>function</code>, and only function-plot uses <code>fn</code>, as a field next to <code>range</code>. No surveyed constructor is named <code>fn</code>, and none names its interval <code>over</code>. Every system with parametric curves gives the parameter its own interval, which supports the rule that the interval belongs to the hidden parameter.</p>
+<p><b>Names already taken in GoFish.</b> <code>Domain</code> is a unit's set of values (<code>Domain.discrete</code>, <code>families/domain.ts</code>, whose comment says a continuous one comes later). <code>Extent</code> is a size claim (<code>ast/extent.ts</code>). <code>Curve</code> is the family of path shapes. <code>between</code> is a row predicate.</p>"""),
             ("p", """<p><b><code>.then</code> is out.</b> Any object with a <code>then</code> method is a <i>thenable</i>: <code>await</code>, <code>Promise.resolve</code>, <code>Promise.all</code> and the return of an <code>async</code> function all call it as <code>then(resolve, reject)</code>. GoFish resolves channels asynchronously. <code>resolveValue</code> in <code>ast/channels.ts</code> is an <code>async</code> function that returns a channel value that is not a plain object as it is, and it runs on every entry of a channel bag that holds a Python accessor, through <code>Promise.all</code>. So in <code>y: { min: field(\"a\").then(f), max: pythonLambda }</code> the runtime would call <code>f(resolve, reject)</code>, and the channel would never resolve.</p>
 <p><b>The other <code>map</code> in GoFish.</b> <code>lib.ts</code> exports a top-level <code>map(data, callback)</code> (<code>ast/iterators/map.ts</code>): an async map over an array, a <code>Map</code> or an object that returns <code>Promise&lt;R[]&gt;</code>, used inside <code>createMark</code> bodies. A method <code>.map</code> on a field expression does not clash with it in JS, because one is a function and the other a method, and Python exports no <code>map</code>. Both mean \"apply this to each element\", so the word keeps one meaning.</p>
 <p><b>Rejected.</b> One <code>.map</code> with a <code>{ fold: true }</code> flag (polars' <code>returns_scalar</code>) keeps one verb but needs the flag, an O(n&sup2;) trap without it, and a check that the result is the same across the group. One <code>.apply((x, xs))</code> repeats the pandas ambiguity polars removed, and every JS function already has an <code>apply</code> method. One <code>.transform((xs) =&gt; column or value)</code> is the fastest for <code>normalize</code>, but it gives up the per-row view, and <code>Transform</code> is the name Josh endorsed for the coordinate and palette family.</p>"""),
@@ -484,9 +812,18 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
   Array.from({ length: n }, (_, i) => ({ v: d.quantile((i + 0.5) / n) }));"""),
             ("p", """<p>It differs from this page in three ways. Its <code>kde</code> range is the data's extent plus 3 bandwidths on each side, as seaborn does, while the page's lean is ggdist's range trimmed to the data. Its bandwidth is <code>1.06 &times; sd &times; n<sup>&minus;0.2</sup></code> (the normal reference rule), while the page says Silverman's <code>0.9 &times; min(sd, IQR &divide; 1.34) &times; n<sup>&minus;0.2</sup></code>, which <code>silvermanBandwidth</code> computes. And its pdf has area 1, while the page proposes area n for rows. All three are prototype shortcuts; the proposal below follows the page.</p>
 <h4>Proposed</h4>
-<p>Two levels. At run time, a <code>Dist</code> is what the engine asks questions of. #980's sketch has <code>DistRep</code>, which is how a Dist is held (a family with parameters, draws, a mixture, a truncation); this <code>Dist</code> is what every representation answers. It adds two things to the prototype: <code>mass</code>, so a density is mass &times; pdf and stacked densities add, and <code>restrict</code>, which is a cell of a partition. In a spec, a <code>DistExpr</code> is an expression over a Dist, as in #980, and this page adds <code>support()</code>, <code>density()</code> and <code>bin()</code> to it. <code>field(\"mass\")</code> over a group of rows is the empirical Dist of those rows, so a field expression has the same methods. Units are in the types: <code>support</code> is in the variable's unit V, <code>density</code> in mass per V, and <code>cdf</code> is a ratio (in a comment, since run-time values are plain numbers). The sketch simplifies #980's types: a unit is a plain tag, and #980's dependence parameter (whether draws are joint) is left out.</p>"""),
+<p>Two levels, with one vocabulary. At run time, a <code>Dist</code> is what the engine asks questions of. #980's sketch has <code>DistRep</code>, which is how a Dist is held (a family with parameters, draws, a mixture, a truncation); this <code>Dist</code> is what every representation answers. Its members are <code>density</code> and <code>cdf</code> (each a <code>Fun&lt;number&gt;</code>), <code>quantile(p)</code>, <code>median</code>, <code>mean</code>, <code>support</code> (an interval), <code>mass</code> and <code>restrict</code>. It adds two things to the prototype: <code>mass</code>, so stacked densities add, and <code>restrict</code>, which is a cell of a partition. In a spec, a <code>DistExpr</code> is an expression over a Dist, as in #980. It is not written by hand: it is the run-time <code>Dist</code> lifted member by member with a mapped type (<code>Lifted</code> in the sketch), so the two cannot drift. A function member becomes a method that returns a function expression, a number member a method that returns a value expression, <code>quantile(p)</code> keeps its argument, and <code>support</code> becomes t &#8614; t over the support. <code>restrict</code> surfaces in a spec as <code>bin()</code> and <code>partition</code>. <code>field(\"mass\")</code> over a group of rows is the empirical Dist of those rows, so a field expression is the same lifted interface plus the row methods. Units are in the types: <code>support</code> is in the variable's unit V, <code>density</code> in mass per V, and <code>cdf</code> is a ratio. The sketch simplifies #980's types: a unit is a plain tag, and #980's dependence parameter (whether draws are joint) is left out.</p>
+<p><b>Why <code>density</code> and not <code>pdf</code>.</b> For rows, the density's area is the row count, so it is not a probability density; <code>pdf</code> would name something it is not. For a family the mass is 1 and the two agree. The names elsewhere:</p>
+<div class="table-wrap"><table>
+<tr><th>System</th><th>Density</th><th>Cumulative</th><th>Inverse</th><th>Where it is defined</th></tr>
+<tr><td>scipy.stats</td><td><code>pdf</code></td><td><code>cdf</code></td><td><code>ppf</code></td><td><code>support()</code></td></tr>
+<tr><td>Distributions.jl</td><td><code>pdf</code></td><td><code>cdf</code></td><td><code>quantile</code></td><td><code>support</code></td></tr>
+<tr><td>distributional (R)</td><td><code>density</code></td><td><code>cdf</code></td><td><code>quantile</code></td><td><code>support</code></td></tr>
+<tr><td>ggdist (computed variables)</td><td><code>pdf</code></td><td><code>cdf</code></td><td></td><td></td></tr>
+</table></div>
+<p>Everyone says <code>cdf</code> and <code>support</code>, and most say <code>quantile</code>, so those stay. <code>density</code> against <code>pdf</code> is decision 6, with the lean <code>density</code>.</p>"""),
             ts_block("Run time, and the spec level", "dist"),
-            ("p", """<p><b>A cell keeps its density.</b> <code>restrict</code> rescales the pdf by the cell's share w = cdf(max) &minus; cdf(min) and the mass by w, so mass &times; pdf is the same inside the cell as in the whole. That is what lets the croissant's cells meet exactly.</p>"""),
+            ("p", """<p><b>A cell keeps its density.</b> <code>restrict</code> keeps the density as it is inside the cell and sets the mass to the cell's share w = cdf(max) &minus; cdf(min) of the whole, so the density is the same inside the cell as in the whole. That is what lets the croissant's cells meet exactly.</p>"""),
             ts_block("The croissant, with the type of each method", "croissant"),
         ],
     ),
@@ -499,7 +836,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 <tr><th>Place</th><th>Today</th><th>Proposed</th><th>Who sees it</th></tr>
 <tr><td>Channels of <code>ribbon</code> and <code>line</code> (<code>x</code>, <code>h</code>, <code>y</code>)</td><td>A channel takes <code>number | column name | (d) =&gt; number | Value | FieldExpr</code> (<code>DeriveMarkProps</code> in <code>channels.ts</code>). <code>ribbon</code> and <code>line</code> have no <code>x</code> option: they are connectors, and their own <code>w</code> and <code>h</code> only size the hidden anchor marks</td><td>Also a function value: <code>d.support()</code>, <code>d.density()</code>, or a <code>reduce</code> that returns one. A bare JS function keeps meaning a row accessor</td><td>spec author</td></tr>
 <tr><td>Other marks (<code>rect</code>, <code>circle</code>, <code>text</code>, ...)</td><td>as above</td><td>A function value in a channel is a type error, and a run-time error that names the fix. Issue #980's \"a bare Dist in a rect channel means its limit\" is a separate question</td><td>spec author</td></tr>
-<tr><td><code>FieldExpr</code></td><td><code>FieldExpr&lt;HasRegion, Binned&gt;</code>, with <code>sort</code>, <code>reverse</code>, <code>bin</code>, <code>dropNulls</code>, <code>normalize</code>, <code>sum</code>, <code>mean</code>, <code>median</code>, <code>count</code>, <code>distinct</code> (<code>fieldExpr.ts</code>)</td><td>New methods <code>support</code>, <code>density</code>, <code>map</code> and <code>reduce</code>. The type has to know the kind of result (one value per row, one per group, or a function) so the mark types can accept or reject it, as <code>RowExpr</code>, <code>ValueExpr</code> and <code>FnExpr</code> do in the sketch</td><td>spec author</td></tr>
+<tr><td><code>FieldExpr</code></td><td><code>FieldExpr&lt;HasRegion, Binned&gt;</code>, with <code>sort</code>, <code>reverse</code>, <code>bin</code>, <code>dropNulls</code>, <code>normalize</code>, <code>sum</code>, <code>mean</code>, <code>median</code>, <code>count</code>, <code>distinct</code> (<code>fieldExpr.ts</code>)</td><td>New methods <code>support</code>, <code>density</code>, <code>map</code> and <code>reduce</code>. The type has to know the kind of result (one value per row, one per group, or a function) so the mark types can accept or reject it, as <code>RowExpr</code>, <code>ValueExpr</code>, <code>DistExpr</code> and <code>FunctionExpr</code> do in the sketch</td><td>spec author</td></tr>
 <tr><td><code>dist.*</code> constructors</td><td>none</td><td>New: <code>dist.normal({ mean, sd })</code> and the other #980 families</td><td>spec author</td></tr>
 <tr><td><code>stack</code></td><td>reads each child's box, writes one translate per child; <code>origin</code> is internal</td><td>Reads each child's cross-sections, writes an offset function per child. New <code>baseline</code> option</td><td>spec author (<code>baseline</code>), operator author (the offsets)</td></tr>
 <tr><td><code>partition</code></td><td>cuts rows into cells; the croissant clips a hidden ribbon with <code>intersect</code></td><td>Restricts function-valued children to each cell (<code>restrict</code>), which removes <code>intersect</code> and the hidden ribbon from the croissant</td><td>operator author</td></tr>
@@ -511,7 +848,7 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 <tr><td>Data rows</td><td>rows hold plain values</td><td>Rows do not hold functions. A Dist is built from columns, <code>dist.normal({ mean: \"mean\", sd: \"sd\" })</code></td><td>spec author</td></tr>
 </table></div>"""),
             ts_block("How a mark's types accept or reject a function value", "channels"),
-            ts_block("A custom curve, and the type error in a rect", "custom-curve"),
+            ts_block("The three kinds of reduce result, a plain function value, and the type error in a rect", "custom-curve"),
         ],
     ),
     dict(
@@ -524,28 +861,31 @@ export const exactQuantiles = (d: Dist, n = 2000) =>
 ]
 
 RULES = [
-    "<b>A shape reports its cross-sections as a function.</b> At each position u along the cross axis, its cross-section is the interval it reaches below and above its baseline. A ribbon's is a function with one knot per row; a box's is constant. No spec or operator sees a list of samples.",
+    "<b>A shape reports its cross-sections as a function.</b> At each position u along the cross axis, its cross-section is the interval it reaches below and above its baseline: a <code>Fun&lt;Interval&gt;</code>. A ribbon's has one knot per row and the ribbon's own curve; a box's is constant. No spec or operator sees a list of samples.",
     "<b>A stack moves cross-sections and never resizes them.</b> It writes one offset function per child. Every <code>baseline</code> is a choice of that offset. A 100% stack is <code>normalize</code> on the values followed by a plain stack, so there is no divide operation and no exception.",
-    "<b>An operator uses a closed set of operations.</b> Evaluate, add, scale, restrict, maximum and minimum, integrate (and, for <code>wiggle</code> only, the derivative, products and a running integral). It never reads a child's rows, vertices or samples.",
-    "<b>Sampling is internal.</b> It happens when a mark is drawn, when a geometry query is asked at a tolerance, and when a maximum or an integral of a smooth function is needed. A function built from rows needs none of the last kind.",
-    "<b>Each value is a size, not a pixel count.</b> It is a data amount times the scale factor plus fixed pixels, so a stack can still solve its scale before layout.",
-    "<b>A function value carries its range and its hidden parameter.</b> <code>x: mass.support()</code> and <code>h: mass.density()</code> share one hidden variable t, whose range belongs to the value. Two function channels over different variables in one mark are an error. A bare JS function is a row accessor, never a function value.",
-    "<b>One verb per kind of result.</b> <code>map</code> gives one value per row, <code>reduce</code> one value per group, and a <code>reduce</code> that returns a function value with its range gives a function value per group.",
+    "<b>An operator uses a closed set of operations.</b> Map, zip, evaluate, add, scale, restrict, maximum and minimum, integrate (and, for <code>wiggle</code> only, the derivative, products and a running integral). It never reads a child's rows, vertices or samples.",
+    "<b>Sampling is internal.</b> It happens when a mark is drawn, when a geometry query is asked at a tolerance, and when a maximum or an integral of a function with a cubic curve or none is needed. A <code>linear</code> or <code>step</code> function needs none of the last kind.",
+    "<b>A claim is geometry as a function of σ.</b> Every geometry query has a claim form with the same name, whose numbers are functions of σ. Each is a closed form where one exists, so there is one solve and then one layout.",
+    "<b>A function value carries its domain. A mark that draws along a path has one parameter t.</b> Every function channel of it is read at the same t, and their domains must be equal, or it is an error. A bare JS function is a row accessor, never a function value.",
+    "<b>One verb per kind of result.</b> <code>map</code> gives one value per row. <code>reduce</code> gives one value per group, a Dist expression when it returns a Dist, and a function expression when it returns a function value.",
+    "<b>A baseline is a part and a fraction.</b> <code>Trait.diverging</code> desugars to <code>Baseline.at(part, fraction)</code>, and whether the axis labels distances from 0 is computed from the parts, not stored.",
 ]
 
 DECISIONS = [
-    "Call the value at one u a <b>cross-section</b>, the function \"a shape's cross-sections\", and the trait <code>HasCrossSection</code>? Users never write the word. Runners-up: extent, band.",
     "A rigid part (a circle, text, an image, a line) in a stack of cross-sections: keep it an error that names the fix, or allow it, resting on the highest point of the boundary below it with a gap underneath?",
-    "Allow <code>baseline</code> on <code>spread</code> too, with <code>start</code>, <code>end</code>, <code>middle</code> and <code>at(part, fraction)</code>, and keep <code>wiggle</code> stack-only and <code>baseline</code> off <code>layer</code> and <code>scatter</code>? The lean is yes.",
-    "Does <code>Baseline.at(part, fraction)</code> also carry <code>StackOrigin</code>'s <code>mirrored</code> (parts on both sides read as amounts away from 0), or does only <code>Trait.diverging</code> set it?",
+    "What <code>Baseline.at(part, fraction)</code> does when the named part is absent from a row, and when the column has no declared order. The lean is to do what <code>Trait.diverging</code> does: the 0 is placed by the column's order, so a missing part moves nothing.",
     "<code>Baseline.wiggle()</code> is defined on the function (the limit), not on the rows, so finer rows do not change the curve? It is the one baseline that needs the derivative, products and a running integral.",
     "Under <code>Baseline.middle()</code> and <code>Baseline.wiggle()</code> the value axis is dropped, since it can only measure thickness?",
     "A density's area is the mass it is made from (the row count, or 1 for a Dist), so stacked densities add up to the density of all rows? The other choice is area 1 for every curve. ggdist reaches the same curve with <code>after_stat(pdf * n)</code> and rescales thickness with <code>normalize</code>; here rescaling is the parent's job.",
-    "The range of t: follow ggdist (rows trimmed to the data's range with a bounded estimator; a Dist over its own range, or its 0.001 to 0.999 quantiles where unbounded), or seaborn (3 bandwidths past the data)? The lean is ggdist.",
+    "<code>density</code> or <code>pdf</code> for the Dist member and method? The lean is <code>density</code>, because for rows its area is the row count, not 1.",
+    "How far t runs for a density: follow ggdist (rows trimmed to the data's range with a bounded estimator; a Dist over its own support, or its 0.001 to 0.999 quantiles where unbounded), or seaborn (3 bandwidths past the data)? The lean is ggdist.",
+    "A cell of a Dist partition is the Dist over the cell with its mass (the density unchanged inside, the mass the cell's share), so <code>d.density()</code> in a cell is the parent's curve there?",
+    "<code>domain</code> or <code>range</code> for a function value's interval? <code>domain</code> has the most precedent (6 of 14), but in GoFish a unit already has a <code>Domain</code> (<code>families/domain.ts</code>: which values exist). My lean, a judgment and not a fact: they are the same concept, the set of values a variable takes, so <code>domain</code> fits, and a later <code>Domain.continuous</code> could be its value.",
+    "The factory's name, <code>fun</code>? It matches ggplot2's <code>fun</code> argument and Julia's <code>Fun</code>, and the type <code>Fun&lt;T&gt;</code>. Alternatives: <code>func</code>, or <code>function</code> as Manim's argument is named (a reserved word in JS). <code>curve</code> is taken by the <code>Curve</code> family, and no surveyed system names it <code>fn</code>.",
+    "What the x channel of a function that is not a distribution is called. <code>support()</code> is a distribution word. A reduce that returns a function needs a method, because its domain differs per group.",
     "<code>.map</code>'s callback keeps <code>Array.prototype.map</code>'s argument order, <code>(x, i, xs)</code>, with the index, rather than <code>(x, xs)</code>?",
-    "A custom curve: <code>reduce</code> returns a function value with its range, spelled <code>fn(at, { over })</code> or a plain <code>{ at, over }</code> object, and its <code>support()</code> gives the x channel? And how is a density's unit written (<code>\"count per g\"</code> above is a placeholder)?",
     "An undeclared <code>unit</code> makes the result a plain number that cannot be stacked, for both verbs?",
-    "A cell of a Dist partition is the Dist over the cell with its mass (pdf and mass both rescaled by the cell's share), so <code>d.density()</code> in a cell is the parent's curve there?",
-    "The cross-sections a stack needs before layout, in data units: solve it here, as a function-valued size along the stack axis, or with #967 (geometry while sizing)?",
+    "Add an opaque claim kind (a claim that runs the subtree's layout at a trial σ) only for the cases #967 lists as having no closed form, as the single declared place where sizing runs layout? The lean is closed forms everywhere else.",
+    "Implement <code>pack</code>'s radius claim in the same effort as cross-sections, so the claim design is tested by two consumers? The lean is yes.",
     "Accept the per-x rewrite (B at the union of breakpoints) as a declared shortcut until the engine has cross-sections?",
 ]
