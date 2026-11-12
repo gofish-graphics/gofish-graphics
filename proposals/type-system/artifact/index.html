@@ -689,7 +689,8 @@
   .grid-controls p {
     margin: 0;
   }
-  #grid-verdicts {
+  #grid-verdicts,
+  #grid-vl {
     font: 600 0.9rem var(--f-body);
     padding: 6px 14px;
     border-radius: 4px;
@@ -698,7 +699,8 @@
     background: var(--surface);
     color: var(--accent);
   }
-  #grid-verdicts[aria-pressed="true"] {
+  #grid-verdicts[aria-pressed="true"],
+  #grid-vl[aria-pressed="true"] {
     background: var(--accent);
     color: var(--surface);
   }
@@ -800,6 +802,15 @@
     .grid4 {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+  @media (min-width: 961px) {
+    [data-panel="grid"].vl-on .grid4 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+  .vl-part pre.code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -1877,7 +1888,10 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
       <p class="intro">
         32 specs, and every one renders today. Under the proposal 11 are valid.
         Before you reveal the verdicts, look at the y axis and ask what its
-        number is the total of.
+        number is the total of.<span class="only-vl" hidden>
+          The 8 hidden specs put a stack outside a spread, which Vega-Lite has
+          no syntax for.</span
+        >
       </p>
       <p class="small">
         Example data: 3 warehouses and 6 months. Every spec is
@@ -1891,31 +1905,47 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
         <button type="button" id="grid-verdicts" aria-pressed="false">
           Show verdicts
         </button>
+        <button type="button" id="grid-vl" aria-pressed="false">
+          Only what Vega-Lite can express
+        </button>
         <p class="grid-total verdict-part" hidden>
-          Valid under the proposal: <strong>11 of 32</strong>.
+          Valid under the proposal: <strong class="only-all">11 of 32</strong
+          ><strong class="only-vl" hidden>11 of 24</strong>.<span
+            class="only-vl"
+            hidden
+          >
+            13 of the 24 specs Vega-Lite can write are wrong.</span
+          >
         </p>
       </div>
+      <p class="small only-vl" hidden>
+        Pictures are GoFish's renders of the same spec. The Vega-Lite specs were
+        not run.
+      </p>
       <div class="grid-block">
         <h3>
           <code>sold</code>
           <span class="grid-kind">units sold: sums over every key</span>
-          <span class="grid-count verdict-part" hidden>6 of 8 valid</span>
+          <span class="grid-count verdict-part" hidden
+            ><span class="only-all">6 of 8 valid</span
+            ><span class="only-vl" hidden>6 of 6 valid</span></span
+          >
         </h3>
         <div class="grid4">
-          <div class="grid-head">
+          <div class="grid-head" data-arr="1">
             1. spread, stack<br /><span>stacked bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="2">
             2. stack, spread<br /><span>a stack outside a spread</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="3">
             3. spread, spread<br /><span>grouped bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="4">
             4. stack, stack<br /><span>nested stacks, one bar</span>
           </div>
           <h4 class="grid-row">month outside, warehouse inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/sold-month-1.png"
               ><img
@@ -1935,6 +1965,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "sold",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -1943,7 +1994,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -1974,7 +2025,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/sold-month-3.png"
               ><img
@@ -1995,6 +2046,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "warehouse" },
+    "y": {
+      "field": "sold",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2002,7 +2074,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/sold-month-4.png"
               ><img
@@ -2022,6 +2094,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "sold",
+      "type": "quantitative"
+    },
+    "color": { "field": "warehouse" },
+    "detail": { "field": "month" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2031,7 +2120,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
             </div>
           </div>
           <h4 class="grid-row">warehouse outside, month inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/sold-warehouse-1.png"
               ><img
@@ -2051,6 +2140,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "sold",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2059,7 +2169,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2090,7 +2200,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/sold-warehouse-3.png"
               ><img
@@ -2111,6 +2221,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "month" },
+    "y": {
+      "field": "sold",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2118,7 +2249,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/sold-warehouse-4.png"
               ><img
@@ -2138,6 +2269,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "sold",
+      "type": "quantitative"
+    },
+    "color": { "field": "month" },
+    "detail": { "field": "warehouse" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2149,7 +2297,9 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
         </div>
         <p class="grid-foot verdict-part" hidden>
-          6 of 8 valid for <code>sold</code>.
+          <span class="only-all">6 of 8 valid</span
+          ><span class="only-vl" hidden>6 of 6 valid</span> for
+          <code>sold</code>.
         </p>
       </div>
       <div class="grid-block">
@@ -2158,23 +2308,26 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <span class="grid-kind"
             >month-end inventory: a snapshot along month</span
           >
-          <span class="grid-count verdict-part" hidden>3 of 8 valid</span>
+          <span class="grid-count verdict-part" hidden
+            ><span class="only-all">3 of 8 valid</span
+            ><span class="only-vl" hidden>3 of 6 valid</span></span
+          >
         </h3>
         <div class="grid4">
-          <div class="grid-head">
+          <div class="grid-head" data-arr="1">
             1. spread, stack<br /><span>stacked bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="2">
             2. stack, spread<br /><span>a stack outside a spread</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="3">
             3. spread, spread<br /><span>grouped bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="4">
             4. stack, stack<br /><span>nested stacks, one bar</span>
           </div>
           <h4 class="grid-row">month outside, warehouse inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/stock-month-1.png"
               ><img
@@ -2194,6 +2347,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "stock",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2202,7 +2376,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2233,7 +2407,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/stock-month-3.png"
               ><img
@@ -2254,6 +2428,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "warehouse" },
+    "y": {
+      "field": "stock",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2261,7 +2456,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/stock-month-4.png"
               ><img
@@ -2281,6 +2476,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "stock",
+      "type": "quantitative"
+    },
+    "color": { "field": "warehouse" },
+    "detail": { "field": "month" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2290,7 +2502,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
             </div>
           </div>
           <h4 class="grid-row">warehouse outside, month inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/stock-warehouse-1.png"
               ><img
@@ -2310,6 +2522,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "stock",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2318,7 +2551,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2349,7 +2582,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/stock-warehouse-3.png"
               ><img
@@ -2370,6 +2603,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "month" },
+    "y": {
+      "field": "stock",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2377,7 +2631,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/stock-warehouse-4.png"
               ><img
@@ -2397,6 +2651,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "stock",
+      "type": "quantitative"
+    },
+    "color": { "field": "month" },
+    "detail": { "field": "warehouse" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2407,30 +2678,35 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
         </div>
         <p class="grid-foot verdict-part" hidden>
-          3 of 8 valid for <code>stock</code>.
+          <span class="only-all">3 of 8 valid</span
+          ><span class="only-vl" hidden>3 of 6 valid</span> for
+          <code>stock</code>.
         </p>
       </div>
       <div class="grid-block">
         <h3>
           <code>price</code>
           <span class="grid-kind">average price per unit: an average</span>
-          <span class="grid-count verdict-part" hidden>2 of 8 valid</span>
+          <span class="grid-count verdict-part" hidden
+            ><span class="only-all">2 of 8 valid</span
+            ><span class="only-vl" hidden>2 of 6 valid</span></span
+          >
         </h3>
         <div class="grid4">
-          <div class="grid-head">
+          <div class="grid-head" data-arr="1">
             1. spread, stack<br /><span>stacked bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="2">
             2. stack, spread<br /><span>a stack outside a spread</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="3">
             3. spread, spread<br /><span>grouped bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="4">
             4. stack, stack<br /><span>nested stacks, one bar</span>
           </div>
           <h4 class="grid-row">month outside, warehouse inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/price-month-1.png"
               ><img
@@ -2450,6 +2726,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "price",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2458,7 +2755,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2489,7 +2786,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/price-month-3.png"
               ><img
@@ -2510,6 +2807,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "warehouse" },
+    "y": {
+      "field": "price",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2517,7 +2835,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/price-month-4.png"
               ><img
@@ -2537,6 +2855,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "price",
+      "type": "quantitative"
+    },
+    "color": { "field": "warehouse" },
+    "detail": { "field": "month" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2546,7 +2881,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
             </div>
           </div>
           <h4 class="grid-row">warehouse outside, month inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/price-warehouse-1.png"
               ><img
@@ -2566,6 +2901,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "price",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2573,7 +2929,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2604,7 +2960,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/price-warehouse-3.png"
               ><img
@@ -2625,6 +2981,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "month" },
+    "y": {
+      "field": "price",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-ok">valid</span>
               <span class="reading"
@@ -2632,7 +3009,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/price-warehouse-4.png"
               ><img
@@ -2652,6 +3029,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "price",
+      "type": "quantitative"
+    },
+    "color": { "field": "month" },
+    "detail": { "field": "warehouse" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2662,30 +3056,35 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
         </div>
         <p class="grid-foot verdict-part" hidden>
-          2 of 8 valid for <code>price</code>.
+          <span class="only-all">2 of 8 valid</span
+          ><span class="only-vl" hidden>2 of 6 valid</span> for
+          <code>price</code>.
         </p>
       </div>
       <div class="grid-block">
         <h3>
           <code>temp</code>
           <span class="grid-kind">mean temperature in °C: no zero</span>
-          <span class="grid-count verdict-part" hidden>0 of 8 valid</span>
+          <span class="grid-count verdict-part" hidden
+            ><span class="only-all">0 of 8 valid</span
+            ><span class="only-vl" hidden>0 of 6 valid</span></span
+          >
         </h3>
         <div class="grid4">
-          <div class="grid-head">
+          <div class="grid-head" data-arr="1">
             1. spread, stack<br /><span>stacked bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="2">
             2. stack, spread<br /><span>a stack outside a spread</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="3">
             3. spread, spread<br /><span>grouped bars</span>
           </div>
-          <div class="grid-head">
+          <div class="grid-head" data-arr="4">
             4. stack, stack<br /><span>nested stacks, one bar</span>
           </div>
           <h4 class="grid-row">month outside, warehouse inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/temp-month-1.png"
               ><img
@@ -2705,6 +3104,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "temp",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2713,7 +3133,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2744,7 +3164,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/temp-month-3.png"
               ><img
@@ -2765,6 +3185,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="month", dir="x"), spread(by="warehouse", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "month",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "warehouse" },
+    "y": {
+      "field": "temp",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "warehouse",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2773,7 +3214,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/temp-month-4.png"
               ><img
@@ -2793,6 +3234,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="month", dir="y"), stack(by="warehouse", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "temp",
+      "type": "quantitative"
+    },
+    "color": { "field": "warehouse" },
+    "detail": { "field": "month" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2802,7 +3260,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
             </div>
           </div>
           <h4 class="grid-row">warehouse outside, month inside</h4>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="1">
             <div class="cell-arr">1. spread, stack (stacked bars)</div>
             <a class="shot grid-shot" href="img/grid/temp-warehouse-1.png"
               ><img
@@ -2822,6 +3280,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "y": {
+      "aggregate": "sum",
+      "field": "temp",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2829,7 +3308,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="2">
             <div class="cell-arr">
               2. stack, spread (a stack outside a spread)
             </div>
@@ -2860,7 +3339,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="3">
             <div class="cell-arr">3. spread, spread (grouped bars)</div>
             <a class="shot grid-shot" href="img/grid/temp-warehouse-3.png"
               ><img
@@ -2881,6 +3360,27 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(spread(by="warehouse", dir="x"), spread(by="month", dir="x"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">Vega-Lite</div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "x": {
+      "field": "warehouse",
+      "type": "nominal"
+    },
+    "xOffset": { "field": "month" },
+    "y": {
+      "field": "temp",
+      "type": "quantitative"
+    },
+    "color": {
+      "field": "month",
+      "type": "nominal"
+    }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2889,7 +3389,7 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               >
             </div>
           </div>
-          <div class="grid-cell">
+          <div class="grid-cell" data-arr="4">
             <div class="cell-arr">4. stack, stack (nested stacks, one bar)</div>
             <a class="shot grid-shot" href="img/grid/temp-warehouse-4.png"
               ><img
@@ -2909,6 +3409,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
                 ><code class="language-python">.flow(stack(by="warehouse", dir="y"), stack(by="month", dir="y"))</code></pre>
               </div>
             </div>
+            <div class="vl-part only-vl" hidden>
+              <div class="label">
+                Vega-Lite <span class="draft">rough equivalent</span>
+              </div>
+              <pre class="code"><code class="language-json">{
+  "mark": "bar",
+  "encoding": {
+    "y": {
+      "aggregate": "sum",
+      "field": "temp",
+      "type": "quantitative"
+    },
+    "color": { "field": "month" },
+    "detail": { "field": "warehouse" }
+  }
+}</code></pre>
+            </div>
             <div class="verdict-part" hidden>
               <span class="verdict v-bad">wrong</span>
               <span class="reading"
@@ -2919,7 +3436,9 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           </div>
         </div>
         <p class="grid-foot verdict-part" hidden>
-          0 of 8 valid for <code>temp</code>.
+          <span class="only-all">0 of 8 valid</span
+          ><span class="only-vl" hidden>0 of 6 valid</span> for
+          <code>temp</code>.
         </p>
       </div>
     </section>
@@ -5840,6 +6359,34 @@ chart(
     try {
       verdictsOn = localStorage.getItem("gofish-ts-verdicts") === "1";
     } catch (e) {}
+    var vlBtn = document.getElementById("grid-vl");
+    var gridPanel = document.querySelector('[data-panel="grid"]');
+    function setVl(on) {
+      vlBtn.setAttribute("aria-pressed", String(on));
+      gridPanel.classList.toggle("vl-on", on);
+      gridPanel.querySelectorAll('[data-arr="2"]').forEach(function (el) {
+        el.hidden = on;
+      });
+      gridPanel.querySelectorAll(".only-vl").forEach(function (el) {
+        el.hidden = !on;
+      });
+      gridPanel.querySelectorAll(".only-all").forEach(function (el) {
+        el.hidden = on;
+      });
+      try {
+        localStorage.setItem("gofish-ts-vl", on ? "1" : "0");
+      } catch (e) {}
+    }
+    var vlOn = false;
+    try {
+      vlOn = localStorage.getItem("gofish-ts-vl") === "1";
+    } catch (e) {}
+    if (vlBtn && gridPanel) {
+      setVl(vlOn);
+      vlBtn.addEventListener("click", function () {
+        setVl(vlBtn.getAttribute("aria-pressed") !== "true");
+      });
+    }
     if (gridBtn) {
       setVerdicts(verdictsOn);
       gridBtn.addEventListener("click", function () {
