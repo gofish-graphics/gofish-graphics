@@ -2,7 +2,7 @@
 
 **Summary.** GoFish already has most of the type system that the "GoFish Goes to School" draft describes: units, traits on columns, traits on coord axes, and facts about spaces that layout computes. The draft's one new idea is that adding up is a fact about a column and a key together, and that idea fixes real charts that GoFish draws wrong today. This proposal writes the whole system in GoFish's own words, gives a typing rule for every operator, channel and coord, and answers the questions the draft deferred.
 
-**Recommendation.** Keep types as run-time values in the existing `Unit`, `Trait` and `Domain` families. Add one keyed trait, `Trait.summable({ by })`, on the column, plus a `weight` for averages and a declared table `key`. Derive everything else. Treat the draft's Nominal, Ratio, Extensive and so on as names for bundles, not as primitives. Keep `coord` at the chart boundary, and if it becomes a method, put it at the start of the chain. Mirror a small part of the checks in TypeScript later.
+**Recommendation.** Keep types as run-time values in the existing `Unit`, `Trait` and `Domain` families. Add one keyed trait, `Trait.canSum({ over })`, on the column, plus a `weight` for averages and a declared table `key`. Derive everything else. Treat the draft's Nominal, Ratio, Extensive and so on as names for bundles, not as primitives. Keep `coord` at the chart boundary, and if it becomes a method, put it at the start of the chain. Mirror a small part of the checks in TypeScript later.
 
 Status: design proposal, nothing implemented. Every spelling marked "new" is hypothetical until signed off.
 
@@ -65,10 +65,13 @@ const inv = chart(rows, {
   key: ["warehouse", "month"], // new: the table's key
   schema: {
     month: Month,
-    // new: traits on a column, keyed with `by`
-    stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
-    sold: { unit: Items, traits: [Trait.summable()] },
-    price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },
+    // new: traits on a column, keyed with `over`
+    stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+    sold: { unit: Items, traits: [Trait.canSum()] },
+    price: {
+      unit: "USD/items",
+      traits: [Trait.canAverage({ weight: "sold" })],
+    },
     temp: { unit: Celsius },
   },
 });
@@ -80,9 +83,9 @@ inv = chart(
     key=["warehouse", "month"],
     schema={
         "month": Month,
-        "stock": {"unit": Items, "traits": [Trait.summable(by="warehouse")]},
-        "sold": {"unit": Items, "traits": [Trait.summable()]},
-        "price": {"unit": "USD/items", "traits": [Trait.weighted(weight="sold")]},
+        "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
+        "sold": {"unit": Items, "traits": [Trait.can_sum()]},
+        "price": {"unit": "USD/items", "traits": [Trait.can_average(weight="sold")]},
         "temp": {"unit": Celsius},
     },
 )
@@ -196,9 +199,9 @@ This is the main new API. The three kinds from the draft are the right way to ex
 ```js
 stock: {
   unit: Items,
-  traits: [Trait.summable({ by: "warehouse" }), Trait.cumulative({ by: "month" })],
+  traits: [Trait.canSum({ over: "warehouse" }), Trait.cumulative({ by: "month" })],
 },
-price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },
+price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
 ```
 
 - The user states every kind for every key.
@@ -221,47 +224,49 @@ stock: { unit: Items, entity: "warehouse" },
 
 ### C. One keyed trait, whose meaning is B and whose fast path is A (recommended)
 
-`Trait.summable({ by: "warehouse" })` and `entity: "warehouse"` say the same thing. Both name the keys the value may be summed across. So there is one declaration:
+`Trait.canSum({ over: "warehouse" })` and `entity: "warehouse"` say the same thing. Both name the keys the value may be summed across. So there is one declaration:
 
 ```js
-stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
-sold: { unit: Items, traits: [Trait.summable()] }, // sums over every key
-price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },
+stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+sold: { unit: Items, traits: [Trait.canSum()] }, // sums over every key
+price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
 ```
 
 - **Meaning.** A sum of `stock` over a set of rows is valid when no two of those rows share a `warehouse`. This is B's rule.
-- **Static rule.** When the table's `key` is declared, the checker does not need the rows. `stack({ by: k })` needs `k` to be in the column's `by`. A channel fold needs every column of the rest key to be in `by`. This is A's rule, and it reports the error before any data is read.
+- **Static rule.** When the table's `key` is declared, the checker does not need the rows. `stack({ by: k })` needs `k` to be in the column's `over`. A channel fold needs every column of the rest key to be in `over`. This is A's rule, and it reports the error before any data is read.
 - **Fallback.** When a key is unknown (no declared `key`, a `by` that is a function, anything after `derive`), the checker uses the row check.
 - **The other kinds are derived, not declared.**
-  - A key not in `by`, along which the value changes, is a level. If that key has `HasOrder`, the error calls it a running level and offers `.last()` and `.mean()`. This is the draft's Cumulative.
-  - A key not in `by`, along which the value is the same on every row, is a copy from a join. The error offers `.first()`. This is the fan trap, and the key-space research calls it Constant.
+  - A key not in `over`, along which the value changes, is a level. If that key has `HasOrder`, the error calls it a running level and offers `.last()` and `.mean()`. This is the draft's Cumulative.
+  - A key not in `over`, along which the value is the same on every row, is a copy from a join. The error offers `.first()`. This is the fan trap, and the key-space research calls it Constant.
   - A bin of a key inherits the key's entry. `stock` does not add up over `month`, so it does not add up over quarters either.
-- **Unit-level `Trait.summable()` stays** as "sums over every key" for every column in that unit. A unit that declares it cannot also hold a column with a narrower `by`. That is an error when the schema is applied, so "one unit cannot both add up and not" still holds.
+- **Unit-level `Trait.canSum()`** (today's `Trait.summable()`) stays as "sums over every key" for every column in that unit. A unit that declares it cannot also hold a column with a narrower `over`. That is an error when the schema is applied, so "one unit cannot both add up and not" still holds.
 
-Why C. It keeps #1198's single declaration and its coverage of unforeseen keys. It keeps the draft's static errors. It uses the family's one key word, `by`. And it adds no trait whose only job is to name a case: Cumulative and Constant come out of the check.
+Why C. It keeps #1198's single declaration and its coverage of unforeseen keys. It keeps the draft's static errors. It names the key with `over`, which reads as a sum over warehouses and has no group-by reading. And it adds no trait whose only job is to name a case: Cumulative and Constant come out of the check.
 
 What C makes awkward. A user who wants the draft's derivations (a running sum of a flow is a level, and the first difference of a level is a flow) gets them only if a later example forces a `Trait.cumulative({ by })`. I would wait for that example. The waterfall chart is the likely one.
 
+Runner-up: A, if Josh wants each kind visible in the schema. What would change my pick: a real chart that needs the level declared to draw correctly, not only to explain an error.
+
 ### A key made of more than one field
 
-`by` takes a list, and the rule is about the tuple: a sum over a set of rows is valid when no two of those rows agree on every column in `by`.
+`over` takes a list, and the rule is about the tuple: a sum over a set of rows is valid when no two of those rows agree on every column in `over`.
 
 ```js
 // one row per (store, product, month)
 key: ["store", "product", "month"],
 schema: {
-  on_hand: { unit: Items, traits: [Trait.summable({ by: ["store", "product"] })] },
-  floor_area: { unit: SquareMeter, traits: [Trait.summable({ by: "store" })] },
-  units_sold: { unit: Items, traits: [Trait.summable()] },
+  on_hand: { unit: Items, traits: [Trait.canSum({ over: ["store", "product"] })] },
+  floor_area: { unit: SquareMeter, traits: [Trait.canSum({ over: "store" })] },
+  units_sold: { unit: Items, traits: [Trait.canSum()] },
 }
 ```
 
-- The static rule: a sum is valid when every key column that varies among the summed rows is in `by`.
-- `stack({ by: "store" })` inside one month with `h: "on_hand"` draws. The rows vary in store and product, and both are in `by`.
-- `stack({ by: "month" })` is an error. Month is not in `by`.
+- The static rule: a sum is valid when every key column that varies among the summed rows is in `over`.
+- `stack({ by: "store" })` inside one month with `h: "on_hand"` draws. The rows vary in store and product, and both are in `over`.
+- `stack({ by: "month" })` is an error. Month is not in `over`.
 - `h: "floor_area"` in a bar per store is an error. The rows vary in product and month. The values are copies, so the message offers `.first()`.
 - Listing two fields means each one adds on its own too, with the other fixed. So the list is a set of dimensions, not one indivisible composite. I could not construct a value that adds over a pair jointly but not over either member. That is an argument, not a proof.
-- Nested keys are why the row check is the definition. With `by: ["county"]` and a stack by state, the static rule passes only if it knows that state is a function of county. Otherwise it checks the rows, and they pass.
+- Nested keys are why the row check is the definition. With `over: ["county"]` and a stack by state, the static rule passes only if it knows that state is a function of county. Otherwise it checks the rows, and they pass.
 - What it cannot say: a counted thing that is not a column, such as students in joint programs in a table that is already aggregated by department. That is #1198's open question 2, and it stays open.
 
 ### A rate: the unit says "per", the column says which weight
@@ -274,20 +279,37 @@ Neither the unit nor the column can hold both facts about an averaged value.
 - Together they give a check that neither gives alone. The unit says "per items", so the weight must be a summable column in items. Naming `revenue` as the weight of a price is a type error.
 
 ```js
-price: { unit: Unit.per(USD, Items), traits: [Trait.weighted({ weight: "sold" })] },
+price: { unit: Unit.per(USD, Items), traits: [Trait.canAverage({ weight: "sold" })] },
 ```
 
 A rate with no declared weight still cannot be stacked. A fold of it is an error that asks for the weight column or an explicit `.mean()`. A `derive` helper that computes `revenue / sold` supplies both the unit and the weight.
 
-Since the weight answers "per which items", a name such as `Trait.per("sold")`, or a plain `weight: "sold"` key on the column record, may read better than `weighted`. That is decision 4.
+The trait is `canAverage` and not `weighted`, because `weighted` does not say what is weighted. `Trait.canAverage()` with no weight is a plain mean, which suits temperatures.
 
-Runner-up: A, if Josh wants each kind visible in the schema. What would change my pick: a real chart that needs the level declared to draw correctly, not only to explain an error.
+### Names
+
+Two changes from the first version of this proposal, both from Josh's review on 11-12.
+
+- **`over`, not `by`.** "Sum by warehouse" reads to a SQL or polars user as "group by warehouse, then sum", which is the invalid sum. "Can sum over warehouse" reads as a sum over warehouses. `line` and `ribbon` name their path tier with `along`, so `over` is free. Its only other use is an internal IR name.
+- **`canSum` and `canAverage`, not `summable` and `weighted`.** `weighted` does not say what is weighted. `canAverage({ weight })` names the operation and what it needs, and with no weight it is a plain mean.
+
+| Trait         | Builder                        | Kind of word                |
+| ------------- | ------------------------------ | --------------------------- |
+| `CanSum`      | `Trait.canSum({ over })`       | the operation               |
+| `CanAverage`  | `Trait.canAverage({ weight })` | the operation               |
+| `HasOrder`    | `Trait.ordered()`              | an adjective for the values |
+| `HasCycle`    | `Trait.cyclic()`               | an adjective for the values |
+| `HasMidpoint` | `Trait.diverging(mid?)`        | an adjective for the values |
+
+The split follows the trait names. A `Can<Verb>` trait is an operation, and its builder is the trait's own name, so the word in an error message is the word the user wrote. A `Has<Thing>` trait describes the values, and its builder is the adjective, because `diverging` has no good `has` form. This replaces the rule in `api-design.md` that every builder word is an adjective, and it renames today's `Trait.summable()`.
+
+Together these names are easier to hold than extensive, intensive and cumulative. Those three stay as words for explaining, not as API.
 
 ### Overlap check
 
-- `Trait.summable()` on a unit and `Trait.summable({ by })` on a column: the first is the second with every key. Exact composition, one mechanism.
-- `Trait.weighted` and `.mean()`: the trait supplies the default fold, and `.mean({ weight })` is that fold written out. Exact composition.
-- `entity` from #1198: the same fact as `by`. One of the two names goes.
+- `Trait.canSum()` on a unit and `Trait.canSum({ over })` on a column: the first is the second with every key. Exact composition, one mechanism.
+- `Trait.canAverage` and `.mean()`: the trait supplies the default fold, and `.mean({ weight })` is that fold written out. Exact composition.
+- `entity` from #1198: the same fact as `over`. The `entity` name goes.
 
 ### Real charts this changes
 
@@ -330,7 +352,7 @@ Today `by` accepts any string and `stack` returns `Operator<any[], any[]>`, so T
 
 - Keep units as they are: gradual, unified across the figure, a clash between two declared units is an error.
 - Add unit algebra (#1142): products, quotients and "per". `revenue / units` has unit `USD/items`.
-- A quotient of two columns that both add up over a key is an average weighted by its denominator. So `derive` helpers that divide can supply `Trait.weighted` without the user writing it.
+- A quotient of two columns that both add up over a key is an average weighted by its denominator. So `derive` helpers that divide can supply `Trait.canAverage` without the user writing it.
 - Points and differences: a unit with no zero has a difference unit, as time has duration. `20 °C + 20 °C` fails because a point plus a point is not defined, and `°C − °C` is in Δ°C. The same split serves geometry, where a position is a point and a size is a difference.
 - Named types such as `Month`, `Temperature` and `Revenue` are aliases over these parts, like chart templates over operators. They come after the parts.
 
@@ -633,8 +655,8 @@ What Flint has that this does not yet: an identifier role (a key that must never
 ## 13. Recommendation, in order of work
 
 1. **Column traits that are already open issues:** `HasZero` (#1051), `HasCycle` (#1052), `Domain.continuous`.
-2. **`Trait.summable({ by })` on the column, a declared `key`, and the row check** (this closes #1198). Public `.last()`, `.first()`, and `weight` on `.mean()`.
-3. **`Trait.weighted({ weight })`** and the schema-driven default fold.
+2. **`Trait.canSum({ over })` on the column, a declared `key`, and the row check** (this closes #1198). Public `.last()`, `.first()`, and `weight` on `.mean()`.
+3. **`Trait.canAverage({ weight })`** and the schema-driven default fold.
 4. **Key checks for connectors:** `line` and `ribbon` need `HasOrder` or `HasCycle`.
 5. **Unit algebra** (#1142), then the key-sized lint.
 6. **`unpivot`.**
@@ -643,18 +665,18 @@ What Flint has that this does not yet: an identifier role (a key that must never
 Each step removes a wrong chart that renders today. Why this shape, against the principles in `api-design.md`:
 
 - It desugars into the core. Every default expands to a fold or an option a user can write.
-- One concept is one trait. `summable` with `by` covers the unit flag, the entity key and the draft's Extensive.
+- One concept is one trait. `canSum` with `over` covers the unit flag, the entity key and the draft's Extensive.
 - Meaning lives on the data type, and a mismatch is a loud error that names the trait.
-- Few new terms: `by` on `Trait.summable`, `Trait.weighted`, `Trait.cyclic`, `key`, `Domain.continuous`.
+- Few new terms: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic`, `key`, `Domain.continuous`.
 - A type is added only where a chart forces it. Cumulative, Constant, `HasNeighbors`, `HasParent` and cells all wait.
 - The same shape in JS and Python, because the types are values on the wire.
 
 ## 14. Decisions for Josh
 
-1. Is `Trait.summable({ by })` the one declaration for additivity (approach C), or do you want each kind declared (approach A)?
-2. Is the word `by`, or `entity` as #1198 wrote it?
+1. Is `Trait.canSum({ over })` the one declaration for additivity (approach C), or do you want each kind declared (approach A)?
+2. Settled 11-12: the key word is `over`, not `by` or #1198's `entity`. Line and ribbon use `along`, so there is no clash.
 3. Should a column that does not add up over an ordered key get a default fold (`.last()`), or an error that offers the choices? I recommend the error.
-4. What is the builder word for an averaged value: `Trait.weighted({ weight: "sold" })`, or something like `Trait.rate({ per: "sold" })`?
+4. Settled 11-12: operations are spelled as the trait, `Trait.canSum` and `Trait.canAverage`. Open: do the value-structure words stay adjectives (`ordered`, `cyclic`, `diverging`), and should today's `Trait.summable()` be renamed to match?
 5. Is `key` a chart option beside `schema`, or part of the schema?
 6. Do plain numbers have `HasZero` by default, with units such as °C opting out through a difference unit?
 7. Does `HasMidpoint` go on amounts too (profit around 0), as well as on ordered keys?
@@ -665,7 +687,7 @@ Each step removes a wrong chart that renders today. Why this shape, against the 
 12. Is the TypeScript mirror worth starting with field names now?
 13. Should `log`, the debug pass-through, be renamed before `Coord.log` exists?
 
-Syntax to review: `Trait.summable({ by })`, `Trait.weighted({ weight })`, `Trait.cyclic()`, `key: [...]`, `traits` on a column record, `Domain.continuous([lo, hi])`, `.mean({ weight })`, `.last()`, `.first()`, `unpivot`.
+Syntax to review: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic()`, `key: [...]`, `traits` on a column record, `Domain.continuous([lo, hi])`, `.mean({ weight })`, `.last()`, `.first()`, `unpivot`.
 
 ## Gaps found on main (not filed)
 

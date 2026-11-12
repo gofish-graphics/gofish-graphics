@@ -595,6 +595,14 @@
     color: var(--bad);
     background: var(--bad-bg);
   }
+  .now-settled {
+    color: var(--ok);
+    background: var(--ok-bg);
+  }
+  .now-partly {
+    color: var(--err);
+    background: var(--err-bg);
+  }
   .now-proposed,
   .now-new {
     color: var(--def);
@@ -619,6 +627,10 @@
   }
   .approach.rec {
     border-top-color: var(--accent);
+  }
+  .approaches.families {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
   }
   .approach h3 {
     margin-top: 6px;
@@ -694,7 +706,7 @@
           <strong>Recommendation.</strong> Keep types as run-time values in the
           existing <code>Unit</code>, <code>Trait</code> and
           <code>Domain</code> families. Add one keyed trait,
-          <code>Trait.summable({ by })</code>, on the column, plus a
+          <code>Trait.canSum({ over })</code>, on the column, plus a
           <code>weight</code> for averages and a declared table
           <code>key</code>. Derive everything else. Treat the draft's Nominal,
           Ratio, Extensive and so on as names for bundles, not as primitives.
@@ -707,11 +719,11 @@
         <ul class="rules">
           <li>
             Adding up is a fact about a column and a key:
-            <code>Trait.summable({ by: "warehouse" })</code>.
+            <code>Trait.canSum({ over: "warehouse" })</code>.
           </li>
           <li>
             An average names its weight:
-            <code>Trait.weighted({ weight: "sold" })</code> fills in
+            <code>Trait.canAverage({ weight: "sold" })</code> fills in
             <code>.mean({ weight: "sold" })</code>.
           </li>
           <li>
@@ -865,10 +877,13 @@ const inv = chart(rows, {
   key: ["warehouse", "month"], // new: the table's key
   schema: {
     month: Month,
-    // new: traits on a column, keyed with `by`
-    stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
-    sold: { unit: Items, traits: [Trait.summable()] },
-    price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },
+    // new: traits on a column, keyed with `over`
+    stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+    sold: { unit: Items, traits: [Trait.canSum()] },
+    price: {
+      unit: "USD/items",
+      traits: [Trait.canAverage({ weight: "sold" })],
+    },
     temp: { unit: Celsius },
   },
 });</code></pre>
@@ -879,9 +894,9 @@ const inv = chart(rows, {
     key=["warehouse", "month"],
     schema={
         "month": Month,
-        "stock": {"unit": Items, "traits": [Trait.summable(by="warehouse")]},
-        "sold": {"unit": Items, "traits": [Trait.summable()]},
-        "price": {"unit": "USD/items", "traits": [Trait.weighted(weight="sold")]},
+        "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
+        "sold": {"unit": Items, "traits": [Trait.can_sum()]},
+        "price": {"unit": "USD/items", "traits": [Trait.can_average(weight="sold")]},
         "temp": {"unit": Celsius},
     },
 )</code></pre>
@@ -1128,7 +1143,7 @@ chart(rows, { axes: true })
                 ><code class="language-javascript">chart(daily, {
   key: ["warehouse", "day"],
   schema: {
-    stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
+    stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
   },
 })
   .flow(
@@ -1142,7 +1157,7 @@ chart(rows, { axes: true })
     chart(
         daily,
         key=["warehouse", "day"],
-        schema={"stock": {"unit": Items, "traits": [Trait.summable(by="warehouse")]}},
+        schema={"stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]}},
     )
     .flow(
         spread(by=field("day").bin(Calendar.month), dir="x"),
@@ -1612,11 +1627,11 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
             <pre class="code"><code class="language-javascript">stock: {
   unit: Items,
   traits: [
-    Trait.summable({ by: "warehouse" }),
+    Trait.canSum({ over: "warehouse" }),
     Trait.cumulative({ by: "month" }),
   ],
 },
-price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</code></pre>
+price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</code></pre>
             <ul>
               <li>The user states every kind for every key.</li>
               <li>The check is static: it reads the schema only.</li>
@@ -1670,15 +1685,15 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
               (recommended)
             </h3>
             <p>
-              <code>Trait.summable({ by: "warehouse" })</code> and
+              <code>Trait.canSum({ over: "warehouse" })</code> and
               <code>entity: "warehouse"</code> say the same thing. Both name the
               keys the value may be summed across. So there is one declaration:
             </p>
             <pre
               class="code"
-            ><code class="language-javascript">stock: { unit: Items, traits: [Trait.summable({ by: "warehouse" })] },
-sold: { unit: Items, traits: [Trait.summable()] }, // sums over every key
-price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</code></pre>
+            ><code class="language-javascript">stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+sold: { unit: Items, traits: [Trait.canSum()] }, // sums over every key
+price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</code></pre>
             <ul>
               <li>
                 <strong>Meaning.</strong> A sum of <code>stock</code> over a set
@@ -1689,8 +1704,8 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
                 <strong>Static rule.</strong> When the table's
                 <code>key</code> is declared, the checker does not need the
                 rows. <code>stack({ by: k })</code> needs <code>k</code> to be
-                in the column's <code>by</code>. A channel fold needs every
-                column of the rest key to be in <code>by</code>. This is A's
+                in the column's <code>over</code>. A channel fold needs every
+                column of the rest key to be in <code>over</code>. This is A's
                 rule, and it reports the error before any data is read.
               </li>
               <li>
@@ -1702,13 +1717,14 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
                 <strong>The other kinds are derived, not declared.</strong>
                 <ul>
                   <li>
-                    A key not in <code>by</code>, along which the value changes,
-                    is a level. If that key has <code>HasOrder</code>, the error
-                    calls it a running level and offers <code>.last()</code> and
-                    <code>.mean()</code>. This is the draft's Cumulative.
+                    A key not in <code>over</code>, along which the value
+                    changes, is a level. If that key has <code>HasOrder</code>,
+                    the error calls it a running level and offers
+                    <code>.last()</code> and <code>.mean()</code>. This is the
+                    draft's Cumulative.
                   </li>
                   <li>
-                    A key not in <code>by</code>, along which the value is the
+                    A key not in <code>over</code>, along which the value is the
                     same on every row, is a copy from a join. The error offers
                     <code>.first()</code>. This is the fan trap, and the
                     key-space research calls it Constant.
@@ -1721,11 +1737,12 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
                 </ul>
               </li>
               <li>
-                <strong>Unit-level <code>Trait.summable()</code> stays</strong>
-                as "sums over every key" for every column in that unit. A unit
-                that declares it cannot also hold a column with a narrower
-                <code>by</code>. That is an error when the schema is applied, so
-                "one unit cannot both add up and not" still holds.
+                <strong>Unit-level <code>Trait.canSum()</code></strong> (today's
+                <code>Trait.summable()</code>) stays as "sums over every key"
+                for every column in that unit. A unit that declares it cannot
+                also hold a column with a narrower <code>over</code>. That is an
+                error when the schema is applied, so "one unit cannot both add
+                up and not" still holds.
               </li>
             </ul>
           </div>
@@ -1746,7 +1763,7 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
                 <th scope="row">What the user writes</th>
                 <td>every kind for every key</td>
                 <td>one fact: which thing the value belongs to</td>
-                <td>one keyed trait, <code>Trait.summable({ by })</code></td>
+                <td>one keyed trait, <code>Trait.canSum({ over })</code></td>
               </tr>
               <tr>
                 <th scope="row">When the error comes</th>
@@ -1788,10 +1805,10 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
         </div>
         <p>
           Why C. It keeps #1198's single declaration and its coverage of
-          unforeseen keys. It keeps the draft's static errors. It uses the
-          family's one key word, <code>by</code>. And it adds no trait whose
-          only job is to name a case: Cumulative and Constant come out of the
-          check.
+          unforeseen keys. It keeps the draft's static errors. It names the key
+          with <code>over</code>, which reads as a sum over warehouses and has
+          no group-by reading. And it adds no trait whose only job is to name a
+          case: Cumulative and Constant come out of the check.
         </p>
         <p>
           What C makes awkward. A user who wants the draft's derivations (a
@@ -1800,11 +1817,179 @@ price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },</cod
           <code>Trait.cumulative({ by })</code>. I would wait for that example.
           The waterfall chart is the likely one.
         </p>
+        <p>
+          Runner-up: A, if Josh wants each kind visible in the schema. What
+          would change my pick: a real chart that needs the level declared to
+          draw correctly, not only to explain an error.
+        </p>
+        <h3>Names</h3>
+        <p>
+          Two changes from the first version of this proposal, both from Josh's
+          review on 11-12.
+        </p>
+        <ul>
+          <li>
+            <strong><code>over</code>, not <code>by</code>.</strong> "Sum by
+            warehouse" reads to a SQL or polars user as "group by warehouse,
+            then sum", which is the invalid sum. "Can sum over warehouse" reads
+            as a sum over warehouses. <code>line</code> and
+            <code>ribbon</code> name their path tier with <code>along</code>, so
+            <code>over</code> is free. Its only other use is an internal IR
+            name.
+          </li>
+          <li>
+            <strong
+              ><code>canSum</code> and <code>canAverage</code>, not
+              <code>summable</code> and <code>weighted</code>.</strong
+            >
+            <code>weighted</code> does not say what is weighted.
+            <code>canAverage({ weight })</code> names the operation and what it
+            needs, and with no weight it is a plain mean.
+          </li>
+        </ul>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Trait</th>
+                <th scope="col">Builder</th>
+                <th scope="col">Kind of word</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>CanSum</code></th>
+                <td><code>Trait.canSum({ over })</code></td>
+                <td>the operation</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>CanAverage</code></th>
+                <td><code>Trait.canAverage({ weight })</code></td>
+                <td>the operation</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasOrder</code></th>
+                <td><code>Trait.ordered()</code></td>
+                <td>an adjective for the values</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasCycle</code></th>
+                <td><code>Trait.cyclic()</code></td>
+                <td>an adjective for the values</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>HasMidpoint</code></th>
+                <td><code>Trait.diverging(mid?)</code></td>
+                <td>an adjective for the values</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The split follows the trait names. A
+          <code>Can&lt;Verb&gt;</code> trait is an operation, and its builder is
+          the trait's own name, so the word in an error message is the word the
+          user wrote. A <code>Has&lt;Thing&gt;</code> trait describes the
+          values, and its builder is the adjective, because
+          <code>diverging</code> has no good <code>has</code> form. This
+          replaces the rule in <code>api-design.md</code> that every builder
+          word is an adjective, and it renames today's
+          <code>Trait.summable()</code>.
+        </p>
+        <p>
+          Together these names are easier to hold than extensive, intensive and
+          cumulative. Those three stay as words for explaining, not as API.
+        </p>
+        <h3>The two families side by side</h3>
+        <p>The same four schema lines in each family.</p>
+        <div class="approaches families">
+          <div class="approach">
+            <h4>Adjectives everywhere</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">stock: { unit: Items, traits: [Trait.summable({ over: "warehouse" })] },
+price: { unit: "USD/items", traits: [Trait.weighted({ weight: "sold" })] },
+month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.cyclic()] }),
+response: Unit({
+  domain: Domain.discrete(LEVELS),
+  traits: [Trait.ordered(), Trait.diverging()],
+}),</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">{
+    "stock": {"unit": Items, "traits": [Trait.summable(over="warehouse")]},
+    "price": {"unit": "USD/items", "traits": [Trait.weighted(weight="sold")]},
+    "month": Unit(domain=Domain.discrete(MONTHS), traits=[Trait.cyclic()]),
+    "response": Unit(
+        domain=Domain.discrete(LEVELS), traits=[Trait.ordered(), Trait.diverging()]
+    ),
+}</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="approach">
+            <h4>Trait names everywhere</h4>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
+month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.hasCycle()] }),
+response: Unit({
+  domain: Domain.discrete(LEVELS),
+  traits: [Trait.hasOrder(), Trait.hasMidpoint()],
+}),</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">{
+    "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
+    "price": {"unit": "USD/items", "traits": [Trait.can_average(weight="sold")]},
+    "month": Unit(domain=Domain.discrete(MONTHS), traits=[Trait.has_cycle()]),
+    "response": Unit(
+        domain=Domain.discrete(LEVELS), traits=[Trait.has_order(), Trait.has_midpoint()]
+    ),
+}</code></pre>
+              </div>
+            </div>
+          </div>
+          <div class="approach rec">
+            <h4>Operations as trait names, value structure as adjectives</h4>
+            <div class="verdicts">
+              <span class="verdict v-def">current proposal</span>
+            </div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
+price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
+month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.cyclic()] }),
+response: Unit({
+  domain: Domain.discrete(LEVELS),
+  traits: [Trait.ordered(), Trait.diverging()],
+}),</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">{
+    "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
+    "price": {"unit": "USD/items", "traits": [Trait.can_average(weight="sold")]},
+    "month": Unit(domain=Domain.discrete(MONTHS), traits=[Trait.cyclic()]),
+    "response": Unit(
+        domain=Domain.discrete(LEVELS), traits=[Trait.ordered(), Trait.diverging()]
+    ),
+}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
         <h3>A key made of more than one field</h3>
         <p>
-          <code>by</code> takes a list, and the rule is about the tuple: a sum
+          <code>over</code> takes a list, and the rule is about the tuple: a sum
           over a set of rows is valid when no two of those rows agree on every
-          column in <code>by</code>.
+          column in <code>over</code>.
         </p>
         <div class="pair">
           <div data-lang="js">
@@ -1815,13 +2000,13 @@ key: ["store", "product", "month"],
 schema: {
   on_hand: {
     unit: Items,
-    traits: [Trait.summable({ by: ["store", "product"] })],
+    traits: [Trait.canSum({ over: ["store", "product"] })],
   },
   floor_area: {
     unit: SquareMeter,
-    traits: [Trait.summable({ by: "store" })],
+    traits: [Trait.canSum({ over: "store" })],
   },
-  units_sold: { unit: Items, traits: [Trait.summable()] },
+  units_sold: { unit: Items, traits: [Trait.canSum()] },
 },</code></pre>
           </div>
           <div data-lang="py">
@@ -1832,9 +2017,12 @@ chart(
     rows,
     key=["store", "product", "month"],
     schema={
-        "on_hand": {"unit": Items, "traits": [Trait.summable(by=["store", "product"])]},
-        "floor_area": {"unit": SquareMeter, "traits": [Trait.summable(by="store")]},
-        "units_sold": {"unit": Items, "traits": [Trait.summable()]},
+        "on_hand": {
+            "unit": Items,
+            "traits": [Trait.can_sum(over=["store", "product"])],
+        },
+        "floor_area": {"unit": SquareMeter, "traits": [Trait.can_sum(over="store")]},
+        "units_sold": {"unit": Items, "traits": [Trait.can_sum()]},
     },
 )</code></pre>
           </div>
@@ -1842,16 +2030,16 @@ chart(
         <ul>
           <li>
             The static rule: a sum is valid when every key column that varies
-            among the summed rows is in <code>by</code>.
+            among the summed rows is in <code>over</code>.
           </li>
           <li>
             <code>stack({ by: "store" })</code> inside one month with
             <code>h: "on_hand"</code> draws. The rows vary in store and product,
-            and both are in <code>by</code>.
+            and both are in <code>over</code>.
           </li>
           <li>
             <code>stack({ by: "month" })</code> is an error. Month is not in
-            <code>by</code>.
+            <code>over</code>.
           </li>
           <li>
             <code>h: "floor_area"</code> in a bar per store is an error. The
@@ -1867,7 +2055,7 @@ chart(
           </li>
           <li>
             Nested keys are why the row check is the definition. With
-            <code>by: ["county"]</code> and a stack by state, the static rule
+            <code>over: ["county"]</code> and a stack by state, the static rule
             passes only if it knows that state is a function of county.
             Otherwise it checks the rows, and they pass.
           </li>
@@ -1911,13 +2099,13 @@ chart(
           <div data-lang="js">
             <pre class="code"><code class="language-javascript">price: {
   unit: Unit.per(USD, Items),
-  traits: [Trait.weighted({ weight: "sold" })],
+  traits: [Trait.canAverage({ weight: "sold" })],
 },</code></pre>
           </div>
           <div data-lang="py">
             <pre
               class="code"
-            ><code class="language-python">{"price": {"unit": Unit.per(USD, Items), "traits": [Trait.weighted(weight="sold")]}}</code></pre>
+            ><code class="language-python">{"price": {"unit": Unit.per(USD, Items), "traits": [Trait.can_average(weight="sold")]}}</code></pre>
           </div>
         </div>
         <p>
@@ -1927,31 +2115,26 @@ chart(
           <code>revenue / sold</code> supplies both the unit and the weight.
         </p>
         <p>
-          Since the weight answers "per which items", a name such as
-          <code>Trait.per("sold")</code>, or a plain
-          <code>weight: "sold"</code> key on the column record, may read better
-          than <code>weighted</code>. That is decision 4.
-        </p>
-        <p>
-          Runner-up: A, if Josh wants each kind visible in the schema. What
-          would change my pick: a real chart that needs the level declared to
-          draw correctly, not only to explain an error.
+          The trait is <code>canAverage</code> and not <code>weighted</code>,
+          because <code>weighted</code> does not say what is weighted.
+          <code>Trait.canAverage()</code> with no weight is a plain mean, which
+          suits temperatures.
         </p>
         <h3>Overlap check</h3>
         <ul>
           <li>
-            <code>Trait.summable()</code> on a unit and
-            <code>Trait.summable({ by })</code> on a column: the first is the
+            <code>Trait.canSum()</code> on a unit and
+            <code>Trait.canSum({ over })</code> on a column: the first is the
             second with every key. Exact composition, one mechanism.
           </li>
           <li>
-            <code>Trait.weighted</code> and <code>.mean()</code>: the trait
+            <code>Trait.canAverage</code> and <code>.mean()</code>: the trait
             supplies the default fold, and <code>.mean({ weight })</code> is
             that fold written out. Exact composition.
           </li>
           <li>
-            <code>entity</code> from #1198: the same fact as <code>by</code>.
-            One of the two names goes.
+            <code>entity</code> from #1198: the same fact as <code>over</code>.
+            The <code>entity</code> name goes.
           </li>
         </ul>
         <h3>Real charts this changes</h3>
@@ -3883,7 +4066,7 @@ chart(
           <li>
             A quotient of two columns that both add up over a key is an average
             weighted by its denominator. So <code>derive</code> helpers that
-            divide can supply <code>Trait.weighted</code> without the user
+            divide can supply <code>Trait.canAverage</code> without the user
             writing it.
           </li>
           <li>
@@ -3975,13 +4158,15 @@ chart(
         <p>Answer by number.</p>
         <ol>
           <li>
-            Is <code>Trait.summable({ by })</code> the one declaration for
+            Is <code>Trait.canSum({ over })</code> the one declaration for
             additivity (approach C), or do you want each kind declared (approach
             A)?
           </li>
           <li>
-            Is the word <code>by</code>, or <code>entity</code> as #1198 wrote
-            it?
+            <span class="chip now-settled">settled</span> 11-12: the key word is
+            <code>over</code>, not <code>by</code> or #1198's
+            <code>entity</code>. Line and ribbon use <code>along</code>, so
+            there is no clash.
           </li>
           <li>
             Should a column that does not add up over an ordered key get a
@@ -3989,9 +4174,12 @@ chart(
             choices? I recommend the error.
           </li>
           <li>
-            What is the builder word for an averaged value:
-            <code>Trait.weighted({ weight: "sold" })</code>, or something like
-            <code>Trait.rate({ per: "sold" })</code>?
+            <span class="chip now-partly">partly settled</span> 11-12:
+            operations are spelled as the trait, <code>Trait.canSum</code> and
+            <code>Trait.canAverage</code>. Open: do the value-structure words
+            stay adjectives (<code>ordered</code>, <code>cyclic</code>,
+            <code>diverging</code>), and should today's
+            <code>Trait.summable()</code> be renamed to match?
           </li>
           <li>
             Is <code>key</code> a chart option beside <code>schema</code>, or
@@ -4026,9 +4214,10 @@ chart(
         </ol>
         <h3>Syntax to review</h3>
         <p>
-          <code>Trait.summable({ by })</code>,
-          <code>Trait.weighted({ weight })</code>, <code>Trait.cyclic()</code>,
-          <code>key: [...]</code>, <code>traits</code> on a column record,
+          <code>Trait.canSum({ over })</code>,
+          <code>Trait.canAverage({ weight })</code>,
+          <code>Trait.cyclic()</code>, <code>key: [...]</code>,
+          <code>traits</code> on a column record,
           <code>Domain.continuous([lo, hi])</code>,
           <code>.mean({ weight })</code>, <code>.last()</code>,
           <code>.first()</code>, <code>unpivot</code>.
@@ -4042,7 +4231,7 @@ chart(
           </li>
           <li>
             <strong
-              ><code>Trait.summable({ by })</code> on the column, a declared
+              ><code>Trait.canSum({ over })</code> on the column, a declared
               <code>key</code>, and the row check</strong
             >
             (this closes #1198). Public <code>.last()</code>,
@@ -4050,7 +4239,7 @@ chart(
             <code>.mean()</code>.
           </li>
           <li>
-            <strong><code>Trait.weighted({ weight })</code></strong> and the
+            <strong><code>Trait.canAverage({ weight })</code></strong> and the
             schema-driven default fold.
           </li>
           <li>
@@ -4076,18 +4265,19 @@ chart(
             option a user can write.
           </li>
           <li>
-            One concept is one trait. <code>summable</code> with
-            <code>by</code> covers the unit flag, the entity key and the draft's
-            Extensive.
+            One concept is one trait. <code>canSum</code> with
+            <code>over</code> covers the unit flag, the entity key and the
+            draft's Extensive.
           </li>
           <li>
             Meaning lives on the data type, and a mismatch is a loud error that
             names the trait.
           </li>
           <li>
-            Few new terms: <code>by</code> on <code>Trait.summable</code>,
-            <code>Trait.weighted</code>, <code>Trait.cyclic</code>,
-            <code>key</code>, <code>Domain.continuous</code>.
+            Few new terms: <code>Trait.canSum({ over })</code>,
+            <code>Trait.canAverage({ weight })</code>,
+            <code>Trait.cyclic</code>, <code>key</code>,
+            <code>Domain.continuous</code>.
           </li>
           <li>
             A type is added only where a chart forces it. Cumulative, Constant,
