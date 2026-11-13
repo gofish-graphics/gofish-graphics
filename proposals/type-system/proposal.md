@@ -1581,6 +1581,65 @@ Notes from a design conversation on 11-13 ([notes-2026-11-13-space-types](resear
 - **Origin state.** The engine's one fact about where a continuous axis's data 0 sits: `pinned` (data 0 is placed, so positions mean something), `free` (a length whose baseline a parent has not placed yet), or `none` (only differences mean something).
 - **Mirrored.** A flag on a continuous space whose two sides of 0 both hold nonnegative amounts, as in a Likert chart. Its axis labels ticks with their distance from 0.
 
+### The main example, typed end to end
+
+This is the valid spec from section 1, typed the way the notes ask: what it needs from the data, and what it gives on the page. It is a reading of this proposal's rules. Nothing computes it today.
+
+```js
+inv
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "warehouse" }));
+```
+
+```python
+inv.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y")).mark(
+    rect(h="stock", fill="warehouse")
+)
+```
+
+![What GoFish draws today for this spec](img/inventory-by-warehouse.png)
+
+**What the spec needs from the data.**
+
+| The spec names            | It needs                                   | The inventory table has                                    |
+| ------------------------- | ------------------------------------------ | ---------------------------------------------------------- |
+| `month`, in `spread`      | a column with levels                       | 12 levels, `HasOrder`, `HasCycle`                          |
+| `warehouse`, in `stack`   | a column with levels                       | 3 levels, no order                                         |
+| `stock`, as a stacked `h` | `HasZero`, and `CanSum` over `warehouse`   | items, `canSum({ over: "warehouse" })`                     |
+| the rows of one mark      | one row, or a fold that suits the rest key | `key` is `warehouse` and `month`, both grouped, so one row |
+
+The middle column is the type of the spec with no data. Any table that has those three facts fits, whatever its fields are called, and extra columns such as `price` and `temp` are ignored. The table has more than the spec needs: `month` has an order and a cycle that this spec does not ask for.
+
+**What each step checks and gives.**
+
+| Step                                   | Check                                                                                     | Groupings so far     | Rest key             | Gives                                                 |
+| -------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------- | -------------------- | ----------------------------------------------------- |
+| `chart(rows)`                          |                                                                                           | none                 | `warehouse`, `month` | nothing yet                                           |
+| `spread({ by: "month", dir: "x" })`    | none on a value                                                                           | `month`              | `warehouse`          | x: 12 slots, in calendar order                        |
+| `stack({ by: "warehouse", dir: "y" })` | `stock` has `CanSum` over `warehouse`, has `HasZero`, and the parts share a unit          | `month`, `warehouse` | empty                | y: lengths in items, glued end to end from 0          |
+| `rect({ h: "stock" })`                 | `h` is a length, so `stock` needs `HasZero`. The rest key is empty, so nothing is folded. | the same             | empty                | 36 marks, one per row                                 |
+| `fill: "warehouse"`                    | none                                                                                      | the same             | empty                | a categorical palette, since `warehouse` has no order |
+
+**What the whole spec gives: its output type.**
+
+| Part of the picture        | Kind                                | What a reader can read from it                                  | Structure it keeps or adds                                                                     |
+| -------------------------- | ----------------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| x of a bar                 | slot, ordered                       | which month, and which month comes next                         | keeps the order of `month`. Drops its cycle: the row is cut between December and January.      |
+| height of a segment        | length, in items                    | the stock of one warehouse in one month                         | keeps amounts: twice the stock is twice the height                                             |
+| top of a whole bar         | position, in items, from a pinned 0 | the stock of all warehouses that month                          | keeps the sum over `warehouse`, which is why the rule asks for `CanSum`                        |
+| bottom of an upper segment | none                                | nothing by itself. It is the running sum of the segments below. | only the lowest warehouse shares a baseline across months. The others compare by length alone. |
+| order of segments in a bar | slot, not ordered                   | nothing. `warehouse` has no order.                              | adds an order the data does not have (first appearance)                                        |
+| width and area of a bar    | none                                | nothing. The width is the slot's.                               | none                                                                                           |
+| color                      | category                            | which warehouse                                                 | keeps identity                                                                                 |
+
+So the output type is: on x, ordered slots keyed by `month`; on y, one continuous space in items with its 0 pinned, holding 36 lengths in 12 stacks; marks keyed by `month` and `warehouse`, which is the table's identity.
+
+Who uses it. The x axis labels the slots in order. The y axis draws a scale in items from 0, because the space is pinned and has a unit. A legend lists the warehouses with no order. A second layer could share the y axis only if its space is also items pinned at 0. A `line` over the bar tops would pass, since `month` has `HasOrder`.
+
+What it shows about the notes. The four facts in the Kind column that the engine already tracks are the slot, its order, the length with its unit, and the pinned 0 (read, per the check above). The two facts about what the stack loses and adds, the missing baseline of upper segments and the invented segment order, are tracked by nothing today, and no rule in section 10 reads them. They are the notes' strongest addition. They do not make this spec wrong, so they belong in the opt-in lint class, not in the checks.
+
+Compare the invalid twin, `spread({ by: "warehouse" })` then `stack({ by: "month" })`. Its output type has the same shape: slots, lengths in items, a pinned 0. Only the Check column differs, because `stock` has no `CanSum` over `month`. So the output type alone does not tell a valid stack from an invalid one. The check on the data side does.
+
 ### What was already here
 
 | Idea in the notes                                     | Where it already is                                                                       | Verdict                                            |

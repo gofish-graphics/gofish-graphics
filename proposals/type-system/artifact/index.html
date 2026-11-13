@@ -7091,6 +7091,253 @@ chart(
             axis labels ticks with their distance from 0.
           </li>
         </ul>
+        <h3 id="main-typed">The main example, typed end to end</h3>
+        <p>
+          This is the valid spec from section 1, typed the way the notes ask:
+          what it needs from the data, and what it gives on the page. It is a
+          reading of this proposal's rules. Nothing computes it today.
+        </p>
+        <div class="pair">
+          <div data-lang="js">
+            <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "warehouse" }));</code></pre>
+          </div>
+          <div data-lang="py">
+            <pre
+              class="code"
+            ><code class="language-python">inv.flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y")).mark(
+    rect(h="stock", fill="warehouse")
+)</code></pre>
+          </div>
+        </div>
+        <p>
+          <img
+            src="img/inventory-by-warehouse.png"
+            alt="Months on x, warehouses stacked, bar height is stock"
+            style="max-width: 420px; width: 100%; height: auto"
+          />
+        </p>
+        <p><strong>What the spec needs from the data.</strong></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">The spec names</th>
+                <th scope="col">It needs</th>
+                <th scope="col">The inventory table has</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>month</code>, in <code>spread</code></th>
+                <td>a column with levels</td>
+                <td>12 levels, <code>HasOrder</code>, <code>HasCycle</code></td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>warehouse</code>, in <code>stack</code>
+                </th>
+                <td>a column with levels</td>
+                <td>3 levels, no order</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>stock</code>, as a stacked <code>h</code>
+                </th>
+                <td>
+                  <code>HasZero</code>, and <code>CanSum</code> over
+                  <code>warehouse</code>
+                </td>
+                <td>items, <code>canSum({ over: "warehouse" })</code></td>
+              </tr>
+              <tr>
+                <th scope="row">the rows of one mark</th>
+                <td>one row, or a fold that suits the rest key</td>
+                <td>
+                  <code>key</code> is <code>warehouse</code> and
+                  <code>month</code>, both grouped, so one row
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The middle column is the type of the spec with no data. Any table that
+          has those three facts fits, whatever its fields are called, and extra
+          columns such as <code>price</code> and <code>temp</code> are ignored.
+          The table has more than the spec needs: <code>month</code> has an
+          order and a cycle that this spec does not ask for.
+        </p>
+        <p><strong>What each step checks and gives.</strong></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Step</th>
+                <th scope="col">Check</th>
+                <th scope="col">Groupings so far</th>
+                <th scope="col">Rest key</th>
+                <th scope="col">Gives</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>chart(rows)</code></th>
+                <td></td>
+                <td>none</td>
+                <td><code>warehouse</code>, <code>month</code></td>
+                <td>nothing yet</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>spread({ by: "month", dir: "x" })</code>
+                </th>
+                <td>none on a value</td>
+                <td><code>month</code></td>
+                <td><code>warehouse</code></td>
+                <td>x: 12 slots, in calendar order</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>stack({ by: "warehouse", dir: "y" })</code>
+                </th>
+                <td>
+                  <code>stock</code> has <code>CanSum</code> over
+                  <code>warehouse</code>, has <code>HasZero</code>, and the
+                  parts share a unit
+                </td>
+                <td><code>month</code>, <code>warehouse</code></td>
+                <td>empty</td>
+                <td>y: lengths in items, glued end to end from 0</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>rect({ h: "stock" })</code></th>
+                <td>
+                  <code>h</code> is a length, so <code>stock</code> needs
+                  <code>HasZero</code>. The rest key is empty, so nothing is
+                  folded.
+                </td>
+                <td>the same</td>
+                <td>empty</td>
+                <td>36 marks, one per row</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>fill: "warehouse"</code></th>
+                <td>none</td>
+                <td>the same</td>
+                <td>empty</td>
+                <td>
+                  a categorical palette, since <code>warehouse</code> has no
+                  order
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><strong>What the whole spec gives: its output type.</strong></p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Part of the picture</th>
+                <th scope="col">Kind</th>
+                <th scope="col">What a reader can read from it</th>
+                <th scope="col">Structure it keeps or adds</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">x of a bar</th>
+                <td>slot, ordered</td>
+                <td>which month, and which month comes next</td>
+                <td>
+                  keeps the order of <code>month</code>. Drops its cycle: the
+                  row is cut between December and January.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">height of a segment</th>
+                <td>length, in items</td>
+                <td>the stock of one warehouse in one month</td>
+                <td>keeps amounts: twice the stock is twice the height</td>
+              </tr>
+              <tr>
+                <th scope="row">top of a whole bar</th>
+                <td>position, in items, from a pinned 0</td>
+                <td>the stock of all warehouses that month</td>
+                <td>
+                  keeps the sum over <code>warehouse</code>, which is why the
+                  rule asks for <code>CanSum</code>
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">bottom of an upper segment</th>
+                <td>none</td>
+                <td>
+                  nothing by itself. It is the running sum of the segments
+                  below.
+                </td>
+                <td>
+                  only the lowest warehouse shares a baseline across months. The
+                  others compare by length alone.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">order of segments in a bar</th>
+                <td>slot, not ordered</td>
+                <td>nothing. <code>warehouse</code> has no order.</td>
+                <td>adds an order the data does not have (first appearance)</td>
+              </tr>
+              <tr>
+                <th scope="row">width and area of a bar</th>
+                <td>none</td>
+                <td>nothing. The width is the slot's.</td>
+                <td>none</td>
+              </tr>
+              <tr>
+                <th scope="row">color</th>
+                <td>category</td>
+                <td>which warehouse</td>
+                <td>keeps identity</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          So the output type is: on x, ordered slots keyed by
+          <code>month</code>; on y, one continuous space in items with its 0
+          pinned, holding 36 lengths in 12 stacks; marks keyed by
+          <code>month</code> and <code>warehouse</code>, which is the table's
+          identity.
+        </p>
+        <p>
+          Who uses it. The x axis labels the slots in order. The y axis draws a
+          scale in items from 0, because the space is pinned and has a unit. A
+          legend lists the warehouses with no order. A second layer could share
+          the y axis only if its space is also items pinned at 0. A
+          <code>line</code> over the bar tops would pass, since
+          <code>month</code> has <code>HasOrder</code>.
+        </p>
+        <p>
+          What it shows about the notes. The four facts in the Kind column that
+          the engine already tracks are the slot, its order, the length with its
+          unit, and the pinned 0 (read, per the check above). The two facts
+          about what the stack loses and adds, the missing baseline of upper
+          segments and the invented segment order, are tracked by nothing today,
+          and no rule in section 10 reads them. They are the notes' strongest
+          addition. They do not make this spec wrong, so they belong in the
+          opt-in lint class, not in the checks.
+        </p>
+        <p>
+          Compare the invalid twin,
+          <code>spread({ by: "warehouse" })</code> then
+          <code>stack({ by: "month" })</code>. Its output type has the same
+          shape: slots, lengths in items, a pinned 0. Only the Check column
+          differs, because <code>stock</code> has no <code>CanSum</code> over
+          <code>month</code>. So the output type alone does not tell a valid
+          stack from an invalid one. The check on the data side does.
+        </p>
         <details class="rationale">
           <summary>Which ideas in the notes were already here</summary>
           <div class="table-wrap">
