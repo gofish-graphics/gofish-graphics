@@ -10,7 +10,7 @@
 //
 // The buttons are added to the rendered page after it mounts (and after each
 // page change), so the markdown never carries them.
-import { computed, onMounted, ref, shallowRef } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef } from "vue";
 import { onContentUpdated, useData } from "vitepress";
 import { chapterSlug, isBookPage } from "./book";
 import {
@@ -85,7 +85,7 @@ async function toggle(box: OpenBox) {
   box.control.setAttribute("aria-expanded", "true");
 }
 
-function close(delivered: boolean) {
+function close(delivered: boolean, refocus = true) {
   const box = open.value;
   if (!box) return;
   open.value = null;
@@ -94,7 +94,18 @@ function close(delivered: boolean) {
     markSent(box.key);
     markControl(box.control);
   }
-  box.control.focus();
+  if (refocus) box.control.focus();
+}
+
+/** A press anywhere outside the open box and its control closes the box.
+ *  The draft is kept, and focus stays where the reader pressed. */
+function onOutsidePress(e: PointerEvent) {
+  const box = open.value;
+  const target = e.target;
+  if (!box || !(target instanceof Node)) return;
+  if (box.control.contains(target)) return;
+  if (target instanceof Element && target.closest(".book-note-box")) return;
+  close(false, false);
 }
 
 function markControl(control: HTMLElement) {
@@ -176,6 +187,10 @@ function openChapter() {
 }
 
 onMounted(attach);
+onMounted(() => document.addEventListener("pointerdown", onOutsidePress));
+onBeforeUnmount(() =>
+  document.removeEventListener("pointerdown", onOutsidePress)
+);
 onContentUpdated(attach);
 </script>
 
