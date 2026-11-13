@@ -54,7 +54,7 @@ reads:
   - .github/workflows/lint-format.yml
   - .github/workflows/visual-tests.yml
 checked:
-  commit: 3e52867e4d31dfe0b02e148c22c225f1d33b5a12
+  commit: d0399a928ec694750cf0832c13195a791fc129c2
   date: 2026-11-13
 cover:
   - figure: crossing
