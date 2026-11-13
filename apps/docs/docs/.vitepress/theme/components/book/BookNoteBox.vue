@@ -46,11 +46,6 @@ const radios = ref<HTMLButtonElement[]>([]);
 const status = ref<HTMLElement>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
-const about = computed(() => {
-  const q = props.note.quote.replace(/\s+/g, " ").trim();
-  if (!q) return "This chapter as a whole";
-  return q.length > 80 ? `${q.slice(0, 80).trimEnd()}…` : q;
-});
 const prompt = computed(() => promptFor(reaction.value));
 const ready = computed(
   () => !!reaction.value || stopped.value || !!text.value.trim()
@@ -148,9 +143,6 @@ function onKey(e: KeyboardEvent) {
     @keydown="onKey"
   >
     <template v-if="!done">
-      <p class="book-note-box__about">
-        <span class="book-note-box__on">On</span> {{ about }}
-      </p>
       <p :id="`${id}-reaction`" class="book-note-box__group">Your reaction</p>
       <div
         class="book-note-box__reactions"

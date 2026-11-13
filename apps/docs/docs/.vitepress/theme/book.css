@@ -1043,15 +1043,21 @@
   font-size: inherit;
   line-height: inherit;
 }
-.book-page .book-note-box .book-note-box__about {
-  margin-bottom: 8px;
-  font-size: 13px;
-  color: var(--book-ink-3);
-  overflow-wrap: anywhere;
+/* The passage the open box is about is highlighted in place, so the box
+   does not have to quote it. A figure or a rules block gets an outline. */
+.book-page .vp-doc .book-noted:has(> .book-note[aria-expanded="true"]) {
+  background: var(--fig-new-bg);
+  box-shadow: 0 0 0 6px var(--fig-new-bg);
+  border-radius: 2px;
 }
-.book-note-box__on {
-  font-weight: 600;
-  color: var(--book-ink-2);
+.book-page .vp-doc figure.book-noted:has(> .book-note[aria-expanded="true"]),
+.book-page
+  .vp-doc
+  .book-rule.book-noted:has(> .book-note[aria-expanded="true"]) {
+  background: none;
+  box-shadow: none;
+  outline: 3px solid var(--fig-new-bg);
+  outline-offset: 6px;
 }
 /* The reactions: two rows of two in the margin box (about 260px inside),
    one row of four when the box has the room. The chosen one is filled and
