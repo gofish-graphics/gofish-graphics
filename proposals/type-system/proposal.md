@@ -1653,6 +1653,86 @@ The third row is the case the output type exists for. `sold` adds up over months
 
 Is a stack of spreads always wrong? By this rule, yes, with two degenerate cases that draw correctly: one bar per group, and bars of equal height. The rule rejects those too, since the fix is to drop the `spread`. One open problem stays: NestedMosaicChart, a stack outside a stack whose `size` option gives each child's length, is flagged by the literal rule and is correct.
 
+### The same in symbols (draft notation)
+
+A compact way to write the types above. It is a draft for review, and it is a notation for reading and discussing rules, not syntax a user writes. `name : Type` reads "name has type".
+
+**Data.** A table is its key and its columns. `Σ k` reads "adds up over `k`", and `Σ *` reads "adds up over every key". `<` marks an order and `○` a cycle.
+
+```text
+inv : Table[warehouse × month]
+  warehouse : Levels(3)
+  month     : Levels(12) < ○
+  stock     : Items 0  Σ warehouse
+  sold      : Items 0  Σ *
+  price     : USD/Items 0  mean by sold
+  temp      : °C
+```
+
+**Space.** Each axis of a node has one of five kinds. Four of them are states the engine already has.
+
+| Symbol                   | Reads                                                                                    | Engine today                |
+| ------------------------ | ---------------------------------------------------------------------------------------- | --------------------------- |
+| `Len[u]`                 | one length in unit `u`, with no baseline yet                                             | continuous, origin `free`   |
+| `Pos[u]`                 | places on an axis in unit `u` whose 0 is fixed. It can hold several lengths from that 0. | continuous, origin `pinned` |
+| `Diff[u]`                | only differences mean something                                                          | continuous, origin `none`   |
+| `Slots[k]`, `Slots[k <]` | one slot per level of key `k`, unordered or ordered                                      | ordinal, with `hasOrder`    |
+| `·`                      | nothing to read                                                                          | no space                    |
+
+**Rules.** Above the line is what a step needs. Below is what it gives. `v` is the value the marks draw.
+
+```text
+rect({ h: v })              v : u 0
+                            ───────────────────────────────
+                            y : Len[u]
+
+stack({ by: k, dir: y })    child.y : Len[u]      v : Σ k
+                            ───────────────────────────────
+                            y : Len[u]            the sum of v over k
+
+spread({ by: k, dir: x })   k : Levels
+                            ───────────────────────────────
+                            x : Slots[k]          y : Pos[u] if child.y : Len[u]
+```
+
+**The main example,** read from the mark outward:
+
+```text
+rect({ h: "stock" })                 y : Len[Items]
+stack({ by: "warehouse", dir: "y" }) y : Len[Items]        needs stock : Σ warehouse   ✓
+spread({ by: "month", dir: "x" })    x : Slots[month <]    y : Pos[Items]
+```
+
+So the type of the whole spec, with the data it needs on the left and the space it gives on the right:
+
+```text
+Table[k₁ × k₂]  with  k₁ : Levels,  k₂ : Levels,  v : u 0  Σ k₂
+    ⟹   x : Slots[k₁]    y : Pos[u] of Len[u] per k₂
+
+applied to inv with k₁ = month, k₂ = warehouse, v = stock:
+    x : Slots[month <]    y : Pos[Items] of Len[Items] per warehouse
+```
+
+The first two lines are the spec's type with no data. `k₁`, `k₂`, `v` and `u` stand for any fields and unit that fit, which is what makes a template reusable.
+
+**The three errors,** each at the line that fails:
+
+```text
+spread by warehouse, stack by month, h: stock
+    stack({ by: "month" })       needs stock : Σ month        ✗  stock : Σ warehouse
+
+stack by month, spread by warehouse, h: sold
+    spread({ by: "warehouse" })  y : Pos[Items]
+    stack({ by: "month" })       needs child.y : Len[Items]   ✗  child.y : Pos[Items]
+
+rect({ h: "temp" })
+    rect                         needs temp : °C 0            ✗  temp : °C
+```
+
+The first error is on the data side and the second is on the space side. The second is the stack of spreads: `sold : Σ *` passes the data check, and `Pos` where `Len` is needed is what fails.
+
+**What the notation does not say yet.** It has no mark for an upper segment's missing baseline or for an invented segment order. A stack with a `size` option needs its own rule (the child's `y` is not read, and `size : Σ k` is needed), which is the nested mosaic question. Area and the join of two siblings on a shared axis are not written. Josh asked on 11-12 to leave out arrow and forall signatures as confusing, so this version uses one arrow, for a whole spec, and no quantifiers.
+
 ### What was already here
 
 | Idea in the notes                                     | Where it already is                                                                       | Verdict                                            |
