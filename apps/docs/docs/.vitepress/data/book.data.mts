@@ -22,7 +22,10 @@ export type BookStamp = {
 export type BookChapter = {
   slug: string;
   link: string;
+  /** The question the chapter answers. */
   title: string;
+  /** One or two words shown before the question: "Layout". */
+  label: string;
   order: number;
   topics: string[];
   reads: string[];

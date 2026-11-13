@@ -1,5 +1,6 @@
 ---
 title: How do names and refs find their targets?
+label: Names
 order: 6
 topics:
   - names

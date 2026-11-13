@@ -8,6 +8,9 @@
  *   --fig-added       nodes a rewrite adds
  *   --fig-ref         refs (always drawn dashed)
  *   --fig-constraint  constraints and guides (gray)
+ *   --fig-generated   code generated from, or a name declared in, the
+ *                     descriptor table (packages/gofish-ir)
+ * One color, one meaning: a figure never uses one of these for anything else.
  * SVG classes below (fig-user, fig-added, fig-ref, fig-guide, ...) apply it.
  */
 
@@ -28,6 +31,7 @@
   --fig-added: #c0412a;
   --fig-ref: #b07a0c;
   --fig-constraint: #8796a7;
+  --fig-generated: #7a4fb0;
   --fig-hl: #17222e;
   --fig-hl-bg: #e9eef4;
   --fig-on-user: #ffffff;
@@ -53,6 +57,7 @@
   --fig-added: #ee7b61;
   --fig-ref: #e2b24c;
   --fig-constraint: #73859a;
+  --fig-generated: #b99be6;
   --fig-hl: #f2f5f8;
   --fig-hl-bg: #22303d;
   --fig-on-user: #0d1319;
@@ -171,6 +176,17 @@
   margin: 1.4rem auto 1.6rem;
 }
 
+/* A chapter's title is "Label: question". The label is what the eye finds
+   first when scanning, and the question follows in normal weight. */
+.book-page .book-title {
+  font-weight: 400;
+  color: var(--book-ink);
+}
+.book-page .book-label {
+  font-weight: 700;
+  color: var(--book-ink-strong);
+}
+
 .book-page .book-subtitle {
   font-size: 1.15rem;
   color: var(--book-ink-2);
@@ -186,6 +202,8 @@
   font-size: 0.82rem;
   line-height: 1.55;
   color: var(--book-ink-2);
+  /* Long file paths wrap instead of widening the page. */
+  overflow-wrap: anywhere;
 }
 .book-stamp > div + div {
   margin-top: 0.3rem;
@@ -357,6 +375,9 @@
   fill: var(--fig-added);
   font-family: var(--vp-font-family-base);
 }
+.book-page .fig-generated {
+  fill: var(--fig-generated);
+}
 .book-page .fig-on-user {
   fill: var(--fig-on-user);
 }
@@ -430,7 +451,7 @@
   color: var(--book-ink-2);
   border: 1px solid var(--book-rule);
 }
-.tree-stepper .ts-btn:hover:not(:disabled) {
+.tree-stepper .ts-btn:hover:not(:disabled):not([aria-pressed="true"]) {
   color: var(--book-ink-strong);
   border-color: var(--book-ink-3);
 }
@@ -524,6 +545,18 @@
   border-top: 1.5px solid var(--fig-constraint);
   border-bottom: 1.5px solid var(--fig-constraint);
   border-radius: 0;
+}
+/* A type: a note that typing writes on a node, not a node. Gray italic, with
+   a round mark. */
+.tree-stepper .ts-item.k-type {
+  font-style: italic;
+  color: var(--book-ink-2);
+}
+.tree-stepper .k-type::before,
+.tree-stepper .ts-swatch.k-type {
+  box-sizing: border-box;
+  border: 1.5px solid var(--book-ink-2);
+  border-radius: 50%;
 }
 .tree-stepper .ts-type {
   color: var(--book-ink-2);
@@ -845,11 +878,12 @@
 }
 .book-page .vp-doc .book-toc__q {
   font-size: 1.08rem;
-  font-weight: 600;
-  color: var(--book-ink-strong);
+  font-weight: 400;
+  color: var(--book-ink);
   text-decoration: none;
 }
-.book-page .vp-doc .book-toc__q:hover {
+.book-page .vp-doc .book-toc__q:hover,
+.book-page .vp-doc .book-toc__q:hover .book-label {
   color: var(--book-accent);
 }
 .book-toc__topics {

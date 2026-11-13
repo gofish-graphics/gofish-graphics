@@ -29,6 +29,7 @@ const KIND_LABEL: Record<TreeKind, string> = {
   added: "added by the rewrite",
   ref: "ref",
   constraint: "constraint",
+  type: "type (a note, not a node)",
 };
 
 const nSteps = computed(() => props.figure.steps.length);

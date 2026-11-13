@@ -159,8 +159,8 @@ defineProps<{ still?: boolean }>();
 
       <div v-if="!still" class="pyx__legend">
         <span
-          ><i class="pyx__sw pyx__sw--gen"></i>generated from, or named in, the
-          descriptor table</span
+          ><i class="pyx__sw pyx__sw--gen"></i>from the descriptor table
+          (generated from it, or named in it)</span
         >
         <span><i class="pyx__sw pyx__sw--user"></i>a node from your code</span>
         <span><i class="pyx__sw pyx__sw--added"></i>a node the chart adds</span>
@@ -215,9 +215,9 @@ defineProps<{ still?: boolean }>();
   color: var(--book-ink-2);
 }
 .pyx__gen {
-  color: var(--fig-added);
+  color: var(--fig-generated);
   font-weight: 600;
-  border-bottom: 1.5px dotted var(--fig-added);
+  border-bottom: 1.5px dotted var(--fig-generated);
 }
 .pyx__gen--whole {
   border-bottom-style: solid;
@@ -246,7 +246,7 @@ defineProps<{ still?: boolean }>();
   width: 14px;
   margin-right: 6px;
   vertical-align: middle;
-  border-bottom: 1.5px dotted var(--fig-added);
+  border-bottom: 1.5px dotted var(--fig-generated);
 }
 .pyx__key--whole {
   border-bottom-style: solid;
@@ -339,7 +339,7 @@ defineProps<{ still?: boolean }>();
 }
 .pyx__sw--gen {
   height: 0;
-  border-bottom: 2px dotted var(--fig-added);
+  border-bottom: 2px dotted var(--fig-generated);
   vertical-align: 3px;
 }
 .pyx__sw--user {

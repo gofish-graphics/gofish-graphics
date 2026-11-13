@@ -43,6 +43,7 @@ frontmatter looks like this.
 
 ```yaml
 title: How does a chart get its axes? # the question, the same as the brief's
+label: Axes # one or two words, the same as the brief's
 order: 1 # its place in the contents and the sidebar
 topics: [axes, ticks, axis titles, legend, elaboration] # terms a reader might search for
 reads: # repo-relative source files the chapter was written from
@@ -58,9 +59,16 @@ cover: # the figures this chapter puts on the book cover, at least one
 
 Do not use the key `covers`. The internals wiki uses it for something else.
 
-The page layout prints the stamp and the title (the question) at the top of
-the chapter. Do not type either one into the markdown. The chapter's markdown
-starts with its first paragraph.
+The page layout prints the stamp and the title at the top of the chapter. Do
+not type either one into the markdown. The chapter's markdown starts with its
+first paragraph.
+
+The `label` is a short name for the chapter, so a reader can scan the
+contents. Wherever the book lists or titles a chapter, it shows the label and
+then the question, e.g., "Axes: How does a chart get its axes?". This is the
+sidebar, the contents, the chapter's heading, the links to the next and
+previous chapters, the browser tab and the cover tiles. The note button's issue
+title uses the question alone.
 
 The contents page and the sidebar are built from this frontmatter. Adding a
 chapter file is enough to list it.
@@ -74,7 +82,7 @@ one.
 
 - `figure` names a figure file beside the chapter, `<slug>.<figure>.vue`,
   whose root element has `id="fig-<figure>"`. The tile links to that id in the
-  chapter, and its accessible name is the chapter's question.
+  chapter, and its accessible name is the chapter's label and question.
 - The tile shows the chapter's own figure component, scaled down, with the
   prop `still` set. A figure file declares `defineProps<{ still?: boolean }>()`
   and passes `still` to a `TreeStepper`, or hides its caption with
@@ -99,6 +107,7 @@ chapter. It looks like this.
 ---
 chapter: axes
 question: How does a chart get its axes?
+label: Axes
 words: 1000
 ---
 
@@ -117,6 +126,9 @@ One paragraph that says what the one figure shows.
 
 - `chapter` is the slug.
 - `question` is the chapter's title. `book:check` fails when the two differ.
+- `label` is one or two words that name the chapter, such as `Layout`.
+  `book:check` fails when it is missing, when it is longer, or when it differs
+  from the chapter's `label`.
 - `words` is the word limit for the chapter's prose. `book:check` allows 10
   percent over it.
 - "Must answer" is required. "Figure" and "Notes" may be empty.
@@ -192,14 +204,16 @@ The chapter's markdown can use these pieces.
   `<slug>.<figure>.vue`, so the cover can show it too. The chapter imports it
   in a `<script setup>` block, e.g., `import AxesRewrite from
 "./axes.rewrite.vue"`, and places it on its own line as `<AxesRewrite />`.
-  See `axes.rewrite.vue` and `axes.names.vue`.
+  See `axes.rewrite.vue` (a stepper) and `python.crossing.vue` (a static
+  figure).
 - `<TreeStepper :figure="data">` is a figure that steps through how a node
   tree grows. Put its data in a file beside the chapter, e.g.,
   `axes.figure.ts`, and import it in the figure file. The data type
   is in `docs/.vitepress/theme/components/book/treeStepper.ts`. Each line of
-  the tree has an `id`, a `depth`, a `text`, a `kind` (`user`, `added`, `ref`
-  or `constraint`), the `step` at which it appears, and for a ref its
-  `targets`. An optional `<svg>` inside the tag is the picture. Give each piece
+  the tree has an `id`, a `depth`, a `text`, a `kind` (`user`, `added`, `ref`,
+  `constraint` or `type`), the `step` at which it appears, and for a ref its
+  `targets`. A `type` item is a note that typing writes on a node, not a
+  node. The legend under the figure lists only the kinds the figure uses. An optional `<svg>` inside the tag is the picture. Give each piece
   of the picture a `data-id` that matches a tree line. Put the caption in a
   `<template #caption>` inside the tag. Keep the whole tag free of blank
   lines, or markdown will break it apart.
@@ -212,15 +226,21 @@ class="fig-panels">` to put several SVG panels side by side.
 
 Every figure uses the same colors, set in `docs/.vitepress/theme/book.css`.
 
-| Meaning                 | CSS variable       | SVG class                                         |
-| ----------------------- | ------------------ | ------------------------------------------------- |
-| A node from your code   | `--fig-user`       | `fig-user`, `fig-user-stroke`                     |
-| A node the library adds | `--fig-added`      | `fig-added`, `fig-added-stroke`, `fig-added-text` |
-| A ref (always dashed)   | `--fig-ref`        | `fig-ref`, `fig-ref-box`, `fig-ref-path`          |
-| A constraint or guide   | `--fig-constraint` | `fig-guide`, `fig-guide-dash`                     |
+| Meaning                                                     | CSS variable       | SVG class                                         |
+| ----------------------------------------------------------- | ------------------ | ------------------------------------------------- |
+| A node from your code                                       | `--fig-user`       | `fig-user`, `fig-user-stroke`                     |
+| A node the library adds                                     | `--fig-added`      | `fig-added`, `fig-added-stroke`, `fig-added-text` |
+| A ref (always dashed)                                       | `--fig-ref`        | `fig-ref`, `fig-ref-box`, `fig-ref-path`          |
+| A constraint or guide                                       | `--fig-constraint` | `fig-guide`, `fig-guide-dash`                     |
+| From the descriptor table, generated from it or named in it | `--fig-generated`  | `fig-generated`                                   |
 
 Each variable has a dark mode value too, so a figure that uses the classes
 works in both modes.
+
+Each color has one meaning across the whole book. Do not use a color for
+anything but its meaning, even in one figure. When a figure needs a new
+meaning, add a new variable to `book.css`, with a light and a dark value, and
+a row to this table.
 
 ## Commands
 

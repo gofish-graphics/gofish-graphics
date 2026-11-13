@@ -2,10 +2,12 @@
 // a small file beside it (for example docs/under-the-surface/axes.figure.ts)
 // and passes it as `:figure`. See apps/docs/book/README.md.
 
-/** What a line of the tree stands for. Each kind has one color in every
+/** What a line of the tree stands for. Each kind has one look in every
  *  chapter (theme/book.css): from the reader's code, added by a rewrite, a
- *  ref (dashed), a constraint (gray). */
-export type TreeKind = "user" | "added" | "ref" | "constraint";
+ *  ref (dashed), a constraint (gray), and a type (gray italic with a round
+ *  mark), which is a note that typing writes on a node, not a node. A
+ *  figure's legend lists only the kinds the figure uses. */
+export type TreeKind = "user" | "added" | "ref" | "constraint" | "type";
 
 export type TreeItem = {
   /** Unique within the figure. Picture pieces with the same `data-id` are

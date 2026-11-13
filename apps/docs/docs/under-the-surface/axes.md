@@ -1,5 +1,6 @@
 ---
 title: How does a chart get its axes?
+label: Axes
 order: 3
 topics:
   - axes

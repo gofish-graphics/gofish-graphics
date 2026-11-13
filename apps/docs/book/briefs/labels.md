@@ -1,6 +1,7 @@
 ---
 chapter: labels
 question: How does a label find its place?
+label: Labels
 words: 1100
 ---
 

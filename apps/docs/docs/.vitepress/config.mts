@@ -246,9 +246,17 @@ function collectInternalsSidebar() {
 
 // "Under the Surface" is the book of short chapters on how GoFish works. Like
 // the internals wiki it is language-agnostic. Its sidebar lists the contents
-// page and then each chapter, ordered by frontmatter `order` and titled by the
-// chapter's question (`title`). See apps/docs/book/README.md.
+// page and then each chapter, ordered by frontmatter `order` and titled
+// "label: question" from `label` and `title`. See apps/docs/book/README.md.
 const BOOK_DIR = "under-the-surface";
+
+/** A chapter's listed title, "Layout: How does ...?", from its frontmatter. */
+function bookChapterTitle(fm: Record<string, unknown>): string | undefined {
+  if (typeof fm.title !== "string") return undefined;
+  return typeof fm.label === "string" && fm.label
+    ? `${fm.label}: ${fm.title}`
+    : fm.title;
+}
 
 function collectBookSidebar() {
   const full = join(docsDir, BOOK_DIR);
@@ -260,7 +268,7 @@ function collectBookSidebar() {
       const fm = matter(readFileSync(join(full, e.name), "utf-8")).data;
       const slug = e.name.replace(/\.md$/, "");
       return {
-        text: typeof fm.title === "string" ? fm.title : slug,
+        text: bookChapterTitle(fm) ?? slug,
         order: typeof fm.order === "number" ? fm.order : 999,
         link: `/${BOOK_DIR}/${slug}`,
       };
@@ -342,6 +350,11 @@ export default defineConfig({
       pageData.frontmatter.pageClass = "book-page";
       pageData.frontmatter.aside = false;
       pageData.frontmatter.outline = false;
+      // The browser tab reads "Layout: How does ...?". `frontmatter.title`
+      // stays the question alone (the note button's issue title uses it).
+      const full = bookChapterTitle(pageData.frontmatter);
+      if (full && pageData.relativePath !== `${BOOK_DIR}/index.md`)
+        pageData.title = full;
     }
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")

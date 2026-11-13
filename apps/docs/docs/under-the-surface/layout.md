@@ -1,5 +1,6 @@
 ---
 title: How does every node get its size and its place?
+label: Layout
 order: 4
 topics:
   - layout

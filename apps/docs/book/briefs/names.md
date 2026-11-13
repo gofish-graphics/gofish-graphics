@@ -1,6 +1,7 @@
 ---
 chapter: names
 question: How do names and refs find their targets?
+label: Names
 words: 1200
 ---
 

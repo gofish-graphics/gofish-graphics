@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The contents of "Under the Surface", generated from each chapter's
-// frontmatter (`title`, `order`, `topics`) and its stamp. Used on
+// frontmatter (`label`, `title`, `order`, `topics`) and its stamp. Used on
 // docs/under-the-surface/index.md.
 import { withBase } from "vitepress";
 import { data as book } from "../../../data/book.data";
@@ -10,7 +10,9 @@ import { plural, stateLabel } from "./book";
 <template>
   <ol class="book-toc">
     <li v-for="c in book.chapters" :key="c.slug" class="book-toc__item">
-      <a class="book-toc__q" :href="withBase(c.link)">{{ c.title }}</a>
+      <a class="book-toc__q" :href="withBase(c.link)"
+        ><span class="book-label">{{ c.label }}:</span> {{ c.title }}</a
+      >
       <div class="book-toc__topics">{{ c.topics.join(", ") }}</div>
       <div class="book-toc__state" :class="`is-${c.stamp.state}`">
         {{ stateLabel(c)

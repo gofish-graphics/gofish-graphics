@@ -87,6 +87,7 @@ export function readChapters() {
         path: `apps/docs/docs/under-the-surface/${f}`,
         link: ROUTE + slug,
         title: data.title,
+        label: data.label,
         order: data.order,
         topics: data.topics,
         reads: data.reads,
@@ -254,6 +255,7 @@ export function loadBook() {
       slug: c.slug,
       link: c.link,
       title: typeof c.title === "string" ? c.title : c.slug,
+      label: typeof c.label === "string" ? c.label : "",
       order: c.order,
       topics: Array.isArray(c.topics) ? c.topics : [],
       reads: Array.isArray(c.reads) ? c.reads : [],
@@ -268,6 +270,12 @@ export function loadBook() {
 // check
 // ---------------------------------------------------------------------------
 
+/** A chapter's label: one or two words, shown before its question
+ *  ("Layout: How does every node ...?"). */
+function validLabel(v) {
+  return typeof v === "string" && /^\S+( \S+)?$/.test(v.trim());
+}
+
 /** Validate every chapter against its brief. Needs no git history. */
 export function checkBook() {
   const errors = [];
@@ -276,6 +284,8 @@ export function checkBook() {
     const at = (msg) => errors.push(`${c.path}: ${msg}`);
     if (typeof c.title !== "string" || !c.title.trim())
       at("frontmatter `title` (the question) is missing");
+    if (!validLabel(c.label))
+      at("frontmatter `label` must be one or two words, like `Layout`");
     if (typeof c.order !== "number") at("frontmatter `order` must be a number");
     if (
       !Array.isArray(c.topics) ||
@@ -341,6 +351,10 @@ export function checkBook() {
       at(
         `title "${c.title}" does not match the brief's question "${b.question}"`
       );
+    if (!validLabel(b.label))
+      bat("`label` must be one or two words, like `Layout`");
+    else if (typeof c.label === "string" && b.label.trim() !== c.label.trim())
+      at(`label "${c.label}" does not match the brief's label "${b.label}"`);
     if (typeof b.words !== "number" || b.words <= 0)
       bat("`words` must be a positive number");
     if (!/^##\s+Must answer\s*$/m.test(brief.content))
@@ -383,7 +397,7 @@ function main(mode) {
     const unknown = book.chapters.filter((c) => c.stamp.state === "unknown");
     for (const c of stale)
       console.log(
-        `${c.slug}\t${c.stamp.since.commits} commit(s), ${c.stamp.since.lines} changed line(s) since ${c.checked.commit?.slice(0, 7)}\t${c.title}`
+        `${c.slug}\t${c.stamp.since.commits} commit(s), ${c.stamp.since.lines} changed line(s) since ${c.checked.commit?.slice(0, 7)}\t${c.label}: ${c.title}`
       );
     for (const c of unknown)
       console.error(

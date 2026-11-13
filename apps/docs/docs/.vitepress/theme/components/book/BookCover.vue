@@ -15,6 +15,7 @@ import {
 } from "vue";
 import { withBase } from "vitepress";
 import { data as book } from "../../../data/book.data";
+import { fullTitle } from "./book";
 
 const modules = import.meta.glob<{ default: Component }>(
   "../../../../under-the-surface/*.vue"
@@ -39,7 +40,7 @@ const spans = (rows: number, cols: number) => {
 const tiles = book.chapters.flatMap((c) =>
   c.cover.map((t) => ({
     key: `${c.slug}.${t.figure}`,
-    title: c.title,
+    title: fullTitle(c),
     href: withBase(`${c.link}#fig-${t.figure}`),
     component: figureFor(c.slug, t.figure),
     style: spans(t.rows, t.cols),

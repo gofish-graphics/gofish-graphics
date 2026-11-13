@@ -96,6 +96,7 @@ one for nodes the library adds, dashed for refs, gray for constraints.
 
 ```yaml
 title: <the brief's question, exactly>
+label: <the brief's label, exactly: one or two words, such as Layout>
 order: <the chapter's place in the book>
 topics: [<terms a reader might search for>]
 reads:
@@ -108,6 +109,10 @@ cover:
     rows: <tile height in cover cells, 1 to 4>
     cols: <tile width in cover cells, 1 to 6>
 ```
+
+The book lists and titles the chapter as "label: question", e.g., "Layout:
+How does every node get its size and its place?". If the brief has no
+`label`, stop and ask for one, as for a missing brief.
 
 Every chapter must offer at least one cover figure. The cover at the top of
 the contents page is built from these entries, so pick a size close to the

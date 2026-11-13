@@ -1,6 +1,7 @@
 ---
 chapter: axes
 question: How does a chart get its axes?
+label: Axes
 words: 1200
 ---
 

@@ -1,5 +1,6 @@
 ---
 title: What happens between chart(...) and the pixels on screen?
+label: Pipeline
 order: 1
 topics:
   - pipeline

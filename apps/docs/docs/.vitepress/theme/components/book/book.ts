@@ -17,6 +17,10 @@ export function chapterSlug(relativePath: string): string | undefined {
 export const isBookPage = (relativePath: string) =>
   relativePath.startsWith(BOOK_PREFIX);
 
+/** A chapter as it is listed and titled: "Layout: How does ...?". */
+export const fullTitle = (c: Pick<BookChapter, "label" | "title">) =>
+  c.label ? `${c.label}: ${c.title}` : c.title;
+
 export const fmt = (n: number) => n.toLocaleString("en-US");
 
 export const plural = (n: number, one: string, many = one + "s") =>

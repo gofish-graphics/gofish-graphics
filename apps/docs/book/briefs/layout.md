@@ -1,6 +1,7 @@
 ---
 chapter: layout
 question: How does every node get its size and its place?
+label: Layout
 words: 1200
 ---
 

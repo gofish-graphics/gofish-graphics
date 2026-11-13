@@ -1,6 +1,7 @@
 ---
 chapter: pipeline
 question: What happens between chart(...) and the pixels on screen?
+label: Pipeline
 words: 1200
 ---
 

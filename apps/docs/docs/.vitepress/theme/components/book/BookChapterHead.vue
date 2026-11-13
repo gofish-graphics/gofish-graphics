@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The top of every chapter of "Under the Surface": the stamp (which commit the
 // chapter was checked against, the files it reads, whether they have changed
-// since, how fast they are changing) and the chapter's question as its title.
+// since, how fast they are changing) and the chapter's label and question as
+// its title.
 // The stamp comes from the build-time data loader, never from the markdown.
 import { computed } from "vue";
 import { useData } from "vitepress";
@@ -67,6 +68,8 @@ const fileUrl = (p: string) =>
         last {{ chapter.stamp.churn.days }} days.
       </div>
     </div>
-    <h1 class="book-title">{{ chapter.title }}</h1>
+    <h1 class="book-title">
+      <span class="book-label">{{ chapter.label }}:</span> {{ chapter.title }}
+    </h1>
   </header>
 </template>

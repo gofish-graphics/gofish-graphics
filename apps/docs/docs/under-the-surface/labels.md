@@ -1,5 +1,6 @@
 ---
 title: How does a label find its place?
+label: Labels
 order: 5
 topics:
   - labels

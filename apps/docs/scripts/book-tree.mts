@@ -30,6 +30,7 @@ import { resolve } from "node:path";
 import { chart, spread, rect } from "../../../packages/gofish-graphics/src/lib";
 import { runLayout } from "../../../packages/gofish-graphics/src/ast/gofish";
 import { GoFishRef } from "../../../packages/gofish-graphics/src/ast/_ref";
+import { isToken } from "../../../packages/gofish-graphics/src/ast/createName";
 
 type Builder = {
   resolve(): Promise<unknown>;
@@ -76,10 +77,18 @@ function runs(names: string[]): string {
   return out.join(", ");
 }
 
+/** A name as the reader wrote it: a string as is, a `createName(tag)` token
+ *  as `token(tag)`, and a ref's path (a list of these) joined with dots. */
+function nameText(v: any): string {
+  if (typeof v === "string") return v;
+  if (isToken(v)) return `token(${v.__tag})`;
+  if (Array.isArray(v)) return v.map(nameText).join(".");
+  return String(v);
+}
+
 function nameOf(n: any): string | undefined {
   const v = n?._name;
-  if (v === undefined) return undefined;
-  return typeof v === "string" ? v : String(v?.name ?? v?.description ?? v);
+  return v === undefined ? undefined : nameText(v);
 }
 
 function describeTarget(t: any): string {
@@ -94,7 +103,7 @@ function describeTarget(t: any): string {
 function head(n: any): string {
   if (n instanceof GoFishRef) {
     const r = n as any;
-    const sel = r.selection !== undefined ? `  "${String(r.selection)}"` : "";
+    const sel = r.selection !== undefined ? `  "${nameText(r.selection)}"` : "";
     return `ref → ${describeTarget(r.targetNode ?? r.handle)}${sel}`;
   }
   const bits: string[] = [String(n.type)];

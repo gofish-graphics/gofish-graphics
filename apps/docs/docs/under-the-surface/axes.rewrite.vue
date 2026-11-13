@@ -292,19 +292,3 @@ defineProps<{ still?: boolean }>();
     >
   </TreeStepper>
 </template>
-
-<style>
-/* Type notes: a kind of tree item the shared TreeStepper has no style for
-   (see axes.figure.ts). */
-.tree-stepper .ts-item.k-type {
-  font-style: italic;
-  color: var(--book-ink-2);
-}
-.tree-stepper .ts-item.k-type::before {
-  box-sizing: border-box;
-  width: 7px;
-  height: 7px;
-  border: 1.5px solid var(--book-ink-2);
-  border-radius: 50%;
-}
-</style>

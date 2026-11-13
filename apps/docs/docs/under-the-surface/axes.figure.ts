@@ -9,15 +9,9 @@
 // come from a probe that prints `_underlyingSpace`, `placedSpace` and the
 // `axis` flags right after `resolveAxes` runs on the render root.
 //
-// Items of kind "type" are not one of the four shared kinds: they are notes
-// that typing writes on the tree, not nodes. TreeStepper renders them with
-// the class `k-type`, which axes.rewrite.vue styles itself.
-import type {
-  TreeFigure,
-  TreeKind,
-} from "../.vitepress/theme/components/book/treeStepper";
-
-const TYPE = "type" as TreeKind;
+// Items of kind "type" are the types that typing writes on the tree. They are
+// notes, not nodes.
+import type { TreeFigure } from "../.vitepress/theme/components/book/treeStepper";
 
 const figure: TreeFigure = {
   label: "Steps of typing and the rewrite",
@@ -54,7 +48,7 @@ const figure: TreeFigure = {
         {
           id: "whyT",
           text: "← titles in x, y",
-          kind: TYPE,
+          kind: "type",
           step: 5,
           targets: ["tyX", "tyY"],
         },
@@ -70,7 +64,7 @@ const figure: TreeFigure = {
         {
           id: "whyC",
           text: "← x: slots",
-          kind: TYPE,
+          kind: "type",
           step: 4,
           targets: ["tyX"],
         },
@@ -86,7 +80,7 @@ const figure: TreeFigure = {
         {
           id: "whyV",
           text: "← y: 0 to 7",
-          kind: TYPE,
+          kind: "type",
           step: 3,
           targets: ["tyY"],
         },
@@ -99,8 +93,8 @@ const figure: TreeFigure = {
       kind: "user",
       step: 1,
       more: [
-        { id: "tyY", text: "y: 0 to 7", kind: TYPE, step: 2 },
-        { id: "own", text: "owner", kind: TYPE, step: 2 },
+        { id: "tyY", text: "y: 0 to 7", kind: "type", step: 2 },
+        { id: "own", text: "owner", kind: "type", step: 2 },
       ],
     },
     { depth: 4, id: "content", text: "layer  content", kind: "user", step: 1 },
@@ -110,7 +104,7 @@ const figure: TreeFigure = {
       text: "layer  spread",
       kind: "user",
       step: 1,
-      more: [{ id: "tyX", text: "x: slots A, B, C", kind: TYPE, step: 2 }],
+      more: [{ id: "tyX", text: "x: slots A, B, C", kind: "type", step: 2 }],
     },
     {
       depth: 6,
@@ -118,7 +112,7 @@ const figure: TreeFigure = {
       text: "rect  A",
       kind: "user",
       step: 1,
-      more: [{ id: "tyA", text: "y: free, 0 to 3", kind: TYPE, step: 2 }],
+      more: [{ id: "tyA", text: "y: free, 0 to 3", kind: "type", step: 2 }],
     },
     {
       depth: 6,
@@ -126,7 +120,7 @@ const figure: TreeFigure = {
       text: "rect  B",
       kind: "user",
       step: 1,
-      more: [{ id: "tyB", text: "y: free, 0 to 7", kind: TYPE, step: 2 }],
+      more: [{ id: "tyB", text: "y: free, 0 to 7", kind: "type", step: 2 }],
     },
     {
       depth: 6,
@@ -134,7 +128,7 @@ const figure: TreeFigure = {
       text: "rect  C",
       kind: "user",
       step: 1,
-      more: [{ id: "tyC", text: "y: free, 0 to 5", kind: TYPE, step: 2 }],
+      more: [{ id: "tyC", text: "y: free, 0 to 5", kind: "type", step: 2 }],
     },
     { depth: 3, id: "axis", text: "rect  axis line", kind: "added", step: 3 },
     {

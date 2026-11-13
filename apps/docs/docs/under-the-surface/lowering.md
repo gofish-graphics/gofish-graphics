@@ -1,5 +1,6 @@
 ---
 title: How does a chart chain become operators, and then constraints?
+label: Lowering
 order: 2
 topics:
   - lowering
@@ -41,6 +42,7 @@ reads:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
+  - packages/gofish-graphics/stories/lowlevel/ConstraintParity.stories.tsx
 checked:
   commit: 3e52867e4d31dfe0b02e148c22c225f1d33b5a12
   date: 2026-11-13

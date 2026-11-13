@@ -1,6 +1,7 @@
 ---
 chapter: lowering
 question: How does a chart chain become operators, and then constraints?
+label: Lowering
 words: 1100
 ---
 
