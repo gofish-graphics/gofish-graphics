@@ -10,13 +10,11 @@
 // translate. The tree is `pnpm --filter docs book:tree` on the same spec,
 // with the two pass-through content layers left out.
 //
-// This is its own small stepper rather than <TreeStepper>: TreeStepper's
-// legend names node kinds ("added by the rewrite"), and this figure's steps
-// fill in values, not nodes. It reuses the stepper's button and note styles
-// (`.tree-stepper .ts-*` in theme/book.css).
-import { computed, ref } from "vue";
+// It steps with <BookStepper> rather than <TreeStepper>: its steps fill in
+// values, not nodes.
+import BookStepper from "../.vitepress/theme/components/book/BookStepper.vue";
 
-const props = defineProps<{ still?: boolean }>();
+defineProps<{ still?: boolean }>();
 
 const steps = [
   {
@@ -48,23 +46,6 @@ const steps = [
     note: "Last, the root is placed on the canvas. Its y grows upward, so its origin goes at the bottom left, 200 pixels down.",
   },
 ];
-
-const n = steps.length;
-const step = ref(props.still ? n : 1);
-const set = (k: number) => (step.value = Math.max(1, Math.min(n, k)));
-const onKey = (ev: KeyboardEvent) => {
-  if (ev.key === "ArrowLeft") {
-    ev.preventDefault();
-    set(step.value - 1);
-  } else if (ev.key === "ArrowRight") {
-    ev.preventDefault();
-    set(step.value + 1);
-  }
-};
-const at = (s: number) => ({
-  "is-future": s > step.value,
-  "is-new": !props.still && s === step.value && s > 1,
-});
 
 // The tree, left to right: what the node asks for (step 2), the pixels it
 // gets (step 4), and where it sits in its parent (the step its parent
@@ -202,52 +183,17 @@ const bars = [
     low: false,
   },
 ];
-const caption = computed(() => !props.still);
 </script>
 
 <template>
-  <figure
+  <BookStepper
     id="fig-fill"
-    class="tree-stepper book-wide layout-fill"
-    :class="{ 'is-still': still }"
+    class="layout-fill"
+    :steps="steps"
+    label="Steps of layout"
+    :still="still"
   >
-    <div class="ts-body">
-      <div v-if="!still" class="ts-controls" @keydown="onKey">
-        <div class="ts-steps" role="group" aria-label="Steps of layout">
-          <button
-            v-for="(s, i) in steps"
-            :key="s.label"
-            type="button"
-            class="ts-btn"
-            :aria-pressed="i + 1 === step ? 'true' : 'false'"
-            @click="set(i + 1)"
-          >
-            {{ s.label }}
-          </button>
-        </div>
-        <div class="ts-nav">
-          <button
-            type="button"
-            class="ts-btn"
-            :disabled="step === 1"
-            @click="set(step - 1)"
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            class="ts-btn"
-            :disabled="step === n"
-            @click="set(step + 1)"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-      <p v-if="!still" class="ts-note" aria-live="polite">
-        <span class="ts-count">Step {{ step }} of {{ n }}.</span>
-        {{ steps[step - 1].note }}
-      </p>
+    <template #default="{ stepClass }">
       <div class="lf-panels">
         <div class="lf-table">
           <svg
@@ -271,15 +217,25 @@ const caption = computed(() => !props.still);
                   {{ r.name }}
                 </tspan>
               </text>
-              <text class="fig-mono lf-val" :class="at(2)" x="166" :y="y(i)">
+              <text
+                class="fig-mono lf-val bs-piece"
+                :class="stepClass(2)"
+                x="166"
+                :y="y(i)"
+              >
                 {{ r.ask }}
               </text>
-              <text class="fig-mono lf-val" :class="at(4)" x="282" :y="y(i)">
+              <text
+                class="fig-mono lf-val bs-piece"
+                :class="stepClass(4)"
+                x="282"
+                :y="y(i)"
+              >
                 {{ r.gets }}
               </text>
               <text
-                class="fig-mono lf-val"
-                :class="at(r.atStep)"
+                class="fig-mono lf-val bs-piece"
+                :class="stepClass(r.atStep)"
                 x="370"
                 :y="y(i)"
               >
@@ -342,7 +298,7 @@ const caption = computed(() => !props.still);
             </text>
 
             <!-- Step 2: the root's request, along each edge. -->
-            <g class="lf-step" :class="at(2)">
+            <g class="lf-step bs-piece" :class="stepClass(2)">
               <path
                 class="fig-guide"
                 :d="`M${CX} ${CY + 224}v8M${CX + 110} ${CY + 224}v8M${CX + 130} ${CY + 224}v8M${CX + 240} ${CY + 224}v8M${CX} ${CY + 228}H${CX + 240}`"
@@ -386,7 +342,7 @@ const caption = computed(() => !props.still);
             </g>
 
             <!-- Step 3: the two solves. -->
-            <g class="lf-step" :class="at(3)">
+            <g class="lf-step bs-piece" :class="stepClass(3)">
               <text class="fig-mono-small lf-eq" :x="CX - 50" :y="CY + 268">
                 x: 2σ + 20 = 240, σ = 110 px per share
               </text>
@@ -396,7 +352,7 @@ const caption = computed(() => !props.still);
             </g>
 
             <!-- Step 4: each bar's size, drawn where it will end up. -->
-            <g class="lf-step" :class="at(4)">
+            <g class="lf-step bs-piece" :class="stepClass(4)">
               <rect
                 v-for="b in bars"
                 :key="b.id + '-o'"
@@ -408,7 +364,7 @@ const caption = computed(() => !props.still);
               />
             </g>
             <!-- Step 5: the stacks place their bars. -->
-            <g class="lf-step" :class="at(5)">
+            <g class="lf-step bs-piece" :class="stepClass(5)">
               <rect
                 v-for="b in bars"
                 :key="b.id + '-f'"
@@ -419,7 +375,7 @@ const caption = computed(() => !props.still);
                 :height="b.h - 1.5"
               />
             </g>
-            <g class="lf-step" :class="at(4)">
+            <g class="lf-step bs-piece" :class="stepClass(4)">
               <template v-for="b in bars" :key="b.id + '-t'">
                 <text
                   class="fig-mono-small lf-on"
@@ -439,7 +395,7 @@ const caption = computed(() => !props.still);
             </g>
 
             <!-- Step 6: the spread's gap and shared baseline. -->
-            <g class="lf-step" :class="at(6)">
+            <g class="lf-step bs-piece" :class="stepClass(6)">
               <line
                 class="fig-guide-dash"
                 :x1="CX - 4"
@@ -462,7 +418,7 @@ const caption = computed(() => !props.still);
             </g>
 
             <!-- Step 7: the root's origin on the canvas. -->
-            <g class="lf-step" :class="at(7)">
+            <g class="lf-step bs-piece" :class="stepClass(7)">
               <circle class="lf-origin" :cx="CX" :cy="CY + 200" r="4" />
               <line
                 class="fig-line"
@@ -492,16 +448,16 @@ const caption = computed(() => !props.still);
           </svg>
         </div>
       </div>
-    </div>
-    <figcaption v-if="caption">
+    </template>
+    <template #caption>
       The stacked bar chart above, rendered at 240 by 200 pixels with axes off.
       Every number is from a run of the library. Places are measured from the
       bottom left of the parent, since y grows upward; the root's place is on
       the canvas, measured from its top left. The tree leaves out two wrapper
       layers between the chart and the spread, which pass sizes and places
       through unchanged.
-    </figcaption>
-  </figure>
+    </template>
+  </BookStepper>
 </template>
 
 <style scoped>
@@ -534,14 +490,6 @@ const caption = computed(() => !props.still);
 }
 .lf-user {
   fill: var(--fig-user);
-}
-.lf-val,
-.lf-step {
-  transition: opacity 260ms ease;
-}
-.lf-val.is-future,
-.lf-step.is-future {
-  opacity: 0;
 }
 .lf-val.is-new,
 .lf-step.is-new .lf-eq {

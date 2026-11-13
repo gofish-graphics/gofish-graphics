@@ -69,11 +69,25 @@ them from the frontmatter.
 Keep the prose within the brief's `words`. `book:check` allows 10 percent over
 and counts everything except frontmatter, code blocks, SVG and HTML tags.
 
-The one figure is a `<TreeStepper>`, a static inline SVG in `<figure
-class="book-wide">`, or a GoFish figure (`::: gofish`). Put a stepper or a
-static figure in its own file beside the chapter, `<slug>.<figure>.vue`, with
-`id="fig-<figure>"` on its root element and a `still` prop (see
-`axes.rewrite.vue`), and import it into the chapter. Use the figure colors
+The one figure is a figure file or a GoFish figure (`::: gofish`). Put a
+figure file beside the chapter, `<slug>.<figure>.vue`, with a `still` prop,
+and import it into the chapter. Draw it inside one of the shared components
+in `docs/.vitepress/theme/components/book/` (the README's "Figures" section
+has their props and slots):
+
+- `<BookFigure id="fig-<figure>">` for a static figure (see
+  `python.crossing.vue`);
+- `<BookStepper id="fig-<figure>" :steps="...">` for a figure that steps; its
+  slot gets the current `step` and `shown(from, until?)` (see
+  `layout.fill.vue`), and `picker` makes the steps a set of choices (see
+  `names.walk.vue`);
+- `<TreeStepper id="fig-<figure>" :figure="...">` for a node tree that grows
+  (see `axes.rewrite.vue`).
+
+Never write your own step buttons, `aria-pressed`, key handling or step
+state: `book:check` fails a figure file that has them or that does not
+import one of the three. If a figure needs a control the stepper lacks, add
+it to `BookStepper` for every figure. Use the figure colors
 from the README for every figure: one color for nodes from the reader's code,
 one for nodes the library adds, dashed for refs, gray for constraints.
 

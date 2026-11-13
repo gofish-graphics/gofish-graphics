@@ -10,14 +10,15 @@
 //   pixels  runLayout + lowerToDisplayList on the same spec at w 300, h 200
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { stages, loops, ticks, flows } from "./pipeline.figure";
+import BookFigure from "../.vitepress/theme/components/book/BookFigure.vue";
 
 defineProps<{ still?: boolean }>();
 
-const root = ref<HTMLElement | null>(null);
+const root = ref<{ $el: HTMLElement } | null>(null);
 const tall = ref(false);
 let observer: ResizeObserver | undefined;
 onMounted(() => {
-  const el = root.value;
+  const el = root.value?.$el;
   if (!el) return;
   const check = () => (tall.value = el.clientWidth > 0 && el.clientWidth < 640);
   check();
@@ -211,8 +212,9 @@ const S = 0.45;
 </script>
 
 <template>
-  <figure id="fig-stages" ref="root" class="book-wide pl-fig">
+  <BookFigure id="fig-stages" ref="root" class="pl-fig" :still="still">
     <svg
+      class="pl-svg"
       :viewBox="`0 0 ${layout.width} ${layout.height}`"
       :style="{ maxWidth: layout.width + 'px' }"
       role="img"
@@ -356,7 +358,7 @@ const S = 0.45;
             <text class="pl-mono pl-type" x="8" y="91">6 nodes become 68</text>
           </g>
 
-          <!-- 4 Claim: the room the root needs, solved for sigma. -->
+          <!-- 4 Ask: the room the root needs, solved for sigma. -->
           <g v-else-if="i === 3">
             <rect class="fig-guide-dash" x="10" y="8" width="24" height="84" />
             <rect class="fig-user" x="14" y="10" width="16" height="64" />
@@ -369,7 +371,7 @@ const S = 0.45;
             <text class="pl-mono pl-type" x="62" y="86">px per unit</text>
           </g>
 
-          <!-- 5 Solve: every node gets a size and a place. -->
+          <!-- 5 Place: every node gets a size and a place. -->
           <g v-else-if="i === 4">
             <rect
               class="fig-guide-dash"
@@ -466,7 +468,7 @@ const S = 0.45;
         </g>
       </g>
     </svg>
-    <figcaption v-if="!still">
+    <template #caption>
       One render of the three-bar chart at 300 by 200 pixels, stage by stage.
       The words on each arrow name what one stage hands the next. The gray loops
       are the stages that run again. Under each stage is the chart as that stage
@@ -474,12 +476,12 @@ const S = 0.45;
       The trees are printed by <code>book:tree</code> and simplified, and the
       numbers come from the display list of the same run. The blue lines at the
       foot of a stage say what a <code>Coord</code> does there.
-    </figcaption>
-  </figure>
+    </template>
+  </BookFigure>
 </template>
 
 <style scoped>
-.pl-fig > svg {
+.pl-svg {
   display: block;
   width: 100%;
   height: auto;

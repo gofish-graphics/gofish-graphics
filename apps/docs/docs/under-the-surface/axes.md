@@ -35,8 +35,8 @@ checked:
   date: 2026-11-13
 cover:
   - figure: rewrite
-    rows: 3
-    cols: 4
+    rows: 2
+    cols: 3
 ---
 
 <script setup>

@@ -58,8 +58,8 @@ checked:
   date: 2026-11-13
 cover:
   - figure: crossing
-    rows: 3
-    cols: 4
+    rows: 2
+    cols: 3
 ---
 
 <script setup>
@@ -122,8 +122,8 @@ The reader calls the public factories, so a Python chart runs the code a JavaScr
 The validator reads the same table, so an undeclared key is an error.
 
 ::: rule One row, one of each.
-_t_ ∈ table ⇔ _t_ ∈ FACTORIES ∪ OPERATOR_BUILDERS\
-<small>and</small> fields(_t_) = kwargs(py(_t_)) <small>renamed</small>
+_t_ ∈ table ⇔ _t_ ∈ FACTORIES ∪ OPERATOR*BUILDERS\
+<small>and</small> fields(\_t*) = kwargs(py(_t_)) <small>renamed</small>
 
 A construct the table does not list has no wire form.
 :::

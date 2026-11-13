@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The figure of "How does a chart get its axes?". The chapter shows it with
 // its controls. The book cover shows it still, at its last step.
+import TreeStepper from "../.vitepress/theme/components/book/TreeStepper.vue";
 import rewrite from "./axes.figure";
 defineProps<{ still?: boolean }>();
 </script>

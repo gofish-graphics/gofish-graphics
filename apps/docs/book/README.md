@@ -44,7 +44,7 @@ frontmatter looks like this.
 ```yaml
 title: How does a chart get its axes? # the question, the same as the brief's
 label: Axes # one or two words, the same as the brief's
-order: 1 # its place in the contents and the sidebar
+order: 1 # its place in the contents
 topics: [axes, ticks, axis titles, legend, elaboration] # terms a reader might search for
 reads: # repo-relative source files the chapter was written from
   - packages/gofish-graphics/src/ast/gofish.tsx
@@ -53,8 +53,8 @@ checked:
   date: 2026-11-13
 cover: # the figures this chapter puts on the book cover, at least one
   - figure: rewrite # the file axes.rewrite.vue beside the chapter
-    rows: 3 # tile height in cells of the cover wall, 1 to 4 (default 2)
-    cols: 4 # tile width in cells, 1 to 6 (default 2)
+    rows: 2 # tile height in cells of the cover wall, 1 to 4 (default 2)
+    cols: 3 # tile width in cells, 1 to 6 (default 2)
 ```
 
 Do not use the key `covers`. The internals wiki uses it for something else.
@@ -66,34 +66,53 @@ first paragraph.
 The `label` is a short name for the chapter, so a reader can scan the
 contents. Wherever the book lists or titles a chapter, it shows the label and
 then the question, e.g., "Axes: How does a chart get its axes?". This is the
-sidebar, the contents, the chapter's heading, the links to the next and
-previous chapters, the browser tab and the cover tiles. The note button's issue
-title uses the question alone.
+contents, the Contents list at the top of each chapter, the chapter's heading,
+the links to the next and previous chapters, the browser tab and the cover
+tiles. The note button's issue title uses the question alone.
 
-The contents page and the sidebar are built from this frontmatter. Adding a
+The contents and the Contents list are built from this frontmatter. Adding a
 chapter file is enough to list it.
+
+## The pages
+
+The book's pages have no sidebar. The first page, `/under-the-surface/`, is a
+book lying open. The left page is the cover and the right page is the
+contents, with the two sentences from `index.md` at its foot. On a window 900
+pixels wide or more, the two pages fit the window with no scrolling, and each
+page is 3 by 4. When the contents are longer than the page, the list scrolls
+inside the page. On a narrower window, the cover comes first and the contents
+follow under it.
+
+A chapter is one column of text. At its top is a line with the book's name,
+which links back to the first page, the chapter's label, and a Contents button
+that opens the list of chapters.
 
 ### The cover
 
-The top of the contents page is the book's cover. It is a wall of tiles, and
-each tile is one figure from a chapter. The title of the book is one cell of
-the wall. Each chapter lists its tiles under `cover`, and must list at least
-one.
+The left page of the first page is the book's cover. It is a wall of tiles,
+and each tile is one figure from a chapter. The title of the book is one tile
+of 3 by 3 cells. Each chapter lists its tiles under `cover`, and must list at
+least one.
 
 - `figure` names a figure file beside the chapter, `<slug>.<figure>.vue`,
   whose root element has `id="fig-<figure>"`. The tile links to that id in the
   chapter, and its accessible name is the chapter's label and question.
 - The tile shows the chapter's own figure component, scaled down, with the
   prop `still` set. A figure file declares `defineProps<{ still?: boolean }>()`
-  and passes `still` to a `TreeStepper`, or hides its caption with
-  `v-if="!still"`. A still stepper shows its last step with no controls,
-  legend or caption. Nothing inside a tile can be focused or clicked.
-- `rows` and `cols` are the tile size. The wall has 6 columns on a wide
-  screen and 2 on a phone. A cell is about 145 by 105 pixels on a wide screen,
-  so pick the size closest to the figure's shape, e.g., 3 by 4 for a stepper
-  and 2 by 6 for a wide two-panel figure. The wall packs the tiles in chapter
-  order and fills gaps with later tiles, so a small gap can remain when the
-  sizes do not add up.
+  and passes `still` to its `BookFigure`, `BookStepper` or `TreeStepper`
+  (see "Figures" below). A still figure shows no controls, note, legend or
+  caption, and a still stepper shows its last step or its `still-step`.
+  Nothing inside a tile can be focused or clicked.
+- `rows` and `cols` are the tile size. The wall is 6 cells across, and its
+  rows stretch to fill the page. With 12 rows, a cell is about one and a half
+  times as wide as it is tall. Pick the size closest to the figure's shape:
+  3 rows by 3 cols for a figure 1.5 times as wide as tall, 2 by 3 for one
+  about twice as wide as tall, 4 by 3 for a square one, and 3 by 6 for a wide
+  two-panel figure.
+  The wall packs the tiles in chapter order and fills gaps with later tiles.
+  The page is filled with no gaps when the tiles add up to 63 cells (12 rows of
+  6, less the title's 9) and each row of the wall is filled. More cells make
+  the rows shorter. The wall is the same on a phone.
 - `book:check` fails when a chapter has no cover entry, when a figure file is
   missing or has no element with the matching id, or when a size is out of
   range.
@@ -204,25 +223,62 @@ The chapter's markdown can use these pieces.
   `<slug>.<figure>.vue`, so the cover can show it too. The chapter imports it
   in a `<script setup>` block, e.g., `import AxesRewrite from
 "./axes.rewrite.vue"`, and places it on its own line as `<AxesRewrite />`.
-  See `axes.rewrite.vue` (a stepper) and `python.crossing.vue` (a static
-  figure).
-- `<TreeStepper :figure="data">` is a figure that steps through how a node
-  tree grows. Put its data in a file beside the chapter, e.g.,
-  `axes.figure.ts`, and import it in the figure file. The data type
-  is in `docs/.vitepress/theme/components/book/treeStepper.ts`. Each line of
-  the tree has an `id`, a `depth`, a `text`, a `kind` (`user`, `added`, `ref`,
-  `constraint` or `type`), the `step` at which it appears, and for a ref its
-  `targets`. A `type` item is a note that typing writes on a node, not a
-  node. The legend under the figure lists only the kinds the figure uses. An optional `<svg>` inside the tag is the picture. Give each piece
-  of the picture a `data-id` that matches a tree line. Put the caption in a
-  `<template #caption>` inside the tag. Keep the whole tag free of blank
-  lines, or markdown will break it apart.
-- A static figure is plain inline SVG inside `<figure class="book-wide">`, with
-  a `<figcaption>`. It may be up to 900 pixels wide. Use `<div
-class="fig-panels">` to put several SVG panels side by side.
+  See "Figures" below.
 - A GoFish figure uses the usual `::: gofish` container. A `::: gofish`
   figure in the markdown cannot be a cover tile, so a chapter whose only
   figure is a GoFish chart also needs a static figure file for the cover.
+
+### Figures
+
+Every figure file draws inside one of three shared components in
+`docs/.vitepress/theme/components/book/`, imported by the figure file. They
+own the frame and the stepping, so every figure looks and steps the same way.
+The figure file owns only what is drawn.
+
+- `<BookFigure id="fig-<figure>" :still="still" :kinds="[...]">` is the
+  frame of a static figure: the wide figure container, the `id` the cover
+  links to, the legend and the caption. The content is the default slot and
+  the caption a `<template #caption>`. `kinds` lists the palette kinds the
+  figure uses (`user`, `added`, `ref`, `constraint`, `type`, `generated`),
+  and the legend shows those, with the same words in every figure. Leave it
+  out for no legend. A figure that is one `<svg>` gets full width; use `<div
+class="fig-panels">` to put several SVG panels side by side. A figure may
+  be up to 900 pixels wide. See `lowering.levels.vue` and
+  `python.crossing.vue`.
+- `<BookStepper id="fig-<figure>" :steps="steps" label="..." :still="still">`
+  is a figure that steps. It is the same frame plus the step buttons,
+  Previous and Next, "Step n of N", the note of the current step, the arrow
+  keys (Home and End too), focus and the `aria` state. `steps` is a list of
+  `{ label, note }`: a short button label and one sentence. The default slot
+  draws the figure for the current step and receives `step` (counting from
+  1), `n`, `still`, `shown(from, until?)`, true from step `from` through step
+  `until`, and `stepClass(from, until?)`, the classes `is-future`, `is-past`
+  and `is-new` for a piece that keeps its place at every step. Give such a
+  piece the class `bs-piece` to fade it in when it appears and out when it
+  goes away. Other props: `start` (the first step shown), `still-step` (the
+  step a still figure shows, default the last), `kinds` (the legend), and
+  `picker`, for choices that are not a sequence: the same buttons, with no
+  Previous and Next and no "Step n of N"; a choice's `note` may be left out.
+  See `layout.fill.vue` (pieces that appear), `labels.chooser.vue` (a
+  picture drawn from each step's data) and `names.walk.vue` (a picker).
+- `<TreeStepper id="fig-<figure>" :figure="data" :still="still">` is a
+  `BookStepper` that steps through how a node tree grows. Put its data in a
+  file beside the chapter, e.g., `axes.figure.ts`, and import it in the
+  figure file. The data type is in `treeStepper.ts`. Each line of the tree
+  has an `id`, a `depth`, a `text`, a `kind` (`user`, `added`, `ref`,
+  `constraint` or `type`), the `step` at which it appears, for a line that
+  goes away the last step it shows (`until`), and for a ref its `targets`. A
+  `type` item is a note that typing writes on a node, not a node. The legend
+  lists the kinds the tree uses. An optional `<svg>` inside the tag is the
+  picture. Give each piece of the picture a `data-id` that matches a tree
+  line; a piece may set its own `data-step` and `data-until`. Put the caption
+  in a `<template #caption>` inside the tag. See `axes.rewrite.vue`.
+
+`book:check` enforces this. Every `.vue` file in `docs/under-the-surface/`
+must import `BookFigure`, `BookStepper` or `TreeStepper`, and must not
+contain `<button`, `aria-pressed`, `role="group"`, a `keydown` handler,
+`<input` or `<select`. Those belong to the shared stepper, so a figure that
+needs a new kind of control changes `BookStepper` for every figure.
 
 Every figure uses the same colors, set in `docs/.vitepress/theme/book.css`.
 

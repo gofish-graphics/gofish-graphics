@@ -1,43 +1,38 @@
 <script setup lang="ts">
-// A figure that steps through how a node tree grows: step buttons and a note
-// above, the tree as an indented outline on the left, and an optional picture
-// (the default slot, an <svg>) on the right. Nothing moves between steps:
-// items not yet added are shown faint, picture pieces not yet added are
-// hidden, and both keep their place. Hovering or focusing a tree item
-// outlines the picture pieces with the same `data-id`, and hovering a piece
-// marks its tree item, both ways. A ref item outlines its targets, dashed.
+// A figure that steps through how a node tree grows, built on <BookStepper>
+// (which draws the step controls, the note, the legend and the caption): the
+// tree as an indented outline on the left, and an optional picture (the
+// default slot, an <svg>) on the right. Nothing moves between steps: items
+// not yet added are shown faint, items gone away faint and struck through,
+// picture pieces not shown are hidden, and all keep their place. Hovering or
+// focusing a tree item outlines the picture pieces with the same `data-id`,
+// and hovering a piece marks its tree item, both ways. A ref item outlines
+// its targets, dashed.
 //
 // Picture contract: any element with `data-id="<item id>"` is a piece of that
-// item. It is hidden until the item's step, or until its own `data-step`.
-// Give a piece class `fig-region` to make it an invisible box used only for
-// outlining (a layer's extent), and put a `fig-hit` rect inside a thin piece
-// to make it easier to hover. Styles: theme/book.css.
+// item. It is shown from the item's step, or its own `data-step`, through
+// the item's `until`, or its own `data-until`. Give a piece class
+// `fig-region` to make it an invisible box used only for outlining (a
+// layer's extent), and put a `fig-hit` rect inside a thin piece to make it
+// easier to hover. Styles: theme/book-stepper.css.
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import type { TreeFigure, TreeItem, TreeKind } from "./treeStepper";
+import BookStepper from "./BookStepper.vue";
+import type { TreeFigure, TreeItem } from "./treeStepper";
 
 // `still` shows the last step as a plain picture with no controls, no
 // caption and nothing to focus or hover. The book cover uses it.
 const props = defineProps<{
+  /** The anchor, "fig-<name>". */
+  id: string;
   figure: TreeFigure;
   start?: number;
   still?: boolean;
 }>();
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-const KIND_LABEL: Record<TreeKind, string> = {
-  user: "from your code",
-  added: "added by the rewrite",
-  ref: "ref",
-  constraint: "constraint",
-  type: "type (a note, not a node)",
-};
 
-const nSteps = computed(() => props.figure.steps.length);
-const step = ref(
-  props.still
-    ? nSteps.value
-    : Math.min(Math.max(props.start ?? 1, 1), nSteps.value)
-);
+/** The current step, mirrored from BookStepper for the picture code. */
+const step = ref(1);
 
 const rows = computed(() =>
   props.figure.lines.map((l) => ({
@@ -48,6 +43,7 @@ const rows = computed(() =>
         text: l.text,
         kind: l.kind,
         step: l.step,
+        until: l.until,
         targets: l.targets,
       },
       ...(l.more ?? []),
@@ -56,12 +52,11 @@ const rows = computed(() =>
 );
 const order = computed(() => rows.value.flatMap((r) => r.items));
 const byId = computed(() => new Map(order.value.map((i) => [i.id, i])));
-const kinds = computed(() =>
-  (Object.keys(KIND_LABEL) as TreeKind[]).filter((k) =>
-    order.value.some((i) => i.kind === k)
-  )
-);
-const visible = computed(() => order.value.filter((i) => i.step <= step.value));
+const kinds = computed(() => [...new Set(order.value.map((i) => i.kind))]);
+
+const isShown = (it: { step: number; until?: number }, s = step.value) =>
+  it.step <= s && (it.until === undefined || s <= it.until);
+const visible = computed(() => order.value.filter((i) => isShown(i)));
 
 /** "layer  frame" → type "layer", rest "frame". */
 function split(text: string): [string, string] {
@@ -72,16 +67,18 @@ function split(text: string): [string, string] {
 // ---- highlight state --------------------------------------------------
 const hlTree = ref<string | null>(null); // a tree item hovered or focused
 const hlPic = ref<string | null>(null); // a picture piece hovered
-const roving = ref<string>(visible.value[0]?.id ?? "");
+const roving = ref<string>("");
 
-function itemClass(it: TreeItem) {
+function itemClass(
+  it: TreeItem,
+  stepClass: (from: number, until?: number) => Record<string, boolean>
+) {
   const pic = hlPic.value;
   return {
     [`k-${it.kind}`]: true,
-    "is-future": it.step > step.value,
-    "is-new": !props.still && it.step === step.value && step.value > 1,
+    ...stepClass(it.step, it.until),
     "is-hl": hlTree.value === it.id || pic === it.id,
-    "is-hl-ref": !!pic && !!it.targets?.includes(pic) && it.step <= step.value,
+    "is-hl-ref": !!pic && !!it.targets?.includes(pic) && isShown(it),
   };
 }
 
@@ -98,15 +95,18 @@ function pieces(id?: string): SVGGraphicsElement[] {
   );
 }
 
-function pieceStep(el: Element): number {
+function pieceShown(el: Element): boolean {
+  const it = byId.value.get(el.getAttribute("data-id") ?? "");
   const own = el.getAttribute("data-step");
-  if (own) return Number(own);
-  return byId.value.get(el.getAttribute("data-id") ?? "")?.step ?? 1;
+  const until = el.getAttribute("data-until");
+  return isShown({
+    step: own ? Number(own) : (it?.step ?? 1),
+    until: until ? Number(until) : it?.until,
+  });
 }
 
 function syncPicture() {
-  for (const el of pieces())
-    el.classList.toggle("is-future", pieceStep(el) > step.value);
+  for (const el of pieces()) el.classList.toggle("is-hidden", !pieceShown(el));
 }
 
 /** The piece's box in the svg's own coordinates. */
@@ -145,7 +145,7 @@ function clearOutlines() {
 function outline(id: string, dashed: boolean) {
   if (!hlLayer) return;
   for (const el of pieces(id)) {
-    if (pieceStep(el) > step.value) continue;
+    if (!pieceShown(el)) continue;
     const b = boxOf(el);
     if (!b) continue;
     const o = dashed ? 2.5 : 1.5;
@@ -172,7 +172,7 @@ function drawOutlines() {
 
 function onPicOver(ev: PointerEvent) {
   const el = (ev.target as Element | null)?.closest?.("[data-id]");
-  if (el && svg?.contains(el) && pieceStep(el) <= step.value) {
+  if (el && svg?.contains(el) && pieceShown(el)) {
     hlTree.value = null;
     hlPic.value = el.getAttribute("data-id");
   } else hlPic.value = null;
@@ -208,7 +208,7 @@ function onTreeKey(ev: KeyboardEvent) {
 }
 
 function onItemEnter(it: TreeItem) {
-  if (it.step > step.value) return;
+  if (!isShown(it)) return;
   hlPic.value = null;
   hlTree.value = it.id;
 }
@@ -226,23 +226,14 @@ function onItemBlur() {
   hlTree.value = null;
 }
 
-// ---- steps ------------------------------------------------------------
-function setStep(n: number) {
-  step.value = Math.max(1, Math.min(nSteps.value, n));
-}
-function onControlsKey(ev: KeyboardEvent) {
-  if (ev.key === "ArrowLeft") {
-    ev.preventDefault();
-    setStep(step.value - 1);
-  } else if (ev.key === "ArrowRight") {
-    ev.preventDefault();
-    setStep(step.value + 1);
-  }
-}
+/** The one shown item that is in the tab order. */
+const tabStop = computed(() =>
+  visible.value.some((v) => v.id === roving.value)
+    ? roving.value
+    : (visible.value[0]?.id ?? "")
+);
 
 watch(step, () => {
-  if ((byId.value.get(roving.value)?.step ?? 1) > step.value)
-    roving.value = visible.value[0]?.id ?? "";
   hlTree.value = null;
   hlPic.value = null;
   syncPicture();
@@ -269,48 +260,17 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <figure class="tree-stepper book-wide" :class="{ 'is-still': still }">
-    <div class="ts-body">
-      <div v-if="!still" class="ts-controls" @keydown="onControlsKey">
-        <div
-          class="ts-steps"
-          role="group"
-          :aria-label="figure.label ?? 'Steps'"
-        >
-          <button
-            v-for="(s, i) in figure.steps"
-            :key="s.label"
-            type="button"
-            class="ts-btn"
-            :aria-pressed="i + 1 === step ? 'true' : 'false'"
-            @click="setStep(i + 1)"
-          >
-            {{ s.label }}
-          </button>
-        </div>
-        <div class="ts-nav">
-          <button
-            type="button"
-            class="ts-btn"
-            :disabled="step === 1"
-            @click="setStep(step - 1)"
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            class="ts-btn"
-            :disabled="step === nSteps"
-            @click="setStep(step + 1)"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-      <p v-if="!still" class="ts-note" aria-live="polite">
-        <span class="ts-count">Step {{ step }} of {{ nSteps }}.</span>
-        {{ figure.steps[step - 1]?.note }}
-      </p>
+  <BookStepper
+    :id="id"
+    class="tree-stepper"
+    :steps="figure.steps"
+    :label="figure.label"
+    :start="start"
+    :still="still"
+    :kinds="kinds"
+    @update:step="(s: number) => (step = s)"
+  >
+    <template #default="{ step: s, stepClass }">
       <div class="ts-grid" :class="{ 'has-pic': !!$slots.default }">
         <div class="ts-tree-wrap">
           <div
@@ -325,16 +285,16 @@ onBeforeUnmount(() => {
                 ><span v-if="k > 0">{{ "   " }}</span
                 ><span
                   class="ts-item"
-                  :class="itemClass(it)"
+                  :class="itemClass(it, stepClass)"
                   :data-item="it.id"
                   :tabindex="
-                    !still && it.step <= step
-                      ? it.id === roving
+                    !still && isShown(it, s)
+                      ? it.id === tabStop
                         ? 0
                         : -1
                       : undefined
                   "
-                  :aria-hidden="it.step > step ? 'true' : undefined"
+                  :aria-hidden="isShown(it, s) ? undefined : 'true'"
                   @mouseenter="onItemEnter(it)"
                   @mouseleave="onItemLeave(it)"
                   @focus="onItemFocus(it)"
@@ -350,26 +310,9 @@ onBeforeUnmount(() => {
         </div>
         <div v-if="$slots.default" ref="picEl" class="ts-pic">
           <slot />
-          <ul v-if="!still" class="ts-legend" aria-label="Legend">
-            <li v-for="k in kinds" :key="k">
-              <span class="ts-swatch" :class="`k-${k}`"></span
-              >{{ KIND_LABEL[k] }}
-            </li>
-          </ul>
         </div>
       </div>
-      <ul
-        v-if="!still && !$slots.default"
-        class="ts-legend"
-        aria-label="Legend"
-      >
-        <li v-for="k in kinds" :key="k">
-          <span class="ts-swatch" :class="`k-${k}`"></span>{{ KIND_LABEL[k] }}
-        </li>
-      </ul>
-    </div>
-    <figcaption v-if="!still && $slots.caption">
-      <slot name="caption" />
-    </figcaption>
-  </figure>
+    </template>
+    <template v-if="$slots.caption" #caption><slot name="caption" /></template>
+  </BookStepper>
 </template>

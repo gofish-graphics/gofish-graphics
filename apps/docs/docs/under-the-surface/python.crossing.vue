@@ -4,11 +4,18 @@
 // Python's `to_ir()` printed for the left panel's call (reformatted, rows
 // cut), and the tree is what `book:tree --before` printed for the document
 // rebuilt by `Serialize.buildIR`.
+import BookFigure from "../.vitepress/theme/components/book/BookFigure.vue";
+
 defineProps<{ still?: boolean }>();
 </script>
 
 <template>
-  <figure id="fig-crossing" class="book-wide pyx">
+  <BookFigure
+    id="fig-crossing"
+    class="pyx"
+    :kinds="['generated', 'user', 'added']"
+    :still="still"
+  >
     <div class="pyx__wrap">
       <div class="pyx__row">
         <section class="pyx__panel" aria-label="Python source">
@@ -156,25 +163,16 @@ defineProps<{ still?: boolean }>();
           </div>
         </section>
       </div>
-
-      <div v-if="!still" class="pyx__legend">
-        <span
-          ><i class="pyx__sw pyx__sw--gen"></i>from the descriptor table
-          (generated from it, or named in it)</span
-        >
-        <span><i class="pyx__sw pyx__sw--user"></i>a node from your code</span>
-        <span><i class="pyx__sw pyx__sw--added"></i>a node the chart adds</span>
-      </div>
     </div>
-    <figcaption v-if="!still">
+    <template #caption>
       One bar chart at three stages. Left: the Python call. Middle: what
       <code>to_ir()</code> printed for it, with its lines rewrapped and the
       three rows cut. Right: what <code>Serialize.buildIR</code> rebuilds from
       that document, and the node tree it makes before layout, printed by
       <code>book:tree</code>. The same chart written in JavaScript prints the
       same tree.
-    </figcaption>
-  </figure>
+    </template>
+  </BookFigure>
 </template>
 
 <style scoped>
@@ -307,8 +305,11 @@ defineProps<{ still?: boolean }>();
   border-color: var(--fig-user);
   color: var(--fig-on-user);
 }
+/* The three rects wrap when the panel is narrow, rather than run past its
+   edge. */
 .pyx__leaves {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 .pyx__d1 {
@@ -319,34 +320,6 @@ defineProps<{ still?: boolean }>();
 }
 .pyx__d3 {
   margin-left: 42px;
-}
-.pyx__legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin-top: 12px;
-  font-family: var(--vp-font-family-base);
-  font-size: 12.5px;
-  color: var(--book-ink-2);
-}
-.pyx__sw {
-  display: inline-block;
-  width: 14px;
-  height: 10px;
-  margin-right: 6px;
-  vertical-align: -1px;
-  border-radius: 2px;
-}
-.pyx__sw--gen {
-  height: 0;
-  border-bottom: 2px dotted var(--fig-generated);
-  vertical-align: 3px;
-}
-.pyx__sw--user {
-  background: var(--fig-user);
-}
-.pyx__sw--added {
-  border: 1.5px solid var(--fig-added);
 }
 
 /* Three panels in a row when there is room: the chapter on a wide screen,

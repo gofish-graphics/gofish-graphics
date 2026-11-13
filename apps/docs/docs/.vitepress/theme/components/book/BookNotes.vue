@@ -68,7 +68,7 @@ function attach() {
   const blocks = all.filter((el) => {
     for (let p = el.parentElement; p && p !== root; p = p.parentElement)
       if (p.matches(BLOCKS)) return false;
-    return !el.closest(".book-toc, .book-cover");
+    return true;
   });
 
   let anchor = pageUrl();
@@ -104,14 +104,14 @@ function attach() {
 
 onMounted(attach);
 onContentUpdated(attach);
-
-const isContents = computed(() => page.value.relativePath.endsWith("index.md"));
 </script>
 
 <template>
+  <!-- The opening spread uses the `page` layout, which has no doc-after
+       slot, so this only ever shows on a chapter. -->
   <p v-if="onBook" class="book-note-chapter">
     <a :href="chapterUrl" target="_blank" rel="noopener noreferrer"
-      >Leave a note on this {{ isContents ? "page" : "chapter" }}</a
+      >Leave a note on this chapter</a
     >
     <span> It opens a GitHub issue. Say what lost you, or what is wrong.</span>
   </p>

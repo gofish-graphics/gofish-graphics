@@ -1,13 +1,13 @@
 // The data a <TreeStepper> figure takes. A chapter keeps its figure's data in
 // a small file beside it (for example docs/under-the-surface/axes.figure.ts)
 // and passes it as `:figure`. See apps/docs/book/README.md.
+import type { BookStep, FigKind } from "./bookFigure";
 
-/** What a line of the tree stands for. Each kind has one look in every
- *  chapter (theme/book.css): from the reader's code, added by a rewrite, a
- *  ref (dashed), a constraint (gray), and a type (gray italic with a round
- *  mark), which is a note that typing writes on a node, not a node. A
- *  figure's legend lists only the kinds the figure uses. */
-export type TreeKind = "user" | "added" | "ref" | "constraint" | "type";
+/** What a line of the tree stands for: a palette kind (bookFigure.ts). From
+ *  the reader's code, added by the library, a ref (dashed), a constraint
+ *  (gray), and a type (gray italic with a round mark), which is a note that
+ *  typing writes on a node, not a node. */
+export type TreeKind = Exclude<FigKind, "generated">;
 
 export type TreeItem = {
   /** Unique within the figure. Picture pieces with the same `data-id` are
@@ -19,6 +19,10 @@ export type TreeItem = {
   kind: TreeKind;
   /** The step (counting from 1) at which the item appears. */
   step: number;
+  /** The last step at which the item is shown, for an item that goes away
+   *  (a node a rewrite replaces). After it the item is faint and struck
+   *  through, and its picture pieces are hidden. */
+  until?: number;
   /** For a ref: the ids of the items it points at. Hovering the ref outlines
    *  them, dashed. */
   targets?: string[];
@@ -32,16 +36,11 @@ export type TreeLine = TreeItem & {
   more?: TreeItem[];
 };
 
-export type TreeStep = {
-  /** A short button label. */
-  label: string;
-  /** One sentence shown under the buttons. */
-  note: string;
-};
+export type TreeStep = BookStep;
 
 export type TreeFigure = {
   steps: TreeStep[];
   lines: TreeLine[];
-  /** A name for the figure, read by screen readers. */
+  /** A name for the figure's step buttons, read by screen readers. */
   label?: string;
 };

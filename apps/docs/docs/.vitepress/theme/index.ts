@@ -8,6 +8,7 @@ import "vitepress-plugin-sandpack/dist/style.css";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
 import BookChapterHead from "./components/book/BookChapterHead.vue";
+import BookRunningHead from "./components/book/BookRunningHead.vue";
 import BookNotes from "./components/book/BookNotes.vue";
 import "./book.css";
 import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
@@ -39,8 +40,7 @@ const pageComponents = {
   TutorialCard: () => import("./components/tutorials/TutorialCard.vue"),
   // Under the Surface (docs/under-the-surface/).
   TreeStepper: () => import("./components/book/TreeStepper.vue"),
-  BookContents: () => import("./components/book/BookContents.vue"),
-  BookCover: () => import("./components/book/BookCover.vue"),
+  BookSpread: () => import("./components/book/BookSpread.vue"),
 };
 export default {
   extends: DefaultTheme,
@@ -57,9 +57,14 @@ export default {
       "layout-top": () => h(LanguageToggle, { placement: "localnav" }),
       // Status banner + "Source files" box for internals essays
       // (the component renders nothing on pages without the frontmatter).
-      // Under the Surface: the stamp and title on top of a chapter, the
-      // note links at the end of the page (both render nothing elsewhere).
-      "doc-before": () => [h(EssayMeta), h(BookChapterHead)],
+      // Under the Surface: the running head, stamp and title on top of a
+      // chapter, the note links at the end of the page (all render nothing
+      // elsewhere).
+      "doc-before": () => [
+        h(EssayMeta),
+        h(BookRunningHead),
+        h(BookChapterHead),
+      ],
       "doc-after": () => h(BookNotes),
     });
   },

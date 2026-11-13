@@ -245,9 +245,13 @@ function collectInternalsSidebar() {
 }
 
 // "Under the Surface" is the book of short chapters on how GoFish works. Like
-// the internals wiki it is language-agnostic. Its sidebar lists the contents
-// page and then each chapter, ordered by frontmatter `order` and titled
-// "label: question" from `label` and `title`. See apps/docs/book/README.md.
+// the internals wiki it is language-agnostic. Its pages show no sidebar
+// (transformPageData sets `sidebar: false`): a reader finds the chapters on
+// the opening spread and in each chapter's Contents menu. The sidebar config
+// below is still needed, because VitePress builds the previous and next links
+// at the foot of a chapter from it. It lists the opening page and then each
+// chapter, ordered by frontmatter `order` and titled "label: question" from
+// `label` and `title`. See apps/docs/book/README.md.
 const BOOK_DIR = "under-the-surface";
 
 /** A chapter's listed title, "Layout: How does ...?", from its frontmatter. */
@@ -345,9 +349,16 @@ export default defineConfig({
   // head so they render into each generated HTML file.
   transformPageData(pageData) {
     // Book pages get their own single-column look (theme/book.css, keyed off
-    // this page class) and no outline aside.
+    // this page class), no sidebar and no outline aside. The opening page is
+    // a two-page spread with the plain `page` layout, so it has no previous
+    // and next links either.
     if (pageData.relativePath.startsWith(`${BOOK_DIR}/`)) {
-      pageData.frontmatter.pageClass = "book-page";
+      const opening = pageData.relativePath === `${BOOK_DIR}/index.md`;
+      pageData.frontmatter.pageClass = opening
+        ? "book-page book-opening"
+        : "book-page";
+      if (opening) pageData.frontmatter.layout = "page";
+      pageData.frontmatter.sidebar = false;
       pageData.frontmatter.aside = false;
       pageData.frontmatter.outline = false;
       // The browser tab reads "Layout: How does ...?". `frontmatter.title`

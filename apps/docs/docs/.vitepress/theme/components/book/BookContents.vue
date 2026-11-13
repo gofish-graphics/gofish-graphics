@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// The contents of "Under the Surface", generated from each chapter's
-// frontmatter (`label`, `title`, `order`, `topics`) and its stamp. Used on
-// docs/under-the-surface/index.md.
+// The contents of "Under the Surface", the right page of the opening spread
+// (BookSpread.vue), generated from each chapter's frontmatter (`label`,
+// `title`, `order`, `topics`) and its stamp.
 import { withBase } from "vitepress";
 import { data as book } from "../../../data/book.data";
 import { plural, stateLabel } from "./book";

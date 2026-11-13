@@ -369,7 +369,49 @@ export function checkBook() {
         );
     }
   }
+  errors.push(...checkFigures());
   return { chapters: chapters.length, errors };
+}
+
+/** What only the shared stepper may draw: buttons, their pressed state, the
+ *  group around them, key handling, and form controls. */
+const STEP_CONTROLS = [
+  ["<button", /<button\b/],
+  ["aria-pressed", /aria-pressed/],
+  ['role="group"', /role=["']group["']/],
+  ["a keydown handler", /(@|v-on:)keydown/],
+  ["<input", /<input\b/],
+  ["<select", /<select\b/],
+];
+const FRAME_IMPORT =
+  /\bfrom\s+["'][^"']*\/(BookFigure|BookStepper|TreeStepper)\.vue["']/;
+
+/**
+ * Every figure file (a .vue in the chapter folder) uses the shared frame and
+ * the shared stepper: it imports BookFigure, BookStepper or TreeStepper
+ * (theme/components/book/), and it draws no step controls of its own, so
+ * every figure steps the same way.
+ */
+export function checkFigures() {
+  const errors = [];
+  if (!existsSync(CHAPTER_DIR)) return errors;
+  for (const f of readdirSync(CHAPTER_DIR).filter((f) => f.endsWith(".vue"))) {
+    const src = readFileSync(join(CHAPTER_DIR, f), "utf-8");
+    const at = (msg) =>
+      errors.push(`apps/docs/docs/under-the-surface/${f}: ${msg}`);
+    if (!FRAME_IMPORT.test(src))
+      at(
+        "a figure must import BookFigure, BookStepper or TreeStepper from theme/components/book/ and be drawn inside it"
+      );
+    const own = STEP_CONTROLS.filter(([, re]) => re.test(src)).map(
+      ([name]) => name
+    );
+    if (own.length)
+      at(
+        `draws its own controls (${own.join(", ")}); step with <BookStepper> (or <BookStepper picker> for choices) instead`
+      );
+  }
+  return errors;
 }
 
 // ---------------------------------------------------------------------------

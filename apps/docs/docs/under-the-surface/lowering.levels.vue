@@ -3,6 +3,8 @@
 // constraints?": one bar chart at three levels, top to bottom, with lines
 // from each part to what it became. The code in it was run: see the chapter.
 // The book cover shows it too, with `still` (no caption).
+import BookFigure from "../.vitepress/theme/components/book/BookFigure.vue";
+
 defineProps<{ still?: boolean }>();
 // The three rows of the chart's data, one rect each.
 const rows = [
@@ -13,7 +15,7 @@ const rows = [
 </script>
 
 <template>
-  <figure id="fig-levels" class="book-wide lowering-fig">
+  <BookFigure id="fig-levels" class="lowering-fig" :still="still">
     <svg
       viewBox="0 0 460 636"
       role="img"
@@ -190,7 +192,7 @@ const rows = [
         }, [r0, r1, r2])
       </text>
     </svg>
-    <figcaption v-if="!still">
+    <template #caption>
       One bar chart at three levels. Blue boxes are your code and the nodes it
       becomes. Red text is what the lowering fills in from the data: the group
       keys, the bar heights and the name of the category axis. Gray boxes are
@@ -198,8 +200,8 @@ const rows = [
       into the layer unchanged, now as slots r0, r1 and r2. Options at their
       defaults are left out. Every level was run, and the three draw the same
       bars, with the differences listed in the text.
-    </figcaption>
-  </figure>
+    </template>
+  </BookFigure>
 </template>
 
 <style scoped>

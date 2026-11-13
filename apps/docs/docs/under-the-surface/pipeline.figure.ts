@@ -56,12 +56,12 @@ export const stages: Stage[] = [
     ],
   },
   {
-    name: "Claim",
+    name: "Ask",
     sub: "room needed, then σ",
     foot: [{ text: "waits for the fonts first" }],
   },
   {
-    name: "Solve",
+    name: "Place",
     sub: "size and place each node",
     foot: [{ text: "Coord: lays out in θ, r", coord: true }],
   },

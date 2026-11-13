@@ -42,7 +42,7 @@ checked:
   date: 2026-11-13
 cover:
   - figure: walk
-    rows: 3
+    rows: 2
     cols: 3
 ---
 

@@ -5,10 +5,10 @@
 // whole 300 x 200 chart; the right one is the two close dots, three times
 // larger. The book cover shows it still, at its last step.
 //
-// This is its own small stepper, not <TreeStepper>: the picture changes what
-// it shows between steps (one dot's spots at a time, one tried box at a
-// time), which TreeStepper's "pieces only appear" contract cannot say.
-import { computed, ref } from "vue";
+// The picture changes what it shows between steps (one dot's spots at a
+// time, one tried box at a time), so it is drawn from the current step's
+// data rather than from pieces that only appear.
+import BookStepper from "../.vitepress/theme/components/book/BookStepper.vue";
 import {
   W,
   H,
@@ -21,10 +21,7 @@ import {
   steps,
 } from "./labels.figure";
 
-const props = defineProps<{ still?: boolean }>();
-const n = steps.length;
-const step = ref(props.still ? n : 1);
-const cur = computed(() => steps[step.value - 1]);
+defineProps<{ still?: boolean }>();
 
 // The zoomed panel: chart pixels [X0, X0 + ZW] x [Y0, Y0 + ZH], times S.
 const X0 = 80;
@@ -35,83 +32,34 @@ const S = 3;
 const zx = (x: number) => (x - X0) * S;
 const zy = (y: number) => (y - Y0) * S;
 
-const placedBoxes = computed(() =>
-  cur.value.placed.map((name) => ({
+/** What each step draws: frames[step - 1]. */
+const frames = steps.map((cur) => ({
+  hit: cur.hit,
+  placedBoxes: cur.placed.map((name) => ({
     name,
     box: boxAt(name, candidates[name][chosen[name]]),
-  }))
-);
-const tries = computed(() =>
-  cur.value.tries.map((t) => ({
+  })),
+  tries: cur.tries.map((t) => ({
     ...t,
     box: boxAt(t.name, candidates[t.name][t.k]),
-  }))
-);
-const marks = computed(() =>
-  cur.value.marks
-    ? candidates[cur.value.marks].map(([x, y], i) => ({ x, y, i }))
-    : []
-);
+  })),
+  marks: cur.marks
+    ? candidates[cur.marks].map(([x, y], i) => ({ x, y, i }))
+    : [],
+}));
 const lima = dots[0];
 const limaLabel = boxAt("Lima", candidates.Lima[chosen.Lima]);
-
-function setStep(k: number) {
-  step.value = Math.max(1, Math.min(n, k));
-}
-function onKey(ev: KeyboardEvent) {
-  if (ev.key === "ArrowLeft") {
-    ev.preventDefault();
-    setStep(step.value - 1);
-  } else if (ev.key === "ArrowRight") {
-    ev.preventDefault();
-    setStep(step.value + 1);
-  }
-}
 </script>
 
 <template>
-  <figure
+  <BookStepper
     id="fig-chooser"
-    class="tree-stepper book-wide lab-fig"
-    :class="{ 'is-still': still }"
+    class="lab-fig"
+    :steps="steps"
+    label="Steps of the chooser"
+    :still="still"
   >
-    <div class="ts-body">
-      <div v-if="!still" class="ts-controls" @keydown="onKey">
-        <div class="ts-steps" role="group" aria-label="Steps of the chooser">
-          <button
-            v-for="(s, i) in steps"
-            :key="s.label"
-            type="button"
-            class="ts-btn"
-            :aria-pressed="i + 1 === step ? 'true' : 'false'"
-            @click="setStep(i + 1)"
-          >
-            {{ s.label }}
-          </button>
-        </div>
-        <div class="ts-nav">
-          <button
-            type="button"
-            class="ts-btn"
-            :disabled="step === 1"
-            @click="setStep(step - 1)"
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            class="ts-btn"
-            :disabled="step === n"
-            @click="setStep(step + 1)"
-          >
-            Next
-          </button>
-        </div>
-      </div>
-      <p v-if="!still" class="ts-note" aria-live="polite">
-        <span class="ts-count">Step {{ step }} of {{ n }}.</span>
-        {{ cur.note }}
-      </p>
+    <template #default="{ step }">
       <div class="fig-panels lab-panels">
         <!-- The whole chart. The dashed rectangle is the frame the chooser
              keeps its labels inside. -->
@@ -122,7 +70,7 @@ function onKey(ev: KeyboardEvent) {
         >
           <rect
             class="fig-boundary"
-            :class="{ 'lab-hit-frame': cur.hit === 'frame' }"
+            :class="{ 'lab-hit-frame': frames[step - 1].hit === 'frame' }"
             x="0"
             y="0"
             :width="W"
@@ -137,7 +85,10 @@ function onKey(ev: KeyboardEvent) {
             :cy="d.cy"
             :r="R"
           />
-          <g v-for="t in tries.filter((t) => !t.zoom)" :key="t.name + t.k">
+          <g
+            v-for="t in frames[step - 1].tries.filter((t) => !t.zoom)"
+            :key="t.name + t.k"
+          >
             <rect
               class="fig-guide-dash"
               :x="t.box.minX"
@@ -155,7 +106,7 @@ function onKey(ev: KeyboardEvent) {
             </text>
           </g>
           <text
-            v-for="p in placedBoxes"
+            v-for="p in frames[step - 1].placedBoxes"
             :key="p.name"
             class="fig-added-text"
             :x="(p.box.minX + p.box.maxX) / 2"
@@ -191,7 +142,7 @@ function onKey(ev: KeyboardEvent) {
           />
           <!-- The obstacle a refused spot hits. -->
           <rect
-            v-if="cur.hit === 'limaLabel'"
+            v-if="frames[step - 1].hit === 'limaLabel'"
             class="fig-outline"
             :x="zx(limaLabel.minX) - 2"
             :y="zy(limaLabel.minY) - 2"
@@ -200,7 +151,7 @@ function onKey(ev: KeyboardEvent) {
             rx="3"
           />
           <circle
-            v-if="cur.hit === 'limaDot'"
+            v-if="frames[step - 1].hit === 'limaDot'"
             class="fig-outline"
             :cx="zx(lima.cx)"
             :cy="zy(lima.cy)"
@@ -208,7 +159,7 @@ function onKey(ev: KeyboardEvent) {
           />
           <!-- Placed labels, each in its box. -->
           <g
-            v-for="p in placedBoxes.filter(
+            v-for="p in frames[step - 1].placedBoxes.filter(
               (p) => p.name === 'Lima' || p.name === 'Quito'
             )"
             :key="p.name"
@@ -224,7 +175,10 @@ function onKey(ev: KeyboardEvent) {
             </text>
           </g>
           <!-- A tried spot: its box, refused (crossed) or taken. -->
-          <g v-for="t in tries.filter((t) => t.zoom)" :key="t.name + t.k">
+          <g
+            v-for="t in frames[step - 1].tries.filter((t) => t.zoom)"
+            :key="t.name + t.k"
+          >
             <rect
               :class="t.ok ? 'fig-added-stroke' : 'fig-guide-dash'"
               :x="zx(t.box.minX)"
@@ -240,7 +194,7 @@ function onKey(ev: KeyboardEvent) {
             />
           </g>
           <!-- One dot's spots, numbered in the order they are tried. -->
-          <g v-for="m in marks" :key="m.i">
+          <g v-for="m in frames[step - 1].marks" :key="m.i">
             <circle class="fig-node" :cx="zx(m.x)" :cy="zy(m.y)" r="9" />
             <text
               class="fig-label"
@@ -266,16 +220,15 @@ function onKey(ev: KeyboardEvent) {
           </text>
         </svg>
       </div>
-    </div>
-    <figcaption v-if="!still">
+    </template>
+    <template #caption>
       The label chooser on four dots, each labeled with
       <code>Place.around()</code>, the default for a dot. The spots, their order
       and each outcome were printed by a run of the library in Node, where text
       is measured by the fallback rule (0.6 em per character), so a browser's
-      boxes are a little different in size. Use the arrow keys on the buttons to
-      step.
-    </figcaption>
-  </figure>
+      boxes are a little different in size.
+    </template>
+  </BookStepper>
 </template>
 
 <style scoped>

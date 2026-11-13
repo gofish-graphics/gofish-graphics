@@ -34,8 +34,8 @@ checked:
   date: 2026-11-13
 cover:
   - figure: chooser
-    rows: 2
-    cols: 4
+    rows: 3
+    cols: 6
 ---
 
 <script setup>
