@@ -247,9 +247,6 @@ html[data-docs-lang="python"] .lang-toggle__btn[data-lang="python"] {
 .VPNavBar .content-body > .VPNavBarSocialLinks {
   order: 1;
 }
-.VPNavBar .content-body > .internals-link {
-  order: 2;
-}
 .VPNavBar .content-body > .VPNavBarExtra {
   order: 3;
 }

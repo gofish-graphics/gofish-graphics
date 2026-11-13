@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Figure 1 of "How does a chart get its axes?". The chapter shows it with
+// The figure of "How does a chart get its axes?". The chapter shows it with
 // its controls. The book cover shows it still, at its last step.
 import rewrite from "./axes.figure";
 defineProps<{ still?: boolean }>();
@@ -10,7 +10,7 @@ defineProps<{ still?: boolean }>();
     <svg
       viewBox="0 0 340 290"
       role="img"
-      aria-label="Sketch of the bar chart with bars A, B and C of values 3, 7 and 5"
+      aria-label="Sketch of the bar chart with bars A, B and C of values 3, 7 and 5, its two types, and the axes the rewrite adds"
     >
       <rect
         class="fig-region"
@@ -25,7 +25,7 @@ defineProps<{ still?: boolean }>();
         data-id="ringC"
         x="40"
         y="0.5"
-        width="264"
+        width="268"
         height="255.5"
       />
       <rect
@@ -33,52 +33,72 @@ defineProps<{ still?: boolean }>();
         data-id="ringV"
         x="44"
         y="0.5"
-        width="256"
+        width="258"
         height="227.5"
       />
       <rect
         class="fig-region"
-        data-id="frame"
+        data-id="box"
         x="82"
-        y="0.5"
+        y="30"
         width="216"
-        height="225.5"
+        height="196"
       />
       <rect
         class="fig-region"
         data-id="content"
         x="86"
-        y="3"
+        y="31"
         width="208"
-        height="220"
-      />
-      <rect
-        class="fig-region"
-        data-id="labels"
-        x="90"
-        y="6"
-        width="200"
-        height="214"
+        height="187"
       />
       <rect
         class="fig-region"
         data-id="spread"
         x="93"
-        y="30"
+        y="32"
         width="194"
-        height="188"
+        height="184"
       />
-      <g data-id="cons">
-        <rect class="fig-hit" x="84" y="190" width="212" height="27" />
-        <line class="fig-guide-dash" x1="84" y1="214.5" x2="296" y2="214.5" />
+      <g data-id="own">
+        <rect
+          class="fig-guide-dash"
+          x="82"
+          y="30"
+          width="216"
+          height="196"
+          rx="3"
+        />
+      </g>
+      <g data-id="tyX">
+        <rect class="fig-hit" x="93" y="2" width="194" height="24" />
         <path
           class="fig-guide"
-          d="M143 202H167M143 198V206M167 198V206M152 196H158M152 193H158"
+          d="M97 26V22H143V26M167 26V22H213V26M237 26V22H283V26"
         />
-        <path
-          class="fig-guide"
-          d="M213 202H237M213 198V206M237 198V206M222 196H228M222 193H228"
-        />
+        <text
+          class="fig-label"
+          x="190"
+          y="15"
+          text-anchor="middle"
+          font-style="italic"
+        >
+          x: slots A, B, C
+        </text>
+      </g>
+      <g data-id="tyY">
+        <rect class="fig-hit" x="302" y="30" width="30" height="188" />
+        <path class="fig-guide" d="M302 214H308V34H302" />
+        <text
+          class="fig-label"
+          x="0"
+          y="0"
+          text-anchor="middle"
+          font-style="italic"
+          transform="translate(324 124) rotate(90)"
+        >
+          y: 0 to 7
+        </text>
       </g>
       <g data-id="rectA">
         <rect class="fig-user" x="97" y="136.86" width="46" height="77.14" />
@@ -101,11 +121,11 @@ defineProps<{ still?: boolean }>();
         />
       </g>
       <g data-id="ticks">
-        <rect class="fig-hit" x="48" y="26" width="18" height="195" />
+        <rect class="fig-hit" x="46" y="26" width="20" height="195" />
         <path
           class="fig-added-stroke"
           stroke-width="1"
-          d="M64 214H70M67 201.14H70M64 188.29H70M67 175.43H70M64 162.57H70M67 149.71H70M64 136.86H70M67 124H70M64 111.14H70M67 98.29H70M64 85.43H70M67 72.57H70M64 59.71H70M67 46.86H70M64 34H70"
+          d="M64 214H70M64 201.14H70M64 188.29H70M64 175.43H70M64 162.57H70M64 149.71H70M64 136.86H70M64 124H70M64 111.14H70M64 98.29H70M64 85.43H70M64 72.57H70M64 59.71H70M64 46.86H70M64 34H70"
         />
         <text
           class="fig-added-text"
@@ -260,56 +280,31 @@ defineProps<{ still?: boolean }>();
           value
         </text>
       </g>
-      <g data-id="lrefA">
-        <rect class="fig-ref" x="91" y="130.86" width="58" height="89.14" />
-      </g>
-      <g data-id="lab3">
-        <text
-          class="fig-added-text"
-          x="120"
-          y="125.86"
-          text-anchor="middle"
-          font-size="12.5"
-          font-weight="600"
-        >
-          3
-        </text>
-      </g>
-      <g data-id="lrefB">
-        <rect class="fig-ref" x="161" y="28" width="58" height="192" />
-      </g>
-      <g data-id="lab7">
-        <text
-          class="fig-added-text"
-          x="190"
-          y="23"
-          text-anchor="middle"
-          font-size="12.5"
-          font-weight="600"
-        >
-          7
-        </text>
-      </g>
-      <g data-id="lrefC">
-        <rect class="fig-ref" x="231" y="79.43" width="58" height="140.57" />
-      </g>
-      <g data-id="lab5">
-        <text
-          class="fig-added-text"
-          x="260"
-          y="74.43"
-          text-anchor="middle"
-          font-size="12.5"
-          font-weight="600"
-        >
-          5
-        </text>
-      </g>
     </svg>
     <template #caption
-      >Step through the rewrite. Hover a line of the tree to find it in the
-      picture. The tree is the real one, printed from a run of this spec. The
-      picture is a sketch of it.</template
+      >Step through typing and the rewrite. Hover a line of the tree to find it
+      in the picture. Gray italic notes with a round mark are types, which
+      typing writes on the tree; they are not nodes. Hover the note beside a
+      ring to see the type that made it. The tree is the real one, printed by
+      <code>book:tree</code>, without the constraints of the rings and the
+      spread. The picture is a sketch: it labels the whole-number ticks only,
+      and the real axis labels all 15.</template
     >
   </TreeStepper>
 </template>
+
+<style>
+/* Type notes: a kind of tree item the shared TreeStepper has no style for
+   (see axes.figure.ts). */
+.tree-stepper .ts-item.k-type {
+  font-style: italic;
+  color: var(--book-ink-2);
+}
+.tree-stepper .ts-item.k-type::before {
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--book-ink-2);
+  border-radius: 50%;
+}
+</style>

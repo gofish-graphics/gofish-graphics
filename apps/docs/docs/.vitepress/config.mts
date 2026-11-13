@@ -475,9 +475,9 @@ export default defineConfig({
       },
     },
     // https://vitepress.dev/reference/default-theme-config
-    // No top-nav items — section navigation lives in the per-language
-    // sidebar, the language toggle is a theme slot, and the internals wiki
-    // is reached via a quiet icon link in the nav bar (InternalsLink.vue).
+    // Section navigation lives in the per-language sidebar and the language
+    // toggle is a theme slot. The internals wiki has no nav entry: its pages
+    // are still built and reachable by URL.
     nav: [
       {
         text: "Under the Surface",

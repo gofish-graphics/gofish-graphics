@@ -7,7 +7,6 @@ import "./style.css";
 import "vitepress-plugin-sandpack/dist/style.css";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
-import InternalsLink from "./components/InternalsLink.vue";
 import BookChapterHead from "./components/book/BookChapterHead.vue";
 import BookNotes from "./components/book/BookNotes.vue";
 import "./book.css";
@@ -47,12 +46,9 @@ export default {
   extends: DefaultTheme,
   Layout: () => {
     return h(DefaultTheme.Layout, null, {
-      // Right-hand nav cluster: the labeled Internals link, then the
-      // JavaScript / Python toggle directly before the GitHub social icon.
-      "nav-bar-content-after": () => [
-        h(InternalsLink),
-        h(LanguageToggle, { placement: "nav" }),
-      ],
+      // Right-hand nav cluster: the JavaScript / Python toggle directly
+      // before the GitHub social icon.
+      "nav-bar-content-after": () => h(LanguageToggle, { placement: "nav" }),
       "sidebar-nav-before": () => h(LanguageToggle, { placement: "sidebar" }),
       // A persistent copy of the toggle that docks into the fixed "Return to
       // top" bar (VitePress's VPLocalNav) shown when the navbar scrolls away on
