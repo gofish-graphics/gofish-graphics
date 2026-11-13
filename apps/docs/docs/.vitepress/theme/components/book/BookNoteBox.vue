@@ -161,7 +161,9 @@ function onKey(e: KeyboardEvent) {
           @click="choose(r.value)"
           @keydown="onRadioKey($event, i)"
         >
-          <span class="book-note-box__tick" aria-hidden="true">✓</span>
+          <span class="book-note-box__emoji" aria-hidden="true">{{
+            r.emoji
+          }}</span>
           {{ r.label }}
         </button>
       </div>

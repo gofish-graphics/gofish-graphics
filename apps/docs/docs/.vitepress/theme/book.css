@@ -1095,19 +1095,17 @@
   color: var(--book-ink);
   border-color: var(--book-ink-3);
 }
-.book-note-box__tick {
-  display: none;
-  font-weight: 700;
+.book-note-box__emoji {
+  font-size: 15px;
+  line-height: 1;
 }
 .book-note-box .book-note-box__reaction[aria-checked="true"] {
   font-weight: 600;
   border-color: var(--book-accent);
+  /* A heavier edge, so the choice does not rest on color alone. */
+  box-shadow: inset 0 0 0 1px var(--book-accent);
   background: var(--book-accent-tint);
   color: var(--book-ink-strong);
-}
-.book-note-box__reaction[aria-checked="true"] .book-note-box__tick {
-  display: inline;
-  color: var(--book-accent);
 }
 .book-note-box__stopped {
   display: flex;

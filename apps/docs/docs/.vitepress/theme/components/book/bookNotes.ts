@@ -20,10 +20,20 @@ export const MAX_NOTE = 2000;
 /** The one-click reactions, in the order the box shows them. They are the
  *  four that beta reading asks for, worst first. */
 export const REACTIONS = [
-  { value: "confusing", label: "Confusing", prompt: "What lost you?" },
-  { value: "slow", label: "Slow", prompt: "What could be cut?" },
-  { value: "useful", label: "Useful", prompt: "What did it help with?" },
-  { value: "loved", label: "Loved it", prompt: "What worked?" },
+  {
+    value: "confusing",
+    label: "Confusing",
+    emoji: "😕",
+    prompt: "What lost you?",
+  },
+  { value: "slow", label: "Slow", emoji: "🐌", prompt: "What could be cut?" },
+  {
+    value: "useful",
+    label: "Useful",
+    emoji: "💡",
+    prompt: "What did it help with?",
+  },
+  { value: "loved", label: "Loved it", emoji: "❤️", prompt: "What worked?" },
 ] as const;
 export type Reaction = (typeof REACTIONS)[number]["value"];
 
