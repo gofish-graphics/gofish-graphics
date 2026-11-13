@@ -23,7 +23,7 @@ export const REACTIONS = [
   {
     value: "confusing",
     label: "Confusing",
-    emoji: "😕",
+    emoji: "🤨",
     prompt: "What lost you?",
   },
   { value: "slow", label: "Slow", emoji: "🐌", prompt: "What could be cut?" },
