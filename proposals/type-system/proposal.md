@@ -1657,81 +1657,114 @@ Is a stack of spreads always wrong? By this rule, yes, with two degenerate cases
 
 A compact way to write the types above. It is a draft for review, and it is a notation for reading and discussing rules, not syntax a user writes. `name : Type` reads "name has type".
 
-**Data.** A table is its key and its columns. `Σ k` reads "adds up over `k`", and `Σ *` reads "adds up over every key". `<` marks an order and `○` a cycle.
+**Data.** A table is its key and its columns. Each column is a domain or a unit, followed by its traits in words.
 
 ```text
 inv : Table[warehouse × month]
-  warehouse : Levels(3)
-  month     : Levels(12) < ○
-  stock     : Items 0  Σ warehouse
-  sold      : Items 0  Σ *
-  price     : USD/Items 0  mean by sold
+  warehouse : Discrete(3)
+  month     : Discrete(12), ordered, cyclic
+  stock     : Items, zero, Σ warehouse
+  sold      : Items, zero, Σ *
+  price     : USD/Items, zero, mean by sold
   temp      : °C
 ```
 
-**Space.** Each axis of a node has one of five kinds. Four of them are states the engine already has.
+| Written        | Reads                                                                                                     | In the schema                          |
+| -------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `Discrete(3)`  | one of 3 named values, with no order between them                                                         | `Domain.discrete([...])`               |
+| `ordered`      | the values run in a line with a first and a last, so "before" and "between" mean something                | `Trait.ordered()`, `HasOrder`          |
+| `cyclic`       | the values run in a loop with no first or last, so only "next" and "between, going around" mean something | `Trait.cyclic()`, `HasCycle`           |
+| `zero`         | 0 means none of the thing, so a length from 0 and "twice as much" mean something                          | `HasZero`                              |
+| `Σ warehouse`  | adds up over `warehouse`                                                                                  | `Trait.canSum({ over: "warehouse" })`  |
+| `Σ *`          | adds up over every key                                                                                    | `Trait.canSum()`                       |
+| `mean by sold` | averages, weighted by `sold`                                                                              | `Trait.canAverage({ weight: "sold" })` |
 
-| Symbol                   | Reads                                                                                    | Engine today                |
-| ------------------------ | ---------------------------------------------------------------------------------------- | --------------------------- |
-| `Len[u]`                 | one length in unit `u`, with no baseline yet                                             | continuous, origin `free`   |
-| `Pos[u]`                 | places on an axis in unit `u` whose 0 is fixed. It can hold several lengths from that 0. | continuous, origin `pinned` |
-| `Diff[u]`                | only differences mean something                                                          | continuous, origin `none`   |
-| `Slots[k]`, `Slots[k <]` | one slot per level of key `k`, unordered or ordered                                      | ordinal, with `hasOrder`    |
-| `·`                      | nothing to read                                                                          | no space                    |
+A cycle is not an order. Mathematicians do say "cyclic order", but it is a different kind of thing: an order compares two values (March is before May), and a cyclic order needs three (going around, March, then May, then October). In a loop every value is both before and after every other, so "first", "last" and "before" have no meaning. Months of the year are a cycle, and the calendar adds a convention that the loop is cut at January, which gives the line. That is why `month` says both, and why decision 41 asks whether `cyclic` alone should include the cut.
 
-**Rules.** Above the line is what a step needs. Below is what it gives. `v` is the value the marks draw.
+**Space.** Each axis of a node has a type. A leaf says what one mark gives. The three constructors say how an operator lays out one child per level of a key, so the type nests exactly as deep as the flow.
 
-```text
-rect({ h: v })              v : u 0
-                            ───────────────────────────────
-                            y : Len[u]
+| Written         | Reads                                                                             | Its kind, which is all a parent checks  |
+| --------------- | --------------------------------------------------------------------------------- | --------------------------------------- |
+| `Len[v]`        | one length that shows the value `v`, with no baseline yet. Its unit is `v`'s.     | `Len`                                   |
+| `·`             | nothing to read                                                                   | `·`                                     |
+| `Slots[k] of T` | one `T` per level of `k`, each in its own slot. `Slots[k <]` when `k` is ordered. | `Slots`                                 |
+| `Glue[k] of T`  | one `T` per level of `k`, end to end. Needs `T` to be a `Len`.                    | `Len`: one longer length                |
+| `Align[k] of T` | one `T` per level of `k`, all starting from one shared baseline                   | `Pos`: places on an axis with a fixed 0 |
 
-stack({ by: k, dir: y })    child.y : Len[u]      v : Σ k
-                            ───────────────────────────────
-                            y : Len[u]            the sum of v over k
+The kinds are the engine's states today: `Len` is a continuous space with a `free` origin, `Pos` is `pinned`, and `Slots` is an ordinal space with `hasOrder`. A fourth, `Diff`, is a continuous space with no origin, where only differences mean something.
 
-spread({ by: k, dir: x })   k : Levels
-                            ───────────────────────────────
-                            x : Slots[k]          y : Pos[u] if child.y : Len[u]
-```
-
-**The main example,** read from the mark outward:
+**Rules.** Above the line is what a step needs. Below is what it gives. `child.y` is the type of the step's child on y. A `Len` carries the value it shows, so a rule can ask what that value adds up over.
 
 ```text
-rect({ h: "stock" })                 y : Len[Items]
-stack({ by: "warehouse", dir: "y" }) y : Len[Items]        needs stock : Σ warehouse   ✓
-spread({ by: "month", dir: "x" })    x : Slots[month <]    y : Pos[Items]
+rect({ h: v })              v : zero
+                            ─────────────────────────────────────────
+                            y : Len[v]
+
+stack({ by: k, dir: y })    child.y : Len[v]         v : Σ k
+                            ─────────────────────────────────────────
+                            y : Glue[k] of Len[v]    a Len[sum of v over k]
+                            x : Align[k] of child.x
+
+spread({ by: k, dir: x })   k : Discrete
+                            ─────────────────────────────────────────
+                            x : Slots[k] of child.x
+                            y : Align[k] of child.y
 ```
 
-So the type of the whole spec, with the data it needs on the left and the space it gives on the right:
+The sum that a stack makes is a value too. `sum of stock over warehouse` adds up over whatever `stock` adds up over, so a second stack around the first is checked the same way.
+
+**The main example.** One line per step, from the mark outward:
 
 ```text
-Table[k₁ × k₂]  with  k₁ : Levels,  k₂ : Levels,  v : u 0  Σ k₂
-    ⟹   x : Slots[k₁]    y : Pos[u] of Len[u] per k₂
-
-applied to inv with k₁ = month, k₂ = warehouse, v = stock:
-    x : Slots[month <]    y : Pos[Items] of Len[Items] per warehouse
+rect({ h: "stock" })                  y : Len[stock]
+stack({ by: "warehouse", dir: "y" })  y : Glue[warehouse] of Len[stock]     needs stock : Σ warehouse  ✓
+spread({ by: "month", dir: "x" })     y : Align[month] of Glue[warehouse] of Len[stock]
+                                      x : Slots[month <] of Align[warehouse] of ·
 ```
 
-The first two lines are the spec's type with no data. `k₁`, `k₂`, `v` and `u` stand for any fields and unit that fit, which is what makes a template reusable.
+The last two lines are the output type. Read left to right, they follow the flow from the outside in: for each month, a slot on x, and on y a stack of warehouses from a shared baseline.
+
+**Deeper nesting.** Each operator adds one constructor on each axis, so the type goes as deep as the flow. A parent only checks its child's kind.
+
+```text
+grouped bars: spread by month, spread by warehouse, h: stock
+    x : Slots[month <] of Slots[warehouse] of ·
+    y : Align[month] of Align[warehouse] of Len[stock]
+
+two stacks on one axis: spread by region, stack by warehouse, stack by product, h: sold
+    y : Align[region] of Glue[warehouse] of Glue[product] of Len[sold]
+        needs sold : Σ product, and (sum of sold over product) : Σ warehouse
+
+mosaic: stack by month on x, stack by warehouse on y, each with size: share of sold
+    x : Glue[month] of Len[share]
+    y : Align[month] of Glue[warehouse] of Len[share]
+```
+
+**A spec with no data.** Replace the field names with letters and the result is the type of the spec alone. Any table that meets the left side gives the right side.
+
+```text
+Table[k₁ × k₂]  with  k₁ : Discrete,  k₂ : Discrete,  v : zero, Σ k₂
+    ⟹   x : Slots[k₁] of Align[k₂] of ·
+         y : Align[k₁] of Glue[k₂] of Len[v]
+```
 
 **The three errors,** each at the line that fails:
 
 ```text
 spread by warehouse, stack by month, h: stock
-    stack({ by: "month" })       needs stock : Σ month        ✗  stock : Σ warehouse
+    stack({ by: "month" })       needs stock : Σ month    ✗  stock : Σ warehouse
 
 stack by month, spread by warehouse, h: sold
-    spread({ by: "warehouse" })  y : Pos[Items]
-    stack({ by: "month" })       needs child.y : Len[Items]   ✗  child.y : Pos[Items]
+    spread({ by: "warehouse" })  y : Align[warehouse] of Len[sold]      kind Pos
+    stack({ by: "month" })       needs child.y : Len      ✗  child.y is a Pos
 
 rect({ h: "temp" })
-    rect                         needs temp : °C 0            ✗  temp : °C
+    rect                         needs temp : zero        ✗  temp : °C
 ```
 
-The first error is on the data side and the second is on the space side. The second is the stack of spreads: `sold : Σ *` passes the data check, and `Pos` where `Len` is needed is what fails.
+The first error is on the data side and the second is on the space side. The second is the stack of spreads: `sold : Σ *` passes the data check, and a `Pos` where a `Len` is needed is what fails.
 
-**What the notation does not say yet.** It has no mark for an upper segment's missing baseline or for an invented segment order. A stack with a `size` option needs its own rule (the child's `y` is not read, and `size : Σ k` is needed), which is the nested mosaic question. Area and the join of two siblings on a shared axis are not written. Josh asked on 11-12 to leave out arrow and forall signatures as confusing, so this version uses one arrow, for a whole spec, and no quantifiers.
+**What the notation does not say yet.** A stack with a `size` option takes its lengths from `size` and does not read `child.y`, which is why the nested mosaic is correct; that rule is not written. A channel that folds several rows (`Len[mean of price]`) is not written. Area, an upper segment's missing baseline, an invented segment order, and the join of two siblings on a shared axis have no symbol. Josh asked on 11-12 to leave out arrow and forall signatures, so this uses one arrow, for a whole spec, and no quantifiers.
 
 ### What was already here
 

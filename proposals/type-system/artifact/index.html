@@ -7433,135 +7433,248 @@ chart(
           writes. <code>name : Type</code> reads "name has type".
         </p>
         <p>
-          <strong>Data.</strong> A table is its key and its columns.
-          <code>Σ k</code> reads "adds up over <code>k</code>", and
-          <code>Σ *</code> reads "adds up over every key".
-          <code>&lt;</code> marks an order and <code>○</code> a cycle.
+          <strong>Data.</strong> A table is its key and its columns. Each column
+          is a domain or a unit, followed by its traits in words.
         </p>
         <pre
           class="code plain"
         ><code class="nohighlight">inv : Table[warehouse × month]
-  warehouse : Levels(3)
-  month     : Levels(12) &lt; ○
-  stock     : Items 0  Σ warehouse
-  sold      : Items 0  Σ *
-  price     : USD/Items 0  mean by sold
+  warehouse : Discrete(3)
+  month     : Discrete(12), ordered, cyclic
+  stock     : Items, zero, Σ warehouse
+  sold      : Items, zero, Σ *
+  price     : USD/Items, zero, mean by sold
   temp      : °C</code></pre>
-        <p>
-          <strong>Space.</strong> Each axis of a node has one of five kinds.
-          Four of them are states the engine already has.
-        </p>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th scope="col">Symbol</th>
+                <th scope="col">Written</th>
                 <th scope="col">Reads</th>
-                <th scope="col">Engine today</th>
+                <th scope="col">In the schema</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <th scope="row"><code>Len[u]</code></th>
-                <td>one length in unit <code>u</code>, with no baseline yet</td>
-                <td>continuous, origin <code>free</code></td>
+                <th scope="row"><code>Discrete(3)</code></th>
+                <td>one of 3 named values, with no order between them</td>
+                <td><code>Domain.discrete([...])</code></td>
               </tr>
               <tr>
-                <th scope="row"><code>Pos[u]</code></th>
+                <th scope="row"><code>ordered</code></th>
                 <td>
-                  places on an axis in unit <code>u</code> whose 0 is fixed. It
-                  can hold several lengths from that 0.
+                  the values run in a line with a first and a last, so "before"
+                  and "between" mean something
                 </td>
-                <td>continuous, origin <code>pinned</code></td>
+                <td><code>Trait.ordered()</code>, <code>HasOrder</code></td>
               </tr>
               <tr>
-                <th scope="row"><code>Diff[u]</code></th>
-                <td>only differences mean something</td>
-                <td>continuous, origin <code>none</code></td>
-              </tr>
-              <tr>
-                <th scope="row">
-                  <code>Slots[k]</code>, <code>Slots[k &lt;]</code>
-                </th>
+                <th scope="row"><code>cyclic</code></th>
                 <td>
-                  one slot per level of key <code>k</code>, unordered or ordered
+                  the values run in a loop with no first or last, so only "next"
+                  and "between, going around" mean something
                 </td>
-                <td>ordinal, with <code>hasOrder</code></td>
+                <td><code>Trait.cyclic()</code>, <code>HasCycle</code></td>
               </tr>
               <tr>
-                <th scope="row"><code>·</code></th>
-                <td>nothing to read</td>
-                <td>no space</td>
+                <th scope="row"><code>zero</code></th>
+                <td>
+                  0 means none of the thing, so a length from 0 and "twice as
+                  much" mean something
+                </td>
+                <td><code>HasZero</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Σ warehouse</code></th>
+                <td>adds up over <code>warehouse</code></td>
+                <td><code>Trait.canSum({ over: "warehouse" })</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Σ *</code></th>
+                <td>adds up over every key</td>
+                <td><code>Trait.canSum()</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>mean by sold</code></th>
+                <td>averages, weighted by <code>sold</code></td>
+                <td><code>Trait.canAverage({ weight: "sold" })</code></td>
               </tr>
             </tbody>
           </table>
         </div>
         <p>
+          A cycle is not an order. Mathematicians do say "cyclic order", but it
+          is a different kind of thing: an order compares two values (March is
+          before May), and a cyclic order needs three (going around, March, then
+          May, then October). In a loop every value is both before and after
+          every other, so "first", "last" and "before" have no meaning. Months
+          of the year are a cycle, and the calendar adds a convention that the
+          loop is cut at January, which gives the line. That is why
+          <code>month</code> says both, and why decision 41 asks whether
+          <code>cyclic</code> alone should include the cut.
+        </p>
+        <p>
+          <strong>Space.</strong> Each axis of a node has a type. A leaf says
+          what one mark gives. The three constructors say how an operator lays
+          out one child per level of a key, so the type nests exactly as deep as
+          the flow.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Written</th>
+                <th scope="col">Reads</th>
+                <th scope="col">Its kind, which is all a parent checks</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>Len[v]</code></th>
+                <td>
+                  one length that shows the value <code>v</code>, with no
+                  baseline yet. Its unit is <code>v</code>'s.
+                </td>
+                <td><code>Len</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>·</code></th>
+                <td>nothing to read</td>
+                <td><code>·</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Slots[k] of T</code></th>
+                <td>
+                  one <code>T</code> per level of <code>k</code>, each in its
+                  own slot. <code>Slots[k &lt;]</code> when <code>k</code> is
+                  ordered.
+                </td>
+                <td><code>Slots</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Glue[k] of T</code></th>
+                <td>
+                  one <code>T</code> per level of <code>k</code>, end to end.
+                  Needs <code>T</code> to be a <code>Len</code>.
+                </td>
+                <td><code>Len</code>: one longer length</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Align[k] of T</code></th>
+                <td>
+                  one <code>T</code> per level of <code>k</code>, all starting
+                  from one shared baseline
+                </td>
+                <td><code>Pos</code>: places on an axis with a fixed 0</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The kinds are the engine's states today: <code>Len</code> is a
+          continuous space with a <code>free</code> origin, <code>Pos</code> is
+          <code>pinned</code>, and <code>Slots</code> is an ordinal space with
+          <code>hasOrder</code>. A fourth, <code>Diff</code>, is a continuous
+          space with no origin, where only differences mean something.
+        </p>
+        <p>
           <strong>Rules.</strong> Above the line is what a step needs. Below is
-          what it gives. <code>v</code> is the value the marks draw.
+          what it gives. <code>child.y</code> is the type of the step's child on
+          y. A <code>Len</code> carries the value it shows, so a rule can ask
+          what that value adds up over.
         </p>
         <pre
           class="code plain"
-        ><code class="nohighlight">rect({ h: v })              v : u 0
-                            ───────────────────────────────
-                            y : Len[u]
+        ><code class="nohighlight">rect({ h: v })              v : zero
+                            ─────────────────────────────────────────
+                            y : Len[v]
 
-stack({ by: k, dir: y })    child.y : Len[u]      v : Σ k
-                            ───────────────────────────────
-                            y : Len[u]            the sum of v over k
+stack({ by: k, dir: y })    child.y : Len[v]         v : Σ k
+                            ─────────────────────────────────────────
+                            y : Glue[k] of Len[v]    a Len[sum of v over k]
+                            x : Align[k] of child.x
 
-spread({ by: k, dir: x })   k : Levels
-                            ───────────────────────────────
-                            x : Slots[k]          y : Pos[u] if child.y : Len[u]</code></pre>
-        <p><strong>The main example,</strong> read from the mark outward:</p>
-        <pre
-          class="code plain"
-        ><code class="nohighlight">rect({ h: "stock" })                 y : Len[Items]
-stack({ by: "warehouse", dir: "y" }) y : Len[Items]        needs stock : Σ warehouse   ✓
-spread({ by: "month", dir: "x" })    x : Slots[month &lt;]    y : Pos[Items]</code></pre>
+spread({ by: k, dir: x })   k : Discrete
+                            ─────────────────────────────────────────
+                            x : Slots[k] of child.x
+                            y : Align[k] of child.y</code></pre>
         <p>
-          So the type of the whole spec, with the data it needs on the left and
-          the space it gives on the right:
+          The sum that a stack makes is a value too.
+          <code>sum of stock over warehouse</code> adds up over whatever
+          <code>stock</code> adds up over, so a second stack around the first is
+          checked the same way.
+        </p>
+        <p>
+          <strong>The main example.</strong> One line per step, from the mark
+          outward:
         </p>
         <pre
           class="code plain"
-        ><code class="nohighlight">Table[k₁ × k₂]  with  k₁ : Levels,  k₂ : Levels,  v : u 0  Σ k₂
-    ⟹   x : Slots[k₁]    y : Pos[u] of Len[u] per k₂
-
-applied to inv with k₁ = month, k₂ = warehouse, v = stock:
-    x : Slots[month &lt;]    y : Pos[Items] of Len[Items] per warehouse</code></pre>
+        ><code class="nohighlight">rect({ h: "stock" })                  y : Len[stock]
+stack({ by: "warehouse", dir: "y" })  y : Glue[warehouse] of Len[stock]     needs stock : Σ warehouse  ✓
+spread({ by: "month", dir: "x" })     y : Align[month] of Glue[warehouse] of Len[stock]
+                                      x : Slots[month &lt;] of Align[warehouse] of ·</code></pre>
         <p>
-          The first two lines are the spec's type with no data. <code>k₁</code>,
-          <code>k₂</code>, <code>v</code> and <code>u</code> stand for any
-          fields and unit that fit, which is what makes a template reusable.
+          The last two lines are the output type. Read left to right, they
+          follow the flow from the outside in: for each month, a slot on x, and
+          on y a stack of warehouses from a shared baseline.
         </p>
+        <p>
+          <strong>Deeper nesting.</strong> Each operator adds one constructor on
+          each axis, so the type goes as deep as the flow. A parent only checks
+          its child's kind.
+        </p>
+        <pre
+          class="code plain"
+        ><code class="nohighlight">grouped bars: spread by month, spread by warehouse, h: stock
+    x : Slots[month &lt;] of Slots[warehouse] of ·
+    y : Align[month] of Align[warehouse] of Len[stock]
+
+two stacks on one axis: spread by region, stack by warehouse, stack by product, h: sold
+    y : Align[region] of Glue[warehouse] of Glue[product] of Len[sold]
+        needs sold : Σ product, and (sum of sold over product) : Σ warehouse
+
+mosaic: stack by month on x, stack by warehouse on y, each with size: share of sold
+    x : Glue[month] of Len[share]
+    y : Align[month] of Glue[warehouse] of Len[share]</code></pre>
+        <p>
+          <strong>A spec with no data.</strong> Replace the field names with
+          letters and the result is the type of the spec alone. Any table that
+          meets the left side gives the right side.
+        </p>
+        <pre
+          class="code plain"
+        ><code class="nohighlight">Table[k₁ × k₂]  with  k₁ : Discrete,  k₂ : Discrete,  v : zero, Σ k₂
+    ⟹   x : Slots[k₁] of Align[k₂] of ·
+         y : Align[k₁] of Glue[k₂] of Len[v]</code></pre>
         <p><strong>The three errors,</strong> each at the line that fails:</p>
         <pre
           class="code plain"
         ><code class="nohighlight">spread by warehouse, stack by month, h: stock
-    stack({ by: "month" })       needs stock : Σ month        ✗  stock : Σ warehouse
+    stack({ by: "month" })       needs stock : Σ month    ✗  stock : Σ warehouse
 
 stack by month, spread by warehouse, h: sold
-    spread({ by: "warehouse" })  y : Pos[Items]
-    stack({ by: "month" })       needs child.y : Len[Items]   ✗  child.y : Pos[Items]
+    spread({ by: "warehouse" })  y : Align[warehouse] of Len[sold]      kind Pos
+    stack({ by: "month" })       needs child.y : Len      ✗  child.y is a Pos
 
 rect({ h: "temp" })
-    rect                         needs temp : °C 0            ✗  temp : °C</code></pre>
+    rect                         needs temp : zero        ✗  temp : °C</code></pre>
         <p>
           The first error is on the data side and the second is on the space
           side. The second is the stack of spreads:
-          <code>sold : Σ *</code> passes the data check, and
-          <code>Pos</code> where <code>Len</code> is needed is what fails.
+          <code>sold : Σ *</code> passes the data check, and a
+          <code>Pos</code> where a <code>Len</code> is needed is what fails.
         </p>
         <p>
-          <strong>What the notation does not say yet.</strong> It has no mark
-          for an upper segment's missing baseline or for an invented segment
-          order. A stack with a <code>size</code> option needs its own rule (the
-          child's <code>y</code> is not read, and <code>size : Σ k</code> is
-          needed), which is the nested mosaic question. Area and the join of two
-          siblings on a shared axis are not written. Josh asked on 11-12 to
-          leave out arrow and forall signatures as confusing, so this version
-          uses one arrow, for a whole spec, and no quantifiers.
+          <strong>What the notation does not say yet.</strong> A stack with a
+          <code>size</code> option takes its lengths from <code>size</code> and
+          does not read <code>child.y</code>, which is why the nested mosaic is
+          correct; that rule is not written. A channel that folds several rows
+          (<code>Len[mean of price]</code>) is not written. Area, an upper
+          segment's missing baseline, an invented segment order, and the join of
+          two siblings on a shared axis have no symbol. Josh asked on 11-12 to
+          leave out arrow and forall signatures, so this uses one arrow, for a
+          whole spec, and no quantifiers.
         </p>
         <details class="rationale">
           <summary>Which ideas in the notes were already here</summary>
