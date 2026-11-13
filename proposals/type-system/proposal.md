@@ -1,8 +1,8 @@
 # A type system for GoFish (version 2)
 
-**Summary.** GoFish already has most of the type system that the "GoFish Goes to School" draft describes: units, traits on columns, traits on coord axes, and facts about spaces that layout computes. The draft's one new idea is that adding up is a fact about a column and a key together, and that idea fixes real charts that GoFish draws wrong today. This proposal writes the whole system in GoFish's own words, gives a typing rule for every operator, channel and coord, and answers the questions the draft deferred.
+**Summary.** GoFish already has most of the type system that the "GoFish Goes to School" draft describes: units, traits on columns, traits on coord axes, and facts about spaces that layout computes. The draft's one new idea is that adding up is a fact about a column and a key together, and that idea fixes real charts that GoFish draws wrong today. This proposal writes the whole system in GoFish's own words, gives a typing rule for every operator, channel and coord, and answers the questions the draft deferred. Written on the twenty example datasets, the vocabulary fits the clean tables and runs out in ten named places. A table's key turns out to be a fact about the data, while what a visualization groups by is a choice, often of fields that are not key columns.
 
-**Recommendation.** Keep types as run-time values in the existing `Unit`, `Trait` and `Domain` families. Add one keyed trait, `Trait.canSum({ over })`, on the column, plus a `weight` for averages and a declared table `key`. Derive everything else. Treat the draft's Nominal, Ratio, Extensive and so on as names for bundles, not as primitives. Keep `coord` at the chart boundary, and if it becomes a method, put it at the start of the chain. Mirror a small part of the checks in TypeScript later.
+**Recommendation.** Keep types as run-time values in the existing `Unit`, `Trait` and `Domain` families. Add one keyed trait, `Trait.canSum({ over })`, on the column, plus a `weight` for averages and a declared table `key` that names the table's identity. A `by` is a grouping read against that identity, and the operations that change the identity are typed steps. Derive everything else. Treat the draft's Nominal, Ratio, Extensive and so on as names for bundles, not as primitives. Keep `coord` at the chart boundary, and if it becomes a method, put it at the start of the chain. Mirror a small part of the checks in TypeScript later.
 
 Status: design proposal, nothing implemented. Every spelling marked "new" is hypothetical until signed off.
 
@@ -12,16 +12,20 @@ Research behind each section is in [`research/`](research/):
 [key-space](research/key-space.md),
 [type-equality](research/type-equality.md),
 [summarizability-partition](research/summarizability-partition.md),
-[coord-method](research/coord-method.md).
+[coord-method](research/coord-method.md),
+[dataset-types](research/dataset-types.md),
+[key-roles](research/key-roles.md),
+[space-types-check](research/space-types-check.md) (which checks the outside notes in [notes-2026-11-13-space-types](research/notes-2026-11-13-space-types.md)).
 
 ## Terms
 
 - **Trait.** A named fact about a type that says what can be done with its values. GoFish names them `Has<Thing>` or `Can<Verb>`: `HasOrder`, `HasZero`, `CanSum`.
 - **Unit.** A unit of measure such as USD or items. Two amounts can share an axis or be added only when their units match.
 - **Domain.** The set of values a column can take, such as a list of levels or the interval from 0 to 1.
-- **Key.** A column, or a set of columns, that says which thing a row is about. In a table of inventory per warehouse per month, the key is (warehouse, month).
+- **Key.** A column, or a set of columns, that says which thing a row is about. In a table of inventory per warehouse per month, the key is (warehouse, month). It is the table's **identity**: a fact about the data, the same for every visualization of it. When no set of columns is unique, the identity is the row itself.
+- **Grouping.** A field, bin or calendar part named in a `by`. It decides which mark a row lands in. It is a choice the visualization makes, and it need not be a key column.
 - **Key context.** The keys that the operators so far have split by, at a given point in a `.flow(...)`.
-- **Rest key.** The key columns that are not yet split. A mark draws one group of rows, and those rows differ only in the rest key.
+- **Rest key.** The identity's columns that the groupings so far do not fix. A mark draws one group of rows, and those rows differ only in the rest key.
 - **Fold.** Turning the several rows of one group into one value: sum, mean, last, and so on.
 - **Extensive.** A value that adds up over a key, such as units sold over stores. In this proposal it is the trait `CanSum` over that key.
 - **Intensive.** A value per unit of something, such as a price. It combines by a mean weighted by its denominator.
@@ -369,6 +373,8 @@ A rate with no declared weight still cannot be stacked. A fold of it is an error
 
 The trait is `canAverage` and not `weighted`, because `weighted` does not say what is weighted. `Trait.canAverage()` with no weight is a plain mean, which suits temperatures.
 
+**When a column has both traits.** A measurement of an individual can do both. Penguin body mass sums (the mass of a group) and averages (the mean mass of a group). The rules above fill in a size channel's fold from the one trait a column has, and say nothing when it has two. The choices are the sum, the mean, or an error that offers both. This is an open decision (section 14). In the dataset schemas (section 16) I left `canSum` off beak lengths, which makes the declaration a statement of what the author means rather than of what the physics allows.
+
 ### Names
 
 Two changes from the first version of this proposal, both from Josh's review on 11-12.
@@ -455,6 +461,326 @@ Open: whether unit conversion (°C to °F) and area-preserving maps belong here.
 
 ## 7. Keys
 
+### A table's identity is universal. What a visualization keys on is not.
+
+Josh asked whether a dataset's keys are universal, or whether different visualizations of one dataset use key spaces with different fields, not only a subset of one key. A survey of the stories answers both readings ([key-roles](research/key-roles.md)). It uses the two words from the Terms: the **identity** is the table's candidate key, a fact about the data; a **grouping** is what a visualization names in a `by`, an `along` or `time.sequence`, which is a choice.
+
+| Finding, over about 186 stories and 14 datasets                                                                                                                                                                      | Count                                       |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| Stories that key only on fields of the table's identity: a projection (some of the key columns) or a fiber (one key column fixed to one value)                                                                       | about 108                                   |
+| Stories that key on something else: an attribute such as `Species` or `weather`, a bin of a measured value, a calendar part, or a key the table does not have (a copy index, a column name, a sample grid, a row id) | about 78                                    |
+| Fields that looked like a key in one story and a value in another, such as the driving data's `year`, `temp_max`, four penguin measurements, IMDB rating and `lake`                                                  | 13, of which 0 are real flips (audit below) |
+| Datasets with two stories whose key sets do not derive from each other, such as month of the year against weekday for the Seattle weather                                                                            | 6 of 14                                     |
+
+These are hand counts from each story's `.flow(...)` and `.mark(...)` lines, so treat them as plus or minus a few. Candidate keys and dependencies between fields were checked by running scripts over the data. The first pass rendered nothing; the audit of the 13 fields below rendered every story it cites.
+
+A re-check of the other counts found that every grouping in them is a function of the one identity. The 78 stories group by a column (a column is a function of the row) or by a bin or calendar part of one. The 6 datasets pair two such functions, such as `lake` and `species` of (lake, species), or month and weekday of `date` (reasoning, from the code). One caveat: some bins are computed from the whole column, namely `Bin.quantiles`, a `Bin.step` anchored at the column's extent, and `Bin.voronoi` seeded by the rows, so a row can land in a different cell when other rows are filtered out (read from `binKey`, not tested).
+
+### The 13 fields, one at a time
+
+Each field was checked against six explanations:
+
+- **(a)** The key is a bin of the value. The key is the cell, and the field stays a value.
+- **(b)** The field is a position in both stories. It only looks like a key because there is one mark per row.
+- **(c)** The field is part of the identity in both stories, and the "value" use reads the key as a position.
+- **(d)** A line's order comes from the field while the field is also a position. That is one role.
+- **(e)** The two stories use different tables, such as an aggregate or a derived table.
+- **(f)** The field is only named in `field(f).count()`, which counts rows and reads no value.
+
+| Field                    | Key story                                       | Value story                               | Verdict                 | Explanation |
+| ------------------------ | ----------------------------------------------- | ----------------------------------------- | ----------------------- | ----------- |
+| `year` (driving)         | `Scatter.Connected`                             | `FacetedChart.FacetedScatterDriving`      | not a flip              | c, d        |
+| `temp_max`               | `Croissant.Ridgeline`, `RidgelineChart.Default` | `Bin.WeekdayTemperature`                  | not a flip              | a, e        |
+| `IMDB Rating`            | `Histogram.Default`                             | the same story's `.count()`               | not a flip (miscounted) | a, f        |
+| `Rotten Tomatoes Rating` | `2DHistogramScatterPlot`                        | none                                      | not a flip (miscounted) | a           |
+| `Body Mass (g)`          | `Partition.ProductForm`                         | `Separate.PenguinMass`                    | not a flip              | a, b        |
+| `Flipper Length (mm)`    | `Partition.ProductForm`                         | `Filter.FieldBetween`                     | not a flip              | a, b        |
+| `Beak Length (mm)`       | `MarginalHistogram` (top)                       | `MarginalHistogram` (scatter)             | not a flip              | a, b        |
+| `Beak Depth (mm)`        | `MarginalHistogram` (side)                      | `MarginalHistogram` (scatter)             | not a flip              | a, b        |
+| `lake`                   | `Bar.Stacked` and most catch stories            | `Ribbon.Polar` (angle)                    | not a flip              | c           |
+| `fertility`              | `AvoidingTrendLine` (`ends` table)              | `AvoidingTrendLine` (countries)           | not a flip              | e, b        |
+| `longitude`              | `Partition.AirportHexbin`                       | `Partition.AirportsByNearestHub` (hubs)   | not a flip              | a, b, f     |
+| `latitude`               | `Partition.AirportHexbin`                       | `Partition.AirportsByNearestHub` (hubs)   | not a flip              | a, b, f     |
+| `Miles_per_Gallon`       | `Partition.CarHexbin`                           | `ScatterPlot` (its `by: "Name"` is a bug) | not a flip              | a, f        |
+
+Genuine flips: 0. By main explanation, 10 are a bin of the value (a), 2 are an identity field read as a position (`year`, `lake`, c), and 1 is the identity of a different, derived table (`fertility`, e). Two of the 13, both movie ratings, were miscounts: their only "value" use is `.count()`, or nothing. Every story above was rendered with `pnpm capture-one` on 11-13 (images in `img/keys/`). Six renders were looked at closely (the cars scatter, the fill bug, the polar ribbon, the trend line, the weekday bars, the faceted scatter); the rest were spot-checked. That no story groups the ten (a) fields raw comes from a grep of `stories/`.
+
+**Penguin body mass: a cell in one, a position in the other (a, b).** The key is a 500 g cell; the beeswarm has no `by`, so each dot is one penguin and the mass is its position.
+
+![Penguins binned by flipper length and body mass](img/keys/penguin-key-partition.png)
+
+```js
+chart(measured, { color: Color.gradient("blues") })
+  .flow(
+    partition({
+      by: {
+        x: field("Flipper Length (mm)").bin(Bin.step(10)),
+        y: field("Body Mass (g)").bin(Bin.step(500)),
+      },
+    })
+  )
+  .mark(region({ fill: field("Body Mass (g)").count() }));
+```
+
+![Beeswarm of body mass by species](img/keys/mass-value-beeswarm.png)
+
+```js
+chart(weighed, { w: 560 })
+  .flow(
+    spread({ by: "Species", dir: "y", spacing: 16 }),
+    scatter({
+      x: "Body Mass (g)",
+      alignment: "middle",
+      overlap: Overlap.separate({ padding: 1 }),
+    })
+  )
+  .mark(circle({ r: 3, fill: "Species" }));
+```
+
+**Driving `year`: the identity read as a position (c, d).** The faceted scatter has no `by`, so its marks are keyed by the row, and the row is the year.
+
+![Connected scatter keyed by year](img/keys/year-key-connected-scatter.png)
+
+```js
+chart(drivingShifts)
+  .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+  .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
+  .layer(line({ stroke: "black", strokeWidth: 2 }));
+```
+
+![Faceted scatter with year on x](img/keys/year-value-faceted-scatter.png)
+
+```js
+chart(drivingShifts)
+  .flow(
+    spread({ by: "side", dir: "x", spacing: 50 }),
+    scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
+  )
+  .mark(circle({ r: 3, fill: "#4682b4" }));
+```
+
+The marginal histogram (code under "Three stories that show it", below) has one identity, the row, and two bins of values: its three "key spaces" are not three keys of the table, and its `by: "id"` is redundant. The polar ribbon reads `lake` as the angle, which places each lake key at its own angle; the ribbon stays open, so the chart is fine.
+
+![Marginal histogram](img/keys/beak-both-marginal-histogram.png)
+
+![Polar ribbon chart: lake as key and as angle](img/keys/lake-key-and-position-polar-ribbon.png)
+
+Two story bugs the audit confirmed by render, neither a key flip: `vega-lite/ScatterPlot` groups by `Name`, so 392 cars draw as exactly 300 dots, and `InferredSize.LegendTracksComputedExtent` fills each lake's bar with the first row's species, so every bar is Bass blue.
+
+![Cars scatter grouped by Name: 300 dots for 392 cars](img/keys/mpg-value-cars-scatter-by-name.png)
+
+![Every bar filled with the first row's species](img/keys/fill-first-row-species.png)
+
+```js
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count", fill: "species" }));
+```
+
+### The rule that covers all 13
+
+> A field with a continuous `Domain` is grouped only through a bin, so the key is the cell and the field stays a value. A field is grouped raw only when its `Domain` is discrete or it is in the table's `key`. Any channel may read a `key` field, which reads the key and never folds rows.
+
+The first sentence covers the ten (a) cases. The second covers `year` and `fertility`: both are numbers, and each is grouped raw only in a table where it is the identity, so each group has one row. The third covers `year` as x, `lake` as the angle, and `fertility` as x.
+
+The rule touches existing stories that group raw by an undeclared number outside the identity: `vega-lite/StripPlot` spreads by `cylinders`, and the titanic passenger stories spread or stack by `pclass` (1, 2, 3) and `survived` (0, 1). They draw correctly, since the numbers have few values. Under the rule each needs one `Domain.discrete` line on the column. Whether a raw `by` on an undeclared number should be an error or a lint is open (section 14). `population.json` spreads by `age`, which is in its identity, so it passes.
+
+So both readings come down to one. Every table has one identity, and no story disagrees with it. A column does have a stable role, and the role is already given by two facts: its `Domain` (discrete or continuous) and whether it is in `key`. Within one table every column is a function of the row, so every grouping by a column, a bin or a calendar part is a coarser view of the identity. A visualization chooses which function, not which subset of fields.
+
+| What changes                   | How the new index relates to the identity                               | Stories                                                     |
+| ------------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Which function groups the rows | coarser: a projection, an attribute, a bin or a calendar part           | most                                                        |
+| A relabeling                   | equivalent: (week, weekday) for a date, "Male" for 1                    | `CalendarHeatmap`, the population stories                   |
+| A fiber                        | one key field fixed to one value                                        | gapminder at one year                                       |
+| A finer index                  | a new key field: a copy, a column name, the right table's key, a sample | waffles, `GroupedBarChartRepeat`, pie glyphs, density grids |
+| A new table                    | an aggregate keyed by the grouping                                      | `RidgelineChart`, `SemanticZoomHistogram`, `titanic`        |
+
+Only the last two make a key that is not a function of the old identity. Those are the operations that need typing.
+
+### Three stories that show it
+
+**`seaborn/MarginalHistogram`: one identity and two bins of values in one figure.** The scatter keys on a row id the story makes, which is the row, so the `by` is redundant. Each histogram keys on a bin of a different measurement, and the measurement stays a value. The null filter, the colors and the `layer` that lines the three up are left out here.
+
+```js
+const data = penguins.map((d, i) => ({ ...d, id: i }));
+
+chart(data)
+  .flow(scatter({ by: "id", x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 3 }));
+
+chart(data, { h: 80 })
+  .flow(partition({ by: field("Beak Length (mm)").bin(Bin.step(2)), dir: "x" }))
+  .mark(rect({ h: field("Beak Length (mm)").count() }));
+
+chart(data, { w: 80 })
+  .flow(partition({ by: field("Beak Depth (mm)").bin(Bin.step(1)), dir: "y" }))
+  .mark(rect({ w: field("Beak Depth (mm)").count() }));
+```
+
+**`vega-lite/ScatterPlot`: a `by` that is not a key.** After the story drops rows with nulls, 392 cars have 300 distinct names (run). A position channel averages its group (read in `channels.ts`), so the chart draws 300 dots, and 92 cars are averaged into other dots with no message (rendered: exactly 300 dots).
+
+```js
+chart(cars)
+  .flow(scatter({ by: "Name", x: "Horsepower", y: "Miles_per_Gallon" }))
+  .mark(circle({ r: 4 }));
+```
+
+**`forwardsyntax/WaffleChart`: a value becomes the size of a new key.** `repeat` turns each row into `count` copies, so the marks are keyed by (lake, species, copy), finer than the rows. It runs inside `derive`, so every check after it is skipped. Spacing and alignment options are left out.
+
+```js
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }),
+    derive((d) => d.flatMap((d) => repeat(d, "count"))),
+    spread({ by: chunk(5), dir: "y" }),
+    spread({ dir: "x" })
+  )
+  .mark(rect({ w: 8, h: 8, fill: "species" }));
+```
+
+### Three designs for what `key` means
+
+**A. "Key" is a role on the column**, as Tableau's dimensions and Flint's identifier role do it.
+
+```js
+chart(penguins, {
+  schema: {
+    Species: { role: "key" },
+    "Body Mass (g)": { role: "value", unit: Grams },
+  },
+});
+```
+
+It is not wrong: the audit above found that a column's role is stable. But the role already follows from the column's `Domain` and from whether it is in `key`, so declaring it again repeats information, and A still needs bins and a key read as a position. It also says nothing about identity, so a `by` on `cars.Name` passes. "Dimension" and "measure" can be doc words for those two facts rather than API.
+
+**B. The table declares its identity. Every `by` is a grouping read as a function of it. Operations that change the identity are typed steps (recommended).**
+
+```js
+chart(countryPopulations, {
+  key: ["country"],
+  schema: {
+    country: { traits: [Trait.nested({ in: "region" })] }, // new: HasParent
+    region: { traits: [Trait.nested({ in: "continent" })] },
+    pop: { unit: People, traits: [Trait.canSum()] },
+  },
+});
+```
+
+The rest key at a mark is the identity's columns that the groupings do not fix. A grouping fixes an identity column when that column depends on it: it is the column, or a declared dependency or a calendar rule says so. That keeps `canSum({ over })` a static check even when a visualization groups by a field outside the key. Its cost is a new dependency declaration (`Trait.nested`, which is `HasParent`) and typed versions of steps that are a `derive` today.
+
+**C. No table identity. The key is whatever the flow builds**, and additivity is checked on the rows of each sum, as in approach B of section 4.
+
+```js
+chart(seafood, {
+  schema: { count: { unit: Items, traits: [Trait.canSum()] } },
+});
+```
+
+It needs no new declaration. It cannot tell a grouping that merges different things from one that merges copies, because it does not know what a thing is. It is the runner-up, and it is what B falls back to when no key is declared, so choosing B does not lose C.
+
+### Four specs worked in each design
+
+**Binned: monthly precipitation (`Bin.MonthBarsChained`).**
+
+```js
+chart(weather, {
+  key: ["date"],
+  schema: {
+    date: Unit.time(),
+    precipitation: { unit: Millimeters, traits: [Trait.canSum()] },
+  },
+})
+  .flow(
+    spread({
+      by: field("date").bin(Calendar.year).bin(Calendar.month),
+      dir: "x",
+    })
+  )
+  .mark(rect({ h: field("precipitation").sum() }));
+```
+
+| Design | Check                                                                                                                                                                                     |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A      | `date` is a key column and the bin is a key. Nothing says the sum runs over days.                                                                                                         |
+| B      | The context is the month cell. A month does not fix a date, so the rest key is `date`, and `precipitation` sums over it. Passes. A daily snapshot would fail the same way inventory does. |
+| C      | The row check sums each month's rows and finds nothing against it. Passes, after a pass over the data.                                                                                    |
+
+**Unpivoted: two grosses per genre (`vega-lite/Bar/GroupedBarChartRepeat`, with the proposed `unpivot`).**
+
+```js
+chart(movies, {
+  schema: {
+    "US Gross": { unit: USD, traits: [Trait.canSum()] },
+    "Worldwide Gross": { unit: USD, traits: [Trait.canSum()] },
+  },
+})
+  .flow(
+    unpivot(["US Gross", "Worldwide Gross"], { key: "market", value: "gross" }),
+    spread({ by: "Major Genre", dir: "x" }),
+    stack({ by: "market", dir: "y" })
+  )
+  .mark(rect({ h: "gross", fill: "market" }));
+```
+
+| Design | Check                                                                                                                                                                                                                                                                           |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A      | `market` is a new column with no declared role. If it defaults to key, the stack passes.                                                                                                                                                                                        |
+| B      | `unpivot` outputs the identity (row, market). `gross` sums over the row, as both columns did, and not over `market`. So the stack is an error: worldwide gross includes US gross, and stacking counts it twice. `spread({ by: "market" })` passes, which is the original story. |
+| C      | No two rows in a segment share a market, so it passes. The double count is not caught.                                                                                                                                                                                          |
+
+**A scatterplot of two measures (`vega-lite/ScatterPlot`, code above).**
+
+| Design | Check                                                                                                                                                                                                                                                                 |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A      | `Name` is marked as a key, so the spec passes, and 92 cars are averaged into other dots.                                                                                                                                                                              |
+| B      | No key is declared, so the identity is the row. `Name` does not fix the row, so each position folds several rows into a mean. A lint: "`scatter` by `Name` puts 392 cars on 300 dots." With `key: ["Name"]` declared, the uniqueness check fails on the data instead. |
+| C      | The flow's key is `Name`, each dot is a group, and a mean of positions is allowed. Passes.                                                                                                                                                                            |
+
+**Coarser than the rows: barley yield (`vega-lite/Bar/HorizontalStackedBarChart`).**
+
+```js
+chart(barley, {
+  key: ["variety", "year", "site"],
+  schema: {
+    yield: { unit: Unit.per(Bushels, Acres), traits: [Trait.canAverage()] },
+  },
+})
+  .flow(spread({ by: "variety", dir: "y" }), stack({ by: "site", dir: "x" }))
+  .mark(rect({ w: "yield", fill: "site" }));
+```
+
+| Design | Check                                                                                                                                                                                                        |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| A      | `yield` is a value, so it may be aggregated. Passes, as in Vega-Lite.                                                                                                                                        |
+| B      | The rest key is `year`, so the mark folds two years into a mean. The stack adds yields across sites, and a rate in bushels per acre does not add, so the stack is an error. `spread({ by: "site" })` passes. |
+| C      | It reaches the same error as B, but only from `canAverage` and after reading the data.                                                                                                                       |
+
+Recommendation: B, with C as its fallback when no key is declared. A is not rejected for being wrong; it repeats what `Domain` and `key` already say. What would change it: two real stories that need two different identities for one table with no operator between them. Then the key would belong on the chart, not the table. Wickham's phone-number example in "Tidy Data" is the candidate, and it is an unpivot.
+
+### What a key type carries
+
+| Property                                  | Today                                                                  | Proposed                                                                                                                                                                          |
+| ----------------------------------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity (equal keys mean the same thing) | groups by value, or the row by position when there is no `by`          | the declared `key` is a candidate key, checked on the rows when a rule relies on it. A `by` that does not fix the identity, under a channel that expects one row, is reported.    |
+| Levels or a continuous range              | `Domain.discrete` levels, bins over the column's domain                | the same, plus `Domain.continuous`, which allows values between keys                                                                                                              |
+| Order, real or arbitrary                  | `HasOrder` from `Trait.ordered()` or a bin, otherwise first appearance | `HasOrder` only from a declaration, a bin, a calendar part or a continuous key. An order made by `.sort(...)` or by first appearance places slots but does not allow a connector. |
+| Cycle                                     | `HasCycle` on calendar parts                                           | the same, plus `Trait.cyclic()` on columns (#1052)                                                                                                                                |
+| Region or cell                            | the `hasRegion` flag on binned fields                                  | `HasRegion` on every bin output                                                                                                                                                   |
+| Nesting                                   | `KeyCell.parent` for bin chains, nothing for columns                   | a declared dependency, `Trait.nested({ in })` (`HasParent`): every value of the finer field has one value of the coarser one                                                      |
+| The output key of each operator           | not tracked                                                            | the table below                                                                                                                                                                   |
+
+| Operator                                                           | Output identity                                              | What the value columns can sum over afterward                                         |
+| ------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| `spread`, `stack`, `group`, `scatter`, `table`, `partition` by `k` | unchanged; the context adds `k`                              | unchanged                                                                             |
+| `filter` on one value of an identity field                         | unchanged; the context fixes that field                      | unchanged                                                                             |
+| `join` along a foreign key                                         | unchanged                                                    | joined columns keep their own table's `over`                                          |
+| `join` that is one-to-many                                         | the left identity plus the right identity                    | as above                                                                              |
+| `repeat` (a typed step, new)                                       | the old identity plus a copy index                           | nothing sums over the copy index                                                      |
+| `unpivot(columns, { key, value })` (new)                           | the old identity plus `key`, with `Domain.discrete(columns)` | `value` sums over the old identity as the columns did, not over `key` unless declared |
+| an aggregate into a new table (a typed `derive` helper)            | the grouping fields; the context starts over                 | a count sums over everything                                                          |
+| a density, sample grid or interpolation                            | a continuous key; the context starts over                    | a density adds over its key only as an integral                                       |
+| `derive(fn)`                                                       | unknown                                                      | unknown: checks after it use the row check                                            |
+
 ### Keys and values in graphical space
 
 The draft asked how keys and values show up in the picture. The answer that held on ten chart types:
@@ -474,7 +800,7 @@ The draft asked how keys and values show up in the picture. The answer that held
 
 ### Key traits
 
-A key column uses the same traits as any column. No second vocabulary is needed.
+"Is a key" follows from a column's `Domain` and from membership in `key`, so it needs no separate role. What lives on the column is its key traits, and they hold however the column is read: `temp_max` has `HasOrder` whether it is a position or a bin, and the bin adds `HasRegion`. A key column uses the same traits as any column. No second vocabulary is needed.
 
 | Trait on the key                             | What it allows                                                                 | Status                                       |
 | -------------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------- |
@@ -488,15 +814,16 @@ A key column uses the same traits as any column. No second vocabulary is needed.
 
 Examples the key traits decide:
 
-- **Ribbons between lakes.** `lake` has no order, so a ribbon between lake groups is an error unless the data says how the lakes connect. This is the question from the PyData talk.
+- **Ribbons between lakes, and between species.** The lakes in the seafood data lie along connected rivers, so Lake A to Lake F is a real order, and the ribbon stories show values flowing from lake to lake. That order is a fact about the world that the strings do not show, so only a declaration can supply it: `lake` with its levels and `Trait.ordered()`. With it, a ribbon along `lake` passes. `species` has no order. With `species` declared by its levels alone, `spread({ by: "species" })` followed by a ribbon is an error, because the band would say that Trout lies between Bass and Catfish. This is the question from the PyData talk.
+- **The check applies once the key is declared.** An undeclared key is unknown and passes, like every undeclared column. Today no story declares the lake order, so the six gallery stories that draw bands between lakes (Area `Basic` and `Stacked`, Ribbon `Basic` and `Polar`, Streamgraph `Default`, and "Area Chart With Flexible Gaps") pass as undeclared, and they stay valid once the order is declared. The engine, by contrast, already treats an undeclared string key as having no order when it draws an axis.
 - **Radar chart over unordered attributes.** The polygon's area depends on an order the attributes do not have. Error: "a closed line over `attribute` needs `HasCycle`".
 - **Smooth curve over Likert levels.** A lint: the curve reads values between levels, and there are none.
 
-![The Ribbon Chart story: ribbons between lakes, which have no order](img/lakes-ribbon.png)
+![The Ribbon Chart story: ribbons between lakes, which lie in river order](img/lakes-ribbon.png)
 
 ### The key context
 
-Each `by` adds a key to the context. The checker tracks two sets: the keys split so far, and the rest key. Additivity is looked up in two places:
+Each `by` adds a grouping to the context. The checker tracks two sets: the groupings so far, and the rest key, which is the identity's columns that those groupings do not fix. Additivity is looked up in two places:
 
 1. `stack({ by: k })` and `treemap` add their children over `k`. They need `CanSum` over `k`.
 2. A channel folds the rows of one group. It needs a fold that suits every column of the rest key.
@@ -505,12 +832,12 @@ Disjoint and complete, the first two summarizability conditions, cost almost not
 
 ### Product keys and missing pairs
 
-After `spread({ by: "lake" })` and `stack({ by: "species" })`, some species are missing from some lakes. For a ribbon between stacks, the value's type decides what a missing pair means:
+After `spread({ by: "lake" })` and `stack({ by: "species" })`, a species can be missing from a lake. Whether a missing pair is zero is a fact about how the table was made, not about the value's traits:
 
-- If the value adds up and has a zero, a missing pair is zero. The ribbon narrows to nothing.
-- Otherwise a missing pair is unknown, and the ribbon shows a gap.
+- In a complete table, such as a catch survey that lists every lake and species it covered, a missing pair of a value that adds up and has a zero is zero. The ribbon narrows to nothing.
+- In a truncated table, a missing pair is not zero. `categoryBrands` lists the top brands of each year: 75 in 2000 and 100 after, and only 37 of 173 brands are present in all 20 years (run). A brand that drops out of the list still has a value, so a ribbon that drew it at zero would be false.
 
-GoFish has no rule for this today.
+So the default is a gap, and a zero needs either an explicit fill or a declaration that the table is complete. How to declare that is open (section 14). GoFish has no rule for this today.
 
 ### Multi-table inputs (smallest useful piece)
 
@@ -544,7 +871,7 @@ The draft deferred "long versus wide and sparse versus dense should type the sam
 3. **Every other reshape is a named conversion that states what it needs:**
    - `unpivot` (wide to long) needs the melted columns to share one unit. The new key gets `Domain.discrete(columns)`.
    - `pivot` (long to wide) needs a unique key or an allowed fold.
-   - Filling missing keys needs a value that adds up and has a zero, or an explicit fill. A rate has no honest fill.
+   - Filling missing keys needs a value that adds up and has a zero in a table known to be complete, or an explicit fill. A rate has no honest fill, and neither does a top-N list.
    - Aggregating needs `CanSum`, or a weight.
 4. **Grids, trees and positional indexes** stay in `derive` or polars.
 
@@ -605,6 +932,8 @@ How to read the tables:
 | `resolve`                     | the name exists in scope                                                                                                                                                                                                                                                   | the key context of the named marks                                   |                                                                                           |                                                                                              | yes                             |
 | `log`                         | nothing. It is a debug pass-through and should be renamed before a log coord ships.                                                                                                                                                                                        |                                                                      |                                                                                           |                                                                                              |                                 |
 
+**Open problem: the stack rule, read literally, rejects the Nested Mosaic story.** `NestedMosaicChart` stacks `class` on y around a stack of `sex` on x, each with `size: field("count").normalize()`. Read literally, the Stack row says each child must be one length along `dir`, and a stack of several lengths "has an extent but no amount". But here the outer stack sets each child's length from its own `size` option, so it never reads the child's extent, and the picture is right. The suggested exemption: a stack whose `size` option gives each child's length does not read the child's extent, so the "one length" condition does not apply to it. The rule above is not changed yet. This is a reading of the rule's text, not the output of a checker (section 14).
+
 ### Data helpers and field methods
 
 | Construct                         | Needs                                                                     | Result type                                                                                                                | Now                                  |
@@ -637,17 +966,17 @@ The palette a color channel gets follows the type: categorical for no order, seq
 
 ### Relational marks and combinators
 
-| Construct                                                         | Needs                                                                                | Gives                                                                                              | Fills in                                                                         | Now  |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | ---- |
-| `line` along a key                                                | the key has `HasOrder` or `HasCycle`. Lint: a smooth `Curve` needs a continuous key. | a path through the marks                                                                           | closes if `HasCycle` in a cyclic axis. Breaks at a missing key.                  | no   |
-| `ribbon` along a key                                              | as `line`. If it fills down to a baseline, the value has `HasZero`.                  | a band                                                                                             | a missing pair is zero if the value has `CanSum` and `HasZero`. Otherwise a gap. | no   |
-| `arrow`, `position`, `offset`                                     | the referenced marks exist                                                           | a glyph between placed marks. A coord does not bend it.                                            |                                                                                  | yes  |
-| `layer([...])`                                                    | children that share an axis agree on its unit                                        | the union of the children's spaces. With `coord`, a new space that the parent places as one glyph. |                                                                                  | yes  |
-| `enclose`                                                         | nothing                                                                              | an outline. Its size is not a data length.                                                         |                                                                                  | yes  |
-| `union`, `intersect`, `subtract`, `exclude`, `atop`               | nothing of the data                                                                  | one region. Its sizes are no longer data lengths, so a parent stack cannot add them.               |                                                                                  | no   |
-| `cut`                                                             | the weights have `CanSum`, `HasZero`, and are not negative                           | pieces whose sizes add up to the shape                                                             |                                                                                  | part |
-| `ref`, `selectAll`                                                | the name is in scope                                                                 | the marks with their keys. A later `by` may use any key in their context.                          |                                                                                  | yes  |
-| `text`, `image`, `blank`, `ellipse`, `petal`, `polygon`, `region` | the channel rules above                                                              | a box like a rect of the same size                                                                 |                                                                                  | part |
+| Construct                                                         | Needs                                                                                | Gives                                                                                              | Fills in                                                                                                                          | Now  |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `line` along a key                                                | the key has `HasOrder` or `HasCycle`. Lint: a smooth `Curve` needs a continuous key. | a path through the marks                                                                           | closes if `HasCycle` in a cyclic axis. Breaks at a missing key.                                                                   | no   |
+| `ribbon` along a key                                              | as `line`. If it fills down to a baseline, the value has `HasZero`.                  | a band                                                                                             | a gap at a missing pair. Zero only if the value has `CanSum` and `HasZero` and the table is declared complete (open, section 14). | no   |
+| `arrow`, `position`, `offset`                                     | the referenced marks exist                                                           | a glyph between placed marks. A coord does not bend it.                                            |                                                                                                                                   | yes  |
+| `layer([...])`                                                    | children that share an axis agree on its unit                                        | the union of the children's spaces. With `coord`, a new space that the parent places as one glyph. |                                                                                                                                   | yes  |
+| `enclose`                                                         | nothing                                                                              | an outline. Its size is not a data length.                                                         |                                                                                                                                   | yes  |
+| `union`, `intersect`, `subtract`, `exclude`, `atop`               | nothing of the data                                                                  | one region. Its sizes are no longer data lengths, so a parent stack cannot add them.               |                                                                                                                                   | no   |
+| `cut`                                                             | the weights have `CanSum`, `HasZero`, and are not negative                           | pieces whose sizes add up to the shape                                                             |                                                                                                                                   | part |
+| `ref`, `selectAll`                                                | the name is in scope                                                                 | the marks with their keys. A later `by` may use any key in their context.                          |                                                                                                                                   | yes  |
+| `text`, `image`, `blank`, `ellipse`, `petal`, `polygon`, `region` | the channel rules above                                                              | a box like a rect of the same size                                                                 |                                                                                                                                   | part |
 
 ### Coords
 
@@ -787,7 +1116,39 @@ Each step removes a wrong chart that renders today. Why this shape, against the 
 16. Should filled-in defaults be recorded as notes that the user can ask to see?
 17. Are the codes (`cannot-sum`, `no-zero`) public names that users can search for and use to turn a lint off?
 
-Syntax to review: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic()`, `key: [...]`, `traits` on a column record, `Domain.continuous([lo, hi])`, `.mean({ weight })`, `.last()`, `.first()`, `unpivot`.
+### Keys (section 7)
+
+18. Does `key: [...]` mean the table's identity, a candidate key checked on the rows when a rule relies on it, and never "the fields a chart may split by"?
+19. With no declared key, is the identity the row?
+20. How is a dependency between fields declared? The draft spelling is `Trait.nested({ in: "region" })` on `country`.
+21. Is an order made by `.sort(...)` on a value a display order only, so that a line or ribbon along that key still needs `HasOrder`?
+22. Should a `scatter({ by })` whose groups hold more than one row be a lint, an error, or allowed (`cars.Name`)?
+23. Should a color or text channel that reads a field that varies inside the mark be an error? Today it reads the first row.
+24. Should `repeat` and `chunk` become typed flow steps that output a key, in place of `derive`?
+25. After `unpivot`, does the value sum over the new key? I recommend no, unless declared.
+26. Do aggregates built into a new table need a typed helper, so the checker sees the new key? About 12 stories build one by hand.
+27. Should a key with no declared order be "unknown" (it passes, as the proposal says) or "no order" (as the engine already treats an undeclared string key for axes)?
+28. Should a `by` on an undeclared number that is not in the table's `key` be an error that asks for a bin or `Domain.discrete`, or only a lint? It affects `StripPlot` (`cylinders`) and the titanic passenger stories (`pclass`, `survived`).
+
+### Datasets (section 16)
+
+29. When a column has both `canSum` and `canAverage`, which fold does a size channel fill in: the sum, the mean, or an error that offers both?
+30. Is a missing pair a gap by default, with zero only for a table declared complete? How is "complete" or "top N" declared?
+31. How does a number column get an order or a time granularity (a year stored as 1956)? Should `Unit.time()` reject a plain number?
+32. Should a column be able to say it belongs to a coarser key in a flat table, such as `{ unit, key: "region" }` for `uncertainty`?
+33. Should a table with no id column get an implicit row key, so that the static rules work on `penguins` and `denseMasses`?
+34. Should the stack rule exempt a stack whose `size` option gives each child's length (the Nested Mosaic case in section 10)?
+
+### Space side (section 17)
+
+35. Adopt the join rule for sibling spaces on one shared axis, with the `mixed-sides` error and the `no-shared-baseline` lint? Should the mirrored fix ship now, before the type system?
+36. Write the Gives column of section 10 in the five words position, length, difference, slot and area?
+37. Is "an area reads as an amount when the product of its two length units can sum over the product key" a lint that waits for #1142?
+38. Scope the key and coord lint by what the mark asserts, so that pies and Cartesian bars of months stay silent?
+39. Build a small metamorphic test kit on top of `capture-one`'s normalized DOM?
+40. Add an opt-in lint class, under strict mode (#1120), for structure a layout invents or drops?
+
+Syntax to review: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic()`, `key: [...]`, `traits` on a column record, `Domain.continuous([lo, hi])`, `.mean({ weight })`, `.last()`, `.first()`, `unpivot`, `Trait.nested({ in })`, `repeat` as a flow step.
 
 ## 15. How the checker reports
 
@@ -950,6 +1311,361 @@ A result or effect library answers a different question: which failures can this
 - The first users are the new type checks. `MeasureClash`, the layout warnings and the IR validator can move to the same record later, one at a time.
 - Sites need a way to point at the user's spec. Today a site is a string such as `spread(by: "site")`. Pointing at a line of the user's source file is out of scope.
 
+## 16. The example datasets, typed
+
+To see how the types work on data GoFish already draws, [dataset-types](research/dataset-types.md) writes this proposal's vocabulary on all twenty datasets in `packages/gofish-graphics/src/data/`. Every spelling marked proposed is new and was not run, since none of it exists. Keys, row counts and dependencies between fields were checked by scripts. 22 specs in today's spelling were built against the library: 19 drew and 3 threw. Which stories the rules would reject comes from reading the rules, not from a checker.
+
+### How to read a schema
+
+| Part                           | What it says                                                                                                   | Status   |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------- | -------- |
+| `key: [...]`                   | the table's identity: no two rows share these columns. Checked on the rows when a rule relies on it.           | proposed |
+| `unit`                         | what the values measure. Two columns can share an axis or be added only when their units match.                | today    |
+| `domain`                       | the values a column can take: `Domain.discrete(levels)`, or `Domain.continuous([lo, hi])` (proposed)           | part     |
+| `Trait.ordered()`              | `HasOrder`: neighbors mean something, so a line or ribbon may join them                                        | today    |
+| `Trait.cyclic()`               | `HasCycle`: the last level is next to the first                                                                | proposed |
+| `Trait.diverging()`            | `HasMidpoint`: a stack over this key starts from the middle level                                              | today    |
+| `Trait.canSum({ over })`       | `CanSum`: rows may be added when they differ only in the listed key columns. With no `over`, every key column. | proposed |
+| `Trait.canAverage({ weight })` | `CanAverage`: rows combine by a mean, weighted by the named column. With no weight, a plain mean.              | proposed |
+| nothing declared               | unknown: the column passes every check                                                                         | today    |
+
+The seafood catch table, which about 30 story files draw from, annotated:
+
+```js
+const Fish = Unit("fish");
+
+chart(seafood, {
+  // The identity: no two rows share a (lake, species) pair. Checked on the
+  // rows when a rule relies on it.
+  key: ["lake", "species"],
+  schema: {
+    // The lakes lie along connected rivers, so Lake A to Lake F is an order.
+    // The strings do not show it, so only this declaration can supply it.
+    // It allows a line or ribbon along lake.
+    lake: Unit({
+      domain: Domain.discrete([
+        "Lake A",
+        "Lake B",
+        "Lake C",
+        "Lake D",
+        "Lake E",
+        "Lake F",
+      ]),
+      traits: [Trait.ordered()],
+    }),
+    // Levels and no order. A ribbon along species is an error.
+    species: Unit({
+      domain: Domain.discrete(["Bass", "Trout", "Catfish", "Perch", "Salmon"]),
+    }),
+    // A count of fish. Each fish is caught once, in one lake, so the count
+    // adds over both key columns: canSum() with no `over` means every key.
+    count: { name: "Catch", unit: Fish, traits: [Trait.canSum()] },
+  },
+});
+```
+
+Today's spelling of the same order, which main accepts (not run with the order; the schema without it was run):
+
+```js
+const Fish = Unit("fish", { traits: [Trait.summable()] });
+
+chart(seafood, {
+  schema: {
+    // The lakes lie along connected rivers.
+    lake: Unit({
+      domain: Domain.discrete([
+        "Lake A",
+        "Lake B",
+        "Lake C",
+        "Lake D",
+        "Lake E",
+        "Lake F",
+      ]),
+      traits: [Trait.ordered()],
+    }),
+    count: { name: "Catch", unit: Fish },
+  },
+});
+```
+
+This is a good teaching case for the order. Nothing in the strings "Lake A" to "Lake F" says the lakes are connected by rivers; it is a fact about the world, and only the declaration carries it. With this schema, `BarStacked` (spread by lake, stack by species, `h: "count"`) passes, Pie `Basic` passes (the rest key is `lake`, and `count` sums over it), and Area `Stacked` passes, because a ribbon along `lake` needs `HasOrder` and now has it. A ribbon along `species` would be an error. Today's spelling accepts the same `lake` declaration (`Trait.ordered()` on `Domain.discrete` levels), with `count` in a summable unit, and `BarStacked` and Area `Stacked` both draw (run, without the `lake` order; the order is not declared in any story today).
+
+### All twenty, in one table
+
+From the cleanest fit to the hardest.
+
+| Dataset                  | Rows               | Key (checked)                                      | The one interesting typing fact                                                                                |
+| ------------------------ | ------------------ | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `olympicMedals`          | 60                 | `Country_Code`, `Medal_Type`                       | the cleanest fit: a count that sums over every key, and an ordered medal key                                   |
+| `seafood` (catch)        | 30                 | `lake`, `species`                                  | `lake` has a river order that the strings do not show, so only a declaration supplies it; `species` has none   |
+| `fishData`               | 30                 | `Lake`, `Fish Type`                                | a second copy of the catch table with other column names, and 28 of 30 counts differ                           |
+| `titanic`                | 16                 | `class`, `sex`, `survived`                         | already aggregated. `class` has a partial order: Crew is not after Third                                       |
+| `nightingale`            | 36                 | `Month`, `Type`                                    | the Rose story stacks square roots of deaths, and `derive` hides it from every rule                            |
+| `gapminderCountries`     | 191                | `Country`                                          | the weight for life expectancy (`Population`) is in the table, but the weight for fertility is not             |
+| `seattleWeather`         | 1,461              | `date`                                             | the gallery story "Seattle Highs by Day of the Week" draws bars of °C from 0, so the `HasZero` rule rejects it |
+| `catchDataWithLocations` | 30                 | `lake`, `species`                                  | `x` and `y` belong to the lake and are copied onto every species row, with no join to remember that            |
+| `countryPopulations`     | 70                 | `country`                                          | `uncertainty` belongs to the region and repeats on every country, so summing it counts it about five times     |
+| `titanicPassengers`      | 1,309              | none after parsing; the raw file: `name`, `ticket` | `fare` is per ticket, so summing it over passengers gives 43,550 instead of 19,303                             |
+| `categoryBrands`         | 1,975              | `year`, `name`                                     | a top-N list: a missing brand is not a zero                                                                    |
+| `drivingShifts`          | 55                 | `year`                                             | `year` is a number, and `Unit.time()` today silently reads 1956 as 1.956 seconds after 1970                    |
+| `birds`                  | 26,280             | `species`, `day`                                   | `day` is a day of the year, and closing the loop is right: day 365 lies 0.03° from day 1                       |
+| `caltrain`               | 1,436              | `Train`, `Station`                                 | `Time` is minutes after midnight and runs past 1,440 for trains after midnight                                 |
+| `streamgraphData`        | 50                 | `x`, `c`                                           | `c` is a category coded as a number                                                                            |
+| `newCarColors`           | 160                | `Color`, `Year`, and also `Year`, `Rank`           | two candidate keys: a rank is a key inside a year                                                              |
+| `genderPayGap`           | 10                 | `Gender`, `Pay Grade`                              | a wide table of five order statistics: none of them sums or averages                                           |
+| `penguins`               | 344                | none                                               | per-penguin measurements can both sum and average, which leaves the default fold open                          |
+| `denseMasses`            | 1,000              | none (735 exact duplicate rows)                    | individuals with no id: there is no spelling for "one row per thing, no id column"                             |
+| `energy`                 | 48 nodes, 68 links | links: `source`, `target`                          | a graph, not a table. Adding every link counts energy 2.77 times                                               |
+| `world110m`              | 287 rings          | none (`id` repeats for 30 countries)               | a row is a ring of points, and the vocabulary has nothing for it                                               |
+
+### Five more schemas worth reading
+
+**`categoryBrands`: a snapshot along year, in a truncated table.** Proposed, not run.
+
+```js
+chart(categoryBrands, {
+  key: ["year", "name"],
+  schema: {
+    year: { unit: "year", traits: [Trait.ordered()] }, // a number with an order
+    // A brand's value on January 1st. It adds over brands, not over years.
+    value: {
+      name: "Brand value",
+      unit: USDMillion,
+      traits: [Trait.canSum({ over: "name" })],
+    },
+  },
+});
+```
+
+Today a bar per brand over all years draws and adds up to 20 yearly values (run). Under the proposal it is an error that offers `.last()` or `.mean()`. The year-by-year race passes. The table is the top 100 brands of each year, so a missing brand is not zero, and nothing in the schema can say the source was truncated.
+
+**`titanicPassengers`: a value that belongs to a coarser key.** Proposed, written on the raw file, since the parser drops `name` and `ticket`.
+
+```js
+chart(titanicRaw, {
+  key: ["name", "ticket"],
+  schema: {
+    // The price of the whole ticket, repeated on every passenger who shared
+    // it. It adds over tickets, not over passengers.
+    fare: { unit: "GBP", traits: [Trait.canSum({ over: "ticket" })] },
+  },
+});
+```
+
+216 tickets cover 596 passengers. Summed over passengers, fares total 43,550; summed over tickets, 19,303 (run). `canSum({ over: "ticket" })` says this exactly, but only on the raw file. On the parsed rows no declaration can repair it.
+
+**`seattleWeather`: the `HasZero` rule finds a gallery story.** Proposed, not run.
+
+```js
+chart(seattleWeather, {
+  key: ["date"],
+  schema: {
+    date: Unit.time(),
+    precipitation: { unit: "mm", traits: [Trait.canSum()] }, // a flow
+    temp_max: { unit: Celsius, traits: [Trait.canAverage()] }, // no HasZero
+  },
+});
+```
+
+`Bin.WeekdayTemperature` draws `rect({ h: field("temp_max").mean() })`, bars of °C from 0, so a 15 °C day looks half as hot as a 30 °C day. Today it draws with °C declared (run). Without the `.mean()` it throws "cannot be summed ... average them instead", and following that advice gives the same story.
+
+**`gapminderCountries`: a weight that is in the table, and one that is not.** Proposed, not run.
+
+```js
+chart(gapminderCountries, {
+  key: ["Country"],
+  schema: {
+    Population: { unit: Persons, traits: [Trait.canSum()] },
+    LifeExpectancy: {
+      unit: "years",
+      traits: [Trait.canAverage({ weight: "Population" })],
+    },
+    // Births per woman. The right weight, women aged 15 to 49, is not here.
+    FertilityRate: { unit: "births/woman" },
+  },
+});
+```
+
+A bar of `LifeExpectancy` per region elaborates to the population-weighted mean. A bar of `FertilityRate` per region is an error that asks for a weight, which is right, and the table cannot answer it.
+
+**`penguins`: no key, and both folds hold.** Proposed, not run.
+
+```js
+chart(penguins, {
+  // no key: one row per penguin, with no id
+  schema: {
+    "Beak Length (mm)": { unit: mm, traits: [Trait.canAverage()] },
+    "Body Mass (g)": {
+      unit: "g",
+      traits: [Trait.canAverage(), Trait.canSum()], // which is the default?
+    },
+  },
+});
+```
+
+The static rules need a declared key, and this table has none. Body mass sums and averages, and the proposal does not say which fold a size channel fills in. `Sex` has two kinds of missing value (null and `"."`); `spread({ by: "Sex" })` with the levels declared throws a correct error that prints the nulls as `undefined` (run).
+
+The other fifteen are in the research file.
+
+### What typing the datasets taught us
+
+Vocabulary gaps, ranked by how many datasets hit them:
+
+1. **Times and orders stored as numbers** (7 datasets). There is no spelling for "this number is a year" or "this number has an order but no sum". `Trait.ordered()` needs `Domain.discrete(levels)`, and `Unit.time()` reads a number as milliseconds since 1970 with no error (run).
+2. **A value that belongs to a coarser key in a flat table** (4). The proposal catches this only after a `join`. Here there was never a join. A spelling such as `{ unit, key: "region" }` on the column would say it.
+3. **No key at all** (4: `penguins`, `denseMasses`, `titanicPassengers`, `world110m`). An implicit row key, where each row is its own thing, would make the static rules work. It is what `canSum()` already assumes.
+4. **Weights that are not in the table** (3). Miles per person needs population per year, and gas price needs gallons sold. `canAverage()` with no weight then claims equal weights, which the data cannot back.
+5. **Pre-aggregated statistics with no fold** (2). A median neither sums nor averages. "Neither trait" is right for the checker, but the error's advice needs to know it is an order statistic.
+6. **Cycles that are not quite cycles** (3). `nightingale.Month` is months of 1855, `birds.day` really is a cycle, and `caltrain.Time` is a time of day unrolled past midnight.
+7. **Wide tables** (2). `unpivot` covers both.
+8. **Shapes and graphs** (2: `world110m`, `energy`). Out of scope.
+9. **Two candidate keys** (1: `newCarColors`). `key` takes one list.
+10. **A partial order** (1: `titanic.class`). First, Second and Third are ordered, and Crew is not in that order.
+
+Rules that look wrong on real data, each fixed or recorded where the rule lives:
+
+- "A missing pair is zero if the value sums and has a zero" is wrong for the top-N `categoryBrands`. Section 7 now makes the default a gap.
+- The stack rule, read literally, flags `NestedMosaicChart`. Recorded as an open problem in section 10.
+- `derive` hides a real error in the Rose story. It stacks `Math.sqrt(Death)` by cause, so each wedge's radius is √a + √b + √c instead of √(a + b + c): January's is 80 where it should be about 56. Today it draws with no error (run). Under the proposal `derive` makes the column unknown, so no rule fires. If `derive` kept a column's type by name (one reading of #999, which asks how column types pass through `derive`), the stack would pass `canSum` and still be wrong. The right spelling is the proposed `Coord.clock({ radius: "area" })` with `h: "Death"` and no derive.
+- No default fold is stated when a column has both `canSum` and `canAverage`. Now a decision (section 14).
+
+Existing stories the rules would reject, once the relevant column is declared:
+
+| Story                              | Rule                                  | Right?                                                 |
+| ---------------------------------- | ------------------------------------- | ------------------------------------------------------ |
+| Bin `WeekdayTemperature` (gallery) | `HasZero`: a bar of °C from 0 (#1051) | Yes                                                    |
+| Bin "Seattle Rain on a Time Axis"  | the key-sized lint of section 9       | A lint. Months differ by up to 3 days, about 10%.      |
+| NestedMosaicChart `Default`        | a stack outside a stack               | No. A false positive of the literal rule (section 10). |
+| Pie `Rose`                         | none fires                            | A miss. The story is wrong and no rule sees it.        |
+
+The six gallery stories that draw bands between lakes (Area `Basic` and `Stacked`, Ribbon `Basic` and `Polar`, Streamgraph `Default`, "Area Chart With Flexible Gaps") and LineChart `Default` are valid: the lakes lie in river order. They do not declare that order today, so under gradual typing they pass as undeclared, and they pass again once `lake` is declared ordered. Ribbon `Polar` is valid too: `lake` is ordered but not cyclic, and its ribbon stays open rather than closing around the turn, which is the case the scoped key and coord lint of section 17 (rule 4) is designed to leave silent.
+
+## 17. What a rule gives: the space side
+
+Notes from a design conversation on 11-13 ([notes-2026-11-13-space-types](research/notes-2026-11-13-space-types.md)) proposed typing each layout operator by the structure it keeps, read once on the data side and once on the space side. [space-types-check](research/space-types-check.md) checked them against this proposal and the engine. Each claim below is marked run (a probe story was rendered), read (from the code) or reasoning. Terms:
+
+- **Space type.** What a layout makes of the data on screen. In the engine it is each node's `UnderlyingSpace` on each axis.
+- **Origin state.** The engine's one fact about where a continuous axis's data 0 sits: `pinned` (data 0 is placed, so positions mean something), `free` (a length whose baseline a parent has not placed yet), or `none` (only differences mean something).
+- **Mirrored.** A flag on a continuous space whose two sides of 0 both hold nonnegative amounts, as in a Likert chart. Its axis labels ticks with their distance from 0.
+
+### What was already here
+
+| Idea in the notes                                     | Where it already is                                                                       | Verdict                                            |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| An operator's type is the structure it keeps          | Section 10's Needs and Gives columns; each operator's `resolveUnderlyingSpace` (read)     | there, under other names                           |
+| Space-side words: position, length, area, order       | `pinned`, `free`, `none` and ordinal slots (read). No area fact.                          | new, fits: name the words, area is missing         |
+| Reference point: edge, neutral point, or none         | one `StackOrigin { part, fraction, mirrored }` record for every stack (read)              | there, as one record                               |
+| Shared axes unify on unit and baseline                | units: `joinUnits` and `MeasureClash`. Baseline: `overlayOrigin` and `allMirrored` (read) | there; the baseline join is unstated and has a bug |
+| A stack of means is rejected by additivity            | the Stack and `.mean()` rows of section 10                                                | there in the proposal; breaks today                |
+| Diverging and cyclic tags pick a layout               | `HasMidpoint` on the stack key, `HasCycle` on a spread key (sections 2 and 3)             | there                                              |
+| An `arbitrary` order on the output                    | the absence of `HasOrder`, which axes already act on (read)                               | there; no new word needed                          |
+| Data declares, chart requires, extra columns are fine | `applySchema` accepts extra columns (read); nothing infers what a chart requires          | there; the "requires" record is not built          |
+| Lints fire at one boundary                            | checks run at many sites, gathered into one report (section 15)                           | conflicts                                          |
+| Bidirectional checking                                | the passes already alternate down and up (read)                                           | there                                              |
+| A data-by-coord table: exact, lossy, missing          | section 10's Coords lints                                                                 | conflicts as stated; fits when scoped to the mark  |
+
+### The eleven examples
+
+| #   | Example                                                      | Verdict                                | How checked     | Why                                                                                                                                            |
+| --- | ------------------------------------------------------------ | -------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Mosaic as a stack of stacks: length times length gives area? | holds only with a condition            | run, read       | Right only because the inner size is a share and the outer width is its weight. With raw counts on both axes, the cells are count times count. |
+| 2   | Mosaic from two one-level treemaps                           | holds for areas                        | run             | Same cell areas. The stack route has two honest axes, and the treemap route has none.                                                          |
+| 3   | Squarified treemap                                           | breaks the composition rule            | run, reasoning  | Its strips are groups the algorithm invents. A treemap's area rule is its own, which GoFish already does.                                      |
+| 4   | Stacked means                                                | holds under the proposal; breaks today | run             | Today the axis reads 35 USD, three mean prices added, because `.mean()` keeps a summable unit.                                                 |
+| 5   | Small multiples with a shared axis                           | holds; the baseline half is unwritten  | read, reasoning | A `none` sibling beside a pinned one joins with no message. Not rendered.                                                                      |
+| 6   | One diverging and one linear sibling                         | breaks today; a right join exists      | run             | The shared axis prints negative counts for the survey. See below.                                                                              |
+| 7   | Likert: tag the data, no spec change                         | holds for the tag                      | read            | With five levels Neutral straddles 0. An explicit origin is the elaborated code and should not lint.                                           |
+| 8   | Radial chart and the data-by-coord table                     | holds only with a third input          | read, reasoning | Linting every lossy cell flags every pie and every bar chart of months. The fit must depend on what the mark claims.                           |
+| 9   | Upper stack segments are lengths only                        | undecided                              | read            | The engine has the pieces, and no reader needs them yet.                                                                                       |
+| 10  | A bar chart on a wide table                                  | holds                                  | read            | Extra columns are accepted.                                                                                                                    |
+| 11  | Unordered categories into a stack                            | holds for slots                        | read            | First-appearance order. "Arbitrary" is the absence of `HasOrder`.                                                                              |
+
+### The Likert finding: one shared axis, two kinds of space
+
+A Likert row (`response` with `Trait.diverging()`) and a row of contact counts stacked by `channel`, as two charts in one `spread` along y, so they share the x axis (run, story `Probe/Space Types`, in `proposals/type-system/stories/SpaceTypes.stories.tsx`):
+
+```js
+spread({ dir: "y", spacing: 24 }, [
+  chart(survey, { schema: { response: Likert } }) // Likert has Trait.diverging()
+    .flow(stack({ by: "response", dir: "x" }))
+    .mark(rect({ w: "count", h: 30, fill: "response" })),
+  chart(contacts)
+    .flow(stack({ by: "channel", dir: "x" }))
+    .mark(rect({ w: "count", h: 30, fill: "channel" })),
+]);
+```
+
+![The Likert row alone: ticks read 60 40 20 0 20 40, distances from 0](img/space/likert-alone.png)
+
+![The Likert row and a nonnegative row on one axis: ticks read -60 -40 -20 0 20, so the survey's left half reads as negative counts](img/space/likert-and-linear.png)
+
+Alone, the Likert axis reads 60, 40, 20, 0, 20, 40: counts measured away from 0. With a sibling of plain counts, it reads −60, −40, −20, 0, 20, and the survey's left half becomes negative counts. The cause (read): the shared axis is the overlay of the two rows, and `overlay` keeps `mirrored` only when every child has it (`allMirrored`). In the probe the colors are defaults, because the palette passed to the combinator's `render` was not applied, the layout overflowed by 12 px, and the Likert row is clipped at the top. The tick labels, which are the point, are as described.
+
+The join the notes proposed, "a linear space is a diverging one with its neutral point at the edge", is right when the linear sibling has nothing below 0: there a distance from 0 and a signed value are the same number (reasoning). With a negative part in the sibling, no one labeling is right for both rows.
+
+### What to adopt, as rules
+
+Ranked by what they catch for what they cost.
+
+1. **Siblings on one shared axis join by these rules.** Add them to the `layer` row of section 10 and to the codes of section 15.
+
+   | Siblings on one axis                      | Result                                                                                |
+   | ----------------------------------------- | ------------------------------------------------------------------------------------- |
+   | all mirrored, or mirrored and nonnegative | mirrored                                                                              |
+   | mirrored, and another reaches below 0     | error `mixed-sides`: one axis cannot label both                                       |
+   | one `pinned` and one `none`               | lint `no-shared-baseline`: the row with no data 0 is not described by the shared axis |
+   | units differ                              | error, as today (`MeasureClash`)                                                      |
+
+   It catches the wrong tick labels above, which render today with no message. The mirrored part is a bug fix on its own and could ship before the type system.
+
+2. **The Gives column uses five words**, four of which the engine already computes:
+
+   | Word                 | Engine fact         | Example                                 |
+   | -------------------- | ------------------- | --------------------------------------- |
+   | position             | `pinned`            | a scatter axis, a stack's total         |
+   | length               | `free`              | a bar before its parent places it       |
+   | difference           | `none`              | a middle-aligned overlay, a streamgraph |
+   | slot, ordered or not | ordinal, `hasOrder` | `spread`, `table`                       |
+   | area                 | none today          | `treemap`, a mosaic cell                |
+
+   It catches nothing on its own. It makes the join rule and the log rule readable against one table. Add the area fact only when a reader needs it.
+
+3. **An area reads as an amount when the product of its two length units can sum over the product key.** A count times a count share is a count, so the mosaic is right. A count times a count is not an amount. This needs unit products from #1142 (where a unit is one definition and products are still open), and it is a lint, for the reason section 9 gives.
+
+   ![The mosaic as written: count on x, count share on y](img/space/mosaic-stack-of-stacks.png)
+
+   ![The same stacks with raw counts on both axes: a stacked bar of variable width, not a mosaic](img/space/mosaic-raw-counts.png)
+
+   ```js
+   chart(cars)
+     .flow(
+       stack({ by: "origin", dir: "x", size: "count" }),
+       stack({ by: "cylinders", dir: "y" })
+     )
+     .mark(rect({ h: "count", fill: "origin" }));
+   ```
+
+4. **The key and coord fit depends on what the mark asserts.** Lint a key with `HasOrder` and no `HasCycle`, on an angle axis with `HasCycle`, only under a closed line or slots placed around the full turn. Pies of nominal categories and Cartesian bar charts of months stay silent. It catches a radial line of years that joins the last year to the first, which the radar rule in section 7 does not cover.
+
+5. **A small metamorphic test kit**, as the testing half of section 7's statement about relabelings. A metamorphic test changes the input in a known way and checks that the output changes to match. Permute the rows of a nominal key, and a `treemap` with `sort: "desc"` keeps each key's tile (run). Scale a value column, and only the tick labels scale. Rotate a cyclic key, and a polar chart rotates.
+
+6. **An opt-in lint class for structure a layout invents or drops**, under strict mode (#1120): an order made by first appearance, a treemap over an ordered key, a palette assigned by first appearance. Opt-in only, since `principles.md` says GoFish does not judge whether a chart is a good idea.
+
+### Not adopted
+
+- **Lean as a design surface.** Section 7 already turns the laws into property tests. Lean would add a language that checks nothing the tests do not.
+- **An `asLinear(...)` wrapper on the data.** The override belongs on the stack as its origin option, once that is public (#1289, which makes internal operands public). A wrapper would be a second way to say one choice.
+- **A lint on every override of a trait's default.** An explicit option is the elaborated code written out. Linting it contradicts "a default is sugar".
+- **An `arbitrary` keyword.** It is the absence of `HasOrder`.
+- **"Untagged data defaults to linear."** In the proposal an undeclared column is unknown. In the engine an undeclared string key has no order for axes and the default edge origin for stacks. Neither is linear.
+- **Per-instance layout types.** The engine solves the same problem with one `StackOrigin` record and per-axis traits, with no table of every kind against every other.
+- **Per-part baseline facts** for upper stack segments, until a label or tooltip needs them.
+- **An effectiveness ranking as a check.** It may belong in a tool that suggests charts, not in the checker.
+
+Where the notes are wrong about GoFish (read): `stack` does not need an ordered key; the default treemap does make an order, by size; checks do not fire at one boundary; data and keys flow down from `chart` while space types flow up; a cyclic calendar key is treated as ordered today and cut at its first part; and with an odd number of Likert levels no segment starts at the baseline.
+
+Not verified: the `none` and `pinned` join (argued from `alignment.ts`, not rendered), whether a `line` over months closes in `Coord.clock()`, and #1270 (bidirectional resolution of spaces), which was cited from an earlier survey.
+
 ## Gaps found on main (not filed)
 
 - The schema docs list `.distinct()` among things that add up. Distinct counts do not add across groups.
@@ -961,5 +1677,25 @@ A result or effect library answers a different question: which failures can this
 - `field("day").bin(Calendar.month)` over half a year keeps all 12 months on the axis and overlaps the labels of the empty ones.
 - A declared °C bar is rejected for having no `CanSum`, even with one row per bar. The reason should be the missing zero.
 - `CLAUDE.md` lists a `keyContext` that is not in the source. Keys live on nodes.
+- `treemap` turns a negative weight into 0 with no message (`resolveWeight` in `treemap.tsx`; read).
+- One diverging and one linear sibling on a shared axis print negative tick labels for the survey's counts, because `allMirrored` drops `mirrored` (run).
+- A `pinned` sibling and a `none` sibling join on a shared axis with no message, and the axis does not describe the `none` one (reasoning from `alignment.ts`; not rendered).
+- Stacked means pass today's check, because `.mean()` keeps a summable unit: the axis reads 35 USD, three mean prices added (run).
+- Calendar cycle parts get `hasOrder: true` and are cut at their first part with no message (read).
+- A `color` palette passed to a combinator's `render` was not applied in the space-type probes (run; not investigated).
+- `Unit.time()` accepts a number and reads the year 1956 as 1,956 ms after 1970; the axis reads "12:00:01 AM" (run).
+- Pie `Rose` stacks square roots of deaths, so each wedge's radius is the sum of roots, not the root of the sum; it draws with no error (run).
+- Bin `WeekdayTemperature`, a gallery story, draws mean °C as bars from 0 (rendered).
+- The "cannot be summed" error tells a user to call `.mean()` on a median column, and a mean of medians is not a median (run, `genderPayGap`).
+- The stray-level error of `spread` prints null values as `undefined` (run, `penguins.Sex`).
+- A `fill` channel does not check values outside declared levels, so `penguins.Sex` `"."` passes (run).
+- `fishData` is a second copy of the catch table, and 28 of its 30 counts differ from `seafood` (run).
+- The `titanicPassengers` parser drops `name` and `ticket`, the table's key, leaving 221 duplicate rows; a sum of `fare` per class then counts shared tickets once per passenger (run).
+- `energy` is not used by any story, test or doc (read).
+- `vega-lite/ScatterPlot` groups by `Name`, which is not a key, so 392 cars draw as 300 dots (rendered: exactly 300 dots).
+- `InferredSize.LegendTracksComputedExtent` colors each lake's bar by the first species in its rows, so every bar is Bass blue (rendered).
+- `vega-lite/Bar/HorizontalStackedBarChart` sums barley yields, a rate, over sites and years, copying the Vega-Lite example (read).
+- `Bin.CalendarHeatmap` labels its week axis with months, and weeks do not nest in months (read; render not inspected).
+- The seafood lakes lie in river order, but no story or doc declares that order (read).
 
-Not verified: whether `treemap` drops negative sizes silently, and whether `cut` weights skip the `CanSum` check. The Lenz and Shoshani paper was read through #1198 and secondary sources, not in full.
+Not verified: whether `cut` weights skip the `CanSum` check. The Lenz and Shoshani paper was read through #1198 and secondary sources, not in full.

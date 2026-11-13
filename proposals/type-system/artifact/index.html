@@ -854,7 +854,10 @@
           idea is that adding up is a fact about a column and a key together,
           and that idea fixes real charts that GoFish draws wrong today. This
           proposal writes the whole system in GoFish's own words and gives a
-          typing rule for every operator, channel and coord.
+          typing rule for every operator, channel and coord. Typing the example
+          datasets shows the vocabulary fits clean tables and runs out in ten
+          named places. A table's key is a fact about the data; what a
+          visualization groups by is a choice.
         </p>
         <p class="rec">
           <strong>Recommendation.</strong> Keep types as run-time values in the
@@ -862,11 +865,13 @@
           <code>Domain</code> families. Add one keyed trait,
           <code>Trait.canSum({ over })</code>, on the column, plus a
           <code>weight</code> for averages and a declared table
-          <code>key</code>. Derive everything else. Treat the draft's Nominal,
-          Ratio, Extensive and so on as names for bundles, not as primitives.
-          Keep <code>coord</code> at the chart boundary, and if it becomes a
-          method, put it at the start of the chain. Mirror a small part of the
-          checks in TypeScript later.
+          <code>key</code>. The <code>key</code> names the table's identity,
+          each <code>by</code> is a grouping read against it, and operations
+          that change the identity are typed steps. Derive everything else.
+          Treat the draft's Nominal, Ratio, Extensive and so on as names for
+          bundles, not as primitives. Keep <code>coord</code> at the chart
+          boundary, and if it becomes a method, put it at the start of the
+          chain. Mirror a small part of the checks in TypeScript later.
         </p>
       </div>
       <div>
@@ -914,16 +919,23 @@
             <li>
               <strong>Key.</strong> A column, or a set of columns, that says
               which thing a row is about. In a table of inventory per warehouse
-              per month, the key is (warehouse, month).
+              per month, the key is (warehouse, month). The declared key is the
+              table's <strong>identity</strong>: no two rows share it. When no
+              columns are unique, the identity is the row itself.
             </li>
             <li>
-              <strong>Key context.</strong> The keys that the operators so far
-              have split by, at a given point in a <code>.flow(...)</code>.
+              <strong>Grouping.</strong> What a visualization names in a
+              <code>by</code>: a column, a bin or a calendar part. It is a
+              choice, and it need not be a key column.
             </li>
             <li>
-              <strong>Rest key.</strong> The key columns that are not yet split.
-              A mark draws one group of rows, and those rows differ only in the
-              rest key.
+              <strong>Key context.</strong> The groupings that the operators so
+              far have split by, at a given point in a <code>.flow(...)</code>.
+            </li>
+            <li>
+              <strong>Rest key.</strong> The identity's columns that the
+              groupings do not fix. A mark draws one group of rows, and those
+              rows differ only in the rest key.
             </li>
             <li>
               <strong>Fold.</strong> Turning the several rows of one group into
@@ -975,6 +987,7 @@
     <div class="links">
       <a href="#examples">Examples</a>
       <a href="#grid">All 32</a>
+      <a href="#datasets">Datasets</a>
       <a href="#additivity">Additivity</a>
       <a href="#rules">Rules</a>
       <a href="#errors">Errors</a>
@@ -1788,13 +1801,17 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
           <div class="card-body">
             <h3>Ribbons between lakes</h3>
             <div class="verdicts">
-              <span class="verdict v-bad">draws today</span
-              ><span class="verdict v-err">error under the proposal</span>
+              <span class="verdict v-ok">draws today</span
+              ><span class="verdict v-ok"
+                >passes once the order is declared</span
+              >
             </div>
             <p class="lead">
               The existing Ribbon Chart story. Ribbons join each lake to the
-              next one in the data's order. The lakes have no order, so the
-              ribbons say that Lake B lies between Lake A and Lake C.
+              next. The lakes lie along connected rivers, so Lake A to Lake F is
+              a real order, and the ribbons show it. The strings do not show
+              that order, so only a declaration can supply it. No story declares
+              it today, so the story passes as undeclared.
             </p>
 
             <div class="label">Proposed spec</div>
@@ -1802,7 +1819,12 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
               <div data-lang="js">
                 <pre
                   class="code"
-                ><code class="language-javascript">chart(seafood)
+                ><code class="language-javascript">const Lake = Unit({
+  domain: Domain.discrete(LAKES), // "Lake A" to "Lake F"
+  traits: [Trait.ordered()], // the lakes lie along connected rivers
+});
+
+chart(seafood, { schema: { lake: Lake } })
   .flow(
     spread({ by: "lake", dir: "x", spacing: 64 }),
     stack({ by: field("species").sort("count"), dir: "y" })
@@ -1811,8 +1833,13 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
   .layer(ribbon({ opacity: 0.8 }));</code></pre>
               </div>
               <div data-lang="py">
-                <pre class="code"><code class="language-python">(
-    chart(seafood)
+                <pre class="code"><code class="language-python">Lake = Unit(
+    domain=Domain.discrete(LAKES),  # "Lake A" to "Lake F"
+    traits=[Trait.ordered()],  # the lakes lie along connected rivers
+)
+
+(
+    chart(seafood, schema={"lake": Lake})
     .flow(
         spread(by="lake", dir="x", spacing=64),
         stack(by=field("species").sort("count"), dir="y"),
@@ -1822,17 +1849,23 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
 )</code></pre>
               </div>
             </div>
-            <div class="label">
-              Checker error <span class="draft">draft wording</span>
-            </div>
+            <div class="label">Checker</div>
             <pre
-              class="code plain msg msg-error"
-            ><code class="nohighlight">a ribbon along lake needs HasOrder or HasCycle on lake. Declare an order, or say how the lakes connect.</code></pre>
+              class="code plain msg msg-message"
+            ><code class="nohighlight">Draws. A ribbon along lake needs HasOrder, and lake has it.</code></pre>
+            <p class="note">
+              The same spec with the spread and stack swapped, a ribbon along
+              <code>species</code>, is an error once <code>species</code> is
+              declared by its levels: the band would say that Trout lies between
+              Bass and Catfish.
+            </p>
 
             <details class="today">
               <summary>Today's code</summary>
               <p class="small">
-                same as the proposed spec: story Forward Syntax/Ribbon/Basic
+                story Forward Syntax/Ribbon/Basic: the proposed spec without the
+                <code>Lake</code> declaration. Today's API accepts the
+                declaration too.
               </p>
             </details>
           </div>
@@ -3840,6 +3873,1663 @@ chart(daily, { schema: { day: Unit.time(), stock: Items }, axes: true })
         </p>
       </div>
     </section>
+    <section class="panel" data-panel="datasets" hidden>
+      <section class="prose wide">
+        <h2>The example datasets, typed</h2>
+        <p>
+          Every dataset in <code>packages/gofish-graphics/src/data/</code>,
+          written in this proposal's vocabulary, so the types can be read on
+          data GoFish already draws. Each schema below is in the proposed
+          spelling, which is new and was not run, since none of it exists. Keys,
+          row counts and dependencies between fields were checked by scripts. 22
+          specs in today's spelling were built against the library: 19 drew and
+          3 threw. Each card says whether today's spelling was run. Which
+          stories the rules would reject comes from reading the rules, not from
+          a checker. Source:
+          <code>proposals/type-system/research/dataset-types.md</code>.
+        </p>
+        <h3>How to read a schema</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Part</th>
+                <th scope="col">What it says</th>
+                <th scope="col">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>key: [...]</code></th>
+                <td>
+                  the table's identity: no two rows share these columns. Checked
+                  on the rows when a rule relies on it.
+                </td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>unit</code></th>
+                <td>
+                  what the values measure. Two columns can share an axis or be
+                  added only when their units match.
+                </td>
+                <td><span class="chip now-exists">exists</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>domain</code></th>
+                <td>
+                  the values a column can take:
+                  <code>Domain.discrete(levels)</code>, or
+                  <code>Domain.continuous([lo, hi])</code>, which is proposed
+                </td>
+                <td><span class="chip now-part">part</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Trait.ordered()</code></th>
+                <td>
+                  <code>HasOrder</code>: neighbors mean something, so a line or
+                  ribbon may join them
+                </td>
+                <td><span class="chip now-exists">exists</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Trait.cyclic()</code></th>
+                <td>
+                  <code>HasCycle</code>: the last level is next to the first
+                </td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Trait.diverging()</code></th>
+                <td>
+                  <code>HasMidpoint</code>: a stack over this key starts from
+                  the middle level
+                </td>
+                <td><span class="chip now-exists">exists</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Trait.canSum({ over })</code></th>
+                <td>
+                  <code>CanSum</code>: rows may be added when they differ only
+                  in the listed key columns. With no <code>over</code>, every
+                  key column.
+                </td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Trait.canAverage({ weight })</code></th>
+                <td>
+                  <code>CanAverage</code>: rows combine by a mean, weighted by
+                  the named column. With no weight, a plain mean.
+                </td>
+                <td><span class="chip now-proposed">proposed</span></td>
+              </tr>
+              <tr>
+                <th scope="row">nothing declared</th>
+                <td>unknown: the column passes every check</td>
+                <td><span class="chip now-exists">exists</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The seafood catch table, which about 30 story files draw from, fully
+          annotated. Its lake order is the lesson: the lakes lie along connected
+          rivers, so Lake A to Lake F is a real order, but nothing in the
+          strings shows it. Only a declaration can supply it.
+        </p>
+        <div class="label">
+          Schema <span class="draft">proposed, not run</span>
+        </div>
+        <div class="pair">
+          <div data-lang="js">
+            <pre
+              class="code"
+            ><code class="language-javascript">const Fish = Unit("fish");
+
+chart(seafood, {
+  // The identity: no two rows share a (lake, species) pair. Checked on the
+  // rows when a rule relies on it.
+  key: ["lake", "species"],
+  schema: {
+    // The lakes lie along connected rivers, so Lake A to Lake F is an order.
+    // The strings do not show it, so only this declaration can supply it.
+    // It allows a line or ribbon along lake.
+    lake: Unit({
+      domain: Domain.discrete([
+        "Lake A",
+        "Lake B",
+        "Lake C",
+        "Lake D",
+        "Lake E",
+        "Lake F",
+      ]),
+      traits: [Trait.ordered()],
+    }),
+    // Levels and no order. A ribbon along species is an error.
+    species: Unit({
+      domain: Domain.discrete(["Bass", "Trout", "Catfish", "Perch", "Salmon"]),
+    }),
+    // A count of fish. Each fish is caught once, in one lake, so the count
+    // adds over both key columns: canSum() with no `over` means every key.
+    count: { name: "Catch", unit: Fish, traits: [Trait.canSum()] },
+  },
+});</code></pre>
+          </div>
+          <div data-lang="py">
+            <pre class="code"><code class="language-python">Fish = Unit("fish")
+
+chart(
+    seafood,
+    key=["lake", "species"],
+    schema={
+        # The lakes lie along connected rivers, so Lake A to Lake F is an order.
+        "lake": Unit(
+            domain=Domain.discrete(
+                ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"]
+            ),
+            traits=[Trait.ordered()],
+        ),
+        # Levels and no order.
+        "species": Unit(
+            domain=Domain.discrete(["Bass", "Trout", "Catfish", "Perch", "Salmon"])
+        ),
+        "count": {"name": "Catch", "unit": Fish, "traits": [Trait.can_sum()]},
+    },
+)</code></pre>
+          </div>
+        </div>
+        <details class="today">
+          <summary>Today's spelling of the same order</summary>
+          <pre
+            class="code"
+          ><code class="language-javascript">const Fish = Unit("fish", { traits: [Trait.summable()] });
+
+chart(seafood, {
+  schema: {
+    // The lakes lie along connected rivers.
+    lake: Unit({
+      domain: Domain.discrete([
+        "Lake A",
+        "Lake B",
+        "Lake C",
+        "Lake D",
+        "Lake E",
+        "Lake F",
+      ]),
+      traits: [Trait.ordered()],
+    }),
+    count: { name: "Catch", unit: Fish },
+  },
+});</code></pre>
+          <p class="small">
+            Main accepts this. It was run without the <code>lake</code> order:
+            <code>BarStacked</code> and Area <code>Stacked</code> both draw. No
+            story declares the order today.
+          </p>
+        </details>
+        <p>
+          With this schema, <code>BarStacked</code> (spread by lake, stack by
+          species, <code>h: "count"</code>) passes. Pie
+          <code>Basic</code> passes: the rest key is <code>lake</code>, and
+          <code>count</code> sums over it. Area <code>Stacked</code> passes,
+          because a ribbon along <code>lake</code> needs
+          <code>HasOrder</code> and now has it. A ribbon along
+          <code>species</code> would be an error.
+        </p>
+      </section>
+
+      <h3>Clean fits</h3>
+      <div class="gallery">
+        <article class="card" id="ds-olympic-medals">
+          <div class="card-body">
+            <h3><code>olympicMedals</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">fits</span
+              ><span class="verdict v-none">60 rows</span>
+            </div>
+            <p class="lead">
+              The cleanest fit: a count that sums over every key, and an ordered
+              medal key.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Country_Code: "USA", Country_Name: "United States", Medal_Type: "Gold", Count: 46 }
+{ Country_Code: "JAM", Country_Name: "Jamaica", Medal_Type: "Gold", Count: 4 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>Country_Code</code>, <code>Medal_Type</code>. 20 countries.
+              <code>Country_Name</code> and <code>Country_Code</code> determine
+              each other.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(olympicMedals, {
+  key: ["Country_Code", "Medal_Type"],
+  schema: {
+    Medal_Type: Unit({
+      domain: Domain.discrete(["Gold", "Silver", "Bronze"]),
+      traits: [Trait.ordered()],
+    }),
+    Count: { name: "Medals", unit: "medals", traits: [Trait.canSum()] },
+  },
+});</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">chart(
+    olympic_medals,
+    key=["Country_Code", "Medal_Type"],
+    schema={
+        "Medal_Type": Unit(
+            domain=Domain.discrete(["Gold", "Silver", "Bronze"]),
+            traits=[Trait.ordered()],
+        ),
+        "Count": {"name": "Medals", "unit": "medals", "traits": [Trait.can_sum()]},
+    },
+)</code></pre>
+              </div>
+            </div>
+            <p class="note">
+              Today's spelling was run: <code>spread</code> by country,
+              <code>stack</code> by medal type, <code>h: "Count"</code>, with
+              <code>Medal_Type</code> ordered and <code>Count</code> summable.
+              It draws.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              Every stack and spread of <code>Count</code> passes. A ribbon
+              along <code>Medal_Type</code> passes too, since it has an order,
+              though a band between Gold and Silver means little. Order allows a
+              connector. Whether the connector means something is not a type
+              question.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">Nothing.</p>
+          </div>
+        </article>
+        <article class="card" id="ds-seafood">
+          <div class="card-body">
+            <h3><code>seafood</code> (catch)</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">fits</span
+              ><span class="verdict v-none">30 rows</span>
+            </div>
+            <p class="lead">
+              The lake order is real (connected rivers) and invisible in the
+              strings, so only a declaration supplies it. <code>species</code>
+              has no order.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ lake: "Lake A", species: "Bass", count: 23 }
+{ lake: "Lake D", species: "Bass", count: 12 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>lake</code>, <code>species</code>. A full grid: 6 lakes
+              times 5 species, no nulls. Imported by about 30 story files, more
+              than any other dataset.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <p class="lead">
+              The annotated schema at the top of this tab, in JS and Python.
+            </p>
+            <p class="note">
+              Today's spelling was run without the lake order:
+              <code>BarStacked</code> and Area <code>Stacked</code> draw.
+              Today's API accepts <code>Trait.ordered()</code> on the lake
+              levels.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>BarStacked</code>, <code>BarGrouped</code>,
+              <code>FacetedChart</code> and Pie <code>Basic</code> pass. The six
+              gallery stories that draw bands between lakes (Area
+              <code>Basic</code> and <code>Stacked</code>, Ribbon
+              <code>Basic</code> and <code>Polar</code>, Streamgraph
+              <code>Default</code>, "Area Chart With Flexible Gaps") and
+              LineChart <code>Default</code> are valid. They pass today as
+              undeclared and pass again once the order is declared. A ribbon
+              along <code>species</code> is an error once
+              <code>species</code> is declared. <code>CircleArea</code> with
+              <code>r: "count"</code> sets a radius from an amount, which is the
+              area lint of #972 (circles sized by area), not a type error.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              Nothing. This table is what the proposal was written for.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-fish-data">
+          <div class="card-body">
+            <h3><code>fishData</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">fits</span
+              ><span class="verdict v-none">30 rows</span>
+            </div>
+            <p class="lead">
+              A second copy of the catch table with other column names, and 28
+              of its 30 counts differ from <code>seafood</code>'s.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Lake: "Lake A", "Fish Type": "Bass", Count: 22 }
+{ Lake: "Lake A", "Fish Type": "Trout", Count: 30 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>Lake</code>, <code>Fish Type</code>. Used only by three
+              files in <code>src/tests/</code>.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(fishData, {
+  key: ["Lake", "Fish Type"],
+  schema: { Count: { name: "Catch", unit: Fish, traits: [Trait.canSum()] } },
+});</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">chart(
+    fish_data,
+    key=["Lake", "Fish Type"],
+    schema={"Count": {"name": "Catch", "unit": Fish, "traits": [Trait.can_sum()]}},
+)</code></pre>
+              </div>
+            </div>
+            <p class="note">Today's spelling: not run.</p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">The same as <code>seafood</code>.</p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              Nothing. Two copies that disagree is a data hygiene question, not
+              a typing one.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <h3>A partial order or a cycle that is not quite one</h3>
+      <div class="gallery">
+        <article class="card" id="ds-titanic">
+          <div class="card-body">
+            <h3><code>titanic</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">16 rows</span>
+            </div>
+            <p class="lead">
+              Already aggregated. <code>class</code> has a partial order: Crew
+              is not after Third.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ class: "First", sex: "Female", survived: "Yes", count: 141 }
+{ class: "First", sex: "Male", survived: "Yes", count: 62 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>class</code>, <code>sex</code>, <code>survived</code>. A
+              full 4 by 2 by 2 grid. Counts total 2,201, crew included.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <div class="pair">
+              <div data-lang="js">
+                <pre
+                  class="code"
+                ><code class="language-javascript">chart(titanic, {
+  key: ["class", "sex", "survived"],
+  schema: {
+    // First, Second and Third are ordered. Crew is not part of that order.
+    class: Unit({
+      domain: Domain.discrete(["First", "Second", "Third", "Crew"]),
+    }),
+    sex: Unit({ domain: Domain.discrete(["Female", "Male"]) }),
+    survived: Unit({ domain: Domain.discrete(["Yes", "No"]) }),
+    // People: each person is in one cell. Adds over every key.
+    count: { name: "People", unit: "people", traits: [Trait.canSum()] },
+  },
+});</code></pre>
+              </div>
+              <div data-lang="py">
+                <pre class="code"><code class="language-python">chart(
+    titanic,
+    key=["class", "sex", "survived"],
+    schema={
+        # First, Second and Third are ordered. Crew is not part of that order.
+        "class": Unit(domain=Domain.discrete(["First", "Second", "Third", "Crew"])),
+        "sex": Unit(domain=Domain.discrete(["Female", "Male"])),
+        "survived": Unit(domain=Domain.discrete(["Yes", "No"])),
+        "count": {"name": "People", "unit": "people", "traits": [Trait.can_sum()]},
+    },
+)</code></pre>
+              </div>
+            </div>
+            <p class="note">
+              Today's spelling was run: with <code>count</code> summable, the
+              <code>NestedMosaicChart</code> flow (three nested stacks, each
+              <code>size: field("count").normalize()</code>) draws.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>count</code> sums over every key, so every stack and
+              normalize passes the value rule. Read literally, the stack rule
+              rejects <code>NestedMosaicChart</code>, a stack inside a stack. It
+              should not: see the open problem on the Rules tab.
+              <code>IcicleChart</code>, <code>NestedWaffleChart</code> and
+              <code>SankeyTree</code> use the low-level combinators, so no
+              schema reaches them.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              Already aggregated, which works here because the cells are
+              disjoint and <code>count</code> counts people. It would fail for
+              "number of families", since a family can span cells. Declaring
+              <code>class</code> ordered would put Crew after Third.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-nightingale">
+          <div class="card-body">
+            <h3><code>nightingale</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">a story is wrong</span
+              ><span class="verdict v-none">36 rows</span>
+            </div>
+            <p class="lead">
+              The Rose story stacks square roots of deaths, and
+              <code>derive</code> hides it from every rule.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Month: "Jan", Type: "Other", Death: 324 }
+{ Month: "Jan", Type: "Wounds", Death: 83 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>Month</code>, <code>Type</code>: 12 months times 3 causes.
+              The values match calendar 1855 (not every value was checked).
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(nightingale, {
+  key: ["Month", "Type"],
+  schema: {
+    // Months of 1855. Ordered. Cyclic only as month-of-year: December 1855 is
+    // not followed by January 1855.
+    Month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.ordered()] }),
+    Type: Unit({ domain: Domain.discrete(["Disease", "Wounds", "Other"]) }),
+    // Deaths during the month: each death happens once, in one month, of one
+    // cause. Adds over both keys.
+    Death: { name: "Deaths", unit: "deaths", traits: [Trait.canSum()] },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run: the Rose spec in
+              <code>Coord.clock()</code>, with the story's
+              <code>derive</code> that takes
+              <code>Math.sqrt(Death)</code> before stacking, draws with no
+              error.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              Each wedge's radius is √a + √b + √c instead of √(a + b + c).
+              January's is 18 + 9 + 53 = 80 where it should be about 56. Under
+              the proposal <code>derive</code> makes the column unknown, so
+              nothing fires. The fix is the proposed
+              <code>Coord.clock({ radius: "area" })</code> with
+              <code>h: "Death"</code> and no derive.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              Whether <code>Month</code> is cyclic depends on whether it means
+              month-of-year or a month of 1855. The table has no year, so the
+              declaration decides. Only a closed line shows the difference.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <h3>Weights and folds</h3>
+      <div class="gallery">
+        <article class="card" id="ds-gapminder-countries">
+          <div class="card-body">
+            <h3><code>gapminderCountries</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">191 rows</span>
+            </div>
+            <p class="lead">
+              The weight for averaging life expectancy is in the table
+              (<code>Population</code>). The weight for fertility, women aged 15
+              to 49, is not.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Country: "Afghanistan", Region: "South Asia", FertilityRate: 7.81, LifeExpectancy: 51, Population: 19701940 }
+{ Country: "Albania", Region: "Europe &amp; Central Asia", FertilityRate: 2.47, LifeExpectancy: 74.2, Population: 3121965 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead"><code>Country</code>. 6 regions, no nulls.</p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">const Persons = Unit("persons");
+
+chart(gapminderCountries, {
+  key: ["Country"],
+  schema: {
+    Region: Unit({ domain: Domain.discrete(regions) }),
+    // Adds over countries.
+    Population: { unit: Persons, traits: [Trait.canSum()] },
+    // Years lived per person born: a mean over persons, so the population is
+    // the weight (strictly, births; population is close).
+    LifeExpectancy: {
+      name: "Life expectancy",
+      unit: "years",
+      traits: [Trait.canAverage({ weight: "Population" })],
+    },
+    // Births per woman. The right weight is women aged 15 to 49, which is not
+    // in the table. With no weight this means a plain mean, which is wrong for
+    // a region.
+    FertilityRate: { name: "Fertility rate", unit: "births/woman" },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling: not run. Today's error for a region bar of
+              <code>LifeExpectancy</code> would suggest an unweighted
+              <code>.mean()</code>, under which India and the Maldives count the
+              same.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>EncloseShapes</code> draws one dot per row, so no fold
+              happens. A bar of <code>LifeExpectancy</code> per region would
+              elaborate to the population-weighted mean. A bar of
+              <code>FertilityRate</code> per region would be an error that asks
+              for a weight, which is right, and this table cannot answer it.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              The weight the unit asks for ("per woman") is not a column. The
+              rule that the weight must be a summable column in the
+              denominator's unit correctly refuses <code>Population</code>, so
+              the honest answer left is "you cannot average this".
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-seattle-weather">
+          <div class="card-body">
+            <h3><code>seattleWeather</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">a gallery story is wrong</span
+              ><span class="verdict v-none">1,461 rows</span>
+            </div>
+            <p class="lead">
+              The gallery story "Seattle Highs by Day of the Week" draws bars of
+              °C from 0, so the <code>HasZero</code> rule rejects it.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ date: "2012-01-01T00:00:00.000Z", precipitation: 0, temp_max: 12.8, temp_min: 5, wind: 4.7, weather: "drizzle" }
+{ date: "2012-01-02T00:00:00.000Z", precipitation: 10.9, temp_max: 10.6, temp_min: 2.8, wind: 4.5, weather: "rain" }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>date</code>: every day of 2012 to 2015. All dates parse.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">// No HasZero: 0 °C is not "no temperature". The proposal has no spelling for
+// this yet (#1051), so the comment carries it.
+const Celsius = Unit("°C");
+
+chart(seattleWeather, {
+  key: ["date"],
+  schema: {
+    date: Unit.time(),
+    // Rain during the day: a flow. Adds over days, so a month's total is valid.
+    precipitation: { unit: "mm", traits: [Trait.canSum()] },
+    // The day's high and low. Average them.
+    temp_max: {
+      name: "Max temperature",
+      unit: Celsius,
+      traits: [Trait.canAverage()],
+    },
+    temp_min: {
+      name: "Min temperature",
+      unit: Celsius,
+      traits: [Trait.canAverage()],
+    },
+    // The day's mean wind speed.
+    wind: { name: "Wind speed", unit: "m/s", traits: [Trait.canAverage()] },
+    weather: Unit({
+      domain: Domain.discrete(["drizzle", "rain", "sun", "snow", "fog"]),
+    }),
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run. <code>WeekdayTemperature</code> (<code
+                >h: field("temp_max").mean()</code
+              >) draws. Without the <code>.mean()</code> it throws "cannot be
+              summed ... average them instead", and following that advice gives
+              the same story. Monthly totals of <code>precipitation</code> draw.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>WeekdayTemperature</code> is rejected: its bars measure from
+              0 °C, so a 15 °C day looks half as hot as a 30 °C day. The
+              "Seattle Rain by Month" stories are valid. "Seattle Rain on a Time
+              Axis" gets the key-sized lint of section 9.
+              <code>CalendarHeatmap</code>
+              colors one row per cell and passes.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              <code>temp_max</code> and <code>temp_min</code> are two columns of
+              one quantity. An <code>unpivot</code> would make them a key with
+              levels max and min. They should not be stacked.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-gender-pay-gap">
+          <div class="card-body">
+            <h3><code>genderPayGap</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">10 rows</span>
+            </div>
+            <p class="lead">
+              A wide table of five order statistics. None of them sums or
+              averages.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Gender: "Male", "Pay Grade": "Five", Median: 94000, "75-Percentile": 97000, "25-Percentile": 92000, Max: 103000, Min: 85000 }
+{ Gender: "Female", "Pay Grade": "Five", Median: 83000, "75-Percentile": 86000, "25-Percentile": 82000, Max: 95000, Min: 70000 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>Gender</code>, <code>Pay Grade</code>. Every row satisfies
+              Min ≤ 25th ≤ Median ≤ 75th ≤ Max.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">// Order statistics of a distribution of pay. None of them sums, and none of
+// them averages: the mean of two medians is not a median.
+const pay = { name: "Pay", unit: "USD" };
+
+chart(genderPayGap, {
+  key: ["Gender", "Pay Grade"],
+  schema: {
+    Gender: Unit({ domain: Domain.discrete(["Male", "Female"]) }),
+    "Pay Grade": Unit({
+      domain: Domain.discrete(["One", "Two", "Three", "Four", "Five"]),
+      traits: [Trait.ordered()],
+    }),
+    Min: pay,
+    "25-Percentile": pay,
+    Median: pay,
+    "75-Percentile": pay,
+    Max: pay,
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run (the <code>BoxPlot</code> story's own
+              schema). The box draws. A bar of <code>Median</code> per pay grade
+              throws "cannot be summed ... average them instead". The error is
+              right and the advice is wrong: a mean of medians is not a median.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The box plot reads each column as a position of one row, so no
+              fold happens. Passes.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              The column names are levels of a hidden key (the quantile), which
+              <code>unpivot</code> would make. A value that neither sums nor
+              averages has no positive type, so the error cannot say "this is an
+              order statistic".
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <h3>A value that belongs to a coarser key</h3>
+      <div class="gallery">
+        <article class="card" id="ds-catch-locations">
+          <div class="card-body">
+            <h3><code>catchDataWithLocations</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">30 rows</span>
+            </div>
+            <p class="lead">
+              <code>x</code> and <code>y</code> belong to the lake and are
+              copied onto every species row, with no join to remember that.
+            </p>
+            <div class="label">Two rows</div>
+            <p class="lead">
+              The catch rows with each lake's <code>x</code> and
+              <code>y</code> added (<code>catchLocationsArray</code> has one row
+              per lake).
+            </p>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>lake</code>, <code>species</code>. <code>x</code> and
+              <code>y</code> depend on <code>lake</code> alone.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">// x and y belong to the lake, not to the (lake, species) row.
+chart(catchDataWithLocations, {
+  key: ["lake", "species"],
+  schema: {
+    count: { unit: Fish, traits: [Trait.canSum()] },
+    x: { unit: "map units" }, // no canSum: a position
+    y: { unit: "map units" },
+  },
+});</code></pre>
+            <p class="note">Today's spelling: not run.</p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>Scatter</code>
+              <code>WithPieGlyphsDenormalized</code> scatters by
+              <code>lake</code> with <code>x: "x"</code>. A position fold is a
+              mean, and the mean of five equal copies is the value, so it
+              passes. A <code>scatter</code> without <code>by</code> would stack
+              five points on each lake, and no rule says why.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              There is no way to say that <code>x</code> depends only on
+              <code>lake</code>. The proposal finds that only after a
+              <code>join</code>.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-country-populations">
+          <div class="card-body">
+            <h3><code>countryPopulations</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">70 rows</span>
+            </div>
+            <p class="lead">
+              <code>uncertainty</code> belongs to the region and repeats on
+              every country, so summing it counts it about five times.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ continent: "Asia", region: "East Asia", country: "China", pop: 1410, uncertainty: 1 }
+{ continent: "Africa", region: "East Africa", country: "Mozambique", pop: 34, uncertainty: 8 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>country</code>. 4 continents, 13 regions.
+              <code>continent</code> and <code>uncertainty</code> are functions
+              of <code>region</code>.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(countryPopulations, {
+  key: ["country"],
+  schema: {
+    continent: Unit({ domain: Domain.discrete(continents) }),
+    region: Unit({ domain: Domain.discrete(regions) }),
+    // Population in millions. Adds over countries.
+    pop: {
+      name: "Population",
+      unit: "million people",
+      traits: [Trait.canSum()],
+    },
+    // A made-up spread per region, in percent, copied onto every country of
+    // the region. It belongs to the region. There is no spelling for that.
+    uncertainty: { name: "Uncertainty", unit: "%" },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run. <code>VoronoiTreemap</code>
+              <code>SliceThenDice</code> draws. A bar of
+              <code>uncertainty</code> per region, with % declared summable,
+              draws and adds 5 copies per region on average: 324 over all rows
+              against 60 over regions.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The treemaps (continent, then region, then country, sized by
+              <code>pop</code>) pass. <code>BubbleTreemap</code>
+              <code>Uncertainty</code> reads <code>padding: "uncertainty"</code>
+              once per region, and the copies agree, so it passes the "must
+              agree across the group" rule. The rule is right.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              <code>uncertainty</code> depends only on <code>region</code> in a
+              table that never went through a <code>join</code>. The row check
+              finds it, but the user cannot declare it. <code>pop</code> is in
+              millions and <code>gapminderCountries.Population</code> in
+              persons, two units that clash with no conversion.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-titanic-passengers">
+          <div class="card-body">
+            <h3><code>titanicPassengers</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">key lost in parsing</span
+              ><span class="verdict v-none">1,309 rows</span>
+            </div>
+            <p class="lead">
+              <code>fare</code> is per ticket, so summing it over passengers
+              gives 43,550 instead of 19,303. The parser drops
+              <code>ticket</code>, so no <code>over</code> can name it.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ survived: 1, pclass: 1, sex: "female", fare: 211.3375, class: "First", alive: "yes", age: "29" }
+{ survived: 0, pclass: 3, sex: "male", fare: 7.225, class: "Third", alive: "no", age: "20" }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              None after parsing: 221 rows are exact copies of another row. In
+              the raw JSON, <code>name</code>, <code>ticket</code> is unique.
+              <code>pclass</code> and <code>class</code> say the same thing, as
+              do <code>survived</code> and <code>alive</code>.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>, on the raw
+              file
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(titanicRaw, {
+  key: ["name", "ticket"],
+  schema: {
+    pclass: Unit({
+      domain: Domain.discrete([1, 2, 3]),
+      traits: [Trait.ordered()],
+    }),
+    sex: Unit({ domain: Domain.discrete(["female", "male"]) }),
+    survived: Unit({ domain: Domain.discrete([0, 1]) }),
+    // Years. Averages. Stored as text, with "" for missing.
+    age: { unit: "years", traits: [Trait.canAverage()] },
+    // The price of the whole ticket, repeated on every passenger who shared
+    // it. It adds over tickets, not over passengers.
+    fare: { unit: "GBP", traits: [Trait.canSum({ over: "ticket" })] },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling: not run. With no <code>ticket</code> column, a
+              summable GBP would sum fares per passenger with no error.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The atom stories count passengers, and a count sums over every
+              key, so they pass. A sum of <code>fare</code> per class would
+              double count: 216 tickets cover 596 passengers. The row check
+              would catch it, but only on the raw file.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              Data preparation removed the key the type needs, and no
+              declaration on the parsed rows can repair that. One fare is a
+              made-up stand-in, and a column with imputed values has no marker.
+              <code>age</code> is a number stored as text.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <h3>Times, orders and categories stored as numbers</h3>
+      <div class="gallery">
+        <article class="card" id="ds-driving-shifts">
+          <div class="card-body">
+            <h3><code>drivingShifts</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">silent bug today</span
+              ><span class="verdict v-none">55 rows</span>
+            </div>
+            <p class="lead">
+              <code>year</code> is a number, and declaring it
+              <code>Unit.time()</code> today silently reads 1956 as 1.956
+              seconds after 1970.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ side: "left", year: 1956, miles: 3675, gas: 2.38 }
+{ side: "right", year: 1957, miles: 3706, gas: 2.4 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead"><code>year</code>, 1956 to 2010 with no gaps.</p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(drivingShifts, {
+  key: ["year"],
+  schema: {
+    year: { unit: "year", traits: [Trait.ordered()] },
+    // Miles driven per person in a year. A rate per person: its weight is the
+    // population, which is not in the table.
+    miles: {
+      name: "Miles driven per person",
+      unit: "mi/person",
+      traits: [Trait.canAverage()],
+    },
+    // Gas price per gallon, inflation adjusted. Its weight is gallons sold.
+    gas: { name: "Gas price", unit: "USD/gal", traits: [Trait.canAverage()] },
+    // Where to put the year's label in the connected scatter. Not data.
+    side: Unit({ domain: Domain.discrete(["left", "right", "top", "bottom"]) }),
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run. The connected scatter draws. With
+              <code>year: Unit.time()</code> it also draws, with no error, and
+              the x axis reads "12:00:01 AM, 12:00:02 AM, 12:00:03 AM".
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The connected scatter's line runs along <code>year</code>, which
+              has an order. Passes. <code>FacetedChart</code> spreads by
+              <code>side</code>, a label hint. That passes every rule and means
+              nothing, and types cannot catch it.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              The weights are not in the table. A number cannot be declared a
+              year, and <code>Unit.time()</code> accepting a number is a bug
+              today, not only a gap.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-category-brands">
+          <div class="card-body">
+            <h3><code>categoryBrands</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">a rule is wrong here</span
+              ><span class="verdict v-none">1,975 rows</span>
+            </div>
+            <p class="lead">
+              A top-N list: a missing brand is not a zero, so "a missing pair is
+              zero" is wrong here.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ year: 2000, name: "Coca-Cola", category: "Beverages", value: 72537 }
+{ year: 2010, name: "Gillette", category: "FMCG", value: 23298 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>year</code>, <code>name</code>. 75 rows in 2000 and 100 in
+              every later year. Only 37 of 173 brands appear in all 20 years.
+              <code>category</code> is a function of <code>name</code>.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">const USDMillion = Unit("USD million");
+
+chart(categoryBrands, {
+  key: ["year", "name"],
+  schema: {
+    year: { unit: "year", traits: [Trait.ordered()] }, // a number with an order
+    name: Unit({ domain: Domain.discrete(brandNames) }),
+    category: Unit({ domain: Domain.discrete(categories) }), // a function of name
+    // A brand's value on January 1st: a reading at a point in time. It adds
+    // over brands (the value of a portfolio) but not over years.
+    value: {
+      name: "Brand value",
+      unit: USDMillion,
+      traits: [Trait.canSum({ over: "name" })],
+      // or, the open second spelling:
+      // traits: [Trait.canSum(), Trait.snapshot({ along: "year" })],
+    },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run. One frame of the race draws. A bar per
+              brand over all years draws too and adds up to 20 yearly values.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>BarChartRace</code> splits by year, then by name, so the
+              rest key is empty and it passes. A bar per brand over all years
+              becomes an error that offers <code>.last()</code> or
+              <code>.mean()</code>.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              The table was truncated before GoFish saw it, and nothing in the
+              schema can say so. A total per year is the total of the top 100.
+              <code>year</code> is a number.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-birds">
+          <div class="card-body">
+            <h3><code>birds</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">26,280 rows</span>
+            </div>
+            <p class="lead">
+              <code>day</code> is a day of the year, and closing the loop is
+              right: day 365 lies 0.03° from day 1.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ day: 1, lon: -101.642, lat: 24.843, species: "Townsend_s_Warbler" }
+{ day: 2, lon: -101.605, lat: 24.784, species: "Townsend_s_Warbler" }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>species</code>, <code>day</code>: 72 species times 365 days,
+              no gaps.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">const Degree = Unit("°");
+
+chart(birds, {
+  key: ["species", "day"],
+  schema: {
+    species: Unit({ domain: Domain.discrete(birdSpecies) }),
+    // Day of the year, 1 to 365. Cyclic: day 365 is next to day 1. The proposal
+    // has no spelling for a numeric domain with a cycle, so this is a guess.
+    day: {
+      domain: Domain.continuous([1, 366]),
+      traits: [Trait.ordered(), Trait.cyclic()],
+    },
+    lon: { name: "Longitude", unit: Degree },
+    lat: { name: "Latitude", unit: Degree },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run: one species' path, with
+              <code>lon</code> and <code>lat</code> in degrees, draws.
+              <code>day</code> cannot be declared ordered today, because
+              <code>Trait.ordered()</code> needs <code>Domain.discrete</code>.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              <code>A_StaticLines</code> passes: the line runs along
+              <code>day</code>. The median distance between day 365 and day 1 is
+              0.029°, against a median daily step of 0.187°, so closing each
+              path is right. It is the first real example in the repo of a
+              closed line along a data key.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              A numeric key with an order and a cycle. The proposal only shows
+              <code>cyclic</code> on a discrete month.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-caltrain">
+          <div class="card-body">
+            <h3><code>caltrain</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">1,436 rows</span>
+            </div>
+            <p class="lead">
+              <code>Time</code> is minutes after midnight, and it runs past
+              1,440 for trains after midnight.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Train: "237N", Direction: "northbound", Type: "Local", Station: "Tamien", Time: 573 }
+{ Train: "237N", Direction: "northbound", Type: "Local", Station: "San Jose", Time: 580 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>Train</code>, <code>Station</code>: 90 trains, 29 stations.
+              <code>Direction</code> and <code>Type</code> are functions of
+              <code>Train</code>.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(caltrain, {
+  key: ["Train", "Station"],
+  schema: {
+    Train: Unit({ domain: Domain.discrete(trainIds) }), // an id, no order
+    Direction: Unit({ domain: Domain.discrete(["northbound", "southbound"]) }),
+    Type: Unit({ domain: Domain.discrete(["Local", "Limited", "Bullet"]) }),
+    // Stations in order along the line, south to north. Not cyclic: the line ends.
+    Station: Unit({
+      domain: Domain.discrete(caltrainStopOrder),
+      traits: [Trait.ordered()],
+    }),
+    // Minutes after midnight. Runs to 1,532 for trains after midnight, so it is
+    // a time of day unrolled past 24 hours, not a clock time.
+    Time: { name: "Departure", unit: "minutes after midnight" },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling: not run. The <code>StringlineChart</code> story
+              uses the low-level combinators and never calls
+              <code>chart(data)</code>.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              A stringline is a <code>line</code> per train along
+              <code>Station</code>, which has an order. Passes.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              <code>Unit.time()</code> would read 573 as 0.573 seconds after
+              1970. A time of day has a 1,440-minute cycle, but this data
+              unrolls it past midnight on purpose, so
+              <code>Trait.cyclic()</code> would be wrong, and nothing says "a
+              time of day, not wrapped".
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-streamgraph-data">
+          <div class="card-body">
+            <h3><code>streamgraphData</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">50 rows</span>
+            </div>
+            <p class="lead"><code>c</code> is a category coded as a number.</p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ x: 0, y: 28, c: 0 }
+{ x: 0, y: 20, c: 1 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>x</code>, <code>c</code>: 10 x values times 5 series.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(streamgraphData, {
+  key: ["x", "c"],
+  schema: {
+    x: { traits: [Trait.ordered()] }, // a number used as an ordered key
+    // A series id written as a number. No order, no sum.
+    c: Unit({ domain: Domain.discrete([0, 1, 2, 3, 4]) }),
+    y: { traits: [Trait.canSum()] },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run: Area <code>Layered</code>'s flow, with
+              <code>c</code> declared discrete, draws.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The ribbons run along <code>x</code>, a number, so they pass if
+              numbers have an order. Declaring <code>c</code> discrete makes its
+              color categorical, which is right.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              A category and an ordered key, both written as numbers.
+              <code>x</code> has no unit and no meaning beyond its order.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-new-car-colors">
+          <div class="card-body">
+            <h3><code>newCarColors</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-def">fits, with a gap</span
+              ><span class="verdict v-none">160 rows</span>
+            </div>
+            <p class="lead">
+              Two candidate keys: a rank is a key inside a year.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Color: "White (solid+pearl)", Year: 2000, Rank: 2 }
+{ Color: "Red", Year: 2000, Rank: 4 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              <code>Color</code>, <code>Year</code>, and also <code>Year</code>,
+              <code>Rank</code>. 10 colors, 16 years.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(newCarColors, {
+  key: ["Color", "Year"], // also a key: ["Year", "Rank"]
+  schema: {
+    Color: Unit({ domain: Domain.discrete(colors) }),
+    Year: { unit: "year", traits: [Trait.ordered()] },
+    // A rank among the colors of one year: ordered, 1 is first. It does not
+    // sum, and a mean rank is a different statistic.
+    Rank: {
+      domain: Domain.discrete([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]),
+      traits: [Trait.ordered()],
+    },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling: not run. The <code>BumpChart</code> story uses
+              the low-level combinators.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              A bump chart is a <code>line</code> per color along
+              <code>Year</code>, which has an order. Passes.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              <code>key</code> takes one list, and the second key is what makes
+              a bump chart work: each year has exactly one color per rank.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <h3>No key at all</h3>
+      <div class="gallery">
+        <article class="card" id="ds-penguins">
+          <div class="card-body">
+            <h3><code>penguins</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-err">no key</span
+              ><span class="verdict v-none">344 rows</span>
+            </div>
+            <p class="lead">
+              Per-penguin measurements can both sum and average, which leaves
+              the default fold open.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ Species: "Adelie", Island: "Torgersen", "Beak Length (mm)": 39.1, "Beak Depth (mm)": 18.7, "Flipper Length (mm)": 181, "Body Mass (g)": 3750, Sex: "MALE" }
+{ Species: "Chinstrap", Island: "Dream", "Beak Length (mm)": 42.4, "Beak Depth (mm)": 17.3, "Flipper Length (mm)": 181, "Body Mass (g)": 3600, Sex: "FEMALE" }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              None. Two rows have every measurement null. <code>Sex</code> is
+              null in 10 rows and <code>"."</code> in 1.
+              <code>MarginalHistogram</code> makes its own key from the row
+              index.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">const mm = Unit("mm");
+
+chart(penguins, {
+  // no key: one row per penguin, with no id
+  schema: {
+    Species: Unit({
+      domain: Domain.discrete(["Adelie", "Chinstrap", "Gentoo"]),
+    }),
+    Island: Unit({ domain: Domain.discrete(["Torgersen", "Biscoe", "Dream"]) }),
+    // "." is a data error. Null is "not recorded".
+    Sex: Unit({ domain: Domain.discrete(["MALE", "FEMALE"]) }),
+    // Measurements of one penguin. Averaging is what anyone means; a sum of
+    // beak lengths is a valid number that nobody wants.
+    "Beak Length (mm)": { unit: mm, traits: [Trait.canAverage()] },
+    "Beak Depth (mm)": { unit: mm, traits: [Trait.canAverage()] },
+    "Flipper Length (mm)": { unit: mm, traits: [Trait.canAverage()] },
+    // Mass both sums (the mass of a group) and averages. Which is the default?
+    "Body Mass (g)": {
+      unit: "g",
+      traits: [Trait.canAverage(), Trait.canSum()],
+    },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling was run. The <code>Filter</code> scatter, colored
+              by a declared <code>Sex</code>, draws, and the stray values are
+              not checked. <code>spread({ by: "Sex" })</code> throws a correct
+              error that prints the nulls as <code>undefined</code>. A bar of
+              body mass per species with no fold throws and suggests
+              <code>.mean()</code>, which is right here.
+            </p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The <code>Partition</code> histograms count rows per bin, and a
+              count sums over every key. <code>Noise</code>,
+              <code>Separate</code>, <code>Filter</code> and
+              <code>MarginalHistogram</code> place one dot per row. All pass.
+              <code>Island</code> has no order, so a ribbon along it would be an
+              error once declared.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              No key, so the static rules have nothing to read. Both folds hold
+              for body mass. <code>Sex</code> has two kinds of missing, and the
+              proposal says nothing about a null value inside a fold.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-dense-masses">
+          <div class="card-body">
+            <h3><code>denseMasses</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-err">no key</span
+              ><span class="verdict v-none">1,000 rows</span>
+            </div>
+            <p class="lead">
+              Individuals with no id. There is no spelling for "one row per
+              thing, no id column".
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ group: "A", mass: 3775 }
+{ group: "B (bimodal)", mass: 4700 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              None. Masses are on a 25 g grid, so 735 rows are exact copies of
+              another row. Each row is one made-up individual.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(denseMasses, {
+  // no key: one row per individual, with no id
+  schema: {
+    group: Unit({
+      domain: Domain.discrete(["A", "B (bimodal)", "C (skewed)"]),
+    }),
+    mass: { name: "Mass", unit: "g", traits: [Trait.canAverage()] },
+  },
+});</code></pre>
+            <p class="note">Today's spelling: not run.</p>
+            <div class="label">Allowed and rejected</div>
+            <p class="lead">
+              The <code>Noise</code> stories place every row as a dot, so no
+              fold happens and nothing is checked.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              Duplicate rows that are different individuals. An implicit row key
+              would say it.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <h3>Not a flat table</h3>
+      <div class="gallery">
+        <article class="card" id="ds-energy">
+          <div class="card-body">
+            <h3><code>energy</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-none">out of scope</span
+              ><span class="verdict v-none">48 nodes, 68 links</span>
+            </div>
+            <p class="lead">
+              A graph, not a table. Adding every link counts energy 2.77 times.
+            </p>
+            <div class="label">Two links</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ source: 0, target: 1, value: 124.729 }
+{ source: 1, target: 2, value: 0.597 }</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              Links: <code>source</code>, <code>target</code>, which index into
+              <code>nodes</code>. Node names are unique.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed sketch, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(energy.links, {
+  key: ["source", "target"],
+  schema: {
+    // Energy flowing along one link, in TWh. It adds over the links that cross
+    // one cut of the graph, not over all links.
+    value: { unit: "TWh", traits: [Trait.canSum()] },
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling: not run. No story, test or doc uses this
+              dataset.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              <code>canSum()</code> is wrong, and <code>over</code> cannot say
+              what is right. 14 nodes are both a source and a target, so the sum
+              over all links (7,856 TWh) is 2.77 times what leaves the sources
+              (2,841 TWh). The proposal's <code>HasNeighbors</code> would need
+              this as its example.
+            </p>
+          </div>
+        </article>
+        <article class="card" id="ds-world110m">
+          <div class="card-body">
+            <h3><code>world110m</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-none">out of scope</span
+              ><span class="verdict v-none">287 rings</span>
+            </div>
+            <p class="lead">
+              Geo shapes: a row is a ring of points, and the vocabulary has
+              nothing for it.
+            </p>
+            <div class="label">Two rows</div>
+            <pre
+              class="code plain"
+            ><code class="nohighlight">{ id: "4", ring: [[61.21, 35.65], [62.23, 35.27], ...] }   // 69 points
+{ id: "24", ring: [[16.33, -5.88], ...] }                   // 66 points</code></pre>
+            <div class="label">Key (checked)</div>
+            <p class="lead">
+              None. <code>id</code> repeats for 30 of 175 countries, since a
+              country with islands has several rings.
+            </p>
+            <div class="label">
+              Schema <span class="draft">proposed, not run</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(world110m, {
+  // no key: one row per ring
+  schema: {
+    // ISO 3166-1 numeric code, as text. An id: no order, no sum.
+    id: Unit({ domain: Domain.discrete(isoCodes) }),
+    // ring: a closed list of [lon, lat] points in degrees. Not a column type.
+  },
+});</code></pre>
+            <p class="note">
+              Today's spelling: not run. The story declares nothing.
+            </p>
+            <div class="label">Where the vocabulary does not fit</div>
+            <p class="lead">
+              A geometry column. Ring areas are not country areas unless the
+              projection is equal-area, which the <code>Coord.geo</code> lint
+              already covers.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <section class="prose wide">
+        <h2>What typing the datasets taught us</h2>
+        <h3>Vocabulary gaps, ranked by how many datasets hit them</h3>
+        <ol>
+          <li>
+            <strong>Times and orders stored as numbers</strong> (7 datasets).
+            There is no spelling for "this number is a year" or "this number has
+            an order but no sum". <code>Trait.ordered()</code> needs
+            <code>Domain.discrete</code>, and <code>Unit.time()</code> reads a
+            number as milliseconds since 1970 with no error (run).
+          </li>
+          <li>
+            <strong
+              >A value that belongs to a coarser key in a flat table</strong
+            >
+            (4). The proposal catches this only after a <code>join</code>. A
+            spelling such as <code>{ unit, key: "region" }</code> on the column
+            would say it.
+          </li>
+          <li>
+            <strong>No key at all</strong> (4). An implicit row key, where each
+            row is its own thing, would make the static rules work. It is what
+            <code>canSum()</code> already assumes.
+          </li>
+          <li>
+            <strong>Weights that are not in the table</strong> (3).
+            <code>canAverage()</code> with no weight then claims equal weights,
+            which the data cannot back.
+          </li>
+          <li>
+            <strong>Pre-aggregated statistics with no fold</strong> (2). A
+            median neither sums nor averages, and the error's advice needs to
+            know that.
+          </li>
+          <li>
+            <strong>Cycles that are not quite cycles</strong> (3): months of
+            1855, a real day-of-year cycle, and a time of day unrolled past
+            midnight.
+          </li>
+          <li>
+            <strong>Wide tables</strong> (2). <code>unpivot</code> covers both.
+          </li>
+          <li><strong>Shapes and graphs</strong> (2). Out of scope.</li>
+          <li>
+            <strong>Two candidate keys</strong> (1). <code>key</code> takes one
+            list.
+          </li>
+          <li>
+            <strong>A partial order</strong> (1). Crew is not in the order of
+            First, Second and Third.
+          </li>
+        </ol>
+        <h3>Rules that look wrong on real data</h3>
+        <ul>
+          <li>
+            <strong
+              >"A missing pair is zero if the value sums and has a zero"</strong
+            >
+            is wrong for the top-N <code>categoryBrands</code>. Whether a
+            missing pair is zero is a fact about how the table was made. The
+            Keys tab now makes the default a gap.
+          </li>
+          <li>
+            <strong
+              >The stack rule, read literally, flags
+              <code>NestedMosaicChart</code>.</strong
+            >
+            Recorded as an open problem on the Rules tab, with a suggested
+            exemption.
+          </li>
+          <li>
+            <strong
+              ><code>derive</code> hides a real error in the Rose story.</strong
+            >
+            If <code>derive</code> kept a column's type by name (one reading of
+            #999, which asks how column types pass through <code>derive</code>),
+            the stack would pass <code>canSum</code> and still be wrong.
+          </li>
+          <li>
+            <strong
+              >No default fold when a column has both <code>canSum</code> and
+              <code>canAverage</code>.</strong
+            >
+            Now a decision.
+          </li>
+        </ul>
+        <h3>Existing stories the rules would reject</h3>
+        <p>Only once the relevant column is declared.</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Story</th>
+                <th scope="col">Rule</th>
+                <th scope="col">Right?</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  Bin <code>WeekdayTemperature</code> (gallery)
+                </th>
+                <td><code>HasZero</code>: a bar of °C from 0 (#1051)</td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <th scope="row">Bin "Seattle Rain on a Time Axis"</th>
+                <td>the key-sized lint (section 9)</td>
+                <td>A lint. Months differ by up to 3 days, about 10%.</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>NestedMosaicChart</code></th>
+                <td>a stack outside a stack</td>
+                <td>No. A false positive of the literal rule.</td>
+              </tr>
+              <tr>
+                <th scope="row">Pie <code>Rose</code></th>
+                <td>none fires</td>
+                <td>A miss. The story is wrong and no rule sees it.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The six gallery stories that draw bands between lakes and LineChart
+          <code>Default</code> are valid, since the lakes lie in river order.
+          They pass today as undeclared and again once the order is declared.
+          Ribbon <code>Polar</code> is valid too: <code>lake</code> is ordered
+          but not cyclic, and its ribbon stays open rather than closing around
+          the turn, which is the case the scoped key and coord lint on the Rules
+          tab is designed to leave silent.
+        </p>
+      </section>
+    </section>
     <section class="panel" data-panel="additivity" hidden>
       <section class="prose wide">
         <h2>Additivity: three ways to declare it</h2>
@@ -4510,6 +6200,17 @@ chart(
           <code>Trait.canAverage()</code> with no weight is a plain mean, which
           suits temperatures.
         </p>
+        <h3>A column with both traits</h3>
+        <p>
+          A measurement of an individual can do both. Penguin body mass sums
+          (the mass of a group) and averages (the mean mass of a group). The
+          rules fill in a size channel's fold from the one trait a column has,
+          and say nothing when it has two. The choices are the sum, the mean, or
+          an error that offers both. This is an open decision. In the dataset
+          schemas I left <code>canSum</code> off beak lengths, which makes the
+          declaration a statement of what the author means rather than of what
+          the physics allows.
+        </p>
         <h3>Overlap check</h3>
         <ul>
           <li>
@@ -4774,6 +6475,24 @@ chart(
             </tbody>
           </table>
         </div>
+        <p class="note">
+          <strong
+            >Open problem: the stack rule, read literally, rejects the Nested
+            Mosaic story.</strong
+          >
+          <code>NestedMosaicChart</code> stacks <code>class</code> on y around a
+          stack of <code>sex</code> on x, each with
+          <code>size: field("count").normalize()</code>. Read literally, the
+          Stack row says each child must be one length along <code>dir</code>,
+          and a stack of several lengths has an extent but no amount. But here
+          the outer stack sets each child's length from its own
+          <code>size</code> option, so it never reads the child's extent, and
+          the picture is right. The suggested exemption: a stack whose
+          <code>size</code> option gives each child's length does not read the
+          child's extent, so the "one length" condition does not apply to it.
+          The rule above is not changed yet. This is a reading of the rule's
+          text, not the output of a checker.
+        </p>
         <h3>Data helpers and field methods</h3>
         <div class="table-wrap">
           <table>
@@ -5030,8 +6749,9 @@ chart(
                 </td>
                 <td>a band</td>
                 <td>
-                  a missing pair is zero if the value has
-                  <code>CanSum</code> and <code>HasZero</code>. Otherwise a gap.
+                  a gap at a missing pair. Zero only if the value has
+                  <code>CanSum</code> and <code>HasZero</code> and the table is
+                  declared complete (open: a top-N table is not)
                 </td>
                 <td><span class="chip now-no">no</span></td>
               </tr>
@@ -5333,6 +7053,438 @@ chart(
           The check runs in two directions. Types and the key context flow down
           the pipeline. Space facts flow back up from the marks, and the coord
           is checked against them. Then the solved traits fill in the defaults.
+        </p>
+        <h2>What a rule gives: the space side</h2>
+        <p>
+          Notes from a design conversation on 11-13 proposed typing each layout
+          operator by the structure it keeps, read once on the data side and
+          once on the space side. A check against this proposal and the engine
+          found most of the ideas already here under other names, one real bug,
+          and six rules worth adopting. Each claim is marked run (a probe story
+          was rendered), read (from the code) or reasoning. Sources:
+          <code>research/notes-2026-11-13-space-types.md</code> and
+          <code>research/space-types-check.md</code>.
+        </p>
+        <ul>
+          <li>
+            <strong>Space type.</strong> What a layout makes of the data on
+            screen. In the engine it is each node's
+            <code>UnderlyingSpace</code> on each axis.
+          </li>
+          <li>
+            <strong>Origin state.</strong> The engine's one fact about where a
+            continuous axis's data 0 sits: <code>pinned</code> (data 0 is
+            placed, so positions mean something), <code>free</code> (a length
+            whose baseline a parent has not placed yet), or <code>none</code>
+            (only differences mean something).
+          </li>
+          <li>
+            <strong>Mirrored.</strong> A flag on a continuous space whose two
+            sides of 0 both hold nonnegative amounts, as in a Likert chart. Its
+            axis labels ticks with their distance from 0.
+          </li>
+        </ul>
+        <details class="rationale">
+          <summary>Which ideas in the notes were already here</summary>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Idea in the notes</th>
+                  <th scope="col">Where it already is</th>
+                  <th scope="col">Verdict</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <th scope="row">
+                    An operator's type is the structure it keeps
+                  </th>
+                  <td>
+                    the Needs and Gives columns above; each operator's
+                    <code>resolveUnderlyingSpace</code> (read)
+                  </td>
+                  <td>there, under other names</td>
+                </tr>
+                <tr>
+                  <th scope="row">
+                    Space words: position, length, area, order
+                  </th>
+                  <td>
+                    <code>pinned</code>, <code>free</code>, <code>none</code>
+                    and ordinal slots (read). No area fact.
+                  </td>
+                  <td>fits: name the words; area is missing</td>
+                </tr>
+                <tr>
+                  <th scope="row">
+                    Reference point: edge, neutral point, none
+                  </th>
+                  <td>
+                    one <code>StackOrigin</code> record for every stack (read)
+                  </td>
+                  <td>there, as one record</td>
+                </tr>
+                <tr>
+                  <th scope="row">Shared axes unify on unit and baseline</th>
+                  <td>
+                    units: <code>joinUnits</code>. Baseline:
+                    <code>overlayOrigin</code> and <code>allMirrored</code>
+                    (read)
+                  </td>
+                  <td>there; the baseline join is unstated and has a bug</td>
+                </tr>
+                <tr>
+                  <th scope="row">A stack of means is rejected</th>
+                  <td>the Stack and <code>.mean()</code> rows above</td>
+                  <td>there in the proposal; breaks today</td>
+                </tr>
+                <tr>
+                  <th scope="row">Diverging and cyclic tags pick a layout</th>
+                  <td>
+                    <code>HasMidpoint</code> on the stack key,
+                    <code>HasCycle</code> on a spread key
+                  </td>
+                  <td>there</td>
+                </tr>
+                <tr>
+                  <th scope="row">An <code>arbitrary</code> order</th>
+                  <td>the absence of <code>HasOrder</code> (read)</td>
+                  <td>there; no new word needed</td>
+                </tr>
+                <tr>
+                  <th scope="row">Lints fire at one boundary</th>
+                  <td>checks run at many sites, gathered into one report</td>
+                  <td>conflicts</td>
+                </tr>
+                <tr>
+                  <th scope="row">
+                    A data-by-coord table: exact, lossy, missing
+                  </th>
+                  <td>the Coords lints above</td>
+                  <td>conflicts as stated; fits when scoped to the mark</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </details>
+        <h3>The eleven examples</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Example</th>
+                <th scope="col">Verdict</th>
+                <th scope="col">How checked</th>
+                <th scope="col">Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Mosaic as a stack of stacks</th>
+                <td>
+                  <span class="verdict v-def">holds with a condition</span>
+                </td>
+                <td>run, read</td>
+                <td>
+                  Right only because the inner size is a share and the outer
+                  width is its weight. With raw counts on both axes, the cells
+                  are count times count.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Mosaic from two one-level treemaps</th>
+                <td><span class="verdict v-ok">holds for areas</span></td>
+                <td>run</td>
+                <td>
+                  Same cell areas. The stack route has two honest axes, the
+                  treemap route has none.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Squarified treemap</th>
+                <td><span class="verdict v-bad">breaks the rule</span></td>
+                <td>run, reasoning</td>
+                <td>
+                  Its strips are groups the algorithm invents. A treemap's area
+                  rule is its own, which GoFish already does.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Stacked means</th>
+                <td>
+                  <span class="verdict v-bad">holds here; breaks today</span>
+                </td>
+                <td>run</td>
+                <td>
+                  Today the axis reads 35 USD, three mean prices added, because
+                  <code>.mean()</code> keeps a summable unit.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Small multiples with a shared axis</th>
+                <td>
+                  <span class="verdict v-def">baseline half unwritten</span>
+                </td>
+                <td>read, reasoning</td>
+                <td>
+                  A <code>none</code> sibling beside a pinned one joins with no
+                  message. Not rendered.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">One diverging and one linear sibling</th>
+                <td><span class="verdict v-bad">breaks today</span></td>
+                <td>run</td>
+                <td>The shared axis prints negative counts. See below.</td>
+              </tr>
+              <tr>
+                <th scope="row">Likert: tag the data, no spec change</th>
+                <td><span class="verdict v-ok">holds for the tag</span></td>
+                <td>read</td>
+                <td>
+                  With five levels Neutral straddles 0. An explicit origin is
+                  the elaborated code and should not lint.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Radial chart and the data-by-coord table</th>
+                <td><span class="verdict v-def">needs a third input</span></td>
+                <td>read, reasoning</td>
+                <td>
+                  Linting every lossy cell flags every pie and every bar chart
+                  of months. The fit must depend on what the mark claims.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Upper stack segments are lengths only</th>
+                <td><span class="verdict v-none">undecided</span></td>
+                <td>read</td>
+                <td>
+                  The engine has the pieces, and no reader needs them yet.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">A bar chart on a wide table</th>
+                <td><span class="verdict v-ok">holds</span></td>
+                <td>read</td>
+                <td>Extra columns are accepted.</td>
+              </tr>
+              <tr>
+                <th scope="row">Unordered categories into a stack</th>
+                <td><span class="verdict v-ok">holds for slots</span></td>
+                <td>read</td>
+                <td>
+                  First-appearance order. "Arbitrary" is the absence of
+                  <code>HasOrder</code>.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>One shared axis, two kinds of space</h3>
+        <p>
+          A Likert row (<code>response</code> with
+          <code>Trait.diverging()</code>) and a row of contact counts stacked by
+          <code>channel</code>, as two charts in one <code>spread</code> along
+          y, so they share the x axis (run, story
+          <code>Probe/Space Types</code> in
+          <code>proposals/type-system/stories/SpaceTypes.stories.tsx</code>).
+        </p>
+        <pre
+          class="code"
+        ><code class="language-javascript">spread({ dir: "y", spacing: 24 }, [
+  chart(survey, { schema: { response: Likert } }) // Likert has Trait.diverging()
+    .flow(stack({ by: "response", dir: "x" }))
+    .mark(rect({ w: "count", h: 30, fill: "response" })),
+  chart(contacts)
+    .flow(stack({ by: "channel", dir: "x" }))
+    .mark(rect({ w: "count", h: 30, fill: "channel" })),
+]);</code></pre>
+        <div class="gallery">
+          <div class="card">
+            <figure class="shot">
+              <img
+                src="img/space/likert-alone.png"
+                alt="The Likert row alone. Its axis ticks read 60, 40, 20, 0, 20, 40."
+                loading="lazy"
+              />
+            </figure>
+            <div class="card-body">
+              <p class="small">
+                Alone: ticks read 60, 40, 20, 0, 20, 40, counts measured away
+                from 0.
+              </p>
+            </div>
+          </div>
+          <div class="card">
+            <figure class="shot">
+              <img
+                src="img/space/likert-and-linear.png"
+                alt="The Likert row above a row of plain counts. The shared axis ticks read -60, -40, -20, 0, 20."
+                loading="lazy"
+              />
+            </figure>
+            <div class="card-body">
+              <p class="small">
+                With a sibling of plain counts: ticks read −60, −40, −20, 0, 20,
+                so the survey's left half reads as negative counts.
+              </p>
+            </div>
+          </div>
+        </div>
+        <p>
+          The cause (read): the shared axis is the overlay of the two rows, and
+          <code>overlay</code> keeps <code>mirrored</code> only when every child
+          has it (<code>allMirrored</code>). In the probe the colors are
+          defaults, because the palette passed to the combinator's
+          <code>render</code> was not applied, the layout overflowed by 12 px,
+          and the Likert row is clipped at the top. The tick labels, which are
+          the point, are as described.
+        </p>
+        <h3>What to adopt, as rules</h3>
+        <p>Ranked by what they catch for what they cost.</p>
+        <ol>
+          <li>
+            <strong>Siblings on one shared axis join by these rules.</strong>
+            Add them to the <code>layer</code> row above and to the error codes.
+            It catches the wrong tick labels above, which render today with no
+            message. The mirrored part is a bug fix on its own and could ship
+            before the type system.
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">Siblings on one axis</th>
+                    <th scope="col">Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <th scope="row">
+                      all mirrored, or mirrored and nonnegative
+                    </th>
+                    <td>mirrored</td>
+                  </tr>
+                  <tr>
+                    <th scope="row">mirrored, and another reaches below 0</th>
+                    <td>
+                      error <code>mixed-sides</code>: one axis cannot label both
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">
+                      one <code>pinned</code> and one <code>none</code>
+                    </th>
+                    <td>
+                      lint <code>no-shared-baseline</code>: the row with no data
+                      0 is not described by the shared axis
+                    </td>
+                  </tr>
+                  <tr>
+                    <th scope="row">units differ</th>
+                    <td>error, as today (<code>MeasureClash</code>)</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </li>
+          <li>
+            <strong>The Gives column uses five words</strong>, four of which the
+            engine already computes: position (<code>pinned</code>), length
+            (<code>free</code>), difference (<code>none</code>), slot, ordered
+            or not (ordinal, <code>hasOrder</code>), and area (none today, for a
+            <code>treemap</code> or a mosaic cell). It catches nothing on its
+            own. It makes the join rule and the log rule readable against one
+            table.
+          </li>
+          <li>
+            <strong
+              >An area reads as an amount when the product of its two length
+              units can sum over the product key.</strong
+            >
+            A count times a count share is a count, so the mosaic is right. A
+            count times a count is not an amount. This needs unit products from
+            #1142 (where a unit is one definition and products are still open),
+            and it is a lint.
+            <div class="gallery">
+              <div class="card">
+                <figure class="shot">
+                  <img
+                    src="img/space/mosaic-stack-of-stacks.png"
+                    alt="A mosaic of cars: origin widths by count on x, cylinder shares on y."
+                    loading="lazy"
+                  />
+                </figure>
+                <div class="card-body">
+                  <p class="small">As written: count on x, count share on y.</p>
+                </div>
+              </div>
+              <div class="card">
+                <figure class="shot">
+                  <img
+                    src="img/space/mosaic-raw-counts.png"
+                    alt="The same stacks with raw counts on both axes: a stacked bar of variable width."
+                    loading="lazy"
+                  />
+                </figure>
+                <div class="card-body">
+                  <p class="small">
+                    Raw counts on both axes: a stacked bar of variable width,
+                    not a mosaic.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <pre class="code"><code class="language-javascript">chart(cars)
+  .flow(
+    stack({ by: "origin", dir: "x", size: "count" }),
+    stack({ by: "cylinders", dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "origin" }));</code></pre>
+          </li>
+          <li>
+            <strong
+              >The key and coord fit depends on what the mark asserts.</strong
+            >
+            Lint a key with <code>HasOrder</code> and no <code>HasCycle</code>,
+            on an angle axis with <code>HasCycle</code>, only under a closed
+            line or slots placed around the full turn. Pies of nominal
+            categories, Cartesian bar charts of months and open ribbons (Ribbon
+            <code>Polar</code> between lakes) stay silent. It catches a radial
+            line of years that joins the last year to the first.
+          </li>
+          <li>
+            <strong>A small metamorphic test kit.</strong> A metamorphic test
+            changes the input in a known way and checks that the output changes
+            to match. Permute the rows of a nominal key, and a
+            <code>treemap</code> with <code>sort: "desc"</code> keeps each key's
+            tile (run). Scale a value column, and only the tick labels scale.
+            Rotate a cyclic key, and a polar chart rotates.
+          </li>
+          <li>
+            <strong
+              >An opt-in lint class for structure a layout invents or
+              drops</strong
+            >, under strict mode (#1120, a strict checking mode): an order made
+            by first appearance, a treemap over an ordered key, a palette
+            assigned by first appearance. Opt-in only, since GoFish does not
+            judge whether a visualization is a good idea.
+          </li>
+        </ol>
+        <p>
+          <strong>Not adopted:</strong> Lean as a design surface; an
+          <code>asLinear(...)</code> wrapper on the data (the override belongs
+          on the stack's origin option, #1289); a lint on every override of a
+          trait's default; an <code>arbitrary</code> keyword; "untagged data
+          defaults to linear"; per-instance layout types; per-part baseline
+          facts; an effectiveness ranking as a check.
+        </p>
+        <p class="note">
+          Not verified: the <code>none</code> and <code>pinned</code> join
+          (argued from <code>alignment.ts</code>, not rendered), whether a
+          <code>line</code> over months closes in <code>Coord.clock()</code>,
+          and #1270 (bidirectional resolution of spaces).
         </p>
         <h2>What GoFish has today, next to the draft</h2>
         <p>
@@ -6034,6 +8186,1039 @@ error[no-zero] at rect({ h: "temp" })
     <section class="panel" data-panel="keys" hidden>
       <section class="prose">
         <h2>Keys</h2>
+        <h3>
+          A table's identity is universal. What a visualization keys on is not.
+        </h3>
+        <p>
+          Josh asked whether a dataset's keys are universal, or whether
+          different visualizations of one dataset use key spaces with different
+          fields, not only a subset of one key. A survey of the stories answers
+          both readings. It uses two words. The <strong>identity</strong> is the
+          table's candidate key: the columns no two rows share, a fact about the
+          data. When no columns are unique, the identity is the row itself. A
+          <strong>grouping</strong> is what a visualization names in a
+          <code>by</code>, an <code>along</code> or <code>time.sequence</code>,
+          which is a choice.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">
+                  Finding, over about 186 stories and 14 datasets
+                </th>
+                <th scope="col">Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Stories that key only on fields of the table's identity: some
+                  of the key columns, or one key column fixed to one value
+                </td>
+                <td>about 108</td>
+              </tr>
+              <tr>
+                <td>
+                  Stories that key on something else: an attribute such as
+                  <code>Species</code> or <code>weather</code>, a bin of a
+                  measured value, a calendar part, or a key the table does not
+                  have (a copy index, a column name, a sample grid, a row id)
+                </td>
+                <td>about 78</td>
+              </tr>
+              <tr>
+                <td>
+                  Fields that looked like a key in one story and a value in
+                  another, such as the driving data's <code>year</code>,
+                  <code>temp_max</code>, four penguin measurements, IMDB rating
+                  and <code>lake</code>
+                </td>
+                <td>13, of which 0 are real flips</td>
+              </tr>
+              <tr>
+                <td>
+                  Datasets with two stories whose key sets do not derive from
+                  each other, such as month of the year against weekday for the
+                  Seattle weather
+                </td>
+                <td>6 of 14</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          These are hand counts from each story's <code>.flow(...)</code> and
+          <code>.mark(...)</code> lines, so treat them as plus or minus a few.
+          Candidate keys and dependencies between fields were checked by running
+          scripts over the data. The first pass rendered nothing; the audit of
+          the 13 fields below rendered every story it cites.
+        </p>
+        <p>
+          A re-check of the other counts found that every grouping in them is a
+          function of the one identity. The 78 stories group by a column, which
+          is a function of the row, or by a bin or calendar part of one. The 6
+          datasets pair two such functions, such as <code>lake</code> and
+          <code>species</code> of (lake, species), or month and weekday of
+          <code>date</code> (reasoning, from the code). One caveat: some bins
+          are computed from the whole column, namely <code>Bin.quantiles</code>,
+          a <code>Bin.step</code> anchored at the column's extent, and
+          <code>Bin.voronoi</code> seeded by the rows, so a row can land in a
+          different cell when other rows are filtered out (read from
+          <code>binKey</code>, not tested).
+        </p>
+
+        <h3 id="keys-audit-13">The 13 fields, one at a time</h3>
+        <p>Each field was checked against six explanations:</p>
+        <ul>
+          <li>
+            <strong>(a)</strong> The key is a bin of the value. The key is the
+            cell, and the field stays a value.
+          </li>
+          <li>
+            <strong>(b)</strong> The field is a position in both stories. It
+            only looks like a key because there is one mark per row.
+          </li>
+          <li>
+            <strong>(c)</strong> The field is part of the identity in both
+            stories, and the "value" use reads the key as a position.
+          </li>
+          <li>
+            <strong>(d)</strong> A line's order comes from the field while the
+            field is also a position. That is one role.
+          </li>
+          <li>
+            <strong>(e)</strong> The two stories use different tables, such as
+            an aggregate or a derived table.
+          </li>
+          <li>
+            <strong>(f)</strong> The field is only named in
+            <code>field(f).count()</code>, which counts rows and reads no value.
+          </li>
+        </ul>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Field</th>
+                <th scope="col">Key story</th>
+                <th scope="col">Value story</th>
+                <th scope="col">Verdict</th>
+                <th scope="col">Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row"><code>year</code> (driving)</th>
+                <td><code>Scatter.Connected</code></td>
+                <td><code>FacetedChart.FacetedScatterDriving</code></td>
+                <td>not a flip</td>
+                <td>c, d</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>temp_max</code></th>
+                <td>
+                  <code>Croissant.Ridgeline</code>,
+                  <code>RidgelineChart.Default</code>
+                </td>
+                <td><code>Bin.WeekdayTemperature</code></td>
+                <td>not a flip</td>
+                <td>a, e</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>IMDB Rating</code></th>
+                <td><code>Histogram.Default</code></td>
+                <td>the same story's <code>.count()</code></td>
+                <td>not a flip (miscounted)</td>
+                <td>a, f</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Rotten Tomatoes Rating</code></th>
+                <td><code>2DHistogramScatterPlot</code></td>
+                <td>none</td>
+                <td>not a flip (miscounted)</td>
+                <td>a</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Body Mass (g)</code></th>
+                <td><code>Partition.ProductForm</code></td>
+                <td><code>Separate.PenguinMass</code></td>
+                <td>not a flip</td>
+                <td>a, b</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Flipper Length (mm)</code></th>
+                <td><code>Partition.ProductForm</code></td>
+                <td><code>Filter.FieldBetween</code></td>
+                <td>not a flip</td>
+                <td>a, b</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Beak Length (mm)</code></th>
+                <td><code>MarginalHistogram</code> (top)</td>
+                <td><code>MarginalHistogram</code> (scatter)</td>
+                <td>not a flip</td>
+                <td>a, b</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Beak Depth (mm)</code></th>
+                <td><code>MarginalHistogram</code> (side)</td>
+                <td><code>MarginalHistogram</code> (scatter)</td>
+                <td>not a flip</td>
+                <td>a, b</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>lake</code></th>
+                <td><code>Bar.Stacked</code> and most catch stories</td>
+                <td><code>Ribbon.Polar</code> (angle)</td>
+                <td>not a flip</td>
+                <td>c</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>fertility</code></th>
+                <td>
+                  <code>AvoidingTrendLine</code> (<code>ends</code> table)
+                </td>
+                <td><code>AvoidingTrendLine</code> (countries)</td>
+                <td>not a flip</td>
+                <td>e, b</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>longitude</code></th>
+                <td><code>Partition.AirportHexbin</code></td>
+                <td><code>Partition.AirportsByNearestHub</code> (hubs)</td>
+                <td>not a flip</td>
+                <td>a, b, f</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>latitude</code></th>
+                <td><code>Partition.AirportHexbin</code></td>
+                <td><code>Partition.AirportsByNearestHub</code> (hubs)</td>
+                <td>not a flip</td>
+                <td>a, b, f</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>Miles_per_Gallon</code></th>
+                <td><code>Partition.CarHexbin</code></td>
+                <td>
+                  <code>ScatterPlot</code> (its <code>by: "Name"</code> is a
+                  bug)
+                </td>
+                <td>not a flip</td>
+                <td>a, f</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Genuine flips: 0.</strong> By main explanation, 10 are a bin
+          of the value (a), 2 are an identity field read as a position
+          (<code>year</code>, <code>lake</code>; c), and 1 is the identity of a
+          different, derived table (<code>fertility</code>; e). Two of the 13,
+          both movie ratings, were miscounts: their only "value" use is
+          <code>.count()</code>, or nothing.
+        </p>
+        <p class="note">
+          Every story here was rendered with <code>pnpm capture-one</code> on
+          11-13. Six renders were looked at closely (the cars scatter, the fill
+          bug, the polar ribbon, the trend line, the weekday bars, the faceted
+          scatter); the rest were spot-checked. That no story groups the ten (a)
+          fields raw comes from a grep of <code>stories/</code>.
+        </p>
+      </section>
+
+      <div class="gallery">
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/penguin-key-partition.png"
+              alt="Penguins binned into cells of flipper length and body mass, shaded by count."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Body mass as a key: a 500 g cell</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">a: the cell is the key</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(measured, { color: Color.gradient("blues") })
+  .flow(
+    partition({
+      by: {
+        x: field("Flipper Length (mm)").bin(Bin.step(10)),
+        y: field("Body Mass (g)").bin(Bin.step(500)),
+      },
+    })
+  )
+  .mark(region({ fill: field("Body Mass (g)").count() }));</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/mass-value-beeswarm.png"
+              alt="A beeswarm of penguin body mass, one row per species."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Body mass as a value: a position</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">b: one dot per penguin</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(weighed, { w: 560 })
+  .flow(
+    spread({ by: "Species", dir: "y", spacing: 16 }),
+    scatter({
+      x: "Body Mass (g)",
+      alignment: "middle",
+      overlap: Overlap.separate({ padding: 1 }),
+    })
+  )
+  .mark(circle({ r: 3, fill: "Species" }));</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/beak-both-marginal-histogram.png"
+              alt="A scatter of beak length against depth, with histograms of each along the top and side."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>The marginal histogram: one identity, two bins</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">a, b</span>
+            </div>
+            <p class="lead">
+              The scatter is keyed by <code>id</code>, which is the row, so the
+              <code>by</code> is redundant. Each histogram keys on a bin of one
+              measurement, which stays a value. The code is below, under "Three
+              stories that show it".
+            </p>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/year-key-connected-scatter.png"
+              alt="A connected scatter of miles driven against gas price, one dot per year joined by a line."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Driving <code>year</code> as a key</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">c, d: the identity</span>
+            </div>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(drivingShifts)
+  .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+  .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
+  .layer(line({ stroke: "black", strokeWidth: 2 }));</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/year-value-faceted-scatter.png"
+              alt="Scatters of miles driven by year, faceted by label side."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>Driving <code>year</code> as a position</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">c: the key read as x</span>
+            </div>
+            <p class="lead">
+              No <code>by</code>, so the marks are keyed by the row, and the row
+              is the year.
+            </p>
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(drivingShifts)
+  .flow(
+    spread({ by: "side", dir: "x", spacing: 50 }),
+    scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
+  )
+  .mark(circle({ r: 3, fill: "#4682b4" }));</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/lake-key-and-position-polar-ribbon.png"
+              alt="Stacked catch per lake around a polar axis, with open ribbons joining neighboring lakes."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3><code>lake</code> as a key and as an angle</h3>
+            <div class="verdicts">
+              <span class="verdict v-ok">c: valid</span>
+            </div>
+            <p class="lead">
+              <code>lake</code> is in the identity, and the angle places each
+              lake key at its own angle. The lakes are in river order and the
+              ribbon stays open, so the visualization is fine.
+            </p>
+            <pre
+              class="code"
+            ><code class="language-javascript">layer({ coord: clock() }, [
+  chart(seafood)
+    .flow(
+      scatter({
+        by: "lake",
+        x: "lake",
+        w: 2 * Math.PI,
+        axes: { x: false, y: true },
+      }).translate({ y: 50 }),
+      stack({ by: field("species").sort("count"), dir: "y", label: false })
+    )
+    .mark(rect({ w: 0.1, h: "count", fill: "species" }).name("bars")),
+  chart(selectAll("bars"))
+    .flow(group({ by: "species" }))
+    .mark(ribbon({ opacity: 0.8 })),
+]);</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/mpg-value-cars-scatter-by-name.png"
+              alt="A scatter of horsepower against miles per gallon with 300 dots."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>A bug in a <code>by</code>: cars by <code>Name</code></h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws wrong today</span>
+            </div>
+            <p class="lead">
+              <code>Name</code> is not a key, so 392 cars draw as exactly 300
+              dots, and a repeated name sits at the mean of its cars (rendered).
+            </p>
+            <pre class="code"><code class="language-javascript">chart(cars)
+  .flow(scatter({ by: "Name", x: "Horsepower", y: "Miles_per_Gallon" }))
+  .mark(circle({ r: 4 }));</code></pre>
+          </div>
+        </article>
+        <article class="card">
+          <figure class="shot">
+            <img
+              src="img/keys/fill-first-row-species.png"
+              alt="Bars of catch per lake, every bar the same blue."
+              loading="lazy"
+            />
+          </figure>
+          <div class="card-body">
+            <h3>A fill read from the first row</h3>
+            <div class="verdicts">
+              <span class="verdict v-bad">draws wrong today</span>
+            </div>
+            <p class="lead">
+              Each lake's bar holds five species, and the fill reads the first
+              row's, so every bar is Bass blue (rendered, story
+              <code>InferredSize.LegendTracksComputedExtent</code>).
+            </p>
+            <pre class="code"><code class="language-javascript">chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count", fill: "species" }));</code></pre>
+          </div>
+        </article>
+      </div>
+
+      <section class="prose">
+        <h3>The rule that covers all 13</h3>
+        <blockquote>
+          A field with a continuous <code>Domain</code> is grouped only through
+          a bin, so the key is the cell and the field stays a value. A field is
+          grouped raw only when its <code>Domain</code> is discrete or it is in
+          the table's <code>key</code>. Any channel may read a
+          <code>key</code> field, which reads the key and never folds rows.
+        </blockquote>
+        <p>
+          The first sentence covers the ten (a) cases. The second covers
+          <code>year</code> and <code>fertility</code>: both are numbers, and
+          each is grouped raw only in a table where it is the identity, so each
+          group has one row. The third covers <code>year</code> as x,
+          <code>lake</code> as the angle, and <code>fertility</code> as x.
+        </p>
+        <p>
+          The rule touches existing stories that group raw by an undeclared
+          number outside the identity: <code>vega-lite/StripPlot</code> spreads
+          by <code>cylinders</code>, and the titanic passenger stories spread or
+          stack by <code>pclass</code> (1, 2, 3) and <code>survived</code> (0,
+          1). They draw correctly, since the numbers have few values. Under the
+          rule each needs one <code>Domain.discrete</code> line on the column.
+          Whether a raw <code>by</code> on an undeclared number should be an
+          error or a lint is open (Decisions tab).
+        </p>
+        <p>
+          So both readings come down to one. Every table has one identity, and
+          no story disagrees with it. A column does have a stable role, and the
+          role is already given by two facts: its <code>Domain</code> (discrete
+          or continuous) and whether it is in <code>key</code>. Within one table
+          every column is a function of the row, so every grouping by a column,
+          a bin or a calendar part is a coarser view of the identity. A
+          visualization chooses which function, not which subset of fields.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">What changes</th>
+                <th scope="col">How the new index relates to the identity</th>
+                <th scope="col">Stories</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Which function groups the rows</th>
+                <td>
+                  coarser: some key columns, an attribute, a bin or a calendar
+                  part
+                </td>
+                <td>most</td>
+              </tr>
+              <tr>
+                <th scope="row">A relabeling</th>
+                <td>equivalent: (week, weekday) for a date, "Male" for 1</td>
+                <td><code>CalendarHeatmap</code>, the population stories</td>
+              </tr>
+              <tr>
+                <th scope="row">One value fixed</th>
+                <td>one key field fixed to one value</td>
+                <td>gapminder at one year</td>
+              </tr>
+              <tr>
+                <th scope="row">A finer index</th>
+                <td>
+                  a new key field: a copy, a column name, the right table's key,
+                  a sample
+                </td>
+                <td>
+                  waffles, <code>GroupedBarChartRepeat</code>, pie glyphs,
+                  density grids
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">A new table</th>
+                <td>an aggregate keyed by the grouping</td>
+                <td>
+                  <code>RidgelineChart</code>,
+                  <code>SemanticZoomHistogram</code>, <code>titanic</code>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Only the last two make a key that is not a function of the old
+          identity. Those are the operations that need typing.
+        </p>
+
+        <h3>Three stories that show it</h3>
+        <p>
+          <strong
+            ><code>seaborn/MarginalHistogram</code>: one identity and two bins
+            of values in one figure.</strong
+          >
+          The scatter keys on a row id the story makes, which is the row, so the
+          <code>by</code> is redundant. Each histogram keys on a bin of a
+          different measurement, and the measurement stays a value. The null
+          filter, the colors and the <code>layer</code> that lines the three up
+          are left out here.
+        </p>
+        <pre
+          class="code"
+        ><code class="language-javascript">const data = penguins.map((d, i) =&gt; ({ ...d, id: i }));
+
+chart(data)
+  .flow(scatter({ by: "id", x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .mark(circle({ r: 3 }));
+
+chart(data, { h: 80 })
+  .flow(partition({ by: field("Beak Length (mm)").bin(Bin.step(2)), dir: "x" }))
+  .mark(rect({ h: field("Beak Length (mm)").count() }));
+
+chart(data, { w: 80 })
+  .flow(partition({ by: field("Beak Depth (mm)").bin(Bin.step(1)), dir: "y" }))
+  .mark(rect({ w: field("Beak Depth (mm)").count() }));</code></pre>
+        <p>
+          <strong
+            ><code>vega-lite/ScatterPlot</code>: a <code>by</code> that is not a
+            key.</strong
+          >
+          After the story drops rows with nulls, 392 cars have 300 distinct
+          names (run). A position channel averages its group (read in
+          <code>channels.ts</code>), so the visualization draws 300 dots, and 92
+          cars are averaged into other dots with no message (rendered: exactly
+          300 dots).
+        </p>
+        <pre class="code"><code class="language-javascript">chart(cars)
+  .flow(scatter({ by: "Name", x: "Horsepower", y: "Miles_per_Gallon" }))
+  .mark(circle({ r: 4 }));</code></pre>
+        <p>
+          <strong
+            ><code>forwardsyntax/WaffleChart</code>: a value becomes the size of
+            a new key.</strong
+          >
+          <code>repeat</code> turns each row into <code>count</code> copies, so
+          the marks are keyed by (lake, species, copy), finer than the rows. It
+          runs inside <code>derive</code>, so every check after it is skipped.
+          Spacing and alignment options are left out.
+        </p>
+        <pre class="code"><code class="language-javascript">chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }),
+    derive((d) =&gt; d.flatMap((d) =&gt; repeat(d, "count"))),
+    spread({ by: chunk(5), dir: "y" }),
+    spread({ dir: "x" })
+  )
+  .mark(rect({ w: 8, h: 8, fill: "species" }));</code></pre>
+
+        <h3>Three designs for what <code>key</code> means</h3>
+        <p>
+          <strong>A. "Key" is a role on the column</strong>, as Tableau's
+          dimensions and Flint's identifier role do it.
+        </p>
+        <pre class="code"><code class="language-javascript">chart(penguins, {
+  schema: {
+    Species: { role: "key" },
+    "Body Mass (g)": { role: "value", unit: Grams },
+  },
+});</code></pre>
+        <p>
+          It is not wrong: the audit above found that a column's role is stable.
+          But the role already follows from the column's <code>Domain</code> and
+          from whether it is in <code>key</code>, so declaring it again repeats
+          information, and A still needs bins and a key read as a position. It
+          also says nothing about identity, so a <code>by</code> on
+          <code>cars.Name</code> passes. "Dimension" and "measure" can be doc
+          words for those two facts rather than API.
+        </p>
+        <p>
+          <strong
+            >B. The table declares its identity. Every <code>by</code> is a
+            grouping read as a function of it. Operations that change the
+            identity are typed steps.</strong
+          >
+          <span class="chip now-proposed">recommended</span>
+        </p>
+        <pre
+          class="code"
+        ><code class="language-javascript">chart(countryPopulations, {
+  key: ["country"],
+  schema: {
+    country: { traits: [Trait.nested({ in: "region" })] }, // new: HasParent
+    region: { traits: [Trait.nested({ in: "continent" })] },
+    pop: { unit: People, traits: [Trait.canSum()] },
+  },
+});</code></pre>
+        <p>
+          The <strong>rest key</strong> at a mark is the identity's columns that
+          the groupings do not fix. A grouping fixes an identity column when
+          that column depends on it: it is the column, or a declared dependency
+          or a calendar rule says so. That keeps <code>canSum({ over })</code> a
+          static check even when a visualization groups by a field outside the
+          key. Its cost is a new dependency declaration
+          (<code>Trait.nested</code>, which is <code>HasParent</code>) and typed
+          versions of steps that are a <code>derive</code> today.
+        </p>
+        <p>
+          <strong
+            >C. No table identity. The key is whatever the flow builds</strong
+          >, and additivity is checked on the rows of each sum.
+          <span class="chip now-rest">runner-up</span>
+        </p>
+        <pre class="code"><code class="language-javascript">chart(seafood, {
+  schema: { count: { unit: Items, traits: [Trait.canSum()] } },
+});</code></pre>
+        <p>
+          It needs no new declaration. It cannot tell a grouping that merges
+          different things from one that merges copies, because it does not know
+          what a thing is. It is what B falls back to when no key is declared,
+          so choosing B does not lose C.
+        </p>
+
+        <h3>Four specs worked in each design</h3>
+        <p>
+          <strong>Binned: monthly precipitation</strong>
+          (<code>Bin.MonthBarsChained</code>).
+        </p>
+        <pre class="code"><code class="language-javascript">chart(weather, {
+  key: ["date"],
+  schema: {
+    date: Unit.time(),
+    precipitation: { unit: Millimeters, traits: [Trait.canSum()] },
+  },
+})
+  .flow(
+    spread({
+      by: field("date").bin(Calendar.year).bin(Calendar.month),
+      dir: "x",
+    })
+  )
+  .mark(rect({ h: field("precipitation").sum() }));</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Design</th>
+                <th scope="col">Check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">A</th>
+                <td>
+                  <code>date</code> is a key column and the bin is a key.
+                  Nothing says the sum runs over days.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">B</th>
+                <td>
+                  The context is the month cell. A month does not fix a date, so
+                  the rest key is <code>date</code>, and
+                  <code>precipitation</code> sums over it. Passes. A daily
+                  snapshot would fail the same way inventory does.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">C</th>
+                <td>
+                  The row check sums each month's rows and finds nothing against
+                  it. Passes, after a pass over the data.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Unpivoted: two grosses per genre</strong>
+          (<code>vega-lite/Bar/GroupedBarChartRepeat</code>, with the proposed
+          <code>unpivot</code>).
+        </p>
+        <pre class="code"><code class="language-javascript">chart(movies, {
+  schema: {
+    "US Gross": { unit: USD, traits: [Trait.canSum()] },
+    "Worldwide Gross": { unit: USD, traits: [Trait.canSum()] },
+  },
+})
+  .flow(
+    unpivot(["US Gross", "Worldwide Gross"], { key: "market", value: "gross" }),
+    spread({ by: "Major Genre", dir: "x" }),
+    stack({ by: "market", dir: "y" })
+  )
+  .mark(rect({ h: "gross", fill: "market" }));</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Design</th>
+                <th scope="col">Check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">A</th>
+                <td>
+                  <code>market</code> is a new column with no declared role. If
+                  it defaults to key, the stack passes.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">B</th>
+                <td>
+                  <code>unpivot</code> outputs the identity (row, market).
+                  <code>gross</code> sums over the row, as both columns did, and
+                  not over <code>market</code>. So the stack is an error:
+                  worldwide gross includes US gross, and stacking counts it
+                  twice. <code>spread({ by: "market" })</code> passes, which is
+                  the original story.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">C</th>
+                <td>
+                  No two rows in a segment share a market, so it passes. The
+                  double count is not caught.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>A scatterplot of two measures</strong>
+          (<code>vega-lite/ScatterPlot</code>, code above).
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Design</th>
+                <th scope="col">Check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">A</th>
+                <td>
+                  <code>Name</code> is marked as a key, so the spec passes, and
+                  92 cars are averaged into other dots.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">B</th>
+                <td>
+                  No key is declared, so the identity is the row.
+                  <code>Name</code> does not fix the row, so each position folds
+                  several rows into a mean. A lint: "<code>scatter</code> by
+                  <code>Name</code> puts 392 cars on 300 dots." With
+                  <code>key: ["Name"]</code> declared, the uniqueness check
+                  fails on the data instead.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">C</th>
+                <td>
+                  The flow's key is <code>Name</code>, each dot is a group, and
+                  a mean of positions is allowed. Passes.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Coarser than the rows: barley yield</strong>
+          (<code>vega-lite/Bar/HorizontalStackedBarChart</code>).
+        </p>
+        <pre class="code"><code class="language-javascript">chart(barley, {
+  key: ["variety", "year", "site"],
+  schema: {
+    yield: { unit: Unit.per(Bushels, Acres), traits: [Trait.canAverage()] },
+  },
+})
+  .flow(spread({ by: "variety", dir: "y" }), stack({ by: "site", dir: "x" }))
+  .mark(rect({ w: "yield", fill: "site" }));</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Design</th>
+                <th scope="col">Check</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">A</th>
+                <td>
+                  <code>yield</code> is a value, so it may be aggregated.
+                  Passes, as in Vega-Lite.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">B</th>
+                <td>
+                  The rest key is <code>year</code>, so the mark folds two years
+                  into a mean. The stack adds yields across sites, and a rate in
+                  bushels per acre does not add, so the stack is an error.
+                  <code>spread({ by: "site" })</code> passes.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">C</th>
+                <td>
+                  It reaches the same error as B, but only from
+                  <code>canAverage</code> and after reading the data.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <strong>Recommendation: B</strong>, with C as its fallback when no key
+          is declared. A is not rejected for being wrong; it repeats what
+          <code>Domain</code> and <code>key</code> already say. What would
+          change it: two real stories that need two different identities for one
+          table with no operator between them. Then the key would belong on the
+          chart, not the table. Wickham's phone-number example in "Tidy Data" is
+          the candidate, and it is an unpivot.
+        </p>
+
+        <h3>What a key type carries</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Property</th>
+                <th scope="col">Today</th>
+                <th scope="col">Proposed</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Identity (equal keys mean the same thing)</th>
+                <td>
+                  groups by value, or the row by position when there is no
+                  <code>by</code>
+                </td>
+                <td>
+                  the declared <code>key</code> is a candidate key, checked on
+                  the rows when a rule relies on it. A <code>by</code> that does
+                  not fix the identity, under a channel that expects one row, is
+                  reported.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Levels or a continuous range</th>
+                <td>
+                  <code>Domain.discrete</code> levels, bins over the column's
+                  domain
+                </td>
+                <td>
+                  the same, plus <code>Domain.continuous</code>, which allows
+                  values between keys
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Order, real or arbitrary</th>
+                <td>
+                  <code>HasOrder</code> from <code>Trait.ordered()</code> or a
+                  bin, otherwise first appearance
+                </td>
+                <td>
+                  <code>HasOrder</code> only from a declaration, a bin, a
+                  calendar part or a continuous key. An order made by
+                  <code>.sort(...)</code> or by first appearance places slots
+                  but does not allow a connector.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Cycle</th>
+                <td><code>HasCycle</code> on calendar parts</td>
+                <td>
+                  the same, plus <code>Trait.cyclic()</code> on columns (#1052,
+                  cyclic columns)
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">Region or cell</th>
+                <td>the <code>hasRegion</code> flag on binned fields</td>
+                <td><code>HasRegion</code> on every bin output</td>
+              </tr>
+              <tr>
+                <th scope="row">Nesting</th>
+                <td>
+                  <code>KeyCell.parent</code> for bin chains, nothing for
+                  columns
+                </td>
+                <td>
+                  a declared dependency, <code>Trait.nested({ in })</code>
+                  (<code>HasParent</code>): every value of the finer field has
+                  one value of the coarser one
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">The output key of each operator</th>
+                <td>not tracked</td>
+                <td>the table below</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Operator</th>
+                <th scope="col">Output identity</th>
+                <th scope="col">
+                  What the value columns can sum over afterward
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  <code>spread</code>, <code>stack</code>, <code>group</code>,
+                  <code>scatter</code>, <code>table</code>,
+                  <code>partition</code> by <code>k</code>
+                </th>
+                <td>unchanged; the context adds <code>k</code></td>
+                <td>unchanged</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>filter</code> on one value of an identity field
+                </th>
+                <td>unchanged; the context fixes that field</td>
+                <td>unchanged</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>join</code> along a foreign key</th>
+                <td>unchanged</td>
+                <td>joined columns keep their own table's <code>over</code></td>
+              </tr>
+              <tr>
+                <th scope="row"><code>join</code> that is one-to-many</th>
+                <td>the left identity plus the right identity</td>
+                <td>as above</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>repeat</code>
+                  <span class="chip now-new">new</span> as a typed step
+                </th>
+                <td>the old identity plus a copy index</td>
+                <td>nothing sums over the copy index</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>unpivot(columns, { key, value })</code>
+                  <span class="chip now-new">new</span>
+                </th>
+                <td>
+                  the old identity plus <code>key</code>, with
+                  <code>Domain.discrete(columns)</code>
+                </td>
+                <td>
+                  <code>value</code> sums over the old identity as the columns
+                  did, not over <code>key</code> unless declared
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  an aggregate into a new table (a typed
+                  <code>derive</code> helper)
+                </th>
+                <td>the grouping fields; the context starts over</td>
+                <td>a count sums over everything</td>
+              </tr>
+              <tr>
+                <th scope="row">a density, sample grid or interpolation</th>
+                <td>a continuous key; the context starts over</td>
+                <td>a density adds over its key only as an integral</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>derive(fn)</code></th>
+                <td>unknown</td>
+                <td>unknown: checks after it use the row check</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
         <h3>Keys and values in graphical space</h3>
         <p>
           The draft asked how keys and values show up in the picture. The answer
@@ -6095,8 +9280,13 @@ error[no-zero] at rect({ h: "temp" })
         </p>
         <h3>Key traits</h3>
         <p>
-          A key column uses the same traits as any column. No second vocabulary
-          is needed.
+          "Is a key" follows from a column's <code>Domain</code> and from
+          membership in <code>key</code>, so it needs no separate role. What
+          lives on the column is its key traits, and they hold however the
+          column is read: <code>temp_max</code> has <code>HasOrder</code>
+          whether it is a position or a bin, and the bin adds
+          <code>HasRegion</code>. A key column uses the same traits as any
+          column. No second vocabulary is needed.
         </p>
         <div class="table-wrap">
           <table>
@@ -6171,10 +9361,26 @@ error[no-zero] at rect({ h: "temp" })
         <p>Examples the key traits decide:</p>
         <ul>
           <li>
-            <strong>Ribbons between lakes.</strong> <code>lake</code> has no
-            order, so a ribbon between lake groups is an error unless the data
-            says how the lakes connect. This is the question from the PyData
-            talk.
+            <strong>Ribbons between lakes, and between species.</strong> The
+            lakes in the seafood data lie along connected rivers, so Lake A to
+            Lake F is a real order, and the ribbon stories show values flowing
+            from lake to lake. The strings do not show that order, so only a
+            declaration can supply it: <code>lake</code> with its levels and
+            <code>Trait.ordered()</code>. With it, a ribbon along
+            <code>lake</code> passes. <code>species</code> has no order. With
+            <code>species</code> declared by its levels alone,
+            <code>spread({ by: "species" })</code> followed by a ribbon is an
+            error, because the band would say that Trout lies between Bass and
+            Catfish. This is the question from the PyData talk.
+          </li>
+          <li>
+            <strong>The check applies once the key is declared.</strong> An
+            undeclared key is unknown and passes, like every undeclared column.
+            No story declares the lake order today, so the six gallery stories
+            that draw bands between lakes pass as undeclared, and they stay
+            valid once the order is declared. The engine, by contrast, already
+            treats an undeclared string key as having no order when it draws an
+            axis.
           </li>
           <li>
             <strong>Radar chart over unordered attributes.</strong> The
@@ -6189,9 +9395,10 @@ error[no-zero] at rect({ h: "temp" })
         </ul>
         <h3>The key context</h3>
         <p>
-          Each <code>by</code> adds a key to the context. The checker tracks two
-          sets: the keys split so far, and the rest key. Additivity is looked up
-          in two places:
+          Each <code>by</code> adds a grouping to the context. The checker
+          tracks two sets: the groupings so far, and the rest key, which is the
+          identity's columns that those groupings do not fix. Additivity is
+          looked up in two places:
         </p>
         <ol>
           <li>
@@ -6214,20 +9421,29 @@ error[no-zero] at rect({ h: "temp" })
         <h3>Product keys and missing pairs</h3>
         <p>
           After <code>spread({ by: "lake" })</code> and
-          <code>stack({ by: "species" })</code>, some species are missing from
-          some lakes. For a ribbon between stacks, the value's type decides what
-          a missing pair means:
+          <code>stack({ by: "species" })</code>, a species can be missing from a
+          lake. Whether a missing pair is zero is a fact about how the table was
+          made, not about the value's traits:
         </p>
         <ul>
           <li>
-            If the value adds up and has a zero, a missing pair is zero. The
-            ribbon narrows to nothing.
+            In a complete table, such as a catch survey that lists every lake
+            and species it covered, a missing pair of a value that adds up and
+            has a zero is zero. The ribbon narrows to nothing.
           </li>
           <li>
-            Otherwise a missing pair is unknown, and the ribbon shows a gap.
+            In a truncated table, a missing pair is not zero.
+            <code>categoryBrands</code> lists the top brands of each year: 75 in
+            2000 and 100 after, and only 37 of 173 brands are present in all 20
+            years (run). A brand that drops out of the list still has a value,
+            so a ribbon that drew it at zero would be false.
           </li>
         </ul>
-        <p>GoFish has no rule for this today.</p>
+        <p>
+          So the default is a gap, and a zero needs either an explicit fill or a
+          declaration that the table is complete. How to declare that is open.
+          GoFish has no rule for this today.
+        </p>
         <details class="rationale">
           <summary>Multi-table inputs (smallest useful piece)</summary>
           <ul>
@@ -6983,6 +10199,117 @@ error[no-zero] at rect({ h: "temp" })
             names that users can search for and use to turn a lint off?
           </li>
         </ol>
+        <h3>Keys (Keys tab)</h3>
+        <ol start="18">
+          <li>
+            Does <code>key: [...]</code> mean the table's identity, a candidate
+            key checked on the rows when a rule relies on it, and never "the
+            fields a chart may split by"?
+          </li>
+          <li>With no declared key, is the identity the row?</li>
+          <li>
+            How is a dependency between fields declared? The draft spelling is
+            <code>Trait.nested({ in: "region" })</code> on <code>country</code>.
+          </li>
+          <li>
+            Is an order made by <code>.sort(...)</code> on a value a display
+            order only, so that a line or ribbon along that key still needs
+            <code>HasOrder</code>?
+          </li>
+          <li>
+            Should a <code>scatter({ by })</code> whose groups hold more than
+            one row be a lint, an error, or allowed (<code>cars.Name</code>)?
+          </li>
+          <li>
+            Should a color or text channel that reads a field that varies inside
+            the mark be an error? Today it reads the first row.
+          </li>
+          <li>
+            Should <code>repeat</code> and <code>chunk</code> become typed flow
+            steps that output a key, in place of <code>derive</code>?
+          </li>
+          <li>
+            After <code>unpivot</code>, does the value sum over the new key? I
+            recommend no, unless declared.
+          </li>
+          <li>
+            Do aggregates built into a new table need a typed helper, so the
+            checker sees the new key? About 12 stories build one by hand.
+          </li>
+          <li>
+            Should a key with no declared order be "unknown" (it passes, as the
+            proposal says) or "no order" (as the engine already treats an
+            undeclared string key for axes)?
+          </li>
+          <li>
+            Should a <code>by</code> on an undeclared number that is not in the
+            table's <code>key</code> be an error that asks for a bin or
+            <code>Domain.discrete</code>, or only a lint? It affects
+            <code>StripPlot</code> (<code>cylinders</code>) and the titanic
+            passenger stories (<code>pclass</code>, <code>survived</code>).
+          </li>
+        </ol>
+        <h3>Datasets (Datasets tab)</h3>
+        <ol start="29">
+          <li>
+            When a column has both <code>canSum</code> and
+            <code>canAverage</code>, which fold does a size channel fill in: the
+            sum, the mean, or an error that offers both?
+          </li>
+          <li>
+            Is a missing pair a gap by default, with zero only for a table
+            declared complete? How is "complete" or "top N" declared?
+          </li>
+          <li>
+            How does a number column get an order or a time granularity (a year
+            stored as 1956)? Should <code>Unit.time()</code> reject a plain
+            number?
+          </li>
+          <li>
+            Should a column be able to say it belongs to a coarser key in a flat
+            table, such as <code>{ unit, key: "region" }</code> for
+            <code>uncertainty</code>?
+          </li>
+          <li>
+            Should a table with no id column get an implicit row key, so that
+            the static rules work on <code>penguins</code> and
+            <code>denseMasses</code>?
+          </li>
+          <li>
+            Should the stack rule exempt a stack whose <code>size</code> option
+            gives each child's length (the Nested Mosaic case on the Rules tab)?
+          </li>
+        </ol>
+        <h3>Space side (Rules tab)</h3>
+        <ol start="35">
+          <li>
+            Adopt the join rule for sibling spaces on one shared axis, with the
+            <code>mixed-sides</code> error and the
+            <code>no-shared-baseline</code> lint? Should the mirrored fix ship
+            now, before the type system?
+          </li>
+          <li>
+            Write the Gives column in the five words position, length,
+            difference, slot and area?
+          </li>
+          <li>
+            Is "an area reads as an amount when the product of its two length
+            units can sum over the product key" a lint that waits for #1142
+            (unit algebra)?
+          </li>
+          <li>
+            Scope the key and coord lint by what the mark asserts, so that pies
+            and Cartesian bars of months stay silent?
+          </li>
+          <li>
+            Build a small metamorphic test kit on top of
+            <code>capture-one</code>'s normalized DOM?
+          </li>
+          <li>
+            Add an opt-in lint class, under strict mode (#1120), for structure a
+            layout invents or drops?
+          </li>
+        </ol>
         <h3>Syntax to review</h3>
         <p>
           <code>Trait.canSum({ over })</code>,
@@ -6991,7 +10318,8 @@ error[no-zero] at rect({ h: "temp" })
           <code>traits</code> on a column record,
           <code>Domain.continuous([lo, hi])</code>,
           <code>.mean({ weight })</code>, <code>.last()</code>,
-          <code>.first()</code>, <code>unpivot</code>.
+          <code>.first()</code>, <code>unpivot</code>,
+          <code>Trait.nested({ in })</code>, <code>repeat</code> as a flow step.
         </p>
         <h3>Recommendation, in order of work</h3>
         <ol>
@@ -7095,10 +10423,100 @@ error[no-zero] at rect({ h: "temp" })
             <code>CLAUDE.md</code> lists a <code>keyContext</code> that is not
             in the source. Keys live on nodes.
           </li>
+          <li>
+            <code>treemap</code> turns a negative weight into 0 with no message
+            (<code>resolveWeight</code> in <code>treemap.tsx</code>; read).
+          </li>
+          <li>
+            One diverging and one linear sibling on a shared axis print negative
+            tick labels for the survey's counts, because
+            <code>allMirrored</code> drops <code>mirrored</code> (run).
+          </li>
+          <li>
+            A <code>pinned</code> sibling and a <code>none</code> sibling join
+            on a shared axis with no message, and the axis does not describe the
+            <code>none</code> one (reasoning from <code>alignment.ts</code>; not
+            rendered).
+          </li>
+          <li>
+            Stacked means pass today's check, because <code>.mean()</code> keeps
+            a summable unit: the axis reads 35 USD, three mean prices added
+            (run).
+          </li>
+          <li>
+            Calendar cycle parts get <code>hasOrder: true</code> and are cut at
+            their first part with no message (read).
+          </li>
+          <li>
+            A <code>color</code> palette passed to a combinator's
+            <code>render</code> was not applied in the space-type probes (run;
+            not investigated).
+          </li>
+          <li>
+            <code>Unit.time()</code> accepts a number and reads the year 1956 as
+            1,956 ms after 1970; the axis reads "12:00:01 AM" (run).
+          </li>
+          <li>
+            Pie <code>Rose</code> stacks square roots of deaths, so each wedge's
+            radius is the sum of roots, not the root of the sum; it draws with
+            no error (run).
+          </li>
+          <li>
+            Bin <code>WeekdayTemperature</code>, a gallery story, draws mean °C
+            as bars from 0 (rendered).
+          </li>
+          <li>
+            The "cannot be summed" error tells a user to call
+            <code>.mean()</code> on a median column, and a mean of medians is
+            not a median (run, <code>genderPayGap</code>).
+          </li>
+          <li>
+            The stray-level error of <code>spread</code> prints null values as
+            <code>undefined</code> (run, <code>penguins.Sex</code>).
+          </li>
+          <li>
+            A <code>fill</code> channel does not check values outside declared
+            levels, so <code>penguins.Sex</code> <code>"."</code> passes (run).
+          </li>
+          <li>
+            <code>fishData</code> is a second copy of the catch table, and 28 of
+            its 30 counts differ from <code>seafood</code> (run).
+          </li>
+          <li>
+            The <code>titanicPassengers</code> parser drops
+            <code>name</code> and <code>ticket</code>, the table's key, leaving
+            221 duplicate rows; a sum of <code>fare</code> per class then counts
+            shared tickets once per passenger (run).
+          </li>
+          <li>
+            <code>energy</code> is not used by any story, test or doc (read).
+          </li>
+          <li>
+            <code>vega-lite/ScatterPlot</code> groups by <code>Name</code>,
+            which is not a key, so 392 cars draw as 300 dots (rendered: exactly
+            300 dots).
+          </li>
+          <li>
+            <code>InferredSize.LegendTracksComputedExtent</code> colors each
+            lake's bar by the first species in its rows, so every bar is Bass
+            blue (rendered).
+          </li>
+          <li>
+            <code>vega-lite/Bar/HorizontalStackedBarChart</code> sums barley
+            yields, a rate, over sites and years, copying the Vega-Lite example
+            (read).
+          </li>
+          <li>
+            <code>Bin.CalendarHeatmap</code> labels its week axis with months,
+            and weeks do not nest in months (read; render not inspected).
+          </li>
+          <li>
+            The seafood lakes lie in river order, but no story or doc declares
+            that order (read).
+          </li>
         </ul>
         <p>
-          Not verified: whether <code>treemap</code> drops negative sizes
-          silently, and whether <code>cut</code> weights skip the
+          Not verified: whether <code>cut</code> weights skip the
           <code>CanSum</code> check. The Lenz and Shoshani paper was read
           through #1198 and secondary sources, not in full.
         </p>
@@ -7116,6 +10534,15 @@ error[no-zero] at rect({ h: "temp" })
             >
           </li>
           <li><code>proposals/type-system/research/coord-method.md</code></li>
+          <li><code>proposals/type-system/research/dataset-types.md</code></li>
+          <li><code>proposals/type-system/research/key-roles.md</code></li>
+          <li>
+            <code>proposals/type-system/research/space-types-check.md</code>,
+            which checks
+            <code
+              >proposals/type-system/research/notes-2026-11-13-space-types.md</code
+            >
+          </li>
         </ul>
         <h3>Related issues</h3>
         <ul>
@@ -7182,6 +10609,7 @@ error[no-zero] at rect({ h: "temp" })
     var TABS = [
       "examples",
       "grid",
+      "datasets",
       "additivity",
       "rules",
       "errors",
