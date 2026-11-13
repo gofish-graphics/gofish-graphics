@@ -22,7 +22,7 @@ const MAX_TEXT = 2000;
 const MAX_QUOTE = 80;
 const MAX_BODY = 16 * 1024;
 /** The reactions the feedback box offers (bookNotes.ts, REACTIONS). */
-const REACTIONS = ["confusing", "slow", "useful", "loved"];
+const REACTIONS = ["confusing", "boring", "useful", "loved"];
 
 /** One line of prose: newlines become spaces, and double quotes become
  *  single quotes, so the quoted note in the brief stays well-formed. */

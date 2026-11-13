@@ -191,7 +191,7 @@ onContentUpdated(attach);
       @click="openChapter"
     >
       Give feedback on this chapter</button
-    ><span> Say what lost you, what dragged, or what worked.</span>
+    ><span> Say what lost you, what bored you, or what worked.</span>
     <span v-if="chapterNoted" class="book-note-chapter__noted">
       You sent feedback on this chapter.</span
     >

@@ -26,7 +26,12 @@ export const REACTIONS = [
     emoji: "🤨",
     prompt: "What lost you?",
   },
-  { value: "slow", label: "Slow", emoji: "🐌", prompt: "What could be cut?" },
+  {
+    value: "boring",
+    label: "Boring",
+    emoji: "😴",
+    prompt: "Where did you lose interest?",
+  },
   {
     value: "useful",
     label: "Useful",

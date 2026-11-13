@@ -150,7 +150,7 @@ land, or the chapter will show as out of date.
 ## 8. How reader feedback reaches the brief
 
 A reader gives feedback in the box beside a paragraph: one of four reactions
-(confusing, slow, useful, loved), an "I stopped reading here" mark, some text,
+(confusing, boring, useful, loved), an "I stopped reading here" mark, some text,
 or any mix. It reaches the brief in one of two ways.
 
 - On the local dev server, the box saves it straight into the brief's
@@ -176,7 +176,7 @@ Issue feedback is copied in by hand:
 - A note changes the chapter only through the brief. After you add notes,
   rebuild the chapter from scratch with this skill.
 
-When you rebuild, fix first the passages marked `[confusing]`, `[slow]` or
+When you rebuild, fix first the passages marked `[confusing]`, `[boring]` or
 `stopped here`: they show where readers get lost or bored and leave. A passage
 that several readers marked counts for more than one long comment. `[useful]`
 and `[loved]` mark what to keep.

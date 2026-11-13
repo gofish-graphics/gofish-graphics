@@ -162,7 +162,7 @@ Every paragraph, list item, heading and figure of a chapter has a "Feedback"
 button, shown on hover and on keyboard focus. The "Give feedback on this
 chapter" button at the end of the chapter is always shown. Either one opens a
 small box beside its passage. In the box the reader picks one of four
-reactions (Confusing, Slow, Useful, Loved it), may tick "I stopped reading
+reactions (Confusing, Boring, Useful, Loved it), may tick "I stopped reading
 here", and may type a few words. A reaction or the tick alone is enough to
 send. The box keeps an unsent draft in the browser, so closing the box or
 reloading the page does not lose it. Where the feedback goes depends on where
@@ -200,7 +200,7 @@ anyone else, the issue arrives without the label, and its title still starts
 with `Feedback on "`.
 
 The reactions and the stop mark follow how beta readers are asked to react in
-"Write Useful Books". Confusing, Slow and a stop matter most, because they
+"Write Useful Books". Confusing, Boring and a stop matter most, because they
 show where readers get lost or bored and quietly leave. Several readers who
 mark the same passage outweigh one long comment. Run small rounds of three to
 five readers between rebuilds, so each rebuild answers fresh feedback.
