@@ -23,6 +23,30 @@ export const fullTitle = (c: Pick<BookChapter, "label" | "title">) =>
 
 export const fmt = (n: number) => n.toLocaleString("en-US");
 
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
+/** "2026-11-13" as "November 13, 2026". Anything else is returned as is. The
+ *  date is read as written, with no time zone, so it never shifts by a day. */
+export function longDate(iso: string | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? "");
+  if (!m) return iso ?? "";
+  const month = MONTHS[Number(m[2]) - 1];
+  return month ? `${month} ${Number(m[3])}, ${m[1]}` : (iso ?? "");
+}
+
 export const plural = (n: number, one: string, many = one + "s") =>
   `${fmt(n)} ${n === 1 ? one : many}`;
 

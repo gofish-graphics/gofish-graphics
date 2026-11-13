@@ -9,7 +9,7 @@
 import { computed } from "vue";
 import { useData } from "vitepress";
 import { data as book } from "../../../data/book.data";
-import { chapterSlug, plural } from "./book";
+import { chapterSlug, longDate, plural } from "./book";
 
 const { page } = useData();
 
@@ -28,7 +28,7 @@ const stability = computed(() => chapter.value?.stamp.churn?.label ?? "");
         <template v-if="stability"
           ><span class="book-stamp__k">Stability: {{ stability }}.</span>
         </template>
-        Checked against the code on {{ chapter.checked.date }}.
+        Checked against the code on {{ longDate(chapter.checked.date) }}.
       </div>
       <div
         v-if="chapter.stamp.state === 'out-of-date' && chapter.stamp.since"

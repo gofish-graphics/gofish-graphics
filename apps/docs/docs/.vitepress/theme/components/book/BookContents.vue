@@ -4,7 +4,7 @@
 // `title`, `order`, `topics`) and its stamp.
 import { withBase } from "vitepress";
 import { data as book } from "../../../data/book.data";
-import { plural, stateLabel } from "./book";
+import { longDate, plural, stateLabel } from "./book";
 </script>
 
 <template>
@@ -17,7 +17,7 @@ import { plural, stateLabel } from "./book";
       <div class="book-toc__state" :class="`is-${c.stamp.state}`">
         {{ stateLabel(c)
         }}<template v-if="c.checked.date">
-          (checked {{ c.checked.date }})</template
+          (checked {{ longDate(c.checked.date) }})</template
         ><template v-if="c.stamp.state === 'out-of-date' && c.stamp.since"
           >: {{ plural(c.stamp.since.commits, "commit") }} since</template
         ><template v-if="c.stamp.churn"
