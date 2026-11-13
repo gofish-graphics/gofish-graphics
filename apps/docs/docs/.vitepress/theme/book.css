@@ -1121,6 +1121,22 @@
   /* It takes focus only so Escape still works; it is not a control. */
   outline: none;
 }
+/* A wide window has an empty margin beside the text column: the box sits
+   there, under the block's Note control, and covers no text. Figures and
+   rules are wider than the column, so their box stays over the text. */
+@media (min-width: 1280px) {
+  .book-page
+    .vp-doc
+    > div
+    > :not(figure, .book-wide, .book-rule)
+    > .book-note-box,
+  .book-page .vp-doc > div > :is(ul, ol) > li > .book-note-box {
+    top: 2em;
+    right: auto;
+    left: calc(100% + 0.75rem);
+    width: min(18rem, calc((100vw - var(--book-col)) / 2 - 2.5rem));
+  }
+}
 /* A narrow column has no room to cover: the box pushes the text down. */
 @container (max-width: 760px) {
   .book-note-box {
