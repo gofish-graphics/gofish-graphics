@@ -19,13 +19,14 @@ const { theme } = useData();
 // duplicate. The localnav copy is the same home-only toggle, docked into the
 // fixed "Return to top" bar that replaces the navbar once you scroll the long
 // landing page on narrow screens (so the switcher persists there). The sidebar
-// copy shows wherever it renders, except the language-agnostic internals wiki.
+// copy shows wherever it renders, except the language-agnostic internals wiki
+// and the book, Under the Sea.
 const hidden = computed(() => {
   const p = route.path;
   if (props.placement === "nav" || props.placement === "localnav") {
     return !(p === "/" || p === "/index.html" || p === "/index");
   }
-  return /^\/internals(\/|\.html|$)/.test(p);
+  return /^\/(internals|under-the-sea)(\/|\.html|$)/.test(p);
 });
 
 const LANGS = [

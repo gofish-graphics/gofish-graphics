@@ -4,6 +4,8 @@ import matter from "gray-matter";
 import gofish from "./markdown-it-gofish";
 import gofishRef from "./markdown-it-gofish-ref";
 import wikilink, { type WikiTarget } from "./markdown-it-wikilink";
+import book from "./markdown-it-book";
+import { bookNotes } from "./book-notes-server";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
@@ -243,6 +245,51 @@ function collectInternalsSidebar() {
     });
 }
 
+// "Under the Sea" is the book of short chapters on how GoFish works. Like
+// the internals wiki it is language-agnostic. Its pages show no sidebar
+// (transformPageData sets `sidebar: false`): a reader finds the chapters on
+// the opening spread and in each chapter's Contents menu. The sidebar config
+// below is still needed, because VitePress builds the previous and next links
+// at the foot of a chapter from it. It lists the opening page and then each
+// chapter, ordered by frontmatter `order` and titled "label: question" from
+// `label` and `title`. See apps/docs/book/README.md.
+const BOOK_DIR = "under-the-sea";
+
+/** A chapter's listed title, "Layout: How does ...?", from its frontmatter. */
+function bookChapterTitle(fm: Record<string, unknown>): string | undefined {
+  if (typeof fm.title !== "string") return undefined;
+  return typeof fm.label === "string" && fm.label
+    ? `${fm.label}: ${fm.title}`
+    : fm.title;
+}
+
+function collectBookSidebar() {
+  const full = join(docsDir, BOOK_DIR);
+  const chapters = readdirSync(full, { withFileTypes: true })
+    .filter(
+      (e) => e.isFile() && e.name.endsWith(".md") && e.name !== "index.md"
+    )
+    .map((e) => {
+      const fm = matter(readFileSync(join(full, e.name), "utf-8")).data;
+      const slug = e.name.replace(/\.md$/, "");
+      return {
+        text: bookChapterTitle(fm) ?? slug,
+        order: typeof fm.order === "number" ? fm.order : 999,
+        link: `/${BOOK_DIR}/${slug}`,
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.text.localeCompare(b.text));
+  return [
+    {
+      text: "Under the Sea",
+      items: [
+        { text: "Contents", link: `/${BOOK_DIR}/` },
+        ...chapters.map(({ text, link }) => ({ text, link })),
+      ],
+    },
+  ];
+}
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
@@ -290,6 +337,9 @@ export default defineConfig({
         name: "gofish-restore-esbuild-tsx",
         config: () => ({ esbuild: { include: /\.[jt]sx?$/, jsx: "preserve" } }),
       },
+      // Dev server only: POST /__book/note saves a reader's note into the
+      // chapter's brief. The built site has no such endpoint.
+      bookNotes(join(docsDir, "../book/briefs")),
     ],
   },
   appearance: false,
@@ -302,6 +352,25 @@ export default defineConfig({
   // with that page's own heading and image. Pushed onto the page's frontmatter
   // head so they render into each generated HTML file.
   transformPageData(pageData) {
+    // Book pages get their own single-column look (theme/book.css, keyed off
+    // this page class), no sidebar and no outline aside. The opening page is
+    // a two-page spread with the plain `page` layout, so it has no previous
+    // and next links either.
+    if (pageData.relativePath.startsWith(`${BOOK_DIR}/`)) {
+      const opening = pageData.relativePath === `${BOOK_DIR}/index.md`;
+      pageData.frontmatter.pageClass = opening
+        ? "book-page book-opening"
+        : "book-page";
+      if (opening) pageData.frontmatter.layout = "page";
+      pageData.frontmatter.sidebar = false;
+      pageData.frontmatter.aside = false;
+      pageData.frontmatter.outline = false;
+      // The browser tab reads "Layout: How does ...?". `frontmatter.title`
+      // stays the question alone (the note button's issue title uses it).
+      const full = bookChapterTitle(pageData.frontmatter);
+      if (full && pageData.relativePath !== `${BOOK_DIR}/index.md`)
+        pageData.title = full;
+    }
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")
       .replace(/\.md$/, ".html");
@@ -395,6 +464,9 @@ export default defineConfig({
       gofishRef(md);
       // `[[slug]]` wiki links between internals essays → resolved internal links.
       wikilink(md, collectWikiTargets());
+      // `::: not-yet-true`, `::: code-map` and `::: rule <name>` for the
+      // chapters of Under the Sea.
+      book(md);
       md.use(container, "gofish-live", {
         render(tokens, idx) {
           return renderSandbox(tokens, idx, "gofish-live");
@@ -431,10 +503,15 @@ export default defineConfig({
       },
     },
     // https://vitepress.dev/reference/default-theme-config
-    // No top-nav items — section navigation lives in the per-language
-    // sidebar, the language toggle is a theme slot, and the internals wiki
-    // is reached via a quiet icon link in the nav bar (InternalsLink.vue).
+    // Section navigation lives in the per-language sidebar and the language
+    // toggle is a theme slot. The internals wiki has no nav entry: its pages
+    // are still built and reachable by URL.
     nav: [
+      {
+        text: "Under the Sea",
+        link: `/${BOOK_DIR}/`,
+        activeMatch: `/${BOOK_DIR}/`,
+      },
       { text: "Examples", link: "/js/examples/", activeMatch: "/examples/" },
       {
         text: "API Reference",
@@ -736,6 +813,7 @@ export default defineConfig({
         },
       ],
       "/internals/": collectInternalsSidebar(),
+      [`/${BOOK_DIR}/`]: collectBookSidebar(),
     },
 
     socialLinks: [
