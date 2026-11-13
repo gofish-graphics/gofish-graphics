@@ -424,6 +424,25 @@
     border-left: 2px solid var(--rule-strong);
     padding-left: 10px;
   }
+  /* A choice the proposal made, shown beside the example it affects */
+  .note.choice {
+    margin: 14px 0;
+    color: var(--ink);
+    background: var(--accent-soft);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    padding: 10px 14px;
+    max-width: 72ch;
+  }
+  .note.choice > * + * {
+    margin-top: 8px;
+  }
+  .note.choice img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    background: var(--shot-bg);
+  }
   .small {
     font-size: 0.9rem;
     color: var(--muted);
@@ -976,7 +995,7 @@
       <a href="#data">Data types</a>
       <a href="#space">Space types</a>
       <a href="#errors">Errors</a>
-      <a href="#decisions">Decisions</a>
+      <a href="#status">Status</a>
     </div>
     <div class="langswitch" role="group" aria-label="Code language">
       <button type="button" id="lang-js" data-set="js" aria-pressed="true">
@@ -1050,6 +1069,17 @@ const inv = chart(rows, {
 )</code></pre>
           </div>
         </div>
+        <p class="note choice" id="choice-41">
+          <strong>Choice made here.</strong> <code>Month</code> says both
+          <code>Trait.ordered()</code> and <code>Trait.cyclic()</code>, because
+          a cycle is not an order and <code>.last()</code> needs a cut (choice
+          41). The other option is that <code>Trait.cyclic()</code> alone
+          implies an order cut at the first level. Under it, the
+          <code>Month</code> line above would read
+          <code>traits: [Trait.cyclic()]</code>, and <code>.last()</code> would
+          work on any cyclic key, such as a weekday, with no declared start. Say
+          so if this is wrong.
+        </p>
       </section>
       <div class="gallery">
         <article class="card" id="ex-inventory-by-warehouse">
@@ -4360,9 +4390,10 @@ chart(seafood, {
             <div class="label">Allowed and rejected</div>
             <p class="lead">
               <code>count</code> sums over every key, so every stack and
-              normalize passes the value rule. Read literally, the stack rule
-              rejects <code>NestedMosaicChart</code>, a stack inside a stack. It
-              should not: see the open problem on the Space types tab.
+              normalize passes the value rule. The stack rule accepts
+              <code>NestedMosaicChart</code>, a stack inside a stack, because
+              each stack takes its children's lengths from its
+              <code>size</code> option (choice 34, Space types tab).
               <code>IcicleChart</code>, <code>NestedWaffleChart</code> and
               <code>SankeyTree</code> use the low-level combinators, so no
               schema reaches them.
@@ -4950,7 +4981,7 @@ chart(categoryBrands, {
       name: "Brand value",
       unit: USDMillion,
       traits: [Trait.canSum({ over: "name" })],
-      // or, the open second spelling:
+      // or, the second spelling, kept for now (choice 3):
       // traits: [Trait.canSum(), Trait.snapshot({ along: "year" })],
     },
   },
@@ -5214,8 +5245,8 @@ chart(birds, {
               ><span class="verdict v-none">344 rows</span>
             </div>
             <p class="lead">
-              Per-penguin measurements can both sum and average, which leaves
-              the default fold open.
+              Per-penguin measurements can both sum and average, so a size
+              channel asks for a fold (choice 29).
             </p>
             <div class="label">Two rows</div>
             <pre
@@ -5457,7 +5488,10 @@ chart(penguins, {
               <tr>
                 <th scope="row"><code>NestedMosaicChart</code></th>
                 <td>a stack outside a stack</td>
-                <td>No. A false positive of the literal rule.</td>
+                <td>
+                  No longer fires. The stack takes each child's length from its
+                  <code>size</code> option (choice 34).
+                </td>
               </tr>
               <tr>
                 <th scope="row">Pie <code>Rose</code></th>
@@ -5611,7 +5645,7 @@ chart(penguins, {
             </h3>
             <div class="verdicts">
               <span class="verdict v-err">binned by month: error</span
-              ><span class="verdict v-none">spelling open</span>
+              ><span class="verdict v-none">two spellings kept</span>
             </div>
             <p class="lead">
               Daily stock is a reading along <code>day</code>. A bin of a key
@@ -6229,9 +6263,18 @@ chart(data, { w: 80 })
           by <code>cylinders</code>, and the titanic passenger stories spread or
           stack by <code>pclass</code> (1, 2, 3) and <code>survived</code> (0,
           1). They draw correctly, since the numbers have few values. Under the
-          rule each needs one <code>Domain.discrete</code> line on the column.
-          Whether a raw <code>by</code> on an undeclared number should be an
-          error or a lint is open (Decisions tab).
+          rule each one is flagged until it gets one
+          <code>Domain.discrete</code> line on the column.
+        </p>
+        <p class="note choice" id="choice-28">
+          <strong>Choice made here.</strong> A <code>by</code> on an undeclared
+          number outside the table's <code>key</code> is a lint that suggests a
+          bin or <code>Domain.discrete</code> (choice 28). The other option is
+          an error. Under an error, <code>vega-lite/StripPlot</code>, which
+          groups by <code>cylinders</code>, and the titanic passenger stories,
+          which group by <code>pclass</code> and <code>survived</code>, would
+          stop drawing until each gets one <code>Domain.discrete</code> line.
+          Under the lint they draw with a warning. Say so if this is wrong.
         </p>
         <p>
           So both readings come down to one. Every table has one identity, and
@@ -6449,7 +6492,10 @@ response: Unit({
                     class="code"
                   ><code class="language-javascript">stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
 price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },
-month: Unit({ domain: Domain.discrete(MONTHS), traits: [Trait.cyclic()] }),
+month: Unit({
+  domain: Domain.discrete(MONTHS),
+  traits: [Trait.ordered(), Trait.cyclic()],
+}),
 response: Unit({
   domain: Domain.discrete(LEVELS),
   traits: [Trait.ordered(), Trait.diverging()],
@@ -6459,7 +6505,9 @@ response: Unit({
                   <pre class="code"><code class="language-python">{
     "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
     "price": {"unit": "USD/items", "traits": [Trait.can_average(weight="sold")]},
-    "month": Unit(domain=Domain.discrete(MONTHS), traits=[Trait.cyclic()]),
+    "month": Unit(
+        domain=Domain.discrete(MONTHS), traits=[Trait.ordered(), Trait.cyclic()]
+    ),
     "response": Unit(
         domain=Domain.discrete(LEVELS), traits=[Trait.ordered(), Trait.diverging()]
     ),
@@ -6674,9 +6722,9 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
           example. The waterfall chart is the likely one.
         </p>
         <p>
-          Runner-up: A, if Josh wants each kind visible in the schema. What
-          would change my pick: a real chart that needs the snapshot declared to
-          draw correctly, not only to explain an error.
+          Runner-up: A, which shows each kind in the schema. What would change
+          my pick: a real chart that needs the snapshot declared to draw
+          correctly, not only to explain an error.
         </p>
         <h3>
           <code>over</code> and <code>along</code>: two spellings of one check
@@ -6827,10 +6875,10 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
           (the mass of a group) and averages (the mean mass of a group). The
           rules fill in a size channel's fold from the one trait a column has,
           and say nothing when it has two. The choices are the sum, the mean, or
-          an error that offers both. This is an open decision. In the dataset
-          schemas I left <code>canSum</code> off beak lengths, which makes the
-          declaration a statement of what the author means rather than of what
-          the physics allows.
+          an error that offers both. The proposal takes the error (choice 29).
+          In the dataset schemas I left <code>canSum</code> off beak lengths,
+          which makes the declaration a statement of what the author means
+          rather than of what the physics allows.
         </p>
         <h3>Overlap check</h3>
         <ul>
@@ -7597,8 +7645,8 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
         </ul>
         <p>
           So the default is a gap, and a zero needs either an explicit fill or a
-          declaration that the table is complete. How to declare that is open.
-          GoFish has no rule for this today.
+          declaration that the table is complete. How to declare that waits for
+          an example (choice 30). GoFish has no rule for this today.
         </p>
         <details class="rationale">
           <summary>Multi-table inputs (smallest useful piece)</summary>
@@ -8478,10 +8526,11 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
           </li>
         </ul>
         <p>
-          Open: whether unit conversion (°C to °F) and area-preserving maps
-          belong here. The scale-transforms proposal already places the second
-          with coords (<code>Coord.clock({ radius: "area" })</code>), and I
-          would leave it there.
+          Unit conversion (°C to °F) is left out of this proposal and belongs
+          with unit algebra (#1142). Area-preserving maps stay with coords,
+          where the scale-transforms proposal already places them (<code
+            >Coord.clock({ radius: "area" })</code
+          >).
         </p>
         <h3>Comparison with Flint</h3>
         <details class="rationale">
@@ -8913,8 +8962,8 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
           every other, so "first", "last" and "before" have no meaning. Months
           of the year are a cycle, and the calendar adds a convention that the
           loop is cut at January, which gives the line. That is why
-          <code>month</code> says both, and why decision 41 asks whether
-          <code>cyclic</code> alone should include the cut.
+          <code>month</code> says both, and why choice 41 keeps the cut out of
+          <code>cyclic</code>.
         </p>
         <p>
           <strong>Space.</strong> Each axis of a node has a type. A leaf says
@@ -9113,12 +9162,13 @@ scatter x: a, y: b
           <strong>What the notation does not say yet.</strong> A stack with a
           <code>size</code> option takes its lengths from <code>size</code> and
           does not read <code>child.y</code>, which is why the nested mosaic is
-          correct; that rule is not written. A channel that folds several rows
-          (<code>Len[mean of price]</code>) is not written. Area, an upper
-          segment's missing baseline, an invented segment order, and the join of
-          two siblings on a shared axis have no symbol. Josh asked on 11-12 to
-          leave out arrow and forall signatures, so this uses one arrow, for a
-          whole spec, and no quantifiers.
+          correct; that rule is not written here (see the
+          <a href="#choice-34">choice under the stack of spreads</a> below). A
+          channel that folds several rows (<code>Len[mean of price]</code>) is
+          not written. Area, an upper segment's missing baseline, an invented
+          segment order, and the join of two siblings on a shared axis have no
+          symbol. Josh asked on 11-12 to leave out arrow and forall signatures,
+          so this uses one arrow, for a whole spec, and no quantifiers.
         </p>
         <h2>A stack of spreads: the error only the space side catches</h2>
         <p>
@@ -9214,10 +9264,44 @@ scatter x: a, y: b
           Is a stack of spreads always wrong? By this rule, yes, with two
           degenerate cases that draw correctly: one bar per group, and bars of
           equal height. The rule rejects those too, since the fix is to drop the
-          <code>spread</code>. One open problem stays: NestedMosaicChart, a
-          stack outside a stack whose <code>size</code> option gives each
-          child's length, is flagged by the literal rule and is correct.
+          <code>spread</code>. A stack with a <code>size</code> option is not
+          affected, because it does not read its children's extents.
         </p>
+        <div class="note choice" id="choice-34">
+          <p>
+            <strong>Choice made here.</strong> A stack takes one length per
+            child, from the child's own length or from the stack's
+            <code>size</code> option. With <code>size</code>, the stack does not
+            read the child's extent (choice 34). The other option is a stack
+            with no <code>size</code> source, where each child must itself be
+            one length. Under it, <code>NestedMosaicChart</code> below is
+            rejected, because each of its outer stacks holds a stack along the
+            other axis, which is a row of several lengths. Under the choice it
+            is valid, as its picture is: each level's <code>size</code> sets
+            each child's share of the window. Say so if this is wrong.
+          </p>
+          <img
+            src="img/space/nested-mosaic.png"
+            alt="The nested mosaic: Titanic passengers by class on y, sex on x within each class, and survival on y within each cell."
+            loading="lazy"
+            style="max-width: 420px; width: 100%"
+          />
+          <pre
+            class="code"
+          ><code class="language-javascript">chart(titanic, { w: 500, h: 500 })
+  .flow(
+    stack({ by: "class", dir: "y", size: field("count").normalize() }),
+    stack({ by: "sex", dir: "x", size: field("count").normalize() }),
+    stack({ by: "survived", dir: "y", size: field("count").normalize() })
+  )
+  .mark(
+    rect({
+      fill: (d) =&gt; (d.survived === "No" ? gray : classColor[d.class]),
+      stroke: "white",
+      strokeWidth: 1,
+    })
+  );</code></pre>
+        </div>
         <h2>One shared axis, two kinds of space</h2>
         <p>
           A Likert row (<code>response</code> with
@@ -9596,10 +9680,10 @@ scatter x: a, y: b
           traits flow down from the coord, and space facts flow up to it.
         </p>
         <p>
-          Recommendation: A, with C as the form to take if Josh wants the
-          method. B is the one to avoid. I would move to C if axes and legends
-          also become methods as part of the chrome work, so that the chain is
-          the one place frame settings live.
+          Choice: A. If the method is ever added, C is its form (choice 9). B is
+          the one to avoid. I would move to C if axes and legends also become
+          methods as part of the chrome work, so that the chain is the one place
+          frame settings live.
         </p>
         <h2 class="appendix" id="rules">Appendix: the rules for space types</h2>
         <p class="appendix-note">
@@ -9656,10 +9740,14 @@ scatter x: a, y: b
                   <td>
                     the stacked size has <code>CanSum</code> over
                     <code>by</code>, has <code>HasZero</code>, and its parts
-                    share a unit. Each child is one length along
-                    <code>dir</code>. A spread or layer of several lengths has
+                    share a unit. Each child gives one length along
+                    <code>dir</code>, from one of two sources: the child's own
+                    length, or the stack's <code>size</code> option. Without
+                    <code>size</code>, a spread or layer of several lengths has
                     an extent there, its tallest bar, but no amount to add, so a
-                    stack outside a spread is an error (#992).
+                    stack outside a spread is an error (#992). With
+                    <code>size</code>, the child's extent is not read (choice
+                    34).
                   </td>
                   <td>adds <code>by</code></td>
                   <td>
@@ -9799,8 +9887,8 @@ scatter x: a, y: b
                 <tr>
                   <th scope="row"><code>log</code></th>
                   <td>
-                    nothing. It is a debug pass-through and should be renamed
-                    before a log coord ships.
+                    nothing. It is a debug pass-through, renamed when
+                    <code>Coord.log</code> lands (choice 13).
                   </td>
                   <td></td>
                   <td></td>
@@ -9812,21 +9900,17 @@ scatter x: a, y: b
           </div>
         </details>
         <p class="note">
-          <strong
-            >Open problem: the stack rule, read literally, rejects the Nested
-            Mosaic story.</strong
-          >
+          <strong>The nested mosaic and the <code>size</code> source.</strong>
           <code>NestedMosaicChart</code> stacks <code>class</code> on y around a
           stack of <code>sex</code> on x, each with
-          <code>size: field("count").normalize()</code>. Read literally, the
-          Stack row says each child must be one length along <code>dir</code>,
-          and a stack of several lengths has an extent but no amount. But here
-          the outer stack sets each child's length from its own
-          <code>size</code> option, so it never reads the child's extent, and
-          the picture is right. The suggested exemption: a stack whose
-          <code>size</code> option gives each child's length does not read the
-          child's extent, so the "one length" condition does not apply to it.
-          The rule above is not changed yet. This is a reading of the rule's
+          <code>size: field("count").normalize()</code>. Along y the inner stack
+          is a row of several lengths, so a stack with no
+          <code>size</code> would reject it. Here the outer stack takes each
+          child's length from its own <code>size</code> option and never reads
+          the child's extent, so the chart is valid, and the picture is right.
+          That is the Stack row's second source of length (<a href="#choice-34"
+            >choice 34</a
+          >, shown with the stack of spreads). This is a reading of the rule's
           text, not the output of a checker.
         </p>
         <details class="rationale">
@@ -10094,7 +10178,7 @@ scatter x: a, y: b
                   <td>
                     a gap at a missing pair. Zero only if the value has
                     <code>CanSum</code> and <code>HasZero</code> and the table
-                    is declared complete (open: a top-N table is not)
+                    is declared complete (choice 30; a top-N table is not)
                   </td>
                   <td><span class="chip now-no">no</span></td>
                 </tr>
@@ -10607,7 +10691,8 @@ scatter x: a, y: b
             or not (ordinal, <code>hasOrder</code>), and area (none today, for a
             <code>treemap</code> or a mosaic cell). It catches nothing on its
             own. It makes the join rule and the log rule readable against one
-            table.
+            table. (The notation draft writes these as <code>Len</code>,
+            <code>Pos</code>, <code>Diff</code> and <code>Slots</code>.)
           </li>
           <li>
             <strong
@@ -11060,223 +11145,9 @@ error[no-zero] at rect({ h: "temp" })
         </ul>
       </section>
     </section>
-    <section class="panel" data-panel="decisions" hidden>
+    <section class="panel" data-panel="status" id="decisions" hidden>
       <section class="prose">
-        <h2>Decisions for Josh</h2>
-        <p>Answer by number. Full text: proposal.md sections 13 and 14.</p>
-        <h3>Additivity and names</h3>
-        <ol>
-          <li>
-            Is <code>Trait.canSum({ over })</code> the one declaration for
-            additivity (approach C), or do you want each kind declared (approach
-            A)?
-          </li>
-          <li>
-            <span class="chip now-settled">settled</span> 11-12: the key word is
-            <code>over</code>, not <code>by</code> or #1198's
-            <code>entity</code>. Line and ribbon use <code>along</code>, so
-            there is no clash.
-          </li>
-          <li>
-            Should a column that does not add up over an ordered key get a
-            default fold (<code>.last()</code>), or an error that offers the
-            choices? I recommend the error.
-          </li>
-          <li>
-            <span class="chip now-partly">partly settled</span> 11-12:
-            operations are spelled as the trait, <code>Trait.canSum</code> and
-            <code>Trait.canAverage</code>. Open: do the value-structure words
-            stay adjectives (<code>ordered</code>, <code>cyclic</code>,
-            <code>diverging</code>), and should today's
-            <code>Trait.summable()</code> be renamed to match?
-          </li>
-        </ol>
-        <h3>Schema and values</h3>
-        <ol start="5">
-          <li>
-            Is <code>key</code> a chart option beside <code>schema</code>, or
-            part of the schema?
-          </li>
-          <li>
-            Do plain numbers have <code>HasZero</code> by default, with units
-            such as °C opting out through a difference unit?
-          </li>
-          <li>
-            Does <code>HasMidpoint</code> go on amounts too (profit around 0),
-            as well as on ordered keys?
-          </li>
-          <li>
-            Are the key-sized checks (histogram density, choropleth of counts)
-            lints and not errors?
-          </li>
-        </ol>
-        <h3>Coords, groups and TypeScript</h3>
-        <ol start="9">
-          <li>
-            <code>.coord()</code>: keep the option, or add the method at the
-            start of the chain?
-          </li>
-          <li>
-            Should a null <code>by</code> value be an error, a visible "missing"
-            group, or stay an unlabeled group? Bins drop nulls silently today.
-          </li>
-          <li>Should declared levels keep empty groups, as cells do?</li>
-          <li>Is the TypeScript mirror worth starting with field names now?</li>
-          <li>
-            Should <code>log</code>, the debug pass-through, be renamed before
-            <code>Coord.log</code> exists?
-          </li>
-        </ol>
-        <h3>Errors</h3>
-        <ol start="14">
-          <li>
-            Should every type check report through one diagnostic record and one
-            list, with <code>render</code> throwing once at the end (section
-            15)? I recommend yes.
-          </li>
-          <li>
-            Are the words made on the JS side for both languages, from one table
-            in <code>gofish-ir</code>, or does Python keep its own messages? I
-            recommend one table.
-          </li>
-          <li>
-            Should filled-in defaults be recorded as notes that the user can ask
-            to see?
-          </li>
-          <li>
-            Are the codes (<code>cannot-sum</code>, <code>no-zero</code>) public
-            names that users can search for and use to turn a lint off?
-          </li>
-        </ol>
-        <h3>Keys</h3>
-        <ol start="18">
-          <li>
-            Does <code>key: [...]</code> mean the table's identity, a candidate
-            key checked on the rows when a rule relies on it, and never "the
-            fields a chart may split by"?
-          </li>
-          <li>With no declared key, is the identity the row?</li>
-          <li>
-            How is a dependency between fields declared? The draft spelling is
-            <code>Trait.nested({ in: "region" })</code> on <code>country</code>.
-          </li>
-          <li>
-            Is an order made by <code>.sort(...)</code> on a value a display
-            order only, so that a line or ribbon along that key still needs
-            <code>HasOrder</code>?
-          </li>
-          <li>
-            Should a <code>scatter({ by })</code> whose groups hold more than
-            one row be a lint, an error, or allowed (<code>cars.Name</code>)?
-          </li>
-          <li>
-            Should a color or text channel that reads a field that varies inside
-            the mark be an error? Today it reads the first row.
-          </li>
-          <li>
-            Should <code>repeat</code> and <code>chunk</code> become typed flow
-            steps that output a key, in place of <code>derive</code>?
-          </li>
-          <li>
-            After <code>unpivot</code>, does the value sum over the new key? I
-            recommend no, unless declared.
-          </li>
-          <li>
-            Do aggregates built into a new table need a typed helper, so the
-            checker sees the new key? About 12 stories build one by hand.
-          </li>
-          <li>
-            Should a key with no declared order be "unknown" (it passes, as the
-            proposal says) or "no order" (as the engine already treats an
-            undeclared string key for axes)?
-          </li>
-          <li>
-            Should a <code>by</code> on an undeclared number that is not in the
-            table's <code>key</code> be an error that asks for a bin or
-            <code>Domain.discrete</code>, or only a lint? It affects
-            <code>StripPlot</code> (<code>cylinders</code>) and the titanic
-            passenger stories (<code>pclass</code>, <code>survived</code>).
-          </li>
-        </ol>
-        <h3>Datasets</h3>
-        <ol start="29">
-          <li>
-            When a column has both <code>canSum</code> and
-            <code>canAverage</code>, which fold does a size channel fill in: the
-            sum, the mean, or an error that offers both?
-          </li>
-          <li>
-            Is a missing pair a gap by default, with zero only for a table
-            declared complete? How is "complete" or "top N" declared?
-          </li>
-          <li>
-            How does a number column get an order or a time granularity (a year
-            stored as 1956)? Should <code>Unit.time()</code> reject a plain
-            number?
-          </li>
-          <li>
-            Should a column be able to say it belongs to a coarser key in a flat
-            table, such as <code>{ unit, key: "region" }</code> for
-            <code>uncertainty</code>?
-          </li>
-          <li>
-            Should a table with no id column get an implicit row key, so that
-            the static rules work on <code>penguins</code> and
-            <code>denseMasses</code>?
-          </li>
-          <li>
-            Should the stack rule exempt a stack whose <code>size</code> option
-            gives each child's length (the Nested Mosaic case on the Space types
-            tab)?
-          </li>
-        </ol>
-        <h3>Space side</h3>
-        <ol start="35">
-          <li>
-            Adopt the join rule for sibling spaces on one shared axis, with the
-            <code>mixed-sides</code> error and the
-            <code>no-shared-baseline</code> lint? Should the mirrored fix ship
-            now, before the type system?
-          </li>
-          <li>
-            Write the Gives column in the five words position, length,
-            difference, slot and area?
-          </li>
-          <li>
-            Is "an area reads as an amount when the product of its two length
-            units can sum over the product key" a lint that waits for #1142
-            (unit algebra)?
-          </li>
-          <li>
-            Scope the key and coord lint by what the mark asserts, so that pies
-            and Cartesian bars of months stay silent?
-          </li>
-          <li>
-            Build a small metamorphic test kit on top of
-            <code>capture-one</code>'s normalized DOM?
-          </li>
-          <li>
-            Add an opt-in lint class, under strict mode (#1120), for structure a
-            layout invents or drops?
-          </li>
-          <li>
-            Does <code>Trait.cyclic()</code> alone give an order with a
-            conventional first level, so that <code>.last()</code> works on
-            months, or must a column say <code>ordered</code> and
-            <code>cyclic</code> both? The example now says both.
-          </li>
-        </ol>
-        <h3>Syntax to review</h3>
-        <p>
-          <code>Trait.canSum({ over })</code>,
-          <code>Trait.canAverage({ weight })</code>,
-          <code>Trait.cyclic()</code>, <code>key: [...]</code>,
-          <code>traits</code> on a column record,
-          <code>Domain.continuous([lo, hi])</code>,
-          <code>.mean({ weight })</code>, <code>.last()</code>,
-          <code>.first()</code>, <code>unpivot</code>,
-          <code>Trait.nested({ in })</code>, <code>repeat</code> as a flow step.
-        </p>
+        <h2>Status</h2>
         <h3>Recommendation, in order of work</h3>
         <ol>
           <li>
@@ -11346,6 +11217,17 @@ error[no-zero] at rect({ h: "temp" })
             wire.
           </li>
         </ul>
+        <h3>Syntax to review</h3>
+        <p>
+          <code>Trait.canSum({ over })</code>,
+          <code>Trait.canAverage({ weight })</code>,
+          <code>Trait.cyclic()</code>, <code>key: [...]</code>,
+          <code>traits</code> on a column record,
+          <code>Domain.continuous([lo, hi])</code>,
+          <code>.mean({ weight })</code>, <code>.last()</code>,
+          <code>.first()</code>, <code>unpivot</code>,
+          <code>Trait.nested({ in })</code>, <code>repeat</code> as a flow step.
+        </p>
         <h3>Gaps found on main (not filed)</h3>
         <ul>
           <li>
@@ -11407,6 +11289,11 @@ error[no-zero] at rect({ h: "temp" })
             A <code>color</code> palette passed to a combinator's
             <code>render</code> was not applied in the space-type probes (run;
             not investigated).
+          </li>
+          <li>
+            The engine treats an undeclared string key as unordered for axes,
+            while the proposal treats every undeclared column as unknown (choice
+            27; read).
           </li>
           <li>
             <code>Unit.time()</code> accepts a number and reads the year 1956 as
@@ -11554,6 +11441,392 @@ error[no-zero] at rect({ h: "temp" })
           TduMB8U1), the stacking design space (3uB2dfsd) and the Flint notes
           (<code>internals/design/flint-chart-notes.md</code>).
         </p>
+        <p id="choices">
+          These are defaults taken so that the proposal is complete. None of
+          them needs an answer. Say so if one looks wrong. The numbers are kept
+          so that older references still resolve.
+        </p>
+        <details class="rationale">
+          <summary>Choices this proposal makes (41)</summary>
+          <h3>Additivity and names</h3>
+          <ol start="1">
+            <li>
+              <strong
+                >One keyed trait, <code>Trait.canSum({ over })</code>, declares
+                additivity.</strong
+              >
+              It covers the unit flag, the entity key and the draft's Extensive
+              in one fact (approach C). Alternative: declare each kind
+              (extensive, snapshot, constant) by name (approach A).
+            </li>
+            <li>
+              <strong>The key word is <code>over</code>.</strong> It does not
+              clash with <code>along</code>, which line and ribbon keep (settled
+              11-12). Alternative: <code>by</code>, or #1198's
+              <code>entity</code>.
+            </li>
+            <li>
+              <strong
+                >A snapshot may be declared by where it adds (<code
+                  >canSum({ over })</code
+                >) or by where it is a reading (<code>snapshot({ along })</code
+                >), and both spellings are kept until examples separate
+                them.</strong
+              >
+              No example found so far needs one over the other.
+              <strong
+                >A column that does not add up over an ordered key gets an error
+                that offers <code>.last()</code> and <code>.mean()</code>, not a
+                silent default fold.</strong
+              >
+              A silent fold would pick a meaning for the user. Alternative: one
+              spelling now, and a default fold (<code>.last()</code>).
+            </li>
+            <li>
+              <strong
+                >Operations are spelled as the trait (<code>Trait.canSum</code>,
+                <code>Trait.canAverage</code>), and value-structure words stay
+                adjectives (<code>ordered</code>, <code>cyclic</code>,
+                <code>diverging</code>). Today's
+                <code>Trait.summable()</code> is renamed
+                <code>Trait.canSum()</code>.</strong
+              >
+              An operation is something a user asks of a column, and a structure
+              is something its values have (settled 11-12 for the operations).
+              Alternative: one family for both, all adjectives or all trait
+              names.
+            </li>
+          </ol>
+          <h3>Schema and values</h3>
+          <ol start="5">
+            <li>
+              <strong
+                ><code>key</code> is a chart option beside
+                <code>schema</code>.</strong
+              >
+              The key is a fact about the whole table, not about one column.
+              Alternative: put it inside the schema.
+            </li>
+            <li>
+              <strong
+                >Plain numbers have <code>HasZero</code> by default, and a unit
+                such as °C opts out.</strong
+              >
+              Most numbers in a chart are amounts with a true zero. Alternative:
+              no zero unless declared.
+            </li>
+            <li>
+              <strong
+                ><code>HasMidpoint</code> goes on amounts too (profit around 0),
+                as well as on ordered keys.</strong
+              >
+              A signed amount diverges around its zero as a Likert scale does
+              around its middle. Alternative: ordered keys only.
+            </li>
+            <li>
+              <strong
+                >The key-sized checks (histogram density, choropleth of counts)
+                are lints, not errors.</strong
+              >
+              Unequal cells are sometimes close enough not to matter, as months
+              are. Alternative: errors.
+            </li>
+          </ol>
+          <h3>Coords, groups and TypeScript</h3>
+          <ol start="9">
+            <li>
+              <strong
+                ><code>coord</code> stays an option at the chart boundary. If it
+                ever becomes a method, it goes at the start of the
+                chain.</strong
+              >
+              A coord is the outermost scope, and the chain reads from the
+              outside in (section 11). Alternative: a method at the end of the
+              chain.
+            </li>
+            <li>
+              <strong
+                >A null <code>by</code> value becomes a visible "missing" group,
+                and bins stop dropping nulls silently.</strong
+              >
+              Missing data stays in view instead of vanishing. Alternative: an
+              error.
+            </li>
+            <li>
+              <strong>Declared levels keep empty groups, as cells do.</strong> A
+              declared level is part of the domain whether or not a row has it.
+              Alternative: drop the levels with no rows.
+            </li>
+            <li>
+              <strong>The TypeScript mirror is not started now.</strong> The
+              checks run on values in both languages, and field-name checks come
+              last in the order of work. Alternative: start it with field names
+              now.
+            </li>
+            <li>
+              <strong
+                ><code>log</code>, the debug pass-through, is renamed when
+                <code>Coord.log</code> lands, not before.</strong
+              >
+              Until then its name clashes with nothing. Alternative: rename it
+              now.
+            </li>
+          </ol>
+          <h3>Errors</h3>
+          <ol start="14">
+            <li>
+              <strong
+                >Every type check reports through one diagnostic record and one
+                list, and <code>render</code> throws once at the end.</strong
+              >
+              The user sees every problem in one run (section 15). Alternative:
+              each check throws its own error.
+            </li>
+            <li>
+              <strong
+                >The words are made on the JS side for both languages, from one
+                table in <code>gofish-ir</code>.</strong
+              >
+              One table keeps the two languages in step, and the record carries
+              the spelling. Alternative: Python keeps its own messages.
+            </li>
+            <li>
+              <strong
+                >Filled-in defaults are recorded as notes that are not printed
+                unless asked for.</strong
+              >
+              A user can see what was filled in without noise on every render.
+              Alternative: print them every time, or do not record them.
+            </li>
+            <li>
+              <strong
+                >The codes (<code>cannot-sum</code>, <code>no-zero</code>) are
+                public names that users can search for and use to turn a lint
+                off.</strong
+              >
+              A search and a switch both need a stable name. Alternative:
+              internal codes only.
+            </li>
+          </ol>
+          <h3>Keys (section 7)</h3>
+          <ol start="18">
+            <li>
+              <strong
+                ><code>key: [...]</code> means the table's identity, checked on
+                the rows when a rule relies on it. It never means "the fields a
+                chart may split by".</strong
+              >
+              A visualization often groups by fields that are not key columns.
+              Alternative: a list of the fields a chart may split by.
+            </li>
+            <li>
+              <strong>With no declared key, the identity is the row.</strong>
+              The row is the one identity every table has. Alternative: no
+              identity, so the rules that need a key do not run.
+            </li>
+            <li>
+              <strong
+                >A dependency between fields is spelled
+                <code>Trait.nested({ in })</code>, and it waits for an example
+                that needs it.</strong
+              >
+              No chart found so far goes wrong without it. Alternative: add it
+              in the first steps.
+            </li>
+            <li>
+              <strong
+                >An order made by <code>.sort(...)</code> on a value is a
+                display order only. A line or ribbon along that key still needs
+                <code>HasOrder</code>.</strong
+              >
+              Sorting bars by height does not make neighbors mean anything.
+              Alternative: a sort counts as an order.
+            </li>
+            <li>
+              <strong
+                >A <code>scatter({ by })</code> whose groups hold more than one
+                row is a lint.</strong
+              >
+              It hides rows, as <code>cars.Name</code> does, but a user may mean
+              it. Alternative: an error, or allowed with no message.
+            </li>
+            <li>
+              <strong
+                >A color or text channel that reads a field that varies inside
+                the mark is an error. Today it reads the first row.</strong
+              >
+              The first row is an arbitrary pick, as the lake bars colored by
+              their first species show. Alternative: a lint.
+            </li>
+            <li>
+              <strong
+                ><code>repeat</code> and <code>chunk</code> become typed flow
+                steps that output a key, later, not in the first steps.</strong
+              >
+              They change the table's identity, and the checker must see the new
+              key. Alternative: they stay inside <code>derive</code>.
+            </li>
+            <li>
+              <strong
+                >After <code>unpivot</code>, the value does not sum over the new
+                key unless declared.</strong
+              >
+              Columns folded into one value often measure different things.
+              Alternative: it sums by default.
+            </li>
+            <li>
+              <strong
+                >Aggregates built into a new table get a typed helper so the
+                checker sees the new key, later.</strong
+              >
+              About 12 stories build one by hand. Alternative: users declare the
+              new key themselves.
+            </li>
+            <li>
+              <strong
+                >A key with no declared order is unknown and passes, like every
+                undeclared column.</strong
+              >
+              Under gradual typing, declaring more catches more. The engine's
+              axis code, which treats an undeclared string key as unordered, is
+              a separate inconsistency listed in the gaps. Alternative: an
+              undeclared key has no order.
+            </li>
+            <li>
+              <strong
+                >A <code>by</code> on an undeclared number outside the table's
+                <code>key</code> is a lint that suggests a bin or
+                <code>Domain.discrete</code>.</strong
+              >
+              The stories that do this draw correctly today. Alternative: an
+              error.
+            </li>
+          </ol>
+          <h3>Datasets (section 16)</h3>
+          <ol start="29">
+            <li>
+              <strong
+                >When a column has both <code>canSum</code> and
+                <code>canAverage</code>, a size channel gets an error that
+                offers both folds.</strong
+              >
+              The reason is the one in choice 3: a silent fold would pick a
+              meaning for the user. Alternative: fill in the sum, or the mean.
+            </li>
+            <li>
+              <strong
+                >A missing pair is a gap by default. Zero is only for a table
+                declared complete, and how to declare that waits for an
+                example.</strong
+              >
+              In a top-N table a missing brand still has a value. Alternative:
+              zero by default.
+            </li>
+            <li>
+              <strong
+                ><code>Unit.time()</code> rejects a plain number. A year stored
+                as 1956 is declared with a unit that says so, and the spelling
+                waits for the time work (#256).</strong
+              >
+              Today the number is read as milliseconds after 1970. Alternative:
+              accept numbers and guess the granularity.
+            </li>
+            <li>
+              <strong
+                >A column that belongs to a coarser key in a flat table (<code
+                  >fare</code
+                >
+                per ticket) cannot be declared yet. It waits for an example
+                beyond the two found.</strong
+              >
+              Two examples are too few to fix a spelling. Alternative: a
+              spelling now, such as <code>{ unit, key: "region" }</code>.
+            </li>
+            <li>
+              <strong
+                >A table with no id column gets an implicit row key.</strong
+              >
+              Then the static rules work on <code>penguins</code> and
+              <code>denseMasses</code>. Alternative: the rules that need a key
+              skip such tables.
+            </li>
+            <li>
+              <strong
+                >A stack takes one length per child from the child's own length
+                or from the stack's <code>size</code> option. With
+                <code>size</code>, the child's extent is not read.</strong
+              >
+              This is what the engine does, and it makes the nested mosaic
+              valid. Alternative: no <code>size</code> source, which rejects the
+              nested mosaic.
+            </li>
+          </ol>
+          <h3>Space side (section 17)</h3>
+          <ol start="35">
+            <li>
+              <strong
+                >The join rule for sibling spaces on one shared axis is adopted,
+                with the <code>mixed-sides</code> error and the
+                <code>no-shared-baseline</code> lint. The mirrored-flag fix is a
+                bug fix that can ship before the type system.</strong
+              >
+              The Likert probe prints wrong tick labels today. Alternative: ship
+              both with the type system.
+            </li>
+            <li>
+              <strong
+                >What an operator gives is written in a closed vocabulary: the
+                notation draft's <code>Len</code>, <code>Pos</code>,
+                <code>Diff</code>, <code>Slots</code>, and area later.</strong
+              >
+              One closed list makes the join rule and the log rule readable
+              against one table. Alternative: free prose per operator.
+            </li>
+            <li>
+              <strong
+                >"An area reads as an amount when the product of its two length
+                units can sum over the product key" is a lint that waits for
+                unit algebra (#1142).</strong
+              >
+              It needs unit products, which #1142 has not settled. Alternative:
+              an error.
+            </li>
+            <li>
+              <strong
+                >The key and coord lint is scoped by what the mark asserts, so
+                pies and Cartesian bars of months stay silent.</strong
+              >
+              Only a closed line or a full turn of slots claims that the loop
+              closes. Alternative: lint every ordered key on a cyclic angle
+              axis.
+            </li>
+            <li>
+              <strong
+                >A small metamorphic test kit on <code>capture-one</code>'s
+                normalized DOM is worth building, later.</strong
+              >
+              It tests the statement about relabelings in section 7.
+              Alternative: no kit.
+            </li>
+            <li>
+              <strong
+                >A lint class for structure a layout invents or drops is opt-in
+                under strict mode (#1120), later.</strong
+              >
+              GoFish does not judge whether a chart is a good idea
+              (<code>principles.md</code>). Alternative: on by default.
+            </li>
+            <li>
+              <strong
+                >A cycle is not an order, so a column that needs both says
+                <code>ordered</code> and <code>cyclic</code>.</strong
+              >
+              <code>.last()</code> needs a cut, and a bare loop has none
+              (section 17). Alternative: <code>Trait.cyclic()</code> alone
+              implies an order cut at the first level.
+            </li>
+          </ol>
+        </details>
       </section>
     </section>
   </main>
@@ -11562,10 +11835,10 @@ error[no-zero] at rect({ h: "temp" })
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
   (function () {
-    var TABS = ["examples", "data", "space", "errors", "decisions"];
+    var TABS = ["examples", "data", "space", "errors", "status"];
     // A hash is a tab, or the id of a section inside one. The old tab names
-    // (#grid, #datasets, #additivity, #rules, #keys, #coord, #embedding) are
-    // ids of the sections they moved to.
+    // (#grid, #datasets, #additivity, #rules, #keys, #coord, #embedding,
+    // #decisions) are ids of the sections they moved to.
     function show() {
       var h = "";
       try {
