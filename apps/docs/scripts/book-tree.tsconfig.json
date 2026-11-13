@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "gofish-ir": ["../../../packages/gofish-ir/src/index.ts"],
+      "gofish-ir/frontend": [
+        "../../../packages/gofish-ir/src/frontend/index.ts"
+      ],
+      "gofish-ir/display-list": [
+        "../../../packages/gofish-ir/src/display-list/index.ts"
+      ]
+    }
+  }
+}

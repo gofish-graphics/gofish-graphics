@@ -1,0 +1,933 @@
+/*
+ * Under the Surface (docs/under-the-surface/): the look of the book's pages.
+ * Every rule is scoped to `.book-page`, the page class config.mts gives the
+ * section, so the rest of the site is untouched.
+ *
+ * The figure palette has meaning, and every chapter's figures use it:
+ *   --fig-user        nodes from the reader's code
+ *   --fig-added       nodes a rewrite adds
+ *   --fig-ref         refs (always drawn dashed)
+ *   --fig-constraint  constraints and guides (gray)
+ * SVG classes below (fig-user, fig-added, fig-ref, fig-guide, ...) apply it.
+ */
+
+.book-page {
+  --book-bg: #ffffff;
+  --book-ink: #283746;
+  --book-ink-strong: #17222e;
+  --book-ink-2: #566679;
+  --book-ink-3: #8a97a6;
+  --book-rule: #e1e6ec;
+  --book-panel: #f5f7f9;
+  --book-accent: #1c7650;
+  --book-accent-tint: #e4f2ea;
+  --book-warn: #9a5800;
+  --book-warn-tint: #fbf1e3;
+
+  --fig-user: #2c61a6;
+  --fig-added: #c0412a;
+  --fig-ref: #b07a0c;
+  --fig-constraint: #8796a7;
+  --fig-hl: #17222e;
+  --fig-hl-bg: #e9eef4;
+  --fig-on-user: #ffffff;
+
+  --book-col: 38rem; /* about 65 characters of 17px text */
+  --book-wide: 900px;
+}
+
+.dark .book-page {
+  --book-bg: #11171e;
+  --book-ink: #d3dbe4;
+  --book-ink-strong: #eef2f6;
+  --book-ink-2: #9ba9b8;
+  --book-ink-3: #6c7b8c;
+  --book-rule: #26313d;
+  --book-panel: #18212a;
+  --book-accent: #52c493;
+  --book-accent-tint: #173a2b;
+  --book-warn: #e6b46a;
+  --book-warn-tint: #2e2414;
+
+  --fig-user: #6e9de2;
+  --fig-added: #ee7b61;
+  --fig-ref: #e2b24c;
+  --fig-constraint: #73859a;
+  --fig-hl: #f2f5f8;
+  --fig-hl-bg: #22303d;
+  --fig-on-user: #0d1319;
+}
+
+/* ---- page frame -------------------------------------------------------- */
+
+.book-page .VPContent,
+.book-page .VPDoc {
+  background: var(--book-bg);
+}
+
+.book-page .VPDoc {
+  --vp-c-text-1: var(--book-ink-strong);
+  --vp-c-text-2: var(--book-ink-2);
+  --vp-c-text-3: var(--book-ink-3);
+  --vp-c-divider: var(--book-rule);
+  --vp-c-brand-1: var(--book-accent);
+  --vp-c-brand-2: var(--book-accent);
+  --vp-code-bg: var(--book-panel);
+  --vp-code-color: var(--book-ink-strong);
+  --vp-code-block-bg: var(--book-panel);
+}
+
+/* Room for the widest figure; text sits in a narrower column inside it. */
+.book-page .VPDoc .content {
+  max-width: calc(var(--book-wide) + 64px);
+}
+.book-page .VPDoc .content-container {
+  max-width: none;
+}
+
+.book-page .vp-doc {
+  container-type: inline-size;
+  color: var(--book-ink);
+  font-size: 17px;
+  line-height: 1.65;
+}
+
+.book-page .vp-doc > div > *,
+.book-page .book-head,
+.book-page .VPDocFooter,
+.book-page .book-note-chapter {
+  max-width: var(--book-col);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.book-page .vp-doc > div > .book-wide,
+.book-page .vp-doc > div > figure,
+.book-page .vp-doc > div > .book-rule {
+  max-width: var(--book-wide);
+}
+
+.book-page .vp-doc p,
+.book-page .vp-doc li {
+  line-height: 1.65;
+}
+.book-page .vp-doc p {
+  margin-top: 0;
+  margin-bottom: 1.05rem;
+}
+.book-page .vp-doc li + li {
+  margin-top: 0.45rem;
+}
+.book-page .vp-doc li::marker {
+  color: var(--book-ink-3);
+}
+.book-page .vp-doc strong {
+  font-weight: 600;
+  color: var(--book-ink-strong);
+}
+.book-page .vp-doc a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+.book-page .vp-doc h1,
+.book-page .book-title {
+  font-size: 1.85rem;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--book-ink-strong);
+  margin-top: 0;
+  margin-bottom: 1.1rem;
+}
+.book-page .vp-doc h2 {
+  border-top: 0;
+  padding-top: 0;
+  font-size: 1.4rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--book-ink-strong);
+  margin: 2.8rem auto 0.8rem;
+}
+.book-page .vp-doc h3 {
+  font-size: 1.2rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--book-ink-strong);
+  margin: 2.6rem auto 0.7rem;
+}
+
+.book-page .vp-doc :not(pre) > code {
+  font-size: 0.86em;
+  border: 1px solid var(--book-rule);
+  border-radius: 4px;
+  padding: 0.05em 0.3em;
+}
+
+.book-page .vp-doc div[class*="language-"] {
+  border: 1px solid var(--book-rule);
+  border-radius: 6px;
+  margin: 1.4rem auto 1.6rem;
+}
+
+.book-page .book-subtitle {
+  font-size: 1.15rem;
+  color: var(--book-ink-2);
+  margin-top: -0.6rem;
+}
+
+/* ---- stamp ------------------------------------------------------------- */
+
+.book-stamp {
+  margin: 0 0 1.6rem;
+  padding: 0.7rem 0 0.7rem 0.95rem;
+  border-left: 3px solid var(--book-accent);
+  font-size: 0.82rem;
+  line-height: 1.55;
+  color: var(--book-ink-2);
+}
+.book-stamp > div + div {
+  margin-top: 0.3rem;
+}
+.book-stamp code {
+  font-size: 0.92em;
+  padding: 0 0.25em;
+  background: var(--book-panel);
+  border: 1px solid var(--book-rule);
+  border-radius: 4px;
+  color: var(--book-ink-strong);
+}
+.book-stamp a {
+  color: inherit;
+  text-decoration: none;
+}
+.book-stamp a:hover code {
+  border-color: var(--book-ink-3);
+}
+.book-stamp__k {
+  color: var(--book-ink-strong);
+  font-weight: 600;
+}
+.book-stamp.is-out-of-date {
+  border-left-color: var(--book-warn);
+}
+.book-stamp__warn {
+  color: var(--book-ink-strong);
+  background: var(--book-warn-tint);
+  padding: 0.35rem 0.55rem;
+  border-radius: 4px;
+}
+.book-stamp.is-unknown {
+  border-left-color: var(--book-ink-3);
+}
+
+/* ---- figures ----------------------------------------------------------- */
+
+.book-page .vp-doc figure {
+  margin: 2.6rem auto 2.4rem;
+}
+.book-page .vp-doc figure > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.book-page .vp-doc figcaption {
+  font-size: 0.86rem;
+  line-height: 1.55;
+  color: var(--book-ink-2);
+  margin: 1rem auto 0;
+  max-width: var(--book-col);
+}
+/* Several SVG panels side by side, wrapping on phones. */
+.book-page .fig-panels {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 24px 36px;
+}
+.book-page .fig-panels > svg {
+  flex: 1 1 320px;
+  max-width: 432px;
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* SVG vocabulary. Fills and strokes take the figure palette. */
+.book-page .fig-user {
+  fill: var(--fig-user);
+}
+.book-page .fig-user-stroke {
+  fill: var(--book-bg);
+  stroke: var(--fig-user);
+  stroke-width: 1.5;
+}
+.book-page .fig-added {
+  fill: var(--fig-added);
+}
+.book-page .fig-added-stroke {
+  fill: none;
+  stroke: var(--fig-added);
+}
+.book-page .fig-ref {
+  fill: none;
+  stroke: var(--fig-ref);
+  stroke-width: 1.3;
+  stroke-dasharray: 3.5 2.5;
+}
+.book-page .fig-ref-box {
+  fill: var(--book-bg);
+  stroke: var(--fig-ref);
+  stroke-width: 1.4;
+  stroke-dasharray: 3.5 2.5;
+}
+.book-page .fig-ref-path {
+  fill: none;
+  stroke: var(--fig-ref);
+  stroke-width: 1.8;
+}
+.book-page .fig-guide {
+  fill: none;
+  stroke: var(--fig-constraint);
+  stroke-width: 1;
+}
+.book-page .fig-guide-dash {
+  fill: none;
+  stroke: var(--fig-constraint);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+.book-page .fig-ink {
+  fill: var(--book-ink-2);
+}
+.book-page .fig-ink-ref {
+  fill: var(--fig-ref);
+}
+.book-page .fig-line {
+  fill: none;
+  stroke: var(--book-ink-2);
+  stroke-width: 1.3;
+}
+.book-page .fig-edge {
+  stroke: var(--book-ink-3);
+  stroke-width: 1;
+}
+.book-page .fig-node {
+  fill: var(--book-bg);
+  stroke: var(--book-ink-2);
+  stroke-width: 1.2;
+}
+.book-page .fig-node-faint {
+  fill: var(--book-bg);
+  stroke: var(--book-ink-3);
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+}
+.book-page .fig-panel {
+  fill: var(--book-panel);
+  stroke: var(--book-ink-3);
+  stroke-width: 1;
+}
+.book-page .fig-boundary {
+  fill: none;
+  stroke: var(--book-ink-2);
+  stroke-width: 1.2;
+  stroke-dasharray: 6 4;
+}
+.book-page .fig-text,
+.book-page .fig-title,
+.book-page .fig-label {
+  font-family: var(--vp-font-family-base);
+}
+.book-page .fig-title {
+  font-size: 15px;
+  font-weight: 600;
+  fill: var(--book-ink-strong);
+}
+.book-page .fig-label {
+  font-size: 12px;
+  fill: var(--book-ink-2);
+}
+.book-page .fig-text {
+  fill: var(--book-ink-strong);
+}
+.book-page .fig-added-text {
+  fill: var(--fig-added);
+  font-family: var(--vp-font-family-base);
+}
+.book-page .fig-on-user {
+  fill: var(--fig-on-user);
+}
+.book-page .fig-mono {
+  font-family: var(--vp-font-family-mono);
+  font-size: 12.5px;
+  fill: var(--book-ink-strong);
+}
+.book-page .fig-mono-small {
+  font-family: var(--vp-font-family-mono);
+  font-size: 11px;
+  fill: var(--book-ink-2);
+}
+.book-page .fig-faint {
+  fill: var(--book-ink-3);
+}
+/* Interaction helpers for TreeStepper pictures. */
+.book-page .fig-hit {
+  fill: transparent;
+}
+.book-page .fig-region {
+  fill: none;
+  stroke: none;
+  pointer-events: none;
+}
+.book-page .fig-outline {
+  fill: none;
+  stroke: var(--fig-hl);
+  stroke-width: 1.6;
+  pointer-events: none;
+}
+.book-page .fig-outline.is-ref {
+  stroke: var(--fig-hl);
+  stroke-dasharray: 4 3;
+  stroke-width: 1.8;
+}
+
+/* ---- tree stepper ------------------------------------------------------ */
+
+.tree-stepper .ts-body {
+  border-top: 1px solid var(--book-rule);
+  border-bottom: 1px solid var(--book-rule);
+  padding: 1.1rem 0 1.3rem;
+}
+.tree-stepper.is-still .ts-body {
+  border: 0;
+  padding: 0;
+}
+.tree-stepper .ts-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tree-stepper .ts-steps,
+.tree-stepper .ts-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.tree-stepper .ts-btn {
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.42rem 0.7rem;
+  border-radius: 5px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--book-ink-2);
+  border: 1px solid var(--book-rule);
+}
+.tree-stepper .ts-btn:hover:not(:disabled) {
+  color: var(--book-ink-strong);
+  border-color: var(--book-ink-3);
+}
+.tree-stepper .ts-btn[aria-pressed="true"] {
+  background: var(--book-ink-strong);
+  border-color: var(--book-ink-strong);
+  color: var(--book-bg);
+}
+.tree-stepper .ts-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.tree-stepper .ts-btn:focus-visible,
+.tree-stepper .ts-item:focus-visible {
+  outline: 2px solid var(--book-accent);
+  outline-offset: 1px;
+}
+.book-page .vp-doc .tree-stepper .ts-note {
+  min-height: 3.2em;
+  margin: 0.85rem 0 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--book-ink);
+}
+.tree-stepper .ts-count {
+  color: var(--book-ink-3);
+}
+.tree-stepper .ts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.tree-stepper .ts-grid.has-pic {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+}
+.tree-stepper .ts-tree-wrap {
+  overflow-x: auto;
+}
+.tree-stepper .ts-tree {
+  font-family: var(--vp-font-family-mono);
+  font-size: 12.5px;
+  line-height: 1.66;
+  color: var(--book-ink-strong);
+  white-space: pre;
+}
+.tree-stepper .ts-line {
+  display: block;
+}
+.tree-stepper .ts-item {
+  display: inline-block;
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: 3px;
+  outline: 1.5px solid transparent;
+  outline-offset: -1px;
+  transition:
+    opacity 260ms ease,
+    background-color 160ms;
+  cursor: default;
+}
+.tree-stepper .ts-item::before,
+.tree-stepper .ts-swatch {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 1px;
+}
+.tree-stepper .k-user::before,
+.tree-stepper .ts-swatch.k-user {
+  background: var(--fig-user);
+}
+.tree-stepper .k-added::before,
+.tree-stepper .ts-swatch.k-added {
+  background: var(--fig-added);
+}
+.tree-stepper .k-ref::before,
+.tree-stepper .ts-swatch.k-ref {
+  border: 1.5px dashed var(--fig-ref);
+  width: 8px;
+  height: 8px;
+}
+.tree-stepper .k-constraint::before,
+.tree-stepper .ts-swatch.k-constraint {
+  height: 5px;
+  width: 8px;
+  vertical-align: 2px;
+  border-top: 1.5px solid var(--fig-constraint);
+  border-bottom: 1.5px solid var(--fig-constraint);
+  border-radius: 0;
+}
+.tree-stepper .ts-type {
+  color: var(--book-ink-2);
+}
+.tree-stepper .ts-item.is-future {
+  opacity: 0.16;
+}
+.tree-stepper .ts-item.is-new {
+  background: var(--book-accent-tint);
+  color: var(--book-accent);
+}
+.tree-stepper .ts-item.is-new .ts-type {
+  color: var(--book-accent);
+}
+.tree-stepper .ts-item.is-hl {
+  outline-color: var(--fig-hl);
+  background: var(--fig-hl-bg);
+}
+.tree-stepper .ts-item.is-hl-ref {
+  outline: 1.5px dashed var(--fig-ref);
+  outline-offset: -1px;
+}
+.tree-stepper .ts-pic {
+  position: sticky;
+  top: calc(var(--vp-nav-height) + 16px);
+}
+.tree-stepper .ts-pic svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tree-stepper [data-id] {
+  transition: opacity 320ms ease;
+}
+.tree-stepper [data-id].is-future {
+  opacity: 0;
+  pointer-events: none;
+}
+.book-page .vp-doc .tree-stepper .ts-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.76rem;
+  color: var(--book-ink-2);
+}
+.book-page .vp-doc .tree-stepper .ts-legend li {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+.tree-stepper .ts-swatch {
+  width: 10px;
+  height: 10px;
+}
+
+@container (max-width: 720px) {
+  .tree-stepper .ts-grid.has-pic {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tree-stepper .ts-pic {
+    order: -1;
+    position: static;
+    max-width: 360px;
+    width: 100%;
+    margin-inline: auto;
+  }
+}
+
+/* ---- formal rules ------------------------------------------------------ */
+
+.book-page .vp-doc > div > .book-rule {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 1.4rem;
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--book-rule);
+  align-items: baseline;
+}
+.book-page .vp-doc > div > :not(.book-rule) + .book-rule {
+  border-top: 1px solid var(--book-rule);
+  margin-top: 1.4rem;
+}
+.book-page .vp-doc > div > .book-rule:has(+ :not(.book-rule)) {
+  margin-bottom: 1.8rem;
+}
+.book-rule__name {
+  font-weight: 600;
+  color: var(--book-ink-strong);
+  font-size: 0.98rem;
+  line-height: 1.45;
+}
+.book-page .vp-doc .book-rule__math p {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.7;
+  color: var(--book-ink-strong);
+  font-variant-numeric: tabular-nums;
+}
+.book-rule__math em {
+  font-style: italic;
+}
+.book-rule__math small {
+  font-size: 1em;
+  color: var(--book-ink-2);
+}
+.book-page .vp-doc .book-rule__plain p {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--book-ink-2);
+}
+@container (max-width: 760px) {
+  .book-page .vp-doc > div > .book-rule {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.35rem;
+  }
+}
+
+/* ---- not yet true ------------------------------------------------------ */
+
+.book-page .vp-doc .book-not-yet-true {
+  margin: 2.4rem auto 1rem;
+  padding: 1.1rem 1.25rem 0.4rem;
+  background: var(--book-panel);
+  border: 1px solid var(--book-rule);
+  border-radius: 8px;
+}
+.book-page .vp-doc .book-not-yet-true h2 {
+  margin-top: 0;
+}
+.book-page .vp-doc .book-not-yet-true li {
+  font-size: 0.96rem;
+}
+
+/* ---- code map ---------------------------------------------------------- */
+
+.book-page .vp-doc .book-code-map ul {
+  margin: 0.4rem 0 1.4rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+.book-page .vp-doc .book-code-map li {
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 1rem;
+  padding: 0.42rem 0;
+  border-bottom: 1px solid var(--book-rule);
+  margin: 0;
+}
+.book-page .vp-doc .book-code-map li:first-child {
+  border-top: 1px solid var(--book-rule);
+}
+.book-code-map__what {
+  color: var(--book-ink-2);
+}
+.book-code-map__where {
+  font-family: var(--vp-font-family-mono);
+  font-size: 0.95em;
+  color: var(--book-ink-strong);
+  overflow-wrap: anywhere;
+}
+.book-page .vp-doc .book-code-map__where code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-size: 1em;
+  color: var(--fig-user);
+}
+@container (max-width: 560px) {
+  .book-page .vp-doc .book-code-map li {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.1rem;
+  }
+}
+
+/* ---- cover ------------------------------------------------------------- */
+
+/* A wall of tiles of mixed sizes. Each tile is a chapter figure, scaled to
+   fit (BookCover.vue sets the transform). The title is one cell of the wall.
+   Rows are tied to the column width, so a tile keeps its shape as the page
+   narrows. Six columns on a wide screen, two on a phone. */
+.book-page .book-cover {
+  margin: 0 auto 2.4rem;
+  container-type: inline-size;
+}
+.book-page .book-cover__wall {
+  --gap: 4px;
+  --cols: 6;
+  --cell: calc((100cqi - (var(--cols) - 1) * var(--gap)) / var(--cols));
+  display: grid;
+  grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+  grid-auto-rows: calc(var(--cell) * 0.72);
+  grid-auto-flow: row dense;
+  gap: var(--gap);
+  padding: var(--gap);
+  background: var(--book-rule);
+  border-radius: 8px;
+}
+.book-page .book-cover__title,
+.book-page .book-cover__tile {
+  background: var(--book-bg);
+  border-radius: 4px;
+  min-width: 0;
+  min-height: 0;
+}
+.book-page .book-cover__title {
+  grid-column: span 2;
+  grid-row: span 3;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 1rem 1.2rem;
+}
+.book-page .book-cover__logo {
+  width: 3.2rem;
+  height: auto;
+  margin-bottom: 0.9rem;
+}
+.book-page .vp-doc .book-cover__title h1 {
+  font-size: 1.9rem;
+  margin: 0 0 0.4rem;
+}
+.book-page .vp-doc .book-cover__sub {
+  font-size: 1.1rem;
+  color: var(--book-ink-2);
+  margin: 0;
+}
+.book-page .vp-doc a.book-cover__tile {
+  position: relative;
+  overflow: hidden;
+  display: block;
+  grid-column: span var(--c6);
+  grid-row: span var(--r6);
+  text-decoration: none;
+  outline-offset: -3px;
+}
+.book-page .book-cover__tile::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 2px transparent;
+  transition: box-shadow 0.15s;
+}
+.book-page .book-cover__tile:hover::after {
+  box-shadow: inset 0 0 0 2px var(--book-ink-3);
+}
+.book-page .book-cover__stage {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 860px;
+  /* The figure lays itself out for this width, not the phone's. */
+  container-type: inline-size;
+  transform-origin: 0 0;
+  pointer-events: none;
+  opacity: 0;
+}
+.book-page .book-cover__stage.is-fit {
+  opacity: 1;
+}
+.book-page .vp-doc .book-cover__stage figure {
+  margin: 0;
+  max-width: none;
+}
+@container (max-width: 560px) {
+  .book-page .book-cover__wall {
+    --cols: 2;
+  }
+  .book-page .book-cover__title {
+    grid-column: span 2;
+    grid-row: span 1;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.9rem;
+  }
+  .book-page .book-cover__logo {
+    margin: 0;
+  }
+  .book-page .vp-doc .book-cover__title h1 {
+    font-size: 1.45rem;
+  }
+  .book-page .vp-doc a.book-cover__tile {
+    grid-column: span var(--c2);
+    grid-row: span var(--r2);
+  }
+}
+
+/* ---- contents page ----------------------------------------------------- */
+
+.book-page .vp-doc .book-toc {
+  list-style: none;
+  padding: 0;
+  margin: 2rem auto;
+  counter-reset: chapter;
+}
+.book-page .vp-doc .book-toc__item {
+  counter-increment: chapter;
+  position: relative;
+  padding: 0.9rem 0 0.9rem 2.2rem;
+  border-top: 1px solid var(--book-rule);
+  margin: 0;
+}
+.book-page .vp-doc .book-toc__item:last-child {
+  border-bottom: 1px solid var(--book-rule);
+}
+.book-page .vp-doc .book-toc__item::before {
+  content: counter(chapter);
+  position: absolute;
+  left: 0;
+  top: 0.9rem;
+  color: var(--book-ink-3);
+  font-variant-numeric: tabular-nums;
+}
+.book-page .vp-doc .book-toc__q {
+  font-size: 1.08rem;
+  font-weight: 600;
+  color: var(--book-ink-strong);
+  text-decoration: none;
+}
+.book-page .vp-doc .book-toc__q:hover {
+  color: var(--book-accent);
+}
+.book-toc__topics {
+  font-size: 0.82rem;
+  color: var(--book-ink-2);
+  margin-top: 0.15rem;
+}
+.book-toc__state {
+  font-size: 0.78rem;
+  color: var(--book-ink-3);
+  margin-top: 0.15rem;
+}
+.book-toc__state.is-out-of-date {
+  color: var(--book-warn);
+}
+
+/* ---- notes ------------------------------------------------------------- */
+
+.book-page .vp-doc .book-noted {
+  position: relative;
+}
+.book-page .vp-doc .book-note {
+  position: absolute;
+  top: 0.2em;
+  right: -4rem;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  padding: 1px 7px;
+  border: 1px solid var(--book-rule);
+  border-radius: 4px;
+  color: var(--book-ink-2);
+  background: var(--book-bg);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 150ms;
+  white-space: nowrap;
+}
+.book-page .vp-doc figure > .book-note,
+.book-page .vp-doc .book-rule > .book-note {
+  top: -1.6em;
+  right: 0;
+}
+.book-page .vp-doc .book-noted:hover > .book-note,
+.book-page .vp-doc .book-note:focus-visible {
+  opacity: 1;
+}
+.book-page .vp-doc .book-note:hover {
+  color: var(--book-accent);
+  border-color: var(--book-ink-3);
+}
+.book-page .vp-doc .book-note:focus-visible {
+  outline: 2px solid var(--book-accent);
+  outline-offset: 1px;
+}
+/* No margin to sit in: put the control over the top-right corner. */
+@container (max-width: 760px) {
+  .book-page .vp-doc .book-note {
+    right: 0;
+    top: -1.5em;
+  }
+}
+.book-note-chapter {
+  margin-top: 2.4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--book-rule);
+  font-size: 0.86rem;
+  color: var(--book-ink-2);
+}
+.book-note-chapter a {
+  font-weight: 600;
+  color: var(--book-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tree-stepper .ts-item,
+  .tree-stepper [data-id],
+  .book-page .vp-doc .book-note {
+    transition: none !important;
+  }
+}

@@ -4,6 +4,7 @@ import matter from "gray-matter";
 import gofish from "./markdown-it-gofish";
 import gofishRef from "./markdown-it-gofish-ref";
 import wikilink, { type WikiTarget } from "./markdown-it-wikilink";
+import book from "./markdown-it-book";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
@@ -243,6 +244,39 @@ function collectInternalsSidebar() {
     });
 }
 
+// "Under the Surface" is the book of short chapters on how GoFish works. Like
+// the internals wiki it is language-agnostic. Its sidebar lists the contents
+// page and then each chapter, ordered by frontmatter `order` and titled by the
+// chapter's question (`title`). See apps/docs/book/README.md.
+const BOOK_DIR = "under-the-surface";
+
+function collectBookSidebar() {
+  const full = join(docsDir, BOOK_DIR);
+  const chapters = readdirSync(full, { withFileTypes: true })
+    .filter(
+      (e) => e.isFile() && e.name.endsWith(".md") && e.name !== "index.md"
+    )
+    .map((e) => {
+      const fm = matter(readFileSync(join(full, e.name), "utf-8")).data;
+      const slug = e.name.replace(/\.md$/, "");
+      return {
+        text: typeof fm.title === "string" ? fm.title : slug,
+        order: typeof fm.order === "number" ? fm.order : 999,
+        link: `/${BOOK_DIR}/${slug}`,
+      };
+    })
+    .sort((a, b) => a.order - b.order || a.text.localeCompare(b.text));
+  return [
+    {
+      text: "Under the Surface",
+      items: [
+        { text: "Contents", link: `/${BOOK_DIR}/` },
+        ...chapters.map(({ text, link }) => ({ text, link })),
+      ],
+    },
+  ];
+}
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: {
@@ -302,6 +336,13 @@ export default defineConfig({
   // with that page's own heading and image. Pushed onto the page's frontmatter
   // head so they render into each generated HTML file.
   transformPageData(pageData) {
+    // Book pages get their own single-column look (theme/book.css, keyed off
+    // this page class) and no outline aside.
+    if (pageData.relativePath.startsWith(`${BOOK_DIR}/`)) {
+      pageData.frontmatter.pageClass = "book-page";
+      pageData.frontmatter.aside = false;
+      pageData.frontmatter.outline = false;
+    }
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")
       .replace(/\.md$/, ".html");
@@ -395,6 +436,9 @@ export default defineConfig({
       gofishRef(md);
       // `[[slug]]` wiki links between internals essays → resolved internal links.
       wikilink(md, collectWikiTargets());
+      // `::: not-yet-true`, `::: code-map` and `::: rule <name>` for the
+      // chapters of Under the Surface.
+      book(md);
       md.use(container, "gofish-live", {
         render(tokens, idx) {
           return renderSandbox(tokens, idx, "gofish-live");
@@ -435,6 +479,11 @@ export default defineConfig({
     // sidebar, the language toggle is a theme slot, and the internals wiki
     // is reached via a quiet icon link in the nav bar (InternalsLink.vue).
     nav: [
+      {
+        text: "Under the Surface",
+        link: `/${BOOK_DIR}/`,
+        activeMatch: `/${BOOK_DIR}/`,
+      },
       { text: "Examples", link: "/js/examples/", activeMatch: "/examples/" },
       {
         text: "API Reference",
@@ -736,6 +785,7 @@ export default defineConfig({
         },
       ],
       "/internals/": collectInternalsSidebar(),
+      [`/${BOOK_DIR}/`]: collectBookSidebar(),
     },
 
     socialLinks: [

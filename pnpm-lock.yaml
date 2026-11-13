@@ -266,6 +266,9 @@ importers:
       prettier:
         specifier: ^3.6.2
         version: 3.8.1
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
       typedoc:
         specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
