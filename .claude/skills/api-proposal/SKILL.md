@@ -191,8 +191,12 @@ fatigue. Do this:
 - Show at most two or three real forks, the ones that change what draws or how
   the main example reads. Put each beside the example it affects, with the
   picture, both options written out, and your pick, so he can react on the spot.
-- When open questions pile up in one area, they usually point at something you
-  misunderstood. Say what that is in a sentence or two instead of listing them.
+- When you do not know what he wants, that is ordinary ambiguity, so resolve it
+  the ordinary way: say what you think he is going for, ask him to say more, or
+  ask what should happen in a concrete case, with the example shown. Many
+  questions piling up in one area is a sign of this (the design is off there, or
+  you and he have not reached common ground), so talk it through with him
+  instead of listing the questions.
 - Keep the full list of choices as a folded record at the bottom of the page
   and as a section of `proposal.md`, for later sessions. It is not something he
   is expected to read, and "N decisions open" is not a status to report.
