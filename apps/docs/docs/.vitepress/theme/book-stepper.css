@@ -227,11 +227,11 @@
   text-decoration: line-through;
 }
 .tree-stepper .ts-item.is-new {
-  background: var(--book-accent-tint);
-  color: var(--book-accent);
+  background: var(--fig-new-bg);
+  color: var(--fig-new);
 }
 .tree-stepper .ts-item.is-new .ts-type {
-  color: var(--book-accent);
+  color: var(--fig-new);
 }
 .tree-stepper .ts-item.is-hl {
   outline-color: var(--fig-hl);

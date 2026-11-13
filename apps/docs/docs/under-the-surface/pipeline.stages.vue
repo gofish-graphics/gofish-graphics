@@ -472,10 +472,10 @@ const S = 0.45;
       One render of the three-bar chart at 300 by 200 pixels, stage by stage.
       The words on each arrow name what one stage hands the next. The gray loops
       are the stages that run again. Under each stage is the chart as that stage
-      leaves it: blue for nodes from your code, red for nodes the library adds.
-      The trees are printed by <code>book:tree</code> and simplified, and the
-      numbers come from the display list of the same run. The blue lines at the
-      foot of a stage say what a <code>Coord</code> does there.
+      leaves it: green for nodes from your code, orange for nodes the library
+      adds. The trees are printed by <code>book:tree</code> and simplified, and
+      the numbers come from the display list of the same run. The green lines at
+      the foot of a stage say what a <code>Coord</code> does there.
     </template>
   </BookFigure>
 </template>

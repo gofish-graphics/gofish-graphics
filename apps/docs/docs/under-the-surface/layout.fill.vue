@@ -493,7 +493,8 @@ const bars = [
 }
 .lf-val.is-new,
 .lf-step.is-new .lf-eq {
-  fill: var(--book-accent);
+  fill: var(--fig-new);
+  font-weight: 700;
 }
 .lf-outline {
   fill: none;

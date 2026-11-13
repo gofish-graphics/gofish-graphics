@@ -193,13 +193,13 @@ const rows = [
       </text>
     </svg>
     <template #caption>
-      One bar chart at three levels. Blue boxes are your code and the nodes it
-      becomes. Red text is what the lowering fills in from the data: the group
-      keys, the bar heights and the name of the category axis. Gray boxes are
-      constraints. Black lines go from a part to what it became. The rects pass
-      into the layer unchanged, now as slots r0, r1 and r2. Options at their
-      defaults are left out. Every level was run, and the three draw the same
-      bars, with the differences listed in the text.
+      One bar chart at three levels. Green boxes are your code and the nodes it
+      becomes. Orange text is what the lowering fills in from the data: the
+      group keys, the bar heights and the name of the category axis. Gray boxes
+      are constraints. Black lines go from a part to what it became. The rects
+      pass into the layer unchanged, now as slots r0, r1 and r2. Options at
+      their defaults are left out. Every level was run, and the three draw the
+      same bars, with the differences listed in the text.
     </template>
   </BookFigure>
 </template>

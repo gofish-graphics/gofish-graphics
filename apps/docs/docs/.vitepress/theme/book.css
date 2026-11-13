@@ -28,12 +28,14 @@
   --book-warn: #9a5800;
   --book-warn-tint: #fbf1e3;
 
-  --fig-user: #2c61a6;
-  --fig-added: #c0412a;
+  --fig-user: #1f8a66;
+  --fig-added: #c8501e;
   --fig-ref: #b07a0c;
   --fig-constraint: #8796a7;
   --fig-generated: #7a4fb0;
   --fig-hl: #17222e;
+  --fig-new: #17222e;
+  --fig-new-bg: #fdf0b8;
   --fig-hl-bg: #e9eef4;
   --fig-on-user: #ffffff;
 
@@ -54,12 +56,14 @@
   --book-warn: #e6b46a;
   --book-warn-tint: #2e2414;
 
-  --fig-user: #6e9de2;
-  --fig-added: #ee7b61;
+  --fig-user: #5fd0a3;
+  --fig-added: #f08a5d;
   --fig-ref: #e2b24c;
   --fig-constraint: #73859a;
   --fig-generated: #b99be6;
   --fig-hl: #f2f5f8;
+  --fig-new: #f6ecc4;
+  --fig-new-bg: #3d3410;
   --fig-hl-bg: #22303d;
   --fig-on-user: #0d1319;
 }
