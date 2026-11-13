@@ -949,8 +949,9 @@
   }
 }
 
-/* ---- notes ------------------------------------------------------------- */
-/* The "Note" button beside each block, and the note box (BookNoteBox.vue).
+/* ---- feedback ---------------------------------------------------------- */
+/* The "Feedback" button beside each block, and the feedback box
+   (BookNoteBox.vue).
    The box opens over the text under its block, so the column never moves; in
    a narrow column it sits in the flow under the block instead. */
 
@@ -960,7 +961,7 @@
 .book-page .vp-doc .book-note {
   position: absolute;
   top: 0.2em;
-  right: -4rem;
+  left: calc(100% + 0.75rem);
   font-family: var(--vp-font-family-base);
   font-size: 12px;
   font-weight: 500;
@@ -979,6 +980,7 @@
 .book-page .vp-doc figure > .book-note,
 .book-page .vp-doc .book-rule > .book-note {
   top: -1.6em;
+  left: auto;
   right: 0;
 }
 .book-page .vp-doc .book-noted:hover > .book-note,
@@ -994,7 +996,7 @@
   outline: 2px solid var(--book-accent);
   outline-offset: 1px;
 }
-/* A block with a note from this session keeps a quiet mark. */
+/* A block with feedback from this session keeps a quiet mark. */
 .book-page .vp-doc .book-note.is-noted {
   opacity: 0.75;
   color: var(--book-accent);
@@ -1004,6 +1006,7 @@
 /* No margin to sit in: put the control over the top-right corner. */
 @container (max-width: 760px) {
   .book-page .vp-doc .book-note {
+    left: auto;
     right: 0;
     top: -1.5em;
   }
@@ -1033,6 +1036,7 @@
   text-align: left;
   text-transform: none;
   color: var(--book-ink);
+  container-type: inline-size;
 }
 .book-page .book-note-box p {
   margin: 0;
@@ -1049,8 +1053,76 @@
   font-weight: 600;
   color: var(--book-ink-2);
 }
+/* The reactions: two rows of two in the margin box (about 260px inside),
+   one row of four when the box has the room. The chosen one is filled and
+   carries a tick, so it does not rest on color alone. */
+.book-page .book-note-box .book-note-box__group {
+  margin-bottom: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--book-ink-2);
+}
+.book-note-box__reactions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+@container (min-width: 340px) {
+  .book-note-box__reactions {
+    grid-template-columns: repeat(4, auto);
+    justify-content: start;
+  }
+}
+.book-note-box .book-note-box__reaction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 13.5px;
+  border: 1px solid var(--book-rule);
+  background: var(--book-bg);
+  color: var(--book-ink-2);
+  white-space: nowrap;
+}
+.book-note-box .book-note-box__reaction:hover {
+  color: var(--book-ink);
+  border-color: var(--book-ink-3);
+}
+.book-note-box__tick {
+  display: none;
+  font-weight: 700;
+}
+.book-note-box .book-note-box__reaction[aria-checked="true"] {
+  font-weight: 600;
+  border-color: var(--book-accent);
+  background: var(--book-accent-tint);
+  color: var(--book-ink-strong);
+}
+.book-note-box__reaction[aria-checked="true"] .book-note-box__tick {
+  display: inline;
+  color: var(--book-accent);
+}
+.book-note-box__stopped {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--book-ink-3);
+  cursor: pointer;
+}
+.book-note-box__stopped input {
+  margin: 0;
+  accent-color: var(--book-accent);
+}
+.book-note-box__stopped input:focus-visible {
+  outline: 2px solid var(--book-accent);
+  outline-offset: 2px;
+}
 .book-note-box__label {
   display: block;
+  margin-top: 10px;
   margin-bottom: 4px;
   font-weight: 600;
 }
@@ -1122,7 +1194,7 @@
   outline: none;
 }
 /* A wide window has an empty margin beside the text column: the box sits
-   there, under the block's Note control, and covers no text. Figures and
+   there, under the block's Feedback control, and covers no text. Figures and
    rules are wider than the column, so their box stays over the text. */
 @media (min-width: 1280px) {
   .book-page

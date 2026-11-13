@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// The note box of "Under the Surface": one small form, opened beside the
+// The feedback box of "Under the Surface": one small form, opened beside the
 // passage it is about. BookNotes.vue opens it and places it; a transport from
-// bookNotes.ts sends the note. The draft is kept in browser storage, keyed by
+// bookNotes.ts sends it. A reader picks one of four reactions, may mark that
+// they stopped reading here, and may write a few words; a reaction or a stop
+// alone is complete feedback. The draft is kept in browser storage, keyed by
 // chapter and passage, so it survives closing the box and reloading.
 import {
   computed,
@@ -13,29 +15,34 @@ import {
 } from "vue";
 import {
   MAX_NOTE,
-  PROMPT,
+  REACTIONS,
   loadDraft,
+  promptFor,
   saveDraft,
   type Note,
+  type Reaction,
   type Transport,
 } from "./bookNotes";
 
 const props = defineProps<{
-  /** The note without its text. */
-  note: Omit<Note, "text">;
+  /** The note without what the reader fills in. */
+  note: Omit<Note, "reaction" | "stopped" | "text">;
   /** The storage key of this passage's draft. */
   draftKey: string;
   transport: Transport;
 }>();
-// `delivered`: the note reached its destination, so the passage is marked.
+// `delivered`: the feedback reached its destination, so the passage is marked.
 const emit = defineEmits<{ close: [delivered: boolean] }>();
 let delivered = false;
 
-const text = ref(loadDraft(props.draftKey));
+const draft = loadDraft(props.draftKey);
+const reaction = ref<Reaction | undefined>(draft.reaction);
+const stopped = ref(draft.stopped);
+const text = ref(draft.text);
 const busy = ref(false);
 const done = ref("");
 const error = ref("");
-const area = ref<HTMLTextAreaElement>();
+const radios = ref<HTMLButtonElement[]>([]);
 const status = ref<HTMLElement>();
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -44,32 +51,73 @@ const about = computed(() => {
   if (!q) return "This chapter as a whole";
   return q.length > 80 ? `${q.slice(0, 80).trimEnd()}…` : q;
 });
+const prompt = computed(() => promptFor(reaction.value));
+const ready = computed(
+  () => !!reaction.value || stopped.value || !!text.value.trim()
+);
+/** The radio that takes Tab: the chosen one, or the first. */
+const tabbable = computed(() =>
+  Math.max(
+    0,
+    REACTIONS.findIndex((r) => r.value === reaction.value)
+  )
+);
 const id = `book-note-${Math.random().toString(36).slice(2, 8)}`;
 
-watch(text, (t) => {
+watch([reaction, stopped, text], () => {
   error.value = "";
-  saveDraft(props.draftKey, t);
+  saveDraft(props.draftKey, {
+    reaction: reaction.value,
+    stopped: stopped.value,
+    text: text.value,
+  });
 });
 
-onMounted(() => area.value?.focus());
+onMounted(() => radios.value[tabbable.value]?.focus());
 onBeforeUnmount(() => clearTimeout(timer));
+
+/** Choose a reaction; choosing the chosen one again clears it. */
+function choose(value: Reaction) {
+  reaction.value = reaction.value === value ? undefined : value;
+}
+
+/** Arrow keys move through the reactions and choose, as radios do. */
+function onRadioKey(e: KeyboardEvent, i: number) {
+  const step =
+    e.key === "ArrowRight" || e.key === "ArrowDown"
+      ? 1
+      : e.key === "ArrowLeft" || e.key === "ArrowUp"
+        ? -1
+        : 0;
+  if (!step) return;
+  e.preventDefault();
+  const next = (i + step + REACTIONS.length) % REACTIONS.length;
+  reaction.value = REACTIONS[next].value;
+  radios.value[next]?.focus();
+}
 
 async function submit() {
   if (busy.value || done.value) return;
-  if (!text.value.trim()) {
-    error.value = "Write a note first.";
-    area.value?.focus();
+  if (!ready.value) {
+    error.value = "Choose a reaction or write a few words first.";
+    radios.value[tabbable.value]?.focus();
     return;
   }
   busy.value = true;
   try {
     const sent = await props.transport.send({
       ...props.note,
+      reaction: reaction.value,
+      stopped: stopped.value,
       text: text.value,
     });
     done.value = sent.message;
     delivered = sent.delivered;
-    saveDraft(props.draftKey, "");
+    saveDraft(props.draftKey, {
+      reaction: undefined,
+      stopped: false,
+      text: "",
+    });
     await nextTick();
     status.value?.focus();
     timer = setTimeout(() => emit("close", delivered), 2200);
@@ -96,23 +144,44 @@ function onKey(e: KeyboardEvent) {
   <div
     class="book-note-box"
     role="dialog"
-    :aria-labelledby="`${id}-label`"
+    aria-label="Feedback"
     @keydown="onKey"
   >
     <template v-if="!done">
       <p class="book-note-box__about">
         <span class="book-note-box__on">On</span> {{ about }}
       </p>
-      <label
-        :id="`${id}-label`"
-        :for="`${id}-text`"
-        class="book-note-box__label"
+      <p :id="`${id}-reaction`" class="book-note-box__group">Your reaction</p>
+      <div
+        class="book-note-box__reactions"
+        role="radiogroup"
+        :aria-labelledby="`${id}-reaction`"
       >
-        {{ PROMPT }}
+        <button
+          v-for="(r, i) in REACTIONS"
+          :key="r.value"
+          ref="radios"
+          type="button"
+          role="radio"
+          class="book-note-box__reaction"
+          :aria-checked="reaction === r.value"
+          :tabindex="i === tabbable ? 0 : -1"
+          @click="choose(r.value)"
+          @keydown="onRadioKey($event, i)"
+        >
+          <span class="book-note-box__tick" aria-hidden="true">✓</span>
+          {{ r.label }}
+        </button>
+      </div>
+      <label class="book-note-box__stopped">
+        <input v-model="stopped" type="checkbox" />
+        I stopped reading here
+      </label>
+      <label :for="`${id}-text`" class="book-note-box__label">
+        {{ prompt }}
       </label>
       <textarea
         :id="`${id}-text`"
-        ref="area"
         v-model="text"
         rows="3"
         :maxlength="MAX_NOTE"
@@ -130,7 +199,7 @@ function onKey(e: KeyboardEvent) {
         <button
           type="button"
           class="book-note-box__send"
-          :disabled="busy"
+          :disabled="busy || !ready"
           @click="submit"
         >
           {{ transport.action }}
@@ -149,7 +218,6 @@ function onKey(e: KeyboardEvent) {
     </template>
     <p
       v-else
-      :id="`${id}-label`"
       ref="status"
       class="book-note-box__done"
       role="status"

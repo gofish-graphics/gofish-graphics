@@ -1,11 +1,13 @@
-// "Under the Surface": a dev-server-only endpoint that saves a reader's note
-// straight into the chapter's brief (apps/docs/book/briefs/<slug>.md).
+// "Under the Surface": a dev-server-only endpoint that saves a reader's
+// feedback straight into the chapter's brief (apps/docs/book/briefs/<slug>.md).
 //
 //   GET  /__book/note  -> {"ok":true,"transport":"brief"}, the capability
 //                         probe. A static host has no such route, so the page
 //                         falls back to opening a GitHub issue.
-//   POST /__book/note  {slug, anchor, quote, text} -> appends one line to the
-//                         brief's "## Notes" section.
+//   POST /__book/note  {slug, anchor, quote, reaction?, stopped?, text}
+//                         -> appends one line to the brief's "## Notes"
+//                         section. `reaction` is one of REACTIONS; the text
+//                         may be empty when there is a reaction or a stop.
 //
 // `apply: "serve"` keeps it out of the build: the published site has no such
 // endpoint. See apps/docs/book/README.md, "How notes reach a brief".
@@ -19,6 +21,8 @@ const ROUTE = "/__book/note";
 const MAX_TEXT = 2000;
 const MAX_QUOTE = 80;
 const MAX_BODY = 16 * 1024;
+/** The reactions the feedback box offers (bookNotes.ts, REACTIONS). */
+const REACTIONS = ["confusing", "slow", "useful", "loved"];
 
 /** One line of prose: newlines become spaces, and double quotes become
  *  single quotes, so the quoted note in the brief stays well-formed. */
@@ -60,7 +64,14 @@ export function appendNote(brief: string, line: string): string {
   return out.endsWith("\n") ? out : `${out}\n`;
 }
 
-type Note = { slug: string; anchor: string; quote: string; text: string };
+type Note = {
+  slug: string;
+  anchor: string;
+  quote: string;
+  reaction: string;
+  stopped: boolean;
+  text: string;
+};
 
 /** The brief's line for a note, or an error message for a bad request. */
 export function noteLine(
@@ -70,14 +81,24 @@ export function noteLine(
   date: string
 ): { line: string; slug: string } | { error: string } {
   if (!input || typeof input !== "object") return { error: "Not a note." };
-  const { slug, anchor = "", quote = "", text } = input as Partial<Note>;
+  const {
+    slug,
+    anchor = "",
+    quote = "",
+    reaction,
+    stopped = false,
+    text,
+  } = input as Partial<Note>;
   if (typeof slug !== "string" || !briefs.includes(`${slug}.md`))
     return { error: "No brief has that name." };
   if (typeof text !== "string" || typeof anchor !== "string")
     return { error: "Not a note." };
   if (typeof quote !== "string") return { error: "Not a note." };
+  if (reaction !== undefined && !REACTIONS.includes(reaction))
+    return { error: "Not a reaction." };
+  if (typeof stopped !== "boolean") return { error: "Not a note." };
   const body = text.trim();
-  if (!body) return { error: "The note is empty." };
+  if (!body && !reaction && !stopped) return { error: "The note is empty." };
   if (body.length > MAX_TEXT)
     return { error: `A note is at most ${MAX_TEXT} characters.` };
   // Heading and figure ids are slugs; anything else is not an anchor.
@@ -91,7 +112,10 @@ export function noteLine(
     where = `"${cut}${cut.length < q.length ? "…" : ""}"`;
   }
   if (anchor) where += `, #${anchor}`;
-  return { slug, line: `- ${date}, ${name}: "${oneLine(body)}" (on ${where})` };
+  const marks = [reaction, stopped && "stopped here"].filter(Boolean);
+  const who = marks.length ? `${name} [${marks.join(", ")}]` : name;
+  const said = body ? ` "${oneLine(body)}"` : "";
+  return { slug, line: `- ${date}, ${who}:${said} (on ${where})` };
 }
 
 function send(res: ServerResponse, status: number, body: unknown) {

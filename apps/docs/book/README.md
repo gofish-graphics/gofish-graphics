@@ -28,10 +28,10 @@ published.
   have changed since, and how fast they are changing.
 - Each chapter ends with a "Not yet true" box and a "Where this lives in the
   code" list. The box says where the code and the intended design part ways.
-- Any visitor can leave a note on a paragraph. The note button opens a small
-  box beside the paragraph. On the local dev server the note is saved straight
-  into the brief. On the published site it opens a new GitHub issue with the
-  chapter, the paragraph and the note filled in.
+- Any visitor can give feedback on a paragraph. The feedback button opens a
+  small box beside the paragraph. On the local dev server the feedback is saved
+  straight into the brief. On the published site it opens a new GitHub issue
+  with the chapter, the paragraph and the feedback filled in.
 - The old internals wiki (`apps/docs/docs/internals/`) is separate. The book
   does not read it, and a chapter is never built from it.
 
@@ -70,7 +70,7 @@ contents. Wherever the book lists or titles a chapter, it shows the label and
 then the question, e.g., "Axes: How does a chart get its axes?". This is the
 contents, the Contents list at the top of each chapter, the chapter's heading,
 the links to the next and previous chapters, the browser tab and the cover
-tiles. The title of a note's issue uses the question alone.
+tiles. The title of a feedback issue uses the question alone.
 
 The contents and the Contents list are built from this frontmatter. Adding a
 chapter file is enough to list it.
@@ -158,39 +158,52 @@ One paragraph that says what the one figure shows.
 
 ### How notes reach a brief
 
-Every paragraph, list item, heading and figure of a chapter has a "Note"
-button, shown on hover and on keyboard focus. The "Leave a note on this
+Every paragraph, list item, heading and figure of a chapter has a "Feedback"
+button, shown on hover and on keyboard focus. The "Give feedback on this
 chapter" button at the end of the chapter is always shown. Either one opens a
-small box beside its passage, where the reader types the note. The box keeps
-an unsent draft in the browser, so closing the box or reloading the page does
-not lose it. Where the note goes depends on where the page is served.
+small box beside its passage. In the box the reader picks one of four
+reactions (Confusing, Slow, Useful, Loved it), may tick "I stopped reading
+here", and may type a few words. A reaction or the tick alone is enough to
+send. The box keeps an unsent draft in the browser, so closing the box or
+reloading the page does not lose it. Where the feedback goes depends on where
+the page is served.
 
 - **The local dev server.** A dev-only Vite plugin,
   `docs/.vitepress/book-notes-server.ts`, serves `/__book/note`. The page asks
   it with a `GET` when it loads. When it answers, the box's button saves the
-  note straight into the brief's `## Notes`, as
-  `- <date>, <name>: "<the note>" (on "<the passage's first words>", #<anchor>)`.
-  The name is the first word of `git config user.name`. The section is added
-  when the brief has none. Such a note is already in the brief, so nothing more
-  needs to be done.
+  feedback straight into the brief's `## Notes`, as
+  `- <date>, <name> [<reaction>, stopped here]: "<the text>" (on "<the passage's first words>", #<anchor>)`.
+  The square brackets hold the reaction and the stop mark, and are left out
+  when there is neither. The quoted text is left out when the reader wrote
+  none. The name is the first word of `git config user.name`. The section is
+  added when the brief has none. Such a note is already in the brief, so
+  nothing more needs to be done.
 - **The published site.** The site is static, so the `GET` fails. The box's
-  button opens a new GitHub issue in a new tab, with the chapter, the passage
-  and the note filled in. The reader submits it there.
+  button opens a new GitHub issue in a new tab, with the chapter, the passage,
+  the reaction (`Reaction: confusing`), the stop mark
+  (`Stopped reading here: yes`) and the text filled in. The reader submits it
+  there.
 
 The transports are in `docs/.vitepress/theme/components/book/bookNotes.ts`.
 
-An issue note has the label `book-note`. Then:
+An issue has the label `book-feedback`. Then:
 
 - An issue that the maintainer opened is copied into the brief's Notes, with
   its date and author, and the issue is closed.
 - An issue from anyone else waits for the maintainer. When the maintainer adds
-  the label `book-note-accepted`, it is copied into the brief and closed in the
+  the label `book-feedback-accepted`, it is copied into the brief and closed in the
   same way.
 
-GitHub applies the `book-note` label from the link only when the label exists
-in the repository and the person opening the issue can set labels. For anyone
-else, the issue arrives without the label, and its title still starts with
-`Note on "`.
+GitHub applies the `book-feedback` label from the link only when the label
+exists in the repository and the person opening the issue can set labels. For
+anyone else, the issue arrives without the label, and its title still starts
+with `Feedback on "`.
+
+The reactions and the stop mark follow how beta readers are asked to react in
+"Write Useful Books". Confusing, Slow and a stop matter most, because they
+show where readers get lost or bored and quietly leave. Several readers who
+mark the same passage outweigh one long comment. Run small rounds of three to
+five readers between rebuilds, so each rebuild answers fresh feedback.
 
 ## The stamp
 

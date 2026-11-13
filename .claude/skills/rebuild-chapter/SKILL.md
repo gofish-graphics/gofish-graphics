@@ -147,30 +147,40 @@ land, or the chapter will show as out of date.
   and one at 400 pixels wide. Check the stamp, the figure at its first and last
   step, and the code map. Stop the server when you are done.
 
-## 8. How reader notes reach the brief
+## 8. How reader feedback reaches the brief
 
-A reader types a note in the note box beside a paragraph. It reaches the brief
-in one of two ways.
+A reader gives feedback in the box beside a paragraph: one of four reactions
+(confusing, slow, useful, loved), an "I stopped reading here" mark, some text,
+or any mix. It reaches the brief in one of two ways.
 
-- On the local dev server, the box saves the note straight into the brief's
+- On the local dev server, the box saves it straight into the brief's
   `## Notes`, as
-  `- <date>, <name>: "<the note>" (on "<the passage's first words>", #<anchor>)`.
-  Such a note is already in the brief. There is nothing to copy.
+  `- <date>, <name> [<reaction>, stopped here]: "<the text>" (on "<the passage's first words>", #<anchor>)`.
+  The brackets are left out when there is no reaction and no stop, and the
+  quoted text is left out when there is none. Such a note is already in the
+  brief. There is nothing to copy.
 - On the published site, the box opens a prefilled GitHub issue, which the
-  reader submits. The issue has the label `book-note` and a title that starts
-  with `Note on "`.
+  reader submits. The issue has the label `book-feedback` and a title that
+  starts with `Feedback on "`. Its body has `Reaction: <reaction>` and
+  `Stopped reading here: yes` lines when the reader chose them.
 
-Issue notes are copied in by hand:
+Issue feedback is copied in by hand:
 
 - An issue opened by the maintainer is copied into the brief's `## Notes` as
-  `- <date>, <name>: "<the note>"`, with a link to the issue. Then the issue is
+  `- <date>, <name> [<reaction>, stopped here]: "<the text>"`, with a link to
+  the issue. Then the issue is
   closed with a comment that points at the brief.
 - An issue from anyone else is left for the maintainer. When the maintainer
-  adds the label `book-note-accepted`, copy it into the brief and close it the
+  adds the label `book-feedback-accepted`, copy it into the brief and close it the
   same way.
 - A note changes the chapter only through the brief. After you add notes,
   rebuild the chapter from scratch with this skill.
 
-List open notes with
-`gh issue list --label book-note --state open` and
-`gh issue list --search 'in:title "Note on \""' --state open`.
+When you rebuild, fix first the passages marked `[confusing]`, `[slow]` or
+`stopped here`: they show where readers get lost or bored and leave. A passage
+that several readers marked counts for more than one long comment. `[useful]`
+and `[loved]` mark what to keep.
+
+List open feedback with
+`gh issue list --label book-feedback --state open` and
+`gh issue list --search 'in:title "Feedback on \""' --state open`.

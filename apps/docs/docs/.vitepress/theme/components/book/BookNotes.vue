@@ -1,11 +1,12 @@
 <script setup lang="ts">
-// "Leave a note" on the pages of "Under the Surface". Each paragraph, list
-// item, heading, rule and figure of the page gets a small "Note" button, shown
-// on hover and on keyboard focus. One always-visible button at the end of the
-// page covers touch screens and notes on the chapter as a whole. Either opens
-// the note box (BookNoteBox.vue) beside its passage, so the reader writes in
-// place. Where the note goes is up to the transport (bookNotes.ts): the
-// chapter's brief on the local dev server, a prefilled GitHub issue elsewhere.
+// Reader feedback on the pages of "Under the Surface". Each paragraph, list
+// item, heading, rule and figure of the page gets a small "Feedback" button,
+// shown on hover and on keyboard focus. One always-visible button at the end
+// of the page covers touch screens and feedback on the chapter as a whole.
+// Either opens the feedback box (BookNoteBox.vue) beside its passage, so the
+// reader reacts in place. Where the feedback goes is up to the transport
+// (bookNotes.ts): the chapter's brief on the local dev server, a prefilled
+// GitHub issue elsewhere.
 //
 // The buttons are added to the rendered page after it mounts (and after each
 // page change), so the markdown never carries them.
@@ -39,7 +40,7 @@ interface OpenBox {
   host: HTMLElement;
   control: HTMLElement;
   key: string;
-  note: Omit<Note, "text">;
+  note: Omit<Note, "reaction" | "stopped" | "text">;
 }
 const open = shallowRef<OpenBox | null>(null);
 const transport = shallowRef<Transport>();
@@ -63,7 +64,10 @@ function textOf(el: Element): string {
   return t.length > 200 ? t.slice(0, 200).trimEnd() + "…" : t;
 }
 
-function noteAbout(anchor: string, quote: string): Omit<Note, "text"> {
+function noteAbout(
+  anchor: string,
+  quote: string
+): Omit<Note, "reaction" | "stopped" | "text"> {
   return {
     slug: slug.value,
     question: question.value,
@@ -99,8 +103,8 @@ function markControl(control: HTMLElement) {
     return;
   }
   control.classList.add("is-noted");
-  control.textContent = "Noted";
-  control.title = "You left a note here. Leave another.";
+  control.textContent = "Sent";
+  control.title = "You sent feedback here. Send more.";
 }
 
 function kindOf(el: Element): string {
@@ -148,9 +152,9 @@ function attach() {
     const b = document.createElement("button");
     b.type = "button";
     b.className = "book-note ignore-header";
-    b.textContent = "Note";
-    b.title = "Leave a note on this part";
-    b.setAttribute("aria-label", `Leave a note on this ${kindOf(el)}`);
+    b.textContent = "Feedback";
+    b.title = "Give feedback on this part";
+    b.setAttribute("aria-label", `Give feedback on this ${kindOf(el)}`);
     b.setAttribute("aria-expanded", "false");
     b.addEventListener("click", () =>
       toggle({ host: el, control: b, key, note: noteAbout(anchor, quote) })
@@ -186,10 +190,10 @@ onContentUpdated(attach);
       aria-expanded="false"
       @click="openChapter"
     >
-      Leave a note on this chapter</button
-    ><span> Say what lost you, or what is wrong.</span>
+      Give feedback on this chapter</button
+    ><span> Say what lost you, what dragged, or what worked.</span>
     <span v-if="chapterNoted" class="book-note-chapter__noted">
-      You left a note on this chapter.</span
+      You sent feedback on this chapter.</span
     >
   </p>
   <Teleport v-if="open && transport" :to="open.host">

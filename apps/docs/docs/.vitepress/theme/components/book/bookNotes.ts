@@ -1,5 +1,6 @@
-// Where a reader's note on "Under the Surface" goes. The note box
-// (BookNoteBox.vue) collects the note; a transport sends it. The page picks
+// Where a reader's feedback on "Under the Surface" goes. The note box
+// (BookNoteBox.vue) collects it: a one-click reaction, a "stopped reading
+// here" mark, some text, or any mix of the three. A transport sends it. The page picks
 // one transport when it loads:
 //
 // - `brief`: on the local dev server, the dev-only plugin in
@@ -14,8 +15,25 @@
 // `chooseTransport` when the service answers. Not built yet.
 import { REPO } from "./book";
 
-export const PROMPT = "What lost you, or what is wrong?";
 export const MAX_NOTE = 2000;
+
+/** The one-click reactions, in the order the box shows them. They are the
+ *  four that beta reading asks for, worst first. */
+export const REACTIONS = [
+  { value: "confusing", label: "Confusing", prompt: "What lost you?" },
+  { value: "slow", label: "Slow", prompt: "What could be cut?" },
+  { value: "useful", label: "Useful", prompt: "What did it help with?" },
+  { value: "loved", label: "Loved it", prompt: "What worked?" },
+] as const;
+export type Reaction = (typeof REACTIONS)[number]["value"];
+
+/** The text box's label, which follows the chosen reaction. */
+export function promptFor(reaction: Reaction | undefined): string {
+  return (
+    REACTIONS.find((r) => r.value === reaction)?.prompt ??
+    "What was your reaction here?"
+  );
+}
 const ROUTE = "/__book/note";
 
 /** One note, about one passage of a chapter or about the whole chapter. */
@@ -32,9 +50,16 @@ export interface Note {
   anchorUrl: string;
   /** The passage's text, or "" for the whole chapter. */
   quote: string;
-  /** What the reader typed. */
+  /** The reader's one-click reaction, if any. */
+  reaction?: Reaction;
+  /** The reader marked "I stopped reading here". */
+  stopped: boolean;
+  /** What the reader typed, maybe "" when there is a reaction or a stop. */
   text: string;
 }
+
+/** The parts of a note the reader fills in, which the draft keeps. */
+export type Draft = Pick<Note, "reaction" | "stopped" | "text">;
 
 export interface Sent {
   /** What the box says afterwards. */
@@ -63,17 +88,21 @@ export function issueUrl(note: Note): string {
   ];
   if (note.quote)
     lines.push(...note.quote.split("\n").map((l) => `> ${l}`), "");
-  lines.push(`**${PROMPT}**`, "", note.text.trim(), "");
+  if (note.reaction) lines.push(`Reaction: ${note.reaction}`);
+  if (note.stopped) lines.push("Stopped reading here: yes");
+  if (note.reaction || note.stopped) lines.push("");
+  if (note.text.trim())
+    lines.push(`**${promptFor(note.reaction)}**`, "", note.text.trim(), "");
   const q = new URLSearchParams({
-    title: `Note on "${note.question}"`,
-    labels: "book-note",
+    title: `Feedback on "${note.question}"`,
+    labels: "book-feedback",
     body: lines.join("\n"),
   });
   return `${REPO}/issues/new?${q.toString()}`;
 }
 
 const brief: Transport = {
-  action: "Save note",
+  action: "Send feedback",
   hint: "",
   async send(note) {
     const res = await fetch(ROUTE, {
@@ -83,6 +112,8 @@ const brief: Transport = {
         slug: note.slug,
         anchor: note.anchor,
         quote: note.quote,
+        reaction: note.reaction,
+        stopped: note.stopped,
         text: note.text,
       }),
     });
@@ -99,7 +130,7 @@ const brief: Transport = {
 
 const issue: Transport = {
   action: "Open as GitHub issue",
-  hint: "Opens GitHub with your note filled in. You submit it there.",
+  hint: "Opens GitHub with your feedback filled in. You submit it there.",
   async send(note) {
     window.open(issueUrl(note), "_blank", "noopener,noreferrer");
     return {
@@ -142,17 +173,29 @@ function store(kind: "local" | "session"): Storage | undefined {
   }
 }
 
-export function loadDraft(key: string): string {
+const EMPTY: Draft = { reaction: undefined, stopped: false, text: "" };
+
+export function loadDraft(key: string): Draft {
   try {
-    return store("local")?.getItem(DRAFT + key) ?? "";
+    const raw = store("local")?.getItem(DRAFT + key);
+    if (!raw) return { ...EMPTY };
+    const d = JSON.parse(raw);
+    return {
+      reaction: REACTIONS.some((r) => r.value === d?.reaction)
+        ? d.reaction
+        : undefined,
+      stopped: d?.stopped === true,
+      text: typeof d?.text === "string" ? d.text : "",
+    };
   } catch {
-    return "";
+    return { ...EMPTY };
   }
 }
 
-export function saveDraft(key: string, text: string) {
+export function saveDraft(key: string, draft: Draft) {
   try {
-    if (text) store("local")?.setItem(DRAFT + key, text);
+    if (draft.reaction || draft.stopped || draft.text)
+      store("local")?.setItem(DRAFT + key, JSON.stringify(draft));
     else store("local")?.removeItem(DRAFT + key);
   } catch {
     /* no storage: the draft lasts as long as the box */
