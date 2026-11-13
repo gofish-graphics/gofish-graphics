@@ -36,7 +36,3 @@ export function stateLabel(c: BookChapter): string {
       return "Not checked in this build";
   }
 }
-
-/** A `reads` path as the reader sees it: the library's src/ prefix dropped. */
-export const shortPath = (p: string) =>
-  p.replace(/^packages\/gofish-graphics\/src\//, "");

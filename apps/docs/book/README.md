@@ -23,9 +23,11 @@ published.
   the brief, or the next rebuild will not see it.
 - The brief is owned by a person. An agent may add a note to a brief, but it
   does not rewrite one.
-- Each chapter shows a stamp at the top. The stamp says which commit the
-  chapter was checked against, which source files it reads, whether those files
-  have changed since, and how fast they are changing.
+- Each chapter shows a one-line stamp at the top: how fast the code behind it
+  is changing, and the date it was checked against that code. When that code
+  has changed since, the stamp says the chapter is out of date. The files a
+  chapter reads and the commit it was checked against are in its frontmatter,
+  for the agent that rebuilds it. The page does not list them.
 - Each chapter ends with a "Not yet true" box and a "Where this lives in the
   code" list. The box says where the code and the intended design part ways.
 - Any visitor can give feedback on a paragraph. The feedback button opens a
