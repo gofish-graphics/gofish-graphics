@@ -5,6 +5,7 @@ import gofish from "./markdown-it-gofish";
 import gofishRef from "./markdown-it-gofish-ref";
 import wikilink, { type WikiTarget } from "./markdown-it-wikilink";
 import book from "./markdown-it-book";
+import { bookNotes } from "./book-notes-server";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
@@ -336,6 +337,9 @@ export default defineConfig({
         name: "gofish-restore-esbuild-tsx",
         config: () => ({ esbuild: { include: /\.[jt]sx?$/, jsx: "preserve" } }),
       },
+      // Dev server only: POST /__book/note saves a reader's note into the
+      // chapter's brief. The built site has no such endpoint.
+      bookNotes(join(docsDir, "../book/briefs")),
     ],
   },
   appearance: false,

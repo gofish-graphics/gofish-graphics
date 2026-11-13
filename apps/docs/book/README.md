@@ -28,8 +28,10 @@ published.
   have changed since, and how fast they are changing.
 - Each chapter ends with a "Not yet true" box and a "Where this lives in the
   code" list. The box says where the code and the intended design part ways.
-- Any visitor can leave a note on a paragraph. The note button opens a new
-  GitHub issue with the chapter and the paragraph filled in.
+- Any visitor can leave a note on a paragraph. The note button opens a small
+  box beside the paragraph. On the local dev server the note is saved straight
+  into the brief. On the published site it opens a new GitHub issue with the
+  chapter, the paragraph and the note filled in.
 - The old internals wiki (`apps/docs/docs/internals/`) is separate. The book
   does not read it, and a chapter is never built from it.
 
@@ -68,7 +70,7 @@ contents. Wherever the book lists or titles a chapter, it shows the label and
 then the question, e.g., "Axes: How does a chart get its axes?". This is the
 contents, the Contents list at the top of each chapter, the chapter's heading,
 the links to the next and previous chapters, the browser tab and the cover
-tiles. The note button's issue title uses the question alone.
+tiles. The title of a note's issue uses the question alone.
 
 The contents and the Contents list are built from this frontmatter. Adding a
 chapter file is enough to list it.
@@ -156,7 +158,28 @@ One paragraph that says what the one figure shows.
 
 ### How notes reach a brief
 
-A note button opens an issue with the label `book-note`. Then:
+Every paragraph, list item, heading and figure of a chapter has a "Note"
+button, shown on hover and on keyboard focus. The "Leave a note on this
+chapter" button at the end of the chapter is always shown. Either one opens a
+small box beside its passage, where the reader types the note. The box keeps
+an unsent draft in the browser, so closing the box or reloading the page does
+not lose it. Where the note goes depends on where the page is served.
+
+- **The local dev server.** A dev-only Vite plugin,
+  `docs/.vitepress/book-notes-server.ts`, serves `/__book/note`. The page asks
+  it with a `GET` when it loads. When it answers, the box's button saves the
+  note straight into the brief's `## Notes`, as
+  `- <date>, <name>: "<the note>" (on "<the passage's first words>", #<anchor>)`.
+  The name is the first word of `git config user.name`. The section is added
+  when the brief has none. Such a note is already in the brief, so nothing more
+  needs to be done.
+- **The published site.** The site is static, so the `GET` fails. The box's
+  button opens a new GitHub issue in a new tab, with the chapter, the passage
+  and the note filled in. The reader submits it there.
+
+The transports are in `docs/.vitepress/theme/components/book/bookNotes.ts`.
+
+An issue note has the label `book-note`. Then:
 
 - An issue that the maintainer opened is copied into the brief's Notes, with
   its date and author, and the issue is closed.

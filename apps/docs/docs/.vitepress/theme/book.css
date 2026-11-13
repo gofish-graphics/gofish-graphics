@@ -950,6 +950,9 @@
 }
 
 /* ---- notes ------------------------------------------------------------- */
+/* The "Note" button beside each block, and the note box (BookNoteBox.vue).
+   The box opens over the text under its block, so the column never moves; in
+   a narrow column it sits in the flow under the block instead. */
 
 .book-page .vp-doc .book-noted {
   position: relative;
@@ -958,15 +961,17 @@
   position: absolute;
   top: 0.2em;
   right: -4rem;
+  font-family: var(--vp-font-family-base);
   font-size: 12px;
   font-weight: 500;
+  letter-spacing: normal;
   line-height: 1.4;
   padding: 1px 7px;
   border: 1px solid var(--book-rule);
   border-radius: 4px;
   color: var(--book-ink-2);
   background: var(--book-bg);
-  text-decoration: none;
+  cursor: pointer;
   opacity: 0;
   transition: opacity 150ms;
   white-space: nowrap;
@@ -977,7 +982,8 @@
   right: 0;
 }
 .book-page .vp-doc .book-noted:hover > .book-note,
-.book-page .vp-doc .book-note:focus-visible {
+.book-page .vp-doc .book-note:focus-visible,
+.book-page .vp-doc .book-note[aria-expanded="true"] {
   opacity: 1;
 }
 .book-page .vp-doc .book-note:hover {
@@ -988,6 +994,13 @@
   outline: 2px solid var(--book-accent);
   outline-offset: 1px;
 }
+/* A block with a note from this session keeps a quiet mark. */
+.book-page .vp-doc .book-note.is-noted {
+  opacity: 0.75;
+  color: var(--book-accent);
+  border-color: var(--book-accent-tint);
+  background: var(--book-accent-tint);
+}
 /* No margin to sit in: put the control over the top-right corner. */
 @container (max-width: 760px) {
   .book-page .vp-doc .book-note {
@@ -995,6 +1008,128 @@
     top: -1.5em;
   }
 }
+
+.book-note-box {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  width: min(26rem, 100%);
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid var(--book-rule);
+  border-radius: 8px;
+  background: var(--book-bg);
+  box-shadow:
+    0 8px 24px rgb(23 34 46 / 0.12),
+    0 1px 3px rgb(23 34 46 / 0.08);
+  /* The box may sit inside a heading or a figure: set its type afresh. */
+  font-family: var(--vp-font-family-base);
+  font-size: 15px;
+  font-weight: 400;
+  font-style: normal;
+  letter-spacing: normal;
+  line-height: 1.5;
+  text-align: left;
+  text-transform: none;
+  color: var(--book-ink);
+}
+.book-page .book-note-box p {
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+.book-page .book-note-box .book-note-box__about {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--book-ink-3);
+  overflow-wrap: anywhere;
+}
+.book-note-box__on {
+  font-weight: 600;
+  color: var(--book-ink-2);
+}
+.book-note-box__label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.book-note-box textarea {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 4.6em;
+  padding: 6px 8px;
+  border: 1px solid var(--book-ink-3);
+  border-radius: 6px;
+  background: var(--book-bg);
+  color: var(--book-ink-strong);
+  font: inherit;
+  resize: vertical;
+}
+.book-note-box textarea:focus-visible,
+.book-note-box button:focus-visible,
+.book-note-chapter__open:focus-visible {
+  outline: 2px solid var(--book-accent);
+  outline-offset: 2px;
+}
+.book-page .book-note-box .book-note-box__error {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--book-warn);
+}
+.book-note-box__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.book-note-box button {
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  padding: 5px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.book-note-box .book-note-box__send {
+  font-weight: 600;
+  border: 1px solid var(--book-accent);
+  background: var(--book-accent);
+  color: #ffffff;
+}
+.book-note-box__send:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.book-note-box .book-note-box__cancel {
+  border: 1px solid var(--book-rule);
+  background: var(--book-bg);
+  color: var(--book-ink-2);
+}
+.book-note-box .book-note-box__cancel:hover {
+  color: var(--book-ink);
+  border-color: var(--book-ink-3);
+}
+.book-page .book-note-box .book-note-box__hint {
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--book-ink-3);
+}
+.book-page .book-note-box .book-note-box__done {
+  color: var(--book-accent);
+  font-weight: 500;
+  /* It takes focus only so Escape still works; it is not a control. */
+  outline: none;
+}
+/* A narrow column has no room to cover: the box pushes the text down. */
+@container (max-width: 760px) {
+  .book-note-box {
+    position: static;
+    width: auto;
+    margin-top: 8px;
+  }
+}
+
 .book-note-chapter {
   margin-top: 2.4rem;
   padding-top: 1rem;
@@ -1002,9 +1137,27 @@
   font-size: 0.86rem;
   color: var(--book-ink-2);
 }
-.book-note-chapter a {
+.book-note-chapter__open {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
   font-weight: 600;
   color: var(--book-accent);
+  cursor: pointer;
+}
+.book-note-chapter__open:hover {
+  text-decoration: underline;
+}
+.book-note-chapter__noted {
+  color: var(--book-accent);
+}
+/* At the end of the chapter there is no text to cover: the box goes in the
+   flow, at the column's full width. */
+.book-note-chapter > .book-note-box {
+  position: static;
+  width: auto;
+  margin-top: 10px;
 }
 
 @media (prefers-reduced-motion: reduce) {

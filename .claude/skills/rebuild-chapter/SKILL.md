@@ -149,8 +149,18 @@ land, or the chapter will show as out of date.
 
 ## 8. How reader notes reach the brief
 
-Readers leave notes as GitHub issues. The note button gives them the label
-`book-note` and a title that starts with `Note on "`.
+A reader types a note in the note box beside a paragraph. It reaches the brief
+in one of two ways.
+
+- On the local dev server, the box saves the note straight into the brief's
+  `## Notes`, as
+  `- <date>, <name>: "<the note>" (on "<the passage's first words>", #<anchor>)`.
+  Such a note is already in the brief. There is nothing to copy.
+- On the published site, the box opens a prefilled GitHub issue, which the
+  reader submits. The issue has the label `book-note` and a title that starts
+  with `Note on "`.
+
+Issue notes are copied in by hand:
 
 - An issue opened by the maintainer is copied into the brief's `## Notes` as
   `- <date>, <name>: "<the note>"`, with a link to the issue. Then the issue is
