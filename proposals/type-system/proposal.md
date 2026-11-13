@@ -1764,6 +1764,27 @@ rect({ h: "temp" })
 
 The first error is on the data side and the second is on the space side. The second is the stack of spreads: `sold : Σ *` passes the data check, and a `Pos` where a `Len` is needed is what fails.
 
+**When x and y are coupled.** Writing `x :` and `y :` on separate lines is a shorthand that works only when an operator acts on one axis at a time, as `spread`, `stack` and `scatter` do. Some operators place their children in the plane as a whole, and their type cannot be split into an x part and a y part. A hexbin is the clear case: a hexagon's x range depends on its y. Those get one type for both axes, written `xy :`.
+
+```text
+hexbin: partition by a hex bin of (lon, lat), fill: count
+    xy : Cells[hex(lon, lat)] of ·            one cell per bin; the cell is the key
+
+2D histogram: partition by a bin of x and a bin of y
+    xy : Cells[bin(a) × bin(b)] of ·          a product, so it also splits:
+    x  : Cells[bin(a)]      y : Cells[bin(b)]
+
+treemap by product, size: sold
+    xy : Tiles[product] of Area[sold]         needs sold : zero, Σ product
+
+scatter x: a, y: b
+    x  : Pos[a]             y : Pos[b]         separate
+```
+
+So the general form is one type for the plane, and the two-line form is the special case where that type is a product of an x type and a y type. A grid of rectangular bins is a product. Hex cells, Voronoi cells, squarified treemap tiles, packed circles and map regions are not. The split matters to consumers: an axis can be drawn for x alone only when the type splits. `Cells`, `Tiles` and `Area` are new symbols here, and how the engine represents a cell that is not a rectangle has not been checked for this draft.
+
+Even the split form is not fully independent. In the main example both lines start with `month`, because one `spread` made the slot on x and the shared baseline on y. The two lines are two views of one nest of operators, not two separate types.
+
 **What the notation does not say yet.** A stack with a `size` option takes its lengths from `size` and does not read `child.y`, which is why the nested mosaic is correct; that rule is not written. A channel that folds several rows (`Len[mean of price]`) is not written. Area, an upper segment's missing baseline, an invented segment order, and the join of two siblings on a shared axis have no symbol. Josh asked on 11-12 to leave out arrow and forall signatures, so this uses one arrow, for a whole spec, and no quantifiers.
 
 ### What was already here

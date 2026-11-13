@@ -7666,6 +7666,47 @@ rect({ h: "temp" })
           <code>Pos</code> where a <code>Len</code> is needed is what fails.
         </p>
         <p>
+          <strong>When x and y are coupled.</strong> Writing
+          <code>x :</code> and <code>y :</code> on separate lines is a shorthand
+          that works only when an operator acts on one axis at a time, as
+          <code>spread</code>, <code>stack</code> and <code>scatter</code> do.
+          Some operators place their children in the plane as a whole, and their
+          type cannot be split into an x part and a y part. A hexbin is the
+          clear case: a hexagon's x range depends on its y. Those get one type
+          for both axes, written <code>xy :</code>.
+        </p>
+        <pre
+          class="code plain"
+        ><code class="nohighlight">hexbin: partition by a hex bin of (lon, lat), fill: count
+    xy : Cells[hex(lon, lat)] of ·            one cell per bin; the cell is the key
+
+2D histogram: partition by a bin of x and a bin of y
+    xy : Cells[bin(a) × bin(b)] of ·          a product, so it also splits:
+    x  : Cells[bin(a)]      y : Cells[bin(b)]
+
+treemap by product, size: sold
+    xy : Tiles[product] of Area[sold]         needs sold : zero, Σ product
+
+scatter x: a, y: b
+    x  : Pos[a]             y : Pos[b]         separate</code></pre>
+        <p>
+          So the general form is one type for the plane, and the two-line form
+          is the special case where that type is a product of an x type and a y
+          type. A grid of rectangular bins is a product. Hex cells, Voronoi
+          cells, squarified treemap tiles, packed circles and map regions are
+          not. The split matters to consumers: an axis can be drawn for x alone
+          only when the type splits. <code>Cells</code>, <code>Tiles</code> and
+          <code>Area</code> are new symbols here, and how the engine represents
+          a cell that is not a rectangle has not been checked for this draft.
+        </p>
+        <p>
+          Even the split form is not fully independent. In the main example both
+          lines start with <code>month</code>, because one
+          <code>spread</code> made the slot on x and the shared baseline on y.
+          The two lines are two views of one nest of operators, not two separate
+          types.
+        </p>
+        <p>
           <strong>What the notation does not say yet.</strong> A stack with a
           <code>size</code> option takes its lengths from <code>size</code> and
           does not read <code>child.y</code>, which is why the nested mosaic is
