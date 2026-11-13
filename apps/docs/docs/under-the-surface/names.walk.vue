@@ -32,7 +32,9 @@ const nameText = (i: number) =>
       : `"${rows[i].name}"`;
 const pillW = (i: number) => {
   const n = nameText(i);
-  return 14 + (label(i).length + (n ? n.length + 1 : 0)) * CHAR;
+  // The template leaves a space on each side of the name's tspan, so a
+  // named row is three characters wider than its two words.
+  return 14 + (label(i).length + (n ? n.length + 3 : 0)) * CHAR;
 };
 const parentOf = (i: number) => {
   for (let j = i - 1; j >= 0; j--)
