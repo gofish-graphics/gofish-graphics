@@ -84,8 +84,12 @@
 }
 
 /* Room for the widest figure; text sits in a narrower column inside it. */
-.book-page .VPDoc .content {
-  max-width: calc(var(--book-wide) + 64px);
+.book-page .VPDoc .content,
+.book-page .VPDoc:not(.has-sidebar) .content {
+  max-width: calc(var(--book-wide) + 64px) !important;
+}
+.book-page .VPDoc:not(.has-sidebar) .container {
+  max-width: calc(var(--book-wide) + 128px) !important;
 }
 .book-page .VPDoc .content-container {
   max-width: none;
