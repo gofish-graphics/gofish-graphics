@@ -6808,6 +6808,74 @@ price: { unit: "USD/items", traits: [Trait.canAverage({ weight: "sold" })] },</c
           </li>
           <li>a table that is already aggregated, with no entity column</li>
         </ul>
+        <h3 id="trait-scope">Two places for traits, and what each one means</h3>
+        <p>
+          <code>traits</code> appears in two places: on a <code>Unit</code> and
+          on a column. That is kept, with one rule for which goes where. Where a
+          trait is written says how far it reaches.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Written on</th>
+                <th scope="col">Holds for</th>
+                <th scope="col">Examples</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">a <code>Unit</code></th>
+                <td>every column in that unit, in every table of the figure</td>
+                <td>°C has no zero; USD adds up</td>
+              </tr>
+              <tr>
+                <th scope="row">a column</th>
+                <td>that column in this table</td>
+                <td>
+                  <code>stock</code> adds up over <code>warehouse</code>;
+                  <code>price</code> averages by <code>sold</code>;
+                  <code>month</code> is ordered
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">the table (<code>key</code>)</th>
+                <td>the rows</td>
+                <td>no two rows share a warehouse and a month</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A trait that names another column (<code>canSum({ over })</code>,
+          <code>canAverage({ weight })</code>, <code>nested({ in })</code>) is
+          an error on a unit, raised when the unit is made. A unit is shared by
+          name across the figure and does not know any table, so it cannot say
+          anything about <code>warehouse</code>. <code>stock</code> and
+          <code>sold</code> are both in items and add up over different keys,
+          which is why that fact cannot sit on <code>Items</code>.
+        </p>
+        <p>
+          This is how SQL divides the same facts, with one word for all three
+          (<code>research/type-spelling-precedent.md</code>, fetched from the
+          PostgreSQL documentation): a domain's check may read only the value, a
+          column constraint reads its own column, and a table constraint holds
+          what spans columns. Pandera uses <code>checks</code> on both a column
+          and a table the same way, and dbt and LookML put the aggregation fact
+          that names another column on the measure.
+        </p>
+        <p>
+          Two other spellings were weighed and not taken. Chaining (<code
+            >Items.canSum({ over: "warehouse" })</code
+          >, <code>Domain.discrete(MONTHS).ordered().cyclic()</code>) removes
+          both fields, but <code>Items.canSum()</code> then cannot say whether
+          the unit adds up or only this column does, it turns adjectives into
+          methods against the rule in <code>api-design.md</code>, and it deletes
+          the <code>Trait</code> family. Moving the relational facts to the
+          table beside <code>key</code> is the runner-up, and becomes the better
+          form if more facts about the table's identity arrive, such as
+          <code>nested({ in })</code> or a foreign key.
+        </p>
         <h3>A key made of more than one field: the rule</h3>
         <ul>
           <li>

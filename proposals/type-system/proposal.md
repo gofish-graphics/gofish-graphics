@@ -343,6 +343,22 @@ Josh (11-12): two spellings seem fine, and more examples are needed to tell them
 - inventory with a `product` key added later (the unforeseen key)
 - a table that is already aggregated, with no entity column
 
+### Two places for traits, and what each one means
+
+`traits` appears in two places: on a `Unit` and on a column. That is kept, with one rule for which goes where. Where a trait is written says how far it reaches.
+
+| Written on        | Holds for                                               | Examples                                                                         |
+| ----------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| a `Unit`          | every column in that unit, in every table of the figure | °C has no zero; USD adds up                                                      |
+| a column          | that column in this table                               | `stock` adds up over `warehouse`; `price` averages by `sold`; `month` is ordered |
+| the table (`key`) | the rows                                                | no two rows share a warehouse and a month                                        |
+
+A trait that names another column (`canSum({ over })`, `canAverage({ weight })`, `nested({ in })`) is an error on a unit, raised when the unit is made. A unit is shared by name across the figure and does not know any table, so it cannot say anything about `warehouse`. `stock` and `sold` are both in items and add up over different keys, which is why that fact cannot sit on `Items`.
+
+This is how SQL divides the same facts, with one word for all three ([type-spelling-precedent](research/type-spelling-precedent.md), fetched from the PostgreSQL documentation): a domain's check may read only the value, a column constraint reads its own column, and a table constraint holds what spans columns. Pandera uses `checks` on both a column and a table the same way, and dbt and LookML put the aggregation fact that names another column on the measure.
+
+Two other spellings were weighed and not taken. Chaining (`Items.canSum({ over: "warehouse" })`, `Domain.discrete(MONTHS).ordered().cyclic()`) removes both fields, but `Items.canSum()` then cannot say whether the unit adds up or only this column does, it turns adjectives into methods against the rule in `api-design.md`, and it deletes the `Trait` family. Moving the relational facts to the table beside `key` is the runner-up, and becomes the better form if more facts about the table's identity arrive, such as `nested({ in })` or a foreign key.
+
 ### A key made of more than one field
 
 `over` takes a list, and the rule is about the tuple: a sum over a set of rows is valid when no two of those rows agree on every column in `over`.
