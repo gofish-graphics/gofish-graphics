@@ -1112,8 +1112,8 @@
   align-items: center;
   gap: 6px;
   margin-top: 8px;
-  font-size: 13px;
-  color: var(--book-ink-3);
+  font-size: 14px;
+  color: var(--book-ink);
   cursor: pointer;
 }
 .book-note-box__stopped input {
