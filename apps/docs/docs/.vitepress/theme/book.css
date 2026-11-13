@@ -65,7 +65,7 @@
   --fig-new: #f6ecc4;
   --fig-new-bg: #3d3410;
   --fig-hl-bg: #22303d;
-  --fig-on-user: #0d1319;
+  --fig-on-user: #001e0f;
 }
 
 /* ---- page frame -------------------------------------------------------- */
@@ -387,7 +387,11 @@
 .book-page .fig-generated {
   fill: var(--fig-generated);
 }
-.book-page .fig-on-user {
+/* Text on a --fig-user fill. The color is the one GoFish's own label rule
+   (autoLabelColorForStyle, by APCA contrast) picks for that fill: white on
+   the light theme's green, a near-black green on the dark theme's. The
+   doubled class keeps it ahead of .fig-mono and the other text classes. */
+.book-page .fig-on-user.fig-on-user {
   fill: var(--fig-on-user);
 }
 .book-page .fig-mono {
