@@ -102,13 +102,15 @@ All paths are relative to `packages/gofish-graphics/`:
 
 - **One lowercase surface**: each operator has one lowercase name that works both inside `.flow(...)` and as a combinator over an explicit child list (`stack(opts, [a, b])`, `layer([...])`, `intersect([a, b])`). A combinator child may be a mark or an already-built node (e.g. `ref(...)`), and a `createMark` body may return a combinator's mark directly. The node-level building blocks (`Spread`, `Layer`, `Treemap`, the region-compositing node operators, …) are internal and not exported (#146). A capital letter means a class or a namespace (`GoFishRef`, `FieldExpr`, `Serialize`, …): the factory namespaces `Constraint` and `Schema`, and the **strategy families** (#1013). An option whose value is one choice from a set of strategies has one family namespace, a module under `src/families/` bound in `lib.ts` with `export * as`: `Overlap.separate()`, `Tile.squarify()`, `Curve.monotone()`, `Coord.polar()`, `Color.palette()`, `Animation.grow()`. The family's type is inside it (`Curve.Curve`), each family is also a subpath (`gofish-graphics/curve`), and strategies are never also top-level exports. Python mirrors this (`from . import curve as Curve`; `from gofish.curve import monotone`). The async map over a collection is the lowercase `map`.
 
-### Context System
+### Render Session
 
-The library uses several global contexts during rendering:
+Each render creates one `RenderSession` (`src/ast/_node.ts`), the state its passes share:
 
-- `scopeContext` - Manages variable scoping
-- `scaleContext` - Handles color scales and axis scales
-- `keyContext` - Tracks named elements for axis labels
+- `scaleContext` - Scales keyed by measure (the color scale lives here)
+- `tokenContext` - Nodes registered under `createName` tokens, which refs resolve against
+- `keyedDomains` - Per axis and unit, the data range sized nodes map into, and whether an axis is drawn over it
+
+Names set with `.name()` are separate from the session. They are filed at build time in a tree of `LayerContext` registries (`src/ast/marks/markResult.ts`), which `selectAll` and `ref` read.
 
 ### Coordinate Transforms
 
