@@ -38,7 +38,7 @@ const pageComponents = {
     import("../../../components/ObservablePlotEmbed.vue"),
   TutorialGrid: () => import("./components/tutorials/TutorialGrid.vue"),
   TutorialCard: () => import("./components/tutorials/TutorialCard.vue"),
-  // Under the Surface (docs/under-the-surface/).
+  // Under the Sea (docs/under-the-sea/).
   TreeStepper: () => import("./components/book/TreeStepper.vue"),
   BookSpread: () => import("./components/book/BookSpread.vue"),
 };
@@ -57,7 +57,7 @@ export default {
       "layout-top": () => h(LanguageToggle, { placement: "localnav" }),
       // Status banner + "Source files" box for internals essays
       // (the component renders nothing on pages without the frontmatter).
-      // Under the Surface: the running head, stamp and title on top of a
+      // Under the Sea: the running head, stamp and title on top of a
       // chapter, the note links at the end of the page (all render nothing
       // elsewhere).
       "doc-before": () => [

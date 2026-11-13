@@ -1,6 +1,6 @@
 /**
  * book-tree — print a GoFish node tree before and after `layout()` rewrites it,
- * as an indented outline, so a chapter of "Under the Surface" can quote a real
+ * as an indented outline, so a chapter of "Under the Sea" can quote a real
  * tree instead of a typed one.
  *
  *   pnpm --filter docs book:tree                     # the built-in "bars" example

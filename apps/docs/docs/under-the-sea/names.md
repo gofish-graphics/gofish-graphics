@@ -133,7 +133,7 @@ Hygiene means a name used inside a part cannot collide with a name outside it. F
 
 Tokens are hygienic by identity. A token made inside the body is new for each call, so the two cards' `box` tokens differ. A token made once outside and shared is one token on two nodes: `ref(createName("box")) is ambiguous: it matched 2 nodes`. And a token's tag still answers to string lookups, which is how the card's `.relate(({ box }) => …)` finds its rect.
 
-The parts the library adds reach nodes through handles, not names (see [the axes chapter](/under-the-surface/axes)), and data keys are not names. For these parts hygiene is true of today's code, not enforced. The `slider` and `button` widgets name inner nodes `"track"`, `"readout"`, `"box"` and `"label"` and are not components. A `button` beside a nested `text(...).name("label")` makes `label` ambiguous: `the name "label" is ambiguous: it matched 2 nodes`.
+The parts the library adds reach nodes through handles, not names (see [the axes chapter](/under-the-sea/axes)), and data keys are not names. For these parts hygiene is true of today's code, not enforced. The `slider` and `button` widgets name inner nodes `"track"`, `"readout"`, `"box"` and `"label"` and are not components. A `button` beside a nested `text(...).name("label")` makes `label` ambiguous: `the name "label" is ambiguous: it matched 2 nodes`.
 
 ## The example, lookup by lookup
 

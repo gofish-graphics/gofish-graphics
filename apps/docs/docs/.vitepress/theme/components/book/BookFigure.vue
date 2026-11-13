@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The frame of every figure in "Under the Surface": the wide figure
+// The frame of every figure in "Under the Sea": the wide figure
 // container, its `id="fig-<name>"` anchor (the cover tiles link to it), the
 // legend and the caption. The figure's content is the default slot and the
 // caption the `caption` slot. With `still` (set by the book cover) only the

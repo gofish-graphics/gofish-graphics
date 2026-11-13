@@ -1,4 +1,4 @@
-// Where a reader's feedback on "Under the Surface" goes. The note box
+// Where a reader's feedback on "Under the Sea" goes. The note box
 // (BookNoteBox.vue) collects it: a one-click reaction, a "stopped reading
 // here" mark, some text, or any mix of the three. A transport sends it. The page picks
 // one transport when it loads:

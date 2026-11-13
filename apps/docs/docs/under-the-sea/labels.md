@@ -54,7 +54,7 @@ Two of the dots are about 10 pixels apart, and one sits in a corner. Yet every n
 
 ## What `.label()` becomes
 
-A `.label()` call only records a request on the node. After the axes are added, a rewrite turns each request into plain nodes (see the [axes chapter](/under-the-surface/axes)). The result is one extra layer around the content of the nearest chart, holding the content, one `ref` per labeled mark and one `label` node per label. A `ref` is a stand-in that reads where another node was placed. The tree for the example, simplified from what `book:tree` prints:
+A `.label()` call only records a request on the node. After the axes are added, a rewrite turns each request into plain nodes (see the [axes chapter](/under-the-sea/axes)). The result is one extra layer around the content of the nearest chart, holding the content, one `ref` per labeled mark and one `label` node per label. A `ref` is a stand-in that reads where another node was placed. The tree for the example, simplified from what `book:tree` prints:
 
 ```text
 layer  {transparent}  [position, labelPlace]

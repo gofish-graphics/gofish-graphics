@@ -1,5 +1,5 @@
-// markdown-it containers for the chapters of "Under the Surface"
-// (docs/under-the-surface/). Styled by theme/book.css. See
+// markdown-it containers for the chapters of "Under the Sea"
+// (docs/under-the-sea/). Styled by theme/book.css. See
 // apps/docs/book/README.md for how a chapter uses them.
 //
 //   ::: not-yet-true            a calm box headed "Not yet true": where the code

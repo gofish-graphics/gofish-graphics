@@ -1,6 +1,6 @@
 ---
 name: rebuild-chapter
-description: Build or rebuild one chapter of "Under the Surface", the book on how GoFish works inside (apps/docs/docs/under-the-surface/). Use when asked to write a new chapter from its brief, to rebuild a chapter that is out of date, or to fold reader notes into a chapter. The chapter is written from scratch from its brief and the code, never patched.
+description: Build or rebuild one chapter of "Under the Sea", the book on how GoFish works inside (apps/docs/docs/under-the-sea/). Use when asked to write a new chapter from its brief, to rebuild a chapter that is out of date, or to fold reader notes into a chapter. The chapter is written from scratch from its brief and the code, never patched.
 user-invocable: true
 allowed-tools:
   - Read
@@ -13,7 +13,7 @@ allowed-tools:
 
 # Build or rebuild one chapter
 
-A chapter of "Under the Surface" answers one question about how GoFish works
+A chapter of "Under the Sea" answers one question about how GoFish works
 inside. It is written from its brief and from the code as it is today. A
 rebuild starts from scratch. It never edits the old chapter text.
 
@@ -52,7 +52,7 @@ rebuild starts from scratch. It never edits the old chapter text.
 
 ## 4. Write the chapter
 
-Write `apps/docs/docs/under-the-surface/<slug>.md` in this shape.
+Write `apps/docs/docs/under-the-sea/<slug>.md` in this shape.
 
 1. A short opening that poses the question, usually with a small example the
    reader could write.
@@ -132,7 +132,7 @@ Every chapter must offer at least one cover figure. The cover at the top of
 the contents page is built from these entries, so pick a size close to the
 figure's shape (the README's "The cover" section has the cell size). A
 `::: gofish` figure cannot be a cover tile. Check the cover at
-`/under-the-surface/` when you look at the render in step 7.
+`/under-the-sea/` when you look at the render in step 7.
 
 `checked.commit` is the commit whose code you read. If you change source files
 in the same branch, read them again and set the commit after those changes
@@ -143,7 +143,7 @@ land, or the chapter will show as out of date.
 - Run `pnpm --filter docs book:check` and fix every problem it prints.
 - Look at the rendered page once. Start the docs dev server on a free port
   (`cd apps/docs && npx vitepress dev docs --port <port>`), open
-  `/under-the-surface/<slug>`, and take a screenshot at about 1200 pixels wide
+  `/under-the-sea/<slug>`, and take a screenshot at about 1200 pixels wide
   and one at 400 pixels wide. Check the stamp, the figure at its first and last
   step, and the code map. Stop the server when you are done.
 

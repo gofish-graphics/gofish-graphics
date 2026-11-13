@@ -107,7 +107,7 @@ All three were run through `book:tree` and `toDisplayList` at 300 by 200 pixels.
 
 `.flow()` and `.mark()` only store what you gave them. Nothing runs until a terminal such as `render` calls `resolve()`.
 
-An operator is a function from a mark to a mark. `resolve()` wraps the mark in each operator, last first, so `.flow(a, b).mark(m)` becomes the mark `a(b(m))`. It calls that mark once with the chart's rows, typed by the chart's `schema`, and puts the result in the chart's frame (see the [pipeline chapter](/under-the-surface/pipeline)).
+An operator is a function from a mark to a mark. `resolve()` wraps the mark in each operator, last first, so `.flow(a, b).mark(m)` becomes the mark `a(b(m))`. It calls that mark once with the chart's rows, typed by the chart's `schema`, and puts the result in the chart's frame (see the [pipeline chapter](/under-the-sea/pipeline)).
 
 The mark that `spread({ by })` returns comes from `createOperator`. Called with rows, it:
 
@@ -132,7 +132,7 @@ Right after resolving colors, `layout()` calls `resolveAliases()`, which walks t
 
 These constraints point at children by slot number, so no name you choose can collide with them. `stack` is `spread` with `glue: true` and lowers the same way.
 
-`.relate()` installs its constraints when the tree is built, and points at children by name. The trees show it: before layout, the constraint form's layer already holds `[align, distribute]` and the spread's holds none. Then layout solves them (see the [layout chapter](/under-the-surface/layout)).
+`.relate()` installs its constraints when the tree is built, and points at children by name. The trees show it: before layout, the constraint form's layer already holds `[align, distribute]` and the spread's holds none. Then layout solves them (see the [layout chapter](/under-the-sea/layout)).
 
 ::: rule A chain is nested marks.
 .flow(*op*₁, … , *op*ₙ).mark(_m_) = *op*₁(… *op*ₙ(_m_))(_rows_)

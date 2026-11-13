@@ -1,8 +1,8 @@
 <script setup lang="ts">
-// The opening page of "Under the Surface": a book lying open. The left page is
+// The opening page of "Under the Sea": a book lying open. The left page is
 // the cover (BookCover.vue) and the right page the contents
 // (BookContents.vue), with the default slot (the short note about the book,
-// written in docs/under-the-surface/index.md) at its foot. book.css sizes the
+// written in docs/under-the-sea/index.md) at its foot. book.css sizes the
 // spread to fit the window and stacks the pages on a narrow screen.
 import BookContents from "./BookContents.vue";
 import BookCover from "./BookCover.vue";

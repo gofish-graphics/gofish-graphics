@@ -67,7 +67,7 @@ chart(data)
 
 No bar says how wide it is or where it goes. Yet each comes out 110 pixels wide, and the second bar of each stack sits on the first. This chapter is about how layout decides that.
 
-Layout is given the node tree after the axis and label rewrites (see [the pipeline](/under-the-surface/pipeline)), the canvas size from `render`, which may be missing on either axis, and the type of every node on each axis: whether the axis holds numbers or categories, and what range the data covers. It gives back, for every node and each axis, a size in pixels and a position in its parent.
+Layout is given the node tree after the axis and label rewrites (see [the pipeline](/under-the-sea/pipeline)), the canvas size from `render`, which may be missing on either axis, and the type of every node on each axis: whether the axis holds numbers or categories, and what range the data covers. It gives back, for every node and each axis, a size in pixels and a position in its parent.
 
 ## Ask, solve, hand down, place
 
@@ -88,7 +88,7 @@ With no canvas size, σ is solved against a default of 400 pixels. Where fixed p
 
 ## Constraints and the solver
 
-`align`, `distribute` and `position` live on a layer and place its children (how `spread` and `stack` become them is in [lowering](/under-the-surface/lowering)). Each becomes facts about anchors: the start, middle, end or baseline of a child's box, one axis at a time.
+`align`, `distribute` and `position` live on a layer and place its children (how `spread` and `stack` become them is in [lowering](/under-the-sea/lowering)). Each becomes facts about anchors: the start, middle, end or baseline of a child's box, one axis at a time.
 
 The solver works per layer and per axis. First it closes sizes: a child pinned at both edges gets its size from them. Then each fact becomes a fixed distance between two children, such as "B starts 20 pixels after A ends". Children joined by distances move as one group. A pin fixes a group. A group with no pin puts its shared baseline at data 0; failing that, a row starts at its first part, and anything else puts its lowest edge at 0.
 
@@ -102,11 +102,11 @@ So the solver sits inside each layer, between laying out its children and measur
 
 ## What a ref does
 
-A `ref` stands where another node is (see [names](/under-the-surface/names)). It asks for its target's request, and when laid out it copies its target's box. Its position is computed each time it is read: the moves from its target up to their closest shared parent, less the moves from its own parent up to that node. So a label can be aligned to a ref, and the solver treats the ref as a fixed point. Refs whose targets depend on each other are a loop, which the asking step reports as an error.
+A `ref` stands where another node is (see [names](/under-the-sea/names)). It asks for its target's request, and when laid out it copies its target's box. Its position is computed each time it is read: the moves from its target up to their closest shared parent, less the moves from its own parent up to that node. So a label can be aligned to a ref, and the solver treats the ref as a fixed point. Refs whose targets depend on each other are a loop, which the asking step reports as an error.
 
 ## Does layout run more than once?
 
-In one render, each node asks once and is laid out once. The rewrites before layout rerun name and type resolution, not layout. Two things lay out the whole chart again: `label: { angle: "auto" }`, once per candidate angle (see [labels](/under-the-surface/labels)), and an input that changes the spec, such as a slider.
+In one render, each node asks once and is laid out once. The rewrites before layout rerun name and type resolution, not layout. Two things lay out the whole chart again: `label: { angle: "auto" }`, once per candidate angle (see [labels](/under-the-sea/labels)), and an input that changes the spec, such as a slider.
 
 ::: rule A request is a line in σ.
 claim(_n_) = ascent(σ) + descent(σ)

@@ -245,7 +245,7 @@ function collectInternalsSidebar() {
     });
 }
 
-// "Under the Surface" is the book of short chapters on how GoFish works. Like
+// "Under the Sea" is the book of short chapters on how GoFish works. Like
 // the internals wiki it is language-agnostic. Its pages show no sidebar
 // (transformPageData sets `sidebar: false`): a reader finds the chapters on
 // the opening spread and in each chapter's Contents menu. The sidebar config
@@ -253,7 +253,7 @@ function collectInternalsSidebar() {
 // at the foot of a chapter from it. It lists the opening page and then each
 // chapter, ordered by frontmatter `order` and titled "label: question" from
 // `label` and `title`. See apps/docs/book/README.md.
-const BOOK_DIR = "under-the-surface";
+const BOOK_DIR = "under-the-sea";
 
 /** A chapter's listed title, "Layout: How does ...?", from its frontmatter. */
 function bookChapterTitle(fm: Record<string, unknown>): string | undefined {
@@ -281,7 +281,7 @@ function collectBookSidebar() {
     .sort((a, b) => a.order - b.order || a.text.localeCompare(b.text));
   return [
     {
-      text: "Under the Surface",
+      text: "Under the Sea",
       items: [
         { text: "Contents", link: `/${BOOK_DIR}/` },
         ...chapters.map(({ text, link }) => ({ text, link })),
@@ -465,7 +465,7 @@ export default defineConfig({
       // `[[slug]]` wiki links between internals essays → resolved internal links.
       wikilink(md, collectWikiTargets());
       // `::: not-yet-true`, `::: code-map` and `::: rule <name>` for the
-      // chapters of Under the Surface.
+      // chapters of Under the Sea.
       book(md);
       md.use(container, "gofish-live", {
         render(tokens, idx) {
@@ -508,7 +508,7 @@ export default defineConfig({
     // are still built and reachable by URL.
     nav: [
       {
-        text: "Under the Surface",
+        text: "Under the Sea",
         link: `/${BOOK_DIR}/`,
         activeMatch: `/${BOOK_DIR}/`,
       },

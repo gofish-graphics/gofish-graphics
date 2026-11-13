@@ -82,7 +82,7 @@ An intermediate representation (IR) is a form of the chart that one stage writes
 2. **The frontend IR document.** JSON, `{irVersion: 0, ir: "gofish-frontend", root, tables}`, typed in `gofish-ir/src/frontend/schema.ts`. It is the chain as written, before layout. Python's `to_ir()` and JavaScript's `Serialize.toJSON` write it. `Serialize.buildIR` reads it, and `Frontend.validate` checks it.
 3. **The shipped document.** The same, with each table as base64 Arrow, a binary column format. Python's `ir_payload` writes it, and `decodeDocument` in `widget-src/arrowBridge.ts` reads it.
 4. **JavaScript builder objects.** What `buildIR` makes, and what `.render()` reads.
-5. **The node tree**, which layout places ([the pipeline](/under-the-surface/pipeline)).
+5. **The node tree**, which layout places ([the pipeline](/under-the-sea/pipeline)).
 6. **The display list.** Positioned shapes in absolute pixels, `ir: "gofish-display-list"`, typed in `gofish-ir/src/display-list/`. `toDisplayList` writes it and `displayListToSVG` reads it. The Python path does not use it.
 7. **SVG markup.** The browser draws it, and the widget sends it back to Python.
 

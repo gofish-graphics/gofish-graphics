@@ -1,9 +1,9 @@
 <script setup lang="ts">
-// The cover of "Under the Surface", the left page of the opening spread
+// The cover of "Under the Sea", the left page of the opening spread
 // (BookSpread.vue). It is a wall of tiles, one per figure that a chapter
 // offers in its `cover:` frontmatter, with the title as one cell of the wall.
 // Each tile renders the chapter's own figure component
-// (docs/under-the-surface/<slug>.<figure>.vue) with `still` set, scaled to fit
+// (docs/under-the-sea/<slug>.<figure>.vue) with `still` set, scaled to fit
 // and inert, so the cover always matches the chapters.
 import {
   defineAsyncComponent,
@@ -18,10 +18,10 @@ import { data as book } from "../../../data/book.data";
 import { fullTitle } from "./book";
 
 const modules = import.meta.glob<{ default: Component }>(
-  "../../../../under-the-surface/*.vue"
+  "../../../../under-the-sea/*.vue"
 );
 const figureFor = (slug: string, figure: string) => {
-  const load = modules[`../../../../under-the-surface/${slug}.${figure}.vue`];
+  const load = modules[`../../../../under-the-sea/${slug}.${figure}.vue`];
   return load ? defineAsyncComponent(load) : undefined;
 };
 
@@ -86,7 +86,7 @@ onBeforeUnmount(() => observer?.disconnect());
         width="56"
         height="56"
       />
-      <h1 id="book-cover-title">Under the Surface</h1>
+      <h1 id="book-cover-title">Under the Sea</h1>
       <p class="book-cover__sub">How GoFish Works</p>
     </div>
     <a

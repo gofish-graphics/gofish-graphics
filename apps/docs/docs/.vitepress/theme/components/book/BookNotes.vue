@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// Reader feedback on the pages of "Under the Surface". Each paragraph, list
+// Reader feedback on the pages of "Under the Sea". Each paragraph, list
 // item, heading, rule and figure of the page gets a small "Feedback" button,
 // shown on hover and on keyboard focus. One always-visible button at the end
 // of the page covers touch screens and feedback on the chapter as a whole.
@@ -28,7 +28,7 @@ const { page, frontmatter } = useData();
 const onBook = computed(() => isBookPage(page.value.relativePath));
 const slug = computed(() => chapterSlug(page.value.relativePath) ?? "");
 const question = computed(() =>
-  String(frontmatter.value.title ?? page.value.title ?? "Under the Surface")
+  String(frontmatter.value.title ?? page.value.title ?? "Under the Sea")
 );
 const sourcePath = computed(() => `apps/docs/docs/${page.value.relativePath}`);
 

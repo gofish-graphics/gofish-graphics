@@ -1,8 +1,8 @@
-# Under the Surface: How GoFish Works
+# Under the Sea: How GoFish Works
 
 This folder holds the plan for a short book about how GoFish works inside. The
-chapters are published on the docs site at `/under-the-surface/`, from
-`apps/docs/docs/under-the-surface/`. The briefs in `briefs/` are not
+chapters are published on the docs site at `/under-the-sea/`, from
+`apps/docs/docs/under-the-sea/`. The briefs in `briefs/` are not
 published.
 
 ## Who reads it
@@ -40,7 +40,7 @@ To build or rebuild a chapter, follow the skill in
 
 ## Chapter frontmatter
 
-A chapter is one file, `apps/docs/docs/under-the-surface/<slug>.md`. Its
+A chapter is one file, `apps/docs/docs/under-the-sea/<slug>.md`. Its
 frontmatter looks like this.
 
 ```yaml
@@ -77,7 +77,7 @@ chapter file is enough to list it.
 
 ## The pages
 
-The book's pages have no sidebar. The first page, `/under-the-surface/`, is a
+The book's pages have no sidebar. The first page, `/under-the-sea/`, is a
 book lying open. The left page is the cover and the right page is the
 contents, with the two sentences from `index.md` at its foot. On a window 900
 pixels wide or more, the two pages fit the window with no scrolling, and each
@@ -310,7 +310,7 @@ class="fig-panels">` to put several SVG panels side by side. A figure may
   line; a piece may set its own `data-step` and `data-until`. Put the caption
   in a `<template #caption>` inside the tag. See `axes.rewrite.vue`.
 
-`book:check` enforces this. Every `.vue` file in `docs/under-the-surface/`
+`book:check` enforces this. Every `.vue` file in `docs/under-the-sea/`
 must import `BookFigure`, `BookStepper` or `TreeStepper`, and must not
 contain `<button`, `aria-pressed`, `role="group"`, a `keydown` handler,
 `<input` or `<select`. Those belong to the shared stepper, so a figure that

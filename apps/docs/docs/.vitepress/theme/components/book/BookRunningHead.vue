@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The running head at the top of every chapter of "Under the Surface": the
+// The running head at the top of every chapter of "Under the Sea": the
 // book's name as a link back to the opening spread, the chapter's label, and
 // a Contents button that opens the chapter list under it. The book has no
 // sidebar, so this list is how a reader moves between chapters (besides the
@@ -55,8 +55,8 @@ onBeforeUnmount(() => close());
 
 <template>
   <div v-if="chapter" class="book-running">
-    <a class="book-running__book" :href="withBase('/under-the-surface/')"
-      >Under the Surface</a
+    <a class="book-running__book" :href="withBase('/under-the-sea/')"
+      >Under the Sea</a
     >
     <span class="book-running__chapter">{{ chapter.label }}</span>
     <div ref="root" class="book-running__menu" @focusout="onFocusOut">

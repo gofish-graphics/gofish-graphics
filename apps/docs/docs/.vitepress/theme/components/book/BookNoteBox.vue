@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The feedback box of "Under the Surface": one small form, opened beside the
+// The feedback box of "Under the Sea": one small form, opened beside the
 // passage it is about. BookNotes.vue opens it and places it; a transport from
 // bookNotes.ts sends it. A reader picks one of four reactions, may mark that
 // they stopped reading here, and may write a few words; a reaction or a stop

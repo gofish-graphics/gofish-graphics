@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The contents of "Under the Surface", the right page of the opening spread
+// The contents of "Under the Sea", the right page of the opening spread
 // (BookSpread.vue), generated from each chapter's frontmatter (`label`,
 // `title`, `order`, `topics`) and its stamp.
 import { withBase } from "vitepress";

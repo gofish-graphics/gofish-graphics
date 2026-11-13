@@ -1,5 +1,5 @@
 // The data a <TreeStepper> figure takes. A chapter keeps its figure's data in
-// a small file beside it (for example docs/under-the-surface/axes.figure.ts)
+// a small file beside it (for example docs/under-the-sea/axes.figure.ts)
 // and passes it as `:figure`. See apps/docs/book/README.md.
 import type { BookStep, FigKind } from "./bookFigure";
 

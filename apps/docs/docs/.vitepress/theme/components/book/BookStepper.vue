@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The one stepper of "Under the Surface". It owns everything about stepping
+// The one stepper of "Under the Sea". It owns everything about stepping
 // and nothing about what is drawn: the step buttons, Previous and Next, the
 // "Step n of N" text, the note of the current step, the arrow keys, focus,
 // the aria state, and the figure frame (<BookFigure>: anchor, legend,
@@ -15,7 +15,7 @@
 // Steps count from 1. `picker` makes the buttons a set of choices rather
 // than a sequence: no Previous and Next, no "Step n of N". `still` (the book
 // cover) shows `stillStep`, or the last step, with no controls, note, legend
-// or caption. Every figure file under docs/under-the-surface/ steps through
+// or caption. Every figure file under docs/under-the-sea/ steps through
 // this component or <TreeStepper>, which is built on it; `book:check` fails a
 // figure that draws its own step controls. Styles: theme/book-stepper.css.
 // See apps/docs/book/README.md, "Figures".

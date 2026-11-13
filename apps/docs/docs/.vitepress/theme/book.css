@@ -1,5 +1,5 @@
 /*
- * Under the Surface (docs/under-the-surface/): the look of the book's pages.
+ * Under the Sea (docs/under-the-sea/): the look of the book's pages.
  * Every rule is scoped to `.book-page`, the page class config.mts gives the
  * section, or to a class only the book's components use (`.book-spread`,
  * `.book-cover`, `.book-toc`), so the rest of the site is untouched.

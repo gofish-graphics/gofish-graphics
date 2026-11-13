@@ -78,15 +78,15 @@ Third, `resolveAxes` walks down from the root and picks each axis's owner. A slo
 
 ## The order of events
 
-`layout()` runs these steps in this order. The whole pipeline is in [the pipeline chapter](/under-the-surface/pipeline).
+`layout()` runs these steps in this order. The whole pipeline is in [the pipeline chapter](/under-the-sea/pipeline).
 
 1. The color scale is resolved, operators install their constraints, and refs are resolved.
 2. Typing: kinds of space, keyed domains, owners.
 3. The legend and titles are requested on the root and the charts.
 4. The rewrite (`elaborateChrome`) builds axes, titles and legend.
 5. The new tree is typed again, so the new nodes have types.
-6. Labels are built ([the labels chapter](/under-the-surface/labels)).
-7. Sizes and positions are solved ([the layout chapter](/under-the-surface/layout)).
+6. Labels are built ([the labels chapter](/under-the-sea/labels)).
+7. Sizes and positions are solved ([the layout chapter](/under-the-sea/layout)).
 
 The rewrite cannot come first because every choice it makes reads a type. The owner says which node gets an axis. The kind of space says which axis. The niced keyed domain says where the ticks fall. The type's field or measure is the title.
 
@@ -142,7 +142,7 @@ constraints(ring(_n_)) = [ position(*n*, 0, baseline), … ]
 The axis parts move around the content, and the content stays put.
 :::
 
-How a user's own names and refs resolve is in [the names chapter](/under-the-surface/names).
+How a user's own names and refs resolve is in [the names chapter](/under-the-sea/names).
 
 ::: not-yet-true
 

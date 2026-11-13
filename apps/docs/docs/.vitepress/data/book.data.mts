@@ -1,4 +1,4 @@
-// Build-time data for "Under the Surface": every chapter with its stamp
+// Build-time data for "Under the Sea": every chapter with its stamp
 // (checked commit, state, changes since, 30-day churn), computed from git by
 // scripts/book-stamps.mjs. The chapter header (theme/components/book/
 // BookChapterHead.vue), the contents page (BookContents.vue) and the cover
@@ -41,7 +41,7 @@ declare const data: BookData;
 export { data };
 
 export default defineLoader({
-  watch: ["../../under-the-surface/*.md"],
+  watch: ["../../under-the-sea/*.md"],
   load(): BookData {
     return loadBook() as BookData;
   },

@@ -1,4 +1,4 @@
-// "Under the Surface": a dev-server-only endpoint that saves a reader's
+// "Under the Sea": a dev-server-only endpoint that saves a reader's
 // feedback straight into the chapter's brief (apps/docs/book/briefs/<slug>.md).
 //
 //   GET  /__book/note  -> {"ok":true,"transport":"brief"}, the capability

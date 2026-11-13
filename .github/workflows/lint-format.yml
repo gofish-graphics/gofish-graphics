@@ -60,7 +60,7 @@ jobs:
       - name: Check internals wiki back-links
         run: pnpm --filter docs check-backlinks
 
-      - name: Check Under the Surface chapters and briefs
+      - name: Check Under the Sea chapters and briefs
         run: pnpm --filter docs book:check
 
       - name: Check gallery story examples

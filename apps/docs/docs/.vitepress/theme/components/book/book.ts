@@ -1,10 +1,10 @@
-// Shared helpers for the "Under the Surface" theme components.
+// Shared helpers for the "Under the Sea" theme components.
 import type { BookChapter } from "../../../data/book.data";
 
 /** The repo the site links to (also in config.mts `socialLinks`). */
 export const REPO = "https://github.com/gofish-graphics/gofish-graphics";
 
-export const BOOK_PREFIX = "under-the-surface/";
+export const BOOK_PREFIX = "under-the-sea/";
 
 /** The chapter slug of a page, or undefined off the book or on its contents
  *  page. `relativePath` is VitePress's `page.relativePath`. */

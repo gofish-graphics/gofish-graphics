@@ -1,4 +1,4 @@
-// Shared types for the figures of "Under the Surface": the palette kinds a
+// Shared types for the figures of "Under the Sea": the palette kinds a
 // legend can list, and the steps a <BookStepper> takes. See
 // apps/docs/book/README.md, "Figures".
 

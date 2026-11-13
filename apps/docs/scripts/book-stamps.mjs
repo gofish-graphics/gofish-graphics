@@ -1,6 +1,6 @@
 /**
- * book-stamps — the stamp and the checks for "Under the Surface", the book of
- * short chapters under apps/docs/docs/under-the-surface/.
+ * book-stamps — the stamp and the checks for "Under the Sea", the book of
+ * short chapters under apps/docs/docs/under-the-sea/.
  *
  *   node scripts/book-stamps.mjs stale   # chapters whose `reads` files changed since `checked.commit`
  *   node scripts/book-stamps.mjs check   # validate chapters and briefs (no git needed; CI)
@@ -32,9 +32,9 @@ import matter from "gray-matter";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(__dirname, "../../..");
-export const CHAPTER_DIR = join(REPO_ROOT, "apps/docs/docs/under-the-surface");
+export const CHAPTER_DIR = join(REPO_ROOT, "apps/docs/docs/under-the-sea");
 export const BRIEF_DIR = join(REPO_ROOT, "apps/docs/book/briefs");
-const ROUTE = "/under-the-surface/";
+const ROUTE = "/under-the-sea/";
 
 /** Over 30 days: "settled" is at most 2 commits and under 300 changed lines;
  *  "changing fast" is 10 or more commits or 2,000 or more changed lines;
@@ -84,7 +84,7 @@ export function readChapters() {
       return {
         slug,
         file,
-        path: `apps/docs/docs/under-the-surface/${f}`,
+        path: `apps/docs/docs/under-the-sea/${f}`,
         link: ROUTE + slug,
         title: data.title,
         label: data.label,
@@ -398,7 +398,7 @@ export function checkFigures() {
   for (const f of readdirSync(CHAPTER_DIR).filter((f) => f.endsWith(".vue"))) {
     const src = readFileSync(join(CHAPTER_DIR, f), "utf-8");
     const at = (msg) =>
-      errors.push(`apps/docs/docs/under-the-surface/${f}: ${msg}`);
+      errors.push(`apps/docs/docs/under-the-sea/${f}: ${msg}`);
     if (!FRAME_IMPORT.test(src))
       at(
         "a figure must import BookFigure, BookStepper or TreeStepper from theme/components/book/ and be drawn inside it"
