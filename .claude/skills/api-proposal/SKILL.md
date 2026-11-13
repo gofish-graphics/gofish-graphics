@@ -182,10 +182,23 @@ specific source for each point. In short, the strongest arguments are:
 A recommendation does not close the space: keep the runner-up visible and say
 what would change your pick.
 
-End with the decisions Josh needs to make, phrased as short questions, and the
-user-facing syntax changes he should review. Keep internal choices out of that
-list unless they leak into the API. Don't re-ask anything a `project_*` memory
-records as decided or parked.
+**Do not end with a list of decisions or questions for Josh.** He does not read
+them: a list lacks the context to answer, and a long one causes decision
+fatigue. Do this:
+
+- Make every choice yourself and state it as a fact with its alternative ("I
+  chose X. The other option is Y."), not as a question.
+- Show at most two or three real forks, the ones that change what draws or how
+  the main example reads. Put each beside the example it affects, with the
+  picture, both options written out, and your pick, so he can react on the spot.
+- When open questions pile up in one area, they usually point at something you
+  misunderstood. Say what that is in a sentence or two instead of listing them.
+- Keep the full list of choices as a folded record at the bottom of the page
+  and as a section of `proposal.md`, for later sessions. It is not something he
+  is expected to read, and "N decisions open" is not a status to report.
+- Don't revisit anything a `project_*` memory records as decided or parked.
+
+End with the user-facing syntax changes he should review.
 
 ## Output
 
@@ -204,8 +217,10 @@ proposal quick to judge, so build the page around side-by-side comparisons:
   where the shape differs) beside its rendered picture. For a syntax change,
   show the current spelling and the proposed one in two columns over the same
   picture.
-- Then the trade-offs, the recommendation, and the decisions as short
-  questions, as in steps 4 and 5.
+- Then the trade-offs and the recommendation, as in steps 4 and 5. Lead each
+  part of the page with examples and put formal rules and long tables at the
+  bottom as an appendix. Keep the page to about five tabs, and fold new
+  material into an existing tab instead of adding one.
 
 Render the pictures for real with `pnpm capture-one` (see the `iterate-example`
 skill) from prototype stories, not hand-drawn guesses, wherever GoFish can
