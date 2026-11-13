@@ -750,7 +750,7 @@ What Flint has that this does not yet: an identifier role (a key that must never
 ## 13. Recommendation, in order of work
 
 1. **Column traits that are already open issues:** `HasZero` (#1051), `HasCycle` (#1052), `Domain.continuous`.
-2. **`Trait.canSum({ over })` on the column, a declared `key`, and the row check** (this closes #1198). Public `.last()`, `.first()`, and `weight` on `.mean()`.
+2. **`Trait.canSum({ over })` on the column, a declared `key`, and the row check** (this closes #1198). Public `.last()`, `.first()`, and `weight` on `.mean()`. The diagnostic record of section 15 comes with this step, since it brings the first check with more than one condition.
 3. **`Trait.canAverage({ weight })`** and the schema-driven default fold.
 4. **Key checks for connectors:** `line` and `ribbon` need `HasOrder` or `HasCycle`.
 5. **Unit algebra** (#1142), then the key-sized lint.
@@ -782,8 +782,173 @@ Each step removes a wrong chart that renders today. Why this shape, against the 
 11. Should declared levels keep empty groups, as cells do?
 12. Is the TypeScript mirror worth starting with field names now?
 13. Should `log`, the debug pass-through, be renamed before `Coord.log` exists?
+14. Should every type check report through one diagnostic record and one list, with `render` throwing once at the end (section 15)? I recommend yes.
+15. Are the words made on the JS side for both languages, from one table in `gofish-ir`, or does Python keep its own messages? I recommend one table.
+16. Should filled-in defaults be recorded as notes that the user can ask to see?
+17. Are the codes (`cannot-sum`, `no-zero`) public names that users can search for and use to turn a lint off?
 
 Syntax to review: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic()`, `key: [...]`, `traits` on a column record, `Domain.continuous([lo, hi])`, `.mean({ weight })`, `.last()`, `.first()`, `unpivot`.
+
+## 15. How the checker reports
+
+The checks in sections 4, 9 and 10 need one way to tell the user what is wrong. Today GoFish has three ways, and none of them fits a checker with many rules.
+
+| Path today                                                                       | Shape                                                                        | What it lacks                                                            |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| Thrown errors: 327 `throw new` sites, `checkSummable` in `measure.ts` among them | A string. `MeasureClash` is the only error class that carries data.          | The first error stops the render, so the user fixes one problem per run. |
+| The IR validator (`gofish-ir`, `validate.ts`)                                    | A list of `{ path, message }`                                                | It collects every problem, but only about the shape of the document.     |
+| Layout warnings (`layoutWarnings.ts`)                                            | A record with a `kind`, the node, numbers and a message, gathered per render | It collects and the chart still draws, but only for layout.              |
+
+Two more gaps follow from throwing strings:
+
+- The wording is written for JS only. Python receives the JS error as one string (`widget.py` documents the reply as `{error: str}`), so a Python user is told to write `Unit("°C", { traits: [Trait.summable()] })`.
+- A check that throws can report only one of its failed conditions. A declared °C bar is rejected for having no `CanSum`, and the missing zero is never mentioned (see the gaps list).
+
+### The proposal: one record, one list
+
+1. A check does not throw. It adds a **diagnostic** to a list on the render session and goes on to the next check.
+2. A diagnostic is data: a code, a severity, the place in the spec, the schema line the rule read, the facts the message names, and the fixes. It holds no finished sentence.
+3. The words are made from the record when it is shown, in the spelling of the user's language.
+4. `render` decides at the end. If the list has an error, it throws one error that lists them all. Lints are printed and the chart draws.
+
+```ts
+type Diagnostic = {
+  code: string; // the condition that failed; stable, so people can search for it
+  severity: "error" | "lint";
+  site: Site; // the operator or channel in the user's spec
+  declared?: Site; // the schema line the rule read
+  facts: Record<string, string | string[]>; // columns, keys and units the message names
+  fixes: Fix[]; // spec fragments the user can write instead
+};
+```
+
+`MeasureClash` is already close to this. It carries both units, the columns bound to each, and the place where they met, and it gets its axis name filled in on the way up the tree. The layout warning record is close too. Both would become diagnostics with their own codes.
+
+### One failed condition
+
+The "Inventory by month" example from section 1.
+
+```js
+inv
+  .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "month" }));
+```
+
+```python
+inv.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y")).mark(rect(h="stock", fill="month"))
+```
+
+The record:
+
+```js
+({
+  code: "cannot-sum",
+  severity: "error",
+  site: { operator: "stack", by: "month" },
+  declared: { schema: "stock", trait: "canSum", over: ["warehouse"] },
+  facts: { column: "stock", addsOver: ["warehouse"], summedOver: "month" },
+  fixes: ["one-group", "last", "mean"],
+});
+```
+
+Shown to a JS user (draft wording):
+
+```text
+GoFish: 1 error
+
+error[cannot-sum] at stack({ by: "month" })
+  `stock` adds up over `warehouse`, not over `month`.
+  Stacking it by month would count the same items once per month.
+  declared at schema.stock: Trait.canSum({ over: "warehouse" })
+  fix: keep one month, or use field("stock").last() or field("stock").mean()
+```
+
+Shown to a Python user, from the same record:
+
+```text
+GoFish: 1 error
+
+error[cannot-sum] at stack(by="month")
+  `stock` adds up over `warehouse`, not over `month`.
+  Stacking it by month would count the same items once per month.
+  declared at schema["stock"]: Trait.can_sum(over="warehouse")
+  fix: keep one month, or use field("stock").last() or field("stock").mean()
+```
+
+### Two failed conditions in one run
+
+Temperatures stacked by warehouse. The Stack rule in section 10 has two conditions on the column, `CanSum` over the stack key and `HasZero`, and °C meets neither.
+
+```js
+chart(rows, { schema: { temp: { unit: Celsius } } })
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "temp" }));
+```
+
+```python
+chart(rows, schema={"temp": {"unit": Celsius}}).flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y")).mark(rect(h="temp"))
+```
+
+Both are reported (draft wording):
+
+```text
+GoFish: 2 errors
+
+error[cannot-sum] at stack({ by: "warehouse" })
+  `temp` does not add up over `warehouse`. It has no CanSum.
+  declared at schema.temp: { unit: Celsius }
+  fix: put the warehouses side by side with spread, or use field("temp").mean()
+
+error[no-zero] at rect({ h: "temp" })
+  `temp` is in °C, which has no zero, so a bar length means nothing.
+  declared at schema.temp: { unit: Celsius }
+  fix: subtract a reference temperature, or use a position (y) in place of a length (h)
+```
+
+A check that throws stops at the first of these. The user fixes the sum, runs again, and only then learns about the zero.
+
+### One code per condition
+
+Each condition above the line of a rule in section 10 is one code. The names are drafts.
+
+| Rule                         | Condition that failed                | Code              | Severity |
+| ---------------------------- | ------------------------------------ | ----------------- | -------- |
+| Stack, Sum                   | the column has `CanSum` over the key | `cannot-sum`      | error    |
+| Stack, any length channel    | the column has `HasZero`             | `no-zero`         | error    |
+| `line`, `ribbon`             | the key has `HasOrder` or `HasCycle` | `no-order`        | error    |
+| Log                          | the domain is above 0                | `log-domain`      | error    |
+| Log                          | no length is pinned at 0 on the axis | `log-zero-length` | error    |
+| Key-sized pieces (section 9) | the amount is per unit of the cell   | `amount-in-cell`  | lint     |
+
+One code can have more than one sentence. `cannot-sum` on `stock` says "adds up over `warehouse`, not over `month`". On `price` it says "is an average weighted by `sold`". The facts in the record pick the sentence.
+
+### Where the words are made
+
+The table of codes and their sentences lives in one place, in `gofish-ir` beside the descriptors, with each spec fragment written in both spellings. The JS side makes the words for both languages, and the Python bridge asks for the Python wording. Python then needs no message code of its own.
+
+A later step could store each fix as a piece of IR and print it as JS or Python source. That would also let an editor apply the fix. It needs a printer from IR to source in both languages, so it is not part of the first step.
+
+### Filled-in defaults
+
+The same list can hold a third kind of entry: a note for each default the checker filled in, such as "`price` is drawn as its mean weighted by `sold`". Every default in this proposal expands to code the user could write, and a note is where the user can read that code. Notes are not printed unless the user asks. How the user asks is not designed here.
+
+### Other ways to do it
+
+|                                  | Throw at the first failure (today) | A result or effect library (Effect, neverthrow)            | One record and one list (recommended)       |
+| -------------------------------- | ---------------------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| Every problem in one run         | No                                 | Possible, if the checker is written in the library's style | Yes                                         |
+| Lints that do not stop the chart | A second path                      | A second path                                              | The same path, by severity                  |
+| Python wording                   | No                                 | Not addressed                                              | Yes, the record is data                     |
+| New dependency                   | No                                 | Yes                                                        | No                                          |
+| Precedent                        |                                    |                                                            | rustc, Elm, the TypeScript compiler, ESLint |
+
+A result or effect library answers a different question: which failures can this function produce, and has the caller handled them. A checker wants to gather many small findings from a walk over a tree and word them well. The compilers listed all do that with a plain list of records.
+
+### What this does not cover
+
+- The 327 existing throw sites are not migrated. A wrong option value or a bug in GoFish can keep throwing.
+- The first users are the new type checks. `MeasureClash`, the layout warnings and the IR validator can move to the same record later, one at a time.
+- Sites need a way to point at the user's spec. Today a site is a string such as `spread(by: "site")`. Pointing at a line of the user's source file is out of scope.
 
 ## Gaps found on main (not filed)
 

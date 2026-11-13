@@ -977,6 +977,7 @@
       <a href="#grid">All 32</a>
       <a href="#additivity">Additivity</a>
       <a href="#rules">Rules</a>
+      <a href="#errors">Errors</a>
       <a href="#keys">Keys</a>
       <a href="#coord">Coord</a>
       <a href="#embedding">Embedding</a>
@@ -5672,6 +5673,364 @@ chart(
         <p>Four of these need a public spelling first. That is #1289.</p>
       </section>
     </section>
+    <section class="panel" data-panel="errors" hidden>
+      <section class="prose wide">
+        <h2>How the checker reports</h2>
+        <p>
+          The checks in sections 4, 9 and 10 need one way to tell the user what
+          is wrong. Today GoFish has three ways, and none of them fits a checker
+          with many rules.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Path today</th>
+                <th scope="col">Shape</th>
+                <th scope="col">What it lacks</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  Thrown errors: 327 <code>throw new</code> sites,
+                  <code>checkSummable</code> in <code>measure.ts</code> among
+                  them
+                </th>
+                <td>
+                  A string. <code>MeasureClash</code> is the only error class
+                  that carries data.
+                </td>
+                <td>
+                  The first error stops the render, so the user fixes one
+                  problem per run.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  The IR validator (<code>gofish-ir</code>,
+                  <code>validate.ts</code>)
+                </th>
+                <td>A list of <code>{ path, message }</code></td>
+                <td>
+                  It collects every problem, but only about the shape of the
+                  document.
+                </td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  Layout warnings (<code>layoutWarnings.ts</code>)
+                </th>
+                <td>
+                  A record with a <code>kind</code>, the node, numbers and a
+                  message, gathered per render
+                </td>
+                <td>
+                  It collects and the chart still draws, but only for layout.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Two more gaps follow from throwing strings:</p>
+        <ul>
+          <li>
+            The wording is written for JS only. Python receives the JS error as
+            one string (<code>widget.py</code> documents the reply as
+            <code>{error: str}</code>), so a Python user is told to write
+            <code>Unit("°C", { traits: [Trait.summable()] })</code>.
+          </li>
+          <li>
+            A check that throws can report only one of its failed conditions. A
+            declared °C bar is rejected for having no <code>CanSum</code>, and
+            the missing zero is never mentioned (see the gaps list).
+          </li>
+        </ul>
+        <h3>The proposal: one record, one list</h3>
+        <ol>
+          <li>
+            A check does not throw. It adds a <strong>diagnostic</strong> to a
+            list on the render session and goes on to the next check.
+          </li>
+          <li>
+            A diagnostic is data: a code, a severity, the place in the spec, the
+            schema line the rule read, the facts the message names, and the
+            fixes. It holds no finished sentence.
+          </li>
+          <li>
+            The words are made from the record when it is shown, in the spelling
+            of the user's language.
+          </li>
+          <li>
+            <code>render</code> decides at the end. If the list has an error, it
+            throws one error that lists them all. Lints are printed and the
+            chart draws.
+          </li>
+        </ol>
+        <pre class="code"><code class="language-typescript">type Diagnostic = {
+  code: string; // the condition that failed; stable, so people can search for it
+  severity: "error" | "lint";
+  site: Site; // the operator or channel in the user's spec
+  declared?: Site; // the schema line the rule read
+  facts: Record&lt;string, string | string[]&gt;; // columns, keys and units the message names
+  fixes: Fix[]; // spec fragments the user can write instead
+};</code></pre>
+        <p>
+          <code>MeasureClash</code> is already close to this. It carries both
+          units, the columns bound to each, and the place where they met, and it
+          gets its axis name filled in on the way up the tree. The layout
+          warning record is close too. Both would become diagnostics with their
+          own codes.
+        </p>
+        <h3>One failed condition</h3>
+        <p>The "Inventory by month" example from section 1.</p>
+        <div class="pair">
+          <div data-lang="js">
+            <pre class="code"><code class="language-javascript">inv
+  .flow(spread({ by: "warehouse", dir: "x" }), stack({ by: "month", dir: "y" }))
+  .mark(rect({ h: "stock", fill: "month" }));</code></pre>
+          </div>
+          <div data-lang="py">
+            <pre
+              class="code"
+            ><code class="language-python">inv.flow(spread(by="warehouse", dir="x"), stack(by="month", dir="y")).mark(
+    rect(h="stock", fill="month")
+)</code></pre>
+          </div>
+        </div>
+
+        <p>The record:</p>
+        <pre class="code"><code class="language-javascript">({
+  code: "cannot-sum",
+  severity: "error",
+  site: { operator: "stack", by: "month" },
+  declared: { schema: "stock", trait: "canSum", over: ["warehouse"] },
+  facts: { column: "stock", addsOver: ["warehouse"], summedOver: "month" },
+  fixes: ["one-group", "last", "mean"],
+});</code></pre>
+        <p>Shown to a JS user (draft wording):</p>
+        <pre
+          class="code plain msg msg-error"
+        ><code class="nohighlight">GoFish: 1 error
+
+error[cannot-sum] at stack({ by: "month" })
+  `stock` adds up over `warehouse`, not over `month`.
+  Stacking it by month would count the same items once per month.
+  declared at schema.stock: Trait.canSum({ over: "warehouse" })
+  fix: keep one month, or use field("stock").last() or field("stock").mean()</code></pre>
+        <p>Shown to a Python user, from the same record:</p>
+        <pre
+          class="code plain msg msg-error"
+        ><code class="nohighlight">GoFish: 1 error
+
+error[cannot-sum] at stack(by="month")
+  `stock` adds up over `warehouse`, not over `month`.
+  Stacking it by month would count the same items once per month.
+  declared at schema["stock"]: Trait.can_sum(over="warehouse")
+  fix: keep one month, or use field("stock").last() or field("stock").mean()</code></pre>
+        <h3>Two failed conditions in one run</h3>
+        <p>
+          Temperatures stacked by warehouse. The Stack rule in section 10 has
+          two conditions on the column, <code>CanSum</code> over the stack key
+          and <code>HasZero</code>, and °C meets neither.
+        </p>
+        <div class="pair">
+          <div data-lang="js">
+            <pre
+              class="code"
+            ><code class="language-javascript">chart(rows, { schema: { temp: { unit: Celsius } } })
+  .flow(spread({ by: "month", dir: "x" }), stack({ by: "warehouse", dir: "y" }))
+  .mark(rect({ h: "temp" }));</code></pre>
+          </div>
+          <div data-lang="py">
+            <pre class="code"><code class="language-python">(
+    chart(rows, schema={"temp": {"unit": Celsius}})
+    .flow(spread(by="month", dir="x"), stack(by="warehouse", dir="y"))
+    .mark(rect(h="temp"))
+)</code></pre>
+          </div>
+        </div>
+
+        <p>Both are reported (draft wording):</p>
+        <pre
+          class="code plain msg msg-error"
+        ><code class="nohighlight">GoFish: 2 errors
+
+error[cannot-sum] at stack({ by: "warehouse" })
+  `temp` does not add up over `warehouse`. It has no CanSum.
+  declared at schema.temp: { unit: Celsius }
+  fix: put the warehouses side by side with spread, or use field("temp").mean()
+
+error[no-zero] at rect({ h: "temp" })
+  `temp` is in °C, which has no zero, so a bar length means nothing.
+  declared at schema.temp: { unit: Celsius }
+  fix: subtract a reference temperature, or use a position (y) in place of a length (h)</code></pre>
+        <p>
+          A check that throws stops at the first of these. The user fixes the
+          sum, runs again, and only then learns about the zero.
+        </p>
+        <h3>One code per condition</h3>
+        <p>
+          Each condition above the line of a rule in section 10 is one code. The
+          names are drafts.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Rule</th>
+                <th scope="col">Condition that failed</th>
+                <th scope="col">Code</th>
+                <th scope="col">Severity</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Stack, Sum</th>
+                <td>the column has <code>CanSum</code> over the key</td>
+                <td><code>cannot-sum</code></td>
+                <td>error</td>
+              </tr>
+              <tr>
+                <th scope="row">Stack, any length channel</th>
+                <td>the column has <code>HasZero</code></td>
+                <td><code>no-zero</code></td>
+                <td>error</td>
+              </tr>
+              <tr>
+                <th scope="row"><code>line</code>, <code>ribbon</code></th>
+                <td>
+                  the key has <code>HasOrder</code> or <code>HasCycle</code>
+                </td>
+                <td><code>no-order</code></td>
+                <td>error</td>
+              </tr>
+              <tr>
+                <th scope="row">Log</th>
+                <td>the domain is above 0</td>
+                <td><code>log-domain</code></td>
+                <td>error</td>
+              </tr>
+              <tr>
+                <th scope="row">Log</th>
+                <td>no length is pinned at 0 on the axis</td>
+                <td><code>log-zero-length</code></td>
+                <td>error</td>
+              </tr>
+              <tr>
+                <th scope="row">Key-sized pieces (section 9)</th>
+                <td>the amount is per unit of the cell</td>
+                <td><code>amount-in-cell</code></td>
+                <td>lint</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          One code can have more than one sentence. <code>cannot-sum</code> on
+          <code>stock</code> says "adds up over <code>warehouse</code>, not over
+          <code>month</code>". On <code>price</code> it says "is an average
+          weighted by <code>sold</code>". The facts in the record pick the
+          sentence.
+        </p>
+        <h3>Where the words are made</h3>
+        <p>
+          The table of codes and their sentences lives in one place, in
+          <code>gofish-ir</code> beside the descriptors, with each spec fragment
+          written in both spellings. The JS side makes the words for both
+          languages, and the Python bridge asks for the Python wording. Python
+          then needs no message code of its own.
+        </p>
+        <p>
+          A later step could store each fix as a piece of IR and print it as JS
+          or Python source. That would also let an editor apply the fix. It
+          needs a printer from IR to source in both languages, so it is not part
+          of the first step.
+        </p>
+        <h3>Filled-in defaults</h3>
+        <p>
+          The same list can hold a third kind of entry: a note for each default
+          the checker filled in, such as "<code>price</code> is drawn as its
+          mean weighted by <code>sold</code>". Every default in this proposal
+          expands to code the user could write, and a note is where the user can
+          read that code. Notes are not printed unless the user asks. How the
+          user asks is not designed here.
+        </p>
+        <h3>Other ways to do it</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col"></th>
+                <th scope="col">Throw at the first failure (today)</th>
+                <th scope="col">
+                  A result or effect library (Effect, neverthrow)
+                </th>
+                <th scope="col">One record and one list (recommended)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">Every problem in one run</th>
+                <td>No</td>
+                <td>
+                  Possible, if the checker is written in the library's style
+                </td>
+                <td>Yes</td>
+              </tr>
+              <tr>
+                <th scope="row">Lints that do not stop the chart</th>
+                <td>A second path</td>
+                <td>A second path</td>
+                <td>The same path, by severity</td>
+              </tr>
+              <tr>
+                <th scope="row">Python wording</th>
+                <td>No</td>
+                <td>Not addressed</td>
+                <td>Yes, the record is data</td>
+              </tr>
+              <tr>
+                <th scope="row">New dependency</th>
+                <td>No</td>
+                <td>Yes</td>
+                <td>No</td>
+              </tr>
+              <tr>
+                <th scope="row">Precedent</th>
+                <td></td>
+                <td></td>
+                <td>rustc, Elm, the TypeScript compiler, ESLint</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          A result or effect library answers a different question: which
+          failures can this function produce, and has the caller handled them. A
+          checker wants to gather many small findings from a walk over a tree
+          and word them well. The compilers listed all do that with a plain list
+          of records.
+        </p>
+        <h3>What this does not cover</h3>
+        <ul>
+          <li>
+            The 327 existing throw sites are not migrated. A wrong option value
+            or a bug in GoFish can keep throwing.
+          </li>
+          <li>
+            The first users are the new type checks. <code>MeasureClash</code>,
+            the layout warnings and the IR validator can move to the same record
+            later, one at a time.
+          </li>
+          <li>
+            Sites need a way to point at the user's spec. Today a site is a
+            string such as <code>spread(by: "site")</code>. Pointing at a line
+            of the user's source file is out of scope.
+          </li>
+        </ul>
+      </section>
+    </section>
     <section class="panel" data-panel="keys" hidden>
       <section class="prose">
         <h2>Keys</h2>
@@ -6605,6 +6964,24 @@ chart(
             Should <code>log</code>, the debug pass-through, be renamed before
             <code>Coord.log</code> exists?
           </li>
+          <li>
+            Should every type check report through one diagnostic record and one
+            list, with <code>render</code> throwing once at the end (section
+            15)? I recommend yes.
+          </li>
+          <li>
+            Are the words made on the JS side for both languages, from one table
+            in <code>gofish-ir</code>, or does Python keep its own messages? I
+            recommend one table.
+          </li>
+          <li>
+            Should filled-in defaults be recorded as notes that the user can ask
+            to see?
+          </li>
+          <li>
+            Are the codes (<code>cannot-sum</code>, <code>no-zero</code>) public
+            names that users can search for and use to turn a lint off?
+          </li>
         </ol>
         <h3>Syntax to review</h3>
         <p>
@@ -6630,7 +7007,9 @@ chart(
             >
             (this closes #1198). Public <code>.last()</code>,
             <code>.first()</code>, and <code>weight</code> on
-            <code>.mean()</code>.
+            <code>.mean()</code>. The diagnostic record on the Errors tab comes
+            with this step, since it brings the first check with more than one
+            condition.
           </li>
           <li>
             <strong><code>Trait.canAverage({ weight })</code></strong> and the
@@ -6805,6 +7184,7 @@ chart(
       "grid",
       "additivity",
       "rules",
+      "errors",
       "keys",
       "coord",
       "embedding",
