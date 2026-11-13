@@ -1638,7 +1638,20 @@ Who uses it. The x axis labels the slots in order. The y axis draws a scale in i
 
 What it shows about the notes. The four facts in the Kind column that the engine already tracks are the slot, its order, the length with its unit, and the pinned 0 (read, per the check above). The two facts about what the stack loses and adds, the missing baseline of upper segments and the invented segment order, are tracked by nothing today, and no rule in section 10 reads them. They are the notes' strongest addition. They do not make this spec wrong, so they belong in the opt-in lint class, not in the checks.
 
-Compare the invalid twin, `spread({ by: "warehouse" })` then `stack({ by: "month" })`. Its output type has the same shape: slots, lengths in items, a pinned 0. Only the Check column differs, because `stock` has no `CanSum` over `month`. So the output type alone does not tell a valid stack from an invalid one. The check on the data side does.
+**Two checks, and each catches what the other cannot.** A stack needs two things. On the data side, the value adds over the stack key. On the space side, each child is one length along the stack's direction, because a stack glues lengths end to end. A `spread` does not give a length. Along its own direction it gives slots, and across it gives several lengths that share a baseline. So a stack of spreads is a space type error whatever the data is.
+
+| Spec, with `h: "sold"` or `h: "stock"`           | Data side: `CanSum` over the stack key   | Space side: what the stack's child gives along y                                               | Result                               |
+| ------------------------------------------------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------- | ------------------------------------ |
+| `spread` by month, `stack` by warehouse, `stock` | passes                                   | one length in items                                                                            | valid                                |
+| `spread` by warehouse, `stack` by month, `stock` | fails: `stock` does not add over `month` | one length in items                                                                            | error, caught on the data side only  |
+| `stack` by month, `spread` by warehouse, `sold`  | passes: `sold` adds over every key       | a row of three lengths from a shared 0. Its extent is its tallest bar, which is not an amount. | error, caught on the space side only |
+| `stack` by month, `spread` by warehouse, `stock` | fails                                    | the same row of lengths                                                                        | error on both sides                  |
+
+![What GoFish draws today for the third row: stack by month, then spread by warehouse, h: "sold"](img/grid/sold-month-2.png)
+
+The third row is the case the output type exists for. `sold` adds up over months and over warehouses, so no rule about the data can reject it. The picture is still wrong: each row of bars is as tall as its tallest bar, and the stack adds those heights, which is the total of nothing. Only the kind of space the `spread` gives says so. This is the stack rule already in section 10 ("each child is one length along `dir`", issue #992 on what a stack does with a spread inside it), and it is the clearest place where a rule reads an output type.
+
+Is a stack of spreads always wrong? By this rule, yes, with two degenerate cases that draw correctly: one bar per group, and bars of equal height. The rule rejects those too, since the fix is to drop the `spread`. One open problem stays: NestedMosaicChart, a stack outside a stack whose `size` option gives each child's length, is flagged by the literal rule and is correct.
 
 ### What was already here
 

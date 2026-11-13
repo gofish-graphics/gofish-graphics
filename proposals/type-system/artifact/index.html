@@ -7330,13 +7330,101 @@ chart(
           opt-in lint class, not in the checks.
         </p>
         <p>
-          Compare the invalid twin,
-          <code>spread({ by: "warehouse" })</code> then
-          <code>stack({ by: "month" })</code>. Its output type has the same
-          shape: slots, lengths in items, a pinned 0. Only the Check column
-          differs, because <code>stock</code> has no <code>CanSum</code> over
-          <code>month</code>. So the output type alone does not tell a valid
-          stack from an invalid one. The check on the data side does.
+          <strong>Two checks, and each catches what the other cannot.</strong> A
+          stack needs two things. On the data side, the value adds over the
+          stack key. On the space side, each child is one length along the
+          stack's direction, because a stack glues lengths end to end. A
+          <code>spread</code> does not give a length. Along its own direction it
+          gives slots, and across it gives several lengths that share a
+          baseline. So a stack of spreads is a space type error whatever the
+          data is.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">
+                  Spec, with <code>h: "sold"</code> or <code>h: "stock"</code>
+                </th>
+                <th scope="col">
+                  Data side: <code>CanSum</code> over the stack key
+                </th>
+                <th scope="col">
+                  Space side: what the stack's child gives along y
+                </th>
+                <th scope="col">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">
+                  <code>spread</code> by month, <code>stack</code> by warehouse,
+                  <code>stock</code>
+                </th>
+                <td>passes</td>
+                <td>one length in items</td>
+                <td>valid</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>spread</code> by warehouse, <code>stack</code> by month,
+                  <code>stock</code>
+                </th>
+                <td>
+                  fails: <code>stock</code> does not add over <code>month</code>
+                </td>
+                <td>one length in items</td>
+                <td>error, caught on the data side only</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>stack</code> by month, <code>spread</code> by warehouse,
+                  <code>sold</code>
+                </th>
+                <td>passes: <code>sold</code> adds over every key</td>
+                <td>
+                  a row of three lengths from a shared 0. Its extent is its
+                  tallest bar, which is not an amount.
+                </td>
+                <td>error, caught on the space side only</td>
+              </tr>
+              <tr>
+                <th scope="row">
+                  <code>stack</code> by month, <code>spread</code> by warehouse,
+                  <code>stock</code>
+                </th>
+                <td>fails</td>
+                <td>the same row of lengths</td>
+                <td>error on both sides</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          <img
+            src="img/grid/sold-month-2.png"
+            alt='What GoFish draws today for the third row: stack by month, then spread by warehouse, h: "sold"'
+            style="max-width: 420px; width: 100%; height: auto"
+          />
+        </p>
+        <p>
+          The third row is the case the output type exists for.
+          <code>sold</code> adds up over months and over warehouses, so no rule
+          about the data can reject it. The picture is still wrong: each row of
+          bars is as tall as its tallest bar, and the stack adds those heights,
+          which is the total of nothing. Only the kind of space the
+          <code>spread</code> gives says so. This is the stack rule already in
+          section 10 ("each child is one length along <code>dir</code>", issue
+          #992 on what a stack does with a spread inside it), and it is the
+          clearest place where a rule reads an output type.
+        </p>
+        <p>
+          Is a stack of spreads always wrong? By this rule, yes, with two
+          degenerate cases that draw correctly: one bar per group, and bars of
+          equal height. The rule rejects those too, since the fix is to drop the
+          <code>spread</code>. One open problem stays: NestedMosaicChart, a
+          stack outside a stack whose <code>size</code> option gives each
+          child's length, is flagged by the literal rule and is correct.
         </p>
         <details class="rationale">
           <summary>Which ideas in the notes were already here</summary>
