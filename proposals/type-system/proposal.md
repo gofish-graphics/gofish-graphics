@@ -60,14 +60,20 @@ The draft's example used a `table(...)` call, TypeScript-style types and a `.coo
 
 ```js
 const Items = Unit("items");
+// Levels and no order: nothing lies between two warehouses.
+const Warehouse = Unit({
+  domain: Domain.discrete(["North", "South", "West"]),
+});
+// Levels in calendar order, and December is next to January.
 const Month = Unit({
   domain: Domain.discrete(MONTHS),
-  traits: [Trait.cyclic()], // new: HasCycle on a column (#1052)
+  traits: [Trait.ordered(), Trait.cyclic()], // cyclic is new on a column (#1052)
 });
 
 const inv = chart(rows, {
   key: ["warehouse", "month"], // new: the table's key
   schema: {
+    warehouse: Warehouse,
     month: Month,
     // new: traits on a column, keyed with `over`
     stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
@@ -86,6 +92,7 @@ inv = chart(
     rows,
     key=["warehouse", "month"],
     schema={
+        "warehouse": Warehouse,
         "month": Month,
         "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
         "sold": {"unit": Items, "traits": [Trait.can_sum()]},
@@ -798,6 +805,30 @@ The draft asked how keys and values show up in the picture. The answer that held
 
 `stack` is the only operator that turns a key into a position by adding values. That is why `stack` needs `CanSum` over its key and `spread` does not. It matches the rule that `stack` glues its children's spaces into one and `spread` keeps them apart.
 
+### The key is a list of fields, and the key space comes from their types
+
+`key: ["warehouse", "month"]` holds two facts and no more: which columns identify a row, and that no two rows agree on all of them. It says nothing about the shape of the key space, which is the set of places a row can sit. That shape is not declared a second time. It is the product of the key columns' own types.
+
+| Fact about the key space                    | Where it is declared                                                                       | In the inventory example                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| which columns identify a row                | `key: [...]`                                                                               | `warehouse` and `month`                                 |
+| the points along one key column             | the column's `Domain`                                                                      | three warehouses, twelve months                         |
+| what is next to what along one key column   | the column's traits: none, `HasOrder`, `HasCycle`                                          | warehouses are not connected; months are, and they wrap |
+| what is next to what across the whole space | nothing new: two rows are neighbors when they differ in one column and are neighbors there | a 3 by 12 grid, connected along `month` only            |
+| whether every combination has a row         | not declared. It is read from the rows.                                                    | all 36 are present                                      |
+
+So the key space is not a type of its own, and a declaration for it would repeat the column types. Every rule in this proposal reads one of two things: the list (the `over` check, the rest key) or one column's traits (a line needs `HasOrder` on the key it runs along). No rule reads the product as a whole.
+
+This is why every key column needs a type. An earlier draft of the example left `warehouse` undeclared. It then passed every check as unknown, and a ribbon between warehouses would have passed too. Declared with levels and no order, that ribbon is an error.
+
+Three things a per-column type cannot say. Each waits for an example that needs it:
+
+- **Connections that are not along one column.** Lakes joined by a branching river, or countries that share a border, are a graph. `Trait.ordered()` can only say a chain. This is the deferred `HasNeighbors`.
+- **A dependency between key columns**, such as a city inside a country. The space is then not the full product. This is the proposed `Trait.nested({ in })`.
+- **Missing combinations.** Whether an absent warehouse and month pair is a zero, a gap, or impossible is a fact about the table, not about either column.
+
+`Month` carries both `Trait.ordered()` and `Trait.cyclic()`. `.last()` on `stock` needs a last month, which a bare cycle does not have. Whether `cyclic` alone should imply an order with a conventional start is decision 41.
+
 ### Key traits
 
 "Is a key" follows from a column's `Domain` and from membership in `key`, so it needs no separate role. What lives on the column is its key traits, and they hold however the column is read: `temp_max` has `HasOrder` whether it is a position or a bin, and the bin adds `HasRegion`. A key column uses the same traits as any column. No second vocabulary is needed.
@@ -1147,6 +1178,8 @@ Each step removes a wrong chart that renders today. Why this shape, against the 
 38. Scope the key and coord lint by what the mark asserts, so that pies and Cartesian bars of months stay silent?
 39. Build a small metamorphic test kit on top of `capture-one`'s normalized DOM?
 40. Add an opt-in lint class, under strict mode (#1120), for structure a layout invents or drops?
+
+41. Does `Trait.cyclic()` alone give an order with a conventional first level (so `.last()` works on months), or must a column say `ordered` and `cyclic` both? The example now says both.
 
 Syntax to review: `Trait.canSum({ over })`, `Trait.canAverage({ weight })`, `Trait.cyclic()`, `key: [...]`, `traits` on a column record, `Domain.continuous([lo, hi])`, `.mean({ weight })`, `.last()`, `.first()`, `unpivot`, `Trait.nested({ in })`, `repeat` as a flow step.
 

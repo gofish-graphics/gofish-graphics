@@ -1170,14 +1170,20 @@
                 <pre
                   class="code"
                 ><code class="language-javascript">const Items = Unit("items");
+// Levels and no order: nothing lies between two warehouses.
+const Warehouse = Unit({
+  domain: Domain.discrete(["North", "South", "West"]),
+});
+// Levels in calendar order, and December is next to January.
 const Month = Unit({
   domain: Domain.discrete(MONTHS),
-  traits: [Trait.cyclic()], // new: HasCycle on a column (#1052)
+  traits: [Trait.ordered(), Trait.cyclic()], // cyclic is new on a column (#1052)
 });
 
 const inv = chart(rows, {
   key: ["warehouse", "month"], // new: the table's key
   schema: {
+    warehouse: Warehouse,
     month: Month,
     // new: traits on a column, keyed with `over`
     stock: { unit: Items, traits: [Trait.canSum({ over: "warehouse" })] },
@@ -1195,6 +1201,7 @@ const inv = chart(rows, {
     rows,
     key=["warehouse", "month"],
     schema={
+        "warehouse": Warehouse,
         "month": Month,
         "stock": {"unit": Items, "traits": [Trait.can_sum(over="warehouse")]},
         "sold": {"unit": Items, "traits": [Trait.can_sum()]},
@@ -9278,6 +9285,102 @@ chart(data, { w: 80 })
           matches the rule that <code>stack</code> glues its children's spaces
           into one and <code>spread</code> keeps them apart.
         </p>
+        <h3>
+          The key is a list of fields, and the key space comes from their types
+        </h3>
+        <p>
+          <code>key: ["warehouse", "month"]</code> holds two facts and no more:
+          which columns identify a row, and that no two rows agree on all of
+          them. It says nothing about the shape of the key space, which is the
+          set of places a row can sit. That shape is not declared a second time.
+          It is the product of the key columns' own types.
+        </p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Fact about the key space</th>
+                <th scope="col">Where it is declared</th>
+                <th scope="col">In the inventory example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th scope="row">which columns identify a row</th>
+                <td><code>key: [...]</code></td>
+                <td><code>warehouse</code> and <code>month</code></td>
+              </tr>
+              <tr>
+                <th scope="row">the points along one key column</th>
+                <td>the column's <code>Domain</code></td>
+                <td>three warehouses, twelve months</td>
+              </tr>
+              <tr>
+                <th scope="row">what is next to what along one key column</th>
+                <td>
+                  the column's traits: none, <code>HasOrder</code>,
+                  <code>HasCycle</code>
+                </td>
+                <td>warehouses are not connected; months are, and they wrap</td>
+              </tr>
+              <tr>
+                <th scope="row">what is next to what across the whole space</th>
+                <td>
+                  nothing new: two rows are neighbors when they differ in one
+                  column and are neighbors there
+                </td>
+                <td>a 3 by 12 grid, connected along <code>month</code> only</td>
+              </tr>
+              <tr>
+                <th scope="row">whether every combination has a row</th>
+                <td>not declared. It is read from the rows.</td>
+                <td>all 36 are present</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          So the key space is not a type of its own, and a declaration for it
+          would repeat the column types. Every rule in this proposal reads one
+          of two things: the list (the <code>over</code> check, the rest key) or
+          one column's traits (a line needs <code>HasOrder</code> on the key it
+          runs along). No rule reads the product as a whole.
+        </p>
+        <p>
+          This is why every key column needs a type. An earlier draft of the
+          example left <code>warehouse</code> undeclared. It then passed every
+          check as unknown, and a ribbon between warehouses would have passed
+          too. Declared with levels and no order, that ribbon is an error.
+        </p>
+        <p>
+          Three things a per-column type cannot say. Each waits for an example
+          that needs it:
+        </p>
+        <ul>
+          <li>
+            <strong>Connections that are not along one column.</strong> Lakes
+            joined by a branching river, or countries that share a border, are a
+            graph. <code>Trait.ordered()</code> can only say a chain. This is
+            the deferred <code>HasNeighbors</code>.
+          </li>
+          <li>
+            <strong>A dependency between key columns</strong>, such as a city
+            inside a country. The space is then not the full product. This is
+            the proposed <code>Trait.nested({ in })</code>.
+          </li>
+          <li>
+            <strong>Missing combinations.</strong> Whether an absent warehouse
+            and month pair is a zero, a gap, or impossible is a fact about the
+            table, not about either column.
+          </li>
+        </ul>
+        <p>
+          <code>Month</code> carries both <code>Trait.ordered()</code> and
+          <code>Trait.cyclic()</code>. <code>.last()</code> on
+          <code>stock</code> needs a last month, which a bare cycle does not
+          have. Whether <code>cyclic</code> alone should imply an order with a
+          conventional start is an open decision (41).
+        </p>
         <h3>Key traits</h3>
         <p>
           "Is a key" follows from a column's <code>Domain</code> and from
@@ -10308,6 +10411,12 @@ chart(data, { w: 80 })
           <li>
             Add an opt-in lint class, under strict mode (#1120), for structure a
             layout invents or drops?
+          </li>
+          <li>
+            Does <code>Trait.cyclic()</code> alone give an order with a
+            conventional first level, so that <code>.last()</code> works on
+            months, or must a column say <code>ordered</code> and
+            <code>cyclic</code> both? The example now says both.
           </li>
         </ol>
         <h3>Syntax to review</h3>
