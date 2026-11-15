@@ -230,7 +230,7 @@ split a domain by accident. Three cases:
   chart(seafood)
     .flow(
       spread({ by: "lake", dir: "x" }),
-      stack({ by: "species", dir: "x", h: 150 }) // split the y domain before #1129
+      spread({ by: "species", dir: "x", spacing: 2, h: 150 }) // split the y domain before #1129
     )
     .mark(rect({ h: "count", fill: "species" }));
   ```

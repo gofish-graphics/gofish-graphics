@@ -77,19 +77,13 @@ chart(
 ).mark(rect(w="count", fill="response"))
 ```
 
-## Examples
+## Example
 
 ```python
 # Stacked bars: lakes across x, species stacked up y
 chart(seafood).flow(
     spread(by="lake", dir="x"),
     stack(by="species", dir="y"),
-).mark(rect(h="count", fill="species"))
-
-# Grouped bars: stack along x instead
-chart(seafood).flow(
-    spread(by="lake", dir="x"),
-    stack(by="species", dir="x"),
 ).mark(rect(h="count", fill="species"))
 ```
 

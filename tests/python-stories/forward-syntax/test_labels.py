@@ -116,10 +116,10 @@ def story_right():
 
 def story_above_start():
     return (
-        chart(SEAFOOD, w=500, h=300)
+        chart(SEAFOOD, w=500, h=300, axes={"x": {"levels": [False, True]}})
         .flow(
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=2),
         )
         .mark(
             rect(h="count", fill="species").label(
@@ -134,10 +134,10 @@ def story_above_start():
 
 def story_above_end():
     return (
-        chart(SEAFOOD, w=500, h=300)
+        chart(SEAFOOD, w=500, h=300, axes={"x": {"levels": [False, True]}})
         .flow(
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=2),
         )
         .mark(
             rect(h="count", fill="species").label(
@@ -234,7 +234,7 @@ def story_label_on_spread():
         )
         .mark(
             lambda d: chart(d, axes=False)
-            .flow(stack(by="species", dir="x"))
+            .flow(spread(by="species", dir="x", spacing=2))
             .mark(rect(h="count", fill="species"))
         ),
         {},

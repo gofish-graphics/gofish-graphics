@@ -6,7 +6,6 @@ Checks for measure-keyed domains (#1114): a size never splits a domain.
 from gofish import (
     chart,
     spread,
-    stack,
     rect,
     select_all,
     group,
@@ -40,7 +39,7 @@ def story_grouped_bars_inner_height():
         chart(_VALUES)
         .flow(
             spread(by="group", dir="x", spacing=24),
-            stack(by="item", dir="x", h=150),
+            spread(by="item", dir="x", spacing=2, h=150),
         )
         .mark(rect(w=20, h="value", fill="item")),
         {},

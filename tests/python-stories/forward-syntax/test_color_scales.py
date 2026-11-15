@@ -94,7 +94,7 @@ def story_paired_palettes():
         .flow(
             derive(_assign_colors),
             spread(by="pair", dir="x"),
-            stack(by="type", dir="x"),
+            spread(by="type", dir="x", spacing=2),
         )
         .mark(rect(h="value", fill="color")),
         {},
@@ -109,6 +109,7 @@ def story_nested_derive():
             color=Color.palette({"salmon-highlight": "#e15759", "first-half": "#4e79a7"}),
             w=400,
             h=400,
+            axes={"x": {"levels": [False, True]}},
         )
         .flow(
             derive(lambda d: [
@@ -125,7 +126,7 @@ def story_nested_derive():
                 for item in d
             ]),
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=2),
         )
         .mark(rect(h="count", fill="highlight")),
         {},
@@ -134,14 +135,20 @@ def story_nested_derive():
 
 def story_selective_derive():
     return (
-        chart(SEAFOOD, color=Color.palette({"highlighted": "#e15759"}), w=400, h=400)
+        chart(
+            SEAFOOD,
+            color=Color.palette({"highlighted": "#e15759"}),
+            w=400,
+            h=400,
+            axes={"x": {"levels": [False, True]}},
+        )
         .flow(
             derive(lambda d: [
                 {**item, "highlight": "highlighted" if item["species"] == "Salmon" else ""}
                 for item in d
             ]),
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=2),
         )
         .mark(rect(h="count", fill="highlight")),
         {},
@@ -150,10 +157,16 @@ def story_selective_derive():
 
 def story_selective_group():
     return (
-        chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}), w=400, h=400)
+        chart(
+            SEAFOOD,
+            color=Color.palette({"Salmon": "#e15759"}),
+            w=400,
+            h=400,
+            axes={"x": {"levels": [False, True]}},
+        )
         .flow(
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=2),
         )
         .mark(rect(h="count", fill="species")),
         {},

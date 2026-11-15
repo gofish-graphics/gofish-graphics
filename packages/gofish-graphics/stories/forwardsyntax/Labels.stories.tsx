@@ -157,17 +157,21 @@ export const Right: StoryObj<Args> = {
 };
 
 // ─── outset-top-start ─────────────────────────────────────────────────────────
-// Above the bar, label anchored at the left edge (start). Good for x-stacked bars.
+// Above the bar, label anchored at the left edge (start). Good for grouped bars.
 
 export const AboveStart: StoryObj<Args> = {
   name: "Position: outset-top-start",
   args: { w: 500, h: 300 },
   render: (args) => {
     const container = initializeContainer();
-    chart(seafood, { w: args.w, h: args.h })
+    chart(seafood, {
+      w: args.w,
+      h: args.h,
+      axes: { x: { levels: [false, true] } },
+    })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species", dir: "x", spacing: 2 })
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
@@ -181,17 +185,21 @@ export const AboveStart: StoryObj<Args> = {
 };
 
 // ─── outset-top-end ───────────────────────────────────────────────────────────
-// Above the bar, label anchored at the right edge (end). Good for x-stacked bars.
+// Above the bar, label anchored at the right edge (end). Good for grouped bars.
 
 export const AboveEnd: StoryObj<Args> = {
   name: "Position: outset-top-end",
   args: { w: 500, h: 300 },
   render: (args) => {
     const container = initializeContainer();
-    chart(seafood, { w: args.w, h: args.h })
+    chart(seafood, {
+      w: args.w,
+      h: args.h,
+      axes: { x: { levels: [false, true] } },
+    })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species", dir: "x", spacing: 2 })
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
@@ -299,7 +307,7 @@ export const LabelOnSpread: StoryObj<Args> = {
       )
       .mark(async (d: any) => {
         return chart(d, { axes: false })
-          .flow(stack({ by: "species", dir: "x" }))
+          .flow(spread({ by: "species", dir: "x", spacing: 2 }))
           .mark(rect({ h: "count" as any, fill: "species" as any }))
           .resolve();
       })

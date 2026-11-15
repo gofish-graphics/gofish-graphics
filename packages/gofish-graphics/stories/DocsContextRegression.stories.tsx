@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { chart, spread, stack, rect } from "../src/lib";
+import { chart, spread, rect } from "../src/lib";
 import { seafood } from "../src/data/catch";
 import * as publicApi from "../src/lib";
 
@@ -15,10 +15,10 @@ export default meta;
 type Args = { w: number; h: number };
 
 const DOCS_GROUPED_BAR_CODE = `
-chart(seafood, { w, h })
+chart(seafood, { w, h, axes: { x: { levels: [false, true] } } })
   .flow(
     spread({ by: "lake", dir: "x", spacing: 24 }),
-    stack({ by: "species",  dir: "x", label: false })
+    spread({ by: "species", dir: "x", spacing: 2 })
   )
   .mark(rect({ h: "count", fill: "species" }))
   .render(root);
@@ -27,7 +27,6 @@ chart(seafood, { w, h })
 type ChartApi = {
   chart: typeof chart;
   spread: typeof spread;
-  stack: typeof stack;
   rect: typeof rect;
 };
 
@@ -47,7 +46,6 @@ const runDocsLikeSnippet = (
     "h",
     "chart",
     "spread",
-    "stack",
     "rect",
     "seafood",
     DOCS_GROUPED_BAR_CODE
@@ -57,12 +55,11 @@ const runDocsLikeSnippet = (
     h: number,
     chartFn: typeof chart,
     spreadFn: typeof spread,
-    stackFn: typeof stack,
     rectFn: typeof rect,
     seafoodData: typeof seafood
   ) => void;
 
-  fn(root, w, h, api.chart, api.spread, api.stack, api.rect, seafood);
+  fn(root, w, h, api.chart, api.spread, api.rect, seafood);
   return root;
 };
 
@@ -71,10 +68,10 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
   root.style.margin = "8px";
   container.appendChild(root);
 
-  chart(seafood, { w, h })
+  chart(seafood, { w, h, axes: { x: { levels: [false, true] } } })
     .flow(
       spread({ by: "lake", dir: "x", spacing: 24 }),
-      stack({ by: "species",  dir: "x" })
+      spread({ by: "species", dir: "x", spacing: 2 })
     )
     .mark(rect({ h: "count", fill: "species" }))
     .render(root);
@@ -136,7 +133,7 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
     runDirectStorybookVersion(directMount, args.w, args.h);
     runDocsLikeSnippet(
       docsLikeSourceMount,
-      { chart, spread, stack, rect },
+      { chart, spread, rect },
       args.w,
       args.h
     );
@@ -145,7 +142,6 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
       {
         chart: publicApi.chart as typeof chart,
         spread: publicApi.spread as typeof spread,
-        stack: publicApi.stack as typeof stack,
         rect: publicApi.rect as typeof rect,
       },
       args.w,

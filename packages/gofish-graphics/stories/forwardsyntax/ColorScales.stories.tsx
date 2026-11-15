@@ -149,7 +149,7 @@ export const PairedPalettes: StoryObj<Args> = {
           });
         }),
         spread({ by: "pair",  dir: "x" }),
-        stack({ by: "type",  dir: "x" })
+        spread({ by: "type", dir: "x", spacing: 2 })
       )
       .mark(rect({ h: "value", fill: "color" }))
       .render(container);
@@ -174,6 +174,7 @@ export const NestedDerive: StoryObj<Args> = {
       }),
       w: args.w,
       h: args.h,
+      axes: { x: { levels: [false, true] } },
     })
       .flow(
         derive((d) =>
@@ -192,7 +193,7 @@ export const NestedDerive: StoryObj<Args> = {
           })
         ),
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species", dir: "x", spacing: 2 })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
       .render(container);
@@ -208,7 +209,12 @@ export const SelectiveDerive: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: Color.palette({ highlighted: "#e15759" }), w: args.w, h: args.h })
+    chart(seafood, {
+      color: Color.palette({ highlighted: "#e15759" }),
+      w: args.w,
+      h: args.h,
+      axes: { x: { levels: [false, true] } },
+    })
       .flow(
         derive((d) =>
           d.map((item) => ({
@@ -217,7 +223,7 @@ export const SelectiveDerive: StoryObj<Args> = {
           }))
         ),
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species", dir: "x", spacing: 2 })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
       .render(container);
@@ -234,16 +240,21 @@ export const SelectiveGroup: StoryObj<Args> = {
   parameters: {
     gallery: {
       title: "Selective Highlight",
-      description: "Stacked catch bars by lake with only the Salmon segments colored and every other species muted to gray.",
+      description: "Grouped catch bars by lake with only the Salmon bars colored and every other species muted to gray.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { color: Color.palette({ Salmon: "#e15759" }), w: args.w, h: args.h })
+    chart(seafood, {
+      color: Color.palette({ Salmon: "#e15759" }),
+      w: args.w,
+      h: args.h,
+      axes: { x: { levels: [false, true] } },
+    })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species", dir: "x", spacing: 2 })
       )
       .mark(rect({ h: "count", fill: "species" }))
       .render(container);

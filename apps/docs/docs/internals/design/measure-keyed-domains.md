@@ -490,13 +490,13 @@ covers this.
 chart(seafood)
   .flow(
     spread({ by: "lake", dir: "x" }),
-    stack({ by: "species", dir: "x", h: 150 })
+    spread({ by: "species", dir: "x", spacing: 2, h: 150 })
   )
   .mark(rect({ h: "count", fill: "species" }));
 ```
 
 y is the cross axis of both operators, so every bar is in one set and `"count"`
-has one domain, 0 to 1.1. Each inner stack is a sized node on y. It widens its
+has one domain, 0 to 1.1. Each inner spread is a sized node on y. It widens its
 claim to the keyed domain and solves 1.1σ = 150.
 
 Expected result: 1.1 maps to 150 px in every group. Today each group fills
