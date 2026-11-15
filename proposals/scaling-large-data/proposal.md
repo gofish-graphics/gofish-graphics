@@ -315,6 +315,85 @@ pay when there are many more rows than pixels. This decides how it is used.
 - **In-memory data is never reduced.** The column form of marks draws every
   row.
 
+### Example 5, a second chart over `selectAll`
+
+![Stacked bars with ribbons drawn by a second chart over the named bars](img/selectall-raw.png)
+
+```js
+chart(catchData, { w: 600, h: 400 })
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 24 }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "species" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(group({ by: "species" }))
+      .mark(ribbon({ opacity: 0.8 }))
+  );
+```
+
+`selectAll("bars")` gives the second chart one item per named mark. The item
+is a reference to the drawn bar. The spelling does not change, and the first
+chart is planned as in example 1. What the second chart reads from each item
+decides what it costs.
+
+**Checked.** The chart above was rendered from 100,000 rows and from the 48
+rows of the query result. The two pictures have 0 different pixels. The
+ribbons read three things from each bar, which are its laid-out box, its
+`species` key and its color. All three are in the mark table or come from
+layout over it.
+
+| What the second chart reads from a named mark                                  | Where it comes from                                          | Checked                   |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------- |
+| Position and size (ribbons, lines, `enclose`, where a label sits)              | layout over the mark table                                   | 0 different pixels        |
+| A key of the first chart (`group({ by: "species" })`)                          | a column of the mark table                                   | 0 different pixels        |
+| The color of the mark                                                          | a column of the mark table                                   | 0 different pixels        |
+| A sum of the summed column, in a function (`sumBy(d[0].datum, "count")`)       | a column of the mark table, because a sum of sums is the sum | 0 different pixels        |
+| A count of the mark's rows, in a function (`d[0].datum.length`)                | the underlying rows                                          | wrong from the mark table |
+| A column the first chart never used, in a function (`meanBy(d[0].datum, "x")`) | the underlying rows                                          | wrong from the mark table |
+
+The last two rows are the hard part. Today a reference's `datum` is the
+mark's rows, and a function in the second chart can do anything with them.
+The test gave such a function the mark table's one row in place of the
+mark's rows. The label that counts rows then says "1" where it should say
+"2158", and nothing reports an error.
+
+| Row count labels from the rows      | The same labels from the mark table    |
+| ----------------------------------- | -------------------------------------- |
+| ![](img/selectall-rowcount-raw.png) | ![](img/selectall-rowcount-pushed.png) |
+
+So the design keeps one rule. **A named mark's `datum` is always its
+underlying rows, never its row of the mark table.**
+
+- Over in-memory data, `datum` is a view into the columns for that group. It
+  is built when a function reads it. The stories that label bars with
+  `sumBy(d[0].datum, "count")` keep working and give the same answer.
+- Over a database table, a function that takes named marks is handled like
+  any other function (see "Escape hatches"). The rows of those marks are
+  fetched for it, and above the row limit this is an error that names the
+  function.
+- The way to label bars over a large table without fetching rows is a channel
+  the planner can read, e.g. `text({ text: field("count").sum() })` in the
+  second chart. This does not work today. A channel over references reads
+  the reference object and not the mark's rows, so this spec draws no labels
+  at all. Making channels read through a reference is a small change with its
+  own value, and after it the label is one more column of the first chart's
+  mark table.
+
+Two more facts from reading the code.
+
+- **A reference points at a real node today.** Ribbons, `enclose`, `resolve`
+  and paint order all walk from the reference to the node and its parents.
+  For charts made of groups this costs nothing, because the 48 bars are
+  nodes anyway. It only becomes a question for a named scatter of rows drawn
+  from columns. What each of these readers needs is a box and the keys, which
+  a row of a laid-out column has. Until references can point at such a row,
+  a named scatter keeps a node per point and runs at today's speed.
+- **The second chart's column domains are computed over the rows the
+  references reach.** With the rule above this stays true. Over a database
+  table it is one more small query with the first chart's filter.
+
 ## What this means for vectorizing the pipeline
 
 `.flow(a, b)` is not a pipeline over data today. Each operator wraps the mark
@@ -949,6 +1028,10 @@ shares its cache and selections with vgplot charts on the page.
 - A fused `line` builds two nodes per point to draw one path.
 - Arrow from Python is decoded into one object per row, after about eight
   copies of the data on the way.
+- A channel over `selectAll` items does not read the mark's rows.
+  `text({ text: "count" })` draws the word "count" at the origin, and
+  `text({ text: field("count").sum() })` draws nothing. Only a function can
+  read them.
 - A `by` cannot name two columns, so one circle per lake and species needs a
   `derive` to make a combined key, and `derive` is a function.
 - A `scatter` nested in a `scatter` draws a small extra axis in the middle of

@@ -732,7 +732,7 @@ ORDER BY min(rownum);</code></pre>
 
     <!-- ============================== EXAMPLES ============================== -->
     <section class="tab" id="examples">
-      <h2>Four examples</h2>
+      <h2>Five examples</h2>
       <p>
         The mapping from a spec to a query is direct, because the pieces of the
         data part were designed as table operations already. The full mapping
@@ -1230,6 +1230,197 @@ chart(db.table("catch"))
             </div>
           </div>
         </div>
+      </article>
+
+      <!-- Example 5 -->
+      <article class="card">
+        <h2>Example 5, a second chart over <code>selectAll</code></h2>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/selectall-raw.png"
+              width="774"
+              height="489"
+              alt="Stacked bars with ribbons drawn by a second chart over the named bars"
+            />
+          </div>
+        </figure>
+        <div class="code">
+          <div class="lang">JavaScript</div>
+          <pre><code class="language-javascript">chart(catchData, { w: 600, h: 400 })
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 24 }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "species" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(group({ by: "species" }))
+      .mark(ribbon({ opacity: 0.8 }))
+  );</code></pre>
+        </div>
+        <p>
+          <code>selectAll("bars")</code> gives the second chart one item per
+          named mark. The item is a reference to the drawn bar. The spelling
+          does not change, and the first chart is planned as in example 1. What
+          the second chart reads from each item decides what it costs.
+        </p>
+
+        <h3>Check</h3>
+        <p>
+          The chart above was rendered from 100,000 rows and from the 48 rows of
+          the query result. The two pictures have 0 different pixels. The
+          ribbons read three things from each bar, which are its laid-out box,
+          its <code>species</code> key and its color. All three are in the mark
+          table or come from layout over it.
+        </p>
+        <div class="table-wrap">
+          <table class="wide">
+            <thead>
+              <tr>
+                <th>What the second chart reads from a named mark</th>
+                <th>Where it comes from</th>
+                <th>Checked</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  Position and size (ribbons, lines, <code>enclose</code>, where
+                  a label sits)
+                </td>
+                <td>layout over the mark table</td>
+                <td>0 different pixels</td>
+              </tr>
+              <tr>
+                <td>
+                  A key of the first chart (<code>group({ by: "species" })</code
+                  >)
+                </td>
+                <td>a column of the mark table</td>
+                <td>0 different pixels</td>
+              </tr>
+              <tr>
+                <td>The color of the mark</td>
+                <td>a column of the mark table</td>
+                <td>0 different pixels</td>
+              </tr>
+              <tr>
+                <td>
+                  A sum of the summed column, in a function (<code
+                    >sumBy(d[0].datum, "count")</code
+                  >)
+                </td>
+                <td>
+                  a column of the mark table, because a sum of sums is the sum
+                </td>
+                <td>0 different pixels</td>
+              </tr>
+              <tr>
+                <td>
+                  A count of the mark's rows, in a function
+                  (<code>d[0].datum.length</code>)
+                </td>
+                <td>the underlying rows</td>
+                <td>wrong from the mark table</td>
+              </tr>
+              <tr>
+                <td>
+                  A column the first chart never used, in a function (<code
+                    >meanBy(d[0].datum, "x")</code
+                  >)
+                </td>
+                <td>the underlying rows</td>
+                <td>wrong from the mark table</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The last two rows are the hard part. Today a reference's
+          <code>datum</code> is the mark's rows, and a function in the second
+          chart can do anything with them. The test gave such a function the
+          mark table's one row in place of the mark's rows. The label that
+          counts rows then says "1" where it should say "2158", and nothing
+          reports an error.
+        </p>
+        <div class="pair">
+          <figure>
+            <div class="plate">
+              <img
+                src="img/selectall-rowcount-raw.png"
+                width="774"
+                height="492"
+                alt="Stacked bars with ribbons and row count labels computed from the rows"
+              />
+            </div>
+            <figcaption>Row count labels from the rows.</figcaption>
+          </figure>
+          <figure>
+            <div class="plate">
+              <img
+                src="img/selectall-rowcount-pushed.png"
+                width="774"
+                height="492"
+                alt="The same chart with row count labels computed from the mark table"
+              />
+            </div>
+            <figcaption>The same labels from the mark table.</figcaption>
+          </figure>
+        </div>
+        <p>
+          So the design keeps one rule.
+          <strong
+            >A named mark's <code>datum</code> is always its underlying rows,
+            never its row of the mark table.</strong
+          >
+        </p>
+        <ul>
+          <li>
+            Over in-memory data, <code>datum</code> is a view into the columns
+            for that group. It is built when a function reads it. The stories
+            that label bars with <code>sumBy(d[0].datum, "count")</code> keep
+            working and give the same answer.
+          </li>
+          <li>
+            Over a database table, a function that takes named marks is handled
+            like any other function (see "Escape hatches"). The rows of those
+            marks are fetched for it, and above the row limit this is an error
+            that names the function.
+          </li>
+          <li>
+            The way to label bars over a large table without fetching rows is a
+            channel the planner can read, e.g.
+            <code>text({ text: field("count").sum() })</code> in the second
+            chart. This does not work today. A channel over references reads the
+            reference object and not the mark's rows, so this spec draws no
+            labels at all. Making channels read through a reference is a small
+            change with its own value, and after it the label is one more column
+            of the first chart's mark table.
+          </li>
+        </ul>
+        <p>Two more facts from reading the code.</p>
+        <ul>
+          <li>
+            <strong>A reference points at a real node today.</strong> Ribbons,
+            <code>enclose</code>, <code>resolve</code> and paint order all walk
+            from the reference to the node and its parents. For charts made of
+            groups this costs nothing, because the 48 bars are nodes anyway. It
+            only becomes a question for a named scatter of rows drawn from
+            columns. What each of these readers needs is a box and the keys,
+            which a row of a laid-out column has. Until references can point at
+            such a row, a named scatter keeps a node per point and runs at
+            today's speed.
+          </li>
+          <li>
+            <strong
+              >The second chart's column domains are computed over the rows the
+              references reach.</strong
+            >
+            With the rule above this stays true. Over a database table it is one
+            more small query with the first chart's filter.
+          </li>
+        </ul>
       </article>
 
       <h2>How a spec maps to a query</h2>
@@ -2597,6 +2788,12 @@ chart(points)
         <li>
           Arrow from Python is decoded into one object per row, after about
           eight copies of the data on the way.
+        </li>
+        <li>
+          A channel over <code>selectAll</code> items does not read the mark's
+          rows. <code>text({ text: "count" })</code> draws the word "count" at
+          the origin, and <code>text({ text: field("count").sum() })</code>
+          draws nothing. Only a function can read them.
         </li>
         <li>
           A <code>by</code> cannot name two columns, so one circle per lake and
