@@ -386,13 +386,119 @@ Two more facts from reading the code.
 - **A reference points at a real node today.** Ribbons, `enclose`, `resolve`
   and paint order all walk from the reference to the node and its parents.
   For charts made of groups this costs nothing, because the 48 bars are
-  nodes anyway. It only becomes a question for a named scatter of rows drawn
-  from columns. What each of these readers needs is a box and the keys, which
-  a row of a laid-out column has. Until references can point at such a row,
-  a named scatter keeps a node per point and runs at today's speed.
+  nodes anyway. Example 6 says what a reference becomes when a mark is not a
+  node.
 - **The second chart's column domains are computed over the rows the
   references reach.** With the rule above this stays true. Over a database
   table it is one more small query with the first chart's filter.
+
+### Example 6, highlighting some marks after the engine drew fewer
+
+![A scatter of 20,000 points with 187 of them ringed in red](img/logical-truth.png)
+
+```js
+chart(catchData, { w: 600, h: 400 })
+  .flow(scatter({ x: "x", y: "y" }))
+  .mark(circle({ r: 2, fill: "#888" }).name("points"))
+  .layer(
+    chart(selectAll("points"))
+      .flow(
+        filter(
+          (p) => project(p, "lake") === "Lake A" && project(p, "count") >= 20
+        )
+      )
+      .mark((ps) =>
+        layer(
+          ps.map((p) =>
+            enclose(
+              { shape: Shape.oval(), padding: 3, fill: "none", stroke: "red" },
+              [p]
+            ).zOrder(1)
+          )
+        )
+      )
+  );
+```
+
+This proposal lets the engine draw fewer or cheaper marks than the spec
+names. A scatter can be one node of columns, a line can be thinned, and a
+full grid of cells can be one image. The rule for `selectAll` under all of
+these is the following.
+
+**`selectAll` selects the marks the spec defines, not the marks the engine
+drew.** A scatter of a million rows has a million points to select from,
+however they are drawn.
+
+**Checked.** The spec above rings the 187 points where the lake is Lake A
+and the count is 20 or more. It was rendered three ways over 20,000 rows.
+
+|                                                                             | Rings drawn | Highlight compared with every point drawn |
+| --------------------------------------------------------------------------- | ----------- | ----------------------------------------- |
+| Every point drawn                                                           | 187 of 187  | the reference                             |
+| Points thinned to one per pixel, selection over the drawn points            | 158 of 187  | 29 rings missing                          |
+| Points thinned to one per pixel, selection over the points the spec defines | 187 of 187  | 0 different pixels                        |
+
+![A part of the plot at four times the size. Left, every point drawn. Middle, selection over the drawn points. Right, selection over the points the spec defines.](img/logical-crop.png)
+
+Thinning removed 29 of the 187 selected rows. A selection over the drawn
+points loses their rings. For the third row, each ring was placed from the
+point's row and the axis scales, with no node for the point, and the rings
+match the first row exactly.
+
+What this means for the design:
+
+- **The mark table is what `selectAll` selects from.** It has one row per mark
+  the spec defines. Thinning, drawing a grid as one image, and storing marks
+  as columns all happen after it, when the chart is drawn, so they cannot
+  change what a selection returns.
+- **A named mark does not need a node.** A reference points at a row of the
+  mark table. The engine makes a node only for the marks the second chart
+  keeps. Ringing 187 points out of a million makes 187 nodes. This replaces
+  the rule in #1009 that a name read by `selectAll` forces a node per
+  element.
+- **A reference answers four questions.** They are the mark's identity (its
+  key path, or its row for one mark per row), its keys and channel values,
+  its underlying rows as `datum`, and its box in the shared frame.
+- **The box does not always need layout.** For a point placed by data alone,
+  the box is the row put through the axis scales and the coordinate
+  transform. The same holds for a `partition` cell, whose box is its bin
+  edges through the scales. For a bar in a `stack` or `spread`, a `treemap`
+  tile, or anything moved by an `Overlap` strategy, the box comes from
+  layout, and those marks are nodes anyway.
+- **Paint order has to be stated for a mark that was not drawn.** Today a ring
+  is painted below the mark it surrounds, and the engine finds that mark as
+  a node. In the test, rings around points that had no node were painted in
+  a different order until the spec set `zOrder`. A reference to a row needs
+  a defined place in the paint order.
+- **The pointer follows the same rule.** The mark under the pointer is found
+  through an index over the mark table, so a hover or a click returns the
+  mark the spec defines.
+
+The same holds for cells. This heatmap has 897 cells, and the second chart
+boxes the ten with the most rows. With the grid drawn as one image there are
+no cell nodes, and today `selectAll("cells")` fails with `Layer "cells" not
+found`. In a second test, boxes around the 15 cells with 150 rows or more
+were placed from the cells' bin edges alone. They differ from boxes placed
+from real cell nodes in 30 pixels, each by one level out of 255.
+
+![A heatmap with its ten fullest cells boxed in red](img/logical-heatmap.png)
+
+**The spelling above is longer than it should be, and that is a separate
+problem this example exposes.** The spellings a user would try first do not
+work today.
+
+| Spelling over `selectAll("points")`                                                       | What happens today                                                                                 |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `filter(field("x").between(40, 45))`                                                      | keeps nothing, with no error, because the predicate reads `x` on the reference and not on its rows |
+| `.mark(circle({ r: 5, stroke: "red" }))`                                                  | draws one ring at the corner of the plot                                                           |
+| a mark function that returns `layer([ring, p])`                                           | draws every ring at the corner of the plot                                                         |
+| `filter(fn)` with `project(p, "lake")`, then `enclose` around each item, with `zOrder(1)` | works                                                                                              |
+
+Over a database table the first row is the one that has to work, because a
+filter the planner can read is a `WHERE` on the first chart's query, and
+only the selected rows come back. A function filter is handled like any
+other function. The rows are fetched for it, and above the row limit it is
+an error.
 
 ## What this means for vectorizing the pipeline
 
@@ -500,8 +606,9 @@ legends and everything else a chart has, and those cost about 10 ms.
 
 - **A scatter is one node that holds columns.** This is the direction agreed
   in #1009. Layout places the collection once, with one scale per axis. The
-  engine makes a node per point only when something needs one (a name that
-  `selectAll` reads, a label per mark, a `relate`, a mark function).
+  engine makes a node per point only when something needs one (a label per
+  mark, a `relate`, a mark function, or a point that a second chart selects
+  and keeps, see example 6).
 - **A line asks for points, not nodes.** The connector asks the operator that
   places its anchors for their center points. A scatter placed by data alone
   answers from its two columns and its scale, and no anchor nodes are made. A
@@ -1032,6 +1139,16 @@ shares its cache and selections with vgplot charts on the page.
   `text({ text: "count" })` draws the word "count" at the origin, and
   `text({ text: field("count").sum() })` draws nothing. Only a function can
   read them.
+- `filter(field("x").between(40, 45))` over `selectAll` items keeps nothing
+  and reports no error.
+- A mark placed over `selectAll` items without an operator that takes the
+  item as a child is drawn at the corner of the plot.
+- A ring drawn by `enclose` is painted under the dots it surrounds, so in a
+  dense scatter most highlights cannot be seen without `zOrder(1)`.
+- A mark function that returns nothing for a group throws
+  `Cannot read properties of undefined (reading 'setKey')`.
+- A function channel that returns the color name `"red"` is treated as a data
+  category and drawn blue. `"#ff0000"` works.
 - A `by` cannot name two columns, so one circle per lake and species needs a
   `derive` to make a combined key, and `derive` is a function.
 - A `scatter` nested in a `scatter` draws a small extra axis in the middle of

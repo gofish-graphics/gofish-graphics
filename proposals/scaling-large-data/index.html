@@ -348,6 +348,13 @@
   .pair figure {
     margin: 0;
   }
+  /* A wide strip of panels scrolls on a phone instead of shrinking */
+  .strip {
+    overflow-x: auto;
+  }
+  .strip .plate {
+    min-width: 34rem;
+  }
   @media (max-width: 720px) {
     .pair {
       grid-template-columns: minmax(0, 1fr);
@@ -732,7 +739,7 @@ ORDER BY min(rownum);</code></pre>
 
     <!-- ============================== EXAMPLES ============================== -->
     <section class="tab" id="examples">
-      <h2>Five examples</h2>
+      <h2>Six examples</h2>
       <p>
         The mapping from a spec to a query is direct, because the pieces of the
         data part were designed as table operations already. The full mapping
@@ -1408,12 +1415,8 @@ chart(db.table("catch"))
             <strong>A reference points at a real node today.</strong> Ribbons,
             <code>enclose</code>, <code>resolve</code> and paint order all walk
             from the reference to the node and its parents. For charts made of
-            groups this costs nothing, because the 48 bars are nodes anyway. It
-            only becomes a question for a named scatter of rows drawn from
-            columns. What each of these readers needs is a box and the keys,
-            which a row of a laid-out column has. Until references can point at
-            such a row, a named scatter keeps a node per point and runs at
-            today's speed.
+            groups this costs nothing, because the 48 bars are nodes anyway.
+            Example 6 says what a reference becomes when a mark is not a node.
           </li>
           <li>
             <strong
@@ -1424,6 +1427,244 @@ chart(db.table("catch"))
             more small query with the first chart's filter.
           </li>
         </ul>
+      </article>
+
+      <!-- Example 6 -->
+      <article class="card">
+        <h2>Example 6, highlighting some marks after the engine drew fewer</h2>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/logical-truth.png"
+              width="693"
+              height="488"
+              alt="A scatter of 20,000 points with 187 of them ringed in red"
+            />
+          </div>
+        </figure>
+        <div class="code">
+          <div class="lang">JavaScript</div>
+          <pre><code class="language-javascript">chart(catchData, { w: 600, h: 400 })
+  .flow(scatter({ x: "x", y: "y" }))
+  .mark(circle({ r: 2, fill: "#888" }).name("points"))
+  .layer(
+    chart(selectAll("points"))
+      .flow(
+        filter(
+          (p) =&gt; project(p, "lake") === "Lake A" &amp;&amp; project(p, "count") &gt;= 20,
+        ),
+      )
+      .mark((ps) =&gt;
+        layer(
+          ps.map((p) =&gt;
+            enclose(
+              { shape: Shape.oval(), padding: 3, fill: "none", stroke: "red" },
+              [p],
+            ).zOrder(1),
+          ),
+        ),
+      ),
+  );</code></pre>
+        </div>
+        <p>
+          This proposal lets the engine draw fewer or cheaper marks than the
+          spec names. A scatter can be one node of columns, a line can be
+          thinned, and a full grid of cells can be one image. The rule for
+          <code>selectAll</code> under all of these is the following.
+        </p>
+        <p>
+          <strong
+            ><code>selectAll</code> selects the marks the spec defines, not the
+            marks the engine drew.</strong
+          >
+          A scatter of a million rows has a million points to select from,
+          however they are drawn.
+        </p>
+
+        <h3>Check</h3>
+        <p>
+          The spec above rings the 187 points where the lake is Lake A and the
+          count is 20 or more. It was rendered three ways over 20,000 rows.
+        </p>
+        <div class="table-wrap">
+          <table class="wide">
+            <thead>
+              <tr>
+                <th></th>
+                <th>Rings drawn</th>
+                <th>Highlight compared with every point drawn</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Every point drawn</td>
+                <td>187 of 187</td>
+                <td>the reference</td>
+              </tr>
+              <tr>
+                <td>
+                  Points thinned to one per pixel, selection over the drawn
+                  points
+                </td>
+                <td>158 of 187</td>
+                <td>29 rings missing</td>
+              </tr>
+              <tr>
+                <td>
+                  Points thinned to one per pixel, selection over the points the
+                  spec defines
+                </td>
+                <td>187 of 187</td>
+                <td>0 different pixels</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <figure>
+          <div class="strip">
+            <div class="plate">
+              <img
+                src="img/logical-crop.png"
+                width="1104"
+                height="280"
+                alt="A part of the plot at four times the size. Left, every point drawn. Middle, selection over the drawn points. Right, selection over the points the spec defines."
+              />
+            </div>
+          </div>
+          <figcaption>
+            A part of the plot at four times the size. Left, every point drawn.
+            Middle, selection over the drawn points. Right, selection over the
+            points the spec defines.
+          </figcaption>
+        </figure>
+        <p>
+          Thinning removed 29 of the 187 selected rows. A selection over the
+          drawn points loses their rings. For the third row, each ring was
+          placed from the point's row and the axis scales, with no node for the
+          point, and the rings match the first row exactly.
+        </p>
+        <p>What this means for the design:</p>
+        <ul>
+          <li>
+            <strong
+              >The mark table is what <code>selectAll</code> selects
+              from.</strong
+            >
+            It has one row per mark the spec defines. Thinning, drawing a grid
+            as one image, and storing marks as columns all happen after it, when
+            the chart is drawn, so they cannot change what a selection returns.
+          </li>
+          <li>
+            <strong>A named mark does not need a node.</strong> A reference
+            points at a row of the mark table. The engine makes a node only for
+            the marks the second chart keeps. Ringing 187 points out of a
+            million makes 187 nodes. This replaces the rule in #1009 that a name
+            read by <code>selectAll</code> forces a node per element.
+          </li>
+          <li>
+            <strong>A reference answers four questions.</strong> They are the
+            mark's identity (its key path, or its row for one mark per row), its
+            keys and channel values, its underlying rows as <code>datum</code>,
+            and its box in the shared frame.
+          </li>
+          <li>
+            <strong>The box does not always need layout.</strong> For a point
+            placed by data alone, the box is the row put through the axis scales
+            and the coordinate transform. The same holds for a
+            <code>partition</code> cell, whose box is its bin edges through the
+            scales. For a bar in a <code>stack</code> or <code>spread</code>, a
+            <code>treemap</code> tile, or anything moved by an
+            <code>Overlap</code> strategy, the box comes from layout, and those
+            marks are nodes anyway.
+          </li>
+          <li>
+            <strong
+              >Paint order has to be stated for a mark that was not
+              drawn.</strong
+            >
+            Today a ring is painted below the mark it surrounds, and the engine
+            finds that mark as a node. In the test, rings around points that had
+            no node were painted in a different order until the spec set
+            <code>zOrder</code>. A reference to a row needs a defined place in
+            the paint order.
+          </li>
+          <li>
+            <strong>The pointer follows the same rule.</strong> The mark under
+            the pointer is found through an index over the mark table, so a
+            hover or a click returns the mark the spec defines.
+          </li>
+        </ul>
+        <p>
+          The same holds for cells. This heatmap has 897 cells, and the second
+          chart boxes the ten with the most rows. With the grid drawn as one
+          image there are no cell nodes, and today
+          <code>selectAll("cells")</code> fails with
+          <code>Layer "cells" not found</code>. In a second test, boxes around
+          the 15 cells with 150 rows or more were placed from the cells' bin
+          edges alone. They differ from boxes placed from real cell nodes in 30
+          pixels, each by one level out of 255.
+        </p>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/logical-heatmap.png"
+              width="752"
+              height="488"
+              alt="A heatmap with its ten fullest cells boxed in red"
+            />
+          </div>
+        </figure>
+        <p>
+          <strong
+            >The spelling above is longer than it should be, and that is a
+            separate problem this example exposes.</strong
+          >
+          The spellings a user would try first do not work today.
+        </p>
+        <div class="table-wrap">
+          <table class="wide">
+            <thead>
+              <tr>
+                <th>Spelling over <code>selectAll("points")</code></th>
+                <th>What happens today</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>filter(field("x").between(40, 45))</code></td>
+                <td>
+                  keeps nothing, with no error, because the predicate reads
+                  <code>x</code> on the reference and not on its rows
+                </td>
+              </tr>
+              <tr>
+                <td><code>.mark(circle({ r: 5, stroke: "red" }))</code></td>
+                <td>draws one ring at the corner of the plot</td>
+              </tr>
+              <tr>
+                <td>
+                  a mark function that returns <code>layer([ring, p])</code>
+                </td>
+                <td>draws every ring at the corner of the plot</td>
+              </tr>
+              <tr>
+                <td>
+                  <code>filter(fn)</code> with <code>project(p, "lake")</code>,
+                  then <code>enclose</code> around each item, with
+                  <code>zOrder(1)</code>
+                </td>
+                <td>works</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          Over a database table the first row is the one that has to work,
+          because a filter the planner can read is a <code>WHERE</code> on the
+          first chart's query, and only the selected rows come back. A function
+          filter is handled like any other function. The rows are fetched for
+          it, and above the row limit it is an error.
+        </p>
       </article>
 
       <h2>How a spec maps to a query</h2>
@@ -1603,8 +1844,8 @@ with connect({ rowLimit }).</code></pre>
           <strong>A scatter is one node that holds columns.</strong> This is the
           direction agreed in #1009. Layout places the collection once, with one
           scale per axis. The engine makes a node per point only when something
-          needs one (a name that <code>selectAll</code> reads, a label per mark,
-          a <code>relate</code>, a mark function).
+          needs one (a label per mark, a <code>relate</code>, a mark function,
+          or a point that a second chart selects and keeps, see example 6).
         </li>
         <li>
           <strong>A line asks for points, not nodes.</strong> The connector asks
@@ -2797,6 +3038,28 @@ chart(points)
           rows. <code>text({ text: "count" })</code> draws the word "count" at
           the origin, and <code>text({ text: field("count").sum() })</code>
           draws nothing. Only a function can read them.
+        </li>
+        <li>
+          <code>filter(field("x").between(40, 45))</code> over
+          <code>selectAll</code> items keeps nothing and reports no error.
+        </li>
+        <li>
+          A mark placed over <code>selectAll</code> items without an operator
+          that takes the item as a child is drawn at the corner of the plot.
+        </li>
+        <li>
+          A ring drawn by <code>enclose</code> is painted under the dots it
+          surrounds, so in a dense scatter most highlights cannot be seen
+          without <code>zOrder(1)</code>.
+        </li>
+        <li>
+          A mark function that returns nothing for a group throws
+          <code>Cannot read properties of undefined (reading 'setKey')</code>.
+        </li>
+        <li>
+          A function channel that returns the color name <code>"red"</code> is
+          treated as a data category and drawn blue. <code>"#ff0000"</code>
+          works.
         </li>
         <li>
           A <code>by</code> cannot name two columns, so one circle per lake and
