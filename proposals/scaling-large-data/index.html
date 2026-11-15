@@ -1,0 +1,2679 @@
+<title>Scaling GoFish</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<style>
+  @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+
+  :root {
+    --bg: #f5f7f9;
+    --surface: #ffffff;
+    --surface-2: #eaeef3;
+    --text: #1a2130;
+    --muted: #546072;
+    --border: #d5dbe3;
+    --accent: #1d5ca6;
+    --accent-soft: #e1ebf7;
+    --code-bg: #eff2f6;
+    --code-text: #1a2130;
+    --plate: #ffffff;
+    --plate-border: #d5dbe3;
+    --hl-keyword: #1d4f9c;
+    --hl-string: #17724a;
+    --hl-number: #955400;
+    --hl-comment: #687384;
+    --hl-title: #7238a8;
+    --hl-attr: #0a6a82;
+    --hl-builtin: #a13b1a;
+    --hl-meta: #687384;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11151b;
+      --surface: #171c24;
+      --surface-2: #202733;
+      --text: #e2e6ed;
+      --muted: #9ba6b6;
+      --border: #2d3542;
+      --accent: #8fb5ec;
+      --accent-soft: #1c2a3e;
+      --code-bg: #0c1016;
+      --code-text: #dfe4ec;
+      --plate: #ffffff;
+      --plate-border: #3a4352;
+      --hl-keyword: #8fb8ff;
+      --hl-string: #8dd3a6;
+      --hl-number: #f0b86c;
+      --hl-comment: #7e899b;
+      --hl-title: #caa6f3;
+      --hl-attr: #7fd0e2;
+      --hl-builtin: #f19c7c;
+      --hl-meta: #7e899b;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11151b;
+    --surface: #171c24;
+    --surface-2: #202733;
+    --text: #e2e6ed;
+    --muted: #9ba6b6;
+    --border: #2d3542;
+    --accent: #8fb5ec;
+    --accent-soft: #1c2a3e;
+    --code-bg: #0c1016;
+    --code-text: #dfe4ec;
+    --plate: #ffffff;
+    --plate-border: #3a4352;
+    --hl-keyword: #8fb8ff;
+    --hl-string: #8dd3a6;
+    --hl-number: #f0b86c;
+    --hl-comment: #7e899b;
+    --hl-title: #caa6f3;
+    --hl-attr: #7fd0e2;
+    --hl-builtin: #f19c7c;
+    --hl-meta: #7e899b;
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family:
+      "IBM Plex Sans",
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      sans-serif;
+    font-size: 16px;
+    line-height: 1.6;
+  }
+  .page {
+    max-width: 74rem;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 1.5rem 4rem;
+  }
+  header.top {
+    padding-block: 0.5rem 1rem;
+  }
+  header.top h1 {
+    margin: 0;
+    font-size: 1.75rem;
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  header.top p {
+    margin: 0.35rem 0 0;
+    color: var(--muted);
+    max-width: 70ch;
+  }
+
+  nav.tabs {
+    position: sticky;
+    top: env(safe-area-inset-top, 0px);
+    z-index: 10;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    padding-block: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+  nav.tabs a {
+    color: var(--muted);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 6px;
+  }
+  @media (max-width: 640px) {
+    nav.tabs {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    nav.tabs a {
+      white-space: nowrap;
+      flex: 0 0 auto;
+    }
+  }
+  nav.tabs a:hover {
+    color: var(--text);
+    background: var(--surface-2);
+  }
+  nav.tabs a[aria-current="page"] {
+    color: var(--accent);
+    background: var(--accent-soft);
+  }
+  nav.tabs a:focus-visible,
+  a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .tabs-on section.tab {
+    display: none;
+  }
+  .tabs-on section.tab.active {
+    display: block;
+  }
+  section.tab {
+    scroll-margin-top: 4rem;
+  }
+  section.tab + section.tab {
+    margin-top: 3rem;
+  }
+  .tabs-on section.tab + section.tab {
+    margin-top: 0;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    line-height: 1.3;
+    font-weight: 600;
+    margin: 2.25rem 0 0.75rem;
+  }
+  h3 {
+    font-size: 1.12rem;
+    line-height: 1.35;
+    font-weight: 600;
+    margin: 1.75rem 0 0.5rem;
+  }
+  h4 {
+    font-size: 1rem;
+    line-height: 1.4;
+    font-weight: 600;
+    margin: 1.25rem 0 0.4rem;
+  }
+  section.tab > h2:first-child,
+  .card > h2:first-child {
+    margin-top: 0;
+  }
+  p,
+  ul,
+  ol {
+    max-width: 70ch;
+  }
+  p {
+    margin: 0 0 0.9rem;
+  }
+  ul,
+  ol {
+    margin: 0 0 1rem;
+    padding-left: 1.4rem;
+  }
+  li {
+    margin-bottom: 0.4rem;
+  }
+  a {
+    color: var(--accent);
+  }
+  strong {
+    font-weight: 600;
+  }
+  code {
+    font-family:
+      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.86em;
+    background: var(--code-bg);
+    color: var(--code-text);
+    padding: 0.08em 0.3em;
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+  }
+  .muted {
+    color: var(--muted);
+  }
+
+  /* Code blocks */
+  .code {
+    margin: 0.75rem 0 1rem;
+    min-width: 0;
+    max-width: 52rem;
+  }
+  .code .lang {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-weight: 500;
+    margin-bottom: 0.2rem;
+  }
+  .code pre {
+    margin: 0;
+    overflow-x: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.9rem;
+  }
+  .code pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.84rem;
+    line-height: 1.55;
+    overflow-wrap: normal;
+    white-space: pre;
+    display: block;
+  }
+  .hljs {
+    color: var(--code-text);
+  }
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-doctag {
+    color: var(--hl-keyword);
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-template-string {
+    color: var(--hl-string);
+  }
+  .hljs-number,
+  .hljs-literal {
+    color: var(--hl-number);
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: var(--hl-comment);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_,
+  .hljs-title.class_,
+  .hljs-section {
+    color: var(--hl-title);
+  }
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-property,
+  .hljs-params {
+    color: var(--hl-attr);
+  }
+  .hljs-built_in,
+  .hljs-type,
+  .hljs-variable.language_ {
+    color: var(--hl-builtin);
+  }
+  .hljs-meta,
+  .hljs-operator,
+  .hljs-punctuation {
+    color: var(--hl-meta);
+  }
+
+  /* Figures */
+  figure {
+    margin: 1rem 0 1.25rem;
+    min-width: 0;
+  }
+  figure.single {
+    max-width: 48rem;
+  }
+  .plate {
+    background: var(--plate);
+    border: 1px solid var(--plate-border);
+    border-radius: 6px;
+    padding: 8px;
+  }
+  .plate img {
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+  }
+  figcaption {
+    font-size: 0.88rem;
+    color: var(--muted);
+    margin-top: 0.4rem;
+    max-width: 70ch;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin: 1rem 0 1.25rem;
+  }
+  .pair figure {
+    margin: 0;
+  }
+  @media (max-width: 720px) {
+    .pair {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    margin: 0.75rem 0 1.25rem;
+    max-width: 100%;
+  }
+  table {
+    border-collapse: collapse;
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+  }
+  table.wide {
+    min-width: 40rem;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 0.45rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    background: var(--surface-2);
+  }
+  td.n,
+  th.n {
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* Example cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.25rem 0.5rem;
+    margin: 1.5rem 0;
+    min-width: 0;
+  }
+  @media (max-width: 520px) {
+    .card {
+      padding: 1rem 0.75rem 0.25rem;
+    }
+  }
+  .fork {
+    border-top: 1px solid var(--border);
+    margin-top: 1.25rem;
+    padding-top: 0.25rem;
+  }
+  .options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 1rem;
+    margin: 0.5rem 0 1rem;
+  }
+  @media (max-width: 720px) {
+    .options {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .option {
+    min-width: 0;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 0.9rem 0.25rem;
+    background: var(--bg);
+  }
+  .option.chosen {
+    border-color: var(--accent);
+  }
+  .option h4 {
+    margin-top: 0;
+  }
+  .option p,
+  .option ul {
+    max-width: none;
+  }
+
+  ol.steps li {
+    margin-bottom: 0.6rem;
+  }
+  .cols-2 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: 1rem;
+  }
+  .cols-2 .code {
+    max-width: 52rem;
+  }
+  @media (min-width: 900px) {
+    .cols-2.split {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .cols-2.split .code {
+      max-width: none;
+    }
+  }
+  .cols-2 > * {
+    min-width: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    nav.tabs a {
+      transition:
+        background-color 120ms ease,
+        color 120ms ease;
+    }
+  }
+</style>
+
+<div class="page">
+  <header class="top">
+    <h1>Scaling to large data</h1>
+    <p>
+      A design proposal for GoFish, covering #41 (Mosaic for large datasets) and
+      #1009 (the slow 10k-dot scatter).
+    </p>
+  </header>
+
+  <nav class="tabs" aria-label="Sections">
+    <a href="#overview" data-tab="overview">Overview</a>
+    <a href="#examples" data-tab="examples">Examples</a>
+    <a href="#scatter-and-line" data-tab="scatter-and-line">Scatter and line</a>
+    <a href="#rendering" data-tab="rendering">Rendering and progressive</a>
+    <a href="#background" data-tab="background">Background</a>
+  </nav>
+
+  <main>
+    <!-- ============================== OVERVIEW ============================== -->
+    <section class="tab" id="overview">
+      <div class="cols-2">
+        <div class="code">
+          <div class="lang">A million rows, as a GoFish spec</div>
+          <pre><code class="language-javascript">chart(catchData, { w: 600, h: 400 })
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }));</code></pre>
+        </div>
+        <div class="code">
+          <div class="lang">
+            The same data part, as a query that returns 48 rows
+          </div>
+          <pre><code class="language-sql">SELECT lake, species,
+       sum(count)                  AS h,
+       arg_min(species, rownum)    AS fill
+FROM catch
+GROUP BY lake, species
+ORDER BY min(rownum);</code></pre>
+        </div>
+      </div>
+
+      <ul>
+        <li>
+          <strong>Summary.</strong> A GoFish spec already says how rows turn
+          into marks. The <code>by</code> keys say which rows belong together,
+          and the kind of each channel says how to combine them (sizes sum,
+          positions average, colors read the first row). So the data part of a
+          spec is a group-by query whose result has one row per mark. Today the
+          engine does not use this. It walks row objects, and a stacked bar over
+          a million rows spends 94% of its time grouping rows that end up as 48
+          rectangles.
+        </li>
+        <li>
+          <strong>Recommendation.</strong> Approach A, "one plan, two places to
+          run it". The engine turns the data part of every chart into a small
+          query plan before it runs anything. A column engine inside GoFish runs
+          the plan by default. When the data lives in a database, the same plan
+          is sent there as SQL and only the rows for the marks come back. No
+          operator, mark or option changes its spelling. Mosaic is the piece
+          that runs the SQL on the JS side, and the user does not have to know
+          it is there.
+        </li>
+        <li>
+          <strong>What a user sees change.</strong> A table in a database is
+          accepted as chart data (already true in Python, new in JS).
+          <code>explain()</code> shows the plan. A function stays the escape
+          hatch: it runs on rows in the host, and it is a loud error when that
+          would pull too many rows out of a database.
+        </li>
+      </ul>
+      <p class="muted">
+        Measurement scripts and raw results are in
+        <code>tests/tmp/scaling/</code> (not committed). Terms such as plan,
+        mark table and relation are defined on the Background tab.
+      </p>
+
+      <h2>What the measurements say</h2>
+      <p>
+        Charts fall into two groups, and they are slow for different reasons.
+        All times are from headless Chromium on an M1 Pro, median of 3 runs.
+      </p>
+
+      <h3>Many rows, few marks</h3>
+      <p>
+        The mark count is fixed by the groups, not the rows. The time goes to
+        the data part.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Chart</th>
+              <th class="n">Rows</th>
+              <th class="n">Today</th>
+              <th class="n">Data part run on columns, then drawn</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Stacked bars, 48 rectangles</td>
+              <td class="n">1,000,000</td>
+              <td class="n">311 ms</td>
+              <td class="n">12 ms</td>
+            </tr>
+            <tr>
+              <td>Stacked bars, 48 rectangles</td>
+              <td class="n">10,000,000</td>
+              <td class="n">3,447 ms</td>
+              <td class="n">29 ms</td>
+            </tr>
+            <tr>
+              <td>Histogram, 40 bins</td>
+              <td class="n">1,000,000</td>
+              <td class="n">196 ms</td>
+              <td class="n">11 ms</td>
+            </tr>
+            <tr>
+              <td>Histogram, 40 bins</td>
+              <td class="n">10,000,000</td>
+              <td class="n">1,644 ms</td>
+              <td class="n">20 ms</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Domain inference, layout and paint stay at about 10 ms from a thousand
+        rows to ten million. At a million rows, grouping takes about half the
+        time, a scan of every column (used or not) takes 16%, the channel sum
+        takes 15% and garbage collection takes 15%. GoFish's grouping is about 3
+        times slower than a plain loop over the same row objects and about 250
+        times slower than a loop over typed arrays.
+      </p>
+
+      <h3>One mark per row</h3>
+      <p>
+        There is nothing to aggregate. The time goes to layout and to memory,
+        and the cost is per node.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Chart</th>
+              <th class="n">Rows</th>
+              <th class="n">Today</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Scatter</td>
+              <td class="n">10,000</td>
+              <td class="n">544 ms</td>
+            </tr>
+            <tr>
+              <td>Scatter</td>
+              <td class="n">100,000</td>
+              <td class="n">8,048 ms</td>
+            </tr>
+            <tr>
+              <td>Scatter</td>
+              <td class="n">300,000</td>
+              <td class="n">fails (stack overflow)</td>
+            </tr>
+            <tr>
+              <td>Line, one path</td>
+              <td class="n">100,000</td>
+              <td class="n">8,006 ms</td>
+            </tr>
+            <tr>
+              <td>Line, one path</td>
+              <td class="n">1,000,000</td>
+              <td class="n">browser tab crashes</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        A line draws one path but builds two nodes per point, so it costs the
+        same as the scatter. A query cannot help these charts by itself, because
+        the spec asks for one mark per row. They need the column form of marks
+        agreed in #1009 (the slow 10k-dot scatter) and reduction by pixel.
+      </p>
+      <p>
+        One more number shapes the design. Loading a million JS row objects into
+        DuckDB took 505 ms, which is slower than GoFish grouping them itself
+        (293 ms). A database only pays off when the data is already in it, or
+        already in columns.
+      </p>
+
+      <h2>Build order</h2>
+      <p>Approach A, built in this order.</p>
+      <ol class="steps">
+        <li>
+          <strong>Column engine and the plan.</strong> No API change. In-memory
+          charts with grouping get about 25 times faster at a million rows, and
+          Arrow from Python is used as columns and no longer turned into row
+          objects.
+        </li>
+        <li>
+          <strong>Run the plan in the Python kernel.</strong> A dataframe or a
+          relation stays in Python, and the mark table crosses the bridge.
+          Python scientists are the audience for 1.0, and for them the cost
+          today is moving the table.
+        </li>
+        <li>
+          <strong>The JS connector on Mosaic.</strong> <code>connect</code>,
+          <code>db.table</code>, <code>explain</code>.
+        </li>
+        <li>
+          <strong>One mark per row.</strong> The mark table as the column form
+          of marks (#1009), then reduction by pixel.
+        </li>
+        <li>
+          <strong>Painters.</strong> This is separate work that reads only the
+          display list. A cheaper SVG painter can merge now. Canvas and WebGL
+          painters pay off after step 4. See the "Rendering and progressive"
+          tab.
+        </li>
+      </ol>
+
+      <h3>Why approach A</h3>
+      <p>Reasons, with the rule each one rests on:</p>
+      <ul>
+        <li>
+          It desugars into the core. A plan means exactly what the row walk
+          means ("if you can desugar it into Core, it must be sound",
+          <code>principles.md</code>).
+        </li>
+        <li>
+          It is one mechanism. The column engine replaces the row path, and the
+          database is a second place to run the same plan, not a second pipeline
+          (#1009, "one implementation, and the pipeline chooses").
+        </li>
+        <li>
+          It adds almost no terms, and the three it adds match polars, ibis and
+          DuckDB (<code>api-design.md</code>, naming precedent order).
+        </li>
+        <li>
+          The aggregation meaning already lives on channel kinds and column
+          types ("channels are chosen by how they aggregate",
+          <code>api-design.md</code>), so the planner reads it and does not
+          guess.
+        </li>
+        <li>
+          It is the same in JS and Python, because the plan is made from the
+          serialized form.
+        </li>
+      </ul>
+      <p>
+        Approach A differs from #335, the earlier attempt to run all transforms
+        in Python that was dropped. #335 added a second form of the spec that
+        carried a tree of grouped data, so Python had to know how GoFish groups.
+        Here JS stays the only engine. It makes the plan and asks the host to
+        run a plain table query, the same way it asks the host to run a
+        <code>derive</code> function today.
+      </p>
+      <p>
+        Approach B is the runner-up. It becomes the better pick if linked
+        selections across many charts turn out to be the main use, because then
+        every chart needs a coordinator anyway.
+      </p>
+    </section>
+
+    <!-- ============================== EXAMPLES ============================== -->
+    <section class="tab" id="examples">
+      <h2>Four examples</h2>
+      <p>
+        The mapping from a spec to a query is direct, because the pieces of the
+        data part were designed as table operations already. The full mapping
+        table is below the examples.
+      </p>
+
+      <!-- Example 1 -->
+      <article class="card">
+        <h2>Example 1, stacked bars</h2>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/stacked-1e6.png"
+              width="780"
+              height="489"
+              alt="Stacked bars of count by lake, one stack per lake with six species, over one million rows"
+            />
+          </div>
+          <figcaption>Stacked bars over one million rows.</figcaption>
+        </figure>
+        <div class="cols-2">
+          <div class="code">
+            <div class="lang">JavaScript</div>
+            <pre><code class="language-javascript">chart(catchData, { w: 600, h: 400 })
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }));</code></pre>
+          </div>
+          <div class="code">
+            <div class="lang">Python</div>
+            <pre><code class="language-python">(
+    chart(catch, w=600, h=400)
+    .flow(spread(by="lake", dir="x"), stack(by="species", dir="y"))
+    .mark(rect(h="count", fill="species"))
+)</code></pre>
+          </div>
+        </div>
+        <div class="cols-2 split">
+          <div class="code">
+            <div class="lang">The plan the engine makes from it</div>
+            <pre><code class="language-plaintext">source  catch
+group   lake, species            from spread.by and stack.by
+  h     = sum(count)             rect.h is a size channel
+  fill  = first(species)         rect.fill is a color channel
+order   first appearance
+result  48 rows, one per rectangle</code></pre>
+          </div>
+          <div class="code">
+            <div class="lang">The same plan as SQL</div>
+            <pre><code class="language-sql">SELECT lake, species,
+       sum(count)                  AS h,
+       arg_min(species, rownum)    AS fill
+FROM catch
+GROUP BY lake, species
+ORDER BY min(rownum);</code></pre>
+          </div>
+        </div>
+        <p>
+          The stack offsets and the y axis come from layout over these 48 rows,
+          as they do today over 48 nodes.
+        </p>
+
+        <h3>Check</h3>
+        <p>
+          A prototype rendered this chart twice over 100,000 rows, once from the
+          rows and once from the 48 rows that DuckDB returned for the query. The
+          two pictures have 0 different pixels and the same SVG geometry.
+        </p>
+        <div class="pair">
+          <figure>
+            <div class="plate">
+              <img
+                src="img/stacked-raw-1e5.png"
+                width="774"
+                height="489"
+                alt="Stacked bars drawn from 100,000 rows"
+              />
+            </div>
+            <figcaption>From the rows, as today.</figcaption>
+          </figure>
+          <figure>
+            <div class="plate">
+              <img
+                src="img/stacked-pushed-1e5.png"
+                width="774"
+                height="489"
+                alt="Stacked bars drawn from the 48 rows of the query result"
+              />
+            </div>
+            <figcaption>From the query result. 0 pixels differ.</figcaption>
+          </figure>
+        </div>
+        <p>
+          The same check passed with 0 different pixels for the histogram, the
+          histogram with a fill, the two-direction heatmap, a grouped mean, and
+          bars normalized to 100%. DuckDB's <code>avg</code> and the engine's
+          mean gave the same bits. A planner of 120 lines read the serialized
+          chart and wrote these queries itself
+          (<code>tests/tmp/scaling/proto/planner.mjs</code>).
+        </p>
+        <p>The check also showed which rules the query must keep.</p>
+        <ul>
+          <li>
+            <strong>Order by first appearance.</strong> Without
+            <code>ORDER BY min(rownum)</code> the bars, the stack order and the
+            legend all change (picture below, 140,000 or more different pixels).
+            That one clause fixes all three.
+          </li>
+          <li>
+            <strong>First row for a color.</strong> A color that is not a key
+            needs <code>arg_min(species, rownum)</code>. With
+            <code>min(species)</code> the colors and the legend change.
+          </li>
+          <li>
+            <strong>Empty cells need nothing.</strong> The query returns only
+            the cells that have rows, and <code>partition</code> rebuilds the
+            rest from the domain.
+          </li>
+        </ul>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/stacked-noorder.png"
+              width="774"
+              height="489"
+              alt="The stacked bars with lakes, stack order and legend in a different order"
+            />
+          </div>
+          <figcaption>The same query without the order rule.</figcaption>
+        </figure>
+        <p>
+          One case did not match, and it shapes the design. For a mean at an
+          outer level of a nested split, the prototype fed the inner groups'
+          rows back through the unchanged spec, and the outer level then took a
+          mean of means (7,603 different pixels). So the plan must compute each
+          level's channels from the rows, as its own level of the query
+          (<code>ROLLUP</code>), and hand layout one mark table per level.
+          Feeding aggregated rows back in as if they were data is not enough.
+        </p>
+
+        <div class="fork">
+          <h3>Where I could be wrong about a function over a database table</h3>
+          <div class="options">
+            <div class="option chosen">
+              <h4>Fetch rows, with a limit (chosen)</h4>
+              <p>
+                The function runs on fetched rows. Fetching more rows than the
+                limit from a relation is an error that names the step and says
+                what to do.
+              </p>
+              <p>
+                I did not choose source reading because Python has no equal
+                path, and the serializable expressions already being designed
+                (#1192, the Python step 8 prototype, and #736, row-level
+                computed channel values) cover the same cases in both languages.
+              </p>
+            </div>
+            <div class="option">
+              <h4>Read the source of JS arrow functions (the other choice)</h4>
+              <p>
+                Read the source the way Arquero does, so this could still be
+                planned:
+              </p>
+              <div class="code">
+                <pre><code class="language-javascript">fill: (d) =&gt; d.survived === "No" ? gray : color[d.class]</code></pre>
+              </div>
+            </div>
+          </div>
+          <p>
+            This proposal does not design those expressions. It depends on them,
+            because without arithmetic expressions every computed column is a
+            function.
+          </p>
+        </div>
+      </article>
+
+      <!-- Example 2 -->
+      <article class="card">
+        <h2>Example 2, histogram</h2>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/hist-1e6.png"
+              width="707"
+              height="488"
+              alt="A histogram of x with bins of width 2.5 over one million rows"
+            />
+          </div>
+          <figcaption>Histogram over one million rows.</figcaption>
+        </figure>
+        <div class="cols-2">
+          <div class="code">
+            <div class="lang">JavaScript</div>
+            <pre><code class="language-javascript">chart(catchData, { w: 600, h: 400 })
+  .flow(partition({ by: field("x").bin(Bin.step(2.5)), dir: "x" }))
+  .mark(rect({ h: field("x").count() }));</code></pre>
+          </div>
+          <div class="code">
+            <div class="lang">SQL</div>
+            <pre><code class="language-sql">SELECT floor(x / 2.5) AS cell, count(x) AS h
+FROM catch
+GROUP BY cell;</code></pre>
+          </div>
+        </div>
+        <p>
+          The cells come from the domain of <code>x</code>, which is two more
+          numbers from the database (<code>min(x)</code>, <code>max(x)</code>).
+          A cell with no rows gets no row back and is drawn empty, which is what
+          <code>partition</code> does today.
+        </p>
+      </article>
+
+      <!-- Example 3 -->
+      <article class="card">
+        <h2>Example 3, a density of ten million points</h2>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/heatmap-1e7.png"
+              width="767"
+              height="488"
+              alt="A density heatmap of ten million rows in 40 by 26 cells"
+            />
+          </div>
+          <figcaption>
+            A density of ten million rows, 40 by 26 cells.
+          </figcaption>
+        </figure>
+        <div class="cols-2">
+          <div class="code">
+            <div class="lang">JavaScript</div>
+            <pre><code class="language-javascript">chart(db.table("catch"), { w: 600, h: 400 })
+  .flow(
+    partition({
+      by: { x: field("x").bin(Bin.step(2.5)), y: field("y").bin(Bin.step(4)) },
+    })
+  )
+  .mark(region({ fill: field("x").count() }));</code></pre>
+          </div>
+          <div class="code">
+            <div class="lang">SQL</div>
+            <pre><code class="language-sql">SELECT floor(x / 2.5) AS cx, floor(y / 4) AS cy, count(*) AS fill
+FROM catch
+GROUP BY cx, cy;</code></pre>
+          </div>
+        </div>
+        <p>
+          The spec for a density is already in the grammar. It is a
+          <code>partition</code> in two directions with a count on the fill.
+          Nothing about it is special to large data.
+        </p>
+
+        <h3>Timing</h3>
+        <p>
+          Over ten million rows the query took 41 ms and returned 627 rows, and
+          GoFish drew them in 60 ms.
+        </p>
+        <p>
+          This example is hard for a second reason. A fine grid has thousands of
+          cells, so the mark count is the limit again even though the data part
+          is one query.
+        </p>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/heatmap-fine-1e7.png"
+              width="760"
+              height="488"
+              alt="The same density at 143 by 94 cells"
+            />
+          </div>
+          <figcaption>The same data at 143 by 94 cells.</figcaption>
+        </figure>
+        <p>
+          At 143 by 94 cells the query still took 23 ms, but drawing 13,517
+          rectangles took 635 ms. The engine can draw a full grid of plain
+          rectangles as one image, because the mark table for it is a column of
+          fills on a regular grid. That is a drawing choice inside the engine,
+          the same kind as the column form of marks in #1009. The "Rendering and
+          progressive" tab has the numbers.
+        </p>
+
+        <div class="fork">
+          <h3>
+            Where I could be wrong about the JS spelling of a database source
+          </h3>
+          <div class="options">
+            <div class="option chosen">
+              <h4>
+                <code>connect()</code> and
+                <code>db.table("catch")</code> (chosen)
+              </h4>
+              <p>
+                From a <code>gofish-graphics/duckdb</code> subpath that is built
+                on Mosaic, so the user does not see Mosaic.
+              </p>
+              <div class="code">
+                <pre><code class="language-javascript">import { connect } from "gofish-graphics/duckdb";
+const db = await connect(); // DuckDB in the browser, or connect({ url }) for a server
+chart(db.table("catch"))
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }));</code></pre>
+              </div>
+            </div>
+            <div class="option">
+              <h4>With an existing Mosaic coordinator</h4>
+              <p>
+                A user who already has a Mosaic coordinator passes it in,
+                <code>connect({ coordinator })</code>, and the chart then shares
+                its cache and selections with vgplot charts on the page.
+              </p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <!-- Example 4 -->
+      <article class="card">
+        <h2>Example 4, one mark per row</h2>
+        <div class="pair">
+          <figure>
+            <div class="plate">
+              <img
+                src="img/line-raw.png"
+                width="707"
+                height="488"
+                alt="A random walk line drawn from all 100,000 points"
+              />
+            </div>
+            <figcaption>All 100,000 points.</figcaption>
+          </figure>
+          <figure>
+            <div class="plate">
+              <img
+                src="img/line-m4.png"
+                width="707"
+                height="488"
+                alt="The same line drawn from the 2,313 points kept by M4"
+              />
+            </div>
+            <figcaption>2,313 points kept by M4.</figcaption>
+          </figure>
+        </div>
+        <div class="code">
+          <div class="lang">JavaScript</div>
+          <pre><code class="language-javascript">chart(walk, { w: 600, h: 400 })
+  .flow(scatter({ x: "t", y: "v" }))
+  .mark(line());</code></pre>
+        </div>
+        <p>
+          There is no <code>by</code>, so the plan has no grouping and the mark
+          table is the two columns. A query cannot shrink it without changing
+          what is drawn. Reduction by pixel is the known answer, so the
+          prototype tested whether it leaves the picture alone. It does not,
+          quite.
+        </p>
+
+        <h3>Check</h3>
+        <h4>The line</h4>
+        <p>
+          M4 kept 2,313 of 100,000 points. The render went from about 8 seconds
+          to about 170 ms.
+        </p>
+        <figure class="single">
+          <div class="plate">
+            <img
+              src="img/line-m4-crop4x.png"
+              width="568"
+              height="240"
+              alt="A part of both lines at four times the size"
+            />
+          </div>
+          <figcaption>
+            A part of both lines at four times the size, all points on the left
+            and M4 on the right.
+          </figcaption>
+        </figure>
+        <p>
+          The two pictures differ in 9,568 pixels. Most differ by a small
+          amount, and 319 differ by half the color range or more. The shape and
+          every peak are kept. What changes is how dark the soft edge of the
+          stroke is where the line doubles back on itself many times. Keeping
+          every k-th point with the same budget is much worse (1,696 pixels
+          differ by half the range or more, and peaks are lost). From ten
+          million points, M4 took 39 ms in a typed-array loop or 69 ms in
+          DuckDB, and the line then drew in 113 ms.
+        </p>
+
+        <h4>The scatter</h4>
+        <p>Keeping one dot per occupied pixel kept 49,863 of 100,000 dots.</p>
+        <div class="pair">
+          <figure>
+            <div class="plate">
+              <img
+                src="img/scatter-a03-raw.png"
+                width="693"
+                height="488"
+                alt="A scatter of all 100,000 dots at 30% opacity"
+              />
+            </div>
+            <figcaption>All 100,000 dots at 30% opacity.</figcaption>
+          </figure>
+          <figure>
+            <div class="plate">
+              <img
+                src="img/scatter-a03-grid1px.png"
+                width="693"
+                height="488"
+                alt="The same scatter with one dot kept per pixel"
+              />
+            </div>
+            <figcaption>
+              One per pixel. Visibly lighter where dots are dense.
+            </figcaption>
+          </figure>
+        </div>
+        <div class="table-wrap">
+          <table class="wide">
+            <thead>
+              <tr>
+                <th>Dots</th>
+                <th class="n">Kept</th>
+                <th class="n">Different pixels</th>
+                <th>How different</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Solid, one per pixel</td>
+                <td class="n">49,863</td>
+                <td class="n">42,031</td>
+                <td>almost all by less than 3% of the color range</td>
+              </tr>
+              <tr>
+                <td>Solid, one per half pixel</td>
+                <td class="n">80,386</td>
+                <td class="n">19,720</td>
+                <td>almost all by less than 3%</td>
+              </tr>
+              <tr>
+                <td>30% opacity, one per pixel</td>
+                <td class="n">49,863</td>
+                <td class="n">70,465</td>
+                <td>visibly lighter where dots are dense</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          So reduction by pixel is close but it is not the same picture, and
+          with see-through dots it is plainly a different picture. It also only
+          starts to pay when there are many more rows than pixels. This decides
+          how it is used.
+        </p>
+        <ul>
+          <li>
+            <strong
+              >A line is reduced with M4 when its data is a relation and there
+              are more points than four per pixel column.</strong
+            >
+            Mosaic does the same by default. <code>explain()</code> says so, and
+            <code>exact: true</code> on the chart turns it off, which then
+            fetches every point or hits the row limit.
+          </li>
+          <li>
+            <strong>A scatter is never thinned by the engine.</strong> Above the
+            row limit it is an error that points to the density spec in example
+            3. Thinning changes what overlapping dots mean, and the density is
+            the honest picture of ten million points.
+          </li>
+          <li>
+            <strong>In-memory data is never reduced.</strong> The column form of
+            marks draws every row.
+          </li>
+        </ul>
+
+        <div class="fork">
+          <h3>
+            Where I could be wrong about a line and a scatter of ten million
+            rows
+          </h3>
+          <div class="options">
+            <div class="option chosen">
+              <h4>Reduce the line, never thin the scatter (chosen)</h4>
+              <p>
+                Reduce a line over a relation by default, because the shape and
+                the peaks are kept and nothing else can draw it, and never thin
+                a scatter.
+              </p>
+            </div>
+            <div class="option">
+              <h4>
+                Nothing is reduced unless the user asks (the stricter choice)
+              </h4>
+              <p>Both charts are errors above the row limit.</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <h2>How a spec maps to a query</h2>
+      <div class="table-wrap">
+        <table class="wide">
+          <thead>
+            <tr>
+              <th>In the spec</th>
+              <th>In the plan</th>
+              <th>SQL</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <code>by: "lake"</code> on any split (<code>spread</code>,
+                <code>stack</code>, <code>group</code>, <code>scatter</code>,
+                <code>treemap</code>, <code>table</code>)
+              </td>
+              <td>add a key</td>
+              <td><code>GROUP BY lake</code></td>
+            </tr>
+            <tr>
+              <td>a split nested inside a split</td>
+              <td>append to the key path</td>
+              <td><code>GROUP BY lake, species</code></td>
+            </tr>
+            <tr>
+              <td>size channel, <code>h: "count"</code></td>
+              <td>sum</td>
+              <td><code>sum(count)</code></td>
+            </tr>
+            <tr>
+              <td>position channel, <code>x: "weight"</code></td>
+              <td>mean</td>
+              <td><code>avg(weight)</code></td>
+            </tr>
+            <tr>
+              <td>color or text channel, <code>fill: "species"</code></td>
+              <td>first row</td>
+              <td><code>arg_min(species, rownum)</code></td>
+            </tr>
+            <tr>
+              <td>
+                <code>field("x").sum()</code>, <code>.mean()</code>,
+                <code>.median()</code>, <code>.count()</code>,
+                <code>.distinct()</code>
+              </td>
+              <td>that aggregate</td>
+              <td>
+                <code>sum</code>, <code>avg</code>, <code>median</code>,
+                <code>count</code>, <code>count(DISTINCT)</code>
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <code>partition({ by: field("x").bin(Bin.step(2.5)) })</code>
+              </td>
+              <td>key is the cell</td>
+              <td><code>GROUP BY floor(x / 2.5)</code></td>
+            </tr>
+            <tr>
+              <td><code>filter(field("x").between(a, b))</code></td>
+              <td>filter</td>
+              <td><code>WHERE x BETWEEN a AND b</code></td>
+            </tr>
+            <tr>
+              <td><code>join(right, { on })</code></td>
+              <td>join</td>
+              <td><code>JOIN ... USING (on)</code></td>
+            </tr>
+            <tr>
+              <td><code>field("lake").sort("count")</code></td>
+              <td>order by the group's sum</td>
+              <td><code>ORDER BY sum(count)</code></td>
+            </tr>
+            <tr>
+              <td>default group order (first appearance)</td>
+              <td>order by first row</td>
+              <td><code>ORDER BY min(rownum)</code></td>
+            </tr>
+            <tr>
+              <td>
+                a channel on an operator, e.g. <code>size</code> on
+                <code>stack</code>
+              </td>
+              <td>the same aggregate one level up</td>
+              <td><code>GROUP BY ROLLUP (lake, species)</code></td>
+            </tr>
+            <tr>
+              <td><code>field("count").normalize()</code></td>
+              <td>share of the parent group</td>
+              <td>
+                <code
+                  >sum(count) / sum(sum(count)) OVER (PARTITION BY lake)</code
+                >
+              </td>
+            </tr>
+            <tr>
+              <td>axis and color domains</td>
+              <td>summary of a column</td>
+              <td><code>min</code>, <code>max</code>, <code>DISTINCT</code></td>
+            </tr>
+            <tr>
+              <td>no <code>by</code> (a scatter of rows)</td>
+              <td>no grouping</td>
+              <td><code>SELECT x, y</code></td>
+            </tr>
+            <tr>
+              <td>
+                <code>derive(fn)</code>, a function accessor, a mark function
+              </td>
+              <td>cannot be planned</td>
+              <td>rows are fetched</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Three things stay in GoFish and are never part of a plan. Layout stays
+        (stack offsets, spread positions, treemap tiles, labels), and it runs on
+        the mark table. Empty cells of a <code>partition</code> stay, because
+        the cells come from the column's domain and not from the rows. Unit
+        checks stay, and they move earlier: a sum over a column that cannot be
+        summed is an error when the plan is made, before any row is read.
+      </p>
+
+      <h2>Escape hatches</h2>
+      <ul>
+        <li>
+          <strong>A function is the escape hatch.</strong>
+          <code>derive(fn)</code>, a function accessor and a mark function keep
+          working. Over in-memory data they run on a row view of the columns.
+          Over a relation they run on fetched rows.
+        </li>
+        <li>
+          <strong>A row limit on fetching.</strong> Fetching more rows than the
+          limit from a relation is an error that names the step and says what to
+          do. It is never a silent slow chart.
+          <div class="code">
+            <pre><code class="language-plaintext">[gofish] derive(fn) at flow step 2 needs every row of "catch"
+(10,000,000 rows, limit 100,000). A function cannot run in the database.
+Filter first, write the step with field expressions, or raise the limit
+with connect({ rowLimit }).</code></pre>
+          </div>
+        </li>
+        <li>
+          <strong>Raw SQL as a source.</strong>
+          <code>chart(db.sql("SELECT ... FROM catch WHERE ..."))</code>. Mosaic,
+          dbplyr and ibis all have this.
+        </li>
+        <li>
+          <strong><code>explain()</code>.</strong>
+          <code>chart(...).flow(...).mark(...).explain()</code> returns the plan
+          and, for a relation, the SQL. It also says where rows are fetched and
+          why.
+        </li>
+      </ul>
+    </section>
+
+    <!-- ============================== SCATTER AND LINE ============================== -->
+    <section class="tab" id="scatter-and-line">
+      <h2>Getting the scatter and the line fast</h2>
+      <p>
+        A query does not help these two charts, so a second investigation
+        profiled them, tried fixes inside today's engine as throwaway patches,
+        and built the column version outside the engine to see how low the cost
+        can go. The patches and results are in
+        <code>tests/tmp/scaling/perf/</code>. The machine was busy during these
+        runs, so the baseline here (6.8 s at 100,000 points) is lower than the
+        8.0 s in the first table.
+      </p>
+
+      <h3>What to build</h3>
+      <ul>
+        <li>
+          <strong>A scatter is one node that holds columns.</strong> This is the
+          direction agreed in #1009. Layout places the collection once, with one
+          scale per axis. The engine makes a node per point only when something
+          needs one (a name that <code>selectAll</code> reads, a label per mark,
+          a <code>relate</code>, a mark function).
+        </li>
+        <li>
+          <strong>A line asks for points, not nodes.</strong> The connector asks
+          the operator that places its anchors for their center points. A
+          scatter placed by data alone answers from its two columns and its
+          scale, and no anchor nodes are made. A line over stacked or spread
+          marks gets its points from the laid-out nodes, as it does today. This
+          is one rule, and the column case is the one where the answer needs no
+          layout.
+        </li>
+        <li>
+          <strong>The two fixes below</strong> (loops, string paint) can merge
+          now.
+        </li>
+      </ul>
+
+      <h3>What the column form gives</h3>
+      <p>
+        The prototype computes what the engine computes for these charts, from
+        columns, outside the engine. Its circle positions match the engine's to
+        within 0.0000000000001 pixels at 10,000 points, and its line path
+        matches to the same order.
+      </p>
+      <div class="table-wrap">
+        <table class="wide">
+          <thead>
+            <tr>
+              <th class="n">Points</th>
+              <th class="n">Engine today</th>
+              <th class="n">Columns: extents and positions</th>
+              <th class="n">Then paint, SVG</th>
+              <th class="n">Then paint, canvas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">10,000</td>
+              <td class="n">548 ms</td>
+              <td class="n">0.4 ms</td>
+              <td class="n">17 ms</td>
+              <td class="n">14 ms</td>
+            </tr>
+            <tr>
+              <td class="n">100,000</td>
+              <td class="n">6,796 ms</td>
+              <td class="n">0.8 ms</td>
+              <td class="n">197 ms</td>
+              <td class="n">121 ms</td>
+            </tr>
+            <tr>
+              <td class="n">1,000,000</td>
+              <td class="n">crashes</td>
+              <td class="n">6 ms</td>
+              <td class="n">2,517 ms</td>
+              <td class="n">1,191 ms</td>
+            </tr>
+            <tr>
+              <td class="n">10,000,000</td>
+              <td class="n">crashes</td>
+              <td class="n">68 ms</td>
+              <td class="n">fails</td>
+              <td class="n">12,259 ms</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The arithmetic for a scatter is one multiply and one add per point per
+        axis. At 100,000 points that is under a millisecond, against about 6
+        seconds in the engine. What is left after that is the browser drawing
+        the marks.
+      </p>
+      <div class="table-wrap">
+        <table class="wide">
+          <thead>
+            <tr>
+              <th class="n">Line points</th>
+              <th class="n">Engine today</th>
+              <th class="n">Columns, one SVG path</th>
+              <th class="n">Columns, canvas stroke</th>
+              <th class="n">Columns, M4 then SVG path</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">100,000</td>
+              <td class="n">6,880 ms</td>
+              <td class="n">114 ms</td>
+              <td class="n">22 ms</td>
+              <td class="n">18 ms</td>
+            </tr>
+            <tr>
+              <td class="n">1,000,000</td>
+              <td class="n">crashes</td>
+              <td class="n">1,370 ms</td>
+              <td class="n">190 ms</td>
+              <td class="n">18 ms</td>
+            </tr>
+            <tr>
+              <td class="n">10,000,000</td>
+              <td class="n">crashes</td>
+              <td class="n">fails</td>
+              <td class="n">910 ms</td>
+              <td class="n">205 ms</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        These are floors, not promises. The engine version has to keep axes,
+        legends and everything else a chart has, and those cost about 10 ms.
+      </p>
+
+      <h3>Where the time and memory go</h3>
+      <p>
+        Every point is a full node, and the engine does the same work for each
+        one.
+      </p>
+      <ul>
+        <li>
+          <strong>Placement.</strong> For each point and each axis, the layout
+          solver builds about 40 small formula nodes and about 12 lines, and
+          makes about 10 passes over the point's position constraint. Every
+          point has the same rule with different numbers. This is 3.9 of 10
+          seconds of busy time at 100,000 points.
+        </li>
+        <li>
+          <strong>Walks that find nothing.</strong> A render walks the whole
+          tree about 12 times. For a plain scatter, the walks for color scales,
+          names, references, labels and coordinate transforms visit every point
+          and have nothing to do.
+        </li>
+        <li>
+          <strong>Memory.</strong> Each point keeps about 14 KB and causes about
+          64 KB of allocation per render. Garbage collection is 21% to 27% of
+          the time.
+        </li>
+        <li>
+          <strong>One term grows faster than the row count.</strong> A step that
+          finds the outer edge of all the lines sorts every line. This is the
+          only such term that was measured.
+        </li>
+        <li>
+          <strong>The line.</strong> It builds two nodes per point, an invisible
+          anchor and a reference to it. The line reads one thing from each
+          anchor, its center point. So 200,000 nodes exist to deliver 100,000
+          pairs of numbers.
+        </li>
+      </ul>
+
+      <h3>What fixes inside today's design give</h3>
+      <div class="table-wrap">
+        <table class="wide">
+          <thead>
+            <tr>
+              <th>Fix</th>
+              <th class="n">Scatter, 100,000</th>
+              <th class="n">Line, 100,000</th>
+              <th>Effect</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Today</td>
+              <td class="n">6,796 ms</td>
+              <td class="n">6,880 ms</td>
+              <td>Both fail at 300,000 with a stack overflow</td>
+            </tr>
+            <tr>
+              <td>Loops in place of spread calls</td>
+              <td class="n">6,829 ms</td>
+              <td class="n">6,704 ms</td>
+              <td>
+                No time gain. 300,000 points no longer fail, but take 30 to 116
+                s
+              </td>
+            </tr>
+            <tr>
+              <td>Drop lines that cannot be on the edge before sorting</td>
+              <td class="n">not recorded</td>
+              <td class="n">6,628 ms</td>
+              <td>Removes the term that grows faster than the row count</td>
+            </tr>
+            <tr>
+              <td>Paint the SVG as one string</td>
+              <td class="n">5,424 ms</td>
+              <td class="n">6,423 ms</td>
+              <td>Scatter paint goes from 779 ms to 77 ms</td>
+            </tr>
+            <tr>
+              <td>Fewer passes over the constraints</td>
+              <td class="n">6,398 ms</td>
+              <td class="n">6,840 ms</td>
+              <td>Nothing measurable</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Each row adds to the ones above it. Every fix left the SVG at 10,000
+        points identical. Together they make the scatter about 20% faster and do
+        little for the line. A million points crashes the browser tab with every
+        fix applied. So tuning the engine as it is does not reach large data.
+        The first and third fixes are still worth merging, because one removes a
+        hard failure and the other is a tenfold cut in paint time for no change
+        in output.
+      </p>
+
+      <h2>What this means for vectorizing the pipeline</h2>
+      <p>
+        <code>.flow(a, b)</code> is not a pipeline over data today. Each
+        operator wraps the mark below it. When the chart runs, the full row
+        array is pushed down once, each split makes a fresh array per group, and
+        the mark is called once per group with one promise per node. Three parts
+        of that can run on whole columns.
+      </p>
+      <ol>
+        <li>
+          <strong>Nested splits become one grouping.</strong>
+          <code>spread({ by: "lake" })</code> then
+          <code>stack({ by: "species" })</code> is one pass that gives every row
+          a group number for the key path <code>lake, species</code>. The tree
+          of groups is rebuilt from the distinct key paths, which is 48 entries
+          and not a million.
+        </li>
+        <li>
+          <strong>A mark's channels become column folds.</strong> The mark is
+          not called once per group. Each channel is one fold of one column over
+          all groups at once, and the result is a column of the mark table. This
+          is the data side of the column form of marks in #1009. A scatter with
+          no <code>by</code> is the case where the fold does nothing and the
+          mark table is the input columns.
+        </li>
+        <li>
+          <strong>A data step after a split becomes one call.</strong> A
+          <code>derive</code> placed after a split runs once per group today,
+          which is one bridge call per group in Python. With a plan, a
+          declarative step after a split is one operation partitioned by the key
+          path, e.g. <code>normalize</code> is a share within the parent group.
+        </li>
+      </ol>
+      <p>
+        What stops this is always the same thing, an opaque function. The engine
+        cannot fold a column through a function it cannot read. The list in JS
+        is <code>derive(fn)</code>, a function predicate in <code>filter</code>,
+        a function <code>by</code>, a function channel accessor,
+        <code>.label(fn)</code> and a mark function. Python already rejects a
+        function <code>by</code>.
+      </p>
+    </section>
+
+    <!-- ============================== RENDERING AND PROGRESSIVE ============================== -->
+    <section class="tab" id="rendering">
+      <h2>Rendering: SVG, canvas, WebGL, WebGPU</h2>
+      <figure class="single">
+        <div class="plate">
+          <img
+            src="img/density-image-1e6.png"
+            width="693"
+            height="488"
+            alt="A density of one million points drawn as one image inside a GoFish chart with axes"
+          />
+        </div>
+        <figcaption>
+          A density of one million points drawn as one image inside a GoFish
+          chart.
+        </figcaption>
+      </figure>
+      <p>
+        This section answers three questions. Does the drawing backend need to
+        be part of this design? Can it be done separately? Does it help large
+        scatterplots and heatmaps?
+      </p>
+      <p>
+        The engine lowers a chart to a display list, which is a flat list of
+        positioned rectangles, ellipses, paths, text and images in final pixels
+        (#608). A painter is the code that draws a display list. Today there is
+        one painter, and it makes SVG elements.
+      </p>
+
+      <h3>Heatmaps need an image, not a new backend</h3>
+      <p>
+        A density grid is one image. The display list already has an image item,
+        and the SVG painter already draws it. Counting a million points into a
+        400 by 300 grid and drawing the grid took about 7 ms (the picture
+        above).
+      </p>
+      <p>Two things are missing, and both are small.</p>
+      <ul>
+        <li>
+          <code>image()</code> cannot be placed or sized in data space.
+          <code>rect</code> can. The picture above uses a workaround (two
+          invisible corner points set the axes, and the image is stretched over
+          the plot).
+        </li>
+        <li>
+          The engine has to notice that a mark table is a full regular grid of
+          plain rectangles and lower it to one image item in place of one item
+          per cell. The spec stays a <code>partition</code> with a
+          <code>rect</code>.
+        </li>
+      </ul>
+      <p>
+        A heatmap grid was painted eight ways from the same display list. All
+        eight give the same pixels at 150 by 100 cells.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="n">Cells</th>
+              <th class="n">SVG, GoFish painter today</th>
+              <th class="n">Canvas, one <code>fillRect</code> per cell</th>
+              <th class="n">One image</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">10,000</td>
+              <td class="n">100 ms</td>
+              <td class="n">33 ms</td>
+              <td class="n">33 ms</td>
+            </tr>
+            <tr>
+              <td class="n">100,000</td>
+              <td class="n">1,001 ms</td>
+              <td class="n">78 ms</td>
+              <td class="n">33 ms</td>
+            </tr>
+            <tr>
+              <td class="n">1,000,000</td>
+              <td class="n">11,772 ms</td>
+              <td class="n">551 ms</td>
+              <td class="n">52 ms</td>
+            </tr>
+            <tr>
+              <td class="n">10,000,000</td>
+              <td class="n">crashes</td>
+              <td class="n">5,429 ms</td>
+              <td class="n">380 ms</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        Times are to the first painted frame, and 33 ms is the lowest the method
+        can measure. One image also pans at 60 frames a second up to ten million
+        cells.
+      </p>
+
+      <h3>Drawing is not what is slow today</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Chart at 100,000 rows</th>
+              <th class="n">Total</th>
+              <th class="n">Lower and paint</th>
+              <th class="n">Share</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Scatter, 100,000 circles</td>
+              <td class="n">8,048 ms</td>
+              <td class="n">1,045 ms</td>
+              <td class="n">13%</td>
+            </tr>
+            <tr>
+              <td>Line, one path</td>
+              <td class="n">8,006 ms</td>
+              <td class="n">171 ms</td>
+              <td class="n">2%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        The rest of the time is spent per node before anything is drawn. Layout
+        is 63% of the scatter, and each point holds about 9 KB of memory. A
+        faster painter today would make the 8 second scatter take 7 seconds, and
+        the chart would still fail at 300,000 rows. So a new painter is not the
+        first step for any chart.
+      </p>
+
+      <h3>It is a separate piece of work</h3>
+      <p>
+        A painter reads the display list and nothing else. The plan, the column
+        engine and layout all finish before the display list exists, so a canvas
+        or WebGL painter does not touch them and they do not touch it. #608
+        built the display list for this purpose, and #42 is the open issue that
+        asks for more backends. The painter work can start at any time and merge
+        in any order with the rest of this proposal. It only pays off after step
+        4.
+      </p>
+
+      <h3>Large scatterplots need a painter after marks are columns</h3>
+      <p>
+        Once marks are stored as columns (#1009), making the display list for a
+        large scatter is cheap, and the SVG painter is the next limit. SVG paint
+        costs about 10 microseconds per element and grows in step with the
+        count, so a million circles is about 10 seconds of paint. That is the
+        point where a canvas pays off.
+      </p>
+      <p>
+        The same display list of circles was painted seven ways on the real GPU
+        (<code>tests/tmp/scaling/render/</code>). Times are to the first painted
+        frame, then the time per frame when every circle moves. The lowest
+        values the method can measure are 33 ms and 16.7 ms.
+      </p>
+      <div class="table-wrap">
+        <table class="wide">
+          <thead>
+            <tr>
+              <th class="n">Circles</th>
+              <th class="n">SVG, GoFish painter today</th>
+              <th class="n">SVG, plain elements</th>
+              <th class="n">Canvas 2D, one path</th>
+              <th class="n">WebGL</th>
+              <th class="n">WebGPU</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="n">10,000</td>
+              <td class="n">100 / 20</td>
+              <td class="n">34 / 20</td>
+              <td class="n">33 / 17</td>
+              <td class="n">33 / 17</td>
+              <td class="n">34 / 17</td>
+            </tr>
+            <tr>
+              <td class="n">100,000</td>
+              <td class="n">884 / 196</td>
+              <td class="n">317 / 205</td>
+              <td class="n">50 / 22</td>
+              <td class="n">33 / 17</td>
+              <td class="n">33 / 17</td>
+            </tr>
+            <tr>
+              <td class="n">1,000,000</td>
+              <td class="n">9,290 / 2,523</td>
+              <td class="n">3,408 / 2,664</td>
+              <td class="n">201 / 203</td>
+              <td class="n">35 / 19</td>
+              <td class="n">66 / 20</td>
+            </tr>
+            <tr>
+              <td class="n">10,000,000</td>
+              <td class="n">crashes</td>
+              <td class="n">did not finish</td>
+              <td class="n">1,910 / timed out</td>
+              <td class="n">236 / 288</td>
+              <td class="n">292 / 271</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What the numbers say:</p>
+      <ul>
+        <li>
+          <strong>Today's SVG painter costs much more than SVG has to.</strong>
+          It makes one SolidJS element per item. That is about 2.7 times slower
+          than making plain elements, and it keeps about 2.2 KB of memory per
+          item, which is 2.2 GB at a million items. Painting from one string,
+          the fix tried in the scatter investigation, removes this.
+        </li>
+        <li>
+          <strong
+            >SVG is fine to about 100,000 items for a first paint and about
+            10,000 for anything that moves.</strong
+          >
+          A hover highlight on an SVG of 100,000 circles already drops frames
+          (23 ms for one fill change).
+        </li>
+        <li>
+          <strong
+            >Canvas 2D is about ten times faster than SVG to first paint</strong
+          >
+          and reaches a million items in 0.2 to 0.8 seconds. Its redraw time
+          still grows with the item count, so it holds 60 frames a second only
+          to about 10,000 items.
+        </li>
+        <li>
+          <strong>WebGL draws a million circles in about 30 ms</strong> and pans
+          them at 60 frames a second. Its cost is not the GPU. It is JavaScript
+          reading display list objects into arrays, so a display list stored as
+          columns makes it cheaper again.
+        </li>
+        <li><strong>WebGPU is no faster than WebGL here.</strong></li>
+        <li>
+          <strong
+            >Finding the mark under the pointer does not need elements.</strong
+          >
+          A grid index over a million points builds in 7 ms and answers in under
+          a microsecond.
+        </li>
+      </ul>
+      <h3>Painter order</h3>
+      <ol class="steps">
+        <li>
+          <strong>Marks as columns.</strong> No painter helps before this.
+        </li>
+        <li>
+          <strong
+            >One SVG painter that does not make a SolidJS element per
+            item</strong
+          >
+          (#1337). This is cheap and helps every chart today.
+        </li>
+        <li>
+          <strong
+            >A full grid of plain rectangles is painted as one image.</strong
+          >
+          Any painter can do this, SVG included.
+        </li>
+        <li>
+          <strong>A canvas 2D painter for the mark layer.</strong> It draws
+          every kind of item the display list has, with the same meaning as SVG,
+          and it covers static charts up to about a million marks. Axes, labels
+          and text stay SVG and sit on top, so text looks the same and can still
+          be selected.
+        </li>
+        <li>
+          <strong
+            >A WebGL painter for collections of circles and rectangles</strong
+          >, when a chart with 100,000 or more marks has to pan, zoom or
+          animate. It only has to handle the column form of a mark, which is the
+          case it is good at.
+        </li>
+        <li>
+          <strong>WebGPU</strong>, not now. It measured the same as WebGL, and
+          it would only help if the layout arithmetic itself moved to the GPU.
+        </li>
+      </ol>
+      <p>
+        The painter only ever sees in-memory scatters, because a scatter over a
+        relation above the row limit is an error (example 4). So the sizes that
+        matter for a painter are the ones that fit in the browser, which is up
+        to a few million points.
+      </p>
+
+      <h3>What a painter changes for the user</h3>
+      <p>
+        The engine picks the painter from the number of display items, which
+        follows the rule in #1009 that a user does not choose a fast path. A
+        render option forces one, e.g.
+        <code>render(el, { painter: "svg" })</code>. Three behaviors are
+        different when the marks are on a canvas.
+      </p>
+      <ul>
+        <li>
+          <strong>Hover and selection.</strong> There is no element per mark, so
+          finding the mark under the pointer uses an index built from the mark
+          table.
+        </li>
+        <li>
+          <strong>Export.</strong> An SVG file of the chart still has to be
+          possible, so the SVG painter stays and the export path uses it.
+        </li>
+        <li>
+          <strong>Reaching into the DOM.</strong> A user who styles or selects
+          the SVG elements of the marks directly cannot do that on a canvas.
+        </li>
+      </ul>
+
+      <h2>Progressive visualization</h2>
+      <p>
+        A progressive visualization shows a first picture from part of the data
+        and improves it as more arrives, so the user does not wait for the whole
+        run. This proposal does not design it. This section says what it would
+        need from the design here, so that building it later does not mean
+        redoing the plan.
+      </p>
+
+      <h3>Three choices to make now so this stays open</h3>
+      <p>None of them costs much, and two of them are needed anyway.</p>
+      <ol>
+        <li>
+          <strong>The mark table keeps the parts, not only the result.</strong>
+          A mean is stored as a sum and a count and divided at the end. This is
+          what lets a chunk be merged in. It also fixes the nested mean that
+          failed in example 1, because an outer level can then be combined from
+          the inner level correctly. Mosaic's fast linked selections need the
+          same thing.
+        </li>
+        <li>
+          <strong>A mark is identified by its key path.</strong> The bar for
+          Lake A and Salmon is the same bar in every update. Incremental layout
+          (#674) and stable identity keys (#673) already ask for this, and a
+          transition between two updates is the update animation in #831.
+        </li>
+        <li>
+          <strong>Running a plan gives a sequence of mark tables.</strong> Today
+          the sequence has one item. A progressive source gives several. The
+          engine is already asynchronous at this point, so this is a choice of
+          type, not new machinery.
+        </li>
+      </ol>
+
+      <h3>What the plan already gives</h3>
+      <p>
+        After a chunk arrives, the new mark table is the old mark table combined
+        with the aggregate of the chunk. That works for exactly the aggregates
+        that can be combined from parts, which are GoFish's default channel
+        rules (sum, count, and mean kept as a sum and a count). The plan knows
+        which aggregates a chart uses, so it knows whether a chart can be
+        progressive. A median or a distinct count cannot be combined this way
+        and needs either a sketch or a fresh run per update.
+      </p>
+
+      <h3>
+        Two rules in today's engine that are unstable when data arrives in parts
+      </h3>
+      <p>These are the places progressive work would force a decision.</p>
+      <ul>
+        <li>
+          <strong>Group order is first appearance.</strong> With chunks read in
+          row order this is stable, because a group keeps its place once seen.
+          With random reading a group's first row can turn up later, and the
+          bars change places. A column with a declared order does not have this
+          problem.
+        </li>
+        <li>
+          <strong>Axis domains come from the data.</strong> A domain of a raw
+          column is cheap to get up front as its own small query, so position
+          axes can be right from the first frame. A domain of an aggregate, e.g.
+          the height of the tallest bar, grows as rows arrive. The known answer
+          (online aggregation, Hellerstein et al., 1999) is to scale each
+          partial sum up to an estimate of the final value, so bars settle
+          instead of growing. An estimate has an error, and showing it connects
+          to the uncertainty work in #980.
+        </li>
+      </ul>
+      <p>
+        Cells of a <code>partition</code> are already stable, because they are
+        defined on the space and not on the rows seen so far.
+      </p>
+      <p>
+        Drawing in parts is a separate thing with the same name. A canvas
+        painter can draw a large in-memory scatter over several frames. That
+        belongs to the painter and needs nothing from the plan.
+      </p>
+
+      <h3>ProVega</h3>
+      <p>
+        ProVega (Filosa, Blasilli, Martino and Angelini, arXiv 2604.02096, April
+        2026) is the recent grammar for this. It is built on Vega-Lite.
+      </p>
+      <ul>
+        <li>
+          The marks and encodings of a spec do not change. The user adds one
+          top-level <code>provega</code> block.
+        </li>
+        <li>
+          The block says how data arrives: in chunks of rows (<code
+            >chunking.type: "data"</code
+          >, with a chunk size, a frequency and a sequential or random reading
+          order), as steps of a computation such as t-SNE
+          (<code>"process"</code>), or both. A live feed is a WebSocket URL in
+          <code>data</code>.
+        </li>
+        <li>
+          The block also asks for controls (play, pause, step), a progress bar,
+          time to completion, and a highlight on marks that changed.
+        </li>
+        <li>
+          It runs in the browser. Each chunk is inserted into the Vega dataset
+          and the whole chart is computed again.
+        </li>
+        <li>
+          The paper does not say which aggregates can be updated from a chunk,
+          how axes behave as data arrives, or how to show how sure an early
+          picture is. It has no database backend.
+        </li>
+      </ul>
+      <p>
+        Two things carry over. Progression is a property of how the data arrives
+        and not of the marks, which fits this proposal: it would be an option on
+        the source. And the three questions the paper leaves open are the ones a
+        plan can answer.
+      </p>
+    </section>
+
+    <!-- ============================== BACKGROUND ============================== -->
+    <section class="tab" id="background">
+      <h2>Approaches</h2>
+
+      <h3>A. One plan, two places to run it (recommended)</h3>
+      <div class="cols-2">
+        <div class="code">
+          <div class="lang">JavaScript</div>
+          <pre><code class="language-javascript">// In memory. Nothing changes, and it runs on columns.
+chart(catchData)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }));
+
+// In a database. The source is the only new thing.
+import { connect } from "gofish-graphics/duckdb";
+const db = await connect(); // DuckDB in the browser, or connect({ url }) for a server
+chart(db.table("catch"))
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }));</code></pre>
+        </div>
+        <div class="code">
+          <div class="lang">Python</div>
+          <pre><code class="language-python"># Already valid today. The change is that the table stays in the kernel.
+con = duckdb.connect("lakes.duckdb")
+chart(con.table("catch")).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
+chart(pl.scan_parquet("catch/*.parquet")).flow(spread(by="lake", dir="x")).mark(rect(h="count"))</code></pre>
+        </div>
+      </div>
+      <p>
+        The engine makes a plan for each chart at the point where the whole
+        pipeline is visible as a list (<code>ChartBuilder.resolveNamed</code>).
+        The plan is part of the serialized form, so Python gets it. A column
+        engine in GoFish runs plans and replaces the row arrays. A relation as
+        chart data sends the plan to its owner.
+      </p>
+      <ul>
+        <li>
+          <strong>Composes with.</strong> Every operator, because the plan is
+          made from the operators' own serialized form and layout still runs on
+          the result. Nested charts and mark functions work, with a mark
+          function being a point where rows are fetched for that group.
+        </li>
+        <li>
+          <strong>Desugars into.</strong> The current meaning exactly. The check
+          during the change is that every story produces the same display list.
+        </li>
+        <li>
+          <strong>Overlap.</strong> None with existing operators. It adds no
+          operator.
+        </li>
+        <li>
+          <strong>One engine.</strong> The column engine is not a fast path
+          beside the row path. It replaces it. A group's rows are a view over
+          the columns, read only when something asks (a label function, a
+          tooltip, <code>selectAll</code>).
+        </li>
+        <li>
+          <strong>Awkward.</strong> Reading a mark's rows is a fetch when the
+          data is in a database, so a tooltip over a database chart is
+          asynchronous.
+        </li>
+        <li>
+          <strong>New terms.</strong> <code>connect</code>, <code>table</code>,
+          <code>explain</code>. All three are the common names (ibis and DuckDB
+          use <code>connect</code> and <code>table</code>, polars uses
+          <code>explain</code>).
+        </li>
+      </ul>
+
+      <h3>B. Every chart is a Mosaic client</h3>
+      <div class="code">
+        <div class="lang">JavaScript</div>
+        <pre><code class="language-javascript">chart(catchData)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }));
+// same spec, but catchData is first copied into DuckDB</code></pre>
+      </div>
+      <p>
+        GoFish loads DuckDB and Mosaic always. In-memory arrays are loaded into
+        DuckDB, and every chart asks the coordinator for its mark table.
+      </p>
+      <ul>
+        <li>
+          <strong>Easy.</strong> One way to run plans. Linked selections across
+          charts, and with vgplot charts on the same page, come with it.
+        </li>
+        <li>
+          <strong>Awkward.</strong> A download of 5 to 8 MB before the first
+          chart. Loading a million row objects costs 505 ms, which is more than
+          grouping them in JS. Small charts, which are most charts, get slower.
+          Diagrams with a few dozen rows gain nothing. #41 already asks that
+          DuckDB not be bundled by default.
+        </li>
+      </ul>
+
+      <h3>C. Columns only, no database</h3>
+      <p>
+        Only the column engine. A relation is collected into Arrow and sent to
+        JS, as today.
+      </p>
+      <ul>
+        <li>
+          <strong>Easy.</strong> No new source and no connector. It is step 1 of
+          approach A.
+        </li>
+        <li>
+          <strong>Awkward.</strong> The data has to fit in the browser. From
+          Python, a table of ten million rows still crosses the bridge whole to
+          draw 48 rectangles.
+        </li>
+      </ul>
+
+      <h3>D. The user marks it (foil)</h3>
+      <div class="code">
+        <div class="lang">JavaScript, not proposed</div>
+        <pre><code class="language-javascript">chart(db.table("catch")).aggregate({
+  by: ["lake", "species"],
+  h: sum("count"),
+}); // not proposed
+chart(points)
+  .flow(scatter({ x: "x", y: "y" }))
+  .mark(rasterize(circle())); // not proposed</code></pre>
+      </div>
+      <p>
+        This is the Swift Charts and dbplot model. It repeats in a second place
+        what the spec already says, and #1009 rejected it.
+      </p>
+
+      <h2>The independent choices</h2>
+      <h3>Where the plan runs</h3>
+      <p>
+        In the column engine inside GoFish, in the host that owns the data (the
+        Python kernel), or in a database. These are not rival designs. They are
+        places to run the same plan, picked by where the data is.
+      </p>
+      <h3>What happens at an opaque function</h3>
+      <p>Three options:</p>
+      <ul>
+        <li>
+          Fetch rows at that point and run the function on them, with an error
+          above a row limit. This is VegaFusion's rule and dbplyr's
+          <code>collect()</code>.
+        </li>
+        <li>
+          Parse the function's source, as Arquero does. This works in JS only.
+        </li>
+        <li>Refuse functions over a relation.</li>
+      </ul>
+      <h3>What happens to one mark per row</h3>
+      <p>Three options, and they stack:</p>
+      <ul>
+        <li>
+          Store the marks as columns (#1009). The picture and the spec are
+          unchanged.
+        </li>
+        <li>
+          Reduce by pixel before making marks, when that cannot change the
+          picture.
+        </li>
+        <li>
+          Leave it to the user to ask for a density with <code>partition</code>,
+          which is the better picture for millions of points anyway.
+        </li>
+      </ul>
+      <h3>How a database table is named in a spec</h3>
+      <p>
+        In Python the answer exists. <code>chart(con.table("catch"))</code> is
+        accepted today. JS needs a spelling.
+      </p>
+
+      <h2>Prior work</h2>
+      <div class="table-wrap">
+        <table class="wide">
+          <thead>
+            <tr>
+              <th>System</th>
+              <th>Does the user change the spec for large data?</th>
+              <th>Who decides what runs in the database</th>
+              <th>What happens to a function</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>VegaFusion</td>
+              <td>No. One line turns it on.</td>
+              <td>
+                A planner. It sends the longest run of supported transforms to
+                the server.
+              </td>
+              <td>The split stops at the first unsupported transform.</td>
+            </tr>
+            <tr>
+              <td>VegaPlus (Yang et al.)</td>
+              <td>No</td>
+              <td>A planner with a learned cost model</td>
+              <td>Runs in Vega</td>
+            </tr>
+            <tr>
+              <td>Polaris and Tableau</td>
+              <td>No</td>
+              <td>
+                The shelf spec is compiled to filter, partition and aggregate
+                queries. Measures sum by default.
+              </td>
+              <td>There are none</td>
+            </tr>
+            <tr>
+              <td>Mosaic and vgplot</td>
+              <td>
+                Mostly no, but channels use SQL helpers (<code>vg.bin</code>,
+                <code>vg.count</code>)
+              </td>
+              <td>
+                The author of each mark writes its query by hand. The
+                coordinator caches and merges queries.
+              </td>
+              <td>Never sent. JS works on the result.</td>
+            </tr>
+            <tr>
+              <td>dbplyr</td>
+              <td>No. Same verbs on a lazy table.</td>
+              <td>Everything until <code>collect()</code></td>
+              <td>Passed to SQL as written, or an error in strict mode</td>
+            </tr>
+            <tr>
+              <td>polars</td>
+              <td>No. Lazy is the same API.</td>
+              <td>The optimizer, until <code>collect()</code></td>
+              <td>
+                Runs as a black box. Polars warns when an expression would do.
+              </td>
+            </tr>
+            <tr>
+              <td>Arquero</td>
+              <td>No</td>
+              <td>
+                Arquero parses the arrow function's source and compiles what it
+                understands
+              </td>
+              <td>
+                Closures need <code>escape(fn)</code>, which cannot aggregate
+                and cannot be serialized
+              </td>
+            </tr>
+            <tr>
+              <td>ggplot2 on a lazy table</td>
+              <td>No</td>
+              <td>Nothing is sent. It collects the whole table.</td>
+              <td>Not applicable</td>
+            </tr>
+            <tr>
+              <td>dbplot</td>
+              <td>
+                Yes, <code>dbplot_histogram</code>, <code>dbplot_raster</code>
+              </td>
+              <td>The user, by calling a different function</td>
+              <td>Not applicable</td>
+            </tr>
+            <tr>
+              <td>Swift Charts</td>
+              <td>
+                Yes, <code>PointPlot</code> in place of <code>PointMark</code>
+              </td>
+              <td>The user</td>
+              <td>Not applicable</td>
+            </tr>
+            <tr>
+              <td>HoloViews and datashader</td>
+              <td>Yes, wrap in <code>rasterize(...)</code></td>
+              <td>The user opts in, then it is automatic per view</td>
+              <td>Not applicable</td>
+            </tr>
+            <tr>
+              <td>deck.gl</td>
+              <td>Yes, a separate aggregation layer</td>
+              <td>The user</td>
+              <td>Not applicable</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>What to take from each:</p>
+      <ul>
+        <li>
+          <strong>VegaFusion</strong> is the model for "no change to the
+          grammar". Three of its planner steps apply directly. It splits at the
+          first step it cannot run. It computes scale domains as their own small
+          queries, so the full table never moves. It turns an aggregate inside a
+          facet into one flat aggregate with the facet keys added, which is the
+          nested split case above.
+        </li>
+        <li>
+          <strong>Polaris</strong> gives the formal version of the mapping table
+          above. It also separates "nest" (only the combinations that exist)
+          from "cross" (every combination). A nested GoFish split is a nest.
+        </li>
+        <li>
+          <strong>Mosaic</strong> is a place to run queries, not a planner. Each
+          Mosaic client writes its own query. GoFish would make the query from
+          the spec and hand it to Mosaic's coordinator, and in return gets
+          caching, merging of queries in the same frame, DuckDB in the browser
+          or on a server, and Arrow results.
+        </li>
+        <li>
+          <strong>Arquero</strong> shows that a JS arrow function can stay the
+          user's syntax and still be compiled, by reading its source. It only
+          works for JS, and a Python lambda has no equal path (polars reads the
+          bytecode and only warns).
+        </li>
+        <li>
+          <strong>Swift Charts, dbplot and deck.gl</strong> are the foils. They
+          make the user pick a second API for large data. #1009 already rejected
+          this.
+        </li>
+        <li>
+          <strong>VegaPlus</strong> measured that sending everything to the
+          database can be slower, and that the client wins at about 50,000 to
+          100,000 rows. Our own numbers agree. This is why the default place to
+          run a plan is the column engine, and the database is used when the
+          data is already there.
+        </li>
+        <li>
+          <strong>Gray et al. (the data cube paper)</strong> sorts aggregates
+          into ones that can be combined from parts (count, sum, min, max, and
+          mean as sum and count) and ones that cannot (median, distinct count).
+          GoFish's default channel rules are all in the first group. Mosaic's
+          fast linked selections need the same condition.
+        </li>
+        <li>
+          <strong>Kindlmann and Scheidegger</strong> give the test for reduction
+          by pixel. A reduction is safe when every change it hides in the data
+          is one the picture could not show anyway.
+        </li>
+      </ul>
+      <p>
+        DuckDB in the browser is about 36 MB, or 5 to 8 MB compressed. That is
+        the reason it stays out of the core bundle, as #41 (the Mosaic issue)
+        says.
+      </p>
+
+      <h2>Terms</h2>
+      <ul>
+        <li>
+          <strong>Data part of a spec.</strong> The steps that decide which rows
+          go into which mark and what value each channel gets. It is the
+          <code>by</code> keys, bins, filters, joins and channel aggregation.
+          The rest of the spec is layout and drawing.
+        </li>
+        <li>
+          <strong>Plan.</strong> A description of the data part as a list of
+          table operations (filter, group, aggregate, order), written down
+          before anything runs.
+        </li>
+        <li>
+          <strong>Mark table.</strong> The result of running a plan. It has one
+          row per mark and one column per channel.
+        </li>
+        <li>
+          <strong>Column engine.</strong> Code that stores a table as one array
+          per column and works on whole columns, in place of one object per row.
+          "Vectorized" means the same thing here.
+        </li>
+        <li>
+          <strong>Pushdown.</strong> Running the plan where the data already is
+          (a database, or the Python kernel) and moving only the result.
+        </li>
+        <li>
+          <strong>Relation.</strong> A table that lives in a database and is
+          named, not loaded. A DuckDB relation and a polars
+          <code>LazyFrame</code> are relations.
+        </li>
+        <li>
+          <strong>Opaque function.</strong> A JS or Python function in a spec.
+          The engine can call it but cannot see what it does, so it cannot be
+          turned into a query.
+        </li>
+        <li>
+          <strong>Reduction by pixel.</strong> Dropping rows that add little or
+          nothing to the picture at the size it is drawn. M4 (Jugel et al.,
+          2014) is the known method for lines. It keeps the first, last, lowest
+          and highest point in each pixel column.
+        </li>
+      </ul>
+
+      <h2>Related issues</h2>
+      <ul>
+        <li>
+          <strong>#41</strong> Implement Mosaic for large datasets. One
+          paragraph. Says the user should not have to know Mosaic exists and
+          DuckDB should not be bundled by default. This proposal is the design
+          for it.
+        </li>
+        <li>
+          <strong>#1009</strong> A 10k-dot scatter takes about 600 ms. The
+          agreed direction is marks stored as columns, chosen by the engine,
+          with one implementation. Step 4 here, and the mark table is the data
+          it needs.
+        </li>
+        <li>
+          <strong>#837, #584</strong> Lists of suspected slow spots in the
+          engine, per node.
+        </li>
+        <li>
+          <strong>#791</strong> A Rust or WASM kernel for the numeric solve.
+          Deferred. It notes that data transforms take callbacks and stay in the
+          host.
+        </li>
+        <li>
+          <strong>#335</strong> Run all transforms in Python (closed, not
+          merged). See the Overview tab.
+        </li>
+        <li>
+          <strong>#700, #709</strong> Field expressions
+          (<code>field(x).sum()</code>), the serialized aggregates the planner
+          reads.
+        </li>
+        <li>
+          <strong>#736, #1192, #269</strong> Row-level expressions and a
+          <code>calculate</code> step. The planner needs these so that computed
+          columns are not functions.
+        </li>
+        <li>
+          <strong>#853, #1093</strong> <code>filter</code> with a serialized
+          predicate.
+        </li>
+        <li>
+          <strong>#48, #1133</strong> <code>partition</code> and
+          <code>Bin</code>. Cells are defined on the space, which is the
+          condition Mosaic needs to keep summaries valid while a selection
+          changes.
+        </li>
+        <li>
+          <strong>#785</strong> Dataframe input through narwhals. Lazy frames
+          and DuckDB relations are collected today.
+        </li>
+        <li>
+          <strong>#1080, #1093</strong> Python accessors are batched, one bridge
+          call per accessor.
+        </li>
+        <li>
+          <strong>#1102</strong> Timestamps are parsed one value at a time on
+          every render.
+        </li>
+        <li>
+          <strong>#830</strong> Interaction as data. A brush is a dataset, so a
+          selection is a filter in the plan.
+        </li>
+        <li>
+          <strong>#674, #673</strong> Memoized layout queries and stable
+          identity keys.
+        </li>
+        <li>
+          <strong>#888</strong> Offline and online animation, and streaming
+          data. It asks whether the same spelling can take a live source. See
+          "Progressive visualization".
+        </li>
+        <li>
+          <strong>#831, #980</strong> The update animation, and uncertainty.
+          Both are where progressive updates would connect.
+        </li>
+        <li>
+          <strong>#608, #42</strong> The display list, and other drawing
+          backends.
+        </li>
+        <li>
+          <strong>#1337</strong> One SVG backend for the display list. Today a
+          SolidJS painter and a string painter repeat each other. A canvas
+          painter is easier to add after they are one.
+        </li>
+        <li>
+          <strong>#577, #578</strong> SVG and PNG export without a browser.
+          These need the SVG painter to stay.
+        </li>
+        <li>
+          <strong>#1198, #999</strong> Column types and what a sum over a column
+          means.
+        </li>
+      </ul>
+
+      <h2>Found along the way</h2>
+      <ul>
+        <li>
+          A scatter of 300,000 rows fails with a stack overflow.
+          <code>foldFinite</code> in <code>src/util.ts</code> spreads every
+          value into one <code>Math.min</code> call. The same pattern is in five
+          more files.
+        </li>
+        <li>
+          <code>image()</code> cannot be placed or sized in data space.
+          <code>rect</code> can. A density drawn as one image inside a chart
+          needs this.
+        </li>
+        <li>
+          <code>applySchema</code> scans every column of every row on every
+          render, including columns the chart never reads.
+        </li>
+        <li>
+          A fused <code>line</code> builds two nodes per point to draw one path.
+        </li>
+        <li>
+          Arrow from Python is decoded into one object per row, after about
+          eight copies of the data on the way.
+        </li>
+        <li>
+          A <code>by</code> cannot name two columns, so one circle per lake and
+          species needs a <code>derive</code> to make a combined key, and
+          <code>derive</code> is a function.
+        </li>
+        <li>
+          A <code>scatter</code> nested in a <code>scatter</code> draws a small
+          extra axis in the middle of the plot, even from raw rows
+          (<code>tests/tmp/scaling/proto/p1/S4-raw.png</code>).
+        </li>
+        <li>
+          The serialized chart does not say what kind each channel is. The
+          planner needs the channel-kind table that the mark factories use.
+        </li>
+        <li>
+          There is no benchmark above 30,000 rows and none that varies rows
+          while holding marks fixed.
+        </li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  (function () {
+    var names = [
+      "overview",
+      "examples",
+      "scatter-and-line",
+      "rendering",
+      "background",
+    ];
+    var root = document.documentElement;
+    root.classList.add("tabs-on");
+    var sections = {};
+    names.forEach(function (n) {
+      sections[n] = document.getElementById(n);
+    });
+    var links = document.querySelectorAll("nav.tabs a[data-tab]");
+
+    function current() {
+      var h = (location.hash || "").slice(1);
+      if (!/^[A-Za-z0-9-]+$/.test(h) || names.indexOf(h) < 0) return names[0];
+      return h;
+    }
+    function show(scrollTop) {
+      var name = current();
+      names.forEach(function (n) {
+        if (sections[n]) sections[n].classList.toggle("active", n === name);
+      });
+      for (var i = 0; i < links.length; i++) {
+        if (links[i].getAttribute("data-tab") === name)
+          links[i].setAttribute("aria-current", "page");
+        else links[i].removeAttribute("aria-current");
+      }
+      if (scrollTop) window.scrollTo(0, 0);
+    }
+    window.addEventListener("hashchange", function () {
+      show(true);
+    });
+    show(false);
+    if (location.hash) {
+      requestAnimationFrame(function () {
+        window.scrollTo(0, 0);
+      });
+    }
+
+    try {
+      if (window.hljs) {
+        document
+          .querySelectorAll("pre code[class*='language-']")
+          .forEach(function (el) {
+            window.hljs.highlightElement(el);
+          });
+      }
+    } catch (e) {}
+  })();
+</script>
