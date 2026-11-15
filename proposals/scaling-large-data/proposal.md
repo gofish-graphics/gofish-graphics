@@ -344,14 +344,14 @@ ribbons read three things from each bar, which are its laid-out box, its
 `species` key and its color. All three are in the mark table or come from
 layout over it.
 
-| What the second chart reads from a named mark                                  | Where it comes from                                          | Checked                   |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------- |
-| Position and size (ribbons, lines, `enclose`, where a label sits)              | layout over the mark table                                   | 0 different pixels        |
-| A key of the first chart (`group({ by: "species" })`)                          | a column of the mark table                                   | 0 different pixels        |
-| The color of the mark                                                          | a column of the mark table                                   | 0 different pixels        |
-| A sum of the summed column, in a function (`sumBy(d[0].datum, "count")`)       | a column of the mark table, because a sum of sums is the sum | 0 different pixels        |
-| A count of the mark's rows, in a function (`d[0].datum.length`)                | the underlying rows                                          | wrong from the mark table |
-| A column the first chart never used, in a function (`meanBy(d[0].datum, "x")`) | the underlying rows                                          | wrong from the mark table |
+| What the second chart reads from a named mark                                  | Where it comes from                                          | Checked                                                                                          |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Position and size (ribbons, lines, `enclose`, where a label sits)              | layout over the mark table                                   | 0 different pixels for ribbons and labels. Lines and `enclose` were read from the code, not run. |
+| A key of the first chart (`group({ by: "species" })`)                          | a column of the mark table                                   | 0 different pixels                                                                               |
+| The color of the mark                                                          | a column of the mark table                                   | 0 different pixels                                                                               |
+| A sum of the summed column, in a function (`sumBy(d[0].datum, "count")`)       | a column of the mark table, because a sum of sums is the sum | 0 different pixels                                                                               |
+| A count of the mark's rows, in a function (`d[0].datum.length`)                | the underlying rows                                          | wrong from the mark table                                                                        |
+| A column the first chart never used, in a function (`meanBy(d[0].datum, "x")`) | the underlying rows                                          | wrong from the mark table                                                                        |
 
 The last two rows are the hard part. Today a reference's `datum` is the
 mark's rows, and a function in the second chart can do anything with them.
