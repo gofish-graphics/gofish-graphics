@@ -173,6 +173,41 @@ async function main() {
     { x: [0, 0, 0], y: [1, 1, 0] }
   );
 
+  // A stack's parts are laid by its chain, not by their own data
+  // (`placedByOwnData`, #1357), unless a datum position places them.
+  const stackedOf = (p: SharingPlan, axis: 0 | 1) =>
+    JSON.stringify([...(p.stacked?.[axis] ?? [])].sort());
+  const glued = plan(
+    [Constraint.distribute({ dir: "y", glue: true }, [r("a"), r("b")])],
+    kids("a", "b", "c")
+  );
+  check(
+    "distribute, glue (stack): its parts are stacked on its axis only",
+    stackedOf(glued, 1) === "[0,1]" && stackedOf(glued, 0) === "[]",
+    `y ${stackedOf(glued, 1)}, x ${stackedOf(glued, 0)}`
+  );
+  const spreadPlan = plan(
+    [Constraint.distribute({ dir: "y" }, [r("a"), r("b")])],
+    kids("a", "b")
+  );
+  check(
+    "distribute, no glue (spread): no part is stacked",
+    stackedOf(spreadPlan, 1) === "[]",
+    stackedOf(spreadPlan, 1)
+  );
+  const placed = plan(
+    [
+      Constraint.distribute({ dir: "y", glue: true }, [r("a"), r("b")]),
+      Constraint.position({ y: v(3) }, [r("b")]),
+    ],
+    kids("a", "b")
+  );
+  check(
+    "distribute, glue, and a datum position on its axis: the position places the part",
+    stackedOf(placed, 1) === "[0]",
+    stackedOf(placed, 1)
+  );
+
   expect(
     "distribute, no glue (spread): detaches and nests each part",
     plan(

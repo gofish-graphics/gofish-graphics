@@ -958,7 +958,9 @@ child is nested at its cell, as a scatter's glyph is at its point. Detaches run 
 and joins second, so an `align` beats a `position` on the same axis. The
 `nested` half is the datum placements plus the spread slots and grid cells. The
 plan also returns the datum placements on their own (`datumPlaced`), which the
-layer's own union leaves out. Unlike `planConstraintComposition`, the plan
+layer's own union leaves out, and the parts of each stack on its axis
+(`stacked`), which the stack's chain places and so are not placed by their
+own data (`placedByOwnData`), unless a datum `position` places them there. Unlike `planConstraintComposition`, the plan
 exists for every layer, point positions included. The layer's type hook, the
 keyed domain table and the `GOFISH_DUMP_SHARING` dump read it. It is step 3 of
 the [measure-keyed domains design](/internals/design/measure-keyed-domains),
@@ -1312,9 +1314,13 @@ authority record — the `PlacementOwnershipPlan` — through one predicate,
 `isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
 a POSITION scope on each axis) is a pure **data/scope** fact — a child in the
 layer's own set whose type on that axis is pinned, in a layer whose own type
-there is pinned too (`placedByOwnData`, the one
+there is pinned too, unless one of the layer's stacks on that axis has it
+as a part (`placedByOwnData`, the one
 rule the claim walk, layout and the sharing of rooms read; a free child still
-waits to be placed, and an origin-less one has a width but no place) —
+waits to be placed, and an origin-less one has a width but no place). A
+stack's chain places its parts end to end, so a stack inside a stack on the
+same axis, whose type is pinned, is placed by the outer chain and not at its
+own 0 (#1357) —
 collected _once_ at the layer boundary and
 handed to the solve as an explicit ownership input. The constraint path no longer
 reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a

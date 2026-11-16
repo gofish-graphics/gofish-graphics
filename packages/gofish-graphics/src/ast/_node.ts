@@ -574,6 +574,12 @@ export const nestEach: ResolveSharing = (childNodes) => {
  * pinned child with a node that has no data (a `region` and its text)
  * keeps the parent pinned, and the region stays where its data puts it.
  *
+ * A stack moves its parts along its axis (`SharingPlan.stacked`): it lays
+ * each one's tail on the previous one's head, and its type adds a pinned
+ * part's width as a box (`distributeSpaceFold`). So a part of a stack is
+ * not placed by its own data there, even when it is pinned. A stack inside
+ * a stack on the same axis is such a part (#1357).
+ *
  * The one rule for "placed by its own data": the claim walk, layout and the
  * sharing of rooms all read it.
  */
@@ -581,10 +587,15 @@ export const placedByOwnData = (
   parent: GoFishNode,
   i: number,
   axis: 0 | 1
-): boolean =>
-  parent.sharing().sets[axis][i] === 0 &&
-  originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
-  originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
+): boolean => {
+  const plan = parent.sharing();
+  return (
+    plan.sets[axis][i] === 0 &&
+    !plan.stacked?.[axis].has(i) &&
+    originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
+    originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned")
+  );
+};
 
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis

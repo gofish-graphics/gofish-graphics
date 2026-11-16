@@ -375,6 +375,10 @@ export type SharingPlan = {
    *  with content a σ-scope of its own (`GoFishNode.isScope`). None when
    *  absent. */
   rooms?: [Set<number>, Set<number>];
+  /** Per axis: the parts of a stack (a glued `distribute`) along the axis,
+   *  which the stack's chain places end to end, but for a part a datum
+   *  `position` places there. None when absent. */
+  stacked?: [Set<number>, Set<number>];
   /** Per axis: children a datum `position` places. None when absent. */
   datumPlaced?: [Set<number>, Set<number>];
   /** Per axis: the data width of the cell a datum interval places a child
@@ -411,6 +415,7 @@ export const childRole = (
  *  The layer's own union leaves those out, since their own extent is nested
  *  at the datum. */
 export type LayerSharingPlan = SharingPlan & {
+  stacked: [Set<number>, Set<number>];
   datumPlaced: [Set<number>, Set<number>];
   cells: [Map<number, number>, Map<number, number>];
 };
@@ -435,6 +440,7 @@ export function planSharing(
   ];
   const nested: [Set<number>, Set<number>] = [new Set(), new Set()];
   const rooms: [Set<number>, Set<number>] = [new Set(), new Set()];
+  const stacked: [Set<number>, Set<number>] = [new Set(), new Set()];
   const detached: [Set<number>, Set<number>] = [new Set(), new Set()];
   const joins: [number[][], number[][]] = [[], []];
   const detach = (axis: 0 | 1, idx: number[]) =>
@@ -500,8 +506,10 @@ export function planSharing(
         // A stack adds its parts on one axis, so they share it. A spread
         // gives each part a slot of its own, and the layer's own type there
         // is the ordinal of the keys.
-        if (c.glue) joins[axis].push(idx);
-        else {
+        if (c.glue) {
+          joins[axis].push(idx);
+          idx.forEach((i) => stacked[axis].add(i));
+        } else {
           detach(axis, idx);
           nest(axis, idx);
         }
@@ -558,7 +566,11 @@ export function planSharing(
       return s;
     });
   }
-  return { sets, nested, rooms, datumPlaced, cells };
+  // A datum `position` on the stack's axis places its child at its datum,
+  // as it did before the stack laid its parts: the chain does not move it.
+  for (const axis of [0, 1] as const)
+    datumPlaced[axis].forEach((i) => stacked[axis].delete(i));
+  return { sets, nested, rooms, stacked, datumPlaced, cells };
 }
 
 const foldOptions = (s: Seg) => ({
