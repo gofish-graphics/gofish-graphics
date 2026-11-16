@@ -160,7 +160,7 @@ export class PlacementProgramLowerer<T> implements PlacementFactEmitter<T> {
     });
   }
 
-  include(request: PlacementParticipantRequest): void {
+  include(request: PlacementParticipantRequest<T>): void {
     if (!this.target(request.key)) return;
     this.anchorFacts(request.axis).push({
       type: "anchor-participant",

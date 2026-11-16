@@ -680,7 +680,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
-        baseline: Where the spread puts its own 0, made by a call in the Baseline family: Baseline.start(), Baseline.end(), Baseline.middle() or Baseline.at(part, point). Baseline.wiggle() is for stack only. Not taken yet: a spread with a baseline is an error, and a stack takes it.
+        baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -980,7 +980,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
-        baseline: Where the spread puts its own 0, made by a call in the Baseline family: Baseline.start(), Baseline.end(), Baseline.middle() or Baseline.at(part, point). Baseline.wiggle() is for stack only. Not taken yet: a spread with a baseline is an error, and a stack takes it.
+        baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.

@@ -4,10 +4,12 @@ title: Baseline
 
 # Baseline
 
-The `Baseline` family holds the places a stack can put its own 0. A baseline is
-the value of the `baseline` option of [`stack`](/python/api/operators/stack).
-The parent of a stack lines its baseline up with the baselines of its other
-children, so in a bar chart every stack starts from one line.
+The `Baseline` family holds the places a stack or a spread can put its own 0.
+A baseline is the value of the `baseline` option of
+[`stack`](/python/api/operators/stack) and
+[`spread`](/python/api/operators/spread). The parent of a stack lines its
+baseline up with the baselines of its other children, so in a bar chart every
+stack starts from one line.
 
 ```python
 from gofish import chart, spread, stack, rect, Baseline
@@ -68,10 +70,10 @@ baselines of its other children, so rows of centered stacks share one middle.
 
 ## `Baseline.at(part, point)`
 
-| Argument | Type                                                  | Description                                                                                                                                        |
-| -------- | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `part`   | `str \| float`                                        | The part: a value of the `by` column in a flow, or a child index in the combinator form.                                                           |
-| `point`  | `float \| "start" \| "middle" \| "end" \| "baseline"` | A fraction of the way from the part's tail to its head (0 is the tail, 1 the head), or one of the part's anchors. `"baseline"` is the part's tail. |
+| Argument | Type                                                  | Description                                                                                                                                                                                                         |
+| -------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `part`   | `str \| float`                                        | The part: a value of the `by` column in a flow, or a child index in the combinator form.                                                                                                                            |
+| `point`  | `float \| "start" \| "middle" \| "end" \| "baseline"` | A fraction of the way from the part's tail to its head (0 is the tail, 1 the head), or one of the part's anchors. `"baseline"` is the part's own 0: the tail of a bar, or the baseline of a nested spread or stack. |
 
 A part that the data lacks takes no room, and the baseline falls on the
 boundary where the part would be. The stack finds that boundary from the order
@@ -79,5 +81,22 @@ of the `by` column, so the column must declare its levels with
 `Domain.discrete(levels)` in the chart's `schema`. `Trait.diverging()` on the
 unit of the `by` column is `Baseline.at` at the midpoint of the column's order,
 and a stack over such a column takes no `baseline` option.
+
+## On `spread`
+
+A spread takes `Baseline.start()`, `Baseline.end()`, `Baseline.middle()` and
+`Baseline.at(part, point)`. Its start is the start of its first child, its
+end is the end of its last child, and the gaps between children are part of
+the way from one to the other. Without `baseline`, its 0 is its start.
+`Baseline.wiggle()` is for `stack` only, and on a spread it is an error. A
+spread's baseline only places it: the spread draws no data axis along its
+direction.
+
+```python
+chart(survey, color=likert_colors, axes={"x": False, "y": True}).flow(
+    spread(by="question", dir="y"),
+    spread(by="response", dir="x", spacing=3, baseline=Baseline.at("Neutral", 0.5)),
+).mark(rect(w="count", fill="response"))
+```
 
 See the [JavaScript `Baseline` page](/js/api/baseline) for more on each member.

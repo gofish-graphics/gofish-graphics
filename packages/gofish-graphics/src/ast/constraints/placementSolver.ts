@@ -24,6 +24,7 @@ import {
   relationFact,
   type AnchorFact,
   type RelationAnchor,
+  type ChainPath,
   type StackPoint,
   type NodeId,
 } from "./placementFacts";
@@ -169,31 +170,40 @@ function nodeAnchorOffset<T>(
   return target && anchorOffset(A, target, axis, anchor, span);
 }
 
-/** The offset from the `min` of the stack part `node` of the stack's 0,
+/** The offset from the `min` of the chain part `node` of the chain's 0,
  *  `origin` ({@link StackPoint}), when the part carries it (`offsetOf`
  *  gives each anchor's offset on a node from that node's `min`): a point on
- *  the part, or a place along the chain the part starts, which adds each
- *  part's step from its tail to its head. */
+ *  the part, which is a place on the path of that one part from its tail to
+ *  its head, or a place along the chain's path ({@link ChainPath}), which
+ *  adds each part's way through and the gaps between them. */
 function stackOriginOffset<T>(
   A: Arith<T>,
   offsetOf: (node: NodeId, anchor: RelationAnchor) => T | undefined,
   node: NodeId,
-  origin: StackPoint
+  origin: StackPoint<T>
 ): T | undefined {
-  const tail = offsetOf(node, "tail");
+  // A word names a point of the part as `alignment` does: a point of its
+  // box, or its own 0 (`"baseline"`), which for a part with a data baseline
+  // is its tail, and for a nested spread or stack is where its baseline is.
   const fraction = "along" in origin ? origin.along : origin.point;
-  if (typeof fraction !== "number")
-    return offsetOf(node, fraction === "baseline" ? "tail" : fraction);
-  if (fraction === 0 || tail === undefined) return tail;
-  const steps = "along" in origin ? origin.chain : [node];
+  if (typeof fraction !== "number") return offsetOf(node, fraction);
+  const path: ChainPath<T> =
+    "along" in origin
+      ? origin.chain
+      : { parts: [node], start: "tail", end: "head", from: "head", to: "tail" };
+  const start = offsetOf(node, path.start);
+  if (fraction === 0 || start === undefined) return start;
+  const last = path.parts.length - 1;
   let length = A.zero;
-  for (const part of steps) {
-    const from = offsetOf(part, "tail");
-    const to = offsetOf(part, "head");
-    if (from === undefined || to === undefined) return undefined;
-    length = A.add(length, A.sub(to, from));
+  for (let i = 0; i <= last; i++) {
+    const part = path.parts[i];
+    const entry = offsetOf(part, i === 0 ? path.start : path.to);
+    const exit = offsetOf(part, i === last ? path.end : path.from);
+    if (entry === undefined || exit === undefined) return undefined;
+    length = A.add(length, A.sub(exit, entry));
+    if (i > 0 && path.gap !== undefined) length = A.add(length, path.gap);
   }
-  return A.add(tail, A.scale(fraction, length));
+  return A.add(start, A.scale(fraction, length));
 }
 
 /** Reduce one axis's anchor facts to a `min`-anchored {@link AxisProblem}, using
@@ -312,20 +322,21 @@ function solveRank2Axis<T>(
   // The participants that carry a baseline the free origin may seat, and each
   // one's baseline offset from its `min` (#773). A free participant (a
   // baseline magnitude) carries its own. A chain along the axis places its
-  // members' baselines instead, so it carries one only as a stack: its
-  // origin (`AnchorParticipantFact.origin`), on whichever part carries it,
-  // a size-strong part included. A spread chain carries none and keeps its
-  // sequence origin.
+  // members' baselines instead, so it carries one only where it states its
+  // 0: its origin (`AnchorParticipantFact.origin`), on whichever part
+  // carries it, a size-strong part included. A stack always states one. A
+  // spread states one only when it is given a `baseline`; one that is not
+  // keeps its sequence origin, its start.
   //
-  // A node's 0 is where its baseline says. A stack says where (its
-  // origin), so its origin is seated at the layer's data 0, or at the
-  // layer's own 0 (pixel 0) where the layer has no data 0: a stack whose 0
-  // is its middle has no data 0, and its 0 is still its middle. A free
+  // A node's 0 is where its baseline says. A chain that says where (its
+  // origin) has its origin seated at the layer's data 0, or at the layer's
+  // own 0 (pixel 0) where the layer has no data 0: a stack whose 0 is its
+  // middle has no data 0, and its 0 is still its middle. A free
   // participant's baseline is its data 0, which only a layer with a data 0
   // seats.
   const freeBaselines = new Map<NodeId, T>();
   const placedByChain = new Set<NodeId>();
-  const stackOrigins = new Map<NodeId, StackPoint>();
+  const stackOrigins = new Map<NodeId, StackPoint<T>>();
   for (const fact of facts) {
     if (fact.type === "anchor-participant" && fact.origin !== undefined)
       stackOrigins.set(fact.node, fact.origin);
@@ -357,7 +368,11 @@ function solveRank2Axis<T>(
     A,
     axis,
     problem,
-    { value: freeOrigin ?? A.zero, baselines: freeBaselines }
+    {
+      value: freeOrigin ?? A.zero,
+      baselines: freeBaselines,
+      stated: new Set(stackOrigins.keys()),
+    }
   );
 
   const cells = new Map<NodeId, SolvedCell<T>>();

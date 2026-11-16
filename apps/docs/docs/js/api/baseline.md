@@ -4,9 +4,10 @@ title: Baseline
 
 # Baseline
 
-The `Baseline` family holds the places a stack can put its own 0. A baseline is
-the value of the `baseline` option of [`stack`](/js/api/operators/stack). The
-parent of a stack lines its baseline up with the baselines of its other
+The `Baseline` family holds the places a stack or a spread can put its own 0.
+A baseline is the value of the `baseline` option of
+[`stack`](/js/api/operators/stack) and [`spread`](/js/api/operators/spread).
+The parent of a stack lines its baseline up with the baselines of its other
 children, so in a bar chart every stack starts from one line.
 
 ::: gofish
@@ -75,10 +76,10 @@ is 0, so it is the same as `Baseline.start()`.
 
 ## `Baseline.at(part, point)`
 
-| Argument | Type                                                   | Description                                                                                                                                        |
-| -------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `part`   | `string \| number`                                     | The part: a value of the `by` column in a flow, or a child index in the combinator form.                                                           |
-| `point`  | `number \| "start" \| "middle" \| "end" \| "baseline"` | A fraction of the way from the part's tail to its head (0 is the tail, 1 the head), or one of the part's anchors. `"baseline"` is the part's tail. |
+| Argument | Type                                                   | Description                                                                                                                                                                                                         |
+| -------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `part`   | `string \| number`                                     | The part: a value of the `by` column in a flow, or a child index in the combinator form.                                                                                                                            |
+| `point`  | `number \| "start" \| "middle" \| "end" \| "baseline"` | A fraction of the way from the part's tail to its head (0 is the tail, 1 the head), or one of the part's anchors. `"baseline"` is the part's own 0: the tail of a bar, or the baseline of a nested spread or stack. |
 
 ```js
 gf.chart(survey, {
@@ -107,5 +108,30 @@ midpoint of the column's order. A stack over such a column takes no
 
 ## On `spread`
 
-`spread` has a `baseline` option too, but it does not take one yet: a spread
-with a baseline is an error. `Baseline.wiggle()` is for `stack` only.
+A spread takes `Baseline.start()`, `Baseline.end()`, `Baseline.middle()` and
+`Baseline.at(part, point)`. Its start is the start of its first child, its
+end is the end of its last child, and the gaps between children are part of
+the way from one to the other. Without `baseline`, its 0 is its start.
+`Baseline.wiggle()` is for `stack` only, and on a spread it is an error. A
+part the data lacks, and `Trait.diverging()` on the `by` column, work as they
+do on a stack.
+
+A spread's baseline only places it: the spread keeps its space, a sequence of
+separate spaces, and draws no data axis along its direction.
+
+```js
+gf.chart(survey, { color: likertColors, axes: { x: false, y: true } })
+  .flow(
+    gf.spread({ by: "question", dir: "y" }),
+    gf.spread({
+      by: "response",
+      dir: "x",
+      spacing: 3,
+      baseline: gf.Baseline.at("Neutral", 0.5),
+    })
+  )
+  .mark(gf.rect({ w: "count", fill: "response" }));
+```
+
+::: gofish example:diverging-likert-chart-with-gaps hidden
+:::

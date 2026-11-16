@@ -65,10 +65,13 @@ export const TOLERANCE = 1e-6;
 /** The owning layer's free-child origin on one axis (#773): the pixel at
  *  which a free node's baseline sits, and the baseline offset from `min` of
  *  each participant whose baseline nothing else places (a free participant,
- *  or the part of a stack that carries its origin). */
+ *  or the part of a chain that carries its origin). `stated` lists the
+ *  parts that carry a chain's stated 0: a stack's, or a spread's given a
+ *  `baseline`. */
 export type FreeOriginInput<T = number> = {
   value: T;
   baselines: Map<NodeId, T>;
+  stated?: ReadonlySet<NodeId>;
 };
 
 function buildRelationGraph<T>(
@@ -211,13 +214,13 @@ export function solveAxisProblem<T>(
   // The component's baseline, joined over the nodes listed in
   // `freeOrigin.baselines`: undefined (none) → determined (they all agree) →
   // impossible (two disagree). The caller lists only baselines nothing else
-  // places, so a stack chain contributes its origin (on whichever part
-  // carries it). A spread chain packs its members' boxes end to end from its
-  // first member's start, so it has no baseline at all: a component holding
-  // one is impossible, whatever else it holds (a free node aligned to one of
-  // its members has a baseline, but seating it would move the whole spread
-  // off its start). Only a determined baseline is returned; impossible places
-  // like undefined.
+  // places, so a chain that states its 0 contributes its origin (on
+  // whichever part carries it). A spread chain that states none packs its
+  // members' boxes end to end from its first member's start, so it has no
+  // baseline at all: a component holding one is impossible, whatever else
+  // it holds (a free node aligned to one of its members has a baseline, but
+  // seating it would move the whole spread off its start). Only a
+  // determined baseline is returned; impossible places like undefined.
   const sharedFreeBaseline = (component: number): T | undefined => {
     if (freeOrigin === undefined) return undefined;
     const holdsSpread = problem.relations.some(
@@ -225,7 +228,10 @@ export function solveAxisProblem<T>(
         relation.chain === "spread" &&
         componentOf.get(relation.from.node) === component
     );
-    if (holdsSpread) return undefined;
+    const states = components[component].some(
+      (node) => freeOrigin.stated?.has(node) === true
+    );
+    if (holdsSpread && !states) return undefined;
     let shared: T | undefined;
     for (const node of components[component]) {
       const offset = freeOrigin.baselines.get(node);

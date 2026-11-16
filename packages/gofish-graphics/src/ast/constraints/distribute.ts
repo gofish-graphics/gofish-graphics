@@ -13,7 +13,11 @@ import {
 import { resolution } from "../_ref";
 import type { GoFishNode } from "../_node";
 import { isValue, type MaybeValue } from "../data";
-import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
+import type {
+  ChainPath,
+  PlacementFactEmitter,
+  RelationAnchor,
+} from "./placementFacts";
 import type { SolvePlaceable } from "./placementProgramLowerer";
 import {
   CONTINUOUS_TYPE,
@@ -85,9 +89,11 @@ export interface DistributeOptions {
   /** The grouping field's values have an order (`HasOrder`, from the chart's
    *  `schema`), so an ORDINAL fold's keys do too ({@link ORDINAL_TYPE}). */
   hasOrder?: boolean;
-  /** Where a stack puts its own 0 (glue only), its `at` part one of the
-   *  operands. Omitted, it is `Baseline.start()`, the tail of the first part
-   *  laid out. */
+  /** Where the chain puts its own 0, its `at` part one of the operands.
+   *  Omitted, a stack's is `Baseline.start()`, the tail of the first part
+   *  laid out, and a spread states none: its 0 is its start. A spread takes
+   *  every baseline but `wiggle`, and it is placement only: the spread's
+   *  space stays a sequence of separate spaces. */
   baseline?: StackBaseline<ConstraintRef>;
   /** The grouping field's order has a midpoint (`HasMidpoint`, from the
    *  chart's `schema`), which set the stack's baseline (glue only). Each
@@ -163,15 +169,30 @@ export const createDistributeConstraint = (
   children,
   measure: options.measure,
   hasOrder: options.hasOrder,
-  baseline: options.glue ? options.baseline : undefined,
+  baseline: checkedBaseline(options),
   hasMidpoint: options.glue ? options.hasMidpoint : undefined,
 });
 
-/** The {@link StackBaseline} of a stack over `ordered` (its parts in
+/** A chain's baseline: a spread takes every one but `wiggle`, whose 0
+ *  moves with the cross-sections a stack glues. */
+function checkedBaseline(
+  options: DistributeOptions
+): StackBaseline<ConstraintRef> | undefined {
+  if (!options.glue && options.baseline?.kind === "wiggle")
+    throw new Error(
+      "spread: `Baseline.wiggle()` needs glued cross-sections: its 0 moves " +
+        "with the parts' middles along the cross axis, and a spread keeps " +
+        "its parts apart. Use `stack({ baseline: Baseline.wiggle() })`, or " +
+        "give the spread `Baseline.start()`, `.end()`, `.middle()` or `.at()`."
+    );
+  return options.baseline;
+}
+
+/** The {@link StackBaseline} of a chain over `ordered` (its parts in
  *  placement order), with an `at` part an index into `ordered`: the declared
  *  baseline, else `start`. */
 export function resolveBaseline(
-  constraint: Pick<DistributeConstraint, "baseline">,
+  constraint: Pick<DistributeConstraint, "baseline" | "glue">,
   ordered: readonly ConstraintRef[],
   keyOf: KeyOf
 ): StackBaseline<number> {
@@ -181,8 +202,9 @@ export function resolveBaseline(
   const part = ordered.findIndex((child) => keyOf(child) === key);
   if (part < 0) {
     throw new Error(
-      `stack: its baseline is on part "${baseline.part.name}", which is not ` +
-        `one of its parts (${ordered.map((child) => `"${child.name}"`).join(", ")}).`
+      `${constraint.glue ? "stack" : "spread"}: its baseline is on part ` +
+        `"${baseline.part.name}", which is not one of its parts ` +
+        `(${ordered.map((child) => `"${child.name}"`).join(", ")}).`
     );
   }
   return { ...baseline, part };
@@ -314,22 +336,36 @@ export function lowerDistributePlacement<T>(
       chain: constraint.glue ? "stack" : "spread",
     });
   }
-  // A spread's chain starts at its first member. A stack's chain also carries
-  // its {@link StackBaseline}, which the solver's free-origin fallback seats
-  // at the measure's origin (#773): a point on one part, or a place along
-  // the whole chain. A chain of translates lays parts at constant offsets
-  // (boxes), whose `wiggle` is their `start` (its slope is 0 where no part
-  // changes along u); parts whose offsets change are placed above.
-  if (!constraint.glue) {
+  // A chain that states its 0 carries its {@link StackBaseline}, which the
+  // solver's free-origin fallback seats at the measure's origin (#773): a
+  // point on one part, or a place along the whole chain. A stack always
+  // states one. A spread that states none starts at its first member's
+  // start. A chain of translates lays parts at constant offsets (boxes),
+  // whose `wiggle` is their `start` (its slope is 0 where no part changes
+  // along u); parts whose offsets change are placed above.
+  if (constraint.baseline === undefined && !constraint.glue) {
     emitter.include({ axis: constraint.dir, key: keys[0], owner });
     return;
   }
   const baseline = resolveBaseline(constraint, ordered, keyOf);
+  // The way along the chain: a stack's from its first part's tail to its
+  // last part's head, through each part's tail and head; a spread's from
+  // its first part's start to its last part's end, through the anchors its
+  // edges tie, with its gaps.
+  const path: ChainPath<T> = constraint.glue
+    ? { parts: keys, start: "tail", end: "head", ...anchors }
+    : {
+        parts: keys,
+        start: "start",
+        end: "end",
+        ...anchors,
+        gap: A.fromValue(gapOf(constraint, axisIndex(constraint.dir))),
+      };
   const along = (at: number) => ({
     axis: constraint.dir,
     key: keys[0],
     owner,
-    origin: { along: at, chain: keys },
+    origin: { along: at, chain: path },
   });
   emitter.include(
     baseline.kind === "at"
@@ -652,7 +688,15 @@ export function stackPlaces(
 
 /** A point on a part, from its tail: a fraction of its step from tail to
  *  head, or one of its anchors. Its box spans `[−descent, ascent]` about its
- *  tail, and `"baseline"` is the tail itself. */
+ *  tail, and `"baseline"`, its own 0, is the tail itself.
+ *
+ *  TODO(stack-profiles S7): a shortcut. That is exact for a part with a
+ *  data baseline. Placement reads `"baseline"` as the part's own 0
+ *  (`stackOriginOffset` in placementSolver.ts), and a part with no data
+ *  baseline (a nested spread or a middle stack) has its own 0 where its
+ *  baseline puts it, which this fold does not see: it lays such a part as
+ *  a box from its start. A stack whose 0 is such a point has a 0 that is no
+ *  data value, as under `middle`, so its space should have no origin. */
 function pointOnPart(
   point: Point,
   ascent: Fun<number>,

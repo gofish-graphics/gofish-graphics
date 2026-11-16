@@ -52,28 +52,45 @@ export type AnchorRelationFact<T = number> = {
   chain?: ChainKind;
 };
 
-export type AnchorParticipantFact = {
+export type AnchorParticipantFact<T = number> = {
   type: "anchor-participant";
   node: NodeId;
   axis: Axis;
   owner: string;
-  /** Set when this participant carries a stack's 0 (#773, #984), from its
-   *  `StackBaseline` (distribute.ts). The solver's free-origin fallback
-   *  seats that point. */
-  origin?: StackPoint;
+  /** Set when this participant carries the 0 of a chain (#773, #984): a
+   *  stack's, or a spread's that states one, from its `StackBaseline`
+   *  (distribute.ts). The solver's free-origin fallback seats that point. */
+  origin?: StackPoint<T>;
 };
 
 /**
- * Where a stack's 0 is, on the participant that carries it: a point on the
+ * Where a chain's 0 is, on the participant that carries it: a point on the
  * participant (a fraction of the way from its `tail` to its `head`, or one
  * of its anchors, `"baseline"` being its tail), or a place `along` the whole
- * chain, a fraction of the way from the tail of its first part (the
- * participant) to the head of its last (`chain`, the parts in placement
- * order).
+ * chain, a fraction of the way along its {@link ChainPath}, whose first part
+ * is the participant.
  */
-export type StackPoint =
+export type StackPoint<T = number> =
   | { point: number | "start" | "middle" | "end" | "baseline" }
-  | { along: number; chain: readonly NodeId[] };
+  | { along: number; chain: ChainPath<T> };
+
+/**
+ * A chain from its start to its end: its `parts` in placement order, from
+ * the `start` anchor of the first part to the `end` anchor of the last. On
+ * the way each part is entered at `to` and left at `from`, the anchors the
+ * chain's edges tie, and `gap` lies between neighbors. A stack runs from its
+ * first part's tail to its last part's head, entering each part at its tail
+ * and leaving it at its head, with no gap. A spread runs from its first
+ * part's start to its last part's end, and its gaps are part of the way.
+ */
+export type ChainPath<T = number> = {
+  parts: readonly NodeId[];
+  start: RelationAnchor;
+  end: RelationAnchor;
+  from: RelationAnchor;
+  to: RelationAnchor;
+  gap?: T;
+};
 
 /** A size-cell equation independent of any anchor (#726, align `"size"`): the
  *  target's `size` box key := `value`, with no coupling to `min`/`max`/`center`.
@@ -94,7 +111,7 @@ export type SizePinFact<T = number> = {
 export type AnchorFact<T = number> =
   | AnchorPinFact<T>
   | AnchorRelationFact<T>
-  | AnchorParticipantFact
+  | AnchorParticipantFact<T>
   | SizePinFact<T>;
 
 export type AnchorProgram<T = number> = {
@@ -130,12 +147,12 @@ export type PlacementRelationRequest<T = number> = {
   chain?: ChainKind;
 };
 
-export type PlacementParticipantRequest = {
+export type PlacementParticipantRequest<T = number> = {
   axis: Axis;
   key: NodeId;
   owner: string;
   /** See {@link AnchorParticipantFact.origin}. */
-  origin?: StackPoint;
+  origin?: StackPoint<T>;
 };
 
 export type PlacementPinRequest<T = number> = {
@@ -178,7 +195,7 @@ export type PlacementRelation<T = number> = {
  *  participants without pre-evaluating any offset (that is the solver's job). */
 export interface PlacementFactEmitter<T = number> {
   pin(request: PlacementPinRequest<T>): void;
-  include(request: PlacementParticipantRequest): void;
+  include(request: PlacementParticipantRequest<T>): void;
   relate(request: PlacementRelationRequest<T>): void;
   pinSize(request: PlacementSizePinRequest<T>): void;
 }
