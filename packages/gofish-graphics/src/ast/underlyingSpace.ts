@@ -33,6 +33,7 @@ import {
 
 export { MeasureClash, type MeasureSite } from "./measure";
 import { nice as d3Nice } from "d3-array";
+import { add, constant, isConstant, type Fun } from "./fun";
 import { Cell, CycleCell, type AxisCell, type KeyCell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
@@ -116,6 +117,13 @@ export type CONTINUOUS_TYPE = {
    *  (axes/elaborate.tsx). A union keeps them only when every part has them
    *  ({@link mergeCells}). */
   cells?: readonly Cell[];
+  /** The interval the content covers along this axis at each position u on
+   *  the other axis (u in that axis's data units), about the same local
+   *  origin as `dataInterval`, which is its hull. Absent, the content covers
+   *  `dataInterval` at every u, as a box does. Read it with
+   *  {@link crossSectionOf}; set it with {@link withProfile}, which never
+   *  stores a constant one. */
+  profile?: Fun<Interval>;
 };
 
 export type ORDINAL_TYPE = {
@@ -419,8 +427,23 @@ export const mirrored = (
 export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
   spaces.length > 0 && spaces.every((s) => s.mirrored === true);
 
+/** A continuous space's cross-section ({@link CONTINUOUS_TYPE.profile}): its
+ *  profile, or, for a space without one, its data interval at every u over
+ *  the whole line. Every reader asks this, so nothing asks whether a space
+ *  has a profile. */
+export const crossSectionOf = (space: CONTINUOUS_TYPE): Fun<Interval> =>
+  space.profile ?? constant(space.dataInterval);
+
+/** `space` with the cross-section `profile`, which is stored only when it is
+ *  not one interval everywhere: a constant profile is what a space without
+ *  one already means. */
+export const withProfile = <T extends CONTINUOUS_TYPE>(
+  space: T,
+  profile: Fun<Interval>
+): T => (isConstant(profile) ? space : { ...space, profile });
+
 /** Pin a continuous space with its local origin at data coordinate `at`: shift
- *  its interval by `at` and pin the origin. A free `[−descent, ascent]` lands
+ *  its interval (and its profile) by `at` and pin the origin. A free `[−descent, ascent]` lands
  *  on `[at − descent, at + ascent]`; an origin-less `[0, width]` lands its low
  *  edge at `at`; a pinned space (whose origin is data 0) moves by `at`. Used by
  *  the `position` operator. `measure` defaults to the space's own. */
@@ -428,13 +451,23 @@ export const anchorAt = (
   space: CONTINUOUS_TYPE,
   at: number,
   measure?: UnitRecord
-): CONTINUOUS_TYPE =>
-  CONTINUOUS(
+): CONTINUOUS_TYPE => {
+  const pinned = CONTINUOUS(
     interval(space.dataInterval.min + at, space.dataInterval.max + at),
     "pinned",
     measure ?? space.measure,
     space.coordinateTransform
   );
+  return space.profile === undefined
+    ? pinned
+    : {
+        ...pinned,
+        profile: add(
+          space.profile,
+          constant({ min: at, max: at }, space.profile.domain)
+        ),
+      };
+};
 
 /** An ordinal space over `domain`, titled by the grouping field `title`. */
 export const ORDINAL = (

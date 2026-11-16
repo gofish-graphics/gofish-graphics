@@ -5,6 +5,7 @@ order: 10
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
+  - packages/gofish-graphics/src/ast/fun.ts
   - packages/gofish-graphics/src/ast/extent.ts
   - packages/gofish-graphics/src/ast/keyedDomains.ts
   - packages/gofish-graphics/src/ast/_node.ts
@@ -256,6 +257,7 @@ type CONTINUOUS_TYPE = {
   measure?: UnitRecord; // { unit?, titles, summands? }
   mirrored?: true;
   cells?: readonly Cell[]; // every region placed along the axis is a cell
+  profile?: Fun<Interval>; // the interval covered at each u across
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; titles?: string[]; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -290,6 +292,31 @@ it, and the `position` operator shifts by its datum offset. Alignment does not
 pin: it establishes a shared baseline (see below). What places a free
 baseline is placement: a parent constraint, a data anchor, or the scope root
 (`placeBaseline`).
+
+**The profile.** A continuous type may also hold a **`profile`**: for each
+position u on the other axis, in that axis's data units, the interval the
+content covers along this one, about the same local origin. It is a function
+value, `Fun<Interval>` (`ast/fun.ts`), and `dataInterval` is its hull. A type
+with no profile covers its `dataInterval` at every u, as a box does, and
+everything reads a type's profile through `crossSectionOf(space)`, which
+gives that box a constant one over the whole line. So nothing asks whether a
+type has a profile. A profile that is constant is never stored
+(`withProfile`), so a box's type stays as it is. No mark makes a profile yet;
+a ribbon built from rows will.
+
+A function value built from rows is exact: it holds one polynomial per
+interval between knots (degree 0 for `Curve.step`, 1 for `Curve.linear`, and
+the cubics of `spline.ts` for `Curve.monotone` and `Curve.smooth`). Sums,
+scales, envelopes and their maxima are exact again, so the folds below get
+the same numbers from constant profiles as from plain intervals. A function
+the module cannot see into (a kernel density) is read to a tolerance.
+
+The folds carry profiles pointwise. A stack's chain fold runs at every u
+(`tailSides` and `chainFold` take and return functions), and its type's
+interval is the largest reach over u, not the sum of each part's largest
+reach. An overlay (`overlay` in `alignment.ts`) takes the lower envelope of
+its parts' low edges and the upper envelope of their high edges. `anchorAt`
+shifts the profile with the interval.
 
 **The data interval has no σ in it.** Pixel overhead (a spread's spacing, a
 nest's padding, a fixed pitch, a `transform.scale`) is never part of the data

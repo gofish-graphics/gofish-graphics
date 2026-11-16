@@ -26,7 +26,20 @@ import {
   CONTINUOUS,
   magnitude,
   hasOrigin,
+  crossSectionOf,
+  withProfile,
 } from "../underlyingSpace";
+import {
+  add,
+  constant,
+  field,
+  maximum,
+  record,
+  scale,
+  subtract,
+  upperEnvelope,
+  type Fun,
+} from "../fun";
 import { currentUnits } from "../measure";
 import {
   inCoordinateSpace,
@@ -369,8 +382,8 @@ export function distributeSpaceFold(
           currentUnits().sum(q, "stack");
     const { origin } = opts;
     const sides = targets.map(tailSides);
-    sides.forEach(({ descent }, i) => {
-      if (origin.mirrored && descent > 0) {
+    sides.forEach((part, i) => {
+      if (origin.mirrored && maximum(field(part, "descent")) > 0) {
         const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
         throw new Error(
           `${by ? `stack({ by: ${by} })` : "stack"}: a centered stack's ` +
@@ -384,9 +397,18 @@ export function distributeSpaceFold(
         );
       }
     });
-    const { ascent, descent } = chainFold(sides, origin);
+    // The chain runs at every u, and the stack covers the largest reach on
+    // each side over u.
+    const reach = chainFold(sides, origin);
+    const above = field(reach, "ascent");
+    const below = field(reach, "descent");
+    const space = CONTINUOUS(
+      Interval.interval(-maximum(below), maximum(above)),
+      "pinned",
+      childMeasure
+    );
     return mirrored(
-      CONTINUOUS(Interval.interval(-descent, ascent), "pinned", childMeasure),
+      withProfile(space, record({ min: scale(below, -1), max: above })),
       origin.mirrored
     );
   }
@@ -399,45 +421,62 @@ export function distributeSpaceFold(
 }
 
 /** A part's reach on each side of its tail, the point the previous part's
- *  head meets (placement's `tail` anchor, see {@link RelationAnchor}). A free
+ *  head meets (placement's `tail` anchor, see {@link RelationAnchor}), at
+ *  every u across (its cross-section, {@link crossSectionOf}). A free
  *  part's tail is its baseline, data 0, so its sides are its interval's ends
  *  and a negative part reaches back. A pinned or origin-less part has no data
  *  baseline for placement, so its tail is its start and it lies above it as a
  *  box. */
-function tailSides(space: CONTINUOUS_TYPE): Sides {
-  const { min, max } = space.dataInterval;
+function tailSides(space: CONTINUOUS_TYPE): Fun<Sides> {
+  const cs = crossSectionOf(space);
+  const min = field(cs, "min");
+  const max = field(cs, "max");
   return space.origin === "free"
-    ? { ascent: max, descent: -min }
-    : { ascent: max - min, descent: 0 };
+    ? record({ ascent: max, descent: scale(min, -1) })
+    : record({ ascent: subtract(max, min), descent: constant(0, cs.domain) });
 }
 
 /** A part's reach on each side of a point on the chain: above it and below
  *  it. */
-type Sides = { ascent: number; descent: number };
+export type Sides = { ascent: number; descent: number };
 
 /**
- * The chain fold behind a stack's type: lay each part's tail on the previous
- * part's head (the tail moved by `ascent − descent`, its parts are
- * {@link tailSides}), from a first tail at 0, and return the highest reach
- * above `origin` and the lowest reach below it, over every part (and the 0
- * the chain starts at). `origin` is the point `fraction` of the way from its
- * part's tail to its head ({@link StackOrigin}). (A claim is its layer's
+ * The chain fold behind a stack's type, at every u across: lay each part's
+ * tail on the previous part's head (the tail moved by `ascent − descent`, its
+ * parts are {@link tailSides}), from a first tail at 0, and return the highest
+ * reach above `origin` and the lowest reach below it, over every part (and
+ * the 0 the chain starts at). `origin` is the point `fraction` of the way from
+ * its part's tail to its head ({@link StackOrigin}). Over parts that are one
+ * interval everywhere (boxes) every function is a constant, and the numbers
+ * are the ones a fold over plain numbers gives. (A claim is its layer's
  * plan's, `solver/plan.ts`, which lays a chain by the placement solve.)
  */
-function chainFold(parts: Sides[], origin: StackOrigin<number>): Sides {
-  const up = [0];
-  const down = [0];
-  let at = 0;
-  let zero = 0;
+export function chainFold(
+  parts: Fun<Sides>[],
+  origin: StackOrigin<number>
+): Fun<Sides> {
+  const domain = parts
+    .map((p) => p.domain)
+    .reduce((a, b) => Interval.union(a, b), parts[0]?.domain ?? ALL);
+  const start = constant<number>(0, domain);
+  const up: Fun<number>[] = [start];
+  const down: Fun<number>[] = [start];
+  let at = start;
+  let zero = start;
   parts.forEach((part, k) => {
-    const step = part.ascent - part.descent;
-    up.push(at + part.ascent);
-    down.push(part.descent - at);
-    if (k === origin.part) zero = at + origin.fraction * step;
-    at += step;
+    const ascent = field(part, "ascent");
+    const descent = field(part, "descent");
+    const step = subtract(ascent, descent);
+    up.push(add(at, ascent));
+    down.push(subtract(descent, at));
+    if (k === origin.part) zero = add(at, scale(step, origin.fraction));
+    at = add(at, step);
   });
-  return {
-    ascent: Math.max(...up) - zero,
-    descent: Math.max(...down) + zero,
-  };
+  return record({
+    ascent: subtract(upperEnvelope(up), zero),
+    descent: add(upperEnvelope(down), zero),
+  });
 }
+
+/** The whole line. */
+const ALL = { min: -Infinity, max: Infinity };

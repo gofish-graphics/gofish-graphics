@@ -12,16 +12,25 @@
  * `extends`.
  *
  * Geometry is available only after layout. A sizing-time form, so that an
- * operator like `pack` can fit itself to the space it is given, is #967.
+ * operator like `pack` can fit itself to the space it is given, is #967. The
+ * cross-section's form before layout, in data units, is a continuous space's
+ * `profile` (underlyingSpace.ts).
  */
 import type { HasBox } from "./box";
+import type { HasCrossSection } from "./crossSection";
 import type { HasEnclosingCircle } from "./enclosingCircle";
 import type { HasOutline } from "./outline";
 
-export interface Geometry extends HasBox, HasEnclosingCircle, HasOutline {}
+export interface Geometry
+  extends HasBox,
+    HasCrossSection,
+    HasEnclosingCircle,
+    HasOutline {}
 
 export { boxOfDims, insetBox, ringExtent } from "./box";
 export type { Box, HasBox } from "./box";
+export { crossSection } from "./crossSection";
+export type { HasCrossSection } from "./crossSection";
 export {
   enclosingCircle,
   circleAroundBox,

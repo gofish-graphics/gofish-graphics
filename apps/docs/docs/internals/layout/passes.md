@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
+  - packages/gofish-graphics/src/ast/geometry/crossSection.ts
   - packages/gofish-graphics/src/ast/geometry/clip.ts
   - packages/gofish-graphics/src/ast/geometry/ring.ts
   - packages/gofish-graphics/src/ast/geometry/voronoiTiling.ts
@@ -184,7 +185,7 @@ inferSizeDomains: (shared, children) => {
 };
 ```
 
-The `computeIntrinsicSize()` function returns a `Monotonic` function that maps from data values to pixel sizes. This is used later during layout to determine how much space each element needs.
+The `computeIntrinsicSize()` function returns a size claim: a `Pwl.Value`, a piecewise linear function of the scale factor σ (`src/ast/solver/pwl.ts`), that gives the pixel size for a scale. Layout reads it later to decide how much room each element needs.
 
 ### Pass 5.5: Axis-Name Resolution
 
@@ -261,7 +262,7 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 **Implementation**: `src/ast/_node.ts:212-223`
 
-This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: σ-affine `ascent`, `descent`, and `width` Monotonics) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
+This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: `ascent`, `descent`, and `width`, each a `Pwl.Value`, piecewise linear in σ) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
 
 **Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
 #586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
@@ -1168,8 +1169,16 @@ Once a node is laid out, `node.geometry()` describes its shape in the same
 local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
 The result always has a `box`, which is `intrinsicDims` as a plain box. It may
 also answer optional queries, one file per query in `src/ast/geometry/`, joined
-into `Geometry` with `extends`. There are two. A consumer calls each query's
+into `Geometry` with `extends`. There are three. A consumer calls each query's
 helper, which falls back to the box when the node does not answer.
+
+- `crossSection` (`crossSection(g, axis)`): for each position u on the other
+  axis, the interval the shape covers along `axis` there, as a function
+  value (`Fun<Interval>`, `ast/fun.ts`). The fallback is the box: the box's
+  interval on `axis` at every u across the box. No node answers it yet; a
+  ribbon built from rows will. Its form before layout, in data units, is the
+  space's `profile` (see
+  [Underlying Space](/internals/core/underlying-space)).
 
 - `enclosingCircle` (`enclosingCircle(g)`): a circle around the shape. The
   fallback is the circle through the box corners.

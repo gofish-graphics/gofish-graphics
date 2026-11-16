@@ -15,7 +15,10 @@ import {
   CONTINUOUS,
   originIs,
   DEFAULT_AXIS_TICKS,
+  crossSectionOf,
+  withProfile,
 } from "../ast/underlyingSpace";
+import * as F from "../ast/fun";
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
 import { pxOf } from "../ast/domain";
@@ -24,21 +27,18 @@ import { sameUnitVar, type UnitVar } from "../ast/measure";
 import { valueUnits } from "../ast/underlyingSpace";
 import { DatumValueImpl } from "../ast/data";
 import {
+  resolveAlignmentSpace,
   unionChildExtents,
   unionChildSpaces,
 } from "../ast/graphicalOperators/alignment";
 import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
-import {
-  distributeSpaceFold,
-} from "../ast/constraints/distribute";
+import { chainFold, distributeSpaceFold } from "../ast/constraints/distribute";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
 import { declared } from "./testHelpers";
-import {
-  resolveLayerBaseSpaces,
-} from "../ast/constraints/compose";
+import { resolveLayerBaseSpaces } from "../ast/constraints/compose";
 
 let passed = 0;
 let failed = 0;
@@ -436,14 +436,18 @@ console.log("# space: a one-value axis does not bind equal measure");
   );
 }
 
-console.log("# space: fit takes the one rule for a claim in its slot (Pwl.fill)");
+console.log(
+  "# space: fit takes the one rule for a claim in its slot (Pwl.fill)"
+);
 {
   const scopes = new ScopeRegistry();
   const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
   const space = CONTINUOUS(interval(0, 10), "none");
   // No session: a fit that warned would find nowhere to put it, so a node
   // with none stands in.
-  const node = { tryGetRenderSession: () => undefined } as unknown as GoFishNode;
+  const node = {
+    tryGetRenderSession: () => undefined,
+  } as unknown as GoFishNode;
   const fitIn = (claim: Pwl.Value, px: number, limit: boolean) =>
     scopes.fit(meta, node, space, Extent(claim), { px, limit })!;
   // 100.3 px of fixed parts in 100 px: they fill the slot up to rounding,
@@ -471,12 +475,17 @@ console.log("# space: fit takes the one rule for a claim in its slot (Pwl.fill)"
   );
 }
 
-console.log("# space: solveScope centers a one-value domain despite float noise");
+console.log(
+  "# space: solveScope centers a one-value domain despite float noise"
+);
 {
   // #1176 comment 2: a slope of ~1e-15 used to solve σ ≈ 1e16.
   const scopes = new ScopeRegistry();
   const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
-  const y = CONTINUOUS(interval(16.000000000000004, 16.000000000000004), "pinned");
+  const y = CONTINUOUS(
+    interval(16.000000000000004, 16.000000000000004),
+    "pinned"
+  );
   const claim = Extent(Pwl.affine(16.000000000000004, 3), Pwl.affine(-16, 3));
   const solved = scopes.solveScope(meta, y, claim, 200);
   ok(
@@ -865,6 +874,181 @@ console.log("# space: nicing is gated on an axis over the interval");
       free!.origin === "free" &&
       Pwl.at(freeClaim!.ascent, 1) === 140 &&
       Pwl.at(freeClaim!.descent, 1) === 40
+  );
+}
+
+console.log("# space: the chain fold over functions");
+{
+  // The chain fold before it ran over functions: one number per side.
+  const scalarFold = (
+    parts: { ascent: number; descent: number }[],
+    origin: { part: number; fraction: number }
+  ) => {
+    const up = [0];
+    const down = [0];
+    let at = 0;
+    let zero = 0;
+    parts.forEach((part, k) => {
+      const step = part.ascent - part.descent;
+      up.push(at + part.ascent);
+      down.push(part.descent - at);
+      if (k === origin.part) zero = at + origin.fraction * step;
+      at += step;
+    });
+    return {
+      ascent: Math.max(...up) - zero,
+      descent: Math.max(...down) + zero,
+    };
+  };
+  // A seeded generator, so a failure reproduces.
+  let seed = 12345;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const value = () =>
+    rand() < 0.2
+      ? 0
+      : Math.round((rand() - 0.4) * 1000) / (rand() < 0.5 ? 7 : 1);
+  let same = 0;
+  let firstDiff = "";
+  const cases = 500;
+  for (let c = 0; c < cases; c++) {
+    const n = 1 + Math.floor(rand() * 6);
+    const parts = Array.from({ length: n }, () => {
+      const ascent = Math.abs(value());
+      return { ascent, descent: rand() < 0.3 ? Math.abs(value()) / 3 : 0 };
+    });
+    const origin = {
+      part: Math.floor(rand() * n),
+      fraction: [0, 0.5, 1, 1 / 3, rand()][Math.floor(rand() * 5)],
+      mirrored: false,
+    };
+    const want = scalarFold(parts, origin);
+    const got = chainFold(
+      parts.map((p) => F.constant(p)),
+      origin
+    );
+    const ascent = F.maximum(F.field(got, "ascent"));
+    const descent = F.maximum(F.field(got, "descent"));
+    if (Object.is(ascent, want.ascent) && Object.is(descent, want.descent))
+      same++;
+    else if (!firstDiff)
+      firstDiff = `${JSON.stringify({ parts, origin })}: ${ascent}, ${descent} vs ${want.ascent}, ${want.descent}`;
+  }
+  ok(
+    "over constant functions the chain fold gives the scalar fold's numbers, bit for bit",
+    same === cases,
+    firstDiff
+  );
+  ok(
+    "and its result is constant",
+    F.isConstant(
+      chainFold(
+        [
+          F.constant({ ascent: 3, descent: 1 }),
+          F.constant({ ascent: 2, descent: 0 }),
+        ],
+        { part: 0, fraction: 0, mirrored: false }
+      )
+    )
+  );
+  const stack = distributeSpaceFold(
+    [CONTINUOUS(interval(0, 30), "free"), CONTINUOUS(interval(-25, 0), "free")],
+    [undefined, undefined],
+    {
+      axis: 1,
+      glue: true,
+      origin: { part: 0, fraction: 0, mirrored: false },
+    }
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a stack of boxes stores no profile",
+    stack.profile === undefined &&
+      JSON.stringify(stack.dataInterval) === JSON.stringify(interval(0, 30))
+  );
+
+  // Two bands over x in [0, 2], each a free extent [0, h(x)]: the stack's
+  // reach is the largest of the pointwise sum, not the sum of the largest.
+  const band = (h: number[]): CONTINUOUS_TYPE =>
+    withProfile(
+      CONTINUOUS(interval(0, Math.max(...h)), "free"),
+      F.record({
+        min: F.constant(0, { min: 0, max: 2 }),
+        max: F.through([0, 1, 2], h, { kind: "linear" }),
+      })
+    );
+  const bands = distributeSpaceFold(
+    [band([1, 4, 1]), band([4, 1, 4])],
+    [undefined, undefined],
+    { axis: 1, glue: true, origin: { part: 0, fraction: 0, mirrored: false } }
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a stack of bands spans the largest pointwise sum",
+    bands.dataInterval.min === 0 && bands.dataInterval.max === 5,
+    JSON.stringify(bands.dataInterval)
+  );
+  ok(
+    "and keeps its cross-section",
+    bands.profile !== undefined &&
+      bands.profile.at(0).max === 5 &&
+      bands.profile.at(1).max === 5 &&
+      bands.profile.at(0.5).max === 5
+  );
+  ok(
+    "a space with no profile is read as its interval at every u",
+    crossSectionOf(CONTINUOUS(interval(-2, 7), "free")).at(1e6).min === -2
+  );
+  const shifted = anchorAt(band([1, 4, 1]), 10);
+  ok(
+    "anchorAt moves the profile with the interval",
+    shifted.profile !== undefined &&
+      shifted.profile.at(1).max === 14 &&
+      shifted.profile.at(1).min === 10 &&
+      shifted.profile.domain.max === 2
+  );
+
+  // An overlay unions its parts' cross-sections at every u.
+  const overlaid = unionChildSpaces(
+    [onY(band([1, 4, 1])), onY(band([4, 1, 4]))],
+    1
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "an overlay of bands takes the upper envelope of their edges",
+    overlaid.profile !== undefined &&
+      overlaid.profile.at(0).max === 4 &&
+      overlaid.profile.at(1).max === 4 &&
+      overlaid.profile.at(0.5).max === 2.5 &&
+      overlaid.dataInterval.max === 4
+  );
+  const started = resolveAlignmentSpace(
+    [
+      withProfile(
+        CONTINUOUS(interval(2, 6), "free"),
+        F.record({
+          min: F.constant(2, { min: 0, max: 1 }),
+          max: F.through([0, 1], [3, 6], { kind: "linear" }),
+        })
+      ),
+      CONTINUOUS(interval(0, 1), "free"),
+    ],
+    "start",
+    1
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a start alignment seats a profiled part by its box",
+    started.profile !== undefined &&
+      started.profile.at(0).min === 0 &&
+      started.profile.at(1).max === 4
+  );
+  ok(
+    "an overlay of boxes stores no profile",
+    (
+      unionChildSpaces(
+        [
+          onY(CONTINUOUS(interval(0, 3), "free")),
+          onY(CONTINUOUS(interval(-1, 2), "free")),
+        ],
+        1
+      ) as CONTINUOUS_TYPE
+    ).profile === undefined
   );
 }
 

@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 /**
  * Function values: a function of one parameter, with the interval it is
  * defined over (its domain). A cross-section is a `Fun<Interval>`; an edge, a
