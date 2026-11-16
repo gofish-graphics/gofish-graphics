@@ -108,7 +108,9 @@ export interface DistributeOptions {
  * nonnegative amounts holds amounts measured away from its 0 on both sides,
  * so its space is {@link CONTINUOUS_TYPE.mirrored}; the fold reads that from
  * the parts. Under `middle` and `wiggle` the 0 is no data value, and the
- * stack's space is free: a baseline its parent places.
+ * stack's space has no origin. Its 0 is still the node's own 0, where
+ * placement seats the point its baseline names, so a parent's
+ * `alignment: "baseline"` lines up the stacks' middles.
  *
  * The `part` of an `at` names the part in four ways on the way down: a
  * value of the `by` column (or a child index in the combinator form) from
@@ -122,7 +124,9 @@ export type StackBaseline<Part> =
 
 /** Whether a stack's 0 is data 0 on its axis: under `middle` and `wiggle`
  *  it is not (a position is no amount from the stack's middle), so the
- *  stack's space is free, a baseline its parent places. */
+ *  stack's space has no origin (`"none"`) and its axis measures only
+ *  differences. Its 0 is still where its baseline puts it: placement seats
+ *  that point at the node's own 0 ({@link lowerDistributePlacement}). */
 const keepsZero = (baseline: StackBaseline<unknown>): boolean =>
   baseline.kind !== "middle" && baseline.kind !== "wiggle";
 
@@ -450,12 +454,12 @@ export function distributeSpaceFold(
     const above = field(reach, "ascent");
     const below = field(reach, "descent");
     // A stack whose 0 is data 0 is a pinned space. One whose 0 is its
-    // middle, or a line that moves with u, has a 0 that is no data value: it
-    // is a baseline a parent places (a free space, whose 0 a baseline align
-    // lines up across stacks).
+    // middle, or a line that moves with u, has a 0 that is no data value:
+    // its space has no origin, and a position on it is no amount. Its own 0
+    // is a placement fact (the point its baseline names), not a data 0.
     const space = CONTINUOUS(
       Interval.interval(-maximum(below), maximum(above)),
-      keepsZero(baseline) ? "pinned" : "free",
+      keepsZero(baseline) ? "pinned" : "none",
       childMeasure
     );
     // Every part a nonnegative amount (none reaches below its tail), on a

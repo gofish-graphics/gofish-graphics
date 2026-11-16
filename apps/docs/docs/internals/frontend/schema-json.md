@@ -4888,7 +4888,7 @@ for the API.
           "required": ["kind", "part", "point"]
         }
       ],
-      "description": "Where a stack puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack`. The parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: the 0 is a baseline the parent places, as for a bar, and the stack shows no axis of its own."
+      "description": "Where a stack puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack`. The parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: a position on the stack's axis is no amount, and its axis shows only differences. The 0 is still the stack's baseline, which its parent lines up."
     }
   }
 }

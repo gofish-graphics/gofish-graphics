@@ -63,8 +63,10 @@ import { middle } from "gofish-graphics/baseline"; // the same value as Baseline
 With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its
 axis is an amount from 0. A stack of parts that are all nonnegative amounts
 then has an axis that counts up from 0 on both sides of it. With `middle` and
-`wiggle`, the stack's 0 is not data 0. It is a baseline that the stack's parent
-places, as it places the baseline of a bar.
+`wiggle`, the stack's 0 is not data 0, so a position on its axis is not an
+amount. Its axis shows only differences. The stack's 0 is still its baseline,
+and a parent with `alignment: "baseline"` lines it up with the baselines of
+its other children, so rows of centered stacks share one middle.
 
 `Baseline.wiggle()` moves its 0 along the cross axis. At each place, the slope
 of the 0 is the average slope of the middles of the parts, weighted by their

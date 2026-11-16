@@ -316,44 +316,48 @@ function solveRank2Axis<T>(
   // origin (`AnchorParticipantFact.origin`), on whichever part carries it,
   // a size-strong part included. A spread chain carries none and keeps its
   // sequence origin.
+  //
+  // A node's 0 is where its baseline says. A stack says where (its
+  // origin), so its origin is seated at the layer's data 0, or at the
+  // layer's own 0 (pixel 0) where the layer has no data 0: a stack whose 0
+  // is its middle has no data 0, and its 0 is still its middle. A free
+  // participant's baseline is its data 0, which only a layer with a data 0
+  // seats.
   const freeBaselines = new Map<NodeId, T>();
-  if (freeOrigin !== undefined) {
-    const placedByChain = new Set<NodeId>();
-    const stackOrigins = new Map<NodeId, StackPoint>();
-    for (const fact of facts) {
-      if (fact.type === "anchor-participant" && fact.origin !== undefined)
-        stackOrigins.set(fact.node, fact.origin);
-      if (fact.type !== "anchor-relation" || !fact.chain) continue;
-      placedByChain.add(fact.from.node);
-      placedByChain.add(fact.to.node);
-    }
-    const baselineOffset = (node: NodeId): T | undefined => {
-      const origin = stackOrigins.get(node);
-      if (origin !== undefined)
-        return stackOriginOffset(
-          A,
-          (n, anchor) => nodeAnchorOffset(A, n, anchor, axis, sizes, targets),
-          node,
-          origin
-        );
-      // An interval (size-strong) has no baseline, and a chain places its
-      // other members' baselines.
-      if (sizes.has(node) || placedByChain.has(node)) return undefined;
-      const target = targets.get(node);
-      return target && freeBaselineOffset(A, target, axis);
-    };
-    for (const node of problem.participants) {
-      const offset = baselineOffset(node);
-      if (offset !== undefined) freeBaselines.set(node, offset);
-    }
+  const placedByChain = new Set<NodeId>();
+  const stackOrigins = new Map<NodeId, StackPoint>();
+  for (const fact of facts) {
+    if (fact.type === "anchor-participant" && fact.origin !== undefined)
+      stackOrigins.set(fact.node, fact.origin);
+    if (fact.type !== "anchor-relation" || !fact.chain) continue;
+    placedByChain.add(fact.from.node);
+    placedByChain.add(fact.to.node);
+  }
+  const baselineOffset = (node: NodeId): T | undefined => {
+    const origin = stackOrigins.get(node);
+    if (origin !== undefined)
+      return stackOriginOffset(
+        A,
+        (n, anchor) => nodeAnchorOffset(A, n, anchor, axis, sizes, targets),
+        node,
+        origin
+      );
+    // An interval (size-strong) has no baseline, and a chain places its
+    // other members' baselines.
+    if (freeOrigin === undefined || sizes.has(node) || placedByChain.has(node))
+      return undefined;
+    const target = targets.get(node);
+    return target && freeBaselineOffset(A, target, axis);
+  };
+  for (const node of problem.participants) {
+    const offset = baselineOffset(node);
+    if (offset !== undefined) freeBaselines.set(node, offset);
   }
   const { positions, conflicts: graphConflicts } = solveAxisProblem(
     A,
     axis,
     problem,
-    freeOrigin === undefined
-      ? undefined
-      : { value: freeOrigin, baselines: freeBaselines }
+    { value: freeOrigin ?? A.zero, baselines: freeBaselines }
   );
 
   const cells = new Map<NodeId, SolvedCell<T>>();

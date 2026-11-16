@@ -61,8 +61,10 @@ from gofish.baseline import middle  # the same function as Baseline.middle
 | `Baseline.at(part, point)` | A point on one part.                                                                       |
 
 With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its
-axis is an amount from 0. With `middle` and `wiggle`, the stack's 0 is not data 0. It is a baseline that the stack's parent places, as it places the baseline
-of a bar.
+axis is an amount from 0. With `middle` and `wiggle`, the stack's 0 is not data 0, so a position on its
+axis is not an amount. Its axis shows only differences. The stack's 0 is still
+its baseline, and a parent with `alignment="baseline"` lines it up with the
+baselines of its other children, so rows of centered stacks share one middle.
 
 ## `Baseline.at(part, point)`
 

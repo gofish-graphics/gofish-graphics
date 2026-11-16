@@ -410,9 +410,15 @@ the two sides:
   `hasOrder`). A stack given both the trait and a `baseline` is an error:
   the trait already puts the 0.
 - Under `Baseline.middle()` and `Baseline.wiggle()` the stack's 0 is no data
-  value, so the stack's space is **free**, not pinned: a baseline its parent
-  places, as it places a bar's. A spread of middle stacks lines their
-  middles up on one line. `Baseline.wiggle()` moves its 0 with u: its slope
+  value, so the stack's space has **no origin** (`"none"`): a position on it
+  is no amount, and its axis is the difference axis. Two things are apart
+  here. The space's data origin says whether a position is an amount from 0.
+  The node's own 0 is where a parent lines it up, and that is a placement
+  fact: the point its baseline names. The placement solve seats a stack's
+  baseline point at the layer's data 0 when the layer has one, and at the
+  layer's own 0 (pixel 0) when it has none (`solveRank2Axis`). So a spread
+  of middle stacks with `alignment: "baseline"` lines their middles up on
+  one line. `Baseline.wiggle()` moves its 0 with u: its slope
   is the average slope of the parts' middles, weighted by their thickness,
   `Σ wᵢ mᵢ′ / Σ wᵢ` (`wiggleZero`), integrated from the first u. That is
   d3's `stackOffsetWiggle` in the limit of fine data. It is defined on the
@@ -422,8 +428,8 @@ the two sides:
   tail), on a 0 that is data 0, builds a **mirrored** space
   (`CONTINUOUS_TYPE.mirrored`): both sides of 0 hold amounts measured away
   from it, so an axis over it labels each tick with its distance from 0. The
-  fold reads this from the parts, not from the baseline (a free middle or
-  wiggle stack is never mirrored). With the 0 at the first part's tail every tick is already
+  fold reads this from the parts, not from the baseline (a middle or
+  wiggle stack, which has no origin, is never mirrored). With the 0 at the first part's tail every tick is already
   a distance, so this changes nothing for a plain stack; a centered stack's
   axis reads `40 20 0 20 40`. A stack with a negative part keeps signed
   labels. A union stays mirrored only when every part is.
@@ -1328,6 +1334,11 @@ origin with how far from that part's tail to its head the origin lies
 (`AnchorParticipantFact.origin`), and the solver lists that point whether or
 not the part is a baseline magnitude, and whether or not it is size-strong (a
 size-strong part's tail is its start). By default it is the first part's tail.
+A stack in a layer with no data 0 (a middle or wiggle stack, whose space has
+no origin) still has its own 0: the solver seats the stack's origin at the
+layer's pixel 0, where the free origin would be. Only a free node's baseline
+needs the layer's data 0. So a node's 0 is where its baseline says, and a
+node that says nothing has it at its data 0, else at its start.
 So a stack seats at the origin like a single bar, a negative first part hangs
 below it, and two stacks of one sign each (grouped by sign) meet on the 0
 tick. A stack over a `HasMidpoint` column carries its origin at the midpoint

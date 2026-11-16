@@ -1168,18 +1168,18 @@ console.log("# space: a wiggle stack's 0");
     anchored.ascent === 5 && anchored.descent === 0,
     JSON.stringify(anchored)
   );
-  const free = distributeSpaceFold(
+  const centered = distributeSpaceFold(
     [CONTINUOUS(interval(0, 30), "free"), CONTINUOUS(interval(0, 10), "free")],
     [undefined, undefined],
     { axis: 1, glue: true, baseline: { kind: "middle" } }
   ) as CONTINUOUS_TYPE;
   ok(
-    "a middle stack is a free space about its middle, not mirrored",
-    free.origin === "free" &&
-      free.mirrored === undefined &&
-      JSON.stringify(free.dataInterval) ===
+    "a middle stack has no data 0 (its axis measures differences), not mirrored",
+    centered.origin === "none" &&
+      centered.mirrored === undefined &&
+      JSON.stringify(centered.dataInterval) ===
         JSON.stringify({ min: -20, max: 20 }),
-    JSON.stringify(free)
+    JSON.stringify(centered)
   );
 }
 
