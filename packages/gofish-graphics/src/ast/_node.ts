@@ -61,8 +61,7 @@ import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
-import { GoFishRef, resolution } from "./_ref";
-import { axisIndex, directSlot } from "./constraints/shared";
+import { GoFishRef } from "./_ref";
 import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -575,7 +574,7 @@ export const nestEach: ResolveSharing = (childNodes) => {
  * pinned child with a node that has no data (a `region` and its text)
  * keeps the parent pinned, and the region stays where its data puts it.
  *
- * A stack moves its parts along its axis ({@link laidByStack}): it lays
+ * A stack moves its parts along its axis (`SharingPlan.stacked`): it lays
  * each one's tail on the previous one's head, and its type adds a pinned
  * part's width as a box (`distributeSpaceFold`). So a part of a stack is
  * not placed by its own data there, even when it is pinned. A stack inside
@@ -588,22 +587,15 @@ export const placedByOwnData = (
   parent: GoFishNode,
   i: number,
   axis: 0 | 1
-): boolean =>
-  parent.sharing().sets[axis][i] === 0 &&
-  !laidByStack(parent, i, axis) &&
-  originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
-  originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
-
-/** Whether one of `parent`'s stacks (a glued `distribute`) along `axis` has
- *  child `i` as a part, so the stack's chain places it there. */
-const laidByStack = (parent: GoFishNode, i: number, axis: 0 | 1): boolean =>
-  parent.constraints.some(
-    (c) =>
-      c.type === "distribute" &&
-      c.glue &&
-      axisIndex(c.dir) === axis &&
-      c.children.some((ref) => directSlot(resolution(parent), ref) === i)
+): boolean => {
+  const plan = parent.sharing();
+  return (
+    plan.sets[axis][i] === 0 &&
+    !plan.stacked?.[axis].has(i) &&
+    originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
+    originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned")
   );
+};
 
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis

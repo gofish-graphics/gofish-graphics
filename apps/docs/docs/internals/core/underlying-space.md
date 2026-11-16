@@ -958,7 +958,9 @@ child is nested at its cell, as a scatter's glyph is at its point. Detaches run 
 and joins second, so an `align` beats a `position` on the same axis. The
 `nested` half is the datum placements plus the spread slots and grid cells. The
 plan also returns the datum placements on their own (`datumPlaced`), which the
-layer's own union leaves out. Unlike `planConstraintComposition`, the plan
+layer's own union leaves out, and the parts of each stack on its axis
+(`stacked`), which the stack's chain places and so are not placed by their
+own data (`placedByOwnData`), unless a datum `position` places them there. Unlike `planConstraintComposition`, the plan
 exists for every layer, point positions included. The layer's type hook, the
 keyed domain table and the `GOFISH_DUMP_SHARING` dump read it. It is step 3 of
 the [measure-keyed domains design](/internals/design/measure-keyed-domains),
