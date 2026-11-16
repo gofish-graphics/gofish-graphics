@@ -258,12 +258,11 @@ function checkGofishNames(code, fileName, exports) {
     if (!ts.isImportDeclaration(stmt)) continue;
     if (stmt.moduleSpecifier.text !== "gofish-graphics") continue;
     const clause = stmt.importClause;
-    if (!clause || clause.isTypeOnly) continue;
+    if (!clause) continue;
     if (clause.name) problems.push(`default import ${clause.name.text}`);
     const bindings = clause.namedBindings;
     if (!bindings || !ts.isNamedImports(bindings)) continue;
     for (const el of bindings.elements) {
-      if (el.isTypeOnly) continue;
       const name = (el.propertyName ?? el.name).text;
       if (!exports.has(name)) problems.push(name);
       else if (exports.get(name))
