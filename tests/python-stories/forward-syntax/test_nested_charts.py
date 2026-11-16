@@ -71,8 +71,7 @@ def story_daily_highs_over_readings():
     their own, so they keep their time type and share the line's time axis."""
     return (
         chart(READINGS, w=560, h=220)
-        .flow(scatter(by="time", x="time", y="temp"))
-        .mark(line(stroke="steelblue", stroke_width=2))
+        .mark(line(x="time", y="temp", stroke="steelblue", stroke_width=2))
         .layer(
             chart(DAILY_HIGHS)
             .flow(scatter(by="time", x="time", y="temp"))
