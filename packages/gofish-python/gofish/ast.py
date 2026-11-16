@@ -258,6 +258,54 @@ class _PendingAccessor:
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
 
+    def reply(self) -> "_Reply":
+        """The callback the payload records for it: one value per row."""
+        return _accessor_reply(self.fn)
+
+
+class _PendingGroupStep(_PendingAccessor):
+    """A Python ``map`` or ``reduce`` in a ``field(...)`` pipeline. JS calls
+    it once with every group's values (a list of lists), and it answers one
+    result per group: the group's new values for a map, its result for a
+    reduce (``resolveGroupSteps`` in fieldExpr.ts)."""
+
+    def reply(self) -> "_Reply":
+        return _table_reply(self.fn)
+
+
+def _group_steps(field: Any) -> List[_PendingAccessor]:
+    """The Python maps and reduces of a ``field(...)`` pipeline."""
+    wire = field._wire if isinstance(field, _LiftedField) else field
+    return [
+        op["fn"]
+        for op in wire.get("ops", [])
+        if isinstance(op.get("fn"), _PendingAccessor)
+    ]
+
+
+def _wire_field(field: Any, payload: "_Payload") -> "FieldAccessor":
+    """A ``field(...)`` pipeline as the wire carries it: each Python map or
+    reduce becomes its ``{"__gofish_lambda": id}`` sentinel, and ``payload``
+    records its callback."""
+    wire = field._wire if isinstance(field, _LiftedField) else field
+    if not _group_steps(wire):
+        return wire
+    out = FieldAccessor(wire)
+    out["ops"] = [
+        {
+            **op,
+            "fn": {
+                "__gofish_lambda": payload.callback(
+                    op["fn"].lambda_id, op["fn"].reply()
+                )
+            },
+        }
+        if isinstance(op.get("fn"), _PendingAccessor)
+        else op
+        for op in wire["ops"]
+    ]
+    return out
+
 
 def _is_function(v: Any) -> bool:
     """A Python function the user wrote: callable, and not a GoFish value. A
@@ -281,7 +329,7 @@ def _holds_node(v: Any) -> bool:
 def _is_tagged(v: Any) -> bool:
     """A `field(...)` or `datum(...)` value: a dict subclass that already holds
     wire data, so the option walks treat it as a leaf."""
-    return isinstance(v, (FieldAccessor, DatumValue))
+    return isinstance(v, (FieldAccessor, _LiftedField, DatumValue))
 
 
 def _channel(v: Any) -> Any:
@@ -323,6 +371,9 @@ def _scan_options(construct: str, options: Dict[str, Any]) -> Dict[str, List["_P
             if isinstance(x, _PendingAccessor):
                 accessors.append(x)
                 return x
+            if isinstance(x, (FieldAccessor, _LiftedField)):
+                accessors.extend(_group_steps(x))
+                return x
             if _is_tagged(x):
                 return x
             if _is_function(x):
@@ -346,10 +397,10 @@ def _wire_accessors(value: Any, payload: "_Payload") -> Any:
     sentinel back into an accessor that calls into Python."""
     return _nonfinite.walk(
         value,
-        lambda x: {
-            "__gofish_lambda": payload.callback(x.lambda_id, _accessor_reply(x.fn))
-        }
+        lambda x: {"__gofish_lambda": payload.callback(x.lambda_id, x.reply())}
         if isinstance(x, _PendingAccessor)
+        else _wire_field(x, payload)
+        if isinstance(x, (FieldAccessor, _LiftedField))
         else x
         if _is_tagged(x)
         else KEEP,
@@ -3288,6 +3339,46 @@ class FieldAccessor(dict):
         field. Valid only in a value (size/pos) slot."""
         return self._with_op({"op": "distinct"})
 
+    def map(
+        self, fn: Callable[..., Any], *, unit: Any = None
+    ) -> "FieldAccessor":
+        """Map each value of the group to a new one, ``fn(x, i, xs)``, with
+        ``xs`` all the values. ``fn`` may take fewer arguments
+        (``lambda x: x * 2``), as in JS. ``unit`` is the new values' unit;
+        without one their unit is unknown, and they cannot be summed or
+        stacked. Mirrors JS ``field(name).map(fn, { unit })``.
+
+        JS calls ``fn`` across the bridge once per spec, with every group's
+        values."""
+        where = f'field("{self["name"]}").map(...)'
+        call = _positional_call(fn, where)
+
+        def all_groups(groups: List[List[Any]]) -> List[List[Any]]:
+            return [
+                [_check_step_value(call(x, i, xs), where) for i, x in enumerate(xs)]
+                for xs in groups
+            ]
+
+        return self._with_op(_step_op("map", all_groups, unit, where))
+
+    def reduce(self, fn: Callable[[List[Any]], Any], *, unit: Any = None) -> Any:
+        """Fold the group's values into one result, ``fn(xs)``, once per
+        group. The result is lifted by its shape: a number is one value, and
+        a dict an object with one method per key, read with ``s.lo()``. A
+        list is an error, and nothing chains after a value. ``unit`` is one
+        unit for every number of the result, or a dict that mirrors its
+        shape; a number whose unit is not declared cannot be summed or
+        stacked. Mirrors JS ``field(name).reduce(fn, { unit })``.
+
+        A Python reduce cannot return a function of t (``fun``): layout
+        reads a function synchronously, and the bridge is asynchronous."""
+        where = f'field("{self["name"]}").reduce(...)'
+
+        def all_groups(groups: List[List[Any]]) -> List[Any]:
+            return [_check_step_value(fn(xs), where) for xs in groups]
+
+        return _LiftedField(self._with_op(_step_op("reduce", all_groups, unit, where)))
+
     def between(
         self, lo: float, hi: float, *, closed: Optional[str] = None
     ) -> "FieldPredicate":
@@ -3314,6 +3405,101 @@ class FieldAccessor(dict):
         if closed is not None:
             pred["closed"] = closed
         return pred
+
+
+def _positional_call(fn: Callable[..., Any], where: str) -> Callable[..., Any]:
+    """``fn`` called with as many of its arguments as it takes. JS calls a
+    function with every argument and drops the ones it does not take;
+    Python raises, so a ``lambda x: ...`` is called with ``x`` alone."""
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return fn
+    if any(p.kind == p.VAR_POSITIONAL for p in params):
+        return fn
+    n = sum(
+        1 for p in params if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+    )
+    if n == 0:
+        raise TypeError(f"{where}: the function takes no arguments; it takes x.")
+    return lambda *args: fn(*args[:n])
+
+
+def _check_step_value(value: Any, where: str) -> Any:
+    """A map's or a reduce's result, checked as it crosses to JS: a
+    function cannot cross (see ``fun``), and a list is not one result."""
+    if callable(value):
+        raise TypeError(
+            f"{where} returned a function. A function of t is read during "
+            "layout, which is synchronous, but a Python function can only be "
+            "called across the bridge, which is asynchronous, so a Python "
+            "reduce cannot give one yet. Return its values at sample points "
+            "as rows instead, or write the reduce in JS."
+        )
+    if isinstance(value, (list, tuple)):
+        raise TypeError(
+            f"{where} returned a list. A reduce returns a number or a dict "
+            "of them; for several values, return a dict ({'lo': ..., 'hi': "
+            "...}) and read its members (s.lo())."
+        )
+    if isinstance(value, dict):
+        for v in value.values():
+            _check_step_value(v, where)
+    return value
+
+
+def _unit_spec(unit: Any, where: str) -> Any:
+    """The ``unit`` option of ``map`` or ``reduce`` as the wire writes it:
+    a unit's traits, a unit's name, or a dict that mirrors the result."""
+    if isinstance(unit, Unit):
+        return copy.deepcopy(unit._type)
+    if isinstance(unit, str):
+        return unit
+    if isinstance(unit, dict):
+        return {k: _unit_spec(v, f"{where}[{k!r}]") for k, v in unit.items()}
+    raise TypeError(
+        f"{where}: unit must be a Unit, a unit's name, or a dict of them, "
+        f"got {unit!r}."
+    )
+
+
+def _step_op(kind: str, fn: Callable, unit: Any, where: str) -> dict:
+    """The wire op of a Python ``map`` or ``reduce``."""
+    op: dict = {"op": kind, "fn": _PendingGroupStep(fn)}
+    if unit is not None:
+        op["unit"] = _unit_spec(unit, f"{where} unit")
+    return op
+
+
+class _LiftedField:
+    """What ``field(name).reduce(fn)`` gives: the expression, whose every
+    attribute is a member of the reduce's result, a method that reads it
+    (``s.lo()``). The shape of the result is known only when the reduce
+    runs in JS, so a member is checked there: a member of a number is an
+    error. Mirrors the proxy ``lifted`` in JS ``fieldExpr.ts``."""
+
+    __slots__ = ("_wire",)
+
+    def __init__(self, wire: "FieldAccessor"):
+        object.__setattr__(self, "_wire", wire)
+
+    def __getattr__(self, name: str) -> Callable[..., "_LiftedField"]:
+        if name.startswith("_"):
+            raise AttributeError(name)
+
+        def member(*args: Any) -> "_LiftedField":
+            op: dict = {"op": "member", "name": name}
+            if args:
+                op["args"] = list(args)
+            return _LiftedField(self._wire._with_op(op))
+
+        return member
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        raise AttributeError("a reduce's result is immutable.")
+
+    def __repr__(self) -> str:
+        return f"<field({self._wire['name']!r}).reduce(...)>"
 
 
 class FieldPredicate(dict):

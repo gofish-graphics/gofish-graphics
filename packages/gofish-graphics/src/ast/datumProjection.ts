@@ -31,12 +31,7 @@ import {
   type ChunkKey,
   type FieldAccessor,
 } from "./data";
-import {
-  getFieldOps,
-  binStepsOf,
-  normalizeNotSupportedError,
-  type FieldOp,
-} from "./fieldExpr";
+import { getFieldOps, binStepsOf, type FieldOp } from "./fieldExpr";
 import { chainCells, Cell, CycleCell, KeyCell, type Cells } from "./cells";
 import {
   columnType,
@@ -719,7 +714,14 @@ export function splitEntries<T extends Record<string, any>>(
             `(e.g. rect({ h: field(...).${op.op}() })), not on \`by\`.`
         );
       case "normalize":
-        throw normalizeNotSupportedError();
+      case "map":
+      case "reduce":
+      case "member":
+        throw new Error(
+          `field(...).${op.op === "member" ? op.name : op.op}(...) computes ` +
+            `values — valid on a value channel (e.g. rect({ h })), not on ` +
+            `\`by\`. To group by computed values, derive a column first.`
+        );
     }
   }
   return ordered

@@ -45,7 +45,12 @@ import {
   type NameableMark,
 } from "../withGoFish";
 import { Band, bandOfFunctions, bandOfRows } from "../shapes/band";
-import { isFunctionExpr, type FunctionExpr } from "../groupExpr";
+import {
+  groupFun,
+  isFunctionExpr,
+  type FunctionExpr,
+  type ValueExpr,
+} from "../groupExpr";
 import { monotone } from "../../families/curve";
 import type { ParameterCurve } from "../fun";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -1116,15 +1121,6 @@ function shapeForm(
       `[gofish] ${type}({ ${parameter} }): the shape form needs \`${value}\` ` +
         `too, the value at each ${parameter}.`
     );
-  // A channel that holds a function expression gives the mark a parameter
-  // t, which every function channel is read at; rows are not read at t.
-  const ofT = isFunctionExpr(opts[parameter]) || isFunctionExpr(opts[value]);
-  if (ofT && opts.curve !== undefined)
-    throw new Error(
-      `[gofish] ${type}({ ${parameter}, ${value}, curve }): a curve says how ` +
-        `a ${type} runs between its rows, but these channels hold functions ` +
-        `of t, which run as they are. Remove curve.`
-    );
   const curve = (opts.curve ?? monotone()) as Curve;
   if (!["linear", "step", "monotone", "smooth"].includes(curve.kind))
     throw new Error(
@@ -1147,6 +1143,19 @@ function shapeForm(
     const accessors = isThenable(pending) ? await pending : pending;
     const paint = await resolveGroupPaint(type, accessors, rows);
     const o = withLiveStatics(paint, liveChannels, rows) as Record<string, any>;
+    // A channel that holds a function expression (a function value, or a
+    // reduce that returns a function for this group) gives the mark a
+    // parameter t, which every function channel is read at; rows are not
+    // read at t.
+    const ofT =
+      groupFun(o[parameter], rows) !== undefined ||
+      groupFun(o[value], rows) !== undefined;
+    if (ofT && opts.curve !== undefined)
+      throw new Error(
+        `[gofish] ${type}({ ${parameter}, ${value}, curve }): a curve says ` +
+          `how a ${type} runs between its rows, but these channels hold ` +
+          `functions of t, which run as they are. Remove curve.`
+      );
     const along = { name: parameter, accessor: o[parameter] };
     const values = {
       name: value,

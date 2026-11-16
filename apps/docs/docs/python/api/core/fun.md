@@ -25,4 +25,8 @@ rows = [{"t": t / 10, "value": math.sin(t / 10)} for t in range(0, 63)]
 chart(rows).mark(ribbon(x="t", h="value"))
 ```
 
+For the same reason, a Python
+[`reduce`](/python/api/operators/spread#map-and-reduce) that returns a
+function raises. A reduce that returns a number or a dict of numbers works.
+
 See [`fun` in JavaScript](/js/api/core/fun).

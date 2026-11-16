@@ -2032,9 +2032,12 @@ is an instance of the data-valued size above, with no layout-side special
 case. Its segments _fill_ the extent in proportion to their value:
 `stack({ by, dir, size: field("count").normalize() })`.
 
-`.normalize()` is a **data** transform, evaluated once, up front, by
-`applyChannels` (`marks/createOperator.ts`) via
-`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts`. For each of the
+`.normalize()` is a **data** transform, the built-in map `x / Σxs`,
+evaluated once, up front, by `applyChannels` (`marks/createOperator.ts`) via
+`splitWindowMaps`/`applyWindowMaps` in `fieldExpr.ts`. On an operator's
+per-entry `size` channel, maps with no fold after them run over the entries'
+values (the window) instead of a group's rows; `normalize` is one such map,
+and a user's `map` is another. For each of the
 operator's own split entries it computes the entry's **share** of their sum,
 `v_e / Σv_e`, tagged with a share [unit](#measures-units-are-types)
 (`"<base> share by <by>"`, via `shareQuantity`) so a share axis can never
@@ -2733,6 +2736,49 @@ error rather than silently doing the wrong thing:
   entry-flagged `size`) and fold a group's rows to a single value —
   `evalFieldValues` in `fieldExpr.ts`. A domain op or a second aggregate
   reaching a value slot throws (the fold happens once).
+- **Maps and reduces** (`.map(fn)`, `.reduce(fn)`, stack profiles S10) are
+  the general form of the value slot, and the named methods are built-in
+  callbacks of them on one path, `evalGroup` in `fieldExpr.ts`. Its
+  pipeline is read in three parts, in order: maps (each a function of all
+  the values: `map`'s `fn(x, i, xs)` on each, or `normalize`'s shares), at
+  most one fold (a user's `reduce`, or `sum`, `mean`, `median`, `count`,
+  `distinct` from the `NAMED_FOLDS` table), and then the members a lifted
+  result is read through (`{ op: "member", name, args }`). A map after the
+  fold, or a member after a named fold, is the chaining error: nothing
+  chains after a value.
+
+### Lifting a reduce's result
+
+A reduce's result is lifted by its shape, which is known only when it runs
+(`liftLeaf`). A number, or no value, is a value; a `Fun` is a function of
+`t`, which only the shape form of `ribbon` and `line` reads (`groupFun` in
+`groupExpr.ts` asks per group); a record is read through the members after
+it, a method member called with its arguments; an array is an error. The
+expression holds the members as ops, so the spec can name a member before
+the reduce has run: `field(x).reduce(fn)` is a `Proxy` over the expression
+(`lifted`), whose every property but its own wire and the hooks the runtime
+probes (`OWN_KEYS`) is a member method. The types mirror this: `Lift<V>` in
+`groupExpr.ts` maps a number to `ValueExpr`, a `Fun<number>` to
+`FunctionExpr`, a record to one method per member, and an array to a
+`LiftError`, which no channel takes.
+
+Each step runs once per group. `evalGroup` keeps what a map or a fold
+computed by its op object and the rows array it ran on (`stepCache`, two
+`WeakMap`s), so the channels of one mark, the extent pass and the drawing
+pass all read the one result. A named fold goes through the cache too, so
+there is one path. A Python map or reduce has only a batch form: before
+inference, `resolveChannelAccessors` (`channels.ts`) calls it once over
+every group the channel will read (`resolveGroupSteps`), one bridge call
+whose input is each group's values and whose reply is one result per group,
+and fills the cache. Reading a Python step on a group it was not resolved
+over is an error, not a silent call.
+
+The `unit` option mirrors the result's shape: one unit for every number
+below it, or a record with a unit per member (`quantityAt`). A number with
+no declared unit gets a quantity marked `undeclared`, whose unit has no
+`CanSum`, so `checkSummable` refuses to sum or stack it and says to declare
+the unit. A named fold keeps the column's quantity (none of its own), as
+before; `count` and `distinct` report counts.
 
 `.between(lo, hi, { closed })` is deliberately **not** an op. It returns a row
 predicate `(row) => boolean` for the `filter` flow operator, and a predicate
@@ -3124,7 +3170,7 @@ with no rows is 0.
 **Unit implications.** `count`/`distinct` report values that are counts,
 not the source field's own units — `evalFieldValues` reports the quantity
 `"count"`, in the declared unit `"count"`, for them. Every other pipeline
-reports no quantity of its own, leaving
+without a map reports no quantity of its own, leaving
 [`resolveColumn`](#measures-units-are-types) to the channel as before, so
 `.sum()` and `.mean()` keep the column's unit. `.normalize()`'s share values
 get their own declared unit, `shareQuantity(base, byName)` — see

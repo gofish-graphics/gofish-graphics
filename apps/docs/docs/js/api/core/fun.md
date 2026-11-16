@@ -22,7 +22,10 @@ f.support()
 
 ## The value
 
-A function value is the same function in every group. Its methods:
+A function value is the same function in every group. For one function per
+group, return a function value from a reduce:
+`field("x").reduce((xs) => fun(...))` (see
+[`map` and `reduce`](/js/api/operators/spread#map-and-reduce)). Its methods:
 
 - `f.support()` is `t ↦ t` over the domain of `f`. It is the position
   channel that reads `f` at the mark's parameter:

@@ -178,10 +178,76 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.median()`, `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
-  position).
+  position). `.map(fn)` and `.reduce(fn)` compute values with your own
+  function ([below](#map-and-reduce)).
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 throws.
+
+### `map` and `reduce` {#map-and-reduce}
+
+```ts
+field(name).map((x, i, xs) => y, { unit? })
+field(name).reduce((xs) => result, { unit? })
+```
+
+`map` gives one new value per row: `fn(x, i, xs)`, where `xs` is all of the
+group's values. Maps come before a reduce. On an operator's `size` channel, a
+map with no reduce after it runs over the entries' values instead, as
+`normalize` does.
+
+`reduce` runs once per group on the group's values. Its result is lifted by
+its shape:
+
+| The reduce returns          | The expression is                                                             |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| a number                    | one value per group, for any value channel                                    |
+| a [`Fun`](/js/api/core/fun) | one function of `t` per group, for the shape form of `ribbon` and `line`      |
+| a record                    | an object with one method per member, read with `s.lo()`, each lifted in turn |
+| an array                    | a type error and a run-time error; return a record instead                    |
+
+A method member of a record keeps its arguments: `s.quantile(0.9)`. A channel
+takes only a number or a function, so a record must be read down to one.
+Nothing chains after a value: `field("v").reduce(f).sum()` is a type error
+and a run-time error.
+
+`unit` mirrors the result's shape. It is one unit for every number of the
+result, or a record with a unit per member. A number whose unit is not
+declared cannot be summed or stacked.
+
+```ts
+const box = field("body_mass_g").reduce(
+  (xs) => {
+    const s = [...xs].sort((a, b) => a - b);
+    const q = (p: number) => quantile(s, p)!;
+    return { lo: s[0], q1: q(0.25), median: q(0.5), q3: q(0.75), hi: s.at(-1) };
+  },
+  { unit: "g" }
+);
+
+chart(penguins)
+  .flow(spread({ by: "species", dir: "x" }))
+  .mark(
+    layer([
+      rect({ w: 1, y: box.lo(), y2: box.hi() }),
+      rect({ w: 16, y: box.q1(), y2: box.q3() }),
+    ])
+  );
+```
+
+Each named method is a built-in callback, on the same path:
+
+| Method         | Stands for                                              |
+| -------------- | ------------------------------------------------------- |
+| `.sum()`       | `reduce((xs) => Σ xs)`, missing values aside            |
+| `.mean()`      | `reduce((xs) => Σ xs / n)`, missing values aside        |
+| `.median()`    | `reduce((xs) => d3.median(xs))`, missing values aside   |
+| `.count()`     | `reduce((xs) => xs.length)`, in the unit "count"        |
+| `.distinct()`  | `reduce((xs) => new Set(xs).size)`, in the unit "count" |
+| `.normalize()` | `map((x, i, xs) => x / Σ xs)`, a share of the whole     |
+
+`.sum()` keeps the column's unit and checks that it adds up first. A map or a
+reduce holds a JS function, so a spec that holds one does not serialize it.
 
 One method is neither: `.between(lo, hi, { closed })` returns a **row
 predicate** for [`filter`](/js/api/operators/filter) rather than appending an op,

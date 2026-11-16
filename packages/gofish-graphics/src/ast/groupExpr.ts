@@ -19,8 +19,21 @@
  */
 import { identity, opaque, type Fun } from "./fun";
 import type { Quantity } from "./measure";
+import {
+  evalGroup,
+  getFieldOps,
+  holdsClosureStep,
+  type UnitLike,
+} from "./fieldExpr";
 
 declare const exprKind: unique symbol;
+
+/** Type-level only: a value expression, one number per group
+ *  (`field("v").sum()`, a reduce that returns a number). A value channel of
+ *  any mark takes one; nothing chains after it. */
+export interface ValueExpr {
+  readonly [exprKind]: "value";
+}
 
 /** Type-level only: a function expression, one function of the mark's
  *  parameter per group. Only `ribbon` and `line` take one in a channel. */
@@ -30,6 +43,53 @@ export interface FunctionExpr {
    *  reads it at the mark's parameter. */
   support(): FunctionExpr;
 }
+
+/**
+ * What `field(x).reduce(fn)` gives for a result of type `V`, lifted by its
+ * shape: a number is a value expression, a `Fun<number>` a function
+ * expression, and a record an object with one method per member, each
+ * lifted the same way (a method member keeps its arguments). An array, or
+ * anything else, is a {@link LiftError}, which no channel takes.
+ */
+export type Lift<V> = [V] extends [number | null | undefined]
+  ? ValueExpr
+  : V extends Fun<number>
+    ? FunctionExpr
+    : V extends readonly unknown[]
+      ? LiftError<"a reduce returns a number, a function or a record, not an array">
+      : V extends (...args: never[]) => unknown
+        ? LiftError<"a reduce returns a number, a function or a record, not a JS function">
+        : V extends object
+          ? { readonly [K in keyof V]: LiftMember<V[K]> }
+          : LiftError<"a reduce returns a number, a function or a record">;
+
+declare const liftError: unique symbol;
+
+/** Type-level only: what a reduce whose result has no lift gives. No
+ *  channel takes it, so using it is a type error that names the reason. */
+export interface LiftError<Reason extends string> {
+  readonly [liftError]: Reason;
+}
+
+/** A member of a lifted record: a method member keeps its arguments, and a
+ *  plain member is read with no arguments. */
+export type LiftMember<T> = T extends (...args: infer A) => infer W
+  ? (...args: A) => Lift<W>
+  : () => Lift<T>;
+
+/** The `unit` option of a reduce whose result is `V`: one unit for every
+ *  number in it, or a record that mirrors its shape. */
+export type Units<V> =
+  | UnitLike
+  | ([V] extends [number | null | undefined]
+      ? never
+      : V extends Fun<number>
+        ? never
+        : V extends (...args: never[]) => infer W
+          ? Units<W>
+          : V extends object
+            ? { readonly [K in keyof V]?: Units<V[K]> }
+            : never);
 
 const FUN_VALUE: unique symbol = Symbol.for("gofish.funValue");
 
@@ -93,32 +153,45 @@ export function fun(
   return funValue(opaque(at, { domain, ...(knots ? { knots } : {}) }));
 }
 
-/** Whether `v` is a function expression: a value that gives one function
- *  per group. */
+/** Whether `v` is a function expression as the spec is written: a function
+ *  value. A reduce's result is one only when its reduce returns a function,
+ *  which is known per group ({@link groupFun}). */
 export const isFunctionExpr = (v: unknown): boolean => isFunValue(v);
+
+/** Whether `v` holds a reduce, whose result's shape is known only per
+ *  group. */
+const holdsReduce = (v: unknown): boolean =>
+  getFieldOps(v).some((op) => op.op === "reduce");
 
 /** The function a function expression gives for one group, and the quantity
  *  its values are amounts of, when it declares one. */
 export type GroupFun = { fun: Fun<number>; quantity?: Quantity };
 
 /**
- * The function `expr` gives for the group `rows`: the one place a function
- * expression is read. A function value is the same in every group.
+ * The function `expr` gives for the group `rows`, or undefined when it
+ * gives none there (a column, or a reduce whose result is a number): the
+ * one place a function expression is read. A function value is the same in
+ * every group; a reduce runs once per group (the step cache in
+ * fieldExpr.ts), so asking twice costs nothing.
  */
 export function groupFun(
   expr: unknown,
-  _rows: readonly unknown[],
-  where: string
-): GroupFun {
+  rows: readonly unknown[],
+  column?: Quantity
+): GroupFun | undefined {
   if (isFunValue(expr)) return { fun: expr };
-  throw new Error(`${where} is not a function expression.`);
+  if (!holdsReduce(expr)) return undefined;
+  const r = evalGroup(expr as any, rows, column);
+  return r.kind === "function"
+    ? { fun: r.fun, ...(r.quantity ? { quantity: r.quantity } : {}) }
+    : undefined;
 }
 
 /** Whether `v` has no wire form: a JS closure, or an expression that holds
- *  one (a function value). The emitter drops such a value as it drops an
- *  accessor (`wireFields` in serialize/toJSON.ts). */
+ *  one (a function value, a JS map or reduce). The emitter drops such a
+ *  value as it drops an accessor (`wireFields` in serialize/toJSON.ts). */
 export const hasNoWireForm = (v: unknown): boolean =>
-  typeof v === "function" || isFunValue(v);
+  typeof v === "function" || isFunValue(v) || holdsClosureStep(v);
 
 /** The error for a function value in a channel of a mark that does not draw
  *  along a path. */

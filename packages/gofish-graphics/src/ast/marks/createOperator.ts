@@ -69,9 +69,9 @@ import { fieldNameOf, isChunk } from "../data";
 import { splitByOf, type SplitKey } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
-  hasNormalizeOp,
-  splitAtNormalize,
-  applyEntryNormalize,
+  hasWindowMaps,
+  splitWindowMaps,
+  applyWindowMaps,
   FieldExpr,
 } from "../fieldExpr";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -1150,21 +1150,25 @@ function applyChannel(
         discretePosition(i, entries.size)
       );
     }
-    // Windowed normalize (`field(...).normalize()` on an operator's
-    // entry-flagged size channel): this is expression evaluation, not
-    // channel logic, so the WINDOW is all this factory supplies — run the
-    // per-entry channel with the PRE-normalize
-    // expression (an aggregate op if present, else the channel's own
-    // default sum, exactly as any size accessor would), then hand the
-    // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
-    // compute shares across the window. `channels.ts` gains no ops
-    // knowledge from this.
-    if (type === "size" && hasNormalizeOp(val)) {
-      const { pre } = splitAtNormalize(val);
+    // Window maps (`field(...).normalize()`, or any map with no fold after
+    // it, on an operator's entry-flagged size channel): this is expression
+    // evaluation, not channel logic, so the WINDOW is all this factory
+    // supplies. Each entry evaluates the expression before its trailing
+    // maps (its fold if it has one, else the channel's own default sum,
+    // exactly as any size accessor would), and fieldExpr.ts's
+    // applyWindowMaps runs the maps over the entries' values (normalize's
+    // shares). `channels.ts` gains no ops knowledge from this.
+    if (type === "size" && hasWindowMaps(val)) {
+      const { pre, maps } = splitWindowMaps(val);
       const rawEntryValues = [...entries.values()].map((items) =>
         CHANNEL_INFER[type](pre, items, column)
       );
-      return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
+      return applyWindowMaps(
+        rawEntryValues,
+        maps,
+        fieldNameOf(val) ?? "value",
+        fieldNameOf(opts.by)
+      );
     }
     // Value aggregation uses each entry's items; the column comes from
     // `wholeData` (the binned array still carries the symbol — each per-entry
@@ -1207,15 +1211,22 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   layerContext: LayerContext,
   operator = "operator"
 ): Promise<Options> {
-  const pending = resolveChannelAccessors(opts, channels, () => {
-    const rows = new Set<unknown>(d);
-    for (const items of entries?.values() ?? []) {
-      for (const row of items) rows.add(row);
-    }
-    // The input's rows, with its column types (a Python accessor's call
-    // sends them, typed, across the bridge).
-    return copyColumnTypes([...rows], d);
-  });
+  const pending = resolveChannelAccessors(
+    opts,
+    channels,
+    () => {
+      const rows = new Set<unknown>(d);
+      for (const items of entries?.values() ?? []) {
+        for (const row of items) rows.add(row);
+      }
+      // The input's rows, with its column types (a Python accessor's call
+      // sends them, typed, across the bridge).
+      return copyColumnTypes([...rows], d);
+    },
+    // The groups a Python map or reduce is read over: the whole input and
+    // each entry, the arrays `applyChannels` reads.
+    () => [d, ...(entries?.values() ?? [])]
+  );
   const resolved = isThenable(pending) ? await pending : pending;
   // The one call of an operator's channel functions.
   const withChannels = withRegistrar(layerContext.registrar, () =>

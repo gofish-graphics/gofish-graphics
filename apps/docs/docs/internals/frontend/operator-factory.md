@@ -287,24 +287,32 @@ the relational-mark pass reads to tell whether a path tier draws its own `by`
 on an axis (`inferred.parameterAxis`; see
 [the mark factory](/internals/frontend/mark-factory)).
 
-**Windowed `normalize()` on an entry-flagged `size` channel.** `spread`/
+**Window maps on an entry-flagged `size` channel.** `spread`/
 `stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a
 per-entry stack-axis extent, one value per split entry, that `Spread` wraps
 each child in its own sized `layer` with (see [Underlying
 Space](/internals/core/underlying-space#space-filling-spines-normalize-nests-each-part)
-for the layout side). When that channel's value carries a `field(...)
-.normalize()` op (checked via `hasNormalizeOp`), `applyChannels` takes a
-different path than plain per-entry inference: it splits the pipeline at
-`normalize` (`splitAtNormalize`, `fieldExpr.ts`) and runs only the PRE
-expression through the ordinary per-entry channel evaluation — one raw value
-per split entry, exactly as any size accessor would produce — then hands
-that whole array to `applyEntryNormalize`, which replaces it with each
-entry's share of their sum. The **window** `applyEntryNormalize` shares over
-is exactly the operator's own split entries, which is why this lives in
-`createOperator.ts` rather than in `fieldExpr.ts` itself: only the factory
-knows what "this operator's entries" means. `channels.ts` gains no knowledge
-of `normalize` from this — it's `applyChannels` and `fieldExpr.ts` splitting
-the responsibility, not a third aggregation mode bolted onto `inferSize`.
+for the layout side). When that channel's value ends in maps with no fold
+after them (`field(...).normalize()`, the built-in map `x / Σxs`, or a
+user's `.map(fn)`; checked via `hasWindowMaps`), `applyChannels` takes a
+different path than plain per-entry inference: it splits off the trailing
+maps (`splitWindowMaps`, `fieldExpr.ts`) and runs only the expression before
+them through the ordinary per-entry channel evaluation — one raw value per
+split entry, exactly as any size accessor would produce — then hands that
+whole array to `applyWindowMaps`, which runs the maps over it: normalize
+replaces it with each entry's share of their sum. The **window** the maps
+run over is exactly the operator's own split entries, which is why this
+lives in `createOperator.ts` rather than in `fieldExpr.ts` itself: only the
+factory knows what "this operator's entries" means. `channels.ts` gains no
+knowledge of maps from this — it's `applyChannels` and `fieldExpr.ts`
+splitting the responsibility, not a third aggregation mode bolted onto
+`inferSize`.
+
+**Python maps and reduces resolve over the groups.** A Python `map` or
+`reduce` in a channel has only a batch form. `applyChannels` passes
+`resolveChannelAccessors` the groups it will read (the whole input and each
+entry), and the channel's Python steps are called once over all of them
+before inference (`resolveGroupSteps` in `fieldExpr.ts`).
 
 ## 6. Adding a new operator: a worked example
 

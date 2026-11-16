@@ -585,6 +585,17 @@ has no pieces, so `edgePath` draws it by sampling it to half a pixel
 channel loop of `withGoFish.ts` (`functionInChannelError`) and in an
 operator's `applyChannels`.
 
+A function expression may also be a `field(x).reduce(fn)` whose `fn`
+returns a `Fun`, one function per group. Whether a reduce gives a function
+is known only when it runs, so the shape form decides per group, inside the
+mark: `groupFun(o[parameter], rows)` asks each channel for the group's
+function (undefined for a column, or a reduce that gives a number), and
+`ofT` is true when either channel has one. The reduce runs once per group
+(the step cache in `fieldExpr.ts`), so asking here and again in
+`bandOfFunctions` costs one call. The guard in `withGoFish.ts` asks
+`groupFun` the same way, so a reduce that returns a function in a `rect`
+channel throws there.
+
 ### A connector's datum, and its `live()` channels
 
 A leaf mark carries the rows it was drawn from, and so does a connector: its

@@ -82,7 +82,7 @@ import {
 import type { BlendMode } from "../blendMode";
 import { evalFieldValues, isMissing } from "../fieldExpr";
 import { resolveColumn } from "../channels";
-import { groupFun, isFunctionExpr } from "../groupExpr";
+import { groupFun } from "../groupExpr";
 
 /** A band's or a path's two edges: functions of the parameter, in data
  *  units, over one domain (the parameter's extent). */
@@ -518,9 +518,7 @@ export function bandOfFunctions(
 ): Pick<BandProps, "edges" | "parameterQuantity" | "valueQuantity"> {
   const where = group === undefined ? "" : ` in the group "${group}"`;
   const read = (c: Channel) =>
-    isFunctionExpr(c.accessor)
-      ? groupFun(c.accessor, rows, `${mark}({ ${c.name} })`)
-      : undefined;
+    groupFun(c.accessor, rows, resolveColumn(rows, c.accessor).quantity);
   const t = read(parameter);
   if (t === undefined)
     throw new Error(

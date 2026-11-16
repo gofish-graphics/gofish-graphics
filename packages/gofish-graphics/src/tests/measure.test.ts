@@ -19,7 +19,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { getQuantity } from "../ast/data";
-import { applyEntryNormalize } from "../ast/fieldExpr";
+import { applyWindowMaps } from "../ast/fieldExpr";
 import {
   columnType,
   columnTypeOf,
@@ -1363,8 +1363,10 @@ console.log("# measure: CanSum");
   // A window's shares: a NaN entry makes the total NaN, so every share is 0
   // with a warning, never a NaN share beside valid ones.
   const shares = (xs: number[]) =>
-    applyEntryNormalize(
-      xs.map((datum) => ({ type: "datum", datum }) as any)
+    applyWindowMaps(
+      xs.map((datum) => ({ type: "datum", datum }) as any),
+      [{ op: "normalize" }],
+      "v"
     ).map((v: any) => v.datum);
   const warn = console.warn;
   let warned = 0;

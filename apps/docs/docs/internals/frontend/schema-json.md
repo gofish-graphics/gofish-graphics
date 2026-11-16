@@ -384,6 +384,59 @@ for the API.
               "const": "distinct"
             }
           }
+        },
+        {
+          "type": "object",
+          "required": ["op", "fn"],
+          "properties": {
+            "op": {
+              "enum": ["map", "reduce"]
+            },
+            "fn": {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            },
+            "unit": {
+              "$ref": "#/$defs/UnitSpecIR"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["op", "name"],
+          "properties": {
+            "op": {
+              "const": "member"
+            },
+            "name": {
+              "type": "string"
+            },
+            "args": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "UnitSpecIR": {
+      "description": "The unit option of map or reduce: a unit's name, a unit's wire traits ({ HasUnit }), or a record that mirrors the result's shape.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": ["HasUnit"]
+        },
+        {
+          "type": "object",
+          "not": {
+            "required": ["HasUnit"]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitSpecIR"
+          }
         }
       ]
     },

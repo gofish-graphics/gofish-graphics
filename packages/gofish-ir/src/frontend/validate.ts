@@ -960,7 +960,26 @@ const FIELD_OP_NAMES = [
   "median",
   "count",
   "distinct",
+  "map",
+  "reduce",
+  "member",
 ] as const;
+
+/** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire
+ *  traits (`{ HasUnit }`), or a record that mirrors the result's shape. */
+function walkUnitSpec(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "string") return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `unit must be a unit's name, a unit, or a record of units, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  if ("HasUnit" in value) return;
+  for (const [k, v] of Object.entries(value))
+    walkUnitSpec(v, `${path}.${k}`, ctx);
+}
 
 /** One op in a `field(...)` pipeline. Rejects an unrecognized op name
  *  consistently with this validator's other enum-style checks. */
@@ -1014,6 +1033,30 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       rejectUnknown(value, ["op", "partition"], path, ctx);
       if (value.partition !== undefined)
         walkPartition(value.partition, `${path}.partition`, ctx);
+      return;
+    case "map":
+    case "reduce":
+      rejectUnknown(value, ["op", "fn", "unit"], path, ctx);
+      if (!isObject(value.fn) || typeof value.fn.__gofish_lambda !== "string")
+        ctx.errors.push({
+          path: `${path}.fn`,
+          message: `${value.op} "fn" must be a Python function's bridge handle ({ __gofish_lambda })`,
+        });
+      if (value.unit !== undefined)
+        walkUnitSpec(value.unit, `${path}.unit`, ctx);
+      return;
+    case "member":
+      rejectUnknown(value, ["op", "name", "args"], path, ctx);
+      if (typeof value.name !== "string")
+        ctx.errors.push({
+          path: `${path}.name`,
+          message: `member "name" must be a string`,
+        });
+      if (value.args !== undefined && !Array.isArray(value.args))
+        ctx.errors.push({
+          path: `${path}.args`,
+          message: `member "args" must be an array when present`,
+        });
       return;
     default:
       // reverse/dropNulls/normalize/sum/mean/median/count/distinct carry no extra fields.

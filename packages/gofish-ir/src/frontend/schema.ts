@@ -1049,7 +1049,22 @@ export type FieldOpIR =
   | { op: "mean" }
   | { op: "median" }
   | { op: "count" }
-  | { op: "distinct" };
+  | { op: "distinct" }
+  /** `map(fn, unit=...)`: each value to a new one, `fn(x, i, xs)`. Only a
+   *  Python function has a wire form, a bridge handle. */
+  | { op: "map"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** `reduce(fn, unit=...)`: all of a group's values to one result,
+   *  `fn(xs)`, a number or a record of numbers. */
+  | { op: "reduce"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** A member of a reduce's result, read with `args` (`s.lo()`). */
+  | { op: "member"; name: string; args?: unknown[] };
+
+/** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire
+ *  traits (`{ HasUnit }`), or a record that mirrors the result's shape. */
+export type UnitSpecIR =
+  | string
+  | { HasUnit: unknown; [trait: string]: unknown }
+  | { [member: string]: UnitSpecIR };
 
 /** A post-scale color transform carried by a datum value, applied AFTER the
  *  datum maps through its color scale — the color analog of {@link

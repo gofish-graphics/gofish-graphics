@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
+import { quantileSorted } from "d3-array";
 import {
   chart,
+  field,
   layer,
   rect,
   spread,
@@ -10,6 +12,7 @@ import {
   Unit,
 } from "../../src/lib";
 import { genderPayGap, payGrade } from "../../src/data/genderPayGap";
+import { penguins } from "../../src/data/penguins";
 
 /**
  * A box plot from the chart builder. Each row already holds its summary
@@ -60,6 +63,43 @@ export const GenderPayGap: StoryObj<Args> = {
             fill: "Gender",
           }),
           rect({ w: 16, h: 1.5, y: "Median", fill: "white" }),
+        ])
+      )
+      .render(container);
+
+    return container;
+  },
+};
+
+/** The five-number summary of a group's values, missing values aside. */
+const fiveNumbers = (xs: (number | null)[]) => {
+  const s = xs.filter((x): x is number => x !== null).sort((a, b) => a - b);
+  return {
+    lo: s[0],
+    q1: quantileSorted(s, 0.25)!,
+    median: quantileSorted(s, 0.5)!,
+    q3: quantileSorted(s, 0.75)!,
+    hi: s[s.length - 1],
+  };
+};
+
+/**
+ * A box plot from the raw rows: a reduce computes each species' summary
+ * once, and returns a record; each mark reads one of its members.
+ */
+export const PenguinBodyMass: StoryObj<Args> = {
+  args: { h: 320 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const box = field("Body Mass (g)").reduce(fiveNumbers, { unit: "g" });
+    chart(penguins, { h: args.h })
+      .flow(spread({ by: "Species", dir: "x", spacing: 40 }))
+      .mark(
+        layer([
+          rect({ x: 11.5, w: 1, y: box.lo(), y2: box.hi(), fill: "gray" }),
+          rect({ w: 24, y: box.q1(), y2: box.q3(), fill: "Species" }),
+          rect({ w: 24, h: 1.5, y: box.median(), fill: "white" }),
         ])
       )
       .render(container);

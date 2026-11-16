@@ -61,6 +61,10 @@ export type Quantity = {
   /** Set on the square root of an amount of a quantity, which an area
    *  channel hands its mark ({@link sqrtQuantity}): that quantity. */
   rootOf?: Quantity;
+  /** Set on values computed by a user's `map` or `reduce` with no declared
+   *  unit: what computed them (`field("v").reduce(...)`). Their unit is
+   *  unknown, and has no CanSum. */
+  undeclared?: string;
 };
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
@@ -192,6 +196,13 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
         `cannot be summed. Place the marks side by side (spread) instead of ` +
         `stacking them, or size them by a length (r, w or h) if their sizes ` +
         `should add up.`
+    );
+  if (q.undeclared !== undefined)
+    throw new Error(
+      `${where} sums the values of ${q.undeclared}, whose unit is not ` +
+        `declared, so they cannot be summed or stacked. If they add up, ` +
+        `declare their unit in its options: { unit: Unit("USD", { traits: ` +
+        `[Trait.summable()] }) }.`
     );
   const difference = q.unit!.difference;
   if (difference?.traits?.CanSum !== undefined)

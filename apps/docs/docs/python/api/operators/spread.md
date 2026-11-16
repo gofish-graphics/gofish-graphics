@@ -153,10 +153,76 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.median()`, `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
-  position).
+  position). `.map(fn)` and `.reduce(fn)` compute values with your own
+  function ([below](#map-and-reduce)).
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 raises.
+
+### `map` and `reduce` {#map-and-reduce}
+
+```python
+field(name).map(lambda x, i, xs: y, unit=None)
+field(name).reduce(lambda xs: result, unit=None)
+```
+
+`map` gives one new value per row: `fn(x, i, xs)`, where `xs` is all of the
+group's values. `fn` may take fewer arguments, as in `lambda x: x * 2`. Maps
+come before a reduce.
+
+`reduce` runs once per group on the group's values. Its result is lifted by
+its shape:
+
+| The reduce returns | The expression is                                                          |
+| ------------------ | -------------------------------------------------------------------------- |
+| a number           | one value per group, for any value channel                                 |
+| a dict             | an object with one method per key, read with `s.lo()`, each lifted in turn |
+| a list             | an error; return a dict instead                                            |
+| a function         | an error: a Python reduce cannot return a function of `t` yet              |
+
+A channel takes only a number, so a dict must be read down to one. Nothing
+chains after a value: `field("v").reduce(f).sum()` raises when the chart
+renders.
+
+`unit` mirrors the result's shape. It is one unit for every number of the
+result, or a dict with a unit per key. A number whose unit is not declared
+cannot be summed or stacked.
+
+Each Python map or reduce is called across the bridge once per chart, with
+every group's values, and answers one result per group. A function of `t`
+is read many times during layout, which is synchronous, so a Python reduce
+cannot return one.
+
+```python
+import statistics
+
+def five_numbers(xs):
+    q1, median, q3 = statistics.quantiles(xs, n=4, method="inclusive")
+    return {"lo": min(xs), "q1": q1, "median": median, "q3": q3, "hi": max(xs)}
+
+box = field("body_mass_g").reduce(five_numbers, unit="g")
+
+chart(penguins).flow(spread(by="species", dir="x")).mark(
+    layer([
+        rect(w=1, y=box.lo(), y2=box.hi()),
+        rect(w=16, y=box.q1(), y2=box.q3()),
+    ])
+)
+```
+
+Each named method is a built-in callback, on the same path:
+
+| Method         | Stands for                                                |
+| -------------- | --------------------------------------------------------- |
+| `.sum()`       | `reduce(lambda xs: sum(xs))`, missing values aside        |
+| `.mean()`      | `reduce(statistics.mean)`, missing values aside           |
+| `.median()`    | `reduce(statistics.median)`, missing values aside         |
+| `.count()`     | `reduce(len)`, in the unit "count"                        |
+| `.distinct()`  | `reduce(lambda xs: len(set(xs)))`, in the unit "count"    |
+| `.normalize()` | `map(lambda x, i, xs: x / sum(xs))`, a share of the whole |
+
+The named methods run in JS and cross the bridge as data, with no call
+into Python.
 
 One method is neither: `.between(lo, hi, closed=None)` returns a **field
 predicate** for [`filter`](/python/api/operators/filter) rather than appending

@@ -789,7 +789,15 @@ Six consumers read the table:
   value, since a callback has no JSON form. It drops a `fun(...)` value for
   the same reason (`hasNoWireForm` in `ast/groupExpr.ts`): it holds a JS
   closure. A Python `fun` raises, since a function value is read during
-  layout, which is synchronous, and the bridge is not. So a key the descriptor does not
+  layout, which is synchronous, and the bridge is not. A `field(...)` whose
+  `map` or `reduce` holds a JS function is dropped too. A Python `map` or
+  `reduce` does cross: its op is `{ op: "map" | "reduce", fn, unit? }` with
+  `fn` a bridge handle (`{ __gofish_lambda }`), and a member read of the
+  result is `{ op: "member", name, args? }` (`FieldOpIR`; `validate.ts`
+  checks both). `unwrapOpts` turns the handle into a batch accessor, which
+  JS calls once with every group's values (`resolveGroupSteps`), and
+  Python's `_PendingGroupStep` answers one result per group. A Python reply
+  that holds a function raises in Python, for the same reason as `fun`. So a key the descriptor does not
   know never reaches the IR, and a construct with no descriptor (such as
   `time.transition`) has no IR form: `toJSON` throws.
 
