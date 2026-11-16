@@ -984,6 +984,11 @@ export class GoFishNode {
    * graphic leaves room for it at its edges.
    */
   public strokeOverhang = 0;
+  /** The axis it draws a data offset along that changes along the other
+   *  axis (`AxisScale.shear`): a band's value axis. A stack whose parts'
+   *  offsets change along u hands each part its offset this way, and a part
+   *  that draws none is an error there. */
+  public shearAxis?: 0 | 1;
   /** Whether it draws its content only inside its box (a `mask`, a
    *  composite clipped to its first child): what its content would draw
    *  past its box, an outline included, is not drawn. */
@@ -1052,6 +1057,7 @@ export class GoFishNode {
       color,
       strokeOverhang,
       labelPosition,
+      shearAxis,
     }: {
       key?: string;
       type: string;
@@ -1073,6 +1079,8 @@ export class GoFishNode {
        *  one. Default `"outset"` (above its box). A node that sets it draws
        *  its own ink and is itself the target of a `.label()` on it. */
       labelPosition?: LabelPosition | Place | "outline";
+      /** See {@link GoFishNode.shearAxis}. */
+      shearAxis?: 0 | 1;
     },
     children: GoFishAST[]
   ) {
@@ -1095,6 +1103,7 @@ export class GoFishNode {
     this.color = color;
     this.strokeOverhang = strokeOverhang ?? 0;
     this.labelPosition = labelPosition;
+    this.shearAxis = shearAxis;
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to

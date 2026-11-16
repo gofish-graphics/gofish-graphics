@@ -14,6 +14,7 @@ import { resolution } from "../_ref";
 import type { GoFishNode } from "../_node";
 import { isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter, RelationAnchor } from "./placementFacts";
+import type { SolvePlaceable } from "./placementProgramLowerer";
 import {
   CONTINUOUS_TYPE,
   ordinalOver,
@@ -38,6 +39,7 @@ import {
   field,
   isConstant,
   maximum,
+  minimum,
   multiply,
   record,
   scale,
@@ -260,7 +262,7 @@ export function lowerDistributePlacement<T>(
   }: {
     A: Arith<T>;
     emitter: PlacementFactEmitter<T>;
-    targets: Pick<Map<string, unknown>, "has" | "get">;
+    targets: Pick<Map<string, SolvePlaceable<T>>, "has" | "get">;
     keyOf: KeyOf;
     isInitiallyPlaced: (axis: Axis, key: string) => boolean;
     gapOf: GapOf;
@@ -272,6 +274,28 @@ export function lowerDistributePlacement<T>(
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
   const keys = ordered.map(keyOf);
+  // A stack whose parts lie at offsets that change along u (bands) places
+  // each part by its offset, not by a chain of translates: each part's
+  // tail sits at the stack's 0, and the part draws its offset itself (the
+  // `shear` its layer hands it, `stackPlaces`). The solve seats every
+  // part's tail where it seats a stack's 0 (`solveRank2Axis`).
+  if (constraint.glue) {
+    const idx = axisIndex(constraint.dir);
+    const places = stackPlaces(
+      keys.map((key) => targets.get(key)?.spaceOn?.(idx) ?? UNDEFINED),
+      resolveBaseline(constraint, ordered, keyOf)
+    );
+    if (places !== undefined) {
+      for (const key of keys)
+        emitter.include({
+          axis: constraint.dir,
+          key,
+          owner,
+          origin: { point: 0 },
+        });
+      return;
+    }
+  }
   const anchors = distributePlacementAnchors(constraint);
   for (let i = 1; i < keys.length; i++) {
     // A chain edge whose endpoints both arrived pre-positioned is a consistency
@@ -293,8 +317,9 @@ export function lowerDistributePlacement<T>(
   // A spread's chain starts at its first member. A stack's chain also carries
   // its {@link StackBaseline}, which the solver's free-origin fallback seats
   // at the measure's origin (#773): a point on one part, or a place along
-  // the whole chain. Placement lays parts that are boxes, whose `wiggle` is
-  // their `start` (its slope is 0 where no part changes along u).
+  // the whole chain. A chain of translates lays parts at constant offsets
+  // (boxes), whose `wiggle` is their `start` (its slope is 0 where no part
+  // changes along u); parts whose offsets change are placed above.
   if (!constraint.glue) {
     emitter.include({ axis: constraint.dir, key: keys[0], owner });
     return;
@@ -516,6 +541,15 @@ export function chainFold(
   parts: Fun<Sides>[],
   baseline: StackBaseline<number>
 ): Fun<Sides> {
+  return chain(parts, baseline).reach;
+}
+
+/** {@link chainFold}, and each part's tail measured from the stack's 0 at
+ *  every u: the offset the stack moves that part by, in data units. */
+function chain(
+  parts: Fun<Sides>[],
+  baseline: StackBaseline<number>
+): { reach: Fun<Sides>; tails: Fun<number>[] } {
   const domain = parts
     .map((p) => p.domain)
     .reduce((a, b) => Interval.union(a, b), parts[0]?.domain ?? ALL);
@@ -525,12 +559,15 @@ export function chainFold(
   // Each part's middle and thickness, which `wiggle` reads.
   const middles: Fun<number>[] = [];
   const thicknesses: Fun<number>[] = [];
+  // Each part's tail, from the chain's start.
+  const tails: Fun<number>[] = [];
   let at = start;
   let zero = start;
   parts.forEach((part, k) => {
     const ascent = field(part, "ascent");
     const descent = field(part, "descent");
     const step = subtract(ascent, descent);
+    tails.push(at);
     up.push(add(at, ascent));
     down.push(subtract(descent, at));
     middles.push(add(at, scale(step, 0.5)));
@@ -542,10 +579,75 @@ export function chainFold(
   if (baseline.kind === "end") zero = at;
   if (baseline.kind === "middle") zero = scale(at, 0.5);
   if (baseline.kind === "wiggle") zero = wiggleZero(middles, thicknesses);
-  return record({
-    ascent: subtract(upperEnvelope(up), zero),
-    descent: add(upperEnvelope(down), zero),
-  });
+  return {
+    reach: record({
+      ascent: subtract(upperEnvelope(up), zero),
+      descent: add(upperEnvelope(down), zero),
+    }),
+    tails: tails.map((tail) => subtract(tail, zero)),
+  };
+}
+
+/** Where one part of a stack lies: its tail's offset from the stack's 0 at
+ *  every u (in data units), and the interval the part covers about the
+ *  stack's 0 over every u. */
+export type StackPlace = { offset: Fun<number>; reach: Interval.Interval };
+
+/**
+ * Where a stack lays each of its parts, when that is not one translate per
+ * part: the parts' offsets differ along u (parts with cross-sections, such
+ * as bands). Each part's offset is its tail measured from the stack's 0 at
+ * every u ({@link chainFold}): the thicknesses of the parts before it, moved
+ * by the baseline. Every band keeps its thickness at every u; the stack only
+ * moves each cross-section.
+ *
+ * Undefined when every offset is constant (parts that are boxes, or bands of
+ * constant thickness under a baseline that does not move with u): the stack
+ * is then laid out by its chain of translates, as a stack of bars is.
+ * Undefined too when a part has no origin (the stack is then a spread).
+ *
+ * TODO(stack-profiles): a shortcut. A stack of boxes could be laid out by
+ * data offsets too, each a constant function, so there would be one path
+ * for every stack. That opens questions the box path answers today: a part
+ * with no data baseline (a pinned or origin-less part, whose tail is its
+ * start), a part with a pixel size (text, a literal size), the spacing a
+ * chain could hold, and a size-strong part, none of which has a data
+ * offset. So box stacks keep the chain of translates.
+ */
+export function stackPlaces(
+  spaces: readonly UnderlyingSpace[],
+  baseline: StackBaseline<number>,
+  nameOf: (k: number) => string = (k) => `part ${k + 1}`
+): StackPlace[] | undefined {
+  if (spaces.length === 0) return undefined;
+  if (!spaces.every(hasOrigin)) {
+    // A part with no data baseline (a pixel size) has no offset in data
+    // units, so a stack that bends cannot lay it among its bands.
+    const bent = spaces.findIndex(
+      (s) => isCONTINUOUS(s) && s.profile !== undefined
+    );
+    const rigid = spaces.findIndex((s) => !hasOrigin(s));
+    if (bent >= 0)
+      throw new Error(
+        `[gofish] stack: ${nameOf(rigid)} has no data baseline (its size ` +
+          `is in pixels, or it is not an amount), but ${nameOf(bent)} has ` +
+          `a cross-section that changes along u, so the stack moves its ` +
+          `parts by offsets in data units that change along u. Give every ` +
+          `part a data size (rect({ h: "count" }), ribbon({ x, h }), not a ` +
+          `pixel size).`
+      );
+    return undefined;
+  }
+  const sides = (spaces as CONTINUOUS_TYPE[]).map(tailSides);
+  const { tails } = chain(sides, baseline);
+  if (tails.every(isConstant)) return undefined;
+  return tails.map((offset, k) => ({
+    offset,
+    reach: Interval.interval(
+      minimum(subtract(offset, field(sides[k], "descent"))),
+      maximum(add(offset, field(sides[k], "ascent")))
+    ),
+  }));
 }
 
 /** A point on a part, from its tail: a fraction of its step from tail to

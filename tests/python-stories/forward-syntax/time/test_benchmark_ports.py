@@ -96,8 +96,8 @@ def _epoch_ms(date):
 def story_stacked_area():
     return (
         chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=520, h=330)
-        .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
-        .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
+        .flow(stack(by="category", dir="y"))
+        .mark(ribbon(x="date", h="sales", fill="category", curve=Curve.linear())),
         {},
     )
 

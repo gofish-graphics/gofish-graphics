@@ -9,17 +9,17 @@ room it is laid out in, or an `fr(k)` weight that takes k shares of the room
 its nearest scope divides.
 
 ```python
-from gofish import chart, fr, ribbon, spread, stack
+from gofish import chart, fr, rect, spread, stack
 
 (
     chart(seafood, w=500, h=200)
     .flow(spread(by="lake", dir="x", spacing=fr(1)), stack(by="species", dir="y"))
-    .mark(ribbon(h="count", fill="species", opacity=0.8))
+    .mark(rect(h="count", fill="species"))
     .render()
 )
 ```
 
-::: gofish example:area-chart-with-flexible-gaps hidden
+::: gofish example:stacked-bar-chart-with-flexible-gaps hidden
 :::
 
 ## Signature

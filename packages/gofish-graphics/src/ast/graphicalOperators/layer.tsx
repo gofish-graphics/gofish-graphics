@@ -104,6 +104,7 @@ import {
   type LayerPlan,
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
+import { stackPlaces, type StackPlace } from "../constraints/distribute";
 import { plotForms, reachPast } from "../solver/plotForms";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -301,6 +302,7 @@ export const layer = createNodeOperatorSequential(
       return node.children.map((c, i) => ({
         key: c.uid,
         extent: extents[i]?.[axis],
+        stackPlace: placeExtent(i, axis),
         space: c.resolveUnderlyingSpace()[axis],
         visualized: isVisualized(partAt(layerTypes!.parts[axis], i, axis)),
         standIn: c instanceof GoFishRef,
@@ -315,6 +317,26 @@ export const layer = createNodeOperatorSequential(
         dataPositioned: placedByOwnData(node, i, axis),
         startBaseline: c instanceof GoFishNode && c.baselineIsStart(axis),
       }));
+    };
+    // Where a stack lays child `i` on `axis` when it moves it by an offset
+    // that changes along u (`stackPlaces`): the interval it covers about the
+    // stack's 0 over every u, times σ. That is the box it draws, sheared;
+    // its own claim is the box it would draw unmoved.
+    // TODO(stack-profiles): a shortcut. The claim is exact only while a
+    // part's cross-section is all data (σ times an interval). A part with a
+    // pixel term in its cross-section (a ribbon's inset) would claim the
+    // envelope over u of `a(u)·σ + b(u)`, an envelope of lines in σ over
+    // the knots, which is no single interval times σ. No band has a pixel
+    // term yet; the one that adds it (a ribbon's `inset`) makes a sheared
+    // part with one an error here until this claim reads that envelope.
+    const placeExtent = (i: number, axis: 0 | 1): Extent | undefined => {
+      const place = layerTypes?.places[axis].get(i);
+      return place === undefined
+        ? undefined
+        : Extent(
+            Pwl.affine(place.reach.max, 0),
+            Pwl.affine(-place.reach.min, 0)
+          );
     };
     // A `ref` stand-in is in the part its target is in, in its target's
     // layer, on `axis`: it stands for that node. Where that layer is this
@@ -635,7 +657,57 @@ export const layer = createNodeOperatorSequential(
         plan,
         resolved,
         parts,
+        places: stackPlacesOf(plan, effectiveChildren, childNodes),
       };
+    };
+
+    // Per axis, where each stack on that axis lays a part whose offset
+    // changes along u (`stackPlaces`), by child index: the part draws its
+    // offset (`AxisScale.shear`), and the layer claims the part where it
+    // lies. A part that cannot draw one (a rect, a circle, text) is an
+    // error that names it.
+    const stackPlacesOf = (
+      plan: ReturnType<typeof planConstraintComposition>,
+      children: Size<UnderlyingSpace>[],
+      childNodes: readonly GoFishAST[]
+    ): [Map<number, StackPlace>, Map<number, StackPlace>] => {
+      const out: [Map<number, StackPlace>, Map<number, StackPlace>] = [
+        new Map(),
+        new Map(),
+      ];
+      for (const seg of plan?.segments ?? []) {
+        if (!seg.glue) continue;
+        const axis = seg.dAxis;
+        const nameOf = (k: number) =>
+          seg.keys[k] !== undefined
+            ? `the part "${seg.keys[k]}"`
+            : `part ${k + 1}`;
+        const places = stackPlaces(
+          seg.idx.map((i) => children[i][axis]),
+          seg.baseline,
+          nameOf
+        );
+        if (places === undefined) continue;
+        seg.idx.forEach((i, k) => {
+          const child = childNodes[i];
+          if (!(child instanceof GoFishNode) || child.shearAxis !== axis) {
+            const name = nameOf(k);
+            const what =
+              child instanceof GoFishNode ? `a ${child.type}` : "a reference";
+            throw new Error(
+              `[gofish] stack: ${name} is ${what}, which has one size along ` +
+                `${axisName(axis)}, but this stack moves each part by an ` +
+                `offset that changes along ${axisName(axis === 0 ? 1 : 0)}, ` +
+                `because some of its parts are bands whose thickness ` +
+                `changes there. Only a band can be moved that way. Stack ` +
+                `parts that are all bands (ribbon({ x, h })), or all boxes ` +
+                `(rect, a ribbon of one thickness).`
+            );
+          }
+          out[axis].set(i, places[k]);
+        });
+      }
+      return out;
     };
 
     // The type hook's last composition, read by the claim hook. A node's
@@ -1274,11 +1346,13 @@ export const layer = createNodeOperatorSequential(
               seats
             );
             childFrames[i] = layoutSize[1];
+            const shearOf = (axis: 0 | 1) =>
+              layerTypes?.places[axis].get(i)?.offset;
             const childPlaceable = child.layout(
               layoutSize,
               [
-                axisScale(childScaleFactors[0], childMaps[0]),
-                axisScale(childScaleFactors[1], childMaps[1]),
+                axisScale(childScaleFactors[0], childMaps[0], shearOf(0)),
+                axisScale(childScaleFactors[1], childMaps[1], shearOf(1)),
               ],
               childShape
             );

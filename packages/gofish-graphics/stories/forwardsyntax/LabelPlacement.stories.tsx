@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import data from "vega-datasets";
-import { seafood } from "../../src/data/catch";
+import { unemployment } from "../../src/data/unemployment";
 import {
   arrow,
+  Baseline,
   blank,
   chart,
   circle,
@@ -160,19 +161,14 @@ export const StreamgraphInteriorLabels: StoryObj = {
     gallery: {
       title: "Streamgraph with Band Labels",
       description:
-        "Fish catch by species across six lakes as a streamgraph, each species named inside its band where the band is thick enough to hold the name.",
+        "Unemployment in 14 US industries from 2000 to 2010 as a streamgraph, each industry named inside its band where the band is thick enough to hold the name.",
     },
   },
   render: () => {
     const container = initializeContainer();
-    chart(seafood, { h: 360 })
-      .flow(
-        spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
-        stack({ by: "species", dir: "y" })
-      )
-      .mark(
-        ribbon({ h: "count", fill: "species", opacity: 0.8 }).label("species")
-      )
+    chart(unemployment, { w: 560, h: 360, schema: { date: Unit.time() } })
+      .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
+      .mark(ribbon({ x: "date", h: "count", fill: "series" }).label("series"))
       .render(container, { legend: false });
     return container;
   },

@@ -233,6 +233,30 @@ const formsOf = (
 };
 
 /**
+ * The forms of `c` where a stack lays it (`ClaimChild.stackPlace`): its box
+ * is the box it draws there, all of it plot, and its claim reaches past it
+ * by its outline, as a leaf's does. Read reflected where it reads y the
+ * other way, as {@link formsOf} reads it.
+ */
+const placedForms = (
+  parent: GoFishNode,
+  c: GoFishAST,
+  box: Extent,
+  axis: 0 | 1
+): ChildForms => {
+  const o = c instanceof GoFishNode ? c.claimedOverhang : 0;
+  const forms: ChildForms = {
+    whole: o === 0 ? box : padExtent(box, o),
+    box,
+    plot: box,
+    zero: Pwl.ZERO,
+  };
+  return flips(parent, c, axis)
+    ? { ...mapForms(forms, reflectedExtent), zero: Pwl.ZERO }
+    : forms;
+};
+
+/**
  * `c`'s plot claim in `parent`'s axis order, on both axes (`formsOf`): read
  * reflected where it reads y the other way. A `nest` pads it before the
  * plan is built.
@@ -275,16 +299,18 @@ export function buildPlan(
   // A child placed where its refs land is placed by what it draws: its
   // forms are where it is placed, all of them box.
   const forms = children.map((c, i): ChildForms | undefined =>
-    c.extent !== undefined
-      ? formsOf(node, node.children[i], c.extent, axis)
-      : c.fromRefs && c.placed !== undefined
-        ? {
-            whole: c.placed.extent,
-            box: c.placed.extent,
-            plot: c.placed.extent,
-            zero: Pwl.ZERO,
-          }
-        : undefined
+    c.stackPlace !== undefined
+      ? placedForms(node, node.children[i], c.stackPlace, axis)
+      : c.extent !== undefined
+        ? formsOf(node, node.children[i], c.extent, axis)
+        : c.fromRefs && c.placed !== undefined
+          ? {
+              whole: c.placed.extent,
+              box: c.placed.extent,
+              plot: c.placed.extent,
+              zero: Pwl.ZERO,
+            }
+          : undefined
   );
   // Each `in` target's frame in this layer's plan on `axis`, by its uid.
   const frames = new Map<string, InFrame | undefined>();

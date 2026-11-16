@@ -119,11 +119,15 @@ export const StackedArea: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(quarterlySales, { schema: { date: Unit.time() }, w: args.w, h: args.h })
-      .flow(
-        scatter({ by: "date", x: "date" }),
-        stack({ by: "category", dir: "y" })
+      .flow(stack({ by: "category", dir: "y" }))
+      .mark(
+        ribbon({
+          x: "date",
+          h: "sales",
+          fill: "category",
+          curve: Curve.linear(),
+        })
       )
-      .mark(ribbon({ h: "sales", fill: "category", curve: Curve.linear() }))
       .render(container);
     return container;
   },

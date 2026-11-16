@@ -1026,13 +1026,14 @@ export function antiderivative(
       out.push(piece);
       if (Number.isFinite(p.to)) reached = evalPoly(coeffs, p.to - p.at0);
     }
-    // Then the whole is moved so it reads 0 at `from`.
+    // Then the whole is moved so it reads 0 at `from`. A piece of 0 slope
+    // keeps one coefficient, so the integral of 0 is a constant.
     const zero = exact(f.domain, out).at(from);
     return exact(
       f.domain,
       out.map((p) => ({
         ...p,
-        coeffs: [p.coeffs[0] - zero, ...p.coeffs.slice(1)],
+        coeffs: trim([p.coeffs[0] - zero, ...p.coeffs.slice(1)]),
       }))
     );
   }

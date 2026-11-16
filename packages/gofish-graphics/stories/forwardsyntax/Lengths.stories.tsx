@@ -5,7 +5,6 @@ import {
   chart,
   spread,
   stack,
-  ribbon,
   rect,
   text,
   layer,
@@ -46,13 +45,13 @@ const panel = (dims: Record<string, unknown>, fill: string, label: string) =>
     text({ text: label, fontSize: 12 }),
   ]);
 
-export const AreaFrGaps: StoryObj = {
+export const StackedBarFrGaps: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
-      title: "Area Chart With Flexible Gaps",
+      title: "Stacked Bar Chart With Flexible Gaps",
       description:
-        "Fish catch by lake and species as stacked areas whose gaps between lakes share the chart's whole width.",
+        "Fish catch by lake and species as stacked bars whose gaps between lakes share the chart's whole width.",
     },
   },
   render: () => {
@@ -62,7 +61,7 @@ export const AreaFrGaps: StoryObj = {
         spread({ by: "lake", dir: "x", spacing: fr(1) }),
         stack({ by: "species", dir: "y" })
       )
-      .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
+      .mark(rect({ h: "count", fill: "species" }))
       .render(container);
     return container;
   },

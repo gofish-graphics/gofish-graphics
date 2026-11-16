@@ -4,7 +4,7 @@ order: 50
 
 # ribbon
 
-Fills a band. It has two forms. The shape form, `ribbon({ x, h })`, draws one band per group from its rows: an area chart. The connector form fills a band between marks another flow placed (edge to edge): streamgraphs, sankey ribbons, and bands between bars. It takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
+Fills a band. It has two forms. The shape form, `ribbon({ x, h })`, draws one band per group from its rows: an area chart. The connector form fills a band between marks another flow placed (edge to edge): sankey ribbons and bands between bars. It takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
 
 ::: gofish
 
@@ -52,12 +52,22 @@ group at the same `x` are an error: split them with
 [`group`](/js/api/operators/group) first. `h` may be negative, and the band
 then goes below the baseline. The curve defaults to `Curve.monotone()` and
 takes `Curve.linear()`, `Curve.step()`, `Curve.monotone()` or
-`Curve.smooth()`. A shape-form ribbon cannot be stacked yet.
+`Curve.smooth()`.
 
 ```ts
 chart(unemployment, { schema: { date: Unit.time() } })
   .flow(group({ by: "series" }))
   .mark(ribbon({ x: "date", h: "count", fill: "series", opacity: 0.5 }));
+```
+
+A [`stack`](/js/api/operators/stack#stacked-areas) of shape-form ribbons is a
+stacked area. Each band keeps its thickness at every `x`, and sits on the
+bands before it. Outside its own rows a band has thickness 0.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(stack({ by: "series", dir: "y" }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series" }));
 ```
 
 ## Connector form

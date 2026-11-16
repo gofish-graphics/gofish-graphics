@@ -1,16 +1,13 @@
 """Equivalent of Streamgraph.stories.tsx — Forward Syntax/Streamgraph."""
 
-from gofish import chart, spread, stack, ribbon
-from python_stories.data import SEAFOOD
+from gofish import chart, stack, ribbon, Baseline, Unit
+from python_stories.data import UNEMPLOYMENT
 
 
 def story_default():
     return (
-        chart(SEAFOOD, h=400)
-        .flow(
-            spread(by="lake", dir="x", spacing=64, alignment="middle"),
-            stack(by="species", dir="y"),
-        )
-        .mark(ribbon(h="count", fill="species", opacity=0.8)),
+        chart(UNEMPLOYMENT, w=560, h=400, schema={"date": Unit.time()})
+        .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
+        .mark(ribbon(x="date", h="count", fill="series")),
         {},
     )

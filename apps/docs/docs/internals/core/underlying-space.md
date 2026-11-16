@@ -424,6 +424,19 @@ the two sides:
   d3's `stackOffsetWiggle` in the limit of fine data. It is defined on the
   functions, so more knots on the same curves do not move it. Over boxes
   every slope is 0 and it is the start.
+- A stack of **bands** (a stacked area: `stack` over `ribbon({ x, h })`)
+  moves each part by an **offset function**: the part's tail measured from
+  the stack's 0 at every u, in data units (`stackPlaces` in `distribute.ts`,
+  from the same chain as `chainFold`). Part k's offset is the sum of the
+  thicknesses before it, moved by the baseline. Each band keeps its
+  thickness at every u; only its cross-section moves. Outside its own domain
+  a band's thickness is 0 (`add` in `fun.ts` reads 0 there), so series
+  sampled at different u stack. When every offset is constant (boxes, or
+  bands of one thickness under a baseline that does not move with u) there
+  are no offset functions and the stack is the chain of translates above.
+  `wiggle` here reads the function-level `wiggleZero`, never the box
+  shortcut. Each part reaches over `[min_u(offset − descent),
+max_u(offset + ascent)]` about the stack's 0 (`StackPlace.reach`).
 - A stack whose parts are all nonnegative amounts (no part reaches below its
   tail), on a 0 that is data 0, builds a **mirrored** space
   (`CONTINUOUS_TYPE.mirrored`): both sides of 0 hold amounts measured away
@@ -1339,6 +1352,21 @@ no origin) still has its own 0: the solver seats the stack's origin at the
 layer's pixel 0, where the free origin would be. Only a free node's baseline
 needs the layer's data 0. So a node's 0 is where its baseline says, and a
 node that says nothing has it at its data 0, else at its start.
+
+A stack of bands (offset functions, `stackPlaces`) has no chain of
+translates. Its lowering puts every part's tail at the stack's 0 (one
+`include` per part with `origin: { point: 0 }`, and no chain relations), and
+the solver seats each by the rule above. The layer hands each part its
+offset as the `shear` of its `AxisScale` on the stack's axis
+(`composeLayerTypes` → `places` in `layer.tsx`), and the band adds it to
+both edges before it maps them (`band.tsx`), so its box, outline and
+cross-section are where it is drawn, and labels, `ref` and `selectAll` read
+them there. Only a node with a `shearAxis` (a band, on its value axis) draws
+a shear. Any other part in such a stack is an error that names it: a rect
+or text has one size along the axis, and a part with a pixel size has no
+offset in data units. A box stack keeps the chain of translates: one path for
+both is a TODO (`stackPlaces`), because a pixel-sized, origin-less or
+size-strong part has no data offset.
 So a stack seats at the origin like a single bar, a negative first part hangs
 below it, and two stacks of one sign each (grouped by sign) meet on the 0
 tick. A stack over a `HasMidpoint` column carries its origin at the midpoint

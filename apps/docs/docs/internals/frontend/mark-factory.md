@@ -566,9 +566,11 @@ lines and Béziers, and resamples them only under a coordinate transform. Its
 geometry gives the box, the outline of the drawn path, and the exact
 cross-section along its value axis.
 
-A shape-form ribbon cannot be stacked yet, and options that only a connector
-reads (`dir`, `from`, `to`, `along` and the anchor keys) are an error in the
-shape form.
+A band sets the node's `shearAxis` to its value axis, so a stack can move it
+by an offset that changes along the parameter (a stacked area, see
+[the underlying space](/internals/core/underlying-space)). Options that only a
+connector reads (`dir`, `from`, `to`, `along` and the anchor keys) are an
+error in the shape form.
 
 ### A connector's datum, and its `live()` channels
 

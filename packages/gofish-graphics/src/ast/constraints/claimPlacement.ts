@@ -102,6 +102,11 @@ export type ClaimChild = {
    *  one rule): it sits where the frame seats it (`seat:`), and no
    *  constraint moves it unless a `position` places it on the axis. */
   dataPositioned: boolean;
+  /** Where a stack lays it about the stack's 0, when the stack moves it by
+   *  an offset that changes along u (a band in a stacked area,
+   *  `stackPlaces`): the box it draws, which is not the box its own claim
+   *  describes. Its forms in the plan are this box, all of it plot. */
+  stackPlace?: Extent;
   /** It places itself at a position of its own as it is laid out, before
    *  the solve (a literal start, a shape's own position, or a node placed
    *  from the refs it reads: `placesItself` in solver/plan.ts). The solve

@@ -1,4 +1,5 @@
 import type { UnitRecord } from "./underlyingSpace";
+import type { Fun } from "./fun";
 
 export type Domain = ContinuousDomain | AestheticDomain;
 
@@ -56,7 +57,15 @@ export type AxisMap<T = number> = { sigma: T; originPx: T };
  *  sanctioned case: since issue #659, nicing is a per-scope operation applied
  *  at the scope's solve, so a scope's map and σ read one domain by
  *  construction.) */
-export type AxisScale = { sigma?: number; map?: AxisMap };
+export type AxisScale = {
+  sigma?: number;
+  map?: AxisMap;
+  /** A data offset along this axis at each data coordinate u of the other
+   *  axis, which the child adds to what it draws: where a stack lays a part
+   *  whose offset changes along u (a band in a stacked area,
+   *  `stackPlaces`). Only a node with a `shearAxis` reads it. */
+  shear?: Fun<number>;
+};
 
 /** Evaluate an anchored map at a data value. */
 export const pxOf = (map: AxisMap, d: number): number =>
@@ -77,6 +86,11 @@ export const posFn = (
  *  the axis carries — it never derives a slope. */
 export const axisScale = (
   sigma: number | undefined,
-  map: AxisMap | undefined
+  map: AxisMap | undefined,
+  shear?: Fun<number>
 ): AxisScale | undefined =>
-  sigma === undefined && map === undefined ? undefined : { sigma, map };
+  sigma === undefined && map === undefined
+    ? undefined
+    : shear === undefined
+      ? { sigma, map }
+      : { sigma, map, shear };

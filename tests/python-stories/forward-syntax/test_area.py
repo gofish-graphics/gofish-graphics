@@ -1,7 +1,7 @@
 """Equivalent of Area.stories.tsx — Forward Syntax/Area."""
 
-from gofish import chart, spread, stack, ribbon, line, group, Coord, Unit
-from python_stories.data import SEAFOOD, UNEMPLOYMENT
+from gofish import chart, stack, ribbon, line, group, Baseline, Coord, Unit
+from python_stories.data import UNEMPLOYMENT
 
 
 def story_basic():
@@ -16,12 +16,53 @@ def story_basic():
 
 def story_stacked():
     return (
-        chart(SEAFOOD, h=400)
-        .flow(
-            spread(by="lake", dir="x", spacing=64),
-            stack(by="species", dir="y"),
+        chart(UNEMPLOYMENT, w=560, h=400, schema={"date": Unit.time()})
+        .flow(stack(by="series", dir="y"))
+        .mark(ribbon(x="date", h="count", fill="series")),
+        {},
+    )
+
+
+def story_stacked_middle():
+    return (
+        chart(UNEMPLOYMENT, w=560, h=400, schema={"date": Unit.time()})
+        .flow(stack(by="series", dir="y", baseline=Baseline.middle()))
+        .mark(ribbon(x="date", h="count", fill="series")),
+        {},
+    )
+
+
+def story_stacked_uneven_samples():
+    rows = [
+        *({"s": "a", "x": x, "v": v} for x, v in zip([0, 2, 4, 6, 8], [3, 4, 2, 5, 3])),
+        *({"s": "b", "x": x, "v": v} for x, v in zip([1, 2.5, 5, 7], [1, 2, 3, 1])),
+        *({"s": "c", "x": x, "v": v} for x, v in zip([0, 3, 8], [2, 1, 2])),
+    ]
+    return (
+        chart(rows, w=420, h=300)
+        .flow(stack(by="s", dir="y"))
+        .mark(ribbon(x="x", h="v", fill="s")),
+        {},
+    )
+
+
+def story_stacked_polar():
+    industries = ["Construction", "Finance", "Manufacturing"]
+    rows = [
+        d
+        for d in UNEMPLOYMENT
+        if d["series"] in industries and d["date"].startswith("2009")
+    ]
+    return (
+        chart(
+            rows,
+            coord=Coord.clock(),
+            w=420,
+            h=420,
+            schema={"date": Unit.time()},
         )
-        .mark(ribbon(h="count", fill="species", opacity=0.8)),
+        .flow(stack(by="series", dir="y"))
+        .mark(ribbon(x="date", h="count", fill="series")),
         {},
     )
 

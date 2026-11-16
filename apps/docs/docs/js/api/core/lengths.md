@@ -16,7 +16,7 @@ gf.chart(seafood, { w: 500, h: 200 })
     gf.spread({ by: "lake", dir: "x", spacing: gf.fr(1) }),
     gf.stack({ by: "species", dir: "y" })
   )
-  .mark(gf.ribbon({ h: "count", fill: "species", opacity: 0.8 }))
+  .mark(gf.rect({ h: "count", fill: "species" }))
   .render(root);
 ```
 

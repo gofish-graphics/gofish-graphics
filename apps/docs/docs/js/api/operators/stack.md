@@ -112,6 +112,38 @@ chart(survey, {
   .mark(rect({ w: "count", fill: "response" }));
 ```
 
+## Stacked areas
+
+A stack of [shape-form ribbons](/js/api/marks/ribbon#shape-form) is a stacked
+area. A band's thickness changes along `x`, so the stack moves each band by
+an amount that changes along `x` too: the thickness of the bands before it,
+moved by the baseline. Each band keeps its thickness at every `x`. Outside its
+own rows a band has thickness 0, so series may be sampled at different `x`.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(stack({ by: "series", dir: "y" }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series" }));
+```
+
+::: gofish example:stacked-area-chart hidden
+:::
+
+With `Baseline.wiggle()` the stack is a streamgraph. With `Baseline.middle()`
+it is centered at every `x`.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series" }));
+```
+
+::: gofish example:streamgraph hidden
+:::
+
+Every part of such a stack must be a band. A `rect` or a `text` in a stack of
+bands is an error.
+
 ## Example
 
 ```ts

@@ -53,13 +53,25 @@ group at the same `x` are an error: split them with
 [`group`](/python/api/operators/group) first. `h` may be negative, and the
 band then goes below the baseline. The curve defaults to `Curve.monotone()`
 and takes `Curve.linear()`, `Curve.step()`, `Curve.monotone()` or
-`Curve.smooth()`. A shape-form ribbon cannot be stacked yet.
+`Curve.smooth()`.
 
 ```python
 (
     chart(unemployment, schema={"date": Unit.time()})
     .flow(group(by="series"))
     .mark(ribbon(x="date", h="count", fill="series", opacity=0.5))
+)
+```
+
+A [`stack`](/python/api/operators/stack#stacked-areas) of shape-form ribbons is
+a stacked area. Each band keeps its thickness at every `x`, and sits on the
+bands before it. Outside its own rows a band has thickness 0.
+
+```python
+(
+    chart(unemployment, schema={"date": Unit.time()})
+    .flow(stack(by="series", dir="y"))
+    .mark(ribbon(x="date", h="count", fill="series"))
 )
 ```
 

@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { seafood } from "../../src/data/catch";
 import { unemployment } from "../../src/data/unemployment";
-import { chart, spread, stack } from "../../src/lib";
+import { chart, stack, Baseline } from "../../src/lib";
 import { ribbon, line, group, Coord, Unit } from "../../src/lib";
 
 const meta: Meta = {
@@ -55,18 +54,88 @@ export const Stacked: StoryObj<Args> = {
     gallery: {
       title: "Stacked Area Chart",
       description:
-        "Fish catch counts by lake split into stacked bands by species, each a colored filled area.",
+        "Unemployment in 14 US industries month by month from 2000 to 2010, stacked into bands so the top edge is the total and each band is one industry.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { h: args.h })
-      .flow(
-        spread({ by: "lake", dir: "x", spacing: 64 }),
-        stack({ by: "species", dir: "y" })
-      )
-      .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
+    chart(unemployment, {
+      w: args.w,
+      h: args.h,
+      schema: { date: Unit.time() },
+    })
+      .flow(stack({ by: "series", dir: "y" }))
+      .mark(ribbon({ x: "date", h: "count", fill: "series" }))
+      .render(container);
+
+    return container;
+  },
+};
+
+// A stacked area about its middle (`Baseline.middle()`, d3's
+// `stackOffsetSilhouette`): each band keeps its thickness, and the stack is
+// centered at every date. A test, not a gallery visualization.
+export const StackedMiddle: StoryObj<Args> = {
+  args: { w: 560, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(unemployment, {
+      w: args.w,
+      h: args.h,
+      schema: { date: Unit.time() },
+    })
+      .flow(stack({ by: "series", dir: "y", baseline: Baseline.middle() }))
+      .mark(ribbon({ x: "date", h: "count", fill: "series" }))
+      .render(container);
+
+    return container;
+  },
+};
+
+// Series sampled at different x: outside its own rows a series has
+// thickness 0, so the bands above it step down onto the band below where it
+// starts and ends. A test, not a gallery visualization.
+export const StackedUnevenSamples: StoryObj<Args> = {
+  args: { w: 420, h: 300 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    const rows = [
+      ...[0, 2, 4, 6, 8].map((x, i) => ({ s: "a", x, v: [3, 4, 2, 5, 3][i] })),
+      ...[1, 2.5, 5, 7].map((x, i) => ({ s: "b", x, v: [1, 2, 3, 1][i] })),
+      ...[0, 3, 8].map((x, i) => ({ s: "c", x, v: [2, 1, 2][i] })),
+    ];
+
+    chart(rows, { w: args.w, h: args.h })
+      .flow(stack({ by: "s", dir: "y" }))
+      .mark(ribbon({ x: "x", h: "v", fill: "s" }))
+      .render(container);
+
+    return container;
+  },
+};
+
+// A stacked area under a clock: the stack moves each band along r by its
+// offset, and the band is resampled through the clock. A test, not a
+// gallery visualization.
+export const StackedPolar: StoryObj<Args> = {
+  args: { w: 420, h: 420 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    const industries = ["Construction", "Finance", "Manufacturing"];
+    const rows = unemployment.filter(
+      (d) => industries.includes(d.series) && d.date.startsWith("2009")
+    );
+
+    chart(rows, {
+      coord: Coord.clock(),
+      w: args.w,
+      h: args.h,
+      schema: { date: Unit.time() },
+    })
+      .flow(stack({ by: "series", dir: "y" }))
+      .mark(ribbon({ x: "date", h: "count", fill: "series" }))
       .render(container);
 
     return container;

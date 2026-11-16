@@ -44,6 +44,7 @@ import {
   minimum,
   record,
   reparameterize,
+  restrict,
   scale,
   add,
   through,
@@ -257,6 +258,9 @@ export const Band = ({
       labelPosition: "outline",
       color: isValue(fill) ? fill : strokeColor,
       strokeOverhang: outlineOverhang(strokeColor, strokeWidth),
+      // A band of amounts can be moved by an offset that changes along its
+      // parameter (a stack of bands), and draws it.
+      shearAxis: origin === "free" ? across : undefined,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
         _childNodes: readonly GoFishAST[]
@@ -311,9 +315,15 @@ export const Band = ({
           k = sigma;
           c = 0;
         }
+        // A stack that moves the band by an offset that changes along the
+        // parameter (`AxisScale.shear`, in data units) moves both edges by
+        // it at every u: each cross-section moves, and none is resized.
+        const shear = values?.shear;
+        const sheared = (f: Fun<number>): Fun<number> =>
+          shear === undefined ? f : add(f, restrict(shear, f.domain));
         const local = (f: Fun<number>): Fun<number> =>
           mapValues(
-            reparameterize(f, along.sigma, along.originPx - start),
+            reparameterize(sheared(f), along.sigma, along.originPx - start),
             k,
             c
           );

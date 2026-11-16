@@ -21,10 +21,11 @@ from gofish import (
     select_all,
     spread,
     stack,
+    Baseline,
     Place,
     Unit,
 )
-from python_stories.data import SEAFOOD
+from python_stories.data import UNEMPLOYMENT
 from python_stories.vega_data_urls import read_csv, read_json
 
 
@@ -106,12 +107,9 @@ def story_inline_sloped_labels():
 
 def story_streamgraph_interior_labels():
     return (
-        chart(SEAFOOD, h=360)
-        .flow(
-            spread(by="lake", dir="x", spacing=64, alignment="middle"),
-            stack(by="species", dir="y"),
-        )
-        .mark(ribbon(h="count", fill="species", opacity=0.8).label("species")),
+        chart(UNEMPLOYMENT, w=560, h=360, schema={"date": Unit.time()})
+        .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
+        .mark(ribbon(x="date", h="count", fill="series").label("series")),
         {"legend": False},
     )
 

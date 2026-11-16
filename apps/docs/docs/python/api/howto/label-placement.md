@@ -81,16 +81,13 @@ label's box can grow largest. A band too thin for its label leaves it out.
 A `polygon` is labeled the same way.
 
 ```python
-from gofish import chart, ribbon, spread, stack
+from gofish import chart, ribbon, stack, Baseline, Unit
 
 (
-    chart(seafood)
-    .flow(
-        spread(by="lake", dir="x", spacing=64, alignment="middle"),
-        stack(by="species", dir="y"),
-    )
-    .mark(ribbon(h="count", fill="species", opacity=0.8).label("species"))
-    .render(w=520, h=360, legend=False)
+    chart(unemployment, schema={"date": Unit.time()})
+    .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
+    .mark(ribbon(x="date", h="count", fill="series").label("series"))
+    .render(w=560, h=360, legend=False)
 )
 ```
 

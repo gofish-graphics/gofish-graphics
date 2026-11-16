@@ -14,7 +14,6 @@ from gofish import (
     layer,
     percent,
     rect,
-    ribbon,
     scatter,
     spread,
     stack,
@@ -42,11 +41,11 @@ def _panel(fill, label, **dims):
     )
 
 
-def story_area_fr_gaps():
+def story_stacked_bar_fr_gaps():
     return (
         chart(SEAFOOD, w=500, h=200)
         .flow(spread(by="lake", dir="x", spacing=fr(1)), stack(by="species", dir="y"))
-        .mark(ribbon(h="count", fill="species", opacity=0.8)),
+        .mark(rect(h="count", fill="species")),
         {},
     )
 
