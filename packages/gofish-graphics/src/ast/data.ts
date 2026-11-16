@@ -228,6 +228,13 @@ export type FieldAccessor = {
  */
 export const field = (name: string): FieldExpr<false, false> =>
   new FieldExpr<false, false>(name);
+/** Whether `row` has a field `name` of its own. A name that only its
+ *  prototype carries (`"constructor"`, `"toString"`) is not a field. */
+export const hasField = (row: unknown, name: string): boolean =>
+  typeof row === "object" &&
+  row !== null &&
+  Object.prototype.hasOwnProperty.call(row, name);
+
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&

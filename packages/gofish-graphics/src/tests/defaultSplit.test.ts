@@ -644,7 +644,7 @@ async function main() {
       rect({ x: 0, y: 0, w: 10, h: 10 }).name("a"),
       rect({ x: 50, y: 50, w: 10, h: 10 }).name("b"),
     ]).relate(({ a, b }: any) => [
-      line({ fill: (d: any) => d.g } as any, [a, b]),
+      line({ fill: (d: any) => v(d.g) }, [a, b]),
     ])(undefined);
     const doc = await node.toDisplayList({ w: 100, h: 100 });
     const pathsIn = (it: any): any[] => [
@@ -672,7 +672,7 @@ async function main() {
       renderDisplayList(
         chart(data, { w: 200, h: 200 })
           .flow(spread({ by: "lake", dir: "x", spacing: 50 }))
-          .mark(ribbon({ h: "count", fill: (d: any) => d.lake } as any)),
+          .mark(ribbon({ h: "count", fill: (d: any) => v(d.lake) })),
         { w: 200, h: 200 }
       )
     );

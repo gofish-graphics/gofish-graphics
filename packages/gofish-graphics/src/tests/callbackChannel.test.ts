@@ -1,99 +1,235 @@
 /**
- * A function in a channel returns, for each row, a value that means what it
+ * A function in a channel gives, for each row, a value that means what it
  * would mean written in the channel itself, as if a conditional in the
- * function were erased. For `fill: (d) => d.k === "b" ? "orange" :
- * "steelblue"`, the mark of row b is drawn as with `fill: "orange"` and the
- * others as with `fill: "steelblue"`: literal colors, with no legend. A
- * string that names a field reads that field, `v(...)` is a data value the
- * color scale maps, and `literal(...)` is a constant (`firstRowValue` in
- * channels.ts).
+ * function were erased (`directValue` in channels.ts). Every channel kind
+ * takes the same step: a color, a text, a size, a position, and the paint
+ * of a connector. `undefined` gives no value, so the mark keeps its
+ * default; `null` is a missing data value. `v(...)` is always data and
+ * `literal(...)` always a constant, whatever the channel does with a plain
+ * string.
  *
  * Run: `tsx src/tests/callbackChannel.test.ts` (wired as
  * `pnpm test:callback-channel`).
  */
 
-import { chart, spread, rect, text, literal, v } from "../lib";
+import {
+  chart,
+  spread,
+  scatter,
+  group,
+  rect,
+  text,
+  line,
+  literal,
+  v,
+} from "../lib";
 import { check, items, report, textsOf } from "./testHelpers";
 
 declare const process: { exit(code: number): never };
 
-const rows = [
-  { k: "a", v: 3 },
-  { k: "b", v: 5 },
-  { k: "c", v: 2 },
+type Row = { k: string; count: number };
+const rows: Row[] = [
+  { k: "a", count: 3 },
+  { k: "b", count: 5 },
+  { k: "c", count: 2 },
 ];
 
-/** The fills of the drawn rects and the texts, in draw order. */
-async function drawn(fill: unknown) {
-  const doc = await chart(rows, { axes: false })
-    .flow(spread({ by: "k", dir: "x" }))
-    .mark(rect({ h: "v", fill: fill as any }))
-    .toDisplayList({ w: 300, h: 200 });
-  const fills = items(doc)
-    .filter((it) => it.kind === "rect")
-    .map((it) => it.style?.fill ?? it.fill);
-  return { fills, texts: textsOf(doc) };
-}
 const same = (a: unknown, b: unknown) =>
   JSON.stringify(a) === JSON.stringify(b);
 
+/** The bars of a spread of `rows` by `k`, drawn with `bar`. */
+async function bars(bar: ReturnType<typeof rect<Row>>) {
+  const doc = await chart(rows, { axes: false })
+    .flow(spread({ by: "k", dir: "x" }))
+    .mark(bar)
+    .toDisplayList({ w: 300, h: 200 });
+  const marks = items(doc)
+    .filter((it) => it.kind === "rect")
+    .slice(0, rows.length);
+  return {
+    fills: marks.map((it) => it.style?.fill ?? it.fill),
+    heights: marks.map((it) => Math.round(it.h ?? 0)),
+    xs: marks.map((it) => Math.round(it.x ?? 0)),
+    texts: textsOf(doc),
+  };
+}
+
 async function main() {
-  console.log("\n# a function's value means what it means in the channel");
+  console.log("\n# a color");
 
-  const highlight = await drawn((d: any) =>
-    d.k === "b" ? "orange" : "steelblue"
-  );
-  check(
-    "a color name is a literal color, with no legend",
-    same(highlight, {
-      fills: ["steelblue", "orange", "steelblue"],
-      texts: [],
-    }),
-    JSON.stringify(highlight)
-  );
-
-  const byField = await drawn("k");
-  check(
-    "a string that names a field reads it, as the field name does",
-    same(await drawn(() => "k"), byField),
-    JSON.stringify(byField)
-  );
-  check(
-    "v(...) is a data value the color scale maps, as the field name does",
-    same(await drawn((d: any) => v(d.k)), byField)
-  );
-  check(
-    "literal(...) is a constant color",
-    same(await drawn(() => literal("red")), {
-      fills: ["red", "red", "red"],
-      texts: [],
+  const highlight = await bars(
+    rect({
+      h: "count",
+      fill: (d: Row) => (d.k === "b" ? "orange" : "steelblue"),
     })
   );
-
-  console.log("\n# a mix of data and literals");
-
-  // The scale's domain is the data values alone (a, c), so the literal
-  // row takes no color of the palette and no legend entry.
-  const mixed = await drawn((d: any) => (d.k === "b" ? "orange" : v(d.k)));
   check(
-    "the literal row is drawn as given, and only the data rows are in the legend",
+    "a color name is that color, with no legend",
+    same(highlight.fills, ["steelblue", "orange", "steelblue"]) &&
+      highlight.texts.length === 0,
+    JSON.stringify(highlight)
+  );
+  const byField = await bars(rect({ h: "count", fill: "k" }));
+  check(
+    "a string that names a field reads it, as the field name does",
+    same(await bars(rect({ h: "count", fill: () => "k" })), byField)
+  );
+  check(
+    "v(...) is data the color scale maps, as the field is",
+    same(await bars(rect({ h: "count", fill: (d: Row) => v(d.k) })), byField)
+  );
+  check(
+    "literal(...) is a constant",
+    same((await bars(rect({ h: "count", fill: () => literal("k") }))).fills, [
+      "k",
+      "k",
+      "k",
+    ])
+  );
+  const mixed = await bars(
+    rect({ h: "count", fill: (d: Row) => (d.k === "b" ? "orange" : v(d.k)) })
+  );
+  check(
+    "a mix: the literal row is drawn as given, the data rows are in the legend",
     mixed.fills[1] === "orange" &&
       mixed.fills[0] !== mixed.fills[2] &&
-      !["a", "c", "orange"].includes(mixed.fills[0]) &&
       same(mixed.texts, ["a", "c"]),
     JSON.stringify(mixed)
   );
+  const plain = await bars(rect({ h: "count" }));
+  check(
+    "undefined gives no value, so the mark keeps its default",
+    same(
+      (
+        await bars(
+          rect({
+            h: "count",
+            fill: (d: Row) => (d.k === "b" ? "red" : undefined),
+          })
+        )
+      ).fills,
+      [plain.fills[0], "red", plain.fills[2]]
+    )
+  );
 
-  console.log("\n# a text channel");
+  console.log("\n# a size");
+
+  check(
+    "a number is pixels, as h: 40 is",
+    same((await bars(rect({ h: () => 40 }))).heights, [40, 40, 40])
+  );
+  check(
+    "literal(...) is pixels too",
+    same((await bars(rect({ h: () => literal(40) }))).heights, [40, 40, 40])
+  );
+  const byCount = await bars(rect({ h: "count" }));
+  check(
+    "v(...) is data, as the field name is",
+    same(
+      (await bars(rect({ h: (d: Row) => v(d.count) }))).heights,
+      byCount.heights
+    )
+  );
+  check(
+    "a field name reads the field",
+    same((await bars(rect({ h: () => "count" }))).heights, byCount.heights)
+  );
+  const nulls = await bars(
+    rect({ h: (d: Row) => (d.k === "b" ? null : v(d.count)) })
+  );
+  check(
+    "null is a missing value, so its mark is not drawn",
+    nulls.heights.length === 2,
+    JSON.stringify(nulls.heights)
+  );
+
+  console.log("\n# a position");
+
+  const xsOf = async (x: any) => {
+    const d = await chart(rows, { axes: false })
+      .flow(spread({ by: "k", dir: "y" }))
+      .mark(rect({ w: 10, h: 10, x }))
+      .toDisplayList({ w: 300, h: 200 });
+    return items(d)
+      .filter((it) => it.kind === "rect")
+      .map((it) => Math.round(it.x ?? 0));
+  };
+  check(
+    "v(...) is data, as the field name is",
+    same(await xsOf((d: Row) => v(d.count)), await xsOf("count")),
+    JSON.stringify(await xsOf("count"))
+  );
+
+  console.log("\n# a text");
 
   const doc = await chart(rows, { axes: false })
     .flow(spread({ by: "k", dir: "x" }))
-    .mark(text({ text: (d: any) => `${d.v}%` }))
+    .mark(text({ text: (d: Row) => `${d.count}%` }))
     .toDisplayList({ w: 300, h: 200 });
   check(
-    "a function's string is the text, as it is written",
+    "a string that names no field is the text",
     same(textsOf(doc), ["3%", "5%", "2%"]),
     JSON.stringify(textsOf(doc))
+  );
+  const own = await chart(rows, { axes: false })
+    .flow(spread({ by: "k", dir: "x" }))
+    .mark(text({ text: () => "constructor" }))
+    .toDisplayList({ w: 300, h: 200 });
+  check(
+    "a name only the row's prototype has is not a field",
+    same(textsOf(own), ["constructor", "constructor", "constructor"]),
+    JSON.stringify(textsOf(own))
+  );
+
+  const wrapped = await chart(rows, { axes: false })
+    .flow(spread({ by: "k", dir: "x" }))
+    .mark(text({ text: (d: Row) => (d.k === "b" ? literal("count") : v(d.k)) }))
+    .toDisplayList({ w: 300, h: 200 });
+  check(
+    "v(...) is the value and literal(...) the text, though it names a field",
+    same(textsOf(wrapped), ["a", "count", "c"]),
+    JSON.stringify(textsOf(wrapped))
+  );
+
+  console.log("\n# a connector's paint");
+
+  const points = [
+    { g: "a", x: 1, y: 1 },
+    { g: "a", x: 2, y: 3 },
+    { g: "b", x: 1, y: 2 },
+    { g: "b", x: 2, y: 1 },
+  ];
+  const strokes = async (stroke: any) => {
+    const d = await chart(points, { axes: false })
+      .flow(group({ by: "g" }), scatter({ by: "x", x: "x", y: "y" }))
+      .mark(line({ stroke }))
+      .toDisplayList({ w: 200, h: 200 });
+    return {
+      strokes: items(d)
+        .filter((it) => it.kind === "path")
+        .map((it) => it.style?.stroke),
+      texts: textsOf(d),
+    };
+  };
+  check(
+    "literal(...) is a constant, with no legend",
+    same(await strokes(() => literal("red")), {
+      strokes: ["red", "red"],
+      texts: [],
+    }),
+    JSON.stringify(await strokes(() => literal("red")))
+  );
+  check(
+    "v(...) is data, as the field name is",
+    same(
+      await strokes((d: (typeof points)[number]) => v(d.g)),
+      await strokes("g")
+    )
+  );
+  check(
+    "an empty string names no field, so it is a literal",
+    same((await strokes(() => "")).strokes, ["", ""]),
+    JSON.stringify(await strokes(() => ""))
   );
 
   report();

@@ -48,6 +48,7 @@ import {
 import { withRegistrar } from "../../interaction/resolveContext";
 import {
   CHANNEL_INFER,
+  directValue,
   isBatchAccessor,
   resolveChannelAccessors,
   resolveValue,
@@ -1130,6 +1131,25 @@ function applyChannel(
   // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
   // flagged channels where the user passed an explicit array.
   if (Array.isArray(val)) return val;
+  // A function is read as the value it returns would be, written in the
+  // channel, over each entry's rows or the whole data (`directValue`). The
+  // column is then the returned value's (a field name's), off `wholeData`.
+  if (typeof val === "function") {
+    const at = (items: any[]) => {
+      const given = directValue(val, items);
+      // No value given: the channel is absent, as an option left out is.
+      if (given === undefined) return undefined;
+      const numeric = type === "size" || type === "area" || type === "pos";
+      return CHANNEL_INFER[type](
+        given,
+        items,
+        numeric ? resolveColumn(wholeData, given) : undefined
+      );
+    };
+    return perEntry && entries !== undefined
+      ? [...entries.values()].map(at)
+      : at(wholeData);
+  }
   // The column (its measure and its schema type) is loop-invariant across
   // split entries (it depends only on the accessor and what `wholeData`
   // carries, not on which items a given entry holds), so resolve it once per

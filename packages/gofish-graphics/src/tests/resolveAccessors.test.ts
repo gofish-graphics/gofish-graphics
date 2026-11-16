@@ -11,7 +11,7 @@
  */
 
 import "../lib";
-import { field } from "../ast/data";
+import { field, value as v } from "../ast/data";
 import * as Bin from "../families/bin";
 import { RESOLVE_ROWS, resolveChannelAccessors } from "../ast/channels";
 import { splitEntries } from "../ast/datumProjection";
@@ -118,7 +118,7 @@ console.log("# resolveChannelAccessors");
 
 console.log("# the fast path");
 {
-  const opts = { h: "v", w: (d: any) => d.v, dims: { r: { size: 3 } } };
+  const opts = { h: "v", w: (d: any) => v(d.v), dims: { r: { size: 3 } } };
   let asked = false;
   const out = resolveChannelAccessors(
     opts,

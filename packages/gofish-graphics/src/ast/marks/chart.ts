@@ -8,8 +8,12 @@ import {
   type AnchorSpec,
 } from "../graphicalOperators/connect";
 import { GoFishNode } from "../_node";
+import toPath from "lodash/toPath";
 import {
   getValue,
+  hasField,
+  isField,
+  isLiteral,
   isValue,
   scaleValue,
   value,
@@ -24,7 +28,7 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { colorValue, resolveChannelAccessors } from "../channels";
+import { colorValue, directValue, resolveChannelAccessors } from "../channels";
 import { isThenable } from "../../util";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import {
@@ -643,15 +647,16 @@ const groupChannelsOf = (type: string): Record<string, "color" | "raw"> =>
  * (`colorValue`), a raw channel's (`enclose`'s `padding`) is used as it is.
  * Several is a loud error, never a silent first-row pick (mirrors the
  * homogeneity-collapse error `resolveLabelText` throws for `.label(field)`).
- * None passes the string through unchanged (it names no field, so it is a
- * literal color, as for a mark's color channel).
+ * A string that names no field of the group's rows (the empty string
+ * included) is a literal, as for a mark's color channel. A `literal(...)` is
+ * its value, a `field(...)` reads its field as the name does, and a `Value`
+ * is left as is.
  *
- * An accessor's value over the group must be one value too, and it means
- * what it would mean written in the channel itself, as for a mark's
- * channel (`firstRowValue` in channels.ts): a string is resolved as above,
- * and a `v(...)` or `literal(...)` is left as is. An accessor with no rows
- * to read is dropped, so the mark keeps its default and a raw function
- * never reaches the node. A `Value` or undefined is left as is.
+ * An accessor is read as the value it returns would be, written in the
+ * channel (`directValue` in channels.ts, the step every channel takes): its
+ * rows must agree on one value, which is then resolved as above. With no
+ * rows it gives no value, so the mark keeps its default and a raw function
+ * never reaches the node.
  *
  * The same resolution serves every mark whose paint is one color: the
  * connectors, `enclose`, and `intersect` (over the rows of its input).
@@ -680,31 +685,25 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   for (const key of Object.keys(paint)) {
     let raw = (resolved as any)[key];
     if (typeof raw === "function") {
-      // The accessor's one value means what it would mean written in the
-      // channel itself: a string goes on as one, and anything else (a
-      // `v(...)`, a `literal(...)`) is left for the node as it would be.
-      const read = projectByValues(group, raw);
-      if (read.length > 1) throw notConstant(key, "the accessor's value");
-      // No row has a value: the accessor has nothing to read, so the mark
-      // keeps its default.
-      raw = read[0];
-      if (typeof raw !== "string") {
+      raw = directValue(raw, rowsReached(group));
+      if (typeof raw === "function")
+        throw notConstant(key, "the accessor's value");
+    }
+    if (isLiteral(raw)) raw = raw.value;
+    else if (isField(raw)) raw = raw.name;
+    else if (typeof raw === "string") {
+      const name = toPath(raw)[0];
+      const rows = rowsReached(group);
+      // A string no row has as a field is a literal.
+      if (name === undefined || !rows.some((row) => hasField(row, name))) {
         resolved = { ...resolved, [key]: raw };
         continue;
       }
+      const values = projectByValues(group, raw);
+      if (values.length > 1) throw notConstant(key, `"${raw}"`);
+      raw = paint[key] === "raw" ? values[0] : colorValue(values[0], raw);
     }
-    if (typeof raw !== "string") continue;
-    const values = projectByValues(group, raw);
-    // No row has a value: the string names no field, so it is a literal.
-    if (values.length === 0) {
-      resolved = { ...resolved, [key]: raw };
-      continue;
-    }
-    if (values.length > 1) throw notConstant(key, `"${raw}"`);
-    resolved = {
-      ...resolved,
-      [key]: paint[key] === "raw" ? values[0] : colorValue(values[0], raw),
-    } as O;
+    resolved = { ...resolved, [key]: raw } as O;
   }
   return resolved;
 }

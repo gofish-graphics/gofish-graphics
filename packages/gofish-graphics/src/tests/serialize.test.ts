@@ -1714,7 +1714,9 @@ async function main() {
   {
     // A Python lambda reaches JS as an accessor with a batch form. The mark
     // and operator factories resolve it over the rows before inference, one
-    // bridge call per accessor, so size and position channels read numbers.
+    // bridge call per accessor. Its values mean what they would written in
+    // the channel, as a JS function's do, so it returns `datum(v)` (the
+    // `{type: "datum"}` wire shape) for data: a bare number would be pixels.
     const rows = [
       { k: "a", v: 1 },
       { k: "b", v: 3 },
@@ -1744,7 +1746,7 @@ async function main() {
     const calls: string[] = [];
     const bridge = accessorBridge((id, batch) => {
       calls.push(id);
-      return batch.map((r) => r.v);
+      return batch.map((r) => ({ type: "datum", datum: r.v }));
     });
     const ir = {
       type: "chart",
@@ -1804,6 +1806,38 @@ async function main() {
       "a bridged operator position accessor places the points",
       cxs.length === 2 && cxs.every(Number.isFinite) && cxs[0] < cxs[1],
       JSON.stringify(cxs)
+    );
+
+    // Python's `literal(...)` and `datum(...)` in one lambda cross as one
+    // table, so each row's object carries the other's key as null.
+    const paintBridge = accessorBridge((_, batch) =>
+      batch.map((r) =>
+        r.k === "a"
+          ? { type: "literal", value: "red", datum: null }
+          : { type: "datum", datum: r.k, value: null }
+      )
+    );
+    const paintIR = {
+      type: "chart",
+      data: { type: "table", id: "t0" },
+      operators: [{ type: "spread", by: "k", dir: "x" }],
+      mark: { type: "rect", w: 10, h: 10, fill: { __gofish_lambda: "f" } },
+    } as any;
+    const fills: string[] = [];
+    const walkFill = (it: any) => {
+      if (it.kind === "rect") fills.push(it.style?.fill ?? it.fill);
+      for (const c of it.children ?? []) walkFill(c);
+    };
+    (
+      await Serialize.buildIR(
+        irDoc(paintIR, { t0: rows }),
+        paintBridge
+      ).toDisplayList({ w: 100, h: 100 })
+    ).items.forEach(walkFill);
+    check(
+      "a bridged literal(...) is a constant and a bridged datum(...) is data",
+      fills[0] === "red" && fills[1] !== "red" && fills[1] !== "b",
+      JSON.stringify(fills)
     );
   }
 
