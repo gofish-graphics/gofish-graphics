@@ -187,7 +187,9 @@ Walking `createOperator.ts:391-415`:
    not restate the key. A function `by` has no field name to record, so
    `resolve` errors there unless given an explicit `key`.
 3. **Apply channels** — `applyChannels` runs `inferSize` / `inferPos` /
-   `inferColor` on annotated opts. For an entry-flagged channel
+   `inferColor` on annotated opts. A function value (`fun(...)`) in an
+   operator's channel is an error that names the operator: only the shape
+   form of `ribbon` and `line` reads one. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
    producing an array of values (one per child); otherwise it aggregates
    over all of `d` and produces one value. Inference is synchronous, so

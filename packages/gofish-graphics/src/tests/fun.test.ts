@@ -131,7 +131,7 @@ console.log("# fun: monotone sums, against dense sampling");
     "the integral of a monotone sum matches Simpson's",
     close(
       F.integrate(s),
-      F.integrate(F.fun(s.at, { domain: s.domain, knots: s.knots })),
+      F.integrate(F.opaque(s.at, { domain: s.domain, knots: s.knots })),
       1e-8
     )
   );
@@ -281,7 +281,7 @@ console.log("# fun: constants, records and envelopes");
 
 console.log("# fun: opaque functions");
 {
-  const g = F.fun((t) => Math.exp(-t * t), { domain: { min: -3, max: 2 } });
+  const g = F.opaque((t) => Math.exp(-t * t), { domain: { min: -3, max: 2 } });
   ok("an opaque maximum is read to a tolerance", close(F.maximum(g), 1, 1e-12));
   ok(
     "an opaque integral too",
@@ -291,7 +291,7 @@ console.log("# fun: opaque functions");
     "its derivative too",
     close(F.derivative(g).at(1), -2 * Math.exp(-1), 1e-5)
   );
-  const unbounded = F.fun((t) => t, { domain: { min: 0, max: Infinity } });
+  const unbounded = F.opaque((t) => t, { domain: { min: 0, max: Infinity } });
   ok(
     "an opaque function over an unbounded domain cannot be read",
     throws(() => F.maximum(unbounded)) !== undefined
@@ -341,7 +341,7 @@ console.log("# fun: multiply and antiderivative");
     "the antiderivative of cubics matches their integral",
     close(C.at(4), F.integrate(curve), 1e-9)
   );
-  const wave = F.fun((u: number) => Math.sin(u), {
+  const wave = F.opaque((u: number) => Math.sin(u), {
     domain: { min: 0, max: Math.PI },
   });
   const W = F.antiderivative(wave);

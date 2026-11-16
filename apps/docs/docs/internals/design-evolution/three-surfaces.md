@@ -31,6 +31,10 @@ density curve into `n` rows at its quantiles, so `Bin.quantiles` and
 `field(x).median()` read the curve. It is a declared shortcut, kept in its
 own module (`ast/quantileRows.ts`), until first-class distributions (#980)
 replace it.
+It exports `fun(at, { domain })`, a function value over `domain` (`[min,
+max]`) that the shape form of `ribbon` and `line` reads at one parameter t
+(`ast/groupExpr.ts`). It is lowercase because it is a value constructor, like
+`field`, not a family.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has

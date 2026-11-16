@@ -17,7 +17,8 @@
  *   restrictions, envelopes, derivatives and records of exact functions are
  *   exact again, and so are their maxima (at a piece's end or at a root of
  *   its derivative) and integrals (in closed form per piece).
- * - An **opaque** function is only its `at` ({@link fun}, or the result of
+ * - An **opaque** function is only its `at` ({@link opaque}, a user's
+ *   `fun()`, or the result of
  *   {@link map} and {@link zip}, which apply a function the module cannot
  *   see into). A query on it is answered to a tolerance, by sampling.
  *
@@ -369,14 +370,23 @@ export function through(
   return exact({ min: knots[0], max: knots[n - 1] }, pieces, curve);
 }
 
-/** Make an opaque function value: the function and its domain, as Chebfun's
- *  `chebfun(f, [a, b])` and Julia's `Fun(f, a..b)` take them. `knots` are
- *  places where it may bend sharply; every query is answered to a tolerance
- *  and splits there. */
-export const fun = <T>(
+/** Make an opaque function: only its `at` and its domain. `knots` are places
+ *  where it may bend sharply; every query is answered to a tolerance and
+ *  splits there. A spec makes one with `fun` (groupExpr.ts). */
+export const opaque = <T>(
   at: (t: number) => T,
   o: { domain: Interval; knots?: readonly number[] }
 ): Fun<T> => ({ at, domain: o.domain, ...(o.knots ? { knots: o.knots } : {}) });
+
+/** The identity `t ↦ t` over `domain`: what `support()` gives, the
+ *  parameter itself, for a mark's position channel. It is exact (one
+ *  linear piece). */
+export const identity = (domain: Interval): Fun<number> =>
+  domain.min === domain.max
+    ? through([domain.min], [domain.min], { kind: "linear" })
+    : through([domain.min, domain.max], [domain.min, domain.max], {
+        kind: "linear",
+      });
 
 // ---------------------------------------------------------------------------
 // Combining exact functions piece by piece.

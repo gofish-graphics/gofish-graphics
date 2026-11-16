@@ -44,7 +44,8 @@ import {
   sealComponent,
   type NameableMark,
 } from "../withGoFish";
-import { Band, bandOfRows } from "../shapes/band";
+import { Band, bandOfFunctions, bandOfRows } from "../shapes/band";
+import { isFunctionExpr, type FunctionExpr } from "../groupExpr";
 import { monotone } from "../../families/curve";
 import type { ParameterCurve } from "../fun";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -1052,13 +1053,19 @@ export type LineOptions = FilterOptions & {
   emY?: boolean;
   /** The shape form: each row's position. Given, the line owns its rows and
    *  draws one path per group through them, sorted by `x`. */
-  x?: RowChannel;
-  y?: RowChannel;
+  x?: ShapeChannel;
+  y?: ShapeChannel;
 };
 
-/** A channel the shape form of `ribbon` and `line` reads once per row: a
- *  column name, an accessor, or a `field(...)` expression. */
-export type RowChannel = string | ((d: any) => unknown) | FieldExpr;
+/** A position or value channel of the shape form of `ribbon` and `line`:
+ *  read once per row (a column name, an accessor, or a `field(...)`
+ *  expression), or a function expression read at the mark's parameter t
+ *  (`fun(...)`, `f.support()`). */
+export type ShapeChannel =
+  | string
+  | ((d: any) => unknown)
+  | FieldExpr
+  | FunctionExpr;
 
 /** The options only the connector form of `ribbon` and `line` reads. */
 const CONNECTOR_ONLY = [
@@ -1109,6 +1116,15 @@ function shapeForm(
       `[gofish] ${type}({ ${parameter} }): the shape form needs \`${value}\` ` +
         `too, the value at each ${parameter}.`
     );
+  // A channel that holds a function expression gives the mark a parameter
+  // t, which every function channel is read at; rows are not read at t.
+  const ofT = isFunctionExpr(opts[parameter]) || isFunctionExpr(opts[value]);
+  if (ofT && opts.curve !== undefined)
+    throw new Error(
+      `[gofish] ${type}({ ${parameter}, ${value}, curve }): a curve says how ` +
+        `a ${type} runs between its rows, but these channels hold functions ` +
+        `of t, which run as they are. Remove curve.`
+    );
   const curve = (opts.curve ?? monotone()) as Curve;
   if (!["linear", "step", "monotone", "smooth"].includes(curve.kind))
     throw new Error(
@@ -1131,21 +1147,25 @@ function shapeForm(
     const accessors = isThenable(pending) ? await pending : pending;
     const paint = await resolveGroupPaint(type, accessors, rows);
     const o = withLiveStatics(paint, liveChannels, rows) as Record<string, any>;
+    const along = { name: parameter, accessor: o[parameter] };
+    const values = {
+      name: value,
+      accessor: o[value],
+      kind: closed ? ("amount" as const) : ("position" as const),
+    };
     const node = withRegistrar(layerContext.registrar, () =>
       Band({
         axis,
-        ...bandOfRows(
-          type,
-          rows,
-          { name: parameter, accessor: o[parameter] },
-          {
-            name: value,
-            accessor: o[value],
-            kind: closed ? "amount" : "position",
-          },
-          curve as ParameterCurve,
-          key
-        ),
+        ...(ofT
+          ? bandOfFunctions(type, rows, along, values, key)
+          : bandOfRows(
+              type,
+              rows,
+              along,
+              values,
+              curve as ParameterCurve,
+              key
+            )),
         origin: closed ? "free" : "pinned",
         closed,
         fill: o.fill,
@@ -1201,7 +1221,7 @@ const lineConnector = createRelationalMark<LineOptions>(
  *   pairwise `{ from, to }`, or a combinator's children.
  */
 export function line(
-  options: LineOptions & { x: RowChannel; y: RowChannel }
+  options: LineOptions & { x: ShapeChannel; y: ShapeChannel }
 ): NameableMark<any>;
 export function line(
   options: LineOptions | undefined,
@@ -1254,15 +1274,17 @@ export type RibbonOptions = FilterOptions & {
   // a field name, a `Value<number>`, or a `field(...)` pipeline like
   // `field("count").sum()` — since they're forwarded verbatim to the
   // synthesized `blank()`, which evaluates them the same way.
-  w?: number | string | Value<number> | FieldExpr;
-  h?: number | string | Value<number> | FieldExpr;
+  // In the shape form they are the band's values: a column, or a function
+  // expression read at the mark's parameter t.
+  w?: number | string | Value<number> | FieldExpr | FunctionExpr;
+  h?: number | string | Value<number> | FieldExpr | FunctionExpr;
   emX?: boolean;
   emY?: boolean;
-  /** The shape form: each row's position along the band. `x` with `h` is a
-   *  band over x, of height h from its baseline; `y` with `w` is a band over
-   *  y, of width w. */
-  x?: RowChannel;
-  y?: RowChannel;
+  /** The shape form: each row's position along the band, or a function
+   *  expression's `support()`. `x` with `h` is a band over x, of height h
+   *  from its baseline; `y` with `w` is a band over y, of width w. */
+  x?: ShapeChannel;
+  y?: ShapeChannel;
 };
 
 // `ribbon`'s connector form — an edge-mode connector: a filled band between
@@ -1301,7 +1323,7 @@ const ribbonConnector = createRelationalMark<RibbonOptions>(
  *   bag, a pairwise `{ from, to }`, or a combinator's children.
  */
 export function ribbon(
-  options: RibbonOptions & ({ x: RowChannel } | { y: RowChannel })
+  options: RibbonOptions & ({ x: ShapeChannel } | { y: ShapeChannel })
 ): NameableMark<any>;
 export function ribbon(
   options: RibbonOptions | undefined,
@@ -1312,10 +1334,21 @@ export function ribbon(
   options?: RibbonOptions,
   children?: GoFishAST[]
 ): GoFishNode | Mark<any> {
-  if (options?.x === undefined && options?.y === undefined)
+  if (options?.x === undefined && options?.y === undefined) {
+    for (const [key, at] of [
+      ["h", "x"],
+      ["w", "y"],
+    ] as const)
+      if (isFunctionExpr(options?.[key]))
+        throw new Error(
+          `[gofish] ribbon({ ${key} }): ${key} holds a function of t, which ` +
+            `the shape form reads; give it ${at} too, the function's ` +
+            `support: ribbon({ ${at}: f.support(), ${key}: f }).`
+        );
     return children === undefined
       ? ribbonConnector(options)
       : ribbonConnector(options, children);
+  }
   if (children !== undefined)
     throw new Error(
       "[gofish] ribbon({ x }, children): the shape form draws its own rows; " +

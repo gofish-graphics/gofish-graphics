@@ -42,6 +42,10 @@ export type {
   FieldPredicateWire,
 } from "./ast/fieldExpr";
 export { map } from "./ast/iterators/map";
+// `fun(at, { domain })`: a function value, the same function in every
+// group, which the shape form of ribbon and line reads at one parameter t.
+export { fun } from "./ast/groupExpr";
+export type { FunValue, FunctionExpr } from "./ast/groupExpr";
 
 // Strategy families (#1013): an option whose value is one choice from a set
 // of named strategies gets one namespace, with a capitalized name. Each is a

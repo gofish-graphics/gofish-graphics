@@ -1097,7 +1097,7 @@ console.log("# space: a wiggle stack's 0");
     }
     return wiggleZero(middles, parts);
   };
-  const exactZero = zeroOf(curves.map((c) => F.fun(c, { domain })));
+  const exactZero = zeroOf(curves.map((c) => F.opaque(c, { domain })));
   // d3's bottom is minus the 0 measured from the stack's start, and its
   // backward differences converge to the slope the 0 is the integral of.
   const gap = (samples: number) => {

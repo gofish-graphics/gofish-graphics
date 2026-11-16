@@ -70,6 +70,34 @@ chart(unemployment, { schema: { date: Unit.time() } })
   .mark(ribbon({ x: "date", h: "count", fill: "series" }));
 ```
 
+## Function channels
+
+`x` and `h` (or `y` and `w`) may hold a function value, made with
+[`fun`](/js/api/core/fun), in place of a column. The ribbon then has one
+parameter `t`, and reads every function channel at the same `t`. Its edges
+are the functions themselves, not curves through rows.
+
+- `x` holds `f.support()`, which is `t` itself over the domain of `f`.
+- Every function channel has the same domain, or it is an error that names
+  both.
+- `h` may be a number instead, a constant over `t`. A column beside a
+  function is an error, since rows are not read at `t`.
+- `curve` is an error, since a function runs as it is.
+
+```ts
+const bump = fun((t) => 1 + Math.exp(-((t - 4) ** 2)), { domain: [0, 10] });
+const wave = fun((t) => 1 + 0.6 * Math.sin(t), { domain: [0, 10] });
+
+stack({ dir: "y" }, [
+  ribbon({ x: bump.support(), h: bump }),
+  ribbon({ x: wave.support(), h: wave }),
+]);
+```
+
+A stack of such ribbons keeps each band's thickness at every `t`, and takes
+a [`Baseline`](/js/api/baseline) like any stacked area. It draws under a
+coordinate transform too.
+
 ## Connector form
 
 `curve` takes a member of the [`Curve`](/js/api/curve) family:

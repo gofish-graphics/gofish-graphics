@@ -65,6 +65,13 @@ first. The curve defaults to `Curve.monotone()` and takes `Curve.linear()`,
 )
 ```
 
+## Function channels
+
+In JavaScript, the shape form reads a function value made with
+[`fun`](/python/api/core/fun) in place of a column. Python does not support
+function values yet: `fun` raises. Give the function's values at sample
+points as rows instead.
+
 ## The line pattern
 
 A line needs points to connect. The idiomatic recipe:

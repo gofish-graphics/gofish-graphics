@@ -64,6 +64,24 @@ chart(prices, { schema: { date: Unit.time() } })
   .mark(line({ x: "date", y: "price", stroke: "symbol" }));
 ```
 
+## Function channels
+
+`x` and `y` may hold a function value, made with [`fun`](/js/api/core/fun),
+in place of a column. The line then draws the function itself, read at one
+parameter `t`, as a [`ribbon`](/js/api/marks/ribbon#function-channels) does.
+`x` holds `f.support()`, which is `t` itself over the domain of `f`.
+
+```ts
+const trend = fun((t) => 1.5 * t + 0.3, { domain: [1, 3] });
+
+layer([
+  chart(points)
+    .flow(scatter({ x: "x", y: "y" }))
+    .mark(circle({ r: 3 })),
+  line({ x: trend.support(), y: trend }),
+]);
+```
+
 ## Connector forms
 
 - **Bag form** — `line()` over a `GoFishRef[]` (e.g. [`selectAll()`](/js/api/selection/ref)):

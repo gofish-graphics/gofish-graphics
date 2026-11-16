@@ -58,6 +58,7 @@ from .ast import (
     fr,
     LengthValue,
     field,
+    fun,
     struct,
     chunk,
 )
@@ -140,6 +141,7 @@ __all__ = [
     "fr",
     "LengthValue",
     "field",
+    "fun",
     "struct",
     "chunk",
     "pluck",

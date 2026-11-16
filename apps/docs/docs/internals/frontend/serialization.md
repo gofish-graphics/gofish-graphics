@@ -786,7 +786,10 @@ Six consumers read the table:
 - **The JS emitter** (`toJSON`) filters what reaches the wire through it.
   A factory tags its options as the caller passed them; `wireOpts` keeps
   only the keys `acceptedFields(kind, type)` lists, and drops any function
-  value, since a callback has no JSON form. So a key the descriptor does not
+  value, since a callback has no JSON form. It drops a `fun(...)` value for
+  the same reason (`hasNoWireForm` in `ast/groupExpr.ts`): it holds a JS
+  closure. A Python `fun` raises, since a function value is read during
+  layout, which is synchronous, and the bridge is not. So a key the descriptor does not
   know never reaches the IR, and a construct with no descriptor (such as
   `time.transition`) has no IR form: `toJSON` throws.
 

@@ -572,6 +572,19 @@ by an offset that changes along the parameter (a stacked area, see
 connector reads (`dir`, `from`, `to`, `along` and the anchor keys) are an
 error in the shape form.
 
+A channel of the shape form may hold a function expression instead of a
+column: `ribbon({ x: f.support(), h: f })` with `f` made by `fun(at, { domain
+})` (`src/ast/groupExpr.ts`). The mark then has one parameter t, and
+`bandOfFunctions` builds the edges from the functions instead of the rows:
+`groupFun` reads each channel's function for the group, their domains must be
+equal, a number in the value channel is a constant over t, and a column
+beside a function is an error. The position must be one increasing line in
+t, so the values are read through it with `reparameterize`. An opaque edge
+has no pieces, so `edgePath` draws it by sampling it to half a pixel
+(`sampledEdgePath`). Any other mark given a function value throws, in the
+channel loop of `withGoFish.ts` (`functionInChannelError`) and in an
+operator's `applyChannels`.
+
 ### A connector's datum, and its `live()` channels
 
 A leaf mark carries the rows it was drawn from, and so does a connector: its

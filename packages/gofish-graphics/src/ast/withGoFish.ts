@@ -52,6 +52,7 @@ import { withWire } from "./wire";
 import { isThenable } from "../util";
 import { breadthFirst } from "./elaborationUtils";
 import { withKindValues } from "./strategyKind";
+import { functionInChannelError, isFunctionExpr } from "./groupExpr";
 
 export interface RenderOptions {
   w?: number;
@@ -562,6 +563,10 @@ function buildCreatedMark(
             ? markValue
             : inferEntrySize(markValue, d);
         } else if (channelType !== undefined) {
+          // A function value is read only by a mark that draws along a path
+          // (the shape form of ribbon and line, which is no createMark).
+          if (isFunctionExpr(markValue))
+            throw functionInChannelError(serialize ?? "mark", propName);
           // Each kind reads an already-wrapped value (`datum(...)`) itself
           // (`CHANNEL_INFER`): an area roots it, the others keep it.
           shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);

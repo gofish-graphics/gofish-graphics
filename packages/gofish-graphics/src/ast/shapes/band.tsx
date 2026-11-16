@@ -5,8 +5,11 @@
  * The node holds two edges, each a function of the parameter in data units
  * (`fun.ts`): `lower` and `upper`. A `ribbon({ x, h })` has `lower` 0 and
  * `upper` the curve through its rows' `h`; a `line({ x, y })` has both
- * edges equal to the curve through its rows' `y`. Every pass reads the two
- * edges from one place, {@link BandProps.edges}:
+ * edges equal to the curve through its rows' `y` ({@link bandOfRows}). A
+ * mark whose channels hold function expressions has the functions
+ * themselves as its edges, read at one parameter t ({@link
+ * bandOfFunctions}). Every pass reads the two edges from one place,
+ * {@link BandProps.edges}:
  *
  * - Types: along the parameter's axis, a pinned space over the parameter's
  *   extent. Along the value axis, the hull of the two edges, free when the
@@ -38,6 +41,7 @@ import type { Size } from "../dims";
 import { isValue, type MaybeValue } from "../data";
 import { pxOf, type AxisScale } from "../domain";
 import {
+  breakpoints,
   constant,
   lowerEnvelope,
   maximum,
@@ -78,6 +82,7 @@ import {
 import type { BlendMode } from "../blendMode";
 import { evalFieldValues, isMissing } from "../fieldExpr";
 import { resolveColumn } from "../channels";
+import { groupFun, isFunctionExpr } from "../groupExpr";
 
 /** A band's or a path's two edges: functions of the parameter, in data
  *  units, over one domain (the parameter's extent). */
@@ -151,12 +156,7 @@ export function edgePath(
   f: Fun<number>,
   point: (u: number, v: number) => Point
 ): Path {
-  if (f.pieces === undefined)
-    // TODO(stack profiles S9): a function given as `fun()` has no pieces;
-    // it is drawn by resampling it, which arrives with function channels.
-    throw new Error(
-      "[gofish] band: an edge without exact pieces cannot be drawn yet."
-    );
+  if (f.pieces === undefined) return sampledEdgePath(f, point);
   const out: Path = [];
   let at: Point | undefined;
   const jumpTo = (p: Point) => {
@@ -190,6 +190,60 @@ export function edgePath(
         )
       );
     at = end;
+  }
+  return out;
+}
+
+/** How far a drawn opaque edge may stray from the function, in pixels: half
+ *  a pixel, as the resampling under a coordinate transform reads it
+ *  (`adaptive-resampling.ts`). */
+const EDGE_TOLERANCE = 0.5;
+/** The longest step a drawn opaque edge takes along its parameter before it
+ *  checks the tolerance, in pixels, so a bump between two samples is not
+ *  missed (d3's `minSourceDistance`). */
+const EDGE_STEP = 10;
+const EDGE_DEPTH = 16;
+
+/**
+ * The path an opaque edge draws, through `point(u, v)` with `u` and `v` in
+ * pixels: a polyline whose vertices are on the function, split until each
+ * segment's midpoint is within {@link EDGE_TOLERANCE} of the function there
+ * and no segment is longer than {@link EDGE_STEP} along the parameter. It
+ * starts at every knot, where the function may bend sharply.
+ */
+function sampledEdgePath(
+  f: Fun<number>,
+  point: (u: number, v: number) => Point
+): Path {
+  const at = (u: number): Point => point(u, f.at(u));
+  const starts = breakpoints(f);
+  if (starts.length < 2) return [];
+  const out: Path = [];
+  const split = (
+    u0: number,
+    p0: Point,
+    u1: number,
+    p1: Point,
+    depth: number
+  ) => {
+    const um = (u0 + u1) / 2;
+    const pm = at(um);
+    const dx = pm[0] - (p0[0] + p1[0]) / 2;
+    const dy = pm[1] - (p0[1] + p1[1]) / 2;
+    if (
+      depth > 0 &&
+      (dx * dx + dy * dy > EDGE_TOLERANCE * EDGE_TOLERANCE ||
+        u1 - u0 > EDGE_STEP)
+    ) {
+      split(u0, p0, um, pm, depth - 1);
+      split(um, pm, u1, p1, depth - 1);
+    } else out.push(segment(p0, p1));
+  };
+  let prev = at(starts[0]);
+  for (let i = 1; i < starts.length; i++) {
+    const next = at(starts[i]);
+    split(starts[i - 1], prev, starts[i], next, EDGE_DEPTH);
+    prev = next;
   }
   return out;
 }
@@ -404,6 +458,119 @@ export const Band = ({
 /** One position channel of the shape form: the option's name and its
  *  accessor. */
 type Channel = { name: string; accessor: unknown };
+
+/** The interval `d` as a message writes it. */
+const showDomain = (d: Interval): string => `[${d.min}, ${d.max}]`;
+
+/** The map `t ↦ a·t + b` that `f` is, when it is exact and one line over its
+ *  whole domain: what a position channel at the mark's parameter must be
+ *  for its cross-sections to be functions of the position (the identity of
+ *  `support()` is one, with `a = 1`, `b = 0`). */
+function affineOf(f: Fun<number>): { a: number; b: number } | undefined {
+  if (f.pieces === undefined) return undefined;
+  const spans = f.pieces.filter((p) => p.from !== p.to);
+  if (spans.length === 0) return undefined;
+  const lineOf = (p: Piece<number>) => {
+    const [c0, c1 = 0, ...rest] = p.coeffs;
+    return rest.some((c) => c !== 0)
+      ? undefined
+      : { a: c1, b: c0 - c1 * p.at0 };
+  };
+  const line = lineOf(spans[0]);
+  if (line === undefined) return undefined;
+  const on = (t: number, v: number) =>
+    Math.abs(line.a * t + line.b - v) <= 1e-12 * Math.max(1, Math.abs(v));
+  // Every piece is the same line: each span's ends, and each point piece's
+  // value, lie on it.
+  for (const p of f.pieces) {
+    const l = lineOf(p);
+    if (l === undefined) return undefined;
+    if (!on(p.from, l.a * p.from + l.b) || !on(p.to, l.a * p.to + l.b))
+      return undefined;
+  }
+  return line;
+}
+
+/**
+ * The edges of a band or a path whose channels hold function expressions:
+ * the mark has one parameter t, and every channel that holds a function is
+ * read at the same t (`groupFun` reads each one's function for this group).
+ *
+ * - Their domains must be equal, or it is an error that names both.
+ * - The position channel (`x`, or a vertical band's `y`) must hold a
+ *   function: a column beside a function is an error, since rows are not
+ *   read at t. The value channel may hold a number instead, a constant
+ *   function over the parameter's domain.
+ * - The position must be one increasing line in t (`f.support()` is
+ *   `t ↦ t`), so the band's cross-sections stay functions of its position.
+ *   The values are then read through it exactly ({@link reparameterize}).
+ *   TODO(stack-profiles): a position that bends in t (a P-P plot,
+ *   `line({ x: a.cdf(), y: b.cdf() })`) needs the values read through the
+ *   inverse of the position; it is an error until then.
+ * - `value` is an amount or a position, as for {@link bandOfRows}.
+ */
+export function bandOfFunctions(
+  mark: string,
+  rows: readonly unknown[],
+  parameter: Channel,
+  value: Channel & { kind: "amount" | "position" },
+  group: string | number | undefined
+): Pick<BandProps, "edges" | "parameterQuantity" | "valueQuantity"> {
+  const where = group === undefined ? "" : ` in the group "${group}"`;
+  const read = (c: Channel) =>
+    isFunctionExpr(c.accessor)
+      ? groupFun(c.accessor, rows, `${mark}({ ${c.name} })`)
+      : undefined;
+  const t = read(parameter);
+  if (t === undefined)
+    throw new Error(
+      `[gofish] ${mark}({ ${parameter.name}, ${value.name} }): ` +
+        `${value.name} holds a function of t, so ${parameter.name} must too: ` +
+        `rows are not read at t. Give ${parameter.name} the function's ` +
+        `support, ${mark}({ ${parameter.name}: f.support(), ${value.name}: f }).`
+    );
+  let v = read(value);
+  if (v === undefined) {
+    if (typeof value.accessor !== "number")
+      throw new Error(
+        `[gofish] ${mark}({ ${parameter.name}, ${value.name} }): ` +
+          `${parameter.name} holds a function of t, so ${value.name} must ` +
+          `hold a function too, or a number (a constant over t): rows are ` +
+          `not read at t.`
+      );
+    v = { fun: constant(value.accessor, t.fun.domain) };
+  } else if (
+    v.fun.domain.min !== t.fun.domain.min ||
+    v.fun.domain.max !== t.fun.domain.max
+  )
+    throw new Error(
+      `[gofish] ${mark}({ ${parameter.name}, ${value.name} }): every function ` +
+        `channel of a ${mark} is read at one t, so their domains must be ` +
+        `equal, but${where} ${parameter.name} is over ` +
+        `${showDomain(t.fun.domain)} and ${value.name} over ` +
+        `${showDomain(v.fun.domain)}.`
+    );
+  const line = affineOf(t.fun);
+  if (line === undefined || !(line.a > 0))
+    throw new Error(
+      `[gofish] ${mark}({ ${parameter.name} }): the position must be one ` +
+        `increasing line in t, such as f.support() (t itself), so each ` +
+        `${parameter.name} has one value; a position that bends in t is not ` +
+        `supported yet.`
+    );
+  const along =
+    line.a === 1 && line.b === 0
+      ? v.fun
+      : reparameterize(v.fun, line.a, line.b);
+  return {
+    edges:
+      value.kind === "position"
+        ? { lower: along, upper: along }
+        : { lower: constant(0, along.domain), upper: along },
+    parameterQuantity: t.quantity,
+    valueQuantity: v.quantity,
+  };
+}
 
 /**
  * The edges of a band or a path built from `rows`: the rows sorted by the

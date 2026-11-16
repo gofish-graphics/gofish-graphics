@@ -94,6 +94,7 @@ import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
 import { GoFishRef } from "../_ref";
+import { functionInChannelError, isFunctionExpr } from "../groupExpr";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -1038,7 +1039,8 @@ function applyChannels<Options extends Record<string, any>>(
   opts: Options,
   channels: ChannelAnnotations<Options> | undefined,
   d: any,
-  entries: Map<SplitKey, any> | undefined
+  entries: Map<SplitKey, any> | undefined,
+  operator: string
 ): Options {
   if (!channels) return opts;
   const out: any = { ...opts };
@@ -1063,6 +1065,9 @@ function applyChannels<Options extends Record<string, any>>(
     const spec = channels[key];
     const val = out[key];
     if (val === undefined || spec === undefined) continue;
+    // Only the shape form of ribbon and line reads a function value.
+    if (isFunctionExpr(val))
+      throw functionInChannelError(operator, String(key));
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     if (type !== "dims") {
       out[key] = infer(type, spec, val);
@@ -1199,7 +1204,8 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   d: Datum[],
   entries: Map<SplitKey, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined,
-  layerContext: LayerContext
+  layerContext: LayerContext,
+  operator = "operator"
 ): Promise<Options> {
   const pending = resolveChannelAccessors(opts, channels, () => {
     const rows = new Set<unknown>(d);
@@ -1213,7 +1219,7 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   const resolved = isThenable(pending) ? await pending : pending;
   // The one call of an operator's channel functions.
   const withChannels = withRegistrar(layerContext.registrar, () =>
-    applyChannels(resolved, channels, d, entries)
+    applyChannels(resolved, channels, d, entries, operator)
   );
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
@@ -1270,7 +1276,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             d,
             undefined,
             undefined,
-            layerContext
+            layerContext,
+            cfg.serialize
           );
           // The one call of the layout function, in the scope of the context
           // the operator is applied in (`time.sequence` reads its clock in it).
@@ -1451,7 +1458,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           d,
           entries,
           splitLayoutOpts,
-          layerContext
+          layerContext,
+          cfg.serialize
         );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the

@@ -48,6 +48,12 @@ packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 # structure, data, options); only the pixel-for-pixel DOM diff is skipped.
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 
+# Function-valued channels (stack profiles S9): a function value is read at
+# t during layout, which is synchronous, and a Python function is reachable
+# only across the asynchronous bridge, so Python `fun(...)` raises
+# (TODO(stack-profiles) in gofish/ast.py). Nothing here can be ported yet.
+packages/gofish-graphics/stories/forwardsyntax/FunctionChannels.stories.tsx
+
 # ---------------------------------------------------------------------------
 # gofish-gotree (the GoTree tree-DSL package), #792.
 #

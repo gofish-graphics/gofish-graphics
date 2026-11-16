@@ -3372,6 +3372,32 @@ def field(name: str) -> FieldAccessor:
     return FieldAccessor({"type": "field", "name": name})
 
 
+def fun(at: Any, *, domain: Any, knots: Any = None) -> Any:
+    """
+    A function value: a function of t over ``domain``, ``(min, max)``,
+    which the shape form of ``ribbon`` and ``line`` reads at one parameter t.
+    Mirrors JS ``fun(at, { domain })`` (``src/ast/groupExpr.ts``).
+
+    Not supported from Python yet: it always raises.
+
+    Raises:
+        NotImplementedError: always.
+    """
+    # TODO(stack-profiles): a Python function value needs the bridge to read
+    # it at t. Layout and drawing read a function value synchronously, many
+    # times (to find its extent, and to draw it to half a pixel), but the
+    # bridge to the Python kernel is asynchronous, so there is no call that
+    # can answer `at(t)` in the middle of layout. A function built in JS
+    # (`field(...).reduce` returning `fun(...)` in a JS spec) works.
+    raise NotImplementedError(
+        "fun(at, domain=...): a function value is read at t during layout, "
+        "which is synchronous, but a Python function can only be called "
+        "across the bridge, which is asynchronous. Python cannot give a "
+        "function value yet; give the function's values at sample points as "
+        "rows instead: ribbon(x='t', h='value')."
+    )
+
+
 class ChunkKey(dict):
     """The ``{type: "chunk", size}`` wire shape of a ``chunk(size)`` grouping
     key. It is data, so a ``by=chunk(size)`` crosses to JS with no
