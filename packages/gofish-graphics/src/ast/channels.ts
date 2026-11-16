@@ -353,7 +353,8 @@ const sqrtArea = (
  * or, for a field expression with an aggregate (`field(x).count()`), against
  * the fold of all of `data`.
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
- *   wrapper, or a string that names no field on the row (e.g. a CSS color).
+ *   wrapper (in the channel, or returned by a function accessor), or a string
+ *   that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
  *   the accessor named one (not for a function accessor). The caller wraps it
  *   in `value(...)`.
@@ -392,9 +393,13 @@ function firstRowValue<T extends Record<string, any>>(
       : { kind: "row", value: row[accessor.name], field: accessor.name };
   }
   if (typeof accessor === "function") {
-    return row === undefined
-      ? { kind: "none" }
-      : { kind: "row", value: accessor(row) };
+    if (row === undefined) return { kind: "none" };
+    // A function reads a value off the row, as a field name does. A
+    // `literal(...)` it returns is a constant, as it is in the channel itself.
+    const read = accessor(row);
+    return isLiteral(read)
+      ? { kind: "literal", value: read.value }
+      : { kind: "row", value: read };
   }
   if (row !== undefined && accessor in row) {
     return { kind: "row", value: row[accessor], field: accessor };

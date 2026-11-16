@@ -222,6 +222,8 @@ Walking `withGoFish.ts:431-477`:
      read from a named field (a field-name string or `field(...)`) records
      that field as its provenance, `DatumValueImpl.field`, so the color
      scale knows which field it maps; a function accessor records none. A
+     function accessor's result is a value read off the row, unless it is a
+     `literal(...)`, which is a constant color as it is in the channel. A
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
      channel does, with the column's quantity, so a `.sum()` checks that
