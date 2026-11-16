@@ -5,7 +5,7 @@ of: min/max tick rects (named) joined by a vertical `line` whisker (a
 `.relate()` clause over the ticks), the
 interquartile box, and the median line. Three stories: a single glyph, a
 male/female pair, and the full pay-grade × gender plot. Mirrors the JS
-`boxwhisker.ts` helper (which the story file delegates to).
+`boxAndWhisker` helper in the story file.
 """
 
 from gofish import layer, spread, line, rect, ref, datum, Curve
