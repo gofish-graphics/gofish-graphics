@@ -1857,7 +1857,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   pack: operator("pack", {
-    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. Children keep their pixel size; the pack does not fit itself to the available space yet (#967).",
+    doc: "Circle packing: place the flow's groups (or rows) so their enclosing circles touch without overlapping, with d3's front-chain algorithm. When every child's radius is data and `spacing` is 0, the pack fits itself to the space it is given; otherwise children keep their pixel size (#967).",
     fields: {
       by: splitBy(
         "Field to partition rows by (like spread/scatter); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."

@@ -76,8 +76,11 @@ the gap in pixels between two touching siblings.
 
 ## Limits
 
-- Children keep the pixel size they are laid out at. The pack does not scale
-  itself to fit the space it is given, and it cannot yet size a child from data.
-  So give each child a size in pixels, e.g., `circle({ r: 12 })`, not
-  `circle({ r: "count" })`. See
+- When every child's radius comes from data, e.g., `circle({ r: "count" })`, and
+  `spacing` is 0, the pack fits itself to the space it is given: its
+  enclosing circle spans the smaller side of that space.
+- Otherwise children keep the pixel size they are laid out at, and the pack
+  does not scale itself. A pack of pixel radii, e.g., `circle({ r: 12 })`, packs
+  at those sizes. Data radii mixed with pixel radii, or data radii with a
+  `spacing`, are not supported yet. See
   [#967](https://github.com/gofish-graphics/gofish-graphics/issues/967).

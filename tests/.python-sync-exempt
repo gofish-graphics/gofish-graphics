@@ -176,3 +176,8 @@ packages/gofish-graphics/stories/forwardsyntax/LabelPlacement.stories.tsx::Arrow
 # path, so it would only throw: there is no chart to byte-match. NoSchema and
 # UsdStacks are ported.
 packages/gofish-graphics/stories/forwardsyntax/Bar/StackNeedsCanSum.stories.tsx::CelsiusRefused
+
+# Pack DataRadiusFits (#967): one story that renders the same spec twice, at
+# two sizes, into boxes it draws itself, to show the pack fitting its room.
+# Not a single spec for a Python story to byte-match.
+packages/gofish-graphics/stories/forwardsyntax/Pack.stories.tsx::DataRadiusFits

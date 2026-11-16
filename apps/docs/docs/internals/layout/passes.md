@@ -261,7 +261,7 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 **Implementation**: `src/ast/_node.ts:212-223`
 
-This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: σ-affine `ascent`, `descent`, and `width` Monotonics) from the children's claims and the already-resolved types. Types never read claims; layout reads both.
+This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered. A second walk over the same tree, `resolveExtent()`, then computes each continuous dimension's **size claim** (an `Extent`: `ascent`, `descent`, and `width`, each a `Pwl.Value`, piecewise linear in σ) from the children's claims and the already-resolved types. Types never read claims; layout reads both. A claim has a second query beside the `Extent`: a node's enclosing radius as a `Pwl.Value` in σ (`GoFishNode.enclosingRadius`), the claim form of the `enclosingCircle` geometry query, which circles and `pack` answer so a pack of data radii can claim its room (see [Shape geometry after layout](#shape-geometry-after-layout)).
 
 **Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
 #586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
@@ -1251,10 +1251,35 @@ inner packs' circles. A group with children answers only `enclosingCircle`
 in general, and its outline is still its box (#1233): labels and enclose
 members read outlines, so the general rule would move existing renders, and
 only `pack` answers its outline so far.
-Geometry exists only after layout, so a parent cannot yet read it while sizing.
-That is why `pack` keeps its children at their pixel size and does not fit
-itself to the space it is given (#967). The design note is
-`internals/design/shape-geometry.md` on the geometry-representations branch.
+Geometry exists only after layout, so a parent cannot read it while sizing.
+For that, the enclosing circle has a claim form (#967): before layout, a node
+may report its enclosing radius as a `Pwl.Value` in σ
+(`GoFishNode.enclosingRadius`, from the optional `resolveEnclosingRadius`
+hook), next to the `Extent` it claims. At the σ that layout solves, it is the
+radius `enclosingCircle` gives after layout. A circle answers `r·σ` for a
+data radius and a constant for a pixel one; an `ellipse` answers for a
+literal box, or for a data size under an aspect lock, the radius of its
+larger side (`enclosingRadiusOf`). The one σ is the one the ellipse's layout
+draws its box with: it fits the box inside both axes' data sizes, so a
+circle's data radius is drawn at the smaller of the two axes' σ, which is
+the shared σ where an aspect lock ties the unit (#1087). Every other node,
+and a glyph size, has no radius claim.
+
+`pack` answers it from its children's radius claims, through the same
+`packCircles` its layout uses. Packing scales exactly: multiplying every
+radius by k multiplies the layout by k. So when every child's radius is
+`aᵢ·σ` and `spacing` is 0, the pack's radius is `R(1)·σ`, where `R(1)` is
+the radius of one pack of the `aᵢ`. Such a pack claims `2·R(1)·σ` on each
+axis (its type stays `UNDEFINED`: its children are separate spaces), so the
+scope around it solves σ and the pack fills its room, nested packs and packs
+in a spread included. When every child's radius is a constant, so is the
+pack's, and it claims no room: it keeps its children at their pixel size, as
+before. Pixel and data radii mixed, or data radii with a pixel `spacing`,
+pack to a radius that is no line in σ, so the pack has no radius claim and
+cannot lay out its data radii (a TODO for #967: it needs a claim that is not
+closed form, a monotone function inverted by search, which no claim is
+today). The design note is `internals/design/shape-geometry.md` on the
+geometry-representations branch.
 
 The second consumer is `scatter`'s `overlap` option, `Overlap.separate()` (#969) or
 `Overlap.noise()` (#970, #1014). `Overlap.sina()` and `Overlap.jitter()` are `Overlap.noise()` with other
