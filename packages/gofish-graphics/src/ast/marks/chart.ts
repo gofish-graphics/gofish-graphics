@@ -637,17 +637,21 @@ const groupChannelsOf = (type: string): Record<string, "color" | "raw"> =>
  * step's rows): one color per connector, the way a mark's color channel
  * gives one color per mark.
  *
- * A field name is shorthand for an accessor (`"species"` is
- * `(d) => d.species`), so both read a value off each row of the group with
+ * A field name reads a value off each row of the group with
  * `projectByValues`, the projection `by` uses. One distinct value is the
  * connector's: a color channel's goes through the shared color scale
  * (`colorValue`), a raw channel's (`enclose`'s `padding`) is used as it is.
  * Several is a loud error, never a silent first-row pick (mirrors the
  * homogeneity-collapse error `resolveLabelText` throws for `.label(field)`).
- * None passes a string through unchanged (it names no field, so it is a
- * literal color, as for a mark's color channel) and drops an accessor (a
- * group with no rows has nothing for it to read), so a raw function never
- * reaches the node. A `Value` or undefined is left as is.
+ * None passes the string through unchanged (it names no field, so it is a
+ * literal color, as for a mark's color channel).
+ *
+ * An accessor's value over the group must be one value too, and it means
+ * what it would mean written in the channel itself, as for a mark's
+ * channel (`firstRowValue` in channels.ts): a string is resolved as above,
+ * and a `v(...)` or `literal(...)` is left as is. An accessor with no rows
+ * to read is dropped, so the mark keeps its default and a raw function
+ * never reaches the node. A `Value` or undefined is left as is.
  *
  * The same resolution serves every mark whose paint is one color: the
  * connectors, `enclose`, and `intersect` (over the rows of its input).
@@ -665,34 +669,41 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
     rowsReached(group)
   );
   let resolved = isThenable(pending) ? await pending : pending;
+  const notConstant = (key: string, what: string) =>
+    new Error(
+      `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
+        `connected group; make sure the flow this ${type} fuses over ` +
+        `groups by that value (or one it agrees with) — or, over a refs ` +
+        `bag, add \`flow(group({ by }))\` — or pass an explicit ` +
+        `${paint[key] === "raw" ? "value" : "color"}.`
+    );
   for (const key of Object.keys(paint)) {
-    const raw = (resolved as any)[key];
-    if (typeof raw !== "string" && typeof raw !== "function") continue;
+    let raw = (resolved as any)[key];
+    if (typeof raw === "function") {
+      // The accessor's one value means what it would mean written in the
+      // channel itself: a string goes on as one, and anything else (a
+      // `v(...)`, a `literal(...)`) is left for the node as it would be.
+      const read = projectByValues(group, raw);
+      if (read.length > 1) throw notConstant(key, "the accessor's value");
+      // No row has a value: the accessor has nothing to read, so the mark
+      // keeps its default.
+      raw = read[0];
+      if (typeof raw !== "string") {
+        resolved = { ...resolved, [key]: raw };
+        continue;
+      }
+    }
+    if (typeof raw !== "string") continue;
     const values = projectByValues(group, raw);
+    // No row has a value: the string names no field, so it is a literal.
     if (values.length === 0) {
-      // No row has a value: a string is then a literal color, and an
-      // accessor has nothing to read, so the mark keeps its default.
-      if (typeof raw === "function")
-        resolved = { ...resolved, [key]: undefined };
+      resolved = { ...resolved, [key]: raw };
       continue;
     }
-    if (values.length > 1) {
-      const what =
-        typeof raw === "string" ? `"${raw}"` : "the accessor's value";
-      throw new Error(
-        `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
-          `connected group; make sure the flow this ${type} fuses over ` +
-          `groups by that value (or one it agrees with) — or, over a refs ` +
-          `bag, add \`flow(group({ by }))\` — or pass an explicit ` +
-          `${paint[key] === "raw" ? "value" : "color"}.`
-      );
-    }
+    if (values.length > 1) throw notConstant(key, `"${raw}"`);
     resolved = {
       ...resolved,
-      [key]:
-        paint[key] === "raw"
-          ? values[0]
-          : colorValue(values[0], typeof raw === "string" ? raw : undefined),
+      [key]: paint[key] === "raw" ? values[0] : colorValue(values[0], raw),
     } as O;
   }
   return resolved;

@@ -355,9 +355,17 @@ const sqrtArea = (
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
- *   the accessor named one (not for a function accessor). The caller wraps it
- *   in `value(...)`.
+ *   the accessor named one. The caller wraps it in `value(...)`.
+ * - "value": a data value (`v(...)`) a function accessor returned, as it is.
  * - "none": there is no usable row to read.
+ *
+ * A function accessor's result for the row means what it would mean written
+ * in the channel itself, as if a conditional in the function were erased:
+ * `d => d.lake === "B" ? "orange" : "steelblue"` is `"orange"` for a row of
+ * lake B, a literal color, and a result that names a field reads that field.
+ * So a data value read off the row goes in `v(...)` (`d => v(d.lake)`), as it
+ * does in the channel itself. An undefined result is the row's missing
+ * value, as before.
  */
 function firstRowValue<T extends Record<string, any>>(
   accessor: string | ((d: T) => any) | FieldAccessor | LiteralValue,
@@ -365,6 +373,7 @@ function firstRowValue<T extends Record<string, any>>(
 ):
   | { kind: "literal"; value: unknown }
   | { kind: "row"; value: unknown; field?: string }
+  | { kind: "value"; value: Value<unknown> }
   | { kind: "none" } {
   if (isLiteral(accessor)) return { kind: "literal", value: accessor.value };
   const row = data.length > 0 && data[0] != null ? data[0] : undefined;
@@ -392,9 +401,13 @@ function firstRowValue<T extends Record<string, any>>(
       : { kind: "row", value: row[accessor.name], field: accessor.name };
   }
   if (typeof accessor === "function") {
-    return row === undefined
-      ? { kind: "none" }
-      : { kind: "row", value: accessor(row) };
+    if (row === undefined) return { kind: "none" };
+    const read: unknown = accessor(row);
+    if (read == null) return { kind: "row", value: read };
+    if (isValue(read)) return { kind: "value", value: read };
+    if (typeof read === "string" || isField(read) || isLiteral(read))
+      return firstRowValue(read, data);
+    return { kind: "literal", value: read };
   }
   if (row !== undefined && accessor in row) {
     return { kind: "row", value: row[accessor], field: accessor };
@@ -422,6 +435,7 @@ export const inferColor = <T extends Record<string, any>>(
   if (isValue(accessor)) return accessor as MaybeValue<string>;
   const resolved = firstRowValue(accessor, data);
   if (resolved.kind === "none") return undefined;
+  if (resolved.kind === "value") return resolved.value as MaybeValue<string>;
   return resolved.kind === "literal"
     ? (resolved.value as string)
     : colorValue(resolved.value, resolved.field, data);
@@ -466,6 +480,8 @@ export const inferRaw = <T extends Record<string, any>>(
   if (isValue(accessor)) return accessor as MaybeValue<string | number>;
   const resolved = firstRowValue(accessor, data);
   if (resolved.kind === "none") return undefined;
+  if (resolved.kind === "value")
+    return resolved.value as MaybeValue<string | number>;
   return resolved.kind === "literal"
     ? (resolved.value as string | number)
     : value(resolved.value);
