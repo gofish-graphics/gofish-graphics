@@ -549,7 +549,7 @@ layer([
       derive(sortBy("Rank")),
       spread("Color", { dir: "y" })
     )
-    .mark(circle({ fill: (d) => d.Color }))
+    .mark(circle({ fill: (d) => v(d.Color) }))
     .as("points"),
   chart(selectAll("points"), group("Color"))
     .mark(line(/* { z: -1 } */))

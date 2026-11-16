@@ -254,8 +254,8 @@ A few rules:
   console warning, because nothing on the chart names those categories any
   more. That happens when the legend is turned off (`legend: false`), when the
   marks are colored by a different field, or when the color comes from a
-  function (`fill: (d) => ...`), which does not tell GoFish which field it
-  reads. Coloring by the same field (`fill: "product"`) with the legend on
+  function (`fill: (d) => v(d.product)`), which does not tell GoFish which
+  field it reads. Coloring by the same field (`fill: "product"`) with the legend on
   keeps the categories named, so there is no warning.
 - GoFish lays the chart out once for each angle it tries. That needs a chart it
   can build again, which is what `chart(...)` and a component function passed to

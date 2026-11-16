@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, Coord, rect, spread } from "../../src/lib";
+import { chart, Coord, rect, spread, v } from "../../src/lib";
 
-// Accessor functions in size channels (#1080, #937). The Python ports pass
-// lambdas, which reach JS as async accessors that call back into Python; the
-// render must match these JS accessors exactly.
+// Accessor functions in size channels (#1080, #937). An accessor's value
+// means what it would written in the channel, so it returns `v(...)` for
+// data (a bare number would be pixels). The Python ports pass lambdas, which
+// reach JS as async accessors that call back into Python; the render must
+// match these JS accessors exactly.
 const meta: Meta = {
   title: "Forward Syntax/Accessor Channels",
   argTypes: {
@@ -24,7 +26,7 @@ export const BarHeight: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x" }))
-      .mark(rect({ h: (d: { count: number }) => d.count }))
+      .mark(rect({ h: (d: { count: number }) => v(d.count) }))
       .render(container);
     return container;
   },
@@ -42,7 +44,7 @@ export const RoseRadius: StoryObj<Args> = {
           w: (Math.PI * 2) / 6,
           emX: true,
           fill: "lake",
-          dims: { r: { size: (d: { count: number }) => Math.sqrt(d.count) } },
+          dims: { r: { size: (d: { count: number }) => v(Math.sqrt(d.count)) } },
         })
       )
       .render(container);

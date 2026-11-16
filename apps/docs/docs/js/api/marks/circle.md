@@ -51,7 +51,7 @@ circle({ r?, area?, w?, h?, x?, cx?, x2?, y?, cy?, y2?, emX?, emY?, dims?,
 // Area proportional to a field, one circle per lake
 .mark(circle({ area: "count", fill: "lake" }))
 
-// Radius from an accessor
+// Radius in pixels from an accessor
 .mark(circle({ r: (d) => (d.highlight ? 6 : 3) }))
 
 // Diameter read against the y axis

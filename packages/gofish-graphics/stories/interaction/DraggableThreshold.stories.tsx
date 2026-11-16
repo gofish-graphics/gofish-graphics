@@ -24,6 +24,7 @@ import {
   signal,
   drag,
   sumBy,
+  v,
 } from "../../src/lib";
 
 const meta: Meta = {
@@ -94,7 +95,7 @@ export const Default: StoryObj<Args> = {
       // scale. With no w it fills the plot.
       .layer(
         rect({
-          y: () => cut(),
+          y: () => v(cut()),
           h: 3,
           fill: "#333",
         })
