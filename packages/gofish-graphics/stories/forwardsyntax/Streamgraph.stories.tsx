@@ -18,6 +18,17 @@ export default meta;
 
 type Args = { w: number; h: number };
 
+// The six industries with the most unemployment over the decade, one for
+// each color of the default palette.
+const largest = [
+  "Wholesale and Retail Trade",
+  "Manufacturing",
+  "Leisure and hospitality",
+  "Business services",
+  "Construction",
+  "Education and Health",
+];
+
 export const Default: StoryObj<Args> = {
   args: { w: 560, h: 400 },
   tags: ["gallery"],
@@ -25,16 +36,18 @@ export const Default: StoryObj<Args> = {
     gallery: {
       title: "Streamgraph",
       description:
-        "Unemployment in 14 US industries from 2000 to 2010 as a streamgraph, the bands stacked about a baseline that moves to keep them as flat as it can.",
+        "Unemployment in the six largest US industries from 2000 to 2010 as a streamgraph, the bands stacked about a baseline that moves to keep them as flat as it can.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
+    const rows = unemployment.filter((d) => largest.includes(d.series));
 
-    chart(unemployment, {
+    chart(rows, {
       w: args.w,
       h: args.h,
       schema: { date: Unit.time() },
+      axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
     })
       .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }))

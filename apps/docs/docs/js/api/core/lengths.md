@@ -11,12 +11,13 @@ its nearest scope divides.
 ::: gofish
 
 ```js
-gf.chart(seafood, { w: 500, h: 200 })
+gf.chart(seafood, { w: 560, h: 240 })
   .flow(
     gf.spread({ by: "lake", dir: "x", spacing: gf.fr(1) }),
-    gf.stack({ by: "species", dir: "y" })
+    gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
   )
-  .mark(gf.rect({ h: "count", fill: "species" }))
+  .mark(gf.rect({ w: 24, h: "count", fill: "species" }))
+  .layer(gf.ribbon({ opacity: 0.8 }))
   .render(root);
 ```
 

@@ -106,9 +106,20 @@ def story_inline_sloped_labels():
 
 # ─── areas: Place.interior() ─────────────────────────────────────────────────
 
+# The four industries with the most unemployment, so every band is thick
+# enough somewhere to hold its name.
+LARGEST_INDUSTRIES = [
+    "Wholesale and Retail Trade",
+    "Manufacturing",
+    "Leisure and hospitality",
+    "Business services",
+]
+
+
 def story_streamgraph_interior_labels():
+    rows = [d for d in UNEMPLOYMENT if d["series"] in LARGEST_INDUSTRIES]
     return (
-        chart(UNEMPLOYMENT, w=560, h=360, schema={"date": Unit.time()})
+        chart(rows, w=560, h=360, schema={"date": Unit.time()})
         .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
         .mark(ribbon(x="date", h="count", fill="series").label("series")),
         {"legend": False},

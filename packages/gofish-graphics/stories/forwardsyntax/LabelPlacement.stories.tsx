@@ -158,18 +158,30 @@ export const InlineSlopedLabels: StoryObj = {
 // ─── areas: Place.interior() ─────────────────────────────────────────────────
 // A band's label goes inside it by default (`Place.interior()`), where the
 // label's own box can grow largest: the thick middle of each stream.
+// The four industries with the most unemployment, so every band is thick
+// enough somewhere to hold its name.
+const largestIndustries = [
+  "Wholesale and Retail Trade",
+  "Manufacturing",
+  "Leisure and hospitality",
+  "Business services",
+];
+
 export const StreamgraphInteriorLabels: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
       title: "Streamgraph with Band Labels",
       description:
-        "Unemployment in 14 US industries from 2000 to 2010 as a streamgraph, each industry named inside its band where the band is thick enough to hold the name.",
+        "Unemployment in the four largest US industries from 2000 to 2010 as a streamgraph, each industry named inside its band where the band is thickest.",
     },
   },
   render: () => {
     const container = initializeContainer();
-    chart(unemployment, { w: 560, h: 360, schema: { date: Unit.time() } })
+    const rows = unemployment.filter((d) =>
+      largestIndustries.includes(d.series)
+    );
+    chart(rows, { w: 560, h: 360, schema: { date: Unit.time() } })
       .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }).label("series"))
       .render(container, { legend: false });
