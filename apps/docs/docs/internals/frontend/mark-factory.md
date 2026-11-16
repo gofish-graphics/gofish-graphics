@@ -535,6 +535,41 @@ forms:
   fresh operand, with its paint resolved off that operand's rows. Position alone tells the two meanings apart; see
   [Enclose and the Shape Family](/internals/frontend/enclose).
 
+### The shape form of `line` and `ribbon`
+
+`line` and `ribbon` also have a shape form, which is not a connector. A
+position channel picks it: `ribbon({ x, h })`, `ribbon({ y, w })` or
+`line({ x, y })`. The exported `line` and `ribbon` in `chart.ts` check the
+options first. With no `x` and no `y` they return the connector built by
+`createRelationalMark`, unchanged. With one, they return `shapeForm(...)`.
+
+`shapeForm` builds an ordinary leaf mark, the way `createMark` builds one. The
+mark is called with its group's rows, like `rect`. It resolves its accessors
+from `MARK_CHANNELS`, resolves its paint once per group (`resolveGroupPaint`,
+the same check a connector makes), and builds one `Band` node
+(`src/ast/shapes/band.tsx`). It is sealed with its rows and carries its wire,
+so `.name()`, `.label()` and the round trip through the IR work as they do for
+`rect`.
+
+`bandOfRows` turns the rows into two edges, the lower and the upper. Each is a
+`Fun<number>` of the parameter in data units, made by `through` over the rows
+sorted by the parameter. A band's lower edge is 0 and its upper edge is `h`.
+A line's two edges are the same curve. Two rows of one group at one parameter
+value are an error, and so is a parameter column with levels.
+
+The node reports a pinned space on the parameter's axis. On the other axis a
+band reports a free space over `[min(0, h), max(0, h)]`, with its
+cross-section as the space's `profile`, and a line reports a pinned space over
+its values. In layout it reads its edges through the axis maps into local
+pixels (`reparameterize` in `fun.ts` for the parameter). It draws them as exact
+lines and Béziers, and resamples them only under a coordinate transform. Its
+geometry gives the box, the outline of the drawn path, and the exact
+cross-section along its value axis.
+
+A shape-form ribbon cannot be stacked yet, and options that only a connector
+reads (`dir`, `from`, `to`, `along` and the anchor keys) are an error in the
+shape form.
+
 ### A connector's datum, and its `live()` channels
 
 A leaf mark carries the rows it was drawn from, and so does a connector: its

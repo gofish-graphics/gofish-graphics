@@ -301,15 +301,19 @@ with no profile covers its `dataInterval` at every u, as a box does, and
 everything reads a type's profile through `crossSectionOf(space)`, which
 gives that box a constant one over the whole line. So nothing asks whether a
 type has a profile. A profile that is constant is never stored
-(`withProfile`), so a box's type stays as it is. No mark makes a profile yet;
-a ribbon built from rows will.
+(`withProfile`), so a box's type stays as it is. The shape form of `ribbon`
+(`ribbon({ x, h })`) makes one: the interval between its baseline and its
+edge at each x.
 
 A function value built from rows is exact: it holds one polynomial per
 interval between knots (degree 0 for `Curve.step`, 1 for `Curve.linear`, and
 the cubics of `spline.ts` for `Curve.monotone` and `Curve.smooth`). Sums,
 scales, envelopes and their maxima are exact again, so the folds below get
 the same numbers from constant profiles as from plain intervals. A function
-the module cannot see into (a kernel density) is read to a tolerance.
+the module cannot see into (a kernel density) is read to a tolerance. A
+function can also be read over a new parameter `u = a·t + b`
+(`reparameterize`), exactly when it has pieces: this is how a band takes its
+edges from data units to pixels in layout.
 
 The folds carry profiles pointwise. A stack's chain fold runs at every u
 (`tailSides` and `chainFold` take and return functions), and its type's

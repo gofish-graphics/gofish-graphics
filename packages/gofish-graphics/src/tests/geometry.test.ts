@@ -39,6 +39,7 @@ import {
   spread,
   stack,
   rect,
+  Curve,
 } from "../lib";
 import { segDist } from "../ast/geometry/plane";
 
@@ -697,6 +698,78 @@ console.log("# geometry: cross-section falls back to the box");
       alongX.at(22).max === 40 &&
       alongX.domain.min === 20 &&
       alongX.domain.max === 25
+  );
+}
+
+console.log("# geometry: the shape form of ribbon and line");
+{
+  const rows = [
+    { x: 0, h: 10 },
+    { x: 1, h: 30 },
+    { x: 2, h: -20 },
+  ];
+  const root = (await chart(rows, { w: 200, h: 100 })
+    .mark(ribbon({ x: "x", h: "h", curve: Curve.linear() }))
+    .resolve()) as GoFishNode;
+  await root.toDisplayList({ w: 200, h: 100, axes: false });
+  const band = [...walk(root)].find((n) => n.type === "ribbon")!;
+  const g = band.geometry();
+  ok(
+    "a band's box is its parameter's width by its values' extent",
+    near(g.box.min[0], 0) &&
+      near(g.box.max[0] - g.box.min[0], 200) &&
+      near(g.box.max[1] - g.box.min[1], 100),
+    JSON.stringify(g.box)
+  );
+  const [o] = g.outline(0.5);
+  ok(
+    "a band's outline is one closed ring with no stroke width",
+    g.outline(0.5).length === 1 && o.closed && o.width === undefined
+  );
+  ok(
+    "the outline lies in the box",
+    o.points.every(
+      ([px, py]) =>
+        px >= g.box.min[0] - EPS &&
+        px <= g.box.max[0] + EPS &&
+        py >= g.box.min[1] - EPS &&
+        py <= g.box.max[1] + EPS
+    )
+  );
+  // Across y at x = 50 px (data x = 0.5, h = 20): the interval from the
+  // baseline up to h, one fifth of the 100 px value extent (−20 to 30).
+  const cs = crossSection(g, 1);
+  const at = cs.at(50);
+  const unit = 100 / 50;
+  ok(
+    "a band's cross-section is exact: from its baseline to its edge",
+    near(at.max - at.min, 20 * unit, 1e-6),
+    JSON.stringify(at)
+  );
+  ok(
+    "and the band's cross-section changes along x (not a box)",
+    !near(cs.at(100).max - cs.at(100).min, at.max - at.min, 1e-3)
+  );
+  ok(
+    "across x it falls back to the box",
+    near(crossSection(g, 0).at(50).max - crossSection(g, 0).at(50).min, 200)
+  );
+
+  const lineRoot = (await chart(rows, { w: 200, h: 100 })
+    .mark(line({ x: "x", y: "h", strokeWidth: 3 }))
+    .resolve()) as GoFishNode;
+  await lineRoot.toDisplayList({ w: 200, h: 100, axes: false });
+  const path = [...walk(lineRoot)].find((n) => n.type === "line")!;
+  const lo = path.geometry().outline(0.5);
+  ok(
+    "a line's outline is one open path with its stroke width",
+    lo.length === 1 && !lo[0].closed && lo[0].width === 3
+  );
+  const lcs = crossSection(path.geometry(), 1).at(100);
+  ok(
+    "a line's cross-section is its one value: an empty interval",
+    near(lcs.max, lcs.min),
+    JSON.stringify(lcs)
   );
 }
 

@@ -549,6 +549,40 @@ export function scale<T extends Linear>(f: Fun<T>, k: number): Fun<T> {
 export const subtract = <T extends Linear>(f: Fun<T>, g: Fun<T>): Fun<T> =>
   add(f, scale(g, -1));
 
+/** `f` read over the parameter `u = a·t + b`, with `a > 0`: the function
+ *  `u ↦ f((u − b) / a)`. This is how a function in data units is read in
+ *  pixels along its parameter's axis. Exact when `f` is: each piece is the
+ *  same polynomial, its `k`th coefficient divided by `aᵏ`. */
+export function reparameterize<T extends Linear>(
+  f: Fun<T>,
+  a: number,
+  b: number
+): Fun<T> {
+  if (!(a > 0 && Number.isFinite(a)) || !Number.isFinite(b))
+    throw new Error(
+      `reparameterize: the map u = a·t + b must be increasing and finite, ` +
+        `but a = ${a} and b = ${b}.`
+    );
+  const u = (t: number) => a * t + b;
+  const domain = { min: u(f.domain.min), max: u(f.domain.max) };
+  if (f.pieces)
+    return exact(
+      domain,
+      f.pieces.map((p) => ({
+        from: u(p.from),
+        to: u(p.to),
+        at0: u(p.at0),
+        coeffs: p.coeffs.map((c, k) => vscale(c, a ** -k)),
+      })),
+      f.curve
+    );
+  return {
+    domain,
+    at: (s) => f.at((s - b) / a),
+    ...(f.knots ? { knots: f.knots.map(u) } : {}),
+  };
+}
+
 /** Restrict to `cell`: the same function over the part of its domain inside
  *  the cell. This is what `partition` does. */
 export function restrict<T>(f: Fun<T>, cell: Interval): Fun<T> {

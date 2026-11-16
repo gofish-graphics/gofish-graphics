@@ -41,8 +41,12 @@ import {
   addRenderMethod,
   createMark,
   reifyChildren,
+  sealComponent,
   type NameableMark,
 } from "../withGoFish";
+import { Band, bandOfRows } from "../shapes/band";
+import { monotone } from "../../families/curve";
+import type { ParameterCurve } from "../fun";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -1046,12 +1050,123 @@ export type LineOptions = FilterOptions & {
   h?: number | string | Value<number> | FieldExpr;
   emX?: boolean;
   emY?: boolean;
+  /** The shape form: each row's position. Given, the line owns its rows and
+   *  draws one path per group through them, sorted by `x`. */
+  x?: RowChannel;
+  y?: RowChannel;
 };
 
-// `line` — a center-mode connector (the "line" component): the path between the
-// centers of consecutive marks. `route` picks the shape (linear | bezier |
-// orthogonal | arc | perfectArrows | …).
-export const line = createRelationalMark<LineOptions>(
+/** A channel the shape form of `ribbon` and `line` reads once per row: a
+ *  column name, an accessor, or a `field(...)` expression. */
+export type RowChannel = string | ((d: any) => unknown) | FieldExpr;
+
+/** The options only the connector form of `ribbon` and `line` reads. */
+const CONNECTOR_ONLY = [
+  "dir",
+  "from",
+  "to",
+  "along",
+  "source",
+  "target",
+  "emX",
+  "emY",
+] as const;
+
+/**
+ * The shape form of `ribbon` and `line`: a mark that owns its rows and
+ * builds one {@link Band} node per group, through them. `parameter` and
+ * `value` name the two channels it reads per row: `x` and `h` for
+ * `ribbon({ x, h })`, `y` and `w` for `ribbon({ y, w })`, `x` and `y` for
+ * `line({ x, y })`. A ribbon's values are amounts from a baseline, which its
+ * parent places, and it is filled; a line's are positions, and it is a path.
+ * Its paint is read once per group, as the connector's is
+ * (`resolveGroupPaint`).
+ */
+function shapeForm(
+  type: "ribbon" | "line",
+  options: Record<string, any>,
+  axis: 0 | 1,
+  parameter: string,
+  value: string
+): NameableMark<any> {
+  const opts = withKindValues(options);
+  for (const key of CONNECTOR_ONLY)
+    if (opts[key] !== undefined)
+      throw new Error(
+        `[gofish] ${type}({ ${parameter}, ${key} }): \`${key}\` belongs to ` +
+          `the connector form, which joins marks another flow placed. The ` +
+          `shape form, with \`${parameter}\`, places its own rows; remove ` +
+          `\`${key}\`, or drop \`${parameter}\` for the connector form.`
+      );
+  for (const key of type === "line" ? ["h", "w"] : [axis === 0 ? "w" : "h"])
+    if (opts[key] !== undefined)
+      throw new Error(
+        `[gofish] ${type}({ ${parameter}, ${key} }): the shape form reads ` +
+          `${parameter} and ${value}; \`${key}\` is not one of its channels.`
+      );
+  if (opts[value] === undefined)
+    throw new Error(
+      `[gofish] ${type}({ ${parameter} }): the shape form needs \`${value}\` ` +
+        `too, the value at each ${parameter}.`
+    );
+  const curve = (opts.curve ?? monotone()) as Curve;
+  if (!["linear", "step", "monotone", "smooth"].includes(curve.kind))
+    throw new Error(
+      `[gofish] ${type}({ ${parameter}, curve: Curve.${curve.kind}() }): the ` +
+        `shape form reads its curve over ${parameter}, so it takes ` +
+        `Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth().`
+    );
+  const closed = type === "ribbon";
+  const filter = displayFilter(
+    opts.filter as FilterOption | undefined,
+    `${type}({ filter })`
+  );
+  const liveChannels = liveChannelsOf(opts);
+  const channels = (MARK_CHANNELS as Record<string, Record<string, string>>)[
+    type
+  ];
+  const mark: Mark<any[]> = async (rows, key, given) => {
+    const layerContext = markContext(given);
+    const pending = resolveChannelAccessors(opts, channels, () => rows);
+    const accessors = isThenable(pending) ? await pending : pending;
+    const paint = await resolveGroupPaint(type, accessors, rows);
+    const o = withLiveStatics(paint, liveChannels, rows) as Record<string, any>;
+    const node = withRegistrar(layerContext.registrar, () =>
+      Band({
+        axis,
+        ...bandOfRows(
+          type,
+          rows,
+          { name: parameter, accessor: o[parameter] },
+          {
+            name: value,
+            accessor: o[value],
+            kind: closed ? "amount" : "position",
+          },
+          curve as ParameterCurve,
+          key
+        ),
+        origin: closed ? "free" : "pinned",
+        closed,
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth,
+        strokeDasharray: o.strokeDasharray,
+        opacity: o.opacity,
+        blendMode: o.blendMode,
+      })
+    );
+    if (liveChannels) (node as any).__gfLive = liveChannels;
+    applyFilter(node, filter);
+    return sealComponent(node, rows);
+  };
+  return withWire(nameableMark(mark), { type, opts: options });
+}
+
+// `line`'s connector form — a center-mode connector (the "line" component):
+// the path between the centers of consecutive marks. `route` picks the shape
+// (linear | bezier | orthogonal | arc | perfectArrows | …).
+const lineConnector = createRelationalMark<LineOptions>(
   "line",
   (o, children, inferred) =>
     Connect(
@@ -1075,6 +1190,45 @@ export const line = createRelationalMark<LineOptions>(
       children
     )
 );
+
+/**
+ * `line` has two forms, picked by whether a position channel is given:
+ *
+ * - `line({ x, y })`, the shape form: the mark owns its rows and draws one
+ *   path per group through them, sorted by `x` ({@link shapeForm}).
+ * - `line(opts)` with no `x` or `y`, the connector form: the path between
+ *   the centers of consecutive marks another flow placed, over a ref bag, a
+ *   pairwise `{ from, to }`, or a combinator's children.
+ */
+export function line(
+  options: LineOptions & { x: RowChannel; y: RowChannel }
+): NameableMark<any>;
+export function line(
+  options: LineOptions | undefined,
+  children: GoFishAST[]
+): GoFishNode;
+export function line(options?: LineOptions): RelationalMark;
+export function line(
+  options?: LineOptions,
+  children?: GoFishAST[]
+): GoFishNode | Mark<any> {
+  if (options?.x === undefined && options?.y === undefined)
+    return children === undefined
+      ? lineConnector(options)
+      : lineConnector(options, children);
+  if (children !== undefined)
+    throw new Error(
+      "[gofish] line({ x, y }, children): the shape form draws its own rows; " +
+        "the combinator form joins its children. Drop x and y to join the " +
+        "children."
+    );
+  if (options.x === undefined)
+    throw new Error(
+      "[gofish] line({ y }): the shape form needs `x` too: a line runs " +
+        "through its rows sorted by x."
+    );
+  return shapeForm("line", options, 0, "x", "y");
+}
 
 export type RibbonOptions = FilterOptions & {
   fill?: MaybeValue<string> | LiveValue;
@@ -1104,11 +1258,17 @@ export type RibbonOptions = FilterOptions & {
   h?: number | string | Value<number> | FieldExpr;
   emX?: boolean;
   emY?: boolean;
+  /** The shape form: each row's position along the band. `x` with `h` is a
+   *  band over x, of height h from its baseline; `y` with `w` is a band over
+   *  y, of width w. */
+  x?: RowChannel;
+  y?: RowChannel;
 };
 
-// `ribbon` — an edge-mode connector: a filled band between the facing edges of
-// consecutive marks (areas, streamgraphs, sankey ribbons).
-export const ribbon = createRelationalMark<RibbonOptions>(
+// `ribbon`'s connector form — an edge-mode connector: a filled band between
+// the facing edges of consecutive marks (sankey ribbons, bands between
+// discrete marks).
+const ribbonConnector = createRelationalMark<RibbonOptions>(
   "ribbon",
   (o, children, inferred) =>
     Connect(
@@ -1129,6 +1289,48 @@ export const ribbon = createRelationalMark<RibbonOptions>(
       children
     )
 );
+
+/**
+ * `ribbon` has two forms, picked by whether a position channel is given:
+ *
+ * - `ribbon({ x, h })` or `ribbon({ y, w })`, the shape form: the mark owns
+ *   its rows and draws one band per group, from its baseline to `h` (or
+ *   `w`) at each row's `x` (or `y`), sorted by it ({@link shapeForm}).
+ * - `ribbon(opts)` with no `x` or `y`, the connector form: a band between
+ *   the facing edges of consecutive marks another flow placed, over a ref
+ *   bag, a pairwise `{ from, to }`, or a combinator's children.
+ */
+export function ribbon(
+  options: RibbonOptions & ({ x: RowChannel } | { y: RowChannel })
+): NameableMark<any>;
+export function ribbon(
+  options: RibbonOptions | undefined,
+  children: GoFishAST[]
+): GoFishNode;
+export function ribbon(options?: RibbonOptions): RelationalMark;
+export function ribbon(
+  options?: RibbonOptions,
+  children?: GoFishAST[]
+): GoFishNode | Mark<any> {
+  if (options?.x === undefined && options?.y === undefined)
+    return children === undefined
+      ? ribbonConnector(options)
+      : ribbonConnector(options, children);
+  if (children !== undefined)
+    throw new Error(
+      "[gofish] ribbon({ x }, children): the shape form draws its own rows; " +
+        "the combinator form joins its children. Drop x and y to join the " +
+        "children."
+    );
+  if (options.x !== undefined && options.y !== undefined)
+    throw new Error(
+      "[gofish] ribbon({ x, y }): the shape form runs along one axis: " +
+        "ribbon({ x, h }) is a band over x, ribbon({ y, w }) a band over y."
+    );
+  return options.x !== undefined
+    ? shapeForm("ribbon", options, 0, "x", "h")
+    : shapeForm("ribbon", options, 1, "y", "w");
+}
 
 /**
  * Draw an outline around nodes, under them: their padded bounding box

@@ -50,6 +50,7 @@ const {
   Place,
   group,
   blank,
+  Unit,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -1469,6 +1470,50 @@ async function main() {
     check(
       "ribbon({ along }) carries along in its wire opts",
       Serialize.wireOf(rib)?.opts?.along === "g"
+    );
+  }
+
+  // The shape form (`ribbon({ x, h })`, `line({ x, y })`): its position
+  // channels ride in the wire opts, and a rebuilt chart draws the same.
+  console.log("\n# shape form of ribbon and line");
+  {
+    const rows = [
+      { date: "2020-01-01", n: 1, s: "a" },
+      { date: "2020-02-01", n: -2, s: "a" },
+      { date: "2020-01-01", n: 3, s: "b" },
+      { date: "2020-02-01", n: 4, s: "b" },
+    ];
+    const schema = { date: Unit.time() };
+    const paint = async (b: any) =>
+      JSON.stringify(await b.toDisplayList({ w: 300, h: 200 }), (k, v) =>
+        k === "id" ? undefined : v
+      );
+    const built = chart(rows, { schema })
+      .flow(group({ by: "s" }))
+      .mark(ribbon({ x: "date", h: "n", fill: "s", opacity: 0.5 }).name("areas"))
+      .layer(
+        chart(rows, { schema })
+          .flow(group({ by: "s" }))
+          .mark(line({ x: "date", y: "n", stroke: "s" }).label("s"))
+      );
+    const doc = await built.toJSON();
+    validateDoc(doc, "shape-form ribbon and line");
+    const text = JSON.stringify(doc);
+    check(
+      "the shape form writes its position channels",
+      text.includes('"x":"date"') && text.includes('"h":"n"') && text.includes('"y":"n"'),
+      text.slice(0, 400)
+    );
+    const rebuilt = Serialize.buildIR(JSON.parse(text));
+    check(
+      "a shape-form ribbon and line round-trip",
+      JSON.stringify(await rebuilt.toJSON()) === text
+    );
+    const original = await paint(built);
+    check(
+      "a rebuilt shape-form chart draws what the original draws",
+      original === (await paint(rebuilt)) && original.includes('"path"'),
+      original.slice(0, 200)
     );
   }
 
