@@ -47,7 +47,7 @@ const boxAndWhisker = ({
   ]);
 };
 
-const testSingleBoxWhisker = () => {
+const singleBoxWhisker = () => {
   const data = genderPayGap[0];
   return boxAndWhisker({
     median: data.Median,
@@ -59,7 +59,7 @@ const testSingleBoxWhisker = () => {
   });
 };
 
-const testPairBoxWhisker = () => {
+const pairBoxWhisker = () => {
   const payGradeFive = genderPayGap.filter((d) => d["Pay Grade"] === "Five");
   const male = payGradeFive.find((d) => d.Gender === "Male")!;
   const female = payGradeFive.find((d) => d.Gender === "Female")!;
@@ -89,7 +89,7 @@ const testPairBoxWhisker = () => {
   );
 };
 
-const testBoxWhiskerPlot = () =>
+const boxWhiskerPlot = () =>
   spreadX(
     {
       spacing: 8,
@@ -130,7 +130,7 @@ export const SingleBoxWhisker: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    testSingleBoxWhisker().render(container, {
+    singleBoxWhisker().render(container, {
       axes: true,
     });
 
@@ -142,7 +142,7 @@ export const PairBoxWhisker: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    testPairBoxWhisker().render(container, {
+    pairBoxWhisker().render(container, {
       axes: true,
     });
 
@@ -162,7 +162,7 @@ export const BoxWhisker: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    testBoxWhiskerPlot().render(container, {
+    boxWhiskerPlot().render(container, {
       axes: true,
     });
 
