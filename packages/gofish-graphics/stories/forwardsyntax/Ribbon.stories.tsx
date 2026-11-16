@@ -10,9 +10,9 @@ import {
   layer,
   selectAll,
   field,
+  Coord,
 } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
-import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
   title: "Forward Syntax/Ribbon",
@@ -68,7 +68,7 @@ export const Polar: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer({ coord: clock(), w: args.w, h: args.h }, [
+    layer({ coord: Coord.clock(), w: args.w, h: args.h }, [
       chart(seafood)
         .flow(
           scatter({

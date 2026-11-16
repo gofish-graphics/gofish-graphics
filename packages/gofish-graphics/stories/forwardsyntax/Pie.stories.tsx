@@ -2,8 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { nightingale } from "../../src/data/nightingale";
-import { chart, rect, stack, spread, derive } from "../../src/lib";
-import { clock } from "../../src/ast/coordinateTransforms/clock";
+import { chart, rect, stack, spread, derive, Coord } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Pie",
@@ -36,7 +35,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { coord: clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
+    chart(seafood, { coord: Coord.clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
       .flow(stack({ by: "species",  dir: "x" }))
       .mark(rect({ w: "count", fill: "species" }))
       .render(container);
@@ -58,7 +57,7 @@ export const Donut: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { coord: clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
+    chart(seafood, { coord: Coord.clock(), axes: true, padding: args.padding, w: args.w, h: args.h })
       .flow(stack({ by: "species",  dir: "x", y: 50, h: 50 }))
       .mark(rect({ w: "count", fill: "species" }))
       .render(container);
@@ -86,7 +85,7 @@ export const SmallMultiples: StoryObj<Args> = {
     chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake", dir: "x", spacing: 20 }))
       .mark(
-        chart({ coord: clock(), w: 100, h: 100, padding: 0 })
+        chart({ coord: Coord.clock(), w: 100, h: 100, padding: 0 })
           .flow(stack({ by: "species", dir: "x" }))
           .mark(rect({ w: "count", fill: "species" }))
       )
@@ -112,7 +111,7 @@ export const Rose: StoryObj<Args> = {
     // A wider polar inset, so the rotated radial title fits until the coord
     // reserves what its axes draw (#1165).
     chart(nightingale, {
-      coord: clock(),
+      coord: Coord.clock(),
       axes: true,
       padding: 40,
       w: args.w,
