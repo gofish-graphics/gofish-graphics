@@ -379,12 +379,18 @@ the two sides:
   the midpoint sits at 0: the parts before the midpoint (and the share of the
   level it falls in that lies before it) lie below 0, the rest above. Parts
   (5, 10, 20, 40, 25) centered on the middle of the 20 span `[−25, 75]`. The
-  parts of a centered stack must be nonnegative (a negative one is an error
-  naming `HasMidpoint`), and the space
-  it builds is **mirrored** (the origin's `mirrored` flag, then
-  `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
-  amounts measured away from it, so an axis over it labels each tick with its
-  distance from 0. A union stays mirrored only when every part is.
+  parts of a centered stack must be nonnegative: each lies on the side of
+  the midpoint its level is on, so a negative one is an error naming
+  `HasMidpoint`. The split tells the fold that the column has the trait
+  (`hasMidpoint`, beside `hasOrder`).
+- A stack whose parts are all nonnegative amounts (no part reaches below its
+  tail) builds a **mirrored** space (`CONTINUOUS_TYPE.mirrored`): both sides
+  of 0 hold amounts measured away from it, so an axis over it labels each
+  tick with its distance from 0. The fold reads this from the parts, not
+  from the origin. With the 0 at the first part's tail every tick is already
+  a distance, so this changes nothing for a plain stack; a centered stack's
+  axis reads `40 20 0 20 40`. A stack with a negative part keeps signed
+  labels. A union stays mirrored only when every part is.
 - A spread lays its parts by the same chain fold as a stack (`chainFold`),
   with a different step: an edge chain lays each part's box after the
   previous one's end plus the spacing, and a fixed-pitch chain lays each

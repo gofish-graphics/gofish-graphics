@@ -1157,7 +1157,6 @@ export function stackOrigin(
   const at = (p: number, fraction: number): StackOrigin<number> => ({
     part: order[p],
     fraction,
-    mirrored: true,
   });
   for (let p = 0; p < ranks.length; p++) {
     // The part's level spans [r, r + 1] along the order. Laid out against

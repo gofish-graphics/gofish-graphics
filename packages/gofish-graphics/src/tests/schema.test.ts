@@ -126,36 +126,36 @@ async function main() {
         stackOrigin("r", centered(levels, at), levels, keys, reverse)
       );
     const is = (part: number, fraction: number) =>
-      JSON.stringify({ part, fraction, mirrored: true });
+      JSON.stringify({ part, fraction });
     check(
       "odd: the middle of the middle level",
       origin(LEVELS5, LEVELS5) ===
-        JSON.stringify({ part: 2, fraction: 0.5, mirrored: true })
+        JSON.stringify({ part: 2, fraction: 0.5 })
     );
     check(
       "even: the boundary between the two middle levels",
       origin(LEVELS4, LEVELS4) ===
-        JSON.stringify({ part: 2, fraction: 0, mirrored: true })
+        JSON.stringify({ part: 2, fraction: 0 })
     );
     check(
       "a missing first level does not move the center",
       origin(LEVELS5, ["D", "N", "A", "SA"]) ===
-        JSON.stringify({ part: 1, fraction: 0.5, mirrored: true })
+        JSON.stringify({ part: 1, fraction: 0.5 })
     );
     check(
       "a missing middle level leaves the center on its boundary",
       origin(LEVELS5, ["SD", "D", "A", "SA"]) ===
-        JSON.stringify({ part: 2, fraction: 0, mirrored: true })
+        JSON.stringify({ part: 2, fraction: 0 })
     );
     check(
       "parts all before the center: the last part's head",
       origin(LEVELS5, ["SD", "D"]) ===
-        JSON.stringify({ part: 1, fraction: 1, mirrored: true })
+        JSON.stringify({ part: 1, fraction: 1 })
     );
     check(
       "a reversed stack keeps the center on the same level",
       origin(LEVELS4, LEVELS4, true) ===
-        JSON.stringify({ part: 1, fraction: 0, mirrored: true })
+        JSON.stringify({ part: 1, fraction: 0 })
     );
     check(
       "midpoint 2 of 5: the boundary after the second level",
@@ -221,22 +221,25 @@ async function main() {
   {
     const fold = (
       values: number[],
-      origin: StackOrigin<number> = { part: 0, fraction: 0, mirrored: false }
+      origin: StackOrigin<number> = { part: 0, fraction: 0 },
+      hasMidpoint = origin.part !== 0 || origin.fraction !== 0
     ) =>
       distributeSpaceFold(
-        values.map((v) => CONTINUOUS(interval(0, v), "free")),
+        values.map((v) =>
+          CONTINUOUS(interval(Math.min(0, v), Math.max(0, v)), "free")
+        ),
         values.map((_, i) => `k${i}`),
         {
           axis: 1,
           glue: true,
           measure: "r",
           origin,
+          hasMidpoint,
         }
       ) as CONTINUOUS_TYPE;
     const odd = fold([5, 10, 20, 40, 25], {
       part: 2,
       fraction: 0.5,
-      mirrored: true,
     });
     check(
       "odd: the parts before the center and half the middle lie below 0",
@@ -248,7 +251,6 @@ async function main() {
     const even = fold([10, 20, 30, 40], {
       part: 2,
       fraction: 0,
-      mirrored: true,
     });
     check(
       "even: the two middle levels meet at 0",
@@ -259,10 +261,30 @@ async function main() {
     check(
       "the default origin is the first part's tail",
       JSON.stringify(continuousInterval(plain)) ===
-        JSON.stringify({ min: 0, max: 30 }) && plain.mirrored === undefined
+        JSON.stringify({ min: 0, max: 30 })
+    );
+    // The flag is read from the parts, not from the origin: a stack of
+    // nonnegative amounts holds amounts on both sides of its 0, whatever
+    // its origin.
+    check(
+      "a plain stack of nonnegative parts is mirrored",
+      plain.mirrored === true
+    );
+    const negative = fold([10, -5, 20]);
+    check(
+      "a stack with a negative part is not mirrored",
+      negative.mirrored === undefined &&
+        JSON.stringify(continuousInterval(negative)) ===
+          JSON.stringify({ min: 0, max: 25 }),
+      JSON.stringify(negative)
+    );
+    check(
+      "a negative part is no error without HasMidpoint",
+      fold([10, -5, 20], { part: 1, fraction: 0.5 }, false).mirrored ===
+        undefined
     );
     const signed = await errorOf(() =>
-      fold([10, -5, 20], { part: 1, fraction: 0.5, mirrored: true })
+      fold([10, -5, 20], { part: 1, fraction: 0.5 })
     );
     check(
       "a negative part in a centered stack is an error naming HasMidpoint",

@@ -79,6 +79,11 @@ export interface DistributeOptions {
   /** A stack's origin (glue only), its part one of the operands. Omitted, it
    *  is the tail of the first part laid out. */
   origin?: StackOrigin<ConstraintRef>;
+  /** The grouping field's order has a midpoint (`HasMidpoint`, from the
+   *  chart's `schema`), which set the stack's origin (glue only). Each part
+   *  then lies on the side of the midpoint its level is on, so the fold
+   *  checks that every part is a nonnegative amount. */
+  hasMidpoint?: boolean;
 }
 
 /**
@@ -87,9 +92,10 @@ export interface DistributeOptions {
  * of the way from the tail of part `part` to its head (see
  * {@link RelationAnchor}). The default is the first part's tail. A stack over
  * a column with `HasMidpoint` puts it at the midpoint of the column's order
- * (#984, `stackOrigin` in schema.ts) and sets `mirrored`: the parts are then
- * nonnegative amounts measured away from the 0 on both sides, and the
- * stack's space is {@link CONTINUOUS_TYPE.mirrored}.
+ * (#984, `stackOrigin` in schema.ts). Whatever the origin, a stack whose
+ * parts are all nonnegative amounts holds amounts measured away from its 0
+ * on both sides, so its space is {@link CONTINUOUS_TYPE.mirrored}; the fold
+ * reads that from the parts.
  *
  * `part` names the part in three ways on the way down: a child index from
  * the split (`stackOrigin`), an operand on the constraint, and an index
@@ -98,7 +104,6 @@ export interface DistributeOptions {
 export type StackOrigin<Part> = {
   part: Part;
   fraction: number;
-  mirrored: boolean;
 };
 
 export interface DistributeConstraint {
@@ -114,6 +119,7 @@ export interface DistributeConstraint {
   measure?: string;
   hasOrder?: boolean;
   origin?: StackOrigin<ConstraintRef>;
+  hasMidpoint?: boolean;
 }
 
 export const createDistributeConstraint = (
@@ -132,6 +138,7 @@ export const createDistributeConstraint = (
   measure: options.measure,
   hasOrder: options.hasOrder,
   origin: options.glue ? options.origin : undefined,
+  hasMidpoint: options.glue ? options.hasMidpoint : undefined,
 });
 
 /** The {@link StackOrigin} of a stack over `ordered` (its parts in placement
@@ -143,7 +150,7 @@ export function distributeOrigin(
   keyOf: KeyOf
 ): StackOrigin<number> {
   const origin = constraint.origin;
-  if (origin === undefined) return { part: 0, fraction: 0, mirrored: false };
+  if (origin === undefined) return { part: 0, fraction: 0 };
   const key = keyOf(origin.part);
   const part = ordered.findIndex((child) => keyOf(child) === key);
   if (part < 0) {
@@ -293,6 +300,8 @@ export type DistributeFoldOptions = {
   /** A stack's {@link StackOrigin}, its part an index into `targetSpaces`
    *  (see {@link distributeOrigin}). */
   origin: StackOrigin<number>;
+  /** See {@link DistributeOptions.hasMidpoint}. */
+  hasMidpoint?: boolean;
 };
 
 /**
@@ -383,7 +392,7 @@ export function distributeSpaceFold(
     const { origin } = opts;
     const sides = targets.map(tailSides);
     sides.forEach((part, i) => {
-      if (origin.mirrored && maximum(field(part, "descent")) > 0) {
+      if (opts.hasMidpoint && maximum(field(part, "descent")) > 0) {
         const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
         throw new Error(
           `${by ? `stack({ by: ${by} })` : "stack"}: a centered stack's ` +
@@ -407,9 +416,11 @@ export function distributeSpaceFold(
       "pinned",
       childMeasure
     );
+    // Every part a nonnegative amount (none reaches below its tail): the
+    // stack holds amounts measured away from its 0 on both sides.
     return mirrored(
       withProfile(space, record({ min: scale(below, -1), max: above })),
-      origin.mirrored
+      sides.every((part) => maximum(field(part, "descent")) <= 0)
     );
   }
 

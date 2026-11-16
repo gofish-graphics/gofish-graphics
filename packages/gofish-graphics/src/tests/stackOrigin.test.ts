@@ -85,17 +85,17 @@ async function main() {
     check(
       "one part, reversed order: the part's tail is the center",
       JSON.stringify(stackOrigin("r", centered, reversed, ["D"])) ===
-        JSON.stringify({ part: 0, fraction: 0, mirrored: true })
+        JSON.stringify({ part: 0, fraction: 0 })
     );
     check(
       "one part, the order: the part's head is the center",
       JSON.stringify(stackOrigin("r", centered, LEVELS5, ["D"])) ===
-        JSON.stringify({ part: 0, fraction: 1, mirrored: true })
+        JSON.stringify({ part: 0, fraction: 1 })
     );
     check(
       "a reversed stack over a reversed order lays the order out again",
       JSON.stringify(stackOrigin("r", centered, reversed, ["D"], true)) ===
-        JSON.stringify({ part: 0, fraction: 1, mirrored: true })
+        JSON.stringify({ part: 0, fraction: 1 })
     );
 
     // q1 has D and A; q2 has only D. Widths are counts, so D is 11 (q1)
@@ -280,7 +280,7 @@ async function main() {
           {
             dir: "x",
             glue: true,
-            origin: { part: g.a, fraction: 0.5, mirrored: false },
+            origin: { part: g.a, fraction: 0.5 },
           },
           [g.a, g.b]
         ),

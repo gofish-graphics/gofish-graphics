@@ -737,7 +737,7 @@ console.log("# space: one fold for every origin");
 {
   const chainOpts = {
     axis: 0 as const,
-    origin: { part: 0, fraction: 0, mirrored: false },
+    origin: { part: 0, fraction: 0 },
   };
   // A spread separates: along its direction its result is a sequence of
   // separate spaces, never one continuous space, whatever its targets.
@@ -836,7 +836,7 @@ console.log("# space: one fold for every origin");
       ["p", "q"],
       {
         axis: 1,
-        origin: { part: 0, fraction: 0, mirrored: false },
+        origin: { part: 0, fraction: 0 },
       }
     )
   );
@@ -919,7 +919,6 @@ console.log("# space: the chain fold over functions");
     const origin = {
       part: Math.floor(rand() * n),
       fraction: [0, 0.5, 1, 1 / 3, rand()][Math.floor(rand() * 5)],
-      mirrored: false,
     };
     const want = scalarFold(parts, origin);
     const got = chainFold(
@@ -946,7 +945,7 @@ console.log("# space: the chain fold over functions");
           F.constant({ ascent: 3, descent: 1 }),
           F.constant({ ascent: 2, descent: 0 }),
         ],
-        { part: 0, fraction: 0, mirrored: false }
+        { part: 0, fraction: 0 }
       )
     )
   );
@@ -956,7 +955,7 @@ console.log("# space: the chain fold over functions");
     {
       axis: 1,
       glue: true,
-      origin: { part: 0, fraction: 0, mirrored: false },
+      origin: { part: 0, fraction: 0 },
     }
   ) as CONTINUOUS_TYPE;
   ok(
@@ -978,7 +977,7 @@ console.log("# space: the chain fold over functions");
   const bands = distributeSpaceFold(
     [band([1, 4, 1]), band([4, 1, 4])],
     [undefined, undefined],
-    { axis: 1, glue: true, origin: { part: 0, fraction: 0, mirrored: false } }
+    { axis: 1, glue: true, origin: { part: 0, fraction: 0 } }
   ) as CONTINUOUS_TYPE;
   ok(
     "a stack of bands spans the largest pointwise sum",

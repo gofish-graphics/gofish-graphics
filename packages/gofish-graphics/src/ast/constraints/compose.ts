@@ -207,6 +207,7 @@ type Seg = {
   measure?: string;
   hasOrder?: boolean;
   origin: StackOrigin<number>;
+  hasMidpoint?: boolean;
   keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
 };
@@ -297,6 +298,7 @@ export function planConstraintComposition(
       measure: d.measure,
       hasOrder: d.hasOrder,
       origin: distributeOrigin(d, ordered, resolved.keyOf),
+      hasMidpoint: d.hasMidpoint,
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
     });
@@ -568,6 +570,7 @@ const foldOptions = (s: Seg) => ({
   hasOrder: s.hasOrder,
   anonymous: s.anonymous,
   origin: s.origin,
+  hasMidpoint: s.hasMidpoint,
 });
 
 /** The types of the operands of `axis`'s max-union (each distribute fold,

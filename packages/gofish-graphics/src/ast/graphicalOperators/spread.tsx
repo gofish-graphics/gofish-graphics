@@ -59,6 +59,7 @@ export const Spread = createNodeOperator(
       reverse = false,
       glue = false,
       origin,
+      hasMidpoint,
       hasOrder,
       size,
       axes,
@@ -85,6 +86,10 @@ export const Spread = createNodeOperator(
        *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
        *  `glue`: a spread packs boxes and has no origin. */
       origin?: StackOrigin<number>;
+      /** The `by` column's order has a midpoint (`HasMidpoint`), which set
+       *  `origin`: the split sets it, and the stack checks that each part
+       *  is a nonnegative amount. Ignored without `glue`. */
+      hasMidpoint?: boolean;
       /** The `by` column's values have an order (`HasOrder`, from the chart's
        *  `schema`): the split sets it, and the ORDINAL space this spread
        *  folds carries it, so its axis knows its keys are ordered. */
@@ -189,6 +194,7 @@ export const Spread = createNodeOperator(
             glue,
             order: reverse ? "reverse" : "forward",
             origin: origin && { ...origin, part: refs[origin.part] },
+            hasMidpoint,
             // The grouping field for this (stack) axis → the ORDINAL
             // space's measure, so a spread-by-category axis titles itself
             // off its space.
@@ -278,7 +284,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
       [...entries.keys()],
       reverse
     );
-    return { entries, layoutOpts: { hasOrder, origin } };
+    return { entries, layoutOpts: { hasOrder, origin, hasMidpoint: true } };
   },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {

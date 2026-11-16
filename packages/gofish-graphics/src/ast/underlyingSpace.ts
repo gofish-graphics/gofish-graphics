@@ -104,8 +104,9 @@ export type CONTINUOUS_TYPE = {
   coordinateTransform?: CoordinateTransform;
   /** True when both sides of the 0 hold nonnegative amounts measured away from
    *  it, rather than signed values (#984's "mirrored side": magnitudes with a
-   *  side). A stack centered on a `HasMidpoint` column builds it: a Likert
-   *  chart's parts left of the center are counts too. An axis over it labels
+   *  side). A stack whose parts are all nonnegative builds it, whatever its
+   *  origin (`distributeSpaceFold`): a Likert chart's parts left of the
+   *  center are counts too. An axis over it labels
    *  each tick with its distance from 0. A union keeps it only when every
    *  part has it ({@link allMirrored}).
    *  TODO(#995): layer axis merging, a coord's declared window, and anchorAt drop it. */
