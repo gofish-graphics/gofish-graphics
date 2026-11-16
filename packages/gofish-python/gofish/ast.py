@@ -3071,6 +3071,25 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
+def literal(value: Any) -> dict:
+    """
+    Wrap a value as a constant: the channel uses it as it is and never reads
+    it as a field name or maps it through a scale. Mirrors the JS
+    `literal(...)` constructor in `packages/gofish-graphics/src/ast/data.ts`.
+
+    - `rect(fill=literal("lake"))` fills with the color named `lake`
+      even when the data has a `lake` column.
+    - `rect(fill=lambda d: literal("red") if d["hot"] else datum(d["lake"]))`
+      paints the hot rows red and maps the rest through the color scale.
+
+    Emits the canonical `{type: "literal", value: value}` shape.
+
+    Args:
+        value: The constant: a color, a text, or a number of pixels.
+    """
+    return {"type": "literal", "value": value}
+
+
 class LengthValue(dict):
     """
     The `{type: "length", ...}` wire shape of a length, as a dict subclass
