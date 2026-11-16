@@ -3,7 +3,9 @@
  * parts end to end, and a part that is itself a stack is one of them: its
  * pinned type does not place it, since the outer chain does
  * (`placedByOwnData` in `_node.ts`). So each inner stack starts where the
- * one before it ends, and the whole is as long as the sum of every part.
+ * one before it ends. A nested stack is laid as a box, its extent, not as
+ * the vector of its net value, so with mixed signs the whole is not the flat
+ * stack's (#992); these checks use positive parts.
  *
  * Run: `pnpm build && tsx src/tests/nestedStack.test.ts` (wired as
  * `pnpm test:nested-stack`). The rendering checks import from `dist` for
@@ -12,33 +14,15 @@
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
+import { check, items, report, type Item } from "./testHelpers";
 
 const { chart, spread, stack, rect } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
-let passed = 0;
-let failed = 0;
-function check(name: string, ok: boolean, detail?: string): void {
-  if (ok) {
-    passed += 1;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed += 1;
-    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
-  }
-}
-
-type Box = { x: number; y: number; w: number; h: number };
-const rectsOf = (dl: any): Box[] => {
-  const out: Box[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "rect") out.push(it);
-    for (const c of it.children ?? []) walk(c);
-  };
-  dl.items.forEach(walk);
-  return out;
-};
+type Box = Required<Pick<Item, "x" | "y" | "w" | "h">>;
+const rectsOf = (dl: any): Box[] =>
+  items(dl).filter((it) => it.kind === "rect") as Box[];
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
 const show = (boxes: Box[]) =>
   boxes.map((b) => `[${b.x.toFixed(1)},${b.y.toFixed(1)} ${b.w.toFixed(1)}x${b.h.toFixed(1)}]`).join(" ");
@@ -137,8 +121,7 @@ async function main() {
     `${height(first)} / ${height(crew)}`
   );
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  report();
 }
 
 main().catch((e) => {
