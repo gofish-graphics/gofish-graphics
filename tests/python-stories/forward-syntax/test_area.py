@@ -3,20 +3,33 @@
 from gofish import chart, stack, ribbon, line, group, Baseline, Coord, Unit
 from python_stories.data import UNEMPLOYMENT
 
+# The six industries with the most unemployment over the decade, one for
+# each color of the default palette.
+LARGEST = [
+    "Wholesale and Retail Trade",
+    "Manufacturing",
+    "Leisure and hospitality",
+    "Business services",
+    "Construction",
+    "Education and Health",
+]
+AXES = {"x": {"title": False}, "y": {"title": "Unemployed (thousands)"}}
+
 
 def story_basic():
     construction = [d for d in UNEMPLOYMENT if d["series"] == "Construction"]
     return (
-        chart(construction, w=560, h=300, schema={"date": Unit.time()}).mark(
-            ribbon(x="date", h="count", opacity=0.8)
-        ),
+        chart(
+            construction, w=560, h=300, schema={"date": Unit.time()}, axes=AXES
+        ).mark(ribbon(x="date", h="count", opacity=0.8)),
         {},
     )
 
 
 def story_stacked():
+    rows = [d for d in UNEMPLOYMENT if d["series"] in LARGEST]
     return (
-        chart(UNEMPLOYMENT, w=560, h=400, schema={"date": Unit.time()})
+        chart(rows, w=560, h=400, schema={"date": Unit.time()}, axes=AXES)
         .flow(stack(by="series", dir="y"))
         .mark(ribbon(x="date", h="count", fill="series")),
         {},
@@ -108,7 +121,7 @@ def story_layered():
     industries = ["Manufacturing", "Construction", "Finance"]
     rows = [d for d in UNEMPLOYMENT if d["series"] in industries]
     return (
-        chart(rows, w=560, h=300, schema={"date": Unit.time()})
+        chart(rows, w=560, h=300, schema={"date": Unit.time()}, axes=AXES)
         .flow(group(by="series"))
         .mark(ribbon(x="date", h="count", fill="series", opacity=0.5)),
         {},

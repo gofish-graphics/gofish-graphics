@@ -19,6 +19,17 @@ export default meta;
 
 type Args = { w: number; h: number };
 
+// The six industries with the most unemployment over the decade, one for
+// each color of the default palette.
+const largest = [
+  "Wholesale and Retail Trade",
+  "Manufacturing",
+  "Leisure and hospitality",
+  "Business services",
+  "Construction",
+  "Education and Health",
+];
+
 export const Basic: StoryObj<Args> = {
   args: { w: 560, h: 300 },
   tags: ["gallery"],
@@ -39,6 +50,7 @@ export const Basic: StoryObj<Args> = {
       w: args.w,
       h: args.h,
       schema: { date: Unit.time() },
+      axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
     })
       .mark(ribbon({ x: "date", h: "count", opacity: 0.8 }))
       .render(container);
@@ -54,16 +66,18 @@ export const Stacked: StoryObj<Args> = {
     gallery: {
       title: "Stacked Area Chart",
       description:
-        "Unemployment in 14 US industries month by month from 2000 to 2010, stacked into bands so the top edge is the total and each band is one industry.",
+        "Unemployment in the six largest US industries month by month from 2000 to 2010, stacked into bands so the top edge is their total and each band is one industry.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
+    const rows = unemployment.filter((d) => largest.includes(d.series));
 
-    chart(unemployment, {
+    chart(rows, {
       w: args.w,
       h: args.h,
       schema: { date: Unit.time() },
+      axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
     })
       .flow(stack({ by: "series", dir: "y" }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }))
@@ -214,7 +228,12 @@ export const Layered: StoryObj<Args> = {
     const industries = ["Manufacturing", "Construction", "Finance"];
     const rows = unemployment.filter((d) => industries.includes(d.series));
 
-    chart(rows, { w: args.w, h: args.h, schema: { date: Unit.time() } })
+    chart(rows, {
+      w: args.w,
+      h: args.h,
+      schema: { date: Unit.time() },
+      axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
+    })
       .flow(group({ by: "series" }))
       .mark(ribbon({ x: "date", h: "count", fill: "series", opacity: 0.5 }))
       .render(container);

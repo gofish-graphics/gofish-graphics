@@ -5,7 +5,6 @@ import { unemployment } from "../../src/data/unemployment";
 import {
   arrow,
   Baseline,
-  blank,
   chart,
   circle,
   Constraint,
@@ -105,12 +104,14 @@ export const LineEndLabels: StoryObj = {
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
     chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
-      .flow(
-        group({ by: "symbol" }),
-        scatter({ by: "date", x: "date", y: "price" })
-      )
+      .flow(group({ by: "symbol" }))
       .mark(
-        line({ stroke: "symbol", strokeWidth: 2 }).label("symbol", {
+        line({
+          x: "date",
+          y: "price",
+          stroke: "symbol",
+          strokeWidth: 2,
+        }).label("symbol", {
           position: Place.end(),
         })
       )
@@ -136,12 +137,14 @@ export const InlineSlopedLabels: StoryObj = {
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
     chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
-      .flow(
-        group({ by: "symbol" }),
-        scatter({ by: "date", x: "date", y: "price" })
-      )
+      .flow(group({ by: "symbol" }))
       .mark(
-        line({ stroke: "symbol", strokeWidth: 2 }).label("symbol", {
+        line({
+          x: "date",
+          y: "price",
+          stroke: "symbol",
+          strokeWidth: 2,
+        }).label("symbol", {
           position: Place.along({ at: 0.6, orient: "sloped" }),
           halo: {},
           fontWeight: 600,
@@ -155,18 +158,30 @@ export const InlineSlopedLabels: StoryObj = {
 // ─── areas: Place.interior() ─────────────────────────────────────────────────
 // A band's label goes inside it by default (`Place.interior()`), where the
 // label's own box can grow largest: the thick middle of each stream.
+// The four industries with the most unemployment, so every band is thick
+// enough somewhere to hold its name.
+const largestIndustries = [
+  "Wholesale and Retail Trade",
+  "Manufacturing",
+  "Leisure and hospitality",
+  "Business services",
+];
+
 export const StreamgraphInteriorLabels: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
       title: "Streamgraph with Band Labels",
       description:
-        "Unemployment in 14 US industries from 2000 to 2010 as a streamgraph, each industry named inside its band where the band is thick enough to hold the name.",
+        "Unemployment in the four largest US industries from 2000 to 2010 as a streamgraph, each industry named inside its band where the band is thickest.",
     },
   },
   render: () => {
     const container = initializeContainer();
-    chart(unemployment, { w: 560, h: 360, schema: { date: Unit.time() } })
+    const rows = unemployment.filter((d) =>
+      largestIndustries.includes(d.series)
+    );
+    chart(rows, { w: 560, h: 360, schema: { date: Unit.time() } })
       .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }).label("series"))
       .render(container, { legend: false });
@@ -375,9 +390,9 @@ const budget = [
 ];
 const budgetChart = (side: "above" | ("above" | "below")[]) =>
   chart(budget, { w: 360, h: 220 })
-    .flow(group({ by: "series" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(group({ by: "series" }))
     .mark(
-      line({ stroke: "series", strokeWidth: 2 }).label("series", {
+      line({ x: "x", y: "y", stroke: "series", strokeWidth: 2 }).label("series", {
         position: Place.along({ at: 0.5, side, orient: "sloped" }),
         fontWeight: 600,
       })
@@ -426,12 +441,13 @@ const trendScatter = (countries: any[]) => {
   // The trend line is drawn first, so it is placed when the labels look
   // for it.
   return chart(ends, { w: 640, h: 440 })
-    .flow(scatter({ by: "fertility", x: "fertility", y: "life_expect" }))
-    .mark(blank().name("ends"))
-    .layer(
-      chart(selectAll("ends")).mark(
-        line({ stroke: "#9e9e9e", strokeWidth: 2 }).name("trend")
-      )
+    .mark(
+      line({
+        x: "fertility",
+        y: "life_expect",
+        stroke: "#9e9e9e",
+        strokeWidth: 2,
+      }).name("trend")
     )
     .layer(
       chart(countries)

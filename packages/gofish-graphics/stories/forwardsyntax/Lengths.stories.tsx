@@ -14,6 +14,8 @@ import {
   Color,
   scatter,
   circle,
+  ribbon,
+  field,
 } from "../../src/lib";
 
 // Lengths (#1176 step 6): a size or a gap given as `percent(n)` of the room
@@ -45,23 +47,24 @@ const panel = (dims: Record<string, unknown>, fill: string, label: string) =>
     text({ text: label, fontSize: 12 }),
   ]);
 
-export const StackedBarFrGaps: StoryObj = {
+export const RibbonChartFrGaps: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
-      title: "Stacked Bar Chart With Flexible Gaps",
+      title: "Ribbon Chart With Flexible Gaps",
       description:
-        "Fish catch by lake and species as stacked bars whose gaps between lakes share the chart's whole width.",
+        "Fish catch by lake and species as a ribbon chart whose bars keep a fixed width while the gaps between lakes share the rest of the chart's width.",
     },
   },
   render: () => {
     const container = initializeContainer();
-    chart(seafood, { w: 500, h: 200 })
+    chart(seafood, { w: 560, h: 240 })
       .flow(
         spread({ by: "lake", dir: "x", spacing: fr(1) }),
-        stack({ by: "species", dir: "y" })
+        stack({ by: field("species").sort("count"), dir: "y" })
       )
-      .mark(rect({ h: "count", fill: "species" }))
+      .mark(rect({ w: 24, h: "count", fill: "species" }))
+      .layer(ribbon({ opacity: 0.8 }))
       .render(container);
     return container;
   },

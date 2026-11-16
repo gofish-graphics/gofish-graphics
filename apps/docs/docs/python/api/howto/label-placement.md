@@ -32,12 +32,16 @@ labels can replace a legend. Labels that would cover each other slide apart
 vertically. Use `Place.start()` to name the lines where they begin.
 
 ```python
-from gofish import Place, Unit, chart, group, line, scatter
+from gofish import Place, Unit, chart, group, line
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
-    .mark(line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end()))
+    .flow(group(by="symbol"))
+    .mark(
+        line(x="date", y="price", stroke="symbol", stroke_width=2).label(
+            "symbol", position=Place.end()
+        )
+    )
     .render(w=560, h=320, axes=True, legend=False)
 )
 ```
@@ -54,13 +58,13 @@ own. `side` puts the label beside the line instead: `"above"`, `"below"`, or
 a list such as `["above", "below"]`, tried in order at each spot.
 
 ```python
-from gofish import Place, Unit, chart, group, line, scatter
+from gofish import Place, Unit, chart, group, line
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+    .flow(group(by="symbol"))
     .mark(
-        line(stroke="symbol", stroke_width=2).label(
+        line(x="date", y="price", stroke="symbol", stroke_width=2).label(
             "symbol",
             position=Place.along(at=0.6, orient="sloped"),
             halo={},
@@ -101,16 +105,14 @@ or a list of marks such as `ref(...)`. Draw those nodes before the labels,
 so they are placed when the labels look for them.
 
 ```python
-from gofish import blank, chart, circle, line, scatter, select_all
+from gofish import chart, circle, line, scatter, select_all
 
 (
     chart(trend_ends)
-    .flow(scatter(by="fertility", x="fertility", y="life_expect"))
-    .mark(blank().name("ends"))
-    .layer(
-        chart(select_all("ends")).mark(
-            line(stroke="#9e9e9e", stroke_width=2).name("trend")
-        )
+    .mark(
+        line(
+            x="fertility", y="life_expect", stroke="#9e9e9e", stroke_width=2
+        ).name("trend")
     )
     .layer(
         chart(countries)
