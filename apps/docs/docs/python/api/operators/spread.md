@@ -141,6 +141,36 @@ chart(select_all("bars")) \
     .mark(ribbon(opacity=0.8))
 ```
 
+## Baselines
+
+`baseline` sets where the spread puts its own 0, the point its parent lines
+up with its other children. It takes a member of the
+[`Baseline`](/python/api/baseline) family: `Baseline.start()`,
+`Baseline.end()`, `Baseline.middle()` or `Baseline.at(part, point)`. The
+start of a spread is the start of its first child, and its end is the end of
+its last child. The gaps between children are part of the way from one to
+the other. Without `baseline`, a spread's 0 is its start.
+`Baseline.wiggle()` is for `stack` only, and on a spread it is an error.
+
+A spread's baseline only places it. The spread keeps its space, a sequence
+of separate spaces, so it draws no data axis along `dir`. Here each row's 0
+is the middle of its Neutral bar, and the rows keep the gaps between their
+bars:
+
+```python
+chart(survey, color=likert_colors, axes={"x": False, "y": True}).flow(
+    spread(by="question", dir="y"),
+    spread(by="response", dir="x", spacing=3, baseline=Baseline.at("Neutral", 0.5)),
+).mark(rect(w="count", fill="response"))
+```
+
+::: gofish example:diverging-likert-chart-with-gaps hidden
+:::
+
+A parent's `alignment="start"`, `"middle"` or `"end"` draws the same
+picture as giving each child that baseline and keeping the parent's
+default, `alignment="baseline"`.
+
 ## Field-expression pipeline {#field-expression-pipeline}
 
 `field(name)` returns a chainable accessor — a builder where each method

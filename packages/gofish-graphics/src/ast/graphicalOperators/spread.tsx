@@ -82,11 +82,13 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
-      /** Where a stack puts its own 0 (`Baseline`), the part of an `at` a
-       *  child index. Omitted: `Baseline.start()`. In a flow the split sets
-       *  it from the `baseline` option, whose `at` part is a value of the
-       *  `by` column, or from a `HasMidpoint` column (`stackBaseline` in
-       *  schema.ts). A spread does not take it yet. */
+      /** Where the spread or stack puts its own 0 (`Baseline`), the part of
+       *  an `at` a child index. Omitted: a stack's is `Baseline.start()`,
+       *  and a spread's 0 is its start. In a flow the split sets it from
+       *  the `baseline` option, whose `at` part is a value of the `by`
+       *  column, or from a `HasMidpoint` column (`stackBaseline` in
+       *  schema.ts). A spread takes every baseline but `wiggle`, and only
+       *  for placement: its type stays a sequence of separate spaces. */
       baseline?: StackBaseline<number>;
       /** The `by` column's order has a midpoint (`HasMidpoint`), which set
        *  `baseline`: the split sets it, and the stack checks that each part
@@ -117,14 +119,6 @@ export const Spread = createNodeOperator(
           "`size: field(<field-name>).normalize()` instead (#700 Phase 2)."
       );
     }
-
-    // TODO(S7 of the stack-profile plan): a spread's baseline, placement
-    // only (its type stays ordinal).
-    if (!glue && baseline !== undefined)
-      throw new Error(
-        "spread: `baseline` is not taken by spread yet, only by stack. Use " +
-          "`stack({ baseline })`, or drop the option."
-      );
 
     children = unwrapLodashArray(children);
     // An axis index is the same axis as its scope-free name (0 is `x`), so
@@ -189,6 +183,13 @@ export const Spread = createNodeOperator(
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
       const refs = childSlots(node);
+      // In the combinator form the part of an `at` is a child index.
+      if (baseline?.kind === "at" && refs[baseline.part] === undefined)
+        throw new Error(
+          `${glue ? "stack" : "spread"}: its baseline is ` +
+            `\`Baseline.at(${baseline.part}, ...)\`, a child index, but it ` +
+            `has ${refs.length} ${refs.length === 1 ? "child" : "children"}.`
+        );
       // The cross-axis align: it shares the frame (unions the children's
       // domain) and, for free children (bars), commits a baseline. A
       // self-positioned child (a scatter facet) is left alone by `align`
@@ -243,8 +244,10 @@ export type SpreadOptions<T = any> = {
   anchor?: AlignAnchor | "edge";
   reverse?: boolean;
   glue?: boolean;
-  /** Where a stack puts its own 0 (`Baseline`); see {@link stack}. A
-   *  spread without `glue` does not take it yet. */
+  /** Where the spread puts its own 0 (`Baseline`), the point its parent
+   *  lines up with other baselines: `start`, `end`, `middle` or `at`, on
+   *  the way from its first child's start to its last child's end, gaps
+   *  included. `wiggle` is for `stack` only. Omitted, its 0 is its start. */
   baseline?: Baseline;
   w?: number | (keyof T & string) | LengthValue;
   h?: number | (keyof T & string) | LengthValue;
@@ -269,20 +272,18 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // lives in createOperator (it dispatches on the mark's kind), not here, so
   // this split stays kind-agnostic.
   //
-  // A stack's `baseline` names its part by a value of the `by` column, and a
-  // stack over a column with HasMidpoint (from the chart's `schema`) puts its
-  // 0 at the midpoint of the column's order; the split knows the groups
+  // A `baseline` names its part by a value of the `by` column, and a spread
+  // or stack over a column with HasMidpoint (from the chart's `schema`) puts
+  // its 0 at the midpoint of the column's order; the split knows the groups
   // present, so it resolves either to a child index (`stackBaseline` in
   // schema.ts). A part the data lacks is placed by the column's declared
   // order, which the split reorders the way it reorders the groups, so the
-  // stack knows which way it lays the order out even in a row with one part.
+  // chain knows which way it lays the order out even in a row with one part.
   // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
   // ordinal space it folds knows its keys are ordered.
   split: ({ by, glue, reverse, baseline }, d) => {
     const entries = splitEntries(by, d);
     const hasOrder = entries.hasOrder;
-    if (!glue)
-      return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
     const column = fieldNameOf(by);
     const type = columnType(d, column);
     const levels = type?.HasLevels?.levels as (string | number)[] | undefined;
@@ -307,7 +308,8 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
           split,
           [...entries.keys()],
           reverse,
-          baseline
+          baseline,
+          glue ? "stack" : "spread"
         ),
         hasMidpoint: type?.HasMidpoint !== undefined,
       },

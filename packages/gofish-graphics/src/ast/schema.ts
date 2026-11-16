@@ -1102,10 +1102,11 @@ export function orderByLevels<K>(
 }
 
 /**
- * The {@link StackBaseline} of a stack over `column` whose children are the
- * groups `keys` (in child order, laid out reversed when `reverse`), with the
- * part of a `Baseline.at` a child index. `given` is the stack's `baseline`
- * option, whose `at` part is a value of the column. `split` is every level of
+ * The {@link StackBaseline} of a chain (a stack, or a spread, named by
+ * `operator`) over `column` whose children are the groups `keys` (in child
+ * order, laid out reversed when `reverse`), with the part of a `Baseline.at`
+ * a child index. `given` is the chain's `baseline` option, whose `at` part
+ * is a value of the column. `split` is every level of
  * the column's declared order, in the order the split puts groups in (the
  * level order after any `field(...).sort()` or `.reverse()`), when the
  * column declares one; `keys` are the levels the data has, in that order.
@@ -1127,14 +1128,16 @@ export function stackBaseline(
   split: unknown[] | undefined,
   keys: unknown[],
   reverse = false,
-  given?: Baseline
+  given?: Baseline,
+  operator: "stack" | "spread" = "stack"
 ): StackBaseline<number> | undefined {
-  const by = column === undefined ? "stack" : `stack({ by: "${column}" })`;
+  const by =
+    column === undefined ? operator : `${operator}({ by: "${column}" })`;
   if (type?.HasMidpoint !== undefined && given !== undefined)
     throw new Error(
       `${by}: it is given \`baseline\`, but its \`by\` column has ` +
         `HasMidpoint (declared with \`Trait.diverging()\`), which already ` +
-        `puts the stack's 0 at the midpoint of the column's order. Drop the ` +
+        `puts its 0 at the midpoint of the column's order. Drop the ` +
         `\`baseline\`, or the trait.`
     );
   if (type?.HasMidpoint !== undefined) {
@@ -1157,12 +1160,12 @@ export function stackBaseline(
   if (levels === undefined || split === undefined || !rank!.has(given.part))
     throw new Error(
       `${by}: its baseline is \`Baseline.at(${showLevel(given.part)}, ...)\`, ` +
-        `but the stack has no part ${showLevel(given.part)} ` +
+        `but the ${operator} has no part ${showLevel(given.part)} ` +
         `(its parts are ${keys.map(showLevel).join(", ")}), and ` +
         (levels === undefined
           ? `its \`by\` column declares no order to place a missing part by. ` +
             `Declare the column's levels with \`Domain.discrete(levels)\` in ` +
-            `the chart's \`schema\`, or name a part the stack has.`
+            `the chart's \`schema\`, or name a part the ${operator} has.`
           : `${showLevel(given.part)} is not one of the levels of its \`by\` ` +
             `column (${levels.levels.map(showLevel).join(", ")}).`)
     );

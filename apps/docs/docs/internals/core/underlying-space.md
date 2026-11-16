@@ -387,8 +387,12 @@ the two sides:
   `Baseline.end()` is the end, `Baseline.middle()` is halfway between, and
   `Baseline.at(part, point)` is a point on one part: a fraction of the way
   from its tail to its head, or one of its anchors (`"baseline"` is its
-  tail). `chainFold` computes the 0 at every u and measures both reaches
-  from it. In a flow, the `at` part is a value of the `by` column, which the
+  own 0, as `alignment` reads it: a bar's tail, or a nested spread's or
+  stack's baseline). `chainFold` computes the 0 at every u and measures both
+  reaches from it. The fold sees a part with no data baseline as a box from
+  its start, so for such a part `"baseline"` is its start there, while
+  placement seats the part's own 0 (a declared shortcut, `TODO` at
+  `pointOnPart`). In a flow, the `at` part is a value of the `by` column, which the
   split turns into a child index (`stackBaseline` in `schema.ts`). A part the
   data lacks takes no room, so the split places the 0 on the boundary where
   it would be, by the column's declared order (`baselineAlongOrder`); with no
@@ -396,7 +400,20 @@ the two sides:
   index, an operand of the constraint, and then an index into the parts in
   placement order (`resolveBaseline`). Placement carries the same point to
   the free-origin seat (`StackPoint` in `placementFacts.ts`): a point on one
-  part, or a place `along` the whole chain for `end` and `middle`.
+  part, or a place `along` the whole chain for `end` and `middle`. The way
+  along the chain is a `ChainPath`: a stack's runs from its first part's
+  tail through each part's tail and head to its last part's head.
+- A **spread** takes `baseline` too, every value but `wiggle` (an error: its
+  0 moves with the cross-sections a stack glues). It is placement only: the
+  spread's fold ignores it, and its space stays a sequence of separate
+  spaces. Its `ChainPath` runs from its first part's start to its last
+  part's end, through the anchors its edges tie (`end` to `start`, or a
+  pitch's anchor), and its gaps, `fr` included, are part of the way. The
+  split resolves an `at` part as for a stack, and a `HasMidpoint` column
+  sets it the same way. A spread with no `baseline` states no 0, and keeps
+  its sequence origin, its start. So `alignment: "start" | "middle" |
+"end"` on a parent draws what each child's `Baseline.start()`, `.middle()`
+  or `.end()` under the default `alignment: "baseline"` draws.
 - A stack whose `by` column has `HasMidpoint` (see
   [Column types](#column-types-the-chart-schema)) is `Baseline.at` at the
   midpoint of the column's order: the split builds that baseline from the
@@ -1373,12 +1390,15 @@ tick. A stack over a `HasMidpoint` column carries its origin at the midpoint
 of the order (a fraction of the way through the part it falls in, or the
 tail of the first part past it), so every row of a Likert chart seats its
 midpoint on the 0 tick
-with no other code. A spread packs boxes from its first
+with no other code. A spread with no `baseline` packs boxes from its first
 member's start, which is not a baseline, so it lists none and keeps its
 sequence origin, even when its members' baselines happen to coincide. Its
 lowering marks its relations `chain: "spread"` (a stack's are `"stack"`), and
 the difference graph gives a component that holds one no baseline at all, so
-a free node aligned to one of its members does not seat it either. So a bar
+a free node aligned to one of its members does not seat it either. A spread
+given a `baseline` states its 0 as a stack does: it carries an origin, the
+solve lists the part that carries it as `stated` (`FreeOriginInput`), and a
+component with a stated 0 is seated by it like a stack's. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its frame has

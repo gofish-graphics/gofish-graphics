@@ -1225,7 +1225,7 @@ for the API.
         },
         "baseline": {
           "$ref": "#/$defs/Baseline",
-          "description": "Where the spread puts its own 0, made by a call in the Baseline family: Baseline.start(), Baseline.end(), Baseline.middle() or Baseline.at(part, point). Baseline.wiggle() is for stack only. Not taken yet: a spread with a baseline is an error, and a stack takes it."
+          "description": "Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`."
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
@@ -4935,13 +4935,13 @@ for the API.
                   "enum": ["start", "middle", "end", "baseline"]
                 }
               ],
-              "description": "Where on the part: a fraction of the way from its tail to its head (0 is its tail, 1 its head), or one of its anchors, \"start\", \"middle\", \"end\" or \"baseline\" (its tail)."
+              "description": "Where on the part: a fraction of the way from its tail to its head (0 is its tail, 1 its head), or one of its anchors, \"start\", \"middle\", \"end\" or \"baseline\" (its own 0: a bar's tail, or the baseline of a nested spread or stack)."
             }
           },
           "required": ["kind", "part", "point"]
         }
       ],
-      "description": "Where a stack puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack`. The parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: a position on the stack's axis is no amount, and its axis shows only differences. The 0 is still the stack's baseline, which its parent lines up."
+      "description": "Where a stack or a spread puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack` and `spread`. On a spread the start is its first child's start, the end its last child's end, and the gaps between children are part of the way; a spread's baseline only places it. For a stack, the parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: a position on the stack's axis is no amount, and its axis shows only differences. The 0 is still the stack's baseline, which its parent lines up."
     }
   }
 }

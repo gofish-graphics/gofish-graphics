@@ -3,9 +3,9 @@
 // </gofish-wiki>
 
 /**
- * The `Baseline` family: where a stack puts its own 0, the point its parent
- * lines up with other baselines. It is the value of the `baseline` option of
- * `stack`.
+ * The `Baseline` family: where a stack or a spread puts its own 0, the point
+ * its parent lines up with other baselines. It is the value of the
+ * `baseline` option of `stack` and `spread`.
  *
  * `lib.ts` binds this module as `Baseline` (`Baseline.middle()`), and
  * `gofish-graphics/baseline` exports the same module. A baseline is a plain
@@ -22,6 +22,11 @@
  * (`lowerDistributePlacement`). `Trait.diverging()` on the `by` column's unit
  * is `Baseline.at` at the column's midpoint (`stackOrigin` in
  * `ast/schema.ts`).
+ *
+ * A spread takes every kind but `wiggle`. Its start is its first child's
+ * start and its end its last child's end, and its gaps are part of the way.
+ * Its baseline only places it (`lowerDistributePlacement`); its fold ignores
+ * it.
  */
 import type { Frontend } from "gofish-ir";
 import { bareKind } from "../ast/strategyKind";
@@ -30,8 +35,8 @@ import { bareKind } from "../ast/strategyKind";
 export type Baseline = Frontend.BaselineIR;
 
 /** A point on one part: a fraction of the way from its tail to its head (0
- *  is its tail, 1 its head), or one of its anchors (`"baseline"` is its
- *  tail). */
+ *  is its tail, 1 its head), or one of its anchors (`"baseline"` is its own
+ *  0: a bar's tail, or a nested spread's or stack's baseline). */
 export type Point = Frontend.BaselinePointIR;
 
 /** The baseline of kind `K`. */
@@ -77,7 +82,7 @@ export const wiggle = bareKind(
  *   `by` column (its declared levels) and moves nothing: the baseline falls
  *   on the boundary where the part would be.
  * @param point A fraction of the way from the part's tail to its head, or
- *   `"start"`, `"middle"`, `"end"` or `"baseline"` (its tail).
+ *   `"start"`, `"middle"`, `"end"` or `"baseline"` (its own 0).
  */
 export const at = (part: string | number, point: Point): Kind<"at"> => ({
   kind: "at",

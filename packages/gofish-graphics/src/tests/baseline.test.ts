@@ -4,9 +4,11 @@
  * level lands on when the split reorders the levels (a centered stack, a
  * `HasMidpoint` column), a set midpoint under a reversed order, a spread
  * chain staying on its sequence origin when a free node joins its
- * component, a centered baseline on a size-strong part, and each
- * `Baseline` strategy: `at` on a value of the `by` column (present or
- * missing), `end`, `middle`, and the errors.
+ * component, a centered baseline on a size-strong part, each `Baseline`
+ * strategy: `at` on a value of the `by` column (present or missing),
+ * `end`, `middle`, and the errors, and a spread's baseline: rows of
+ * spreads with gaps lined up on their 0s, `alignment` as a shorthand for a
+ * shared baseline, and a spread nested in a spread.
  *
  * Run: `pnpm build && tsx src/tests/baseline.test.ts` (wired as
  * `pnpm test:baseline`). The rendering checks import from `dist` for the
@@ -445,19 +447,6 @@ async function main() {
       near(centerOf(middled.slice(0, 5)), centerOf(middled.slice(5))),
       JSON.stringify(middled)
     );
-    const spreadBaseline = await errorOf(async () =>
-      rectsOf(
-        await chart(likert)
-          .flow(spread({ by: "r", dir: "x", baseline: Baseline.end() }))
-          .mark(rect({ w: "n" }))
-          .toDisplayList({ w: 300, h: 200 })
-      )
-    );
-    check(
-      "a spread does not take a baseline yet",
-      spreadBaseline !== undefined && spreadBaseline.includes("stack"),
-      spreadBaseline
-    );
     // The combinator form names the part by its index. A bar at data 0
     // beside the stack shows where its 0 sits.
     const combinator = async (baseline: unknown) =>
@@ -477,6 +466,212 @@ async function main() {
       JSON.stringify(atOne) === JSON.stringify(endOne) &&
         JSON.stringify(atOne) !== JSON.stringify(startOf),
       JSON.stringify({ atOne, endOne, startOf })
+    );
+  }
+
+  console.log("\n# a spread's baseline");
+  {
+    // Rows of spreads with 3 px gaps, each with its own 0, lined up by the
+    // parent's default alignment, "baseline".
+    const likert = [
+      { q: "q1", r: "SD", n: 4 },
+      { q: "q1", r: "D", n: 6 },
+      { q: "q1", r: "N", n: 10 },
+      { q: "q1", r: "A", n: 12 },
+      { q: "q1", r: "SA", n: 8 },
+      { q: "q2", r: "SD", n: 2 },
+      { q: "q2", r: "D", n: 3 },
+      { q: "q2", r: "N", n: 6 },
+      { q: "q2", r: "A", n: 20 },
+      { q: "q2", r: "SA", n: 25 },
+    ];
+    const levels = {
+      schema: { r: Unit({ domain: Domain.discrete(LEVELS5) }) },
+    };
+    const rows = async (spreadOpts: object, data = likert, options = {}) =>
+      partsOf(
+        await chart(data, { axes: false, legend: false, ...options })
+          .flow(
+            spread({ by: "q", dir: "y" }),
+            spread({ by: "r", dir: "x", spacing: 3, ...spreadOpts })
+          )
+          .mark(rect({ w: "n", h: 10 }))
+          .toDisplayList({ w: 300, h: 200 })
+      );
+    // The parts of each row, from left to right.
+    const byRow = (bs: Box[]) => {
+      const ys = [...new Set(bs.map((b) => b.y))].sort((a, b) => a - b);
+      return ys.map((y) =>
+        bs.filter((b) => b.y === y).sort((a, b) => a.x - b.x)
+      );
+    };
+    const gapsOf = (row: Box[]) =>
+      row.slice(1).map((b, i) => b.x - (row[i].x + row[i].w));
+    const middleOf = (b: Box) => b.x + b.w / 2;
+    const at = byRow(await rows({ baseline: Baseline.at("N", 0.5) }));
+    check(
+      'Baseline.at("N", 0.5): every row\'s N is centered on one x',
+      near(middleOf(at[0][2]), middleOf(at[1][2])),
+      JSON.stringify(at)
+    );
+    check(
+      "the gaps stay 3 px",
+      at.every((row) => gapsOf(row).every((g) => near(g, 3))),
+      JSON.stringify(at.map(gapsOf))
+    );
+    const span = (row: Box[]) => [row[0].x, row.at(-1)!.x + row.at(-1)!.w];
+    const middled = byRow(await rows({ baseline: Baseline.middle() }));
+    check(
+      "Baseline.middle(): the rows, gaps included, share a middle",
+      near(
+        (span(middled[0])[0] + span(middled[0])[1]) / 2,
+        (span(middled[1])[0] + span(middled[1])[1]) / 2
+      ),
+      JSON.stringify(middled.map(span))
+    );
+    const ended = byRow(await rows({ baseline: Baseline.end() }));
+    check(
+      "Baseline.end(): the rows end at one x",
+      near(span(ended[0])[1], span(ended[1])[1]),
+      JSON.stringify(ended.map(span))
+    );
+    const started = await rows({ baseline: Baseline.start() });
+    const plain = await rows({});
+    check(
+      "Baseline.start() puts the 0 where a spread with no baseline has it",
+      JSON.stringify(started) === JSON.stringify(plain),
+      JSON.stringify({ started, plain })
+    );
+
+    // q2 has no N: the 0 falls where N would be, at the start of its A.
+    const withoutN = likert.filter((d) => !(d.q === "q2" && d.r === "N"));
+    const lacking = byRow(
+      await rows({ baseline: Baseline.at("N", 0.5) }, withoutN, levels)
+    );
+    check(
+      "a missing part is placed by the declared order and moves nothing",
+      near(lacking[1][2].x, middleOf(lacking[0][2])),
+      JSON.stringify(lacking)
+    );
+    const unordered = await errorOf(() =>
+      rows({ baseline: Baseline.at("N", 0.5) }, withoutN)
+    );
+    check(
+      "a missing part with no declared order is an error naming the fix",
+      unordered !== undefined &&
+        unordered.startsWith("spread") &&
+        unordered.includes("Domain.discrete"),
+      unordered
+    );
+    const wiggle = await errorOf(() => rows({ baseline: Baseline.wiggle() }));
+    check(
+      "Baseline.wiggle() on a spread is an error that names stack",
+      wiggle !== undefined &&
+        wiggle.includes("glued") &&
+        wiggle.includes("stack({ baseline: Baseline.wiggle() })"),
+      wiggle
+    );
+
+    // Reversed, the rows lay SA first, and N's middle still lines up.
+    const reversed = byRow(
+      await rows({ reverse: true, baseline: Baseline.at("N", 0.5) })
+    );
+    check(
+      "a reversed spread lines its rows up on the same part",
+      near(middleOf(reversed[0][2]), middleOf(reversed[1][2])) &&
+        near(reversed[0][0].w * 4, reversed[0][4].w * 8),
+      JSON.stringify(reversed)
+    );
+    // A fixed pitch between the parts' middles: the baseline is still a
+    // point on N.
+    const pitched = byRow(
+      await rows({
+        spacing: 60,
+        anchor: "middle",
+        baseline: Baseline.at("N", "middle"),
+      })
+    );
+    check(
+      'with a pitch (anchor: "middle"), the rows line up on N\'s middle',
+      near(middleOf(pitched[0][2]), middleOf(pitched[1][2])),
+      JSON.stringify(pitched)
+    );
+  }
+
+  console.log("\n# alignment is a shorthand for a shared baseline");
+  {
+    // Each row sets its own 0 and the parent keeps its default, "baseline":
+    // the same picture as the parent's `alignment`.
+    const bars = [
+      ["a", [30, 10, 20]],
+      ["b", [10, 50]],
+      ["c", [25, 25, 25, 5]],
+    ].flatMap(([row, ws]) =>
+      (ws as number[]).map((w, i) => ({ row, part: `p${i}`, w }))
+    );
+    const draw = (parent: object, child: object) =>
+      chart(bars, { legend: false, w: 300, h: 110 })
+        .flow(
+          spread({ by: "row", dir: "y", spacing: 6, ...parent }),
+          spread({ by: "part", dir: "x", spacing: 4, ...child })
+        )
+        .mark(rect({ w: "w", fill: "part" }))
+        .toDisplayList();
+    for (const word of ["start", "middle", "end"] as const) {
+      const aligned = partsOf(await draw({ alignment: word }, {}), false);
+      const based = partsOf(
+        await draw({}, { baseline: Baseline[word]() }),
+        false
+      );
+      check(
+        `alignment: "${word}" draws what Baseline.${word}() on each row does`,
+        JSON.stringify(aligned) === JSON.stringify(based),
+        JSON.stringify({ aligned, based })
+      );
+    }
+  }
+
+  console.log("\n# a spread nested in a spread");
+  {
+    // A row is a label and a spread of bars. The row's 0 is the bars' own
+    // 0 (`"baseline"`), which is the middle of their second bar, so the
+    // parent lines the rows up there whatever the labels' widths.
+    const row = (label: number, widths: number[]) =>
+      spread({ dir: "x", spacing: 6, baseline: Baseline.at(1, "baseline") }, [
+        rect({ w: label, h: 10 }),
+        spread(
+          { dir: "x", spacing: 3, baseline: Baseline.at(1, 0.5) },
+          widths.map((w) => rect({ w: v(w), h: 10 }))
+        ),
+      ]);
+    const rs = partsOf(
+      await spread({ dir: "y" }, [
+        row(30, [10, 20, 30]),
+        row(60, [40, 10, 5]),
+      ]).toDisplayList({ w: 300, h: 100 }),
+      false
+    );
+    const [label1, first1, mid1, , label2, first2, mid2] = rs;
+    check(
+      "the rows line up on the inner spreads' own 0",
+      near(mid1.x + mid1.w / 2, mid2.x + mid2.w / 2),
+      JSON.stringify(rs)
+    );
+    check(
+      "each label sits 6 px before its bars",
+      near(first1.x - (label1.x + label1.w), 6) &&
+        near(first2.x - (label2.x + label2.w), 6),
+      JSON.stringify(rs)
+    );
+    const outOfRange = await errorOf(() =>
+      spread({ dir: "x", baseline: Baseline.at(3, 0.5) }, [
+        rect({ w: 10, h: 10 }),
+      ]).toDisplayList({ w: 100, h: 100 })
+    );
+    check(
+      "in the combinator form a part past the last child is an error",
+      outOfRange !== undefined && outOfRange.includes("child index"),
+      outOfRange
     );
   }
 
