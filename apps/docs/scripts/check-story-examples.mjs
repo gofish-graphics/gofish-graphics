@@ -9,20 +9,19 @@
  *   - every snippet imports only from "gofish-graphics", "./dataset", bare npm
  *     packages, or local asset files (no leftover `../src/...`, `../helper`,
  *     or `@storybook/html` imports)
- *   - every name a snippet imports from "gofish-graphics" is a public export
- *     of the package (src/lib.ts, following `export *`), and every member it
- *     reads off an imported namespace (`Coord.clock`) is exported by that
- *     namespace. The loader re-points every import from the library source at
- *     the package, so a story that imports an internal module (for example
- *     `clock` from src/ast/coordinateTransforms/clock) would otherwise publish
- *     an import line that does not load.
+ *   - every name a snippet and its dataset use exists where they read it:
+ *     the snippet is type checked against the packages' source
+ *     (publicExports.mjs), and a diagnostic about a missing export, a missing
+ *     namespace member, or a type used as a value fails it. The loader
+ *     already publishes each import under the public name it resolves to and
+ *     throws for one that is not public; this checks the code that uses them.
  *   - datasetCode and datasetPreview (when present) transpile
  *
  * Prints a table of id → ok / fallback and exits non-zero on any failure.
  */
 import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   readFileSync,
@@ -32,6 +31,10 @@ import {
   mkdirSync,
 } from "node:fs";
 import { execSync, execFileSync } from "node:child_process";
+import {
+  publicSurface,
+  ts as packageTs,
+} from "../docs/.vitepress/data/publicExports.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -206,88 +209,101 @@ function checkImports(code) {
   return problems;
 }
 
-// The package's public surface, read from its entry with the TypeScript
-// checker so that `export *` and `export * as Ns` are followed. Maps each
-// exported name to the names it exports when it is a namespace (else null).
-function publicExports() {
-  const pkgDir = resolve(__dirname, "../../../packages/gofish-graphics");
-  const entry = resolve(pkgDir, "src/lib.ts");
-  const config = ts.getParsedCommandLineOfConfigFile(
-    resolve(pkgDir, "tsconfig.json"),
-    {},
-    { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} }
-  );
-  const program = ts.createProgram([entry], {
-    ...(config?.options ?? {}),
-    noEmit: true,
-  });
-  const checker = program.getTypeChecker();
-  const moduleSymbol = checker.getSymbolAtLocation(
-    program.getSourceFile(entry)
-  );
-  const exports = new Map();
-  for (const sym of checker.getExportsOfModule(moduleSymbol)) {
-    const target =
-      sym.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym;
-    const isNamespace =
-      target.flags & ts.SymbolFlags.ValueModule &&
-      target.declarations?.some((d) => ts.isSourceFile(d));
-    exports.set(
-      sym.name,
-      isNamespace
-        ? new Set(checker.getExportsOfModule(target).map((s) => s.name))
-        : null
-    );
-  }
-  return exports;
-}
+// Type check every snippet, with its dataset as `./dataset`, against the
+// packages' source (publicExports.mjs), and report each diagnostic that says
+// a name the snippet uses does not exist where it reads it: an import a
+// module does not export, a member a namespace lacks, a type used as a value.
+// The checker resolves names by scope, so a local that shadows a namespace,
+// destructuring, element access and qualified type names are all read as
+// TypeScript reads them. Other type errors (an implicit `any` in a story
+// written loosely) are not this check's business.
+const NAME_DIAGNOSTICS = new Set([
+  1361, // 'X' cannot be used as a value because it was imported using 'import type'
+  1362, // 'X' cannot be used as a value because it was exported using 'export type'
+  2305, // Module 'm' has no exported member 'X'
+  2307, // Cannot find module 'm'
+  2503, // Cannot find namespace 'X'
+  2614, // Module 'm' has no exported member 'X'. Did you mean to use 'import X from'?
+  2693, // 'X' only refers to a type, but is being used as a value here
+  2694, // Namespace 'N' has no exported member 'X'
+  2708, // Cannot use namespace 'N' as a value
+  2724, // 'm' has no exported member named 'X'. Did you mean 'Y'?
+]);
 
-// Names a snippet imports from "gofish-graphics" that the package does not
-// export, and `Ns.member` reads of an imported namespace that it lacks.
-function checkGofishNames(code, fileName, exports) {
-  const problems = [];
-  const sf = ts.createSourceFile(
-    fileName,
-    code,
-    ts.ScriptTarget.ESNext,
-    true,
-    ts.ScriptKind.TSX
+function checkSnippetNames(examples) {
+  const ts = packageTs;
+  const surface = publicSurface();
+  const root = resolve(__dirname, "../.snippet-check");
+  const storiesFile = resolve(
+    __dirname,
+    "../../../packages/gofish-graphics/stories/index.ts"
   );
-  const namespaces = new Map(); // local name -> exported member names
-  for (const stmt of sf.statements) {
-    if (!ts.isImportDeclaration(stmt)) continue;
-    if (stmt.moduleSpecifier.text !== "gofish-graphics") continue;
-    const clause = stmt.importClause;
-    if (!clause) continue;
-    if (clause.name) problems.push(`default import ${clause.name.text}`);
-    const bindings = clause.namedBindings;
-    if (!bindings || !ts.isNamedImports(bindings)) continue;
-    for (const el of bindings.elements) {
-      const name = (el.propertyName ?? el.name).text;
-      if (!exports.has(name)) problems.push(name);
-      else if (exports.get(name))
-        namespaces.set(el.name.text, exports.get(name));
+  const files = new Map(); // virtual path -> text
+  const owner = new Map(); // virtual path -> example id
+  for (const ex of examples) {
+    const index = join(root, ex.id, "index.tsx");
+    files.set(index, ex.code);
+    owner.set(index, ex.id);
+    if (ex.datasetCode) {
+      const dataset = join(root, ex.id, "dataset.ts");
+      files.set(dataset, ex.datasetCode);
+      owner.set(dataset, ex.id);
     }
   }
-  const visit = (node) => {
-    if (
-      ts.isPropertyAccessExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      namespaces.has(node.expression.text) &&
-      !namespaces.get(node.expression.text).has(node.name.text)
-    ) {
-      problems.push(`${node.expression.text}.${node.name.text}`);
-    }
-    ts.forEachChild(node, visit);
+  // The snippets run in a bundler (the live editor), so they resolve as one.
+  const options = {
+    ...surface.options,
+    jsx: ts.JsxEmit.Preserve,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
   };
-  visit(sf);
-  return [...new Set(problems)];
+  const host = ts.createCompilerHost(options);
+  const { getSourceFile, fileExists, readFile } = host;
+  const { directoryExists } = host;
+  host.fileExists = (f) => files.has(f) || fileExists.call(host, f);
+  host.directoryExists = (d) =>
+    d === root || d.startsWith(root + "/") || directoryExists.call(host, d);
+  host.readFile = (f) => files.get(f) ?? readFile.call(host, f);
+  host.getSourceFile = (f, lang, ...rest) =>
+    files.has(f)
+      ? ts.createSourceFile(f, files.get(f), lang, true)
+      : getSourceFile.call(host, f, lang, ...rest);
+  host.resolveModuleNameLiterals = (literals, containingFile) =>
+    literals.map((lit) => {
+      const entry = surface.entries.get(lit.text);
+      if (entry)
+        return {
+          resolvedModule: { resolvedFileName: entry, extension: ".ts" },
+        };
+      // A package the snippet names resolves from the stories' package,
+      // whose dependencies the stories use (computeNpmDeps reads the same).
+      const from = lit.text.startsWith(".") ? containingFile : storiesFile;
+      return ts.resolveModuleName(lit.text, from, options, host);
+    });
+  const program = ts.createProgram([...files.keys()], options, host);
+  const byId = new Map();
+  for (const [file, id] of owner) {
+    const sf = program.getSourceFile(file);
+    for (const d of program.getSemanticDiagnostics(sf)) {
+      const text = ts.flattenDiagnosticMessageText(d.messageText, " ");
+      // A member a namespace import lacks (`Coord.clocky`) is the general
+      // "property does not exist" error (2339, or 2551 with a suggestion),
+      // on the namespace's module type.
+      const namespaceMember =
+        (d.code === 2339 || d.code === 2551) && text.includes("typeof import(");
+      if (!NAME_DIAGNOSTICS.has(d.code) && !namespaceMember) continue;
+      if (!byId.has(id)) byId.set(id, []);
+      const where = file.endsWith("dataset.ts") ? "dataset: " : "";
+      byId.get(id).push(where + text);
+    }
+  }
+  return byId;
 }
 
 async function main() {
   const mod = await loadModule();
-  const exports = publicExports();
   const examples = mod.loadStoryExamples();
+  const nameProblems = checkSnippetNames(examples);
 
   let failures = 0;
   const rows = [];
@@ -321,9 +337,8 @@ async function main() {
     const badImports = checkImports(ex.code);
     if (badImports.length) issues.push(`bad imports: ${badImports.join(", ")}`);
 
-    const missing = checkGofishNames(ex.code, `${ex.id}.tsx`, exports);
-    if (missing.length)
-      issues.push(`not exported by gofish-graphics: ${missing.join(", ")}`);
+    const missing = nameProblems.get(ex.id) ?? [];
+    if (missing.length) issues.push(`names: ${missing.join("; ")}`);
 
     if (ex.datasetCode) {
       const dsErrs = transpiles(ex.datasetCode, `${ex.id}.dataset.ts`);
