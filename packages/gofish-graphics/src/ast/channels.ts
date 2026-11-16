@@ -392,32 +392,41 @@ export function directValue(
   rows: readonly unknown[]
 ): unknown {
   if (typeof accessor !== "function") return accessor;
+  if (rows.length === 0) return undefined;
   const results = rows.map((row) => (accessor as (r: unknown) => unknown)(row));
-  if (results.length === 0) return undefined;
-  if (new Set(results.map(eqKey)).size === 1)
+  const keys = results.map(eqKey);
+  if (keys.every((k) => k === keys[0]))
     // `null` is a missing data value, which the channel folds as it folds
     // a missing value of a field.
     return results[0] === null ? () => null : results[0];
-  const NOT_DATA = Symbol();
-  const dataOf = (r: unknown, row: unknown): unknown => {
-    if (r === null) return null;
-    if (isValue(r as MaybeValue<unknown>)) return getValue(r as Value<unknown>);
-    if (typeof r === "string" && hasField(row, r))
-      return (row as Record<string, unknown>)[r];
-    return NOT_DATA;
-  };
-  const data = results.map((r, i) => dataOf(r, rows[i]));
-  if (data.includes(NOT_DATA)) {
-    const shown = [...new Set(results.map(eqKey))].slice(0, 4).join(", ");
-    throw new Error(
-      `[gofish] a channel function's value is not constant across the ` +
-        `rows of one mark (${shown}). One mark has one value, so the rows ` +
-        `may differ only when each value is data, a v(...) or a field name, ` +
-        `which the channel folds as it folds a field.`
-    );
-  }
-  const byRow = new Map(rows.map((row, i) => [row, data[i]]));
+  const byRow = new Map<unknown, unknown>();
+  results.forEach((r, i) => {
+    const data = dataOf(r, rows[i]);
+    if (data === NOT_DATA) {
+      const shown = [...new Set(keys)].slice(0, 4).join(", ");
+      throw new Error(
+        `[gofish] a channel function's value is not constant across the ` +
+          `rows of one mark (${shown}). One mark has one value, so the rows ` +
+          `may differ only when each value is data, a v(...) or a field name, ` +
+          `which the channel folds as it folds a field.`
+      );
+    }
+    byRow.set(rows[i], data);
+  });
   return (row: unknown) => byRow.get(row);
+}
+
+const NOT_DATA = Symbol("not data");
+
+/** One row's result of a channel function read as data ({@link directValue}):
+ *  `null`, a `v(...)`'s value, or the field a string names; anything else is
+ *  {@link NOT_DATA}. */
+function dataOf(r: unknown, row: unknown): unknown {
+  if (r === null) return null;
+  if (isValue(r as MaybeValue<unknown>)) return getValue(r as Value<unknown>);
+  if (typeof r === "string" && hasField(row, r))
+    return (row as Record<string, unknown>)[r];
+  return NOT_DATA;
 }
 
 /**

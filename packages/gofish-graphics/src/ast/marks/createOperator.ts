@@ -1131,6 +1131,9 @@ function applyChannel(
   // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
   // flagged channels where the user passed an explicit array.
   if (Array.isArray(val)) return val;
+  // Only size/area/pos consume a column; computing it for color/raw would
+  // add a spurious conflict-throw site.
+  const numeric = type === "size" || type === "area" || type === "pos";
   // A function is read as the value it returns would be, written in the
   // channel, over each entry's rows or the whole data (`directValue`). The
   // column is then the returned value's (a field name's), off `wholeData`.
@@ -1139,7 +1142,6 @@ function applyChannel(
       const given = directValue(val, items);
       // No value given: the channel is absent, as an option left out is.
       if (given === undefined) return undefined;
-      const numeric = type === "size" || type === "area" || type === "pos";
       return CHANNEL_INFER[type](
         given,
         items,
@@ -1153,12 +1155,8 @@ function applyChannel(
   // The column (its measure and its schema type) is loop-invariant across
   // split entries (it depends only on the accessor and what `wholeData`
   // carries, not on which items a given entry holds), so resolve it once per
-  // channel. Only size/area/pos consume it; computing it for color/raw would
-  // add a spurious conflict-throw site.
-  const column =
-    type === "size" || type === "area" || type === "pos"
-      ? resolveColumn(wholeData, val)
-      : undefined;
+  // channel.
+  const column = numeric ? resolveColumn(wholeData, val) : undefined;
   if (perEntry && entries !== undefined) {
     if (type === "pos" && discrete && isNonNumericEntryField(val, wholeData)) {
       return [...entries.keys()].map((_, i) =>

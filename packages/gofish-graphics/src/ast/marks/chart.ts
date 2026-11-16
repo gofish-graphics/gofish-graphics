@@ -670,9 +670,8 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   group: unknown
 ): Promise<O> {
   const paint = groupChannelsOf(type);
-  const pending = resolveChannelAccessors(opts, paint, () =>
-    rowsReached(group)
-  );
+  const rows = rowsReached(group);
+  const pending = resolveChannelAccessors(opts, paint, () => rows);
   let resolved = isThenable(pending) ? await pending : pending;
   const notConstant = (key: string, what: string) =>
     new Error(
@@ -685,7 +684,7 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   for (const key of Object.keys(paint)) {
     let raw = (resolved as any)[key];
     if (typeof raw === "function") {
-      raw = directValue(raw, rowsReached(group));
+      raw = directValue(raw, rows);
       if (typeof raw === "function")
         throw notConstant(key, "the accessor's value");
     }
@@ -693,15 +692,12 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
     else if (isField(raw)) raw = raw.name;
     else if (typeof raw === "string") {
       const name = toPath(raw)[0];
-      const rows = rowsReached(group);
       // A string no row has as a field is a literal.
-      if (name === undefined || !rows.some((row) => hasField(row, name))) {
-        resolved = { ...resolved, [key]: raw };
-        continue;
+      if (name !== undefined && rows.some((row) => hasField(row, name))) {
+        const values = projectByValues(group, raw);
+        if (values.length > 1) throw notConstant(key, `"${raw}"`);
+        raw = paint[key] === "raw" ? values[0] : colorValue(values[0], raw);
       }
-      const values = projectByValues(group, raw);
-      if (values.length > 1) throw notConstant(key, `"${raw}"`);
-      raw = paint[key] === "raw" ? values[0] : colorValue(values[0], raw);
     }
     resolved = { ...resolved, [key]: raw } as O;
   }
