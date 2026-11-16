@@ -61,7 +61,8 @@ import { setLiveSlots } from "../interaction/liveSlots";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
-import { GoFishRef } from "./_ref";
+import { GoFishRef, resolution } from "./_ref";
+import { axisIndex, directSlot } from "./constraints/shared";
 import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -574,6 +575,12 @@ export const nestEach: ResolveSharing = (childNodes) => {
  * pinned child with a node that has no data (a `region` and its text)
  * keeps the parent pinned, and the region stays where its data puts it.
  *
+ * A stack moves its parts along its axis ({@link laidByStack}): it lays
+ * each one's tail on the previous one's head, and its type adds a pinned
+ * part's width as a box (`distributeSpaceFold`). So a part of a stack is
+ * not placed by its own data there, even when it is pinned. A stack inside
+ * a stack on the same axis is such a part (#1357).
+ *
  * The one rule for "placed by its own data": the claim walk, layout and the
  * sharing of rooms all read it.
  */
@@ -583,8 +590,20 @@ export const placedByOwnData = (
   axis: 0 | 1
 ): boolean =>
   parent.sharing().sets[axis][i] === 0 &&
+  !laidByStack(parent, i, axis) &&
   originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
   originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
+
+/** Whether one of `parent`'s stacks (a glued `distribute`) along `axis` has
+ *  child `i` as a part, so the stack's chain places it there. */
+const laidByStack = (parent: GoFishNode, i: number, axis: 0 | 1): boolean =>
+  parent.constraints.some(
+    (c) =>
+      c.type === "distribute" &&
+      c.glue &&
+      axisIndex(c.dir) === axis &&
+      c.children.some((ref) => directSlot(resolution(parent), ref) === i)
+  );
 
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis

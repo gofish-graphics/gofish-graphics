@@ -1312,9 +1312,13 @@ authority record — the `PlacementOwnershipPlan` — through one predicate,
 `isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
 a POSITION scope on each axis) is a pure **data/scope** fact — a child in the
 layer's own set whose type on that axis is pinned, in a layer whose own type
-there is pinned too (`placedByOwnData`, the one
+there is pinned too, unless one of the layer's stacks on that axis has it
+as a part (`placedByOwnData`, the one
 rule the claim walk, layout and the sharing of rooms read; a free child still
-waits to be placed, and an origin-less one has a width but no place) —
+waits to be placed, and an origin-less one has a width but no place). A
+stack's chain places its parts end to end, so a stack inside a stack on the
+same axis, whose type is pinned, is placed by the outer chain and not at its
+own 0 (#1357) —
 collected _once_ at the layer boundary and
 handed to the solve as an explicit ownership input. The constraint path no longer
 reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
