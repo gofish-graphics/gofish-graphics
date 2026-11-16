@@ -1175,9 +1175,11 @@ helper, which falls back to the box when the node does not answer.
 - `crossSection` (`crossSection(g, axis)`): for each position u on the other
   axis, the interval the shape covers along `axis` there, as a function
   value (`Fun<Interval>`, `ast/fun.ts`). The fallback is the box: the box's
-  interval on `axis` at every u across the box. No node answers it yet; a
-  ribbon built from rows will. Its form before layout, in data units, is the
-  space's `profile` (see
+  interval on `axis` at every u across the box (`boxCrossSection`). The shape
+  form of `ribbon` and `line` (`Band`, `src/ast/shapes/band.tsx`) answers it
+  exactly along its value axis: the interval between its two edges at each
+  point of its parameter, in pixels. Its form before layout, in data units,
+  is the space's `profile` (see
   [Underlying Space](/internals/core/underlying-space)).
 
 - `enclosingCircle` (`enclosingCircle(g)`): a circle around the shape. The

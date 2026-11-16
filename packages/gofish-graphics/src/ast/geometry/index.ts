@@ -29,7 +29,7 @@ export interface Geometry
 
 export { boxOfDims, insetBox, ringExtent } from "./box";
 export type { Box, HasBox } from "./box";
-export { crossSection } from "./crossSection";
+export { crossSection, boxCrossSection } from "./crossSection";
 export type { HasCrossSection } from "./crossSection";
 export {
   enclosingCircle,

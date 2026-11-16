@@ -2229,7 +2229,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   line: leafMark("line", {
-    doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
+    doc: "A path. Given `x` and `y`, the shape form: the mark owns its rows and draws one path per group through them, sorted by `x`. Without them, the connector form: the path between the centers of consecutive marks another flow placed, in bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
     include: [filtered],
     fields: {
       // Center mode paints `fill: "none"` on the path (connect.tsx's
@@ -2259,7 +2259,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       curve: {
         type: t.ref("Curve"),
-        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().',
+        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
@@ -2295,11 +2295,17 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
+      x: ch.pos(
+        "Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The path runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `y`."
+      ),
+      y: ch.pos(
+        "Shape form: each row's y, a position on the y axis. Needs `x`."
+      ),
     },
   }),
 
   ribbon: leafMark("ribbon", {
-    doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
+    doc: "A filled band. Given `x` (with `h`) or `y` (with `w`), the shape form: the mark owns its rows and draws one band per group, from its baseline to `h` at each row's `x` (or to `w` at each row's `y`), sorted by it. Without them, the connector form: a band between the facing edges of consecutive marks another flow placed (sankey ribbons, bands between bars).",
     include: [filtered],
     fields: {
       fill: ch.color(
@@ -2322,7 +2328,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
         type: t.ref("Curve"),
-        doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.',
+        doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.',
       },
       from: { type: t.string },
       to: { type: t.string },
@@ -2340,12 +2346,18 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       w: {
         ...ch.size(),
-        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
+        doc: "Shape form with `y`: the band's width at each row, an amount from its baseline (negative values extend the other way). Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.",
       },
       h: {
         ...ch.size(),
-        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
+        doc: "Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.",
       },
+      x: ch.pos(
+        "Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`."
+      ),
+      y: ch.pos(
+        "Shape form: each row's y, for a band that runs up the y axis. Needs `w`."
+      ),
     },
   }),
 

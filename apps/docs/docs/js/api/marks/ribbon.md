@@ -4,7 +4,7 @@ order: 50
 
 # ribbon
 
-Fills a band between data points (edge-to-edge) — areas, streamgraphs, and sankey ribbons. Takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
+Fills a band. It has two forms. The shape form, `ribbon({ x, h })`, draws one band per group from its rows: an area chart. The connector form fills a band between marks another flow placed (edge to edge): streamgraphs, sankey ribbons, and bands between bars. It takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
 
 ::: gofish
 
@@ -30,6 +30,11 @@ gf.layer([
 ## Signature
 
 ```ts
+// Shape form
+ribbon({ x, h, fill?, stroke?, strokeWidth = 0, opacity?, blendMode = "normal", curve? })
+ribbon({ y, w, fill?, stroke?, strokeWidth = 0, opacity?, blendMode = "normal", curve? })
+
+// Connector form
 ribbon({ stroke?, strokeWidth = 0, opacity?, blendMode = "normal", dir = "x", curve?, along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
@@ -37,6 +42,25 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, blendMode = "normal", dir = "x", cu
 
 ::: gofish-ref ribbon
 :::
+
+## Shape form
+
+Given `x`, the ribbon draws one band per group, from 0 to `h` at each row's
+`x`. Given `y`, it draws from 0 to `w` at each row's `y`. The rows are sorted
+by `x` (or `y`), which must be a numeric or time column. Two rows of one
+group at the same `x` are an error: split them with
+[`group`](/js/api/operators/group) first. `h` may be negative, and the band
+then goes below the baseline. The curve defaults to `Curve.monotone()` and
+takes `Curve.linear()`, `Curve.step()`, `Curve.monotone()` or
+`Curve.smooth()`. A shape-form ribbon cannot be stacked yet.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(group({ by: "series" }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series", opacity: 0.5 }));
+```
+
+## Connector form
 
 `curve` takes a member of the [`Curve`](/js/api/curve) family:
 `Curve.linear()`, `Curve.bezier()`, `Curve.step()`, `Curve.monotone()`,
@@ -107,8 +131,8 @@ zBelow-by-default paint order and the desugaring to the explicit `layer([...])`
 
 When there's no earlier tier at all — just raw data that needs both fresh
 anchors and a connector — place `ribbon(...)` directly in `.mark()` position
-and skip `.layer()` too. This is the fused spelling of the [Area chart](/js/examples/area-chart)
-and [Ridgeline chart](/js/examples/ridgeline-chart) gallery examples:
+and skip `.layer()` too. This is the fused spelling of the
+[Ridgeline chart](/js/examples/ridgeline-chart) gallery example:
 
 ```ts
 chart(seafood, { axes: true })

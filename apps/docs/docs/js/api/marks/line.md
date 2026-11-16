@@ -4,7 +4,7 @@ order: 40
 
 # line
 
-Connects data points center-to-center with a line. Takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
+Draws a path. It has two forms. The shape form, `line({ x, y })`, draws one path per group through its rows. The connector form connects marks another flow placed, center to center. It takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
 
 ::: gofish
 
@@ -31,6 +31,10 @@ gf.layer([
 ## Signature
 
 ```ts
+// Shape form
+line({ x, y, stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve? })
+
+// Connector form
 line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve?, along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
@@ -46,7 +50,21 @@ connection axis, it smooths them with `Curve.monotone()`. Otherwise it draws a
 straight polyline, `Curve.linear()`. The [`Curve`](/js/api/curve#curves-through-data)
 page compares the curves and says how a line picks the knots of its curve.
 
-## Two forms
+## Shape form
+
+Given `x` and `y`, the line draws one path per group through its rows, sorted
+by `x`. `x` must be a numeric or time column. Two rows of one group at the
+same `x` are an error: split them with [`group`](/js/api/operators/group)
+first. The curve defaults to `Curve.monotone()` and takes `Curve.linear()`,
+`Curve.step()`, `Curve.monotone()` or `Curve.smooth()`.
+
+```ts
+chart(prices, { schema: { date: Unit.time() } })
+  .flow(group({ by: "symbol" }))
+  .mark(line({ x: "date", y: "price", stroke: "symbol" }));
+```
+
+## Connector forms
 
 - **Bag form** — `line()` over a `GoFishRef[]` (e.g. [`selectAll()`](/js/api/selection/ref)):
   one polyline through all the refs (the example above).

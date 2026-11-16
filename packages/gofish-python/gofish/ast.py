@@ -3620,9 +3620,13 @@ def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dic
 
 
 def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
-    """Line mark — a center-mode connector (the path between mark centers).
+    """Line mark: a path.
 
-    Three forms:
+    Given ``x`` and ``y``, the shape form: ``line(x="date", y="price")``
+    draws one path per group through its rows, sorted by ``x``.
+
+    Without them, a center-mode connector (the path between mark centers),
+    in three forms:
       - combinator form ``line([ref(a), ref(b)], dir="x")`` — the low-level
         connector over explicitly listed children (the drop-in for the removed
         ``connect``). ``source``/``target`` pin each endpoint to a normalized
@@ -3655,10 +3659,15 @@ def line(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
 
 
 def ribbon(children: Optional[List["Mark"]] = None, **options: Any) -> Mark:
-    """Ribbon mark — an edge-mode connector: a filled band between the facing
-    edges of consecutive marks (areas, streamgraphs, sankey ribbons).
+    """Ribbon mark: a filled band.
 
-    Three forms, like :func:`line`: combinator form
+    Given ``x`` (with ``h``) or ``y`` (with ``w``), the shape form:
+    ``ribbon(x="date", h="count")`` draws one band per group from 0 to ``h``
+    at each row's ``x``, sorted by ``x``.
+
+    Without them, an edge-mode connector: a filled band between the facing
+    edges of consecutive marks (streamgraphs, sankey ribbons), in three forms
+    like :func:`line`: combinator form
     ``ribbon([ref(a), ref(b)], dir="x")`` (the low-level connector over listed
     children — drop-in for the removed ``connect``), bag form fused over the
     chart's own flow (split inferred, or pinned with ``along="year"`` — see
