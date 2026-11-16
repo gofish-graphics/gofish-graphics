@@ -12,20 +12,9 @@
 import { chart, spread, rect, literal } from "../lib";
 import { inferColor } from "../ast/channels";
 import { isValue } from "../ast/data";
+import { check, items, report, textsOf } from "./testHelpers";
 
 declare const process: { exit(code: number): never };
-
-let passed = 0;
-let failed = 0;
-function check(name: string, ok: boolean, detail?: string): void {
-  if (ok) {
-    passed += 1;
-    console.log(`  ok  ${name}`);
-  } else {
-    failed += 1;
-    console.error(`  FAIL ${name}${detail ? ` — ${detail}` : ""}`);
-  }
-}
 
 const rows = [
   { k: "a", v: 3 },
@@ -42,15 +31,10 @@ async function drawn(fill: unknown): Promise<{
     .flow(spread({ by: "k", dir: "x" }))
     .mark(rect({ h: "v", fill: fill as any }))
     .toDisplayList({ w: 300, h: 200 });
-  const fills: string[] = [];
-  const texts: string[] = [];
-  const walk = (it: any) => {
-    if (it.kind === "rect") fills.push(it.style?.fill ?? it.fill);
-    if (it.kind === "text") texts.push(String(it.text));
-    (it.children ?? []).forEach(walk);
-  };
-  doc.items.forEach(walk);
-  return { fills, texts };
+  const fills = items(doc)
+    .filter((it) => it.kind === "rect")
+    .map((it) => it.style?.fill ?? it.fill);
+  return { fills, texts: textsOf(doc) };
 }
 
 async function main() {
@@ -91,8 +75,7 @@ async function main() {
     JSON.stringify(constant)
   );
 
-  console.log(`\n${passed} passed, ${failed} failed`);
-  if (failed > 0) process.exit(1);
+  report();
 }
 
 main().catch((e) => {
