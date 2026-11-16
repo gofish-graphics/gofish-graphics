@@ -67,6 +67,7 @@ from .charts import bar_chart
 # Strategy families (#1013): one module per family, with a lowercase file
 # name, bound here under its capitalized name. `Curve.monotone` and
 # `from gofish.curve import monotone` are the same function.
+from . import baseline as Baseline
 from . import bin as Bin
 from . import calendar as Calendar
 from . import color as Color
@@ -144,6 +145,7 @@ __all__ = [
     "pluck",
     "project",
     "bar_chart",
+    "Baseline",
     "Bin",
     "Color",
     "Coord",

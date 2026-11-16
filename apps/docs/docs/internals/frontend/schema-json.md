@@ -1170,6 +1170,10 @@ for the API.
           "description": "Stack semantics: children glued, sizes sum; spacing forced to 0.",
           "default": false
         },
+        "baseline": {
+          "$ref": "#/$defs/Baseline",
+          "description": "Where the spread puts its own 0, made by a call in the Baseline family: Baseline.start(), Baseline.end(), Baseline.middle() or Baseline.at(part, point). Baseline.wiggle() is for stack only. Not taken yet: a spread with a baseline is an error, and a stack takes it."
+        },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },
@@ -1273,6 +1277,13 @@ for the API.
           "type": "boolean",
           "description": "Reverse the children's order along dir.",
           "default": false
+        },
+        "baseline": {
+          "$ref": "#/$defs/Baseline",
+          "description": "Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error.",
+          "default": {
+            "kind": "start"
+          }
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
@@ -4788,6 +4799,80 @@ for the API.
         }
       ],
       "description": "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
+    },
+    "Baseline": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "start"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "end"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "middle"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "wiggle"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "at"
+            },
+            "part": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/Number"
+                }
+              ],
+              "description": "The part: a value of the `by` column in a flow, or a child index in the combinator form."
+            },
+            "point": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "enum": ["start", "middle", "end", "baseline"]
+                }
+              ],
+              "description": "Where on the part: a fraction of the way from its tail to its head (0 is its tail, 1 its head), or one of its anchors, \"start\", \"middle\", \"end\" or \"baseline\" (its tail)."
+            }
+          },
+          "required": ["kind", "part", "point"]
+        }
+      ],
+      "description": "Where a stack puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack`. The parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: the 0 is a baseline the parent places, as for a bar, and the stack shows no axis of its own."
     }
   }
 }

@@ -225,7 +225,7 @@ async function main() {
         {
           axis: 1,
           glue: true,
-          origin: { part: 0, fraction: 0 },
+          baseline: { kind: "start" },
         }
       );
       return originIs(s, "pinned") ? continuousInterval(s) : undefined;

@@ -931,3 +931,136 @@ export function derivative(f: Fun<number>, tolerance = TOLERANCE): Fun<number> {
     ...(f.knots ? { knots: f.knots } : {}),
   };
 }
+
+/** Multiply two functions of numbers pointwise, over the hull of their
+ *  domains. Outside its own domain each reads 0. Exact when both are: the
+ *  product of two polynomials on each common piece. */
+export function multiply(f: Fun<number>, g: Fun<number>): Fun<number> {
+  const domain = hull(f.domain, g.domain);
+  if (f.pieces && g.pieces) {
+    const pieces = overPieces<number, number>(
+      [f, g],
+      domain,
+      ([p, q], a, b, at0) => {
+        if (p === undefined || q === undefined)
+          return [{ from: a, to: b, at0, coeffs: [0] }];
+        const coeffs = new Array<number>(p.length + q.length - 1).fill(0);
+        p.forEach((pi, i) => q.forEach((qj, j) => (coeffs[i + j] += pi * qj)));
+        return [{ from: a, to: b, at0, coeffs: trim(coeffs) }];
+      }
+    );
+    return exact(domain, pieces);
+  }
+  return zip(f, g, (a, b) => a * b, [0, 0]);
+}
+
+/**
+ * The running integral of `f` from `from`: the function whose value at `t`
+ * is the integral of `f` from `from` to `t`, and whose derivative is `f`.
+ * Exact for an exact function: each piece's polynomial integrated in closed
+ * form, each piece continuing from where the one before it ends. For an
+ * opaque function its domain must be finite, and the result holds cubic
+ * pieces that match the integral to `tolerance` (absolute), with `f` as
+ * their slope at their ends; they split at `f`'s knots and wherever the
+ * integral bends, so the result follows the function, not the places it was
+ * sampled.
+ */
+export function antiderivative(
+  f: Fun<number>,
+  from: number = f.domain.min,
+  tolerance = TOLERANCE
+): Fun<number> {
+  if (!Number.isFinite(from))
+    throw new Error(
+      `antiderivative: the integral runs from ${from}; give a finite start.`
+    );
+  if (f.pieces) {
+    // Each span's integral as a polynomial about its own origin, plus a
+    // constant that makes it start where the span before it ends. A point
+    // piece holds the value the span before it reaches there.
+    const out: Piece<number>[] = [];
+    let reached = 0;
+    for (const p of f.pieces) {
+      if (isPoint(p)) {
+        out.push({ ...p, coeffs: [reached] });
+        continue;
+      }
+      const coeffs = [0, ...p.coeffs.map((c, k) => c / (k + 1))];
+      if (out.length > 0 && Number.isFinite(p.from))
+        coeffs[0] = reached - evalPoly(coeffs, p.from - p.at0);
+      const piece = { ...p, coeffs };
+      out.push(piece);
+      if (Number.isFinite(p.to)) reached = evalPoly(coeffs, p.to - p.at0);
+    }
+    // Then the whole is moved so it reads 0 at `from`.
+    const zero = exact(f.domain, out).at(from);
+    return exact(
+      f.domain,
+      out.map((p) => ({
+        ...p,
+        coeffs: [p.coeffs[0] - zero, ...p.coeffs.slice(1)],
+      }))
+    );
+  }
+  finiteDomain(f, "antiderivative");
+  const ts = [...new Set([...breakpoints(f), from])].sort((a, b) => a - b);
+  // The integral at every breakpoint, from the first.
+  const values = new Map<number, number>([[ts[0], 0]]);
+  for (let i = 0; i + 1 < ts.length; i++)
+    values.set(
+      ts[i + 1],
+      values.get(ts[i])! + simpson(f.at, ts[i], ts[i + 1], tolerance / 4)
+    );
+  const zero = values.get(from)!;
+  // Cubic Hermite pieces through the integral, with `f` as the slope at
+  // each end, bisected until they match the integral inside.
+  const pieces: Piece<number>[] = [];
+  const fit = (
+    a: number,
+    b: number,
+    Fa: number,
+    Fb: number,
+    depth: number
+  ): void => {
+    const h = b - a;
+    const da = f.at(a);
+    const db = f.at(b);
+    const coeffs = [
+      Fa,
+      da,
+      (3 * (Fb - Fa)) / (h * h) - (2 * da + db) / h,
+      (da + db) / (h * h) - (2 * (Fb - Fa)) / (h * h * h),
+    ];
+    // A cubic can match the middle and miss elsewhere (a sine's integral
+    // over a half period, say), so the check reads the quarters too.
+    const m = (a + b) / 2;
+    const Fm = Fa + simpson(f.at, a, m, tolerance / 4);
+    const misses = [h / 4, h / 2, (3 * h) / 4].some(
+      (t) =>
+        Math.abs(
+          evalPoly(coeffs, t) -
+            (t === h / 2 ? Fm : Fa + simpson(f.at, a, a + t, tolerance / 4))
+        ) > tolerance
+    );
+    if (depth > 0 && misses) {
+      fit(a, m, Fa, Fm, depth - 1);
+      fit(m, b, Fm, Fb, depth - 1);
+    } else pieces.push({ from: a, to: b, at0: a, coeffs });
+  };
+  for (let i = 0; i + 1 < ts.length; i++)
+    fit(
+      ts[i],
+      ts[i + 1],
+      values.get(ts[i])! - zero,
+      values.get(ts[i + 1])! - zero,
+      24
+    );
+  const last = ts[ts.length - 1];
+  pieces.push({
+    from: last,
+    to: last,
+    at0: last,
+    coeffs: [values.get(last)! - zero],
+  });
+  return exact(f.domain, pieces);
+}

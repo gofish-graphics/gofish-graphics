@@ -21,7 +21,7 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 // Operator form (inside .flow):
-spread({ by?, dir, spacing?, alignment?, glue?, ... })
+spread({ by?, dir, spacing?, alignment?, glue?, baseline?, ... })
 
 // Combinator form (apply n marks to one datum):
 spread({ dir, ... }, [m1, m2, ...])

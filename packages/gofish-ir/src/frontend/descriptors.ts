@@ -539,11 +539,12 @@ const axisOptions: FieldSpec = {
 export interface StrategyKind {
   doc: string;
   params: FieldGroup;
-  /** The param the factory takes as its argument, not in an options
-   *  object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`. In Python it
-   *  is a positional-only parameter. The wire form is the same either way
+  /** The params the factory takes as its arguments, in order, not in an
+   *  options object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`, and
+   *  `Baseline.at("Neutral", 0.5)`. In Python they are positional-only
+   *  parameters. The wire form is the same either way
    *  (`{ kind: "step", size: 0.5 }`). */
-  positional?: string;
+  positional?: readonly string[];
 }
 
 /** A factory that makes a kind with some of its params already set
@@ -843,7 +844,7 @@ export const STRATEGIES = {
     kinds: {
       step: {
         doc: "Cells of one width, aligned to multiples of it: a value is in the cell that starts at the largest multiple of the width at or below it. Every value has a cell, whatever the domain.",
-        positional: "size",
+        positional: ["size"],
         params: {
           size: {
             type: t.num({ exclusiveMin: 0, finite: true }),
@@ -854,7 +855,7 @@ export const STRATEGIES = {
       },
       thresholds: {
         doc: "Cells fitted to the domain of the field in the chart's data, which they cover with both ends included: a value on the last edge falls in the last cell, as in numpy's `histogram` and d3's `bin`.",
-        positional: "thresholds",
+        positional: ["thresholds"],
         params: {
           thresholds: {
             type: t.union(
@@ -868,7 +869,7 @@ export const STRATEGIES = {
       },
       quantiles: {
         doc: "Cells whose inner edges are quantiles of the field's values in the chart's data (type 7, the default of numpy and d3), with the domain's ends as the outer edges, as in polars' and pandas' `qcut`. Two edges at one value, as many equal values can give, are an error: ask for fewer cells.",
-        positional: "quantiles",
+        positional: ["quantiles"],
         params: {
           quantiles: {
             type: t.union(
@@ -1095,10 +1096,50 @@ export const STRATEGIES = {
       },
     },
   },
+  Baseline: {
+    doc: "Where a stack puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack`. The parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: the 0 is a baseline the parent places, as for a bar, and the stack shows no axis of its own.",
+    kinds: {
+      start: {
+        doc: "The start of the stack, where its first part's tail is. The default.",
+        params: {},
+      },
+      end: {
+        doc: "The end of the stack, where its last part's head is, so the parts lie before 0: bars that grow the other way.",
+        params: {},
+      },
+      middle: {
+        doc: "Halfway from the start of the stack to its end, so the stack is centered on its baseline (d3's `stackOffsetSilhouette`).",
+        params: {},
+      },
+      wiggle: {
+        doc: "A baseline that moves along the cross axis to keep the bands as flat as it can: at each place, the slope of the baseline cancels the average slope of the middles of the parts, weighted by their thickness (d3's `stackOffsetWiggle`, Byron and Wattenberg 2008). A streamgraph. Over parts that are boxes it is `start`. Not on `spread`.",
+        params: {},
+      },
+      at: {
+        doc: "A point on one part. A part the data lacks is placed by the order of the `by` column (its declared levels) and moves nothing: the baseline falls on the boundary where the part would be. `Trait.diverging()` on the `by` column's unit is this baseline at the midpoint of the order.",
+        positional: ["part", "point"],
+        params: {
+          part: {
+            type: t.union(t.string, t.number),
+            required: true,
+            doc: "The part: a value of the `by` column in a flow, or a child index in the combinator form.",
+          },
+          point: {
+            type: t.union(
+              t.num({ min: 0, max: 1 }),
+              t.enum("start", "middle", "end", "baseline")
+            ),
+            required: true,
+            doc: 'Where on the part: a fraction of the way from its tail to its head (0 is its tail, 1 its head), or one of its anchors, "start", "middle", "end" or "baseline" (its tail).',
+          },
+        },
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
- *  `"Bin"`, `"Calendar"`, `"Shape"` or `"Place"`. */
+ *  `"Bin"`, `"Calendar"`, `"Shape"`, `"Place"` or `"Baseline"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -1650,6 +1691,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: false,
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
+      baseline: {
+        type: t.ref("Baseline"),
+        doc: "Where the spread puts its own 0, made by a call in the Baseline family: Baseline.start(), Baseline.end(), Baseline.middle() or Baseline.at(part, point). Baseline.wiggle() is for stack only. Not taken yet: a spread with a baseline is an error, and a stack takes it.",
+      },
       axes: { type: t.ref("AxesOptions") },
       ...operatorBoxFields,
       ...spreadSizeField,
@@ -1693,6 +1738,11 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.boolean,
         default: false,
         doc: "Reverse the children's order along dir.",
+      },
+      baseline: {
+        type: t.ref("Baseline"),
+        default: { kind: "start" },
+        doc: "Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error.",
       },
       axes: { type: t.ref("AxesOptions") },
       ...operatorBoxFields,

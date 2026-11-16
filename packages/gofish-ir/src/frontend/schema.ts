@@ -318,6 +318,9 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Where the result puts its own 0 (`Baseline`). Not taken yet without
+   *  `glue`. */
+  baseline?: BaselineIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -347,6 +350,8 @@ export interface StackOperator
   alignment?: string;
   anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
+  /** Where the stack puts its own 0 (`Baseline`). */
+  baseline?: BaselineIR;
   /** Per-entry size — see `SpreadOperator`. */
   size?: ChannelValue;
   axes?: AxesOptions;
@@ -619,6 +624,22 @@ export type OverlapIR =
       padding?: number;
       seed?: number;
     };
+
+/** A point on one part of a stack: a fraction of the way from the part's
+ *  tail to its head, or one of its anchors (`"baseline"` is its tail). */
+export type BaselinePointIR = number | "start" | "middle" | "end" | "baseline";
+
+/** Where a stack puts its own 0, made by a call in the `Baseline` family
+ *  (`Baseline.start()`, `Baseline.end()`, `Baseline.middle()`,
+ *  `Baseline.wiggle()`, `Baseline.at(part, point)`). The `part` of `at` is a
+ *  value of the `by` column in a flow, and a child index in the combinator
+ *  form. */
+export type BaselineIR =
+  | { kind: "start" }
+  | { kind: "end" }
+  | { kind: "middle" }
+  | { kind: "wiggle" }
+  | { kind: "at"; part: string | number; point: BaselinePointIR };
 
 /** How a path runs through its points, made by a call in the `Curve` family
  *  (`Curve.monotone()`, `Curve.arc({ direction: "down" })`, ...). */

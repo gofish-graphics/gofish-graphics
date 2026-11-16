@@ -31,15 +31,22 @@ import {
 } from "../underlyingSpace";
 import {
   add,
+  antiderivative,
+  breakpoints,
   constant,
+  derivative,
   field,
+  isConstant,
   maximum,
+  multiply,
   record,
   scale,
   subtract,
   upperEnvelope,
+  zip,
   type Fun,
 } from "../fun";
+import type { Baseline, Point } from "../../families/baseline";
 import { currentUnits } from "../measure";
 import {
   inCoordinateSpace,
@@ -76,35 +83,48 @@ export interface DistributeOptions {
   /** The grouping field's values have an order (`HasOrder`, from the chart's
    *  `schema`), so an ORDINAL fold's keys do too ({@link ORDINAL_TYPE}). */
   hasOrder?: boolean;
-  /** A stack's origin (glue only), its part one of the operands. Omitted, it
-   *  is the tail of the first part laid out. */
-  origin?: StackOrigin<ConstraintRef>;
+  /** Where a stack puts its own 0 (glue only), its `at` part one of the
+   *  operands. Omitted, it is `Baseline.start()`, the tail of the first part
+   *  laid out. */
+  baseline?: StackBaseline<ConstraintRef>;
   /** The grouping field's order has a midpoint (`HasMidpoint`, from the
-   *  chart's `schema`), which set the stack's origin (glue only). Each part
-   *  then lies on the side of the midpoint its level is on, so the fold
+   *  chart's `schema`), which set the stack's baseline (glue only). Each
+   *  part then lies on the side of the midpoint its level is on, so the fold
    *  checks that every part is a nonnegative amount. */
   hasMidpoint?: boolean;
 }
 
 /**
- * A stack's origin: its baseline, the 0 its running sums start from, which
- * the layer seats at the measure's origin (#773). It is the point `fraction`
- * of the way from the tail of part `part` to its head (see
- * {@link RelationAnchor}). The default is the first part's tail. A stack over
- * a column with `HasMidpoint` puts it at the midpoint of the column's order
- * (#984, `stackOrigin` in schema.ts). Whatever the origin, a stack whose
- * parts are all nonnegative amounts holds amounts measured away from its 0
- * on both sides, so its space is {@link CONTINUOUS_TYPE.mirrored}; the fold
- * reads that from the parts.
+ * A stack's baseline (`Baseline`): the 0 its running sums are measured from,
+ * which the layer seats at the measure's origin (#773). The parts lie end to
+ * end, each part's tail on the previous part's head (see
+ * {@link RelationAnchor}), from the start of the chain (the first part's
+ * tail) to its end (the last part's head). `start` is the chain's start, the
+ * default; `end` its end; `middle` halfway between; `at` a point on one
+ * part; `wiggle` a 0 that moves with u ({@link wiggleZero}). A stack over a
+ * column with `HasMidpoint` puts it at the midpoint of the column's order
+ * (#984, `stackBaseline` in schema.ts), an `at`. A stack whose 0 is data 0
+ * (any baseline but `middle` and `wiggle`) and whose parts are all
+ * nonnegative amounts holds amounts measured away from its 0 on both sides,
+ * so its space is {@link CONTINUOUS_TYPE.mirrored}; the fold reads that from
+ * the parts. Under `middle` and `wiggle` the 0 is no data value, and the
+ * stack's space is free: a baseline its parent places.
  *
- * `part` names the part in three ways on the way down: a child index from
- * the split (`stackOrigin`), an operand on the constraint, and an index
- * into the parts in placement order once resolved ({@link distributeOrigin}).
+ * The `part` of an `at` names the part in four ways on the way down: a
+ * value of the `by` column (or a child index in the combinator form) from
+ * the user, a child index from the split (`stackBaseline` in schema.ts), an
+ * operand on the constraint, and an index into the parts in placement order
+ * once resolved ({@link resolveBaseline}).
  */
-export type StackOrigin<Part> = {
-  part: Part;
-  fraction: number;
-};
+export type StackBaseline<Part> =
+  | Exclude<Baseline, { kind: "at" }>
+  | { kind: "at"; part: Part; point: Point };
+
+/** Whether a stack's 0 is data 0 on its axis: under `middle` and `wiggle`
+ *  it is not (a position is no amount from the stack's middle), so the
+ *  stack's space is free, a baseline its parent places. */
+const keepsZero = (baseline: StackBaseline<unknown>): boolean =>
+  baseline.kind !== "middle" && baseline.kind !== "wiggle";
 
 export interface DistributeConstraint {
   type: "distribute";
@@ -118,7 +138,7 @@ export interface DistributeConstraint {
   children: ConstraintRef[];
   measure?: string;
   hasOrder?: boolean;
-  origin?: StackOrigin<ConstraintRef>;
+  baseline?: StackBaseline<ConstraintRef>;
   hasMidpoint?: boolean;
 }
 
@@ -137,29 +157,29 @@ export const createDistributeConstraint = (
   children,
   measure: options.measure,
   hasOrder: options.hasOrder,
-  origin: options.glue ? options.origin : undefined,
+  baseline: options.glue ? options.baseline : undefined,
   hasMidpoint: options.glue ? options.hasMidpoint : undefined,
 });
 
-/** The {@link StackOrigin} of a stack over `ordered` (its parts in placement
- *  order), with `part` an index into `ordered`: the declared origin, else the
- *  first part's tail. */
-export function distributeOrigin(
-  constraint: Pick<DistributeConstraint, "origin">,
+/** The {@link StackBaseline} of a stack over `ordered` (its parts in
+ *  placement order), with an `at` part an index into `ordered`: the declared
+ *  baseline, else `start`. */
+export function resolveBaseline(
+  constraint: Pick<DistributeConstraint, "baseline">,
   ordered: readonly ConstraintRef[],
   keyOf: KeyOf
-): StackOrigin<number> {
-  const origin = constraint.origin;
-  if (origin === undefined) return { part: 0, fraction: 0 };
-  const key = keyOf(origin.part);
+): StackBaseline<number> {
+  const baseline = constraint.baseline ?? { kind: "start" };
+  if (baseline.kind !== "at") return baseline;
+  const key = keyOf(baseline.part);
   const part = ordered.findIndex((child) => keyOf(child) === key);
   if (part < 0) {
     throw new Error(
-      `stack: its origin is on part "${origin.part.name}", which is not one of ` +
-        `its parts (${ordered.map((child) => `"${child.name}"`).join(", ")}).`
+      `stack: its baseline is on part "${baseline.part.name}", which is not ` +
+        `one of its parts (${ordered.map((child) => `"${child.name}"`).join(", ")}).`
     );
   }
-  return { ...origin, part };
+  return { ...baseline, part };
 }
 
 /** `children` in placement order — reversed for `order: "reverse"`. The result
@@ -267,15 +287,33 @@ export function lowerDistributePlacement<T>(
     });
   }
   // A spread's chain starts at its first member. A stack's chain also carries
-  // its {@link StackOrigin}, which the solver's free-origin fallback seats at
-  // the measure's origin (#773).
-  const origin = distributeOrigin(constraint, ordered, keyOf);
-  emitter.include({
+  // its {@link StackBaseline}, which the solver's free-origin fallback seats
+  // at the measure's origin (#773): a point on one part, or a place along
+  // the whole chain. Placement lays parts that are boxes, whose `wiggle` is
+  // their `start` (its slope is 0 where no part changes along u).
+  if (!constraint.glue) {
+    emitter.include({ axis: constraint.dir, key: keys[0], owner });
+    return;
+  }
+  const baseline = resolveBaseline(constraint, ordered, keyOf);
+  const along = (at: number) => ({
     axis: constraint.dir,
-    key: keys[origin.part],
+    key: keys[0],
     owner,
-    origin: constraint.glue ? origin.fraction : undefined,
+    origin: { along: at, chain: keys },
   });
+  emitter.include(
+    baseline.kind === "at"
+      ? {
+          axis: constraint.dir,
+          key: keys[baseline.part],
+          owner,
+          origin: { point: baseline.point },
+        }
+      : along(
+          baseline.kind === "end" ? 1 : baseline.kind === "middle" ? 0.5 : 0
+        )
+  );
 }
 
 /** The options a distribute fold reads (shared by the type fold and the claim
@@ -297,9 +335,9 @@ export type DistributeFoldOptions = {
   /** True when every contributing child was POSITIONALLY keyed (a `spread`
    *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
   anonymous?: boolean;
-  /** A stack's {@link StackOrigin}, its part an index into `targetSpaces`
-   *  (see {@link distributeOrigin}). */
-  origin: StackOrigin<number>;
+  /** A stack's {@link StackBaseline}, its `at` part an index into
+   *  `targetSpaces` (see {@link resolveBaseline}). */
+  baseline: StackBaseline<number>;
   /** See {@link DistributeOptions.hasMidpoint}. */
   hasMidpoint?: boolean;
 };
@@ -389,7 +427,7 @@ export function distributeSpaceFold(
       if (t.origin === "free")
         for (const q of t.measure?.summands ?? [])
           currentUnits().sum(q, "stack");
-    const { origin } = opts;
+    const { baseline } = opts;
     const sides = targets.map(tailSides);
     sides.forEach((part, i) => {
       if (opts.hasMidpoint && maximum(field(part, "descent")) > 0) {
@@ -408,19 +446,25 @@ export function distributeSpaceFold(
     });
     // The chain runs at every u, and the stack covers the largest reach on
     // each side over u.
-    const reach = chainFold(sides, origin);
+    const reach = chainFold(sides, baseline);
     const above = field(reach, "ascent");
     const below = field(reach, "descent");
+    // A stack whose 0 is data 0 is a pinned space. One whose 0 is its
+    // middle, or a line that moves with u, has a 0 that is no data value: it
+    // is a baseline a parent places (a free space, whose 0 a baseline align
+    // lines up across stacks).
     const space = CONTINUOUS(
       Interval.interval(-maximum(below), maximum(above)),
-      "pinned",
+      keepsZero(baseline) ? "pinned" : "free",
       childMeasure
     );
-    // Every part a nonnegative amount (none reaches below its tail): the
-    // stack holds amounts measured away from its 0 on both sides.
+    // Every part a nonnegative amount (none reaches below its tail), on a
+    // stack whose 0 is data 0: the stack holds amounts measured away from
+    // its 0 on both sides.
     return mirrored(
       withProfile(space, record({ min: scale(below, -1), max: above })),
-      sides.every((part) => maximum(field(part, "descent")) <= 0)
+      keepsZero(baseline) &&
+        sides.every((part) => maximum(field(part, "descent")) <= 0)
     );
   }
 
@@ -455,16 +499,18 @@ export type Sides = { ascent: number; descent: number };
  * The chain fold behind a stack's type, at every u across: lay each part's
  * tail on the previous part's head (the tail moved by `ascent − descent`, its
  * parts are {@link tailSides}), from a first tail at 0, and return the highest
- * reach above `origin` and the lowest reach below it, over every part (and
- * the 0 the chain starts at). `origin` is the point `fraction` of the way from
- * its part's tail to its head ({@link StackOrigin}). Over parts that are one
- * interval everywhere (boxes) every function is a constant, and the numbers
- * are the ones a fold over plain numbers gives. (A claim is its layer's
- * plan's, `solver/plan.ts`, which lays a chain by the placement solve.)
+ * reach above the stack's 0 and the lowest reach below it, over every part
+ * (and the point the chain starts at). The 0 is where `baseline` puts it
+ * ({@link StackBaseline}): the chain's start, its end, halfway, a point on
+ * one part (a fraction of the way from its tail to its head, or one of its
+ * anchors), or the {@link wiggleZero}. Over parts that are one interval
+ * everywhere (boxes) every function is a constant, and the numbers are the
+ * ones a fold over plain numbers gives. (A claim is its layer's plan's,
+ * `solver/plan.ts`, which lays a chain by the placement solve.)
  */
 export function chainFold(
   parts: Fun<Sides>[],
-  origin: StackOrigin<number>
+  baseline: StackBaseline<number>
 ): Fun<Sides> {
   const domain = parts
     .map((p) => p.domain)
@@ -472,6 +518,9 @@ export function chainFold(
   const start = constant<number>(0, domain);
   const up: Fun<number>[] = [start];
   const down: Fun<number>[] = [start];
+  // Each part's middle and thickness, which `wiggle` reads.
+  const middles: Fun<number>[] = [];
+  const thicknesses: Fun<number>[] = [];
   let at = start;
   let zero = start;
   parts.forEach((part, k) => {
@@ -480,13 +529,72 @@ export function chainFold(
     const step = subtract(ascent, descent);
     up.push(add(at, ascent));
     down.push(subtract(descent, at));
-    if (k === origin.part) zero = add(at, scale(step, origin.fraction));
+    middles.push(add(at, scale(step, 0.5)));
+    thicknesses.push(add(ascent, descent));
+    if (baseline.kind === "at" && k === baseline.part)
+      zero = add(at, pointOnPart(baseline.point, ascent, descent, step));
     at = add(at, step);
   });
+  if (baseline.kind === "end") zero = at;
+  if (baseline.kind === "middle") zero = scale(at, 0.5);
+  if (baseline.kind === "wiggle") zero = wiggleZero(middles, thicknesses);
   return record({
     ascent: subtract(upperEnvelope(up), zero),
     descent: add(upperEnvelope(down), zero),
   });
+}
+
+/** A point on a part, from its tail: a fraction of its step from tail to
+ *  head, or one of its anchors. Its box spans `[−descent, ascent]` about its
+ *  tail, and `"baseline"` is the tail itself. */
+function pointOnPart(
+  point: Point,
+  ascent: Fun<number>,
+  descent: Fun<number>,
+  step: Fun<number>
+): Fun<number> {
+  if (typeof point === "number") return scale(step, point);
+  if (point === "start") return scale(descent, -1);
+  if (point === "end") return ascent;
+  if (point === "middle") return scale(step, 0.5);
+  return constant<number>(0, step.domain);
+}
+
+/** One over the value of a constant total, or 0 for an empty one. */
+const reciprocalOf = (total: Fun<number>): number => {
+  const v = total.pieces![0].coeffs[0];
+  return v === 0 ? 0 : 1 / v;
+};
+
+/**
+ * The 0 of a `wiggle` stack, measured from the chain's start, at every u:
+ * the function whose slope is the average slope of the parts' middles,
+ * weighted by their thickness, `Σ wᵢ mᵢ′ / Σ wᵢ` (0 where every part is
+ * empty), and which is 0 at the first u. Moving the 0 with the middles
+ * leaves the bands as flat as they can be: it is d3's `stackOffsetWiggle`
+ * (Byron and Wattenberg 2008) in the limit of fine data, since d3 sums the
+ * same slopes as backward differences between its samples. It is defined
+ * on the functions, not on their knots, so sampling the same curves more
+ * finely does not move it. Over parts that are boxes every slope is 0, and
+ * so is the 0.
+ */
+export function wiggleZero(
+  middles: Fun<number>[],
+  thicknesses: Fun<number>[]
+): Fun<number> {
+  const sum = (fs: Fun<number>[]) => fs.reduce((a, b) => add(a, b));
+  const weighted = sum(
+    middles.map((m, i) => multiply(thicknesses[i], derivative(m)))
+  );
+  const total = sum(thicknesses);
+  // A constant total divides as a scale, which keeps the slope exact.
+  const slope = isConstant(total)
+    ? scale(weighted, reciprocalOf(total))
+    : zip(weighted, total, (n, d) => (d === 0 ? 0 : n / d), [0, 0]);
+  const first = [...middles, ...thicknesses]
+    .flatMap(breakpoints)
+    .filter(Number.isFinite);
+  return antiderivative(slope, first.length > 0 ? Math.min(...first) : 0);
 }
 
 /** The whole line. */

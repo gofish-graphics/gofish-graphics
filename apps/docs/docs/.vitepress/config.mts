@@ -584,6 +584,11 @@ export default defineConfig({
               items: [{ text: "Curve", link: "/js/api/curve" }],
             },
             {
+              text: "Baseline",
+              collapsed: true,
+              items: [{ text: "Baseline", link: "/js/api/baseline" }],
+            },
+            {
               text: "Bin",
               collapsed: true,
               items: [{ text: "Bin", link: "/js/api/bin" }],
@@ -711,6 +716,11 @@ export default defineConfig({
               text: "Curve",
               collapsed: true,
               items: [{ text: "Curve", link: "/python/api/curve" }],
+            },
+            {
+              text: "Baseline",
+              collapsed: true,
+              items: [{ text: "Baseline", link: "/python/api/baseline" }],
             },
             {
               text: "Bin",

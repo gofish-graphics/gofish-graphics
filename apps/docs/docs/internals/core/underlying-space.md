@@ -21,6 +21,7 @@ covers:
   - packages/gofish-graphics/src/ast/cells.ts
   - packages/gofish-graphics/src/ast/polygonCells.ts
   - packages/gofish-graphics/src/ast/structExpr.ts
+  - packages/gofish-graphics/src/families/baseline.ts
   - packages/gofish-graphics/src/families/bin.ts
   - packages/gofish-graphics/src/families/calendar.ts
   - packages/gofish-graphics/src/families/domain.ts
@@ -308,8 +309,11 @@ A function value built from rows is exact: it holds one polynomial per
 interval between knots (degree 0 for `Curve.step`, 1 for `Curve.linear`, and
 the cubics of `spline.ts` for `Curve.monotone` and `Curve.smooth`). Sums,
 scales, envelopes and their maxima are exact again, so the folds below get
-the same numbers from constant profiles as from plain intervals. A function
-the module cannot see into (a kernel density) is read to a tolerance.
+the same numbers from constant profiles as from plain intervals. So are
+products (`multiply`) and running integrals (`antiderivative`): a polynomial
+piece integrates in closed form. A function the module cannot see into (a
+kernel density) is read to a tolerance, and its running integral is a set of
+cubic pieces that match it to that tolerance.
 
 The folds carry profiles pointwise. A stack's chain fold runs at every u
 (`tailSides` and `chainFold` take and return functions), and its type's
@@ -372,22 +376,50 @@ the two sides:
   part's tail is where placement puts it (`tailSides`): a free part's tail is
   its baseline, and a pinned or origin-less part, which has no data baseline
   for placement, lies above its tail as a box.
-- The 0 of a stack is its **origin**: its first part's tail by default, as
-  above. A stack whose `by` column has `HasMidpoint` (see
-  [Column types](#column-types-the-chart-schema)) puts its origin at the
-  midpoint of the column's order instead, and the fold shifts the extent so
-  the midpoint sits at 0: the parts before the midpoint (and the share of the
-  level it falls in that lies before it) lie below 0, the rest above. Parts
-  (5, 10, 20, 40, 25) centered on the middle of the 20 span `[−25, 75]`. The
-  parts of a centered stack must be nonnegative: each lies on the side of
-  the midpoint its level is on, so a negative one is an error naming
-  `HasMidpoint`. The split tells the fold that the column has the trait
-  (`hasMidpoint`, beside `hasOrder`).
+- The 0 of a stack is its **baseline** (`StackBaseline` in `distribute.ts`,
+  the `Baseline` family, `families/baseline.ts`). The parts run from the
+  start of the chain (the first part's tail) to its end (the last part's
+  head). `Baseline.start()` is the start, as above, and the default.
+  `Baseline.end()` is the end, `Baseline.middle()` is halfway between, and
+  `Baseline.at(part, point)` is a point on one part: a fraction of the way
+  from its tail to its head, or one of its anchors (`"baseline"` is its
+  tail). `chainFold` computes the 0 at every u and measures both reaches
+  from it. In a flow, the `at` part is a value of the `by` column, which the
+  split turns into a child index (`stackBaseline` in `schema.ts`). A part the
+  data lacks takes no room, so the split places the 0 on the boundary where
+  it would be, by the column's declared order (`baselineAlongOrder`); with no
+  declared order that is an error. On the way down the part is a child
+  index, an operand of the constraint, and then an index into the parts in
+  placement order (`resolveBaseline`). Placement carries the same point to
+  the free-origin seat (`StackPoint` in `placementFacts.ts`): a point on one
+  part, or a place `along` the whole chain for `end` and `middle`.
+- A stack whose `by` column has `HasMidpoint` (see
+  [Column types](#column-types-the-chart-schema)) is `Baseline.at` at the
+  midpoint of the column's order: the split builds that baseline from the
+  trait, and the fold shifts the extent so the midpoint sits at 0. The parts
+  before the midpoint (and the share of the level it falls in that lies
+  before it) lie below 0, the rest above. Parts (5, 10, 20, 40, 25) centered
+  on the middle of the 20 span `[−25, 75]`. The parts of a centered stack
+  must be nonnegative: each lies on the side of the midpoint its level is
+  on, so a negative one is an error naming `HasMidpoint`. The split tells
+  the fold that the column has the trait (`hasMidpoint`, beside
+  `hasOrder`). A stack given both the trait and a `baseline` is an error:
+  the trait already puts the 0.
+- Under `Baseline.middle()` and `Baseline.wiggle()` the stack's 0 is no data
+  value, so the stack's space is **free**, not pinned: a baseline its parent
+  places, as it places a bar's. A spread of middle stacks lines their
+  middles up on one line. `Baseline.wiggle()` moves its 0 with u: its slope
+  is the average slope of the parts' middles, weighted by their thickness,
+  `Σ wᵢ mᵢ′ / Σ wᵢ` (`wiggleZero`), integrated from the first u. That is
+  d3's `stackOffsetWiggle` in the limit of fine data. It is defined on the
+  functions, so more knots on the same curves do not move it. Over boxes
+  every slope is 0 and it is the start.
 - A stack whose parts are all nonnegative amounts (no part reaches below its
-  tail) builds a **mirrored** space (`CONTINUOUS_TYPE.mirrored`): both sides
-  of 0 hold amounts measured away from it, so an axis over it labels each
-  tick with its distance from 0. The fold reads this from the parts, not
-  from the origin. With the 0 at the first part's tail every tick is already
+  tail), on a 0 that is data 0, builds a **mirrored** space
+  (`CONTINUOUS_TYPE.mirrored`): both sides of 0 hold amounts measured away
+  from it, so an axis over it labels each tick with its distance from 0. The
+  fold reads this from the parts, not from the baseline (a free middle or
+  wiggle stack is never mirrored). With the 0 at the first part's tail every tick is already
   a distance, so this changes nothing for a plain stack; a centered stack's
   axis reads `40 20 0 20 40`. A stack with a negative part keeps signed
   labels. A union stays mirrored only when every part is.
@@ -2411,7 +2443,7 @@ a unit has one trait of its own (`CanSum`):
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
   which `Unit` calls at once and `columnTypeOf` calls on a wire
   record; Python's `Unit` raises the same messages, with code spelled in Python. A stack over the column takes the
-  midpoint as its origin (`stackOrigin`, then the stack fold and the
+  midpoint as its baseline (`stackBaseline`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the
   first part past it (or the last part's head). A stack laid out against the
@@ -2420,7 +2452,7 @@ a unit has one trait of its own (`CanSum`):
   the parts present: a row with no responses for some level keeps the same
   midpoint. So does the side of it each level lies on: the split applies its
   `field(...).sort()` and `.reverse()` to every level of the order
-  (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
+  (`orderEntries`), and `stackBaseline` reads the stack's direction off that,
   so a row with one part puts it where a full row does. A split order that
   is neither the order nor its reverse is an error.
 - A time (`Unit.time({ zone })`, #1057) is a `HasUnit` with a `zone`: the

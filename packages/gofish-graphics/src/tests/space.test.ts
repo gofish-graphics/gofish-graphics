@@ -33,7 +33,11 @@ import {
 } from "../ast/graphicalOperators/alignment";
 import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
-import { chainFold, distributeSpaceFold } from "../ast/constraints/distribute";
+import {
+  chainFold,
+  distributeSpaceFold,
+  wiggleZero,
+} from "../ast/constraints/distribute";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
@@ -737,7 +741,7 @@ console.log("# space: one fold for every origin");
 {
   const chainOpts = {
     axis: 0 as const,
-    origin: { part: 0, fraction: 0 },
+    baseline: { kind: "start" },
   };
   // A spread separates: along its direction its result is a sequence of
   // separate spaces, never one continuous space, whatever its targets.
@@ -836,7 +840,7 @@ console.log("# space: one fold for every origin");
       ["p", "q"],
       {
         axis: 1,
-        origin: { part: 0, fraction: 0 },
+        baseline: { kind: "start" },
       }
     )
   );
@@ -923,7 +927,7 @@ console.log("# space: the chain fold over functions");
     const want = scalarFold(parts, origin);
     const got = chainFold(
       parts.map((p) => F.constant(p)),
-      origin
+      { kind: "at", part: origin.part, point: origin.fraction }
     );
     const ascent = F.maximum(F.field(got, "ascent"));
     const descent = F.maximum(F.field(got, "descent"));
@@ -945,7 +949,7 @@ console.log("# space: the chain fold over functions");
           F.constant({ ascent: 3, descent: 1 }),
           F.constant({ ascent: 2, descent: 0 }),
         ],
-        { part: 0, fraction: 0 }
+        { kind: "start" }
       )
     )
   );
@@ -955,7 +959,7 @@ console.log("# space: the chain fold over functions");
     {
       axis: 1,
       glue: true,
-      origin: { part: 0, fraction: 0 },
+      baseline: { kind: "start" },
     }
   ) as CONTINUOUS_TYPE;
   ok(
@@ -977,7 +981,7 @@ console.log("# space: the chain fold over functions");
   const bands = distributeSpaceFold(
     [band([1, 4, 1]), band([4, 1, 4])],
     [undefined, undefined],
-    { axis: 1, glue: true, origin: { part: 0, fraction: 0 } }
+    { axis: 1, glue: true, baseline: { kind: "start" } }
   ) as CONTINUOUS_TYPE;
   ok(
     "a stack of bands spans the largest pointwise sum",
@@ -1048,6 +1052,134 @@ console.log("# space: the chain fold over functions");
         1
       ) as CONTINUOUS_TYPE
     ).profile === undefined
+  );
+}
+
+console.log("# space: a wiggle stack's 0");
+{
+  // d3's stackOffsetWiggle, as d3-shape writes it: the bottom of the stack
+  // at each sample j, over series values `values[i][j]`, the stack laid in
+  // series order.
+  const d3Wiggle = (values: number[][]): number[] => {
+    const n = values.length;
+    const m = values[0].length;
+    const bottoms = [0];
+    let y = 0;
+    for (let j = 1; j < m; ++j) {
+      let s1 = 0;
+      let s2 = 0;
+      for (let i = 0; i < n; ++i) {
+        const sij0 = values[i][j];
+        const sij1 = values[i][j - 1];
+        let s3 = (sij0 - sij1) / 2;
+        for (let k = 0; k < i; ++k) s3 += values[k][j] - values[k][j - 1];
+        s1 += sij0;
+        s2 += s3 * sij0;
+      }
+      if (s1) y -= s2 / s1;
+      bottoms.push(y);
+    }
+    return bottoms;
+  };
+  // Three smooth series over u in [0, 2].
+  const curves = [
+    (u: number) => 1 + u * u,
+    (u: number) => 2 + Math.sin(2 * u),
+    (u: number) => 3 - u,
+  ];
+  const domain = { min: 0, max: 2 };
+  const zeroOf = (parts: F.Fun<number>[]) => {
+    const middles: F.Fun<number>[] = [];
+    let below: F.Fun<number> = F.constant(0, domain);
+    for (const p of parts) {
+      middles.push(F.add(below, F.scale(p, 0.5)));
+      below = F.add(below, p);
+    }
+    return wiggleZero(middles, parts);
+  };
+  const exactZero = zeroOf(curves.map((c) => F.fun(c, { domain })));
+  // d3's bottom is minus the 0 measured from the stack's start, and its
+  // backward differences converge to the slope the 0 is the integral of.
+  const gap = (samples: number) => {
+    const us = Array.from({ length: samples + 1 }, (_, j) => (2 * j) / samples);
+    const bottoms = d3Wiggle(curves.map((c) => us.map(c)));
+    return Math.max(...us.map((u, j) => Math.abs(bottoms[j] + exactZero.at(u))));
+  };
+  const coarse = gap(50);
+  const fine = gap(5000);
+  ok(
+    "the wiggle 0 is d3's stackOffsetWiggle in the limit of fine samples",
+    fine < 1e-3 && fine < coarse / 50,
+    JSON.stringify({ coarse, fine })
+  );
+  // The same polylines with more knots on them: the same functions.
+  const knots = [0, 0.5, 1.25, 2];
+  const polylines = (ks: number[]) =>
+    curves.map((c) =>
+      F.through(
+        ks,
+        ks.map((u) =>
+          // The value of the coarse polyline at u.
+          F.through(knots, knots.map(c), { kind: "linear" }).at(u)
+        ),
+        { kind: "linear" }
+      )
+    );
+  const refined = [...knots, 0.25, 0.8, 1.6, 1.9].sort((a, b) => a - b);
+  const coarseZero = zeroOf(polylines(knots));
+  const refinedZero = zeroOf(polylines(refined));
+  const us = Array.from({ length: 41 }, (_, j) => j / 20);
+  ok(
+    "refining the knots of the same curves does not move the 0",
+    us.every((u) => Math.abs(coarseZero.at(u) - refinedZero.at(u)) < 1e-9),
+    JSON.stringify(us.map((u) => coarseZero.at(u) - refinedZero.at(u)))
+  );
+  ok(
+    "over boxes the wiggle is the start",
+    JSON.stringify(
+      chainFold(
+        [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
+        { kind: "wiggle" }
+      ).at(0)
+    ) === JSON.stringify({ ascent: 5, descent: 0 })
+  );
+  const middled = chainFold(
+    [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
+    { kind: "middle" }
+  ).at(0);
+  ok(
+    "a middle stack's 0 is halfway along its chain",
+    middled.ascent === 2.5 && middled.descent === 2.5
+  );
+  const ended = chainFold(
+    [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
+    { kind: "end" }
+  ).at(0);
+  ok(
+    "an end stack's 0 is its last part's head",
+    ended.ascent === 0 && ended.descent === 5
+  );
+  const anchored = chainFold(
+    [F.constant({ ascent: 3, descent: 1 }), F.constant({ ascent: 2, descent: 0 })],
+    { kind: "at", part: 0, point: "start" }
+  ).at(0);
+  ok(
+    "at(part, \"start\") is the start of the part's box, below its tail",
+    anchored.ascent === 5 && anchored.descent === 0,
+    JSON.stringify(anchored)
+  );
+  const free = distributeSpaceFold(
+    [CONTINUOUS(interval(0, 30), "free"), CONTINUOUS(interval(0, 10), "free")],
+    [undefined, undefined],
+    { axis: 1, glue: true, baseline: { kind: "middle" } }
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a middle stack is a free space about its middle, not mirrored",
+    free.origin === "free" &&
+      free.mirrored === undefined &&
+      JSON.stringify(free.dataInterval) ===
+        JSON.stringify({ min: -20, max: 20 }),
+    JSON.stringify(free)
   );
 }
 

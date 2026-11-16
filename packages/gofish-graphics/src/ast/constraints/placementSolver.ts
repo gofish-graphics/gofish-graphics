@@ -24,6 +24,7 @@ import {
   relationFact,
   type AnchorFact,
   type RelationAnchor,
+  type StackPoint,
   type NodeId,
 } from "./placementFacts";
 import {
@@ -168,20 +169,31 @@ function nodeAnchorOffset<T>(
   return target && anchorOffset(A, target, axis, anchor, span);
 }
 
-/** The offset from its `min` of the point `fraction` of the way from a stack
- *  part's tail to its head (`offsetOf` gives each anchor's offset): the
- *  stack's origin when the part carries it. */
+/** The offset from the `min` of the stack part `node` of the stack's 0,
+ *  `origin` ({@link StackPoint}), when the part carries it (`offsetOf`
+ *  gives each anchor's offset on a node from that node's `min`): a point on
+ *  the part, or a place along the chain the part starts, which adds each
+ *  part's step from its tail to its head. */
 function stackOriginOffset<T>(
   A: Arith<T>,
-  offsetOf: (anchor: RelationAnchor) => T | undefined,
-  fraction: number
+  offsetOf: (node: NodeId, anchor: RelationAnchor) => T | undefined,
+  node: NodeId,
+  origin: StackPoint
 ): T | undefined {
-  const tail = offsetOf("tail");
+  const tail = offsetOf(node, "tail");
+  const fraction = "along" in origin ? origin.along : origin.point;
+  if (typeof fraction !== "number")
+    return offsetOf(node, fraction === "baseline" ? "tail" : fraction);
   if (fraction === 0 || tail === undefined) return tail;
-  const head = offsetOf("head");
-  return head === undefined
-    ? undefined
-    : A.add(tail, A.scale(fraction, A.sub(head, tail)));
+  const steps = "along" in origin ? origin.chain : [node];
+  let length = A.zero;
+  for (const part of steps) {
+    const from = offsetOf(part, "tail");
+    const to = offsetOf(part, "head");
+    if (from === undefined || to === undefined) return undefined;
+    length = A.add(length, A.sub(to, from));
+  }
+  return A.add(tail, A.scale(fraction, length));
 }
 
 /** Reduce one axis's anchor facts to a `min`-anchored {@link AxisProblem}, using
@@ -307,7 +319,7 @@ function solveRank2Axis<T>(
   const freeBaselines = new Map<NodeId, T>();
   if (freeOrigin !== undefined) {
     const placedByChain = new Set<NodeId>();
-    const stackOrigins = new Map<NodeId, number>();
+    const stackOrigins = new Map<NodeId, StackPoint>();
     for (const fact of facts) {
       if (fact.type === "anchor-participant" && fact.origin !== undefined)
         stackOrigins.set(fact.node, fact.origin);
@@ -320,7 +332,8 @@ function solveRank2Axis<T>(
       if (origin !== undefined)
         return stackOriginOffset(
           A,
-          (anchor) => nodeAnchorOffset(A, node, anchor, axis, sizes, targets),
+          (n, anchor) => nodeAnchorOffset(A, n, anchor, axis, sizes, targets),
+          node,
           origin
         );
       // An interval (size-strong) has no baseline, and a chain places its

@@ -202,6 +202,7 @@ export { scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";
 export * as Curve from "./families/curve";
+export * as Baseline from "./families/baseline";
 export { treemap } from "./ast/graphicalOperators/treemap";
 export * as Tile from "./families/tile";
 export type { TreemapOptions } from "./ast/graphicalOperators/treemap";

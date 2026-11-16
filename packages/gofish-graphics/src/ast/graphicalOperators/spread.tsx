@@ -7,8 +7,9 @@ import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
 import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
 import { isField } from "../data";
-import { columnType, stackOrigin } from "../schema";
-import type { StackOrigin } from "../constraints/distribute";
+import { columnType, stackBaseline } from "../schema";
+import type { StackBaseline } from "../constraints/distribute";
+import type { Baseline } from "../../families/baseline";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
@@ -58,7 +59,7 @@ export const Spread = createNodeOperator(
       anchor = "edge",
       reverse = false,
       glue = false,
-      origin,
+      baseline,
       hasMidpoint,
       hasOrder,
       size,
@@ -81,13 +82,14 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
-      /** A stack's {@link StackOrigin}, its part a child index. Omitted: the
-       *  first part's tail. The `stack` operator's split sets it from a
-       *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
-       *  `glue`: a spread packs boxes and has no origin. */
-      origin?: StackOrigin<number>;
+      /** Where a stack puts its own 0 (`Baseline`), the part of an `at` a
+       *  child index. Omitted: `Baseline.start()`. In a flow the split sets
+       *  it from the `baseline` option, whose `at` part is a value of the
+       *  `by` column, or from a `HasMidpoint` column (`stackBaseline` in
+       *  schema.ts). A spread does not take it yet. */
+      baseline?: StackBaseline<number>;
       /** The `by` column's order has a midpoint (`HasMidpoint`), which set
-       *  `origin`: the split sets it, and the stack checks that each part
+       *  `baseline`: the split sets it, and the stack checks that each part
        *  is a nonnegative amount. Ignored without `glue`. */
       hasMidpoint?: boolean;
       /** The `by` column's values have an order (`HasOrder`, from the chart's
@@ -115,6 +117,14 @@ export const Spread = createNodeOperator(
           "`size: field(<field-name>).normalize()` instead (#700 Phase 2)."
       );
     }
+
+    // TODO(S7 of the stack-profile plan): a spread's baseline, placement
+    // only (its type stays ordinal).
+    if (!glue && baseline !== undefined)
+      throw new Error(
+        "spread: `baseline` is not taken by spread yet, only by stack. Use " +
+          "`stack({ baseline })`, or drop the option."
+      );
 
     children = unwrapLodashArray(children);
     // An axis index is the same axis as its scope-free name (0 is `x`), so
@@ -193,7 +203,10 @@ export const Spread = createNodeOperator(
             anchor,
             glue,
             order: reverse ? "reverse" : "forward",
-            origin: origin && { ...origin, part: refs[origin.part] },
+            baseline:
+              baseline?.kind === "at"
+                ? { ...baseline, part: refs[baseline.part] }
+                : baseline,
             hasMidpoint,
             // The grouping field for this (stack) axis → the ORDINAL
             // space's measure, so a spread-by-category axis titles itself
@@ -230,6 +243,9 @@ export type SpreadOptions<T = any> = {
   anchor?: AlignAnchor | "edge";
   reverse?: boolean;
   glue?: boolean;
+  /** Where a stack puts its own 0 (`Baseline`); see {@link stack}. A
+   *  spread without `glue` does not take it yet. */
+  baseline?: Baseline;
   w?: number | (keyof T & string) | LengthValue;
   h?: number | (keyof T & string) | LengthValue;
   /** The size of each CHILD along `dir` (a distributive singular, like a
@@ -253,38 +269,49 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // lives in createOperator (it dispatches on the mark's kind), not here, so
   // this split stays kind-agnostic.
   //
-  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
-  // origin at the midpoint of the column's order instead of at its first
-  // part's tail; the split knows the groups present, so it computes it. It
-  // reorders every level of the order the way it reorders the groups, so the
+  // A stack's `baseline` names its part by a value of the `by` column, and a
+  // stack over a column with HasMidpoint (from the chart's `schema`) puts its
+  // 0 at the midpoint of the column's order; the split knows the groups
+  // present, so it resolves either to a child index (`stackBaseline` in
+  // schema.ts). A part the data lacks is placed by the column's declared
+  // order, which the split reorders the way it reorders the groups, so the
   // stack knows which way it lays the order out even in a row with one part.
   // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
   // ordinal space it folds knows its keys are ordered.
-  split: ({ by, glue, reverse }, d) => {
+  split: ({ by, glue, reverse, baseline }, d) => {
     const entries = splitEntries(by, d);
     const hasOrder = entries.hasOrder;
     if (!glue)
       return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
     const column = fieldNameOf(by);
     const type = columnType(d, column);
-    // Only a column with HasMidpoint moves the origin (as in `stackOrigin`),
-    // so the level order is built only for one. The stack's origin stays
-    // undefined, the default.
-    if (!type?.HasMidpoint)
-      return { entries, layoutOpts: { hasOrder, origin: undefined } };
-    const levels = (type?.HasLevels?.levels ?? []) as (string | number)[];
-    const split = orderEntries(
-      by,
-      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
-    );
-    const origin = stackOrigin(
-      column,
-      type,
-      [...split.keys()],
-      [...entries.keys()],
-      reverse
-    );
-    return { entries, layoutOpts: { hasOrder, origin, hasMidpoint: true } };
+    const levels = type?.HasLevels?.levels as (string | number)[] | undefined;
+    // The level order is built only when the baseline is read off it.
+    const split =
+      levels !== undefined &&
+      (type?.HasMidpoint !== undefined || baseline?.kind === "at")
+        ? [
+            ...orderEntries(
+              by,
+              new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+            ).keys(),
+          ]
+        : undefined;
+    return {
+      entries,
+      layoutOpts: {
+        hasOrder,
+        baseline: stackBaseline(
+          column,
+          type,
+          split,
+          [...entries.keys()],
+          reverse,
+          baseline
+        ),
+        hasMidpoint: type?.HasMidpoint !== undefined,
+      },
+    };
   },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {

@@ -58,10 +58,10 @@ import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import {
   distributeChildrenInPlacementOrder,
-  distributeOrigin,
+  resolveBaseline,
   distributeSpaceFold,
   type DistributeConstraint,
-  type StackOrigin,
+  type StackBaseline,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
 import {
@@ -206,7 +206,7 @@ type Seg = {
   glue: boolean;
   measure?: string;
   hasOrder?: boolean;
-  origin: StackOrigin<number>;
+  baseline: StackBaseline<number>;
   hasMidpoint?: boolean;
   keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
@@ -297,7 +297,7 @@ export function planConstraintComposition(
       glue: d.glue,
       measure: d.measure,
       hasOrder: d.hasOrder,
-      origin: distributeOrigin(d, ordered, resolved.keyOf),
+      baseline: resolveBaseline(d, ordered, resolved.keyOf),
       hasMidpoint: d.hasMidpoint,
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
@@ -569,7 +569,7 @@ const foldOptions = (s: Seg) => ({
   measure: s.measure,
   hasOrder: s.hasOrder,
   anonymous: s.anonymous,
-  origin: s.origin,
+  baseline: s.baseline,
   hasMidpoint: s.hasMidpoint,
 });
 

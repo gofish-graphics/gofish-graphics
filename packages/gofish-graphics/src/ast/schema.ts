@@ -2,7 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { StackOrigin } from "./constraints/distribute";
+import type { StackBaseline } from "./constraints/distribute";
+import type { Baseline } from "../families/baseline";
 import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
 import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
@@ -1101,40 +1102,115 @@ export function orderByLevels<K>(
 }
 
 /**
- * The {@link StackOrigin} of a stack over `column`, its part a child index,
- * whose children are the groups `keys` (in child order, laid out reversed
- * when `reverse`): the midpoint of the column's order, when the column has
- * {@link HasMidpoint}; else undefined (the default origin). `split` is every
- * level of the order, in the order the split puts groups in (the level order
- * after any `field(...).sort()` or `.reverse()`), and `keys` are the levels
- * the data has, in that order.
+ * The {@link StackBaseline} of a stack over `column` whose children are the
+ * groups `keys` (in child order, laid out reversed when `reverse`), with the
+ * part of a `Baseline.at` a child index. `given` is the stack's `baseline`
+ * option, whose `at` part is a value of the column. `split` is every level of
+ * the column's declared order, in the order the split puts groups in (the
+ * level order after any `field(...).sort()` or `.reverse()`), when the
+ * column declares one; `keys` are the levels the data has, in that order.
  *
- * The midpoint is defined by the ORDER, not by the parts present: a group the
- * data lacks moves nothing. Level `i` spans `[i, i + 1]` in the midpoint's
- * edge coordinates. When the midpoint falls inside a level whose part is
- * present, the origin is that far through the part. Otherwise it falls on a
+ * - A column with {@link HasMidpoint} (`Trait.diverging()`) puts the 0 at
+ *   its midpoint, a `Baseline.at` ({@link baselineAlongOrder}). A `given`
+ *   baseline there is an error: the unit already fixes the 0.
+ * - A `Baseline.at` on a part that is present is that point on its child.
+ * - A `Baseline.at` on a part the data lacks is placed by the column's
+ *   declared order and moves nothing: the 0 falls on the boundary where the
+ *   part would be. A column with no declared order cannot place it (an
+ *   error that names the fix).
+ * - Any other baseline is the given one; none is undefined (the default,
+ *   `Baseline.start()`).
+ */
+export function stackBaseline(
+  column: string | undefined,
+  type: ColumnType | undefined,
+  split: unknown[] | undefined,
+  keys: unknown[],
+  reverse = false,
+  given?: Baseline
+): StackBaseline<number> | undefined {
+  const by = column === undefined ? "stack" : `stack({ by: "${column}" })`;
+  if (type?.HasMidpoint !== undefined && given !== undefined)
+    throw new Error(
+      `${by}: it is given \`baseline\`, but its \`by\` column has ` +
+        `HasMidpoint (declared with \`Trait.diverging()\`), which already ` +
+        `puts the stack's 0 at the midpoint of the column's order. Drop the ` +
+        `\`baseline\`, or the trait.`
+    );
+  if (type?.HasMidpoint !== undefined) {
+    if (column === undefined || keys.length === 0) return undefined;
+    return baselineAlongOrder(
+      by,
+      type.HasLevels!,
+      split!,
+      keys,
+      reverse,
+      type.HasMidpoint.at,
+      "HasMidpoint (declared with `Trait.diverging()`)"
+    );
+  }
+  if (given === undefined || given.kind !== "at") return given;
+  const part = keys.indexOf(given.part);
+  if (part >= 0) return { kind: "at", part, point: given.point };
+  const levels = type?.HasLevels;
+  const rank = levels === undefined ? undefined : levelRanks(levels);
+  if (levels === undefined || split === undefined || !rank!.has(given.part))
+    throw new Error(
+      `${by}: its baseline is \`Baseline.at(${showLevel(given.part)}, ...)\`, ` +
+        `but the stack has no part ${showLevel(given.part)} ` +
+        `(its parts are ${keys.map(showLevel).join(", ")}), and ` +
+        (levels === undefined
+          ? `its \`by\` column declares no order to place a missing part by. ` +
+            `Declare the column's levels with \`Domain.discrete(levels)\` in ` +
+            `the chart's \`schema\`, or name a part the stack has.`
+          : `${showLevel(given.part)} is not one of the levels of its \`by\` ` +
+            `column (${levels.levels.map(showLevel).join(", ")}).`)
+    );
+  if (keys.length === 0) return undefined;
+  // A part the data lacks spans no width, so any point on it is the
+  // boundary where its level starts.
+  return baselineAlongOrder(
+    by,
+    levels,
+    split,
+    keys,
+    reverse,
+    rank!.get(given.part)!,
+    `\`Baseline.at(${showLevel(given.part)}, ...)\` on a part the data lacks`
+  );
+}
+
+/**
+ * The `Baseline.at` at the point `coordinate` along a column's order, for a
+ * stack over the column whose children are the groups `keys` (see
+ * {@link stackBaseline}). Level `i` spans `[i, i + 1]` in these edge
+ * coordinates, and `split` is every level, in the split's order.
+ *
+ * The point is defined by the ORDER, not by the parts present: a group the
+ * data lacks moves nothing. When the point falls inside a level whose part
+ * is present, the 0 is that far through the part. Otherwise it falls on a
  * boundary between present parts (a level edge, or a level the data lacks):
  * the tail of the first part laid out past it, or the head of the last part
  * when every part lies before it. A stack that lays the order out against
- * its levels measures the fraction from the other end, so the midpoint `at`
- * lands at `n - at` along the layout. The side of the midpoint a level lands
+ * its levels measures the fraction from the other end, so the point `at`
+ * lands at `n - at` along the layout. The side of the point a level lands
  * on comes from `split`, not from the parts present, so a row with one part
- * puts it where a row with every part does.
+ * puts it where a row with every part does. `why` names what puts the 0 on
+ * the order, for the error when the split reorders the levels.
  */
-export function stackOrigin(
-  column: string | undefined,
-  type: ColumnType | undefined,
+function baselineAlongOrder(
+  by: string,
+  levels: HasLevels,
   split: unknown[],
   keys: unknown[],
-  reverse = false
-): StackOrigin<number> | undefined {
-  if (column === undefined || !type?.HasMidpoint || keys.length === 0)
-    return undefined;
-  const rank = levelRanks(type.HasLevels!);
-  const midpoint = type.HasMidpoint.at;
+  reverse: boolean,
+  coordinate: number,
+  why: string
+): StackBaseline<number> {
+  const rank = levelRanks(levels);
   // The order's ranks as the stack lays the levels out: along the order (+1)
   // or against it (−1). It must be one or the other, or "before the
-  // midpoint" is not a prefix.
+  // point" is not a prefix.
   const laidOut = (reverse ? [...split].reverse() : split).map(
     (level) => rank.get(level)!
   );
@@ -1142,31 +1218,31 @@ export function stackOrigin(
   for (let p = 1; p < laidOut.length; p++) {
     if (Math.sign(laidOut[p] - laidOut[p - 1]) !== dir) {
       throw new Error(
-        `stack({ by: "${column}" }): a centered stack lays its parts out in ` +
-          `the order of "${column}" (or its reverse), but its \`by\` puts ` +
-          `the levels in the order ${split.map(showLevel).join(", ")}. ` +
-          `HasMidpoint (declared with \`Trait.diverging()\`) puts the stack's 0 at ` +
-          `a point along that order, which needs the parts on each side of ` +
-          `it together. Drop the reordering of "${column}".`
+        `${by}: a centered stack lays its parts out in the order of its ` +
+          `\`by\` column (or its reverse), but its \`by\` puts the levels ` +
+          `in the order ${split.map(showLevel).join(", ")}. ${why} puts the ` +
+          `stack's 0 at a point along that order, which needs the parts on ` +
+          `each side of it together. Drop the reordering of the column.`
       );
     }
   }
   // The parts present, in layout order.
   const order = keys.map((_, i) => (reverse ? keys.length - 1 - i : i));
   const ranks = order.map((i) => rank.get(keys[i])!);
-  const at = (p: number, fraction: number): StackOrigin<number> => ({
+  const at = (p: number, fraction: number): StackBaseline<number> => ({
+    kind: "at",
     part: order[p],
-    fraction,
+    point: fraction,
   });
   for (let p = 0; p < ranks.length; p++) {
     // The part's level spans [r, r + 1] along the order. Laid out against
     // the order, its tail is at r + 1.
     const r = ranks[p];
-    if (r < midpoint && midpoint < r + 1)
-      return at(p, dir > 0 ? midpoint - r : r + 1 - midpoint);
-    // The first part laid out past the midpoint: the midpoint is its tail.
-    if (dir > 0 ? r >= midpoint : r + 1 <= midpoint) return at(p, 0);
+    if (r < coordinate && coordinate < r + 1)
+      return at(p, dir > 0 ? coordinate - r : r + 1 - coordinate);
+    // The first part laid out past the point: the point is its tail.
+    if (dir > 0 ? r >= coordinate : r + 1 <= coordinate) return at(p, 0);
   }
-  // Every part lies before the midpoint: it is the last part's head.
+  // Every part lies before the point: it is the last part's head.
   return at(ranks.length - 1, 1);
 }

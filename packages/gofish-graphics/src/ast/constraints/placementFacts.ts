@@ -57,12 +57,23 @@ export type AnchorParticipantFact = {
   node: NodeId;
   axis: Axis;
   owner: string;
-  /** Set when this participant carries a stack's origin (#773, #984): the
-   *  `fraction` of its `StackOrigin` (distribute.ts; 0 = the participant's
-   *  `tail`).
-   *  The solver's free-origin fallback seats that point. */
-  origin?: number;
+  /** Set when this participant carries a stack's 0 (#773, #984), from its
+   *  `StackBaseline` (distribute.ts). The solver's free-origin fallback
+   *  seats that point. */
+  origin?: StackPoint;
 };
+
+/**
+ * Where a stack's 0 is, on the participant that carries it: a point on the
+ * participant (a fraction of the way from its `tail` to its `head`, or one
+ * of its anchors, `"baseline"` being its tail), or a place `along` the whole
+ * chain, a fraction of the way from the tail of its first part (the
+ * participant) to the head of its last (`chain`, the parts in placement
+ * order).
+ */
+export type StackPoint =
+  | { point: number | "start" | "middle" | "end" | "baseline" }
+  | { along: number; chain: readonly NodeId[] };
 
 /** A size-cell equation independent of any anchor (#726, align `"size"`): the
  *  target's `size` box key := `value`, with no coupling to `min`/`max`/`center`.
@@ -124,7 +135,7 @@ export type PlacementParticipantRequest = {
   key: NodeId;
   owner: string;
   /** See {@link AnchorParticipantFact.origin}. */
-  origin?: number;
+  origin?: StackPoint;
 };
 
 export type PlacementPinRequest<T = number> = {

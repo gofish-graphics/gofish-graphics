@@ -604,7 +604,7 @@ async function main() {
   // kind of each family that has kinds with no required option.
   // -------------------------------------------------------------------------
   {
-    const { Curve, Calendar } = GoFish as any;
+    const { Curve, Calendar, Baseline } = GoFish as any;
     const rows = [
       { a: 1, b: 2, d: Date.UTC(2024, 0, 3), g: "x" },
       { a: 2, b: 3, d: Date.UTC(2024, 4, 9), g: "y" },
@@ -640,6 +640,19 @@ async function main() {
             )
             .mark(circle({ r: 3 })),
       ],
+      [
+        "Baseline.middle in stack({ baseline })",
+        (s) =>
+          chart(rows)
+            .flow(
+              stack({
+                by: "g",
+                dir: "y",
+                baseline: s ? Baseline.middle : Baseline.middle(),
+              })
+            )
+            .mark(rect({ h: "a" })),
+      ],
       // (A JS treemap has no IR form yet, so Tile is covered by
       // families.test.ts, which compares each Tile kind's JSON.)
       [
@@ -669,6 +682,56 @@ async function main() {
       );
       validateDoc(JSON.parse(bare), `bare ${name}`);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // A stack's baseline round-trips: `Baseline.at` with a column value and a
+  // fraction or an anchor, through toJSON, the validator, and buildIR.
+  // -------------------------------------------------------------------------
+  {
+    const { Baseline } = GoFish as any;
+    const rows = [
+      { a: 1, g: "x" },
+      { a: 2, g: "y" },
+    ];
+    for (const baseline of [
+      Baseline.at("y", 0.5),
+      Baseline.at("x", "end"),
+      Baseline.end(),
+      Baseline.wiggle(),
+    ]) {
+      const c = chart(rows)
+        .flow(stack({ by: "g", dir: "y", baseline }))
+        .mark(rect({ h: "a" }));
+      const doc = await c.toJSON();
+      validateDoc(doc, `stack({ baseline: ${JSON.stringify(baseline)} })`);
+      const op = (doc.root as Frontend.ChartIR).operators![0] as any;
+      const doc2 = await Serialize.buildIR(doc).toJSON();
+      check(
+        `stack's baseline ${JSON.stringify(baseline)} round-trips`,
+        JSON.stringify(op.baseline) === JSON.stringify(baseline) &&
+          JSON.stringify(doc2.root) === JSON.stringify(doc.root),
+        JSON.stringify(op)
+      );
+    }
+    const bad = Frontend.validate({
+      ...(await chart(rows)
+        .flow(stack({ by: "g", dir: "y" }))
+        .mark(rect({ h: "a" }))
+        .toJSON()),
+    });
+    check("a stack with no baseline validates", bad.valid);
+    const doc = await chart(rows)
+      .flow(stack({ by: "g", dir: "y", baseline: Baseline.at("x", 0.5) }))
+      .mark(rect({ h: "a" }))
+      .toJSON();
+    (doc.root as any).operators[0].baseline.point = 2;
+    const outOfRange = Frontend.validate(doc);
+    check(
+      "a baseline point past 1 is rejected",
+      !outOfRange.valid,
+      JSON.stringify(outOfRange)
+    );
   }
 
   // -------------------------------------------------------------------------

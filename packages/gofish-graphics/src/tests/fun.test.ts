@@ -300,6 +300,59 @@ console.log("# fun: opaque functions");
   ok("a map is opaque", m.pieces === undefined && close(F.maximum(m), 1));
 }
 
+console.log("# fun: multiply and antiderivative");
+{
+  const f = F.through([0, 1, 3], [1, 3, 2], linear);
+  const g = F.through([0, 2, 3], [2, 0, 4], linear);
+  const fg = F.multiply(f, g);
+  ok(
+    "a product of exact functions is exact",
+    fg.pieces !== undefined &&
+      [0, 0.5, 1, 1.7, 2, 2.4, 3].every((u) =>
+        close(fg.at(u), f.at(u) * g.at(u))
+      )
+  );
+  const opaque = F.multiply(F.map(f, (v) => v), g);
+  ok(
+    "a product with an opaque function is opaque",
+    opaque.pieces === undefined && close(opaque.at(1.7), f.at(1.7) * g.at(1.7))
+  );
+  const F1 = F.antiderivative(f);
+  ok(
+    "the antiderivative of a polyline is exact, 0 at its start",
+    F1.pieces !== undefined &&
+      close(F1.at(0), 0) &&
+      close(F1.at(1), 2) &&
+      close(F1.at(3), 2 + 5)
+  );
+  const from = F.antiderivative(f, 1);
+  ok(
+    "it is 0 where it runs from",
+    close(from.at(1), 0) && close(from.at(0), -2) && close(from.at(3), 5)
+  );
+  const dF = F.derivative(F1);
+  ok(
+    "its derivative is the function",
+    [0.25, 0.5, 1.5, 2.9].every((u) => close(dF.at(u), f.at(u)))
+  );
+  const curve = F.through([0, 1, 2, 4], [0, 2, 1, 3], smooth);
+  const C = F.antiderivative(curve);
+  ok(
+    "the antiderivative of cubics matches their integral",
+    close(C.at(4), F.integrate(curve), 1e-9)
+  );
+  const wave = F.fun((u: number) => Math.sin(u), {
+    domain: { min: 0, max: Math.PI },
+  });
+  const W = F.antiderivative(wave);
+  ok(
+    "the antiderivative of an opaque function holds pieces that match it",
+    W.pieces !== undefined &&
+      [0.3, 1, 2, Math.PI].every((u) => close(W.at(u), 1 - Math.cos(u), 1e-8)),
+    JSON.stringify([0.3, 1, 2, Math.PI].map((u) => W.at(u) - (1 - Math.cos(u))))
+  );
+}
+
 /** Abramowitz and Stegun 7.1.26 is too coarse; use a series. */
 function erf(x: number): number {
   let sum = 0;

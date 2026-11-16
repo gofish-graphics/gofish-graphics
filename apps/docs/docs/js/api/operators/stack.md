@@ -26,7 +26,7 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 // Operator form:
-stack({ by?, dir, alignment?, ... })
+stack({ by?, dir, alignment?, baseline?, ... })
 
 // Combinator form:
 stack({ dir, ... }, [m1, m2, ...])
@@ -76,12 +76,25 @@ stacked bar), group by sign first, so each stack holds one sign:
 )
 ```
 
+## Baselines
+
+`baseline` sets where the stack puts its own 0, the point its parent lines up
+with its other children. It takes a member of the
+[`Baseline`](/js/api/baseline) family: `Baseline.start()` (the default),
+`Baseline.end()`, `Baseline.middle()`, `Baseline.wiggle()` or
+`Baseline.at(part, point)`.
+
+```ts
+stack({ by: "response", dir: "x", baseline: Baseline.at("Neutral", 0.5) });
+```
+
 ## Centered stacks
 
 When the chart's `schema` gives the `by` column a midpoint
 ([`Unit({ domain: Domain.discrete(levels), traits: [Trait.diverging()] })`](/js/api/core/schema)), the stack's 0 is
-the midpoint of that order instead of the start of its first part. The parts
-must be nonnegative. This draws Likert charts and population pyramids:
+the midpoint of that order instead of the start of its first part: a
+`Baseline.at` at that midpoint. The parts must be nonnegative, and the stack
+takes no `baseline` option. This draws Likert charts and population pyramids:
 
 ```ts
 chart(survey, {

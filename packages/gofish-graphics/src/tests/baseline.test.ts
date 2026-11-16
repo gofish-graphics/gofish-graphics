@@ -1,19 +1,21 @@
 /**
- * A stack's origin (#773, #984): where the free origin seats a stack, and
- * where a centered stack (a `HasMidpoint` column) puts its 0. Covers the side
- * of the midpoint a level lands on when the split reorders the levels, a
- * set midpoint under a reversed order, a
- * spread chain staying on its sequence origin when a free node joins its
- * component, and a centered origin on a size-strong part.
+ * A stack's baseline (`Baseline`, #773, #984): where the free origin seats a
+ * stack, and where a stack puts its 0. Covers the side of the midpoint a
+ * level lands on when the split reorders the levels (a centered stack, a
+ * `HasMidpoint` column), a set midpoint under a reversed order, a spread
+ * chain staying on its sequence origin when a free node joins its
+ * component, a centered baseline on a size-strong part, and each
+ * `Baseline` strategy: `at` on a value of the `by` column (present or
+ * missing), `end`, `middle`, and the errors.
  *
- * Run: `pnpm build && tsx src/tests/stackOrigin.test.ts` (wired as
- * `pnpm test:stack-origin`). The rendering checks import from `dist` for the
+ * Run: `pnpm build && tsx src/tests/baseline.test.ts` (wired as
+ * `pnpm test:baseline`). The rendering checks import from `dist` for the
  * same lodash-ESM reason as `axisDims.test.ts`.
  */
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
-import { stackOrigin, type ColumnType } from "../ast/schema";
+import { stackBaseline, type ColumnType } from "../ast/schema";
 import { solveAxisProblem } from "../ast/constraints/differenceGraph";
 import { numbers } from "../ast/solver/arith";
 import { anchorExpr, relationFact } from "../ast/constraints/placementFacts";
@@ -28,6 +30,7 @@ const {
   Unit,
   Domain,
   Trait,
+  Baseline,
   field,
   v,
 } = GoFish as any;
@@ -66,6 +69,11 @@ const rectsOf = (dl: any): Box[] => {
   return out;
 };
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+/** The boxes of a render's data parts (or every rect), without their ids. */
+const partsOf = (dl: any, data = true): Box[] =>
+  rectsOf(dl)
+    .filter((r: any) => !data || r.datum !== undefined)
+    .map(({ x, y, w, h }) => ({ x, y, w, h }));
 
 const LEVELS5 = ["SD", "D", "N", "A", "SA"];
 const centered: ColumnType = {
@@ -82,20 +90,22 @@ async function main() {
     // The split reverses the order, so the stack lays SA first. A row with
     // only "D" puts it past the center, as a row with every level does.
     const reversed = [...LEVELS5].reverse();
+    const at = (part: number, point: number) =>
+      JSON.stringify({ kind: "at", part, point });
     check(
       "one part, reversed order: the part's tail is the center",
-      JSON.stringify(stackOrigin("r", centered, reversed, ["D"])) ===
-        JSON.stringify({ part: 0, fraction: 0 })
+      JSON.stringify(stackBaseline("r", centered, reversed, ["D"])) ===
+        at(0, 0)
     );
     check(
       "one part, the order: the part's head is the center",
-      JSON.stringify(stackOrigin("r", centered, LEVELS5, ["D"])) ===
-        JSON.stringify({ part: 0, fraction: 1 })
+      JSON.stringify(stackBaseline("r", centered, LEVELS5, ["D"])) ===
+        at(0, 1)
     );
     check(
       "a reversed stack over a reversed order lays the order out again",
-      JSON.stringify(stackOrigin("r", centered, reversed, ["D"], true)) ===
-        JSON.stringify({ part: 0, fraction: 1 })
+      JSON.stringify(stackBaseline("r", centered, reversed, ["D"], true)) ===
+        at(0, 1)
     );
 
     // q1 has D and A; q2 has only D. Widths are counts, so D is 11 (q1)
@@ -261,10 +271,10 @@ async function main() {
     );
   }
 
-  console.log("\n# a centered origin on a size-strong part");
+  console.log("\n# a centered baseline on a size-strong part");
   {
     // `a` has no width of its own: align "size" gives it src's. The stack's
-    // origin is a's middle, which seats at data 0 (src's x) whether or not
+    // baseline is a's middle, which seats at data 0 (src's x) whether or not
     // the part is size-strong.
     const stacked = (strong: boolean) =>
       layer([
@@ -280,7 +290,7 @@ async function main() {
           {
             dir: "x",
             glue: true,
-            origin: { part: g.a, fraction: 0.5 },
+            baseline: { kind: "at", part: g.a, point: 0.5 },
           },
           [g.a, g.b]
         ),
@@ -341,6 +351,132 @@ async function main() {
       "the stacks do not share a flat baseline",
       new Set(starts.map((s) => s.toFixed(3))).size === 3,
       JSON.stringify({ starts })
+    );
+  }
+
+  console.log("\n# Baseline strategies");
+  {
+    const likert = [
+      { q: "q1", r: "SD", n: 4 },
+      { q: "q1", r: "D", n: 6 },
+      { q: "q1", r: "N", n: 10 },
+      { q: "q1", r: "A", n: 12 },
+      { q: "q1", r: "SA", n: 8 },
+      { q: "q2", r: "SD", n: 2 },
+      { q: "q2", r: "D", n: 3 },
+      { q: "q2", r: "A", n: 20 },
+      { q: "q2", r: "SA", n: 25 },
+    ];
+    const levels = (traits: unknown[] = []) => ({
+      schema: { r: Unit({ domain: Domain.discrete(LEVELS5), traits }) },
+    });
+    // The parts' boxes, without the axis, and without the ids a render
+    // numbers its nodes by.
+    const bars = async (options: object, stackOpts: object, rows = likert) =>
+      partsOf(
+        await chart(rows, options)
+          .flow(
+            spread({ by: "q", dir: "y" }),
+            stack({ by: "r", dir: "x", ...stackOpts })
+          )
+          .mark(rect({ w: "n" }))
+          .toDisplayList({ w: 300, h: 200 })
+      );
+    const diverging = await bars(levels([Trait.diverging()]), {});
+    const explicit = await bars(levels(), {
+      baseline: Baseline.at("N", 0.5),
+    });
+    check(
+      "Baseline.at(\"N\", 0.5) lays a Likert out as Trait.diverging() does",
+      JSON.stringify(explicit) === JSON.stringify(diverging),
+      JSON.stringify({ explicit, diverging })
+    );
+    // q2 has no N: the 0 falls on the boundary where N would be, the tail
+    // of its A, which is where q1's N is half through.
+    const q1N = explicit[2];
+    const q2A = explicit[7];
+    check(
+      "a missing part is placed by the order and moves nothing",
+      near(q2A.x, q1N.x + q1N.w / 2),
+      JSON.stringify({ q1N, q2A })
+    );
+    const both = await errorOf(() =>
+      bars(levels([Trait.diverging()]), { baseline: Baseline.at("N", 0.5) })
+    );
+    check(
+      "a baseline over a Trait.diverging column is an error that says why",
+      both !== undefined &&
+        both.includes("Trait.diverging()") &&
+        both.includes("baseline"),
+      both
+    );
+    const unordered = await errorOf(() =>
+      bars({}, { baseline: Baseline.at("N", 0.5) })
+    );
+    check(
+      "a missing part with no declared order is an error naming the fix",
+      unordered !== undefined && unordered.includes("Domain.discrete"),
+      unordered
+    );
+    const anchor = await bars(levels(), { baseline: Baseline.at("N", "end") });
+    const fraction = await bars(levels(), { baseline: Baseline.at("N", 1) });
+    check(
+      "Baseline.at(part, \"end\") is the part's head, like the fraction 1",
+      JSON.stringify(anchor.slice(0, 5)) === JSON.stringify(fraction.slice(0, 5)),
+      JSON.stringify({ anchor, fraction })
+    );
+    const ended = await bars(levels(), { baseline: Baseline.end() });
+    const rows = [ended.slice(0, 5), ended.slice(5)];
+    check(
+      "Baseline.end(): every row ends at one x",
+      near(
+        Math.max(...rows[0].map((b) => b.x + b.w)),
+        Math.max(...rows[1].map((b) => b.x + b.w))
+      ),
+      JSON.stringify(ended)
+    );
+    const middled = await bars(levels(), { baseline: Baseline.middle() });
+    const centerOf = (bs: Box[]) =>
+      (Math.min(...bs.map((b) => b.x)) +
+        Math.max(...bs.map((b) => b.x + b.w))) /
+      2;
+    check(
+      "Baseline.middle(): every row is centered on one x",
+      near(centerOf(middled.slice(0, 5)), centerOf(middled.slice(5))),
+      JSON.stringify(middled)
+    );
+    const spreadBaseline = await errorOf(async () =>
+      rectsOf(
+        await chart(likert)
+          .flow(spread({ by: "r", dir: "x", baseline: Baseline.end() }))
+          .mark(rect({ w: "n" }))
+          .toDisplayList({ w: 300, h: 200 })
+      )
+    );
+    check(
+      "a spread does not take a baseline yet",
+      spreadBaseline !== undefined && spreadBaseline.includes("stack"),
+      spreadBaseline
+    );
+    // The combinator form names the part by its index. A bar at data 0
+    // beside the stack shows where its 0 sits.
+    const combinator = async (baseline: unknown) =>
+      layer([
+        rect({ x: v(0), w: v(10), y: 0, h: 5 }),
+        stack({ dir: "x", baseline }, [
+          rect({ w: v(10), h: 10, y: 20 }),
+          rect({ w: v(20), h: 10, y: 20 }),
+          rect({ w: v(30), h: 10, y: 20 }),
+        ]),
+      ]).toDisplayList({ w: 300, h: 100 });
+    const atOne = partsOf(await combinator(Baseline.at(1, 0)), false);
+    const endOne = partsOf(await combinator(Baseline.at(0, 1)), false);
+    const startOf = partsOf(await combinator(Baseline.start()), false);
+    check(
+      "in the combinator form the part is a child index",
+      JSON.stringify(atOne) === JSON.stringify(endOne) &&
+        JSON.stringify(atOne) !== JSON.stringify(startOf),
+      JSON.stringify({ atOne, endOne, startOf })
     );
   }
 

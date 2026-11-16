@@ -30,7 +30,7 @@ import {
   orderByLevels,
   schemaToWire,
   setColumnTypes,
-  stackOrigin,
+  stackBaseline,
   Unit as SrcUnit,
   type ColumnType,
 } from "../ast/schema";
@@ -39,7 +39,7 @@ import schemaWireFixture from "./fixtures/schema-wire.json";
 import { textsOf } from "./testHelpers";
 import {
   distributeSpaceFold,
-  type StackOrigin,
+  type StackBaseline,
 } from "../ast/constraints/distribute";
 import {
   continuousInterval,
@@ -123,39 +123,39 @@ async function main() {
       at?: number
     ) =>
       JSON.stringify(
-        stackOrigin("r", centered(levels, at), levels, keys, reverse)
+        stackBaseline("r", centered(levels, at), levels, keys, reverse)
       );
     const is = (part: number, fraction: number) =>
-      JSON.stringify({ part, fraction });
+      JSON.stringify({ kind: "at", part, point: fraction });
     check(
       "odd: the middle of the middle level",
       origin(LEVELS5, LEVELS5) ===
-        JSON.stringify({ part: 2, fraction: 0.5 })
+        is(2, 0.5)
     );
     check(
       "even: the boundary between the two middle levels",
       origin(LEVELS4, LEVELS4) ===
-        JSON.stringify({ part: 2, fraction: 0 })
+        is(2, 0)
     );
     check(
       "a missing first level does not move the center",
       origin(LEVELS5, ["D", "N", "A", "SA"]) ===
-        JSON.stringify({ part: 1, fraction: 0.5 })
+        is(1, 0.5)
     );
     check(
       "a missing middle level leaves the center on its boundary",
       origin(LEVELS5, ["SD", "D", "A", "SA"]) ===
-        JSON.stringify({ part: 2, fraction: 0 })
+        is(2, 0)
     );
     check(
       "parts all before the center: the last part's head",
       origin(LEVELS5, ["SD", "D"]) ===
-        JSON.stringify({ part: 1, fraction: 1 })
+        is(1, 1)
     );
     check(
       "a reversed stack keeps the center on the same level",
       origin(LEVELS4, LEVELS4, true) ===
-        JSON.stringify({ part: 1, fraction: 0 })
+        is(1, 0)
     );
     check(
       "midpoint 2 of 5: the boundary after the second level",
@@ -195,7 +195,7 @@ async function main() {
     );
     check(
       "no HasMidpoint: the default origin",
-      stackOrigin(
+      stackBaseline(
         "r",
         { HasLevels: { levels: LEVELS5 }, HasOrder: {} },
         LEVELS5,
@@ -203,7 +203,7 @@ async function main() {
       ) === undefined
     );
     const shuffled = await errorOf(() =>
-      stackOrigin(
+      stackBaseline(
         "r",
         centered(LEVELS5),
         ["A", "SD", "N", "D", "SA"],
@@ -219,10 +219,15 @@ async function main() {
 
   console.log("\n# a centered stack's extent fold");
   {
+    const at = (part: number, point: number): StackBaseline<number> => ({
+      kind: "at",
+      part,
+      point,
+    });
     const fold = (
       values: number[],
-      origin: StackOrigin<number> = { part: 0, fraction: 0 },
-      hasMidpoint = origin.part !== 0 || origin.fraction !== 0
+      baseline: StackBaseline<number> = { kind: "start" },
+      hasMidpoint = baseline.kind === "at"
     ) =>
       distributeSpaceFold(
         values.map((v) =>
@@ -233,14 +238,11 @@ async function main() {
           axis: 1,
           glue: true,
           measure: "r",
-          origin,
+          baseline,
           hasMidpoint,
         }
       ) as CONTINUOUS_TYPE;
-    const odd = fold([5, 10, 20, 40, 25], {
-      part: 2,
-      fraction: 0.5,
-    });
+    const odd = fold([5, 10, 20, 40, 25], at(2, 0.5));
     check(
       "odd: the parts before the center and half the middle lie below 0",
       JSON.stringify(continuousInterval(odd)) ===
@@ -248,10 +250,7 @@ async function main() {
       JSON.stringify(continuousInterval(odd))
     );
     check("a centered stack's space is mirrored", odd.mirrored === true);
-    const even = fold([10, 20, 30, 40], {
-      part: 2,
-      fraction: 0,
-    });
+    const even = fold([10, 20, 30, 40], at(2, 0));
     check(
       "even: the two middle levels meet at 0",
       JSON.stringify(continuousInterval(even)) ===
@@ -280,11 +279,11 @@ async function main() {
     );
     check(
       "a negative part is no error without HasMidpoint",
-      fold([10, -5, 20], { part: 1, fraction: 0.5 }, false).mirrored ===
+      fold([10, -5, 20], at(1, 0.5), false).mirrored ===
         undefined
     );
     const signed = await errorOf(() =>
-      fold([10, -5, 20], { part: 1, fraction: 0.5 })
+      fold([10, -5, 20], at(1, 0.5))
     );
     check(
       "a negative part in a centered stack is an error naming HasMidpoint",
