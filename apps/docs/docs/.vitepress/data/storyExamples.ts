@@ -6,7 +6,9 @@
  * for each one synthesizes a standalone, runnable TypeScript snippet by
  * transforming the story's source:
  *
- *   - library imports (`../../src/lib`, `../../src/color`, `clock`, …)  → `"gofish-graphics"`
+ *   - library imports (`../../src/lib`, `../../src/families/coord`, …) → the public
+ *     name and package specifier the checker resolves each name to
+ *     (`publicExports.mjs`); a name that is not public is an error
  *   - dataset imports (`../../src/data/X`)                              → `"./dataset"`
  *   - the `initializeContainer()` helper                               → `document.getElementById("app")`
  *   - `args.w` / `args.h` / etc.                                       → the literal values from `args`
@@ -29,7 +31,9 @@
  * This module is imported at build time by the VitePress data loader
  * (`storyExamples.data.js`) and may also be consumed by markdown-it plugins, so
  * it is synchronous and depends only on `node:fs` / `node:path` / `typescript`
- * / the sibling `textUtils.ts` (dedent/indent helpers shared with pythonExamples.ts).
+ * / the sibling `textUtils.ts` (dedent/indent helpers shared with pythonExamples.ts)
+ * / the sibling `publicExports.mjs` (the packages' public surface, shared with
+ * scripts/check-doc-snippets.mjs).
  *
  * Hard build-time guards: duplicate ids throw; unparseable tagged stories throw.
  */
@@ -38,6 +42,7 @@ import { dirname, join, relative, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { dedent, indent } from "./textUtils.ts";
+import { publicSurface } from "./publicExports.mjs";
 
 export interface StoryExample {
   /** kebab-case of gallery.title, e.g. "seattle-weather-stacked-bar-chart" */
@@ -99,6 +104,7 @@ const GOFISH_PKG_JSON = join(
 const GOTREE_STORIES_DIR = join(REPO_ROOT, "packages/gofish-gotree/stories");
 const GOTREE_SRC_DIR = join(REPO_ROOT, "packages/gofish-gotree/src");
 const GOTREE_DATA_MODULE = join(GOTREE_STORIES_DIR, "data"); // stories/data.ts
+const LIB_SRC_DIR = join(REPO_ROOT, "packages/gofish-graphics/src");
 
 const ASSET_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
 
@@ -146,7 +152,7 @@ function parse(file: string, source: string): ts.SourceFile {
 // ---------------------------------------------------------------------------
 
 type ImportTarget =
-  | { kind: "gofish" }
+  | { kind: "source"; file: string } // a module of a package's source tree
   | { kind: "dataset"; modulePath: string }
   | { kind: "keep"; module: string }
   | { kind: "asset"; module: string }
@@ -176,17 +182,16 @@ function classifyModule(spec: string, storyFile: string): ImportTarget {
     if (ASSET_EXTENSIONS.some((ext) => spec.endsWith(ext))) {
       return { kind: "asset", module: "./" + basename(spec) };
     }
-    // Any other import that lands inside the library source tree is re-exported
-    // from the package entry (lib re-exports color, clock, path, util, …).
-    if (absolute.includes("/packages/gofish-graphics/src/")) {
-      return { kind: "gofish" };
-    }
-    // gofish-gotree grammar imports (`../../src`) → the bare package name.
+    // Any other import that lands inside a package's source tree (the
+    // library's, or the gofish-gotree grammar's `../../src`): each name it
+    // imports is published under the public name it resolves to, if any
+    // (`publicImport`).
     if (
+      absolute.startsWith(LIB_SRC_DIR + "/") ||
       absolute === GOTREE_SRC_DIR ||
       absolute.startsWith(GOTREE_SRC_DIR + "/")
     ) {
-      return { kind: "keep", module: "gofish-gotree" };
+      return { kind: "source", file: resolveModuleFile(absolute) };
     }
     // A local helper module next to the story — cannot be made standalone.
     return { kind: "local" };
@@ -201,6 +206,8 @@ function resolveModuleFile(absoluteNoExt: string): string {
     absoluteNoExt,
     absoluteNoExt + ".ts",
     absoluteNoExt + ".tsx",
+    join(absoluteNoExt, "index.ts"),
+    join(absoluteNoExt, "index.tsx"),
   ]) {
     try {
       if (statSync(candidate).isFile()) return candidate;
@@ -209,6 +216,54 @@ function resolveModuleFile(absoluteNoExt: string): string {
     }
   }
   return absoluteNoExt + ".ts";
+}
+
+/** How one import of a package source module is published. */
+type PublicImport =
+  | { form: "named"; specifier: string; binding: string }
+  | { form: "namespace"; specifier: string; name: string };
+
+/**
+ * The package import that stands for `imp`, an import of the source module
+ * `file` that `from` (a story or a dataset module) makes: its public name
+ * and specifier, found by the symbol it resolves to (`publicExports.mjs`),
+ * so a renamed export is found under its public name. `undefined` when it is
+ * not public: no package import of it loads.
+ */
+function publicImport(
+  imp: ImportBinding,
+  file: string
+): PublicImport | undefined {
+  const surface = publicSurface();
+  if (imp.form === "namespace") {
+    const r = surface.resolveNamespace(file);
+    if (!r) return undefined;
+    return r.name === undefined
+      ? { form: "namespace", specifier: r.specifier, name: imp.name }
+      : {
+          form: "named",
+          specifier: r.specifier,
+          binding: r.name === imp.name ? r.name : `${r.name} as ${imp.name}`,
+        };
+  }
+  const exported = imp.form === "named" ? imp.imported! : "default";
+  const r = surface.resolveName(file, exported, { value: !imp.isTypeOnly });
+  if (!r) return undefined;
+  return {
+    form: "named",
+    specifier: r.specifier,
+    binding: r.name === imp.name ? r.name : `${r.name} as ${imp.name}`,
+  };
+}
+
+/** The error for an import that is not public ({@link publicImport}). */
+function notPublic(imp: ImportBinding, from: string): Error {
+  const name = imp.form === "named" ? imp.imported : imp.name;
+  return new Error(
+    `${relative(REPO_ROOT, from)} imports ${name} from "${imp.module}", ` +
+      `which no package exports publicly, so the published example could ` +
+      `not load it. Import it from the package's public entry instead.`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -641,7 +696,8 @@ function transformStory(
   }
 
   // ----- build imports -----
-  const gofishNames = new Set<string>();
+  // Package specifier → the bindings imported from it.
+  const publicNamed = new Map<string, Set<string>>();
   const datasetNames = new Set<string>();
   const datasetModules = new Set<string>();
   const keepLines: string[] = [];
@@ -662,10 +718,18 @@ function transformStory(
     switch (target.kind) {
       case "drop":
         break;
-      case "gofish":
-        if (imp.form === "named") gofishNames.add(imp.imported ?? imp.name);
-        else forcedFallback = true; // default/namespace import from lib is unexpected
+      case "source": {
+        const pub = publicImport(imp, target.file);
+        if (!pub) throw notPublic(imp, storyFile);
+        if (pub.form === "namespace")
+          keepNamespace.set(pub.specifier, pub.name);
+        else {
+          if (!publicNamed.has(pub.specifier))
+            publicNamed.set(pub.specifier, new Set());
+          publicNamed.get(pub.specifier)!.add(pub.binding);
+        }
         break;
+      }
       case "dataset":
         datasetNames.add(imp.name);
         datasetModules.add(target.modulePath);
@@ -703,9 +767,9 @@ function transformStory(
   }
 
   const importLines: string[] = [];
-  if (gofishNames.size) {
+  for (const [module, names] of [...publicNamed.entries()].sort()) {
     importLines.push(
-      `import { ${[...gofishNames].sort().join(", ")} } from "gofish-graphics";`
+      `import { ${[...names].sort().join(", ")} } from "${module}";`
     );
   }
   for (const [module, names] of [...keepNamed.entries()].sort()) {
@@ -970,11 +1034,10 @@ function inlineDataModule(modulePath: string, preview: boolean): string {
         };`,
       });
     } else if (spec.startsWith(".")) {
-      // a relative import into the library source → re-point at the package
       edits.push({
-        start: stmt.moduleSpecifier.getStart(sourceFile),
-        end: stmt.moduleSpecifier.getEnd(),
-        text: `"gofish-graphics"`,
+        start: stmt.getStart(sourceFile),
+        end: stmt.getEnd(),
+        text: datasetImport(stmt, modulePath, preview),
       });
     }
   }
@@ -984,6 +1047,70 @@ function inlineDataModule(modulePath: string, preview: boolean): string {
     src = src.slice(0, e.start) + e.text + src.slice(e.end);
   }
   return src.trim();
+}
+
+/**
+ * What stands for a dataset module's relative import of a package source
+ * module: the package imports its names are public under, or, when the module
+ * is a self-contained helper that the package does not export (the seeded
+ * generator `lcg` in src/util), the helper's own source, since the dataset
+ * must run on its own. A helper that imports anything is not self-contained,
+ * so it throws, as does an import of anything else.
+ */
+function datasetImport(
+  stmt: ts.ImportDeclaration,
+  modulePath: string,
+  preview: boolean
+): string {
+  const spec = (stmt.moduleSpecifier as ts.StringLiteral).text;
+  const file = resolveModuleFile(resolve(dirname(modulePath), spec));
+  const clause = stmt.importClause;
+  const bindings: ImportBinding[] = [];
+  if (clause?.name)
+    bindings.push({
+      name: clause.name.text,
+      module: spec,
+      form: "default",
+      isTypeOnly: !!clause.isTypeOnly,
+    });
+  const named = clause?.namedBindings;
+  if (named && ts.isNamespaceImport(named))
+    bindings.push({
+      name: named.name.text,
+      module: spec,
+      form: "namespace",
+      isTypeOnly: !!clause!.isTypeOnly,
+    });
+  else if (named)
+    for (const el of named.elements)
+      bindings.push({
+        name: el.name.text,
+        imported: el.propertyName?.text ?? el.name.text,
+        module: spec,
+        form: "named",
+        isTypeOnly: !!clause!.isTypeOnly || el.isTypeOnly,
+      });
+  const pubs = bindings.map((b) => publicImport(b, file));
+  const missing = bindings.find((_, i) => pubs[i] === undefined);
+  if (missing) {
+    const helper = parse(file, readFileSync(file, "utf-8"));
+    if (helper.statements.some(ts.isImportDeclaration))
+      throw notPublic(missing, modulePath);
+    return `// ---- ${relative(dirname(modulePath), file)} ----\n${inlineDataModule(file, preview)}`;
+  }
+  const byModule = new Map<string, string[]>();
+  const lines: string[] = [];
+  for (const pub of pubs as PublicImport[]) {
+    if (pub.form === "namespace")
+      lines.push(`import * as ${pub.name} from "${pub.specifier}";`);
+    else {
+      if (!byModule.has(pub.specifier)) byModule.set(pub.specifier, []);
+      byModule.get(pub.specifier)!.push(pub.binding);
+    }
+  }
+  for (const [module, names] of byModule)
+    lines.unshift(`import { ${names.join(", ")} } from "${module}";`);
+  return lines.join("\n");
 }
 
 function resolveJsonPath(modulePath: string, spec: string): string {
