@@ -237,7 +237,7 @@ export const QuarterlyBars: StoryObj<Args> = {
     })
       // The two ends are times, whose unit is an instant, so they share
       // the x axis.
-      .flow(scatter({ by: "start", xMin: "start", xMax: "end" }))
+      .flow(scatter({ by: "start", x: "start", x2: "end" }))
       .mark(rect({ h: "amount" }))
       .render(container);
     return container;

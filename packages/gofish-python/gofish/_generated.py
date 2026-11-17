@@ -746,17 +746,15 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x_min: Optional[int | float | str] = None, x_max: Optional[int | float | str] = None, y_min: Optional[int | float | str] = None, y_max: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Position each child at an explicit (x, y) point or [min, max] span in data space.
+def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Position each child at an explicit (x, y) point or a span from x to x2 (y to y2) in data space.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
-        x: Point position, x.
-        y: Point position, y.
-        x_min: Range form: left/bottom edge, x.
-        x_max: Range form: right/top edge, x.
-        y_min: Range form: left/bottom edge, y.
-        y_max: Range form: right/top edge, y.
+        x: Each child's point on x, or with `x2` the start of its span.
+        y: Each child's point on y, or with `y2` the start of its span.
+        x2: The other end of each child's span on x, which starts at `x`.
+        y2: The other end of each child's span on y, which starts at `y`.
         dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
         overlap: How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.
@@ -769,10 +767,8 @@ def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Opt
         ("by", by),
         ("x", _channel(x)),
         ("y", _channel(y)),
-        ("xMin", _channel(x_min)),
-        ("xMax", _channel(x_max)),
-        ("yMin", _channel(y_min)),
-        ("yMax", _channel(y_max)),
+        ("x2", _channel(x2)),
+        ("y2", _channel(y2)),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("alignment", alignment),
         ("overlap", _to_wire(("ref", "Overlap"), overlap, "overlap")),

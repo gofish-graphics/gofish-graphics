@@ -373,10 +373,9 @@ export interface ScatterOperator
   by?: string | FieldAccessor | ChunkKeyIR;
   x?: ChannelValue;
   y?: ChannelValue;
-  xMin?: ChannelValue;
-  xMax?: ChannelValue;
-  yMin?: ChannelValue;
-  yMax?: ChannelValue;
+  /** With `x`, the other end of each child's span (`x` is then its start). */
+  x2?: ChannelValue;
+  y2?: ChannelValue;
   /** Per-child placement by axis name (see `AxisDims`): a bare value is the
    *  point, `{ min, max }` the span, `{ center }` the point. */
   dims?: AxisDims;

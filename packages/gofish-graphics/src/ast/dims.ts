@@ -78,8 +78,9 @@ export type IntervalKey = (typeof AXIS_INTERVAL_KEYS)[number];
 /**
  * How a family of options reads its `dims` bag: `where` prefixes messages,
  * `bare` is the anchor a bare value fills, `topLevel` names the top-level
- * option that writes each allowed anchor per axis (for messages), and
- * `badKey` explains an anchor outside `topLevel`.
+ * option that writes each allowed anchor per axis (for messages, and for
+ * channel inference: a slot infers as the option it names), and `badKey`
+ * explains an anchor outside `topLevel`.
  */
 export type AxisDimsForm = {
   where: string;

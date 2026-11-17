@@ -434,7 +434,7 @@ These would be new field ops.
 - `field("y").mean()` needs an affine `T` and returns `T`.
 - `field("y").quantile(0.9)` needs an ordered `T` and returns `T`.
 - `field("y").interval(0.95)` needs an ordered `T` and returns `Interval<T>`. GoFish
-  already has interval positions (`scatter({ yMin, yMax })` and the `dims` interval form),
+  already has interval positions (`scatter({ y, y2 })` and the `dims` interval form),
   so an error bar is a summary and an existing operator.
 - `field("y").sd()` returns the difference type of `T`.
 - `field("y").prob()` needs a discrete `T` and returns a probability for each category.
@@ -505,7 +505,7 @@ This table checks twelve target visualizations. The classes are these.
 
 | Target                                 | Mode    | Class        | GoFish pieces                                                                                                       |
 | -------------------------------------- | ------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Error bars                             | summary | type alone   | `field(y).interval(0.95)` into `scatter({ yMin, yMax })`, thin `rect`                                               |
+| Error bars                             | summary | type alone   | `field(y).interval(0.95)` into `scatter({ y, y2 })`, thin `rect`                                                    |
 | Point and multi-level interval         | summary | type alone   | two intervals and a point, `.layer(...)`. An `interval` mark would be shorter                                       |
 | Quantile dotplot                       | summary | type alone   | `quantiles(20)` as rows, `bin`, `stack` of `circle` (the unit violin pattern)                                       |
 | Fan chart over time                    | summary | type alone   | intervals at three levels per time, `ribbon` through interval marks, layered                                        |

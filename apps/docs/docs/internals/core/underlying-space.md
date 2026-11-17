@@ -869,8 +869,8 @@ composes its targets' spaces into the layer's claim on that axis:
   (`buildChildSpans`, `constraints/proposalPlan.ts`), so the child's
   content fills the span it will be pinned across rather than being laid out
   in the whole layer and then stretched. `scatter` uses both
-  forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
-  `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
+  forms of `Constraint.position`: plain `x`/`y` → a point coordinate, a span
+  `x` with `x2` (`y` with `y2`) → an interval coordinate (the operator no longer
   has a bespoke layout). A position constraint may instead give its target
   a **region** (`region: PositionRegion`, #1059), which is what `partition`
   uses. It sizes its target as an interval does, but pins only the

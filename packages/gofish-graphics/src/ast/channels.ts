@@ -70,7 +70,7 @@ export type ChannelSpec<C extends ChannelType = ChannelType> =
 /**
  * A `dims` option whose slots infer exactly as the top-level options they
  * stand for: the slot for anchor `k` is the channel `form.topLevel[k]` names
- * (scatter's bare value and `center` infer as `x`, its `min` as `xMin`). The
+ * (scatter's bare value, `center` and `min` infer as `x`, its `max` as `x2`). The
  * counterparts on the two axes must share one spec, since a slot's axis is
  * known only once the enclosing coordinate space is. A counterpart with no
  * channel leaves the slot as given.

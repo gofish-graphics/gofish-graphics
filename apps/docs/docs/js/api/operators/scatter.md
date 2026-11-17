@@ -26,7 +26,7 @@ gf.chart(locations, { axes: true })
 ## Signature
 
 ```ts
-scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, dims?, alignment?, overlap? })
+scatter({ by?, x?, y?, x2?, y2?, dims?, alignment?, overlap? })
 ```
 
 ## Parameters
@@ -34,14 +34,17 @@ scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, dims?, alignment?, overlap? }
 ::: gofish-ref scatter
 :::
 
-At least one of `x`, `y`, the `xMin`/`xMax` pair, or the `yMin`/`yMax` pair is required.
+At least one of `x` or `y` is required. On its own, `x` places each child at a
+point. With `x2`, each child spans from `x` to `x2`, as a
+[`rect`](/js/api/marks/rect) does. `y` and `y2` work the
+same way.
 
 ## Placing by axis name with `dims`
 
 `x` and `y` mean the first and second axis in any coordinate space. To use the
 names the enclosing coordinate space declares, put them in `dims`: a plain
-value is the point, like `x`, and `{ min, max }` is the span, like
-`xMin`/`xMax`.
+value is the point, like `x`, and `{ min, max }` is the span, like `x` with
+`x2`.
 
 ```ts
 // Under Coord.polar(): the same as scatter({ by: "id", x: "bearing", y: "distance" })
@@ -55,9 +58,9 @@ value is the point, like `x`, and `{ min, max }` is the span, like
 A scatter only places its children, so a `size` inside `dims` is an error; size
 the mark instead. Placing an axis twice, such as `x` together with
 `dims.theta`, is an error too. The two ends of a span may come from either
-spelling (`xMin` with `dims: { x: { max: "hi" } }`), but one end without the
+spelling (`x` with `dims: { x: { max: "hi" } }`), but one end without the
 other is an error. Each value in `dims` is read like its top-level
-counterpart: a point like `x`, a `min` like `xMin`. The circle's `r` above is
+counterpart: a point or a `min` like `x`, a `max` like `x2`. The circle's `r` above is
 its radius, not the polar axis: axis names only appear as keys of `dims`.
 
 ## Keeping dots apart with `overlap`
@@ -260,8 +263,8 @@ Some cases are errors:
 .flow(scatter({ by: "species", x: "bill_length", y: "flipper_length" }))
 .mark(rect({ w: 8, h: 8, rx: 4 }))
 
-// Range form: each rect spans its task's start to end in data space
-.flow(scatter({ by: "task", xMin: "start", xMax: "end" }))
+// Span form: each rect spans its task's start to end in data space
+.flow(scatter({ by: "task", x: "start", x2: "end" }))
 .mark(rect({ h: 12 }))
 ```
 

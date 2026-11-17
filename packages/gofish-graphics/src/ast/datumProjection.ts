@@ -727,29 +727,6 @@ export function splitEntries<T extends Record<string, any>>(
     : entries;
 }
 
-/** Which axes a scatter-family opts object positions: `x`/`y` true when a
- *  plain point value or a full range (`Min`+`Max`) is given for that axis.
- *  Shared by `Scatter`'s `isPlaced` (over the axes merged with `dims`) and
- *  the `arrangement` declaration the scatter operator hands `createOperator`
- *  (both in `graphicalOperators/scatter.tsx`) so the two don't drift. */
-export function scatterPositions(opts: {
-  x?: unknown;
-  xMin?: unknown;
-  xMax?: unknown;
-  y?: unknown;
-  yMin?: unknown;
-  yMax?: unknown;
-}): { x: boolean; y: boolean } {
-  return {
-    x:
-      opts.x !== undefined ||
-      (opts.xMin !== undefined && opts.xMax !== undefined),
-    y:
-      opts.y !== undefined ||
-      (opts.yMin !== undefined && opts.yMax !== undefined),
-  };
-}
-
 /** The full set of distinct values at `path` ("every possible value"), with no
  *  collapse. `source` may be a ref (anything exposing `.datum`), a row array,
  *  or a single row. Use when you want the multiset, not a scalar key. */

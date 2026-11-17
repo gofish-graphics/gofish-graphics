@@ -80,7 +80,7 @@ discipline:
    split over **all** distribute targets, sized-or-not. A fixed child's unused
    share is simply lost (measured below: a `[50px, fill, fill]` row in a 300px
    container comes out 256px wide).
-3. **The scribble.** `scatter`'s `xMin`/`xMax` channels write the child's
+3. **The scribble.** `scatter`'s `x`/`x2` span channels (once `xMin`/`xMax`) write the child's
    translate _and_ its `intrinsicDims` directly (`scatter.tsx:227-248`);
    `treemap` does the same with d3's rectangles. Both work because their
    targets are leaves or layout-once subtrees; neither records ownership, and
@@ -88,12 +88,12 @@ discipline:
 
 And four pending features each need a fourth answer unless we design one:
 
-| consumer                                                                                                 | direction | where the number comes from                        | units                                                                             |
-| -------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `nest` (outer := inner + padding; [#461](https://github.com/gofish-graphics/gofish-graphics/pull/461))   | bottom-up | another child's measured extent, plus a constant   | px (padding) over whatever inner's units are                                      |
-| treemap slots ([#541](https://github.com/gofish-graphics/gofish-graphics/issues/541))                    | top-down  | an external algorithm                              | **area** — d3 owns each rectangle's aspect ratio; weights are not per-axis shares |
-| equal-width (Bluefish §6.2's unsolved case)                                                              | sideways  | the max of the targets' requests, pushed back down | the targets' shared units                                                         |
-| interval channels (`xMin`/`xMax`; [#546](https://github.com/gofish-graphics/gofish-graphics/issues/546)) | derived   | two placed anchors on one axis                     | the position scale's units                                                        |
+| consumer                                                                                                                | direction | where the number comes from                        | units                                                                             |
+| ----------------------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `nest` (outer := inner + padding; [#461](https://github.com/gofish-graphics/gofish-graphics/pull/461))                  | bottom-up | another child's measured extent, plus a constant   | px (padding) over whatever inner's units are                                      |
+| treemap slots ([#541](https://github.com/gofish-graphics/gofish-graphics/issues/541))                                   | top-down  | an external algorithm                              | **area** — d3 owns each rectangle's aspect ratio; weights are not per-axis shares |
+| equal-width (Bluefish §6.2's unsolved case)                                                                             | sideways  | the max of the targets' requests, pushed back down | the targets' shared units                                                         |
+| interval channels (`x`/`x2`, once `xMin`/`xMax`; [#546](https://github.com/gofish-graphics/gofish-graphics/issues/546)) | derived   | two placed anchors on one axis                     | the position scale's units                                                        |
 
 Plus the flex question (#553): a fill child's share of leftover space is
 conceptually a _per-child datum_ ("this child gets 2 shares"), yet until this

@@ -250,9 +250,9 @@ channels: {
 | `{ type: "pos", entry: true, discrete: true }` | for nonnumeric categorical fields, emit evenly spaced discrete placement coordinates |
 | user passed an array                           | already final form — pass through unchanged                                          |
 
-`scatter` uses `entry: true` for `x`/`y`/`xMin`/`xMax`/`yMin`/`yMax` so a
+`scatter` uses `entry: true` for `x`/`y`/`x2`/`y2` so a
 field name like `x: "miles"` becomes a per-group mean position
-(`src/ast/graphicalOperators/scatter.tsx:336`). Its point channels also set
+(`src/ast/graphicalOperators/scatter.tsx`). Its point channels also set
 `discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
 slot coordinate instead of an invalid numeric mean.
 
@@ -262,8 +262,8 @@ same `AxisDimsForm` the operator later merges the bag with, and its
 `topLevel` table names the top-level option each anchor stands for. For each
 slot, `applyChannels` looks up that option's own channel spec and applies it,
 so a slot infers exactly as its counterpart: scatter's bare value and
-`center` as `x` (per entry, discrete for a nonnumeric field), its `min` as
-`xMin` (per entry, never discrete). A counterpart with no channel leaves the
+`center` and its `min` as `x` (per entry, discrete for a nonnumeric field),
+its `max` as `x2` (per entry, never discrete). A counterpart with no channel leaves the
 slot as given (treemap's `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 

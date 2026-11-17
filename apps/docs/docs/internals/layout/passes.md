@@ -236,11 +236,12 @@ children by slot. The walk sees the tree before any hook runs; that is enough,
 because spread's and scatter's constraints add no nodes.
 A name the scope does not declare **throws**, listing the names it does; so does
 setting one (axis, anchor) slot twice, across the top-level keys and `dims` or within
-`dims`. Scatter merges its top-level `x`/`xMin`/`xMax` (and `y` ones) with its `dims`
+`dims`. Scatter merges its top-level `x`/`x2` (and `y` ones) with its `dims`
 through the same `mergeAxisDims` as the marks, with its own rules: a bare value is
-the point (`center`), and `size` is not a key. A span is checked on the merged axis,
-so `xMin` with `dims.x.max` is a span, and one end without the other throws, from
-either spelling. Like the later embedding pass it
+the point (`center`), `size` is not a key, and `x` is the span's start on an axis
+that has an other end (`x2` or `dims.x.max`), else the point. A span is checked on
+the merged axis, so `x` with `dims.x.max` is a span, and one end without the other
+throws, from either spelling. Like the later embedding pass it
 mutates the per-axis dims array by reassigning its elements, so the captured
 layout/space closures observe the result.
 

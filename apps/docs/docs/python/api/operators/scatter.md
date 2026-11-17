@@ -40,12 +40,17 @@ scatter(*, by=None, **options) -> Operator
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
+At least one of `x` or `y` is required. On its own, `x` places each child at a
+point. With `x2`, each child spans from `x` to `x2`, as a
+[`rect`](/python/api/marks/rect) does. `y` and `y2` work the
+same way.
+
 ## Placing by axis name with `dims`
 
 `x` and `y` mean the first and second axis in any coordinate space. To use the
 names the enclosing coordinate space declares, pass them in the `dims` dict: a
 plain value is the point, like `x`, and `{"min": ..., "max": ...}` is the span,
-like `x_min`/`x_max`.
+like `x` with `x2`.
 
 ```python
 # Under Coord.polar(): the same as scatter(by="id", x="bearing", y="distance")
@@ -57,9 +62,9 @@ chart(trips, coord=Coord.polar()) \
 A scatter only places its children, so a `"size"` inside `dims` is an error;
 size the mark instead. Placing an axis twice, such as `x` together with
 `dims["theta"]`, is an error too. The two ends of a span may come from either
-spelling (`x_min` with `dims={"x": {"max": "hi"}}`), but one end without the
+spelling (`x` with `dims={"x": {"max": "hi"}}`), but one end without the
 other is an error. Each value in `dims` is read like its top-level
-counterpart: a point like `x`, a `min` like `x_min`. The circle's `r` is its
+counterpart: a point or a `min` like `x`, a `max` like `x2`. The circle's `r` is its
 radius, not the polar axis: axis names only appear as keys of `dims`.
 
 ## Keeping dots apart with `overlap`
@@ -246,5 +251,5 @@ chart(data).flow(scatter(by="lake", x="x", y="y")).mark(circle(r=8))
 - With `by`, each group is positioned at the mean of its members' `x`/`y`.
   Without `by`, every row is positioned individually, and the mark gets the
   one-row group `[row]` (see [spread](./spread#without-by)).
-- Use the range accessors (`x_min`/`x_max`/`y_min`/`y_max`) when a group should span
-  an interval rather than sit at a point.
+- Give `x2` (or `y2`) with `x` (or `y`) when a group should span an interval
+  rather than sit at a point.

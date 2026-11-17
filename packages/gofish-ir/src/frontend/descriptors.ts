@@ -1712,17 +1712,19 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   scatter: operator("scatter", {
-    doc: "Position each child at an explicit (x, y) point or [min, max] span in data space.",
+    doc: "Position each child at an explicit (x, y) point or a span from x to x2 (y to y2) in data space.",
     fields: {
       by: splitBy(
         "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
       ),
-      x: ch.pos("Point position, x."),
-      y: ch.pos("Point position, y."),
-      xMin: ch.pos("Range form: left/bottom edge, x."),
-      xMax: ch.pos("Range form: right/top edge, x."),
-      yMin: ch.pos("Range form: left/bottom edge, y."),
-      yMax: ch.pos("Range form: right/top edge, y."),
+      x: ch.pos("Each child's point on x, or with `x2` the start of its span."),
+      y: ch.pos("Each child's point on y, or with `y2` the start of its span."),
+      x2: ch.pos(
+        "The other end of each child's span on x, which starts at `x`."
+      ),
+      y2: ch.pos(
+        "The other end of each child's span on y, which starts at `y`."
+      ),
       dims: axisDims(
         "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
       ),

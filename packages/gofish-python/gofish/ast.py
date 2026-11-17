@@ -2261,8 +2261,8 @@ def scatter(
             domain ops (``field("site").sort("yield")``). Omit for per-item
             scatter.
         **options: The generated ``_scatter_opts`` core's options; see the
-            docs options table. Give at least one of ``x``, ``y``,
-            ``x_min``/``x_max``, ``y_min``/``y_max``, or ``dims`` (placement
+            docs options table. Give at least one of ``x`` or ``y`` (a
+            point, or with ``x2``/``y2`` the start of a span), or ``dims`` (placement
             by axis name, e.g. ``dims={"theta": "bearing", "r": "distance"}``
             in polar).
 

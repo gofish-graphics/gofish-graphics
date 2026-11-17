@@ -521,10 +521,10 @@ const bal = [
 
 const renders: [string, () => any][] = [
   [
-    "histogram: derive(user bins), xMin start / xMax end",
+    "histogram: derive(user bins), x start / x2 end",
     () =>
       chart(penguins)
-        .flow(derive(myBins), scatter({ xMin: "start", xMax: "end" }))
+        .flow(derive(myBins), scatter({ x: "start", x2: "end" }))
         .mark(rect({ h: "count" })),
   ],
   [
@@ -541,25 +541,25 @@ const renders: [string, () => any][] = [
         ),
   ],
   [
-    "dendrogram: xMin x1 / xMax x2",
+    "dendrogram: spans x1 to x2 and y1 to y2",
     () =>
       chart([
         { id: "a", x1: 0, x2: 1, y1: 2, y2: 2 },
         { id: "b", x1: 0, x2: 0, y1: 0, y2: 2 },
       ])
         .flow(
-          scatter({ by: "id", xMin: "x1", xMax: "x2", yMin: "y1", yMax: "y2" })
+          scatter({ by: "id", x: "x1", x2: "x2", y: "y1", y2: "y2" })
         )
         .mark(rect({})),
   ],
   [
-    "waterfall: yMin lo / yMax hi",
+    "waterfall: y lo / y2 hi",
     () =>
       chart(flows)
         .flow(
           derive(totals),
           spread({ by: "label", dir: "x" }),
-          scatter({ yMin: "lo", yMax: "hi" })
+          scatter({ y: "lo", y2: "hi" })
         )
         .mark(rect({})),
   ],
@@ -614,7 +614,7 @@ const renders: [string, () => any][] = [
       )
         .flow(
           spread({ by: "task", dir: "y" }),
-          scatter({ xMin: "start", xMax: "end" })
+          scatter({ x: "start", x2: "end" })
         )
         .mark(rect({ h: 10 })),
   ],
@@ -1019,7 +1019,7 @@ console.log("# measure: titles are Quantity (unit)");
       .flow(
         derive(totals),
         spread({ by: "label", dir: "x" }),
-        scatter({ yMin: "lo", yMax: "hi" })
+        scatter({ y: "lo", y2: "hi" })
       )
       .mark(rect({}))
       .toDisplayList(SIZE)

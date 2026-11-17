@@ -1399,7 +1399,7 @@ for the API.
       }
     },
     "ScatterOperator": {
-      "description": "Position each child at an explicit (x, y) point or [min, max] span in data space.",
+      "description": "Position each child at an explicit (x, y) point or a span from x to x2 (y to y2) in data space.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1423,27 +1423,19 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Point position, x."
+          "description": "Each child's point on x, or with `x2` the start of its span."
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Point position, y."
+          "description": "Each child's point on y, or with `y2` the start of its span."
         },
-        "xMin": {
+        "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Range form: left/bottom edge, x."
+          "description": "The other end of each child's span on x, which starts at `x`."
         },
-        "xMax": {
+        "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Range form: right/top edge, x."
-        },
-        "yMin": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Range form: left/bottom edge, y."
-        },
-        "yMax": {
-          "$ref": "#/$defs/ChannelValue",
-          "description": "Range form: right/top edge, y."
+          "description": "The other end of each child's span on y, which starts at `y`."
         },
         "dims": {
           "type": "object",

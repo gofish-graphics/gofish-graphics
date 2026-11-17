@@ -380,13 +380,13 @@ async function main() {
       )
     );
     check(
-      "dims {x: {min, max}} ≡ xMin/xMax",
+      "dims {x: {min, max}} ≡ x/x2",
       same(
         await dots({ dims: { x: { min: lo, max: hi } }, y: "angle" }),
-        await dots({ xMin: lo, xMax: hi, y: "angle" })
+        await dots({ x: lo, x2: hi, y: "angle" })
       )
     );
-    // `x` is discrete for a non-numeric field; `xMin`/`xMax` are not.
+    // `x` is discrete for a non-numeric field; `x2` is not.
     check(
       "dims {x: <non-numeric field>} ≡ x (both discrete)",
       same(
@@ -394,44 +394,75 @@ async function main() {
         await dots({ x: "name", y: "angle" })
       )
     );
-    // A non-numeric span is not discrete either: it has no data interval, so
-    // the chart's x axis has no position scale to place it with, and both
+    // A non-numeric span has no data interval: its start, read like `x`,
+    // is a discrete position, which a span cannot end at, and both
     // spellings throw the same error.
     const spanErrors: string[] = [];
     for (const [spelling, opts] of [
       ["dims {x: {min, max}}", { dims: { x: { min: "name", max: "name" } } }],
-      ["xMin/xMax", { xMin: "name", xMax: "name" }],
+      ["x/x2", { x: "name", x2: "name" }],
     ] as const) {
       const err = await errorOf(() => dots({ ...opts, y: "angle" }));
       spanErrors.push(err);
       check(
-        `${spelling} over a non-numeric field throws: its axis has no position scale`,
-        err.includes("no position scale"),
+        `${spelling} over a non-numeric field throws: a span takes no discrete position`,
+        err.includes("not discrete positions"),
         err
       );
     }
     check(
-      "dims {x: {min, max}} and xMin/xMax throw the same error",
+      "dims {x: {min, max}} and x/x2 throw the same error",
       spanErrors[0] === spanErrors[1],
       JSON.stringify(spanErrors)
     );
 
     const mixed = await errorOf(() =>
-      dots({ xMin: lo, dims: { x: { max: hi } }, y: "angle" })
+      dots({ x: lo, dims: { x: { max: hi } }, y: "angle" })
     );
-    check("xMin with dims.x.max is a span", mixed === "", mixed);
+    check("x with dims.x.max is a span", mixed === "", mixed);
     check(
-      "xMin with dims.x.max ≡ xMin/xMax",
+      "x with dims.x.max ≡ x/x2",
       same(
-        await dots({ xMin: lo, dims: { x: { max: hi } }, y: "angle" }),
-        await dots({ xMin: lo, xMax: hi, y: "angle" })
+        await dots({ x: lo, dims: { x: { max: hi } }, y: "angle" }),
+        await dots({ x: lo, x2: hi, y: "angle" })
       )
     );
-    const lone = await errorOf(() => dots({ xMin: "lo", y: "angle" }));
     check(
-      "a lone top-level xMin throws, naming it",
-      lone.includes("xMin") && lone.includes("both ends"),
+      "dims.x.min with x2 ≡ x/x2",
+      same(
+        await dots({ dims: { x: { min: lo } }, x2: hi, y: "angle" }),
+        await dots({ x: lo, x2: hi, y: "angle" })
+      )
+    );
+    check(
+      "a bare dims.x with x2 ≡ x/x2",
+      same(
+        await dots({ dims: { x: lo }, x2: hi, y: "angle" }),
+        await dots({ x: lo, x2: hi, y: "angle" })
+      )
+    );
+    const twice = await errorOf(() =>
+      dots({ x: lo, x2: hi, dims: { x: { min: lo } }, y: "angle" })
+    );
+    check(
+      "x and dims.x.min both starting one span throws",
+      twice.includes("dims.x") && twice.includes("set twice"),
+      twice
+    );
+    const lone = await errorOf(() => dots({ x2: "hi", y: "angle" }));
+    check(
+      "a lone top-level x2 throws, naming it and the missing x",
+      lone.includes("x2 sets") && lone.includes("(x)") &&
+        lone.includes("both ends"),
       lone
+    );
+    // The removed spelling: with nothing else placing x, the scatter
+    // places no axis by a field but y, so the old options name nothing.
+    const old = await errorOf(() => dots({ xMin: "lo", xMax: "hi" }));
+    check(
+      "the removed xMin/xMax spelling alone is an error",
+      old.includes("requires at least one of x or y"),
+      old
     );
     const loneDims = await errorOf(() =>
       dots({ dims: { x: { min: "lo" } }, y: "angle" })
