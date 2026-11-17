@@ -21,7 +21,7 @@ import {
   checkPartition,
   Cell,
   CycleCell,
-  StepBin,
+  StepBinning,
 } from "../ast/cells";
 import * as Binning from "../families/binning";
 import { mergeCells } from "../ast/underlyingSpace";
@@ -62,7 +62,7 @@ const {
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
-const DistBin = (GoFish as any).Binning;
+const DistBinning = (GoFish as any).Binning;
 
 declare const process: { exit(code: number): never; execPath: string };
 
@@ -885,7 +885,7 @@ async function main() {
     check(
       "the wire forms check",
       checkPartition({ kind: "month", every: 3 }, "t") instanceof Object &&
-        checkPartition({ kind: "step", size: 2 }, "t") instanceof StepBin &&
+        checkPartition({ kind: "step", size: 2 }, "t") instanceof StepBinning &&
         same(checkPartition({ kind: "step", size: 2 }, "t"), {
           kind: "step",
           size: 2,
@@ -1079,7 +1079,7 @@ async function main() {
     const rows = [1.2, 1.4, 2.6, 2.7, 2.8].map((rating) => ({ rating }));
     const dl = await chart(rows, { axes: { x: { title: false }, y: false } })
       .flow(
-        spread({ by: distField("rating").bin(DistBin.step(0.5)), dir: "x" })
+        spread({ by: distField("rating").bin(DistBinning.step(0.5)), dir: "x" })
       )
       .mark(rect({ w: 20, h: distField("rating").count() }))
       .toDisplayList({ w: 300, h: 100 });
@@ -1433,8 +1433,8 @@ async function main() {
       { axes: { x: { title: false }, y: false } }
     )
       .flow(
-        spread({ by: distField("v").bin(DistBin.step(10)), dir: "x" }),
-        spread({ by: distField("v").bin(DistBin.step(5)), dir: "x" })
+        spread({ by: distField("v").bin(DistBinning.step(10)), dir: "x" }),
+        spread({ by: distField("v").bin(DistBinning.step(5)), dir: "x" })
       )
       .mark(rect({ w: 20, h: 10 }))
       .toDisplayList({ w: 400, h: 100 });
@@ -1453,8 +1453,8 @@ async function main() {
       { axes: { x: { title: false }, y: false } }
     )
       .flow(
-        spread({ by: distField("v").bin(DistBin.step(10)), dir: "x" }),
-        spread({ by: distField("w").bin(DistBin.step(10)), dir: "x" })
+        spread({ by: distField("v").bin(DistBinning.step(10)), dir: "x" }),
+        spread({ by: distField("w").bin(DistBinning.step(10)), dir: "x" })
       )
       .mark(rect({ w: 20, h: 10 }))
       .toDisplayList({ w: 400, h: 100 });
@@ -1882,7 +1882,7 @@ async function main() {
       await chart(rows, noAxes)
         .flow(
           partition({
-            by: distField("rating").bin(DistBin.step(0.5)),
+            by: distField("rating").bin(DistBinning.step(0.5)),
             dir: "x",
           })
         )
@@ -1968,11 +1968,11 @@ async function main() {
     ];
     const grid = async (first: "x" | "y") => {
       const px = partition({
-        by: distField("a").bin(DistBin.step(1)),
+        by: distField("a").bin(DistBinning.step(1)),
         dir: "x",
       });
       const py = partition({
-        by: distField("b").bin(DistBin.step(1)),
+        by: distField("b").bin(DistBinning.step(1)),
         dir: "y",
       });
       return rectsOf(
@@ -2035,8 +2035,8 @@ async function main() {
     const sorted = (items: any[]) =>
       items.map((it) => JSON.stringify(it)).sort();
     const ab = {
-      x: distField("a").bin(DistBin.step(1)),
-      y: distField("b").bin(DistBin.step(1)),
+      x: distField("a").bin(DistBinning.step(1)),
+      y: distField("b").bin(DistBinning.step(1)),
     };
     const product = async (mark: any) =>
       itemsOf(
@@ -2211,7 +2211,7 @@ async function main() {
       { x: 4.2, y: 2 },
       { x: 4.5, y: 0 },
     ];
-    const byCell = () => distField("x").bin(DistBin.step(1));
+    const byCell = () => distField("x").bin(DistBinning.step(1));
     const noAxes = { axes: false };
 
     const lines = await chart(pts, noAxes)
@@ -2418,7 +2418,7 @@ async function main() {
     const runs = await chart(pts, { axes: false })
       .flow(
         spread({
-          by: distField("x").bin(DistBin.thresholds([10, 90])),
+          by: distField("x").bin(DistBinning.thresholds([10, 90])),
           dir: "x",
         }),
         scatter({ x: "x", y: "y" })
@@ -2452,7 +2452,7 @@ async function main() {
       .mark(circle({ r: 3 }).name("points"))
       .layer(
         chart(selectAll("points"))
-          .flow(spread({ by: distField("x").bin(DistBin.step(2)), dir: "x" }))
+          .flow(spread({ by: distField("x").bin(DistBinning.step(2)), dir: "x" }))
           .mark(rect({ w: 3, h: 3 }))
       )
       .toDisplayList({ w: 300, h: 100 })
@@ -2526,7 +2526,7 @@ async function main() {
           (e: Error) => e.message
         );
     const byAge = () =>
-      spread({ by: distField("age").bin(DistBin.thresholds(10)), dir: "x" });
+      spread({ by: distField("age").bin(DistBinning.thresholds(10)), dir: "x" });
     const both = await rects([spread({ by: "group", dir: "y" }), byAge()]);
     check(
       "each group of a nested split has the ten bins of the column's domain",
@@ -2566,7 +2566,7 @@ async function main() {
           spread({ by: "group", dir: "y" }),
           ...flow,
           partition({
-            by: distField("age").bin(DistBin.quantiles(4)),
+            by: distField("age").bin(DistBinning.quantiles(4)),
             dir: "x",
           })
         )

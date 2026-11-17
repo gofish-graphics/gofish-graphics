@@ -12,16 +12,16 @@ import { kindValue } from "./strategyKind";
 import type { GoFishNode } from "./_node";
 
 /** What the `effect` option takes. */
-export type EffectOption = Effect | string;
+export type EffectValue = Effect | string;
 
 /** The `effect` option, as every mark's and `layer`'s options hold it. */
-export type WithEffect = { effect?: EffectOption };
+export type WithEffect = { effect?: EffectValue };
 
 /** The display-list filter an `effect` option draws with, checked once per
  *  spec: undefined when none is given. `grayscale` is a CSS function;
  *  `luminanceToAlpha` has none, so a backend draws its SVG def. */
 export function displayFilter(
-  value: EffectOption | undefined,
+  value: EffectValue | undefined,
   where: string
 ): DisplayList.DisplayFilter | undefined {
   if (value === undefined) return undefined;

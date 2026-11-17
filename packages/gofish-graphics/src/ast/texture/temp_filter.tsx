@@ -258,7 +258,7 @@ const waterColorSplotchFilter = (
 );
 
 // A soft, fibrous felt-like texture that gently tints and displaces the source
-// Works best applied to filled shapes; use with `effect="url(#filter-felt)"`
+// Works best applied to filled shapes; use with `filter="url(#filter-felt)"`
 const feltFilter = (
   <filter
     id="filter-felt"

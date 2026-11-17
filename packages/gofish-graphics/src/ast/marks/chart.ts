@@ -65,7 +65,7 @@ import type { BlendMode } from "../blendMode";
 import {
   applyFilter,
   displayFilter,
-  type EffectOption,
+  type EffectValue,
   type WithEffect,
 } from "../drawEffect";
 import {
@@ -797,7 +797,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     const liveChannels = liveChannelsOf(opts);
     // Its `effect` filters each connector's whole drawing; checked once.
     const filter = displayFilter(
-      opts.effect as EffectOption | undefined,
+      opts.effect as EffectValue | undefined,
       `${type}({ effect })`
     );
     /** The cell `ChartBuilder` writes the computed split / travel direction /

@@ -152,7 +152,7 @@
     "test:enclose-render": "pnpm run build && tsx src/tests/encloseRender.test.ts",
     "test:clip": "pnpm run build && tsx src/tests/clip.test.ts",
     "test:hidden": "pnpm run build && tsx src/tests/hidden.test.ts",
-    "test:effect": "pnpm run build && tsx src/tests/effect.test.ts",
+    "test:effect": "pnpm run build && node --conditions browser --import tsx src/tests/effect.test.ts",
     "typecheck": "tsc --noEmit",
     "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate-mark-channels.ts && prettier --write src/ast/markChannels.generated.ts"
   },

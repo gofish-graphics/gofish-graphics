@@ -239,7 +239,7 @@ on a mark to attach a deferred text label, mirroring JS's `.label(accessor, opti
 rect(h="count").label("count", placement="center", font_size=10)
 ```
 
-`position` is a position string or a value of the [`Placement`](/python/api/placement)
+`placement` is a position string or a value of the [`Placement`](/python/api/placement)
 family, which reads the mark's outline and keeps the labels of one call off
 the marks, off each other, and off the nodes in `avoiding`
 (`avoiding=select_all("trend")`). `halo={"color": ..., "width": ...}` draws an

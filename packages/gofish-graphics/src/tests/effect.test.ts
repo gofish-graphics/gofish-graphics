@@ -2,8 +2,16 @@
  * The `effect` option (#1267): a mark's or a layer's whole drawing is drawn
  * in one group under its filter, an `Effect` strategy or a raw CSS string.
  *
- * Run: `pnpm build && tsx src/tests/effect.test.ts` (wired as `pnpm test:effect`).
+ * Both backends are checked: the string backend (`displayListToSVG`) and the
+ * DOM backend (`.render`, under happy-dom) draw the filter as an SVG `filter`
+ * attribute.
+ *
+ * Run: `pnpm test:effect` (`pnpm build`, then the test under
+ * `node --conditions browser --import tsx`, as `pnpm test:interaction` runs).
  */
+// The headless DOM goes first, so its globals exist before the built library
+// and solid-js/web evaluate.
+import { settle } from "./interactionDomSetup";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 import { DisplayList } from "gofish-ir";
@@ -91,9 +99,47 @@ console.log("# a layer's filter wraps its whole subtree");
   const id = /<filter id="([^"]+)"/.exec(svg)?.[1];
   check(
     "the group's filter names the def",
-    id !== undefined && svg.includes(`effect="url(#${id})"`),
+    id !== undefined && svg.includes(`filter="url(#${id})"`),
     svg
   );
+  check(
+    "the string backend writes no effect attribute",
+    !svg.includes("effect="),
+    svg
+  );
+}
+
+console.log("# the DOM backend draws the same filter attribute");
+{
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  await layer([
+    layer({ effect: Effect.luminanceToAlpha }, [
+      rect({ w: 10, h: 10, fill: "white" }),
+    ]),
+    rect({ x: 20, w: 10, h: 10, fill: "red", effect: "blur(2px)" }),
+  ]).render(container, { w: 100, h: 100 });
+  await settle();
+  const id = container.querySelector("filter")?.getAttribute("id");
+  const filters = [...container.querySelectorAll("g[filter]")].map((g) =>
+    g.getAttribute("filter")
+  );
+  check(
+    "the luminanceToAlpha group's filter names the def",
+    id !== undefined && id !== null && filters.includes(`url(#${id})`),
+    container.innerHTML
+  );
+  check(
+    "the CSS string is the blur group's filter",
+    filters.includes("blur(2px)"),
+    filters
+  );
+  check(
+    "the DOM backend writes no effect attribute",
+    container.querySelectorAll("[effect]").length === 0,
+    container.innerHTML
+  );
+  container.remove();
 }
 
 console.log("# a mark built from an operator takes a filter");

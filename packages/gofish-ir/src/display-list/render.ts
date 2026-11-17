@@ -117,7 +117,7 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
         f?.kind === "css"
           ? ` filter="${esc(f.value)}"`
           : f?.kind === "luminanceToAlpha"
-            ? ` effect="url(#${filterId})"`
+            ? ` filter="url(#${filterId})"`
             : "";
       return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
     }

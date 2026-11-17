@@ -2652,7 +2652,7 @@ its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
 value (`calendar.ts`), `Binning.step(size)`, `Binning.thresholds(countOrEdges)`
 (a count, or a list of edges), or `Binning.quantiles(countOrProbabilities)`, the
 three `Binning` kinds that bin one field (`families/binning.ts`). Those three are
-objects of a class, `StepBin`, `ThresholdsBin` and `QuantilesBin`, whose own keys are their wire form (`{ kind: "step", size }`)
+objects of a class, `StepBinning`, `ThresholdsBinning` and `QuantilesBinning`, whose own keys are their wire form (`{ kind: "step", size }`)
 and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
 wire form of the op is `{ op: "bin", partition? }` with the partition's own
 wire form, a Calendar value's `{ kind: "month", every: 1 }` or a `Binning` kind's,

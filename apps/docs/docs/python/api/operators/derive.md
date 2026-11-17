@@ -99,7 +99,7 @@ GoFish ships small helpers that pair well with `derive`:
   `rows` is a grid of one curve, each row a position `x` and the `density`
   there, in any order, with no two rows at one position (call it after the split into curves). The density is integrated by the trapezoid rule. Each
   row made holds `x` and every column whose value is the same in all of
-  `rows` (a group's `month`). [`Binning.quantiles`](/python/api/binning#bin-quantiles)
+  `rows` (a group's `month`). [`Binning.quantiles`](/python/api/binning#binning-quantiles)
   and `field(x).median()` over the result read the curve instead of the
   grid. It stands in for first-class distributions
   ([#980](https://github.com/gofish-graphics/gofish-graphics/issues/980)),

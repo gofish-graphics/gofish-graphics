@@ -19,8 +19,8 @@
  *    edges are quantiles of the column's values, with the domain's ends as
  *    the outer edges.
  *
- * The three `Binning` kinds are {@link StepBin}, {@link ThresholdsBin} and
- * {@link QuantilesBin}: each is
+ * The three `Binning` kinds are {@link StepBinning},
+ * {@link ThresholdsBinning} and {@link QuantilesBinning}: each is
  * its Binning strategy object, `{ kind, ...params }`, with a `.format(fn)` for
  * its cells' labels, as a Calendar value has one.
  *
@@ -109,7 +109,7 @@ abstract class NumberBin {
 }
 
 /** `Binning.step(size)`: cells `size` wide, aligned to multiples of `size`. */
-export class StepBin extends NumberBin {
+export class StepBinning extends NumberBin {
   readonly kind = "step" as const;
   readonly size: number;
 
@@ -120,8 +120,8 @@ export class StepBin extends NumberBin {
 
   /** The same cells, labeled by `fn`, a function of the cell. JS only: a
    *  partition with a format has no wire form. */
-  format(fn: NumberCellFormat): StepBin {
-    return new StepBin(this.size, checkFormat<NumberCellFormat>(this, fn));
+  format(fn: NumberCellFormat): StepBinning {
+    return new StepBinning(this.size, checkFormat<NumberCellFormat>(this, fn));
   }
 
   protected wire(): Frontend.FieldBinIR {
@@ -135,7 +135,7 @@ export class StepBin extends NumberBin {
 
 /** `Binning.thresholds(countOrEdges)`: about `count` cells with round edges, or
  *  the cells between the given edges. */
-export class ThresholdsBin extends NumberBin {
+export class ThresholdsBinning extends NumberBin {
   readonly kind = "thresholds" as const;
   readonly thresholds: number | number[];
 
@@ -146,8 +146,8 @@ export class ThresholdsBin extends NumberBin {
 
   /** The same cells, labeled by `fn`, a function of the cell. JS only: a
    *  partition with a format has no wire form. */
-  format(fn: NumberCellFormat): ThresholdsBin {
-    return new ThresholdsBin(
+  format(fn: NumberCellFormat): ThresholdsBinning {
+    return new ThresholdsBinning(
       this.thresholds,
       checkFormat<NumberCellFormat>(this, fn)
     );
@@ -165,7 +165,7 @@ export class ThresholdsBin extends NumberBin {
 /** `Binning.quantiles(countOrProbabilities)`: `count` cells holding about the
  *  same number of values, or the cells between the quantiles at the given
  *  probabilities. */
-export class QuantilesBin extends NumberBin {
+export class QuantilesBinning extends NumberBin {
   readonly kind = "quantiles" as const;
   readonly quantiles: number | number[];
 
@@ -176,8 +176,8 @@ export class QuantilesBin extends NumberBin {
 
   /** The same cells, labeled by `fn`, a function of the cell. JS only: a
    *  partition with a format has no wire form. */
-  format(fn: NumberCellFormat): QuantilesBin {
-    return new QuantilesBin(
+  format(fn: NumberCellFormat): QuantilesBinning {
+    return new QuantilesBinning(
       this.quantiles,
       checkFormat<NumberCellFormat>(this, fn)
     );
@@ -194,7 +194,10 @@ export class QuantilesBin extends NumberBin {
 
 /** A partition of the number line: `Binning.step(size)`,
  *  `Binning.thresholds(countOrEdges)` or `Binning.quantiles(countOrProbabilities)`. */
-export type NumberPartition = StepBin | ThresholdsBin | QuantilesBin;
+export type NumberPartition =
+  | StepBinning
+  | ThresholdsBinning
+  | QuantilesBinning;
 
 /** What `field(x).bin(p)` takes: a Calendar value or a numeric partition. */
 export type Partition = CalendarPartition | NumberPartition;
@@ -346,8 +349,8 @@ export type Cells = {
 };
 
 /** Check a partition as the user (or the wire) wrote it, and return it in
- *  its builder form: a CalendarPartition, a {@link StepBin}, or a
- *  {@link ThresholdsBin}. The wire form is told apart by its `kind`
+ *  its builder form: a CalendarPartition, a {@link StepBinning}, or a
+ *  {@link ThresholdsBinning}. The wire form is told apart by its `kind`
  *  (`Frontend.checkPartition`); a `Binning` kind that bins two fields
  *  (`Binning.hex`) is an error naming `struct({ x, y }).bin`. */
 export function checkPartition(given: unknown, where: string): Partition {
@@ -359,11 +362,11 @@ export function checkPartition(given: unknown, where: string): Partition {
   const wire = p as PartitionJSON;
   switch (wire.kind) {
     case "step":
-      return new StepBin(wire.size);
+      return new StepBinning(wire.size);
     case "thresholds":
-      return new ThresholdsBin(wire.thresholds);
+      return new ThresholdsBinning(wire.thresholds);
     case "quantiles":
-      return new QuantilesBin(wire.quantiles);
+      return new QuantilesBinning(wire.quantiles);
     default:
       return fromWire(wire);
   }
@@ -530,7 +533,7 @@ export function checkChain(steps: readonly BinStep[], where: string): void {
     const finer =
       prev instanceof CalendarPartition && p instanceof CalendarPartition
         ? nominalMs(p.unit, p.step) < nominalMs(prev.unit, prev.step)
-        : prev instanceof StepBin && p instanceof StepBin
+        : prev instanceof StepBinning && p instanceof StepBinning
           ? p.size < prev.size
           : true;
     if (!finer)
@@ -554,7 +557,7 @@ export const binStepToJSON = (step: BinStep): BinStepJSON =>
 export const partitionToJSON = (p: Partition): PartitionJSON => p.toJSON();
 
 /** The default partition of `.bin()` with no argument: about 10 cells. */
-export const DEFAULT_PARTITION: NumberPartition = new ThresholdsBin(10);
+export const DEFAULT_PARTITION: NumberPartition = new ThresholdsBinning(10);
 
 /** `x` rounded to 12 significant digits, so `3 * 0.1` is 0.3. Cell edges are
  *  computed as multiples of a step, and a step like 0.1 has no exact binary
@@ -617,7 +620,7 @@ function numberEdges(
  *  cell) throw, as polars' `qcut` does: merging them would give fewer
  *  cells than asked for, and an empty cell has no place on the axis. */
 function quantileEdges(
-  p: QuantilesBin,
+  p: QuantilesBinning,
   domain: HasDomain,
   where: string
 ): number[] {
