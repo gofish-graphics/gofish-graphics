@@ -36,18 +36,18 @@ const treeRows = [
 
 // y axis points up — reverse each vertical stack for top-to-bottom order.
 const before = gf.spreadY(
-  { spacing: 0, alignment: "start" },
+  { spacing: 11, alignment: "start" },
   treeRows.slice().reverse()
 );
 
-const after = gf.spreadX({ spacing: 0, alignment: "middle" }, [
+const after = gf.spreadX({ spacing: 14, alignment: "middle" }, [
   box("rect", LEAF, 96),
   box("rect", LEAF, 96),
   box("ellipse", LEAF, 96),
 ]);
 
 gf.spreadY(
-  { spacing: 0, alignment: "start" },
+  { spacing: 14, alignment: "start" },
   [
     lbl("Before — nested operator tree", "#333", 13),
     before,
