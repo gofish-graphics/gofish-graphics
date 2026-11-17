@@ -1872,7 +1872,7 @@ for the API.
       ]
     },
     "RectMark": {
-      "description": "A rectangle. Box geometry via the shared dims channels.",
+      "description": "A rectangle. Box geometry via the shared dims channels; it spans from `x` to `x2` (`y` to `y2`) when both ends are data values.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1882,7 +1882,7 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge position."
+          "description": "Start edge on x."
         },
         "cx": {
           "$ref": "#/$defs/ChannelValue",
@@ -1890,7 +1890,7 @@ for the API.
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Right edge position."
+          "description": "The other end on x from `x`. Only `rect` reads it."
         },
         "w": {
           "anyOf": [
@@ -1917,7 +1917,7 @@ for the API.
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Other y edge position."
+          "description": "The other end on y from `y`. Only `rect` reads it."
         },
         "h": {
           "anyOf": [
@@ -2046,7 +2046,7 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge position."
+          "description": "Start edge on x."
         },
         "cx": {
           "$ref": "#/$defs/ChannelValue",
@@ -2054,7 +2054,7 @@ for the API.
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Right edge position."
+          "description": "The other end on x from `x`. Only `rect` reads it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -2074,7 +2074,7 @@ for the API.
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Other y edge position."
+          "description": "The other end on y from `y`. Only `rect` reads it."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
@@ -2180,7 +2180,7 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge position."
+          "description": "Start edge on x."
         },
         "cx": {
           "$ref": "#/$defs/ChannelValue",
@@ -2188,7 +2188,7 @@ for the API.
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Right edge position."
+          "description": "The other end on x from `x`. Only `rect` reads it."
         },
         "w": {
           "anyOf": [
@@ -2215,7 +2215,7 @@ for the API.
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Other y edge position."
+          "description": "The other end on y from `y`. Only `rect` reads it."
         },
         "h": {
           "anyOf": [
@@ -2324,7 +2324,7 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge position."
+          "description": "Start edge on x."
         },
         "cx": {
           "$ref": "#/$defs/ChannelValue",
@@ -2332,7 +2332,7 @@ for the API.
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Right edge position."
+          "description": "The other end on x from `x`. Only `rect` reads it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -2352,7 +2352,7 @@ for the API.
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Other y edge position."
+          "description": "The other end on y from `y`. Only `rect` reads it."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
@@ -2441,7 +2441,7 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge position."
+          "description": "Start edge on x."
         },
         "cx": {
           "$ref": "#/$defs/ChannelValue",
@@ -2449,7 +2449,7 @@ for the API.
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Right edge position."
+          "description": "The other end on x from `x`. Only `rect` reads it."
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
@@ -2469,7 +2469,7 @@ for the API.
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Other y edge position."
+          "description": "The other end on y from `y`. Only `rect` reads it."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
@@ -2607,7 +2607,7 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge position."
+          "description": "Start edge on x."
         },
         "cx": {
           "$ref": "#/$defs/ChannelValue",
@@ -2615,7 +2615,7 @@ for the API.
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Right edge position."
+          "description": "The other end on x from `x`. Only `rect` reads it."
         },
         "w": {
           "anyOf": [
@@ -2642,7 +2642,7 @@ for the API.
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Other y edge position."
+          "description": "The other end on y from `y`. Only `rect` reads it."
         },
         "h": {
           "anyOf": [

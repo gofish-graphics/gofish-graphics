@@ -1346,8 +1346,9 @@ Three patterns cover most operators:
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the
 kind from their props. A rect with data-bound `h` emits
 `CONTINUOUS(interval(0, value), "free")` on y (the value's positive part as
-ascent, its negative part as descent); the same rect with literal `y` and `y2`
-emits `CONTINUOUS(interval(y, y2), "pinned")`. Constants (no
+ascent, its negative part as descent); the same rect with `y` and `y2` both
+data values emits `CONTINUOUS(interval(y, y2), "pinned")` (`pinnedSpan`). A
+pixel `y2`, or a `y2` with no data `y`, sets no span. Constants (no
 data-bound dim) emit `UNDEFINED` — the literal pixel value is handled at
 layout time by `computeAesthetic`, not via the underlying-space tree. (The
 old anomaly where a literal-pixel `min` plus a data size made `DIFFERENCE`
