@@ -631,6 +631,9 @@ export function mountDraggable(
   type Drag = {
     markKey: string;
     rowKeys: string;
+    /** Keys of the rows whose marks travel with the drag: the dragged rows,
+     *  or for a reorder every row of the dragged level. */
+    moving: Set<string>;
     grab: Vec;
     combos: Combo[];
     conts: Cont[];
@@ -647,6 +650,20 @@ export function mountDraggable(
     bestCornerW?: number[];
   };
   let drag: Drag | undefined;
+  // Paint order during a drag and its drop tween: the marks that travel with
+  // the drag go last, so nothing covers them, and the grabbed mark (and
+  // anything drawing its rows) goes last of all. Chrome has no rows and keeps
+  // its place; the debug overlay is a separate SVG above the chart.
+  const raise = (entries: Entry[], D: Drag): Entry[] => {
+    const rank = (e: Entry) =>
+      e.key.startsWith(`m:${D.rowKeys}:`)
+        ? 2
+        : e.rows?.length && e.rows.every((r) => D.moving.has(key(r)))
+          ? 1
+          : 0;
+    const rs = entries.map(rank);
+    return [0, 1, 2].flatMap((k) => entries.filter((_, i) => rs[i] === k));
+  };
   let loading = false;
   let pendingPointer: Vec | undefined;
   let tweening: Promise<void> = Promise.resolve();
@@ -685,6 +702,14 @@ export function mountDraggable(
     drag = {
       markKey: e.key,
       rowKeys: rowsKey(e.rows!, key),
+      moving: new Set(
+        (opts.drag.reorder
+          ? state.rows.filter(
+              (r) => r[opts.drag.reorder!] === e.rows![0][opts.drag.reorder!]
+            )
+          : e.rows!
+        ).map(key)
+      ),
       grab: { x: p.x - c0.x, y: p.y - c0.y },
       combos: combos.filter((_, i) => keep[i]),
       conts,
@@ -781,8 +806,8 @@ export function mountDraggable(
     }
     D.shownW = flatW;
     let entries = blendLayouts(flatL, flatW);
-    // The dragged mark (and anything drawing the same rows) on top; when
-    // floating, also moved to sit under the pointer.
+    // When floating, the dragged mark (and anything drawing the same rows)
+    // moves to sit under the pointer.
     const mine = (e: Entry) => e.key.startsWith(`m:${D.rowKeys}:`);
     let off = { x: 0, y: 0 };
     if (feel === "floating") {
@@ -790,16 +815,12 @@ export function mountDraggable(
       const c = m && centerOf(m);
       if (c) off = { x: want.x - c.x, y: want.y - c.y };
     }
-    entries = [
-      ...entries.filter((e) => !mine(e)),
-      ...entries
-        .filter(mine)
-        .map((e) => ({
-          ...e,
-          at: { ...e.at, tx: e.at.tx + off.x, ty: e.at.ty + off.y },
-        })),
-    ];
-    paint(entries);
+    entries = entries.map((e) =>
+      mine(e)
+        ? { ...e, at: { ...e.at, tx: e.at.tx + off.x, ty: e.at.ty + off.y } }
+        : e
+    );
+    paint(raise(entries, D));
     // Drop state: the heaviest combo, with continuous fields at the
     // inverted values.
     const ids = new Set(D.rowKeys.split("|"));
@@ -913,7 +934,7 @@ export function mountDraggable(
         const u = Math.min(1, (performance.now() - t0) / 200);
         const e = 1 - (1 - u) ** 3;
         if (u < 1) {
-          paint(blendLayouts([from, target], [1 - e, e]));
+          paint(raise(blendLayouts([from, target], [1 - e, e]), D));
           requestAnimationFrame(step);
         } else {
           paint(target.entries);

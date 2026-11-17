@@ -53,6 +53,14 @@ keeps colors with `color: Color.palette({ Bass: ..., ... })`. The filmstrip
 confirms all three: after the drop Bass is on top of every stack, first in the
 legend, and still blue.
 
+**Paint order during a drag.** During a drag and its drop tween, the engine
+paints the marks that travel with the drag last (`raise` in `engine.ts`): the
+dragged rows' marks, or for a reorder every mark of the dragged level, with the
+grabbed mark on top. Chrome has no rows and keeps its place, the debug overlay
+stays above in its own SVG, and the normal order returns after the drop. In
+Reorder Stack this keeps every Bass segment whole while it passes a taller
+segment.
+
 ### Feels per demo
 
 - Reorder Bars: `floating`. The bar follows the pointer, and the other bars
