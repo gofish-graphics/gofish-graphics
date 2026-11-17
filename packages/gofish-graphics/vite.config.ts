@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import solidPlugin from "vite-plugin-solid";
+import solidPlugin from "@solidjs/vite-plugin";
 import dts from "vite-plugin-dts";
 import { readdirSync } from "node:fs";
 
@@ -63,7 +63,15 @@ export default defineConfig(({ command, mode }) => {
         formats: ["es"],
       },
       rollupOptions: {
-        external: ["solid-js"],
+        // `solid-js` is a peer, with its subpaths: the bundled `@solidjs/web`
+        // imports `solid-js/internal`, and bundling that would ship a second
+        // reactive runtime. `@solidjs/web` stays bundled, as `solid-js/web`
+        // was under 1.x.
+        // TODO(solid-2): externalizing `@solidjs/web` too (it is a peer of
+        // solid-js 2.0) makes `dist` fail to import in Node without the
+        // `browser` condition: its server build throws on the module-level
+        // `template()` calls compiled JSX makes.
+        external: [/^solid-js(\/|$)/],
         output: {
           globals: {
             "solid-js": "SolidJS",

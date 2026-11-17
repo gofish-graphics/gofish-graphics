@@ -14,7 +14,7 @@
  * transform — each item paints verbatim.
  */
 
-import type { JSX } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { DisplayList } from "gofish-ir";
 import { GEOMETRY_CHANNELS, getLiveSlots } from "../../interaction/liveSlots";
 

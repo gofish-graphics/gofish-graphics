@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import solidPlugin from "vite-plugin-solid";
+import solidPlugin from "@solidjs/vite-plugin";
 import { resolve } from "path";
 
 // Bench gates (set by tests/scripts/bench.ts when spawning this server):

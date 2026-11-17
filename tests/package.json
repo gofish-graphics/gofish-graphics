@@ -55,10 +55,11 @@
     "pngjs": "^7.0.0",
     "prettier": "^3.8.1",
     "shiki": "^4.1.0",
-    "solid-js": "^1.9.11",
+    "@solidjs/web": "^2.0.0",
+    "solid-js": "^2.0.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vite": "^6.4.1",
-    "vite-plugin-solid": "^2.11.10"
+    "vite": "^8.3.8",
+    "@solidjs/vite-plugin": "^3.0.0"
   }
 }

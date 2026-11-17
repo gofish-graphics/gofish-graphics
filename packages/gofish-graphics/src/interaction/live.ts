@@ -22,16 +22,7 @@
  * resolve-time color scale). See the plan's "Design notes".
  */
 
-import {
-  createComputed,
-  createSignal,
-  getOwner,
-  onCleanup,
-  untrack,
-  type Accessor,
-  type Owner,
-  type Setter,
-} from "solid-js";
+import { createMemo, getOwner, onCleanup, untrack, type Owner } from "solid-js";
 import { runInLiveEval } from "./resolveContext";
 
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
@@ -106,17 +97,16 @@ export function sharedDecision<T>(read: () => T): () => T {
   }
   const made = byRead.get(read);
   if (made !== undefined) return made as () => T;
-  let decision: Accessor<T> | undefined;
-  let setDecision: Setter<T> | undefined;
-  // A computation's first run is synchronous: it creates the signal from its
-  // first reading, so `decision` is set by the time `createComputed` returns.
-  createComputed(() => {
-    const next = runInLiveEval(read);
-    if (setDecision === undefined) [decision, setDecision] = createSignal(next);
-    else setDecision(() => next);
-  });
-  byRead.set(read, decision!);
-  return decision!;
+  // TODO(solid-2): 1.x made this decision a `createComputed` that wrote a
+  // signal, because a 1.x memo marked everything downstream as pending on
+  // every input change (one step per item per tick; see the Reactivity
+  // essay). 2.0 removes `createComputed` and forbids a signal write inside a
+  // computation (REACTIVE_WRITE_IN_OWNED_SCOPE), so the only 2.0 form is the
+  // memo the essay rejected. Whether 2.0's memo still costs a visit per item
+  // per tick has to be measured before this is settled.
+  const decision = createMemo(() => runInLiveEval(read));
+  byRead.set(read, decision);
+  return decision;
 }
 
 /**

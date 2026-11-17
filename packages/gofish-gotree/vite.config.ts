@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import solidPlugin from "vite-plugin-solid";
+import solidPlugin from "@solidjs/vite-plugin";
 
 export default defineConfig({
   plugins: [solidPlugin()],
@@ -15,7 +15,7 @@ export default defineConfig({
       formats: ["es"],
     },
     rollupOptions: {
-      external: ["solid-js", "gofish-graphics", "d3-hierarchy"],
+      external: [/^solid-js(\/|$)/, "gofish-graphics", "d3-hierarchy"],
       output: {
         globals: {
           "solid-js": "SolidJS",

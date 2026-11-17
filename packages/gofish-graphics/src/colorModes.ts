@@ -31,9 +31,13 @@ useMode(modeLch65);
 export { blend, formatHex, parse };
 export type { Color, Rgb };
 
-export const toRgb = converter("rgb");
-export const toLab65 = converter("lab65");
-export const toLch65 = converter("lch65");
+// Annotated so the declaration names culori's converter type through
+// `culori/fn` (its `ConvertFn` lives at a path its exports do not expose).
+export const toRgb: ReturnType<typeof converter<"rgb">> = converter("rgb");
+export const toLab65: ReturnType<typeof converter<"lab65">> =
+  converter("lab65");
+export const toLch65: ReturnType<typeof converter<"lch65">> =
+  converter("lch65");
 
 /** An sRGB channel in [0, 1] clipped to the gamut and rounded to 8 bits. */
 export const to8Bit = (v: number): number =>

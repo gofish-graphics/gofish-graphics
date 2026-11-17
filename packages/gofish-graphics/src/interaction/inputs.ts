@@ -14,7 +14,16 @@
  *     schedule a full, rAF-coalesced re-render.
  * Reads outside resolve (an external readout) just read.
  */
-import { createSignal, getListener, onCleanup, untrack } from "solid-js";
+import { createSignal, getObserver, onCleanup, untrack } from "solid-js";
+
+// TODO(solid-2): a 2.0 signal write is not visible to a read until the next
+// microtask flush (or `flush()`). The inputs here read their own signals right
+// after writing them (the timer's `setPlayingTracked` / `isRunning` /
+// `publish`, `set()` then a read, the lazy start on first read), and callers
+// read an input synchronously after the DOM event that set it (`drag` after
+// pointerdown). 30 of 190 checks in `interaction.test.ts` fail on this. Making
+// the inputs work with deferred writes is a design decision for the
+// registrar, not a mechanical port.
 import type {
   Hit,
   InputPrimitive,
@@ -677,6 +686,11 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   // The SIGNAL holds the emitted DOMAIN VALUE, not elapsed: a tick that doesn't
   // change the value writes nothing, so a 365-day year over 10s costs one
   // pipeline re-run per day rather than one per frame.
+  // TODO(solid-2): in 2.0 a FUNCTION passed to createSignal makes a derived
+  // (writable-memo) signal, not a signal holding that function, so a generic
+  // `T` no longer type-checks here (Solid types the value `Exclude<T,
+  // Function>`). Narrowing the public type parameter, or rejecting function
+  // values, is an API decision; left as a type error.
   const [value, setValue] = createSignal<T>(invert(0));
   const [playing, setPlaying] = createSignal(false);
 
@@ -708,7 +722,7 @@ export function timer<T = number>(options: TimerOptions<T> = {}): Timer<T> {
   /** Count the current reader, and tick if the clock is running. Invariant:
    *  a running, watched clock is ticking. */
   const watch = (): void => {
-    if (getListener() !== null) {
+    if (getObserver() !== null) {
       paintReaders++;
       onCleanup(() => void paintReaders--);
     }
@@ -821,6 +835,11 @@ export interface Signal<T> {
  *  pipeline dependency, so `.set()` schedules a full re-render (read in a
  *  `live()` channel it patches paint only). */
 export function signal<T>(init: T): Signal<T> {
+  // TODO(solid-2): in 2.0 a FUNCTION passed to createSignal makes a derived
+  // (writable-memo) signal, not a signal holding that function, so a generic
+  // `T` no longer type-checks here (Solid types the value `Exclude<T,
+  // Function>`). Narrowing the public type parameter, or rejecting function
+  // values, is an API decision; left as a type error.
   const [value, setValue] = createSignal<T>(init);
 
   const input: InputPrimitive = {

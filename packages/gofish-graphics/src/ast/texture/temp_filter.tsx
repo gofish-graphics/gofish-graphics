@@ -1,4 +1,4 @@
-import { JSX } from "solid-js/jsx-runtime";
+import type { JSX } from "@solidjs/web";
 
 const dropShadowFilter = (
   <filter id="filter-drop-shadow">

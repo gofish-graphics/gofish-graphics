@@ -7,7 +7,7 @@ import wikilink, { type WikiTarget } from "./markdown-it-wikilink";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
-import solidPlugin from "vite-plugin-solid";
+import solidPlugin from "@solidjs/vite-plugin";
 import { loadStoryExamples } from "./data/storyExamples";
 import { readdirSync, readFileSync } from "fs";
 import { dirname, join, relative } from "path";
@@ -244,6 +244,11 @@ function collectInternalsSidebar() {
 }
 
 // https://vitepress.dev/reference/site-config
+// TODO(solid-2): blocked. `@solidjs/vite-plugin` (the only Solid 2 compiler
+// plugin) needs Vite 8+, and VitePress 1.x runs on Vite 5, so this config fails
+// to load. The aliases above also still name 1.x entry points (`solid-js/web`,
+// `solid-js/jsx-runtime`); in 2.0 they are `@solidjs/web` (which imports
+// `solid-js/internal`) and `@solidjs/web/jsx-runtime`. Revisit with VitePress 2.
 export default defineConfig({
   vite: {
     resolve: {

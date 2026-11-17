@@ -4,9 +4,9 @@
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
 
-import { createResource, Show, Suspense, type JSX } from "solid-js";
+import { createMemo, Loading, Show, untrack } from "solid-js";
+import { render as solidRender, type JSX } from "@solidjs/web";
 import { type ColorConfig, type GradientScale } from "./colorSchemes";
-import { render as solidRender } from "solid-js/web";
 import {
   debugInputSceneGraph,
   debugNodeTree,
@@ -1374,24 +1374,24 @@ export function gofish(
     };
   }
 
-  const [layoutData] = createResource(() =>
-    runLayout(options, child).then((data) => {
-      state.warnings = data.warnings;
-      reportLayoutWarnings(data.warnings, state.warned);
-      return data;
-    })
-  );
-
   const dispose = solidRender(() => {
-    // Suspense covers the async layout resource (derived data resolves in it).
+    // The layout is an async computation; `Loading` covers it until it lands
+    // (derived data resolves in it). The run is untracked, as a source-less
+    // resource's fetcher was: a pipeline read registers with the chart's own
+    // registrar, never as a dependency of this computation.
+    const layoutData = createMemo(() =>
+      untrack(() =>
+        runLayout(options, child).then((data) => {
+          state.warnings = data.warnings;
+          reportLayoutWarnings(data.warnings, state.warned);
+          return data;
+        })
+      )
+    );
     return (
-      <Suspense fallback={<div>Loading...</div>}>
-        {(() => {
-          const data = layoutData();
-          if (!data) return null;
-          return renderLayout(data, options.defs, options.interaction);
-        })()}
-      </Suspense>
+      <Loading fallback={<div>Loading...</div>}>
+        {renderLayout(layoutData(), options.defs, options.interaction)}
+      </Loading>
     );
   }, container);
   state.disposeRoot = () => {
@@ -1465,7 +1465,7 @@ export async function gofishToSVGElement(
   const data = await runLayout(options, child);
   reportLayoutWarnings(data.warnings);
   const root = document.createElement("div");
-  // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
+  // Layout is already awaited, so the SVG mounts synchronously — no Loading.
   const dispose = solidRender(() => renderLayout(data, options.defs), root);
   const svg = root.querySelector("svg");
   if (!svg) {
@@ -1524,6 +1524,9 @@ export async function saveSVGString(
 
   // Node: write to disk. Dynamic import keeps `fs` out of the browser bundle;
   // the indirect specifier stops the bundler/TS from resolving it at build time.
+  // TODO(solid-2): Vite 8 (Rolldown) folds this constant back into the
+  // `import()`, so the built `dist` names "node:fs/promises" literally and the
+  // Python widget's esbuild browser bundle fails to resolve it.
   const fsModule = "node:fs/promises";
   const { writeFile } = (await import(/* @vite-ignore */ fsModule)) as {
     writeFile: (path: string, data: string, encoding: string) => Promise<void>;

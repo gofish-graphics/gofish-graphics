@@ -209,20 +209,24 @@ export function slider(opts: SliderOptions): Control {
     input: (hitTest) => drag({ hitTest }),
     // The write: one pure function of the pointer's position along the track.
     write: (scrub, trackId) =>
-      createEffect(() => {
-        if (!scrub.isActive()) return;
-        const pt = scrub.current();
-        const id = trackId();
-        if (!pt || id === undefined) return;
-        // The frame's own record of where layout put the track. Absent on the
-        // first event of a chart whose frame hasn't published yet — then there is
-        // nothing to map against, and skipping is the honest answer.
-        const box = scrub.nodeBox(id);
-        if (!box) return;
-        const px = Math.max(1, box.w - 2 * HANDLE_R);
-        const next = valueAt((pt.x - (box.x + HANDLE_R)) / px);
-        if (next !== untrack(readValue)) onInput(next);
-      }),
+      createEffect(
+        (): number | undefined => {
+          if (!scrub.isActive()) return undefined;
+          const pt = scrub.current();
+          const id = trackId();
+          if (!pt || id === undefined) return undefined;
+          // The frame's own record of where layout put the track. Absent on the
+          // first event of a chart whose frame hasn't published yet — then there
+          // is nothing to map against, and skipping is the honest answer.
+          const box = scrub.nodeBox(id);
+          if (!box) return undefined;
+          const px = Math.max(1, box.w - 2 * HANDLE_R);
+          return valueAt((pt.x - (box.x + HANDLE_R)) / px);
+        },
+        (next) => {
+          if (next !== undefined && next !== untrack(readValue)) onInput(next);
+        }
+      ),
     build: async (scrub, ctx) => {
       // Every read of the value or the drag state is a PAINT-time read. This
       // one is the value the handle is laid out at: `readLive` reads it without
@@ -340,12 +344,14 @@ export function button(opts: ButtonOptions): Control {
     input: (hitTest) => click({ hitTest }),
     write: (press) => {
       let handled = 0;
-      createEffect(() => {
-        const n = press.count();
-        if (n <= handled) return;
-        handled = n;
-        onClick();
-      });
+      createEffect(
+        () => press.count(),
+        (n) => {
+          if (n <= handled) return;
+          handled = n;
+          onClick();
+        }
+      );
     },
     build: async (press, ctx) => {
       // The caption changes the text's box, so it is read at resolve and

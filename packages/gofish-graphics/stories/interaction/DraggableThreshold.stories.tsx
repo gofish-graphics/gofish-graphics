@@ -66,10 +66,12 @@ export const Default: StoryObj<Args> = {
     // the drag is reading — a feedback loop that reads as a jarring rescale.
     const maxCount = Math.max(...data.map((d) => d.count));
     createRoot(() => {
-      createEffect(() => {
-        const c = dr.currentData();
-        if (c?.y != null) cut.set(Math.min(maxCount, Math.max(0, c.y)));
-      });
+      createEffect(
+        () => dr.currentData()?.y,
+        (y) => {
+          if (y != null) cut.set(Math.min(maxCount, Math.max(0, y)));
+        }
+      );
     });
 
     chart(data, { w: args.w, h: args.h })

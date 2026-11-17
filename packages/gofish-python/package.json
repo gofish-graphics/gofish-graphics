@@ -16,7 +16,8 @@
     "apache-arrow": "^15.0.2",
     "gofish-graphics": "workspace:*",
     "gofish-ir": "workspace:*",
-    "solid-js": "^1.9.5"
+    "@solidjs/web": "^2.0.0",
+    "solid-js": "^2.0.0"
   },
   "devDependencies": {
     "esbuild": "^0.24.0",

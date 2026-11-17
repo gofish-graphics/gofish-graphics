@@ -1,4 +1,5 @@
-import { Component, onCleanup, type JSX, createEffect } from "solid-js";
+import { type Component, createEffect } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { gofish, type AxesOptions } from "./gofish";
 import { type GoFishNode } from "./_node";
 
@@ -18,11 +19,13 @@ interface GoFishComponentProps {
 export const GoFishSolid: Component<GoFishComponentProps> = (props) => {
   let containerRef: HTMLDivElement | undefined;
 
-  createEffect(() => {
-    if (!containerRef) return;
-    const view = gofish(
-      containerRef,
-      {
+  // Compute reads the props (the effect's dependencies); apply draws the
+  // chart and returns its cleanup. The component owns the chart's lifetime: a
+  // prop change re-runs the effect, which unmounts the previous chart first,
+  // and the component's disposal ends it.
+  createEffect(
+    () => ({
+      options: {
         w: props.w,
         h: props.h,
         x: props.x,
@@ -33,12 +36,14 @@ export const GoFishSolid: Component<GoFishComponentProps> = (props) => {
         axes: props.axes,
         legend: props.legend,
       },
-      props.children
-    );
-    // The component owns the chart's lifetime: a prop change re-runs this
-    // effect and the component's disposal ends it.
-    onCleanup(() => view.unmount());
-  });
+      child: props.children,
+    }),
+    ({ options, child }) => {
+      if (!containerRef) return;
+      const view = gofish(containerRef, options, child);
+      return () => view.unmount();
+    }
+  );
 
   return <div ref={containerRef} />;
 };

@@ -7,7 +7,7 @@ import { Frontend } from "gofish-ir";
 import { checkLengths } from "./length";
 
 import { getColumnTypes, setColumnTypes } from "./schema";
-import type { JSX } from "solid-js";
+import type { JSX } from "@solidjs/web";
 import { GoFishAST } from "./_ast";
 import { GoFishNode } from "./_node";
 import type { AxesOptions, View } from "./gofish";
