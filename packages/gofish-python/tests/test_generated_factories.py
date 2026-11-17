@@ -543,6 +543,24 @@ def test_nested_axes_keys_serialize_to_wire_keys():
     }
 
 
+def test_legend_option_serializes_to_wire():
+    # `legend` is a bool or a dict of entries, as in JS: `color`, and a
+    # length entry per dimension (`False`, or a dict with a `title`).
+    legend = {"color": False, "y": {"title": "thousand unemployed"}}
+    node = chart([], legend=legend).mark(rect()).to_ir()["root"]
+    assert node["options"]["legend"] == legend
+    assert chart([], legend=False).mark(rect()).to_ir()["root"]["options"]["legend"] is False
+    with pytest.raises(TypeError, match="unexpected key 'z'"):
+        chart([], legend={"z": False})
+
+
+def test_render_legend_option_reaches_the_widget():
+    from gofish.widget import GoFishChartWidget  # noqa: F401
+
+    widget = chart([], w=10, h=10).mark(rect()).render(legend={"color": False, "y": False})
+    assert widget.legend == {"color": False, "y": False}
+
+
 def test_nested_unknown_key_is_rejected():
     # The flat label keys the nested `label` dict replaced are unknown keys,
     # and the error lists the keys an axis takes, `label` among them.

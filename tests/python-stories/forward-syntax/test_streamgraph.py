@@ -13,7 +13,8 @@ LARGEST = [
     "Construction",
     "Education and Health",
 ]
-AXES = {"x": {"title": False}, "y": {"title": "Unemployed (thousands)"}}
+AXES = {"x": {"title": False}}
+LEGEND = {"y": {"title": "thousand unemployed"}}
 
 
 def story_default():
@@ -24,6 +25,7 @@ def story_default():
             h=400,
             schema={"date": Unit.time()},
             axes=AXES,
+            legend=LEGEND,
         )
         .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
         .mark(ribbon(x="date", h="count", fill="series")),

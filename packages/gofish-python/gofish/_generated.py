@@ -32,10 +32,12 @@ _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
+    "LegendOptions": ("object", {"color": ("color", None), "x": ("x", ("ref", "LengthEntryOptions")), "y": ("y", ("ref", "LengthEntryOptions"))}),
+    "LengthEntryOptions": ("object", {"title": ("title", None)}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
     "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
-    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
+    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", ("ref", "LegendOptions")), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
     "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),
     "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
@@ -1293,7 +1295,7 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
             opts[_k] = _v
     return opts
 
-def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
+def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool | dict] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
     """Chart-level options for chart(data, **options).
 
     Args:
@@ -1302,7 +1304,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
         color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
-        legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
+        legend: Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Turned off, the marks keep their colors and sizes and only the entry is dropped. Default true.
         padding: Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates. Default 30.
         schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
     """
@@ -1313,7 +1315,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         ("coord", coord),
         ("color", color),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("legend", legend),
+        ("legend", _to_wire(("ref", "LegendOptions"), legend, "legend")),
         ("padding", padding),
         ("schema", schema),
     ]:

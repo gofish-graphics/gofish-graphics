@@ -19,6 +19,7 @@ import {
   isCONTINUOUS,
   niceContinuous,
   axisOver,
+  domainOver,
   isOneValue,
   placeBaseline,
   type AxisTicks,
@@ -238,7 +239,7 @@ export const padExtent = (extent: Extent, padding: number): Extent =>
  *  niced domain ({@link widenTo}): on an absolute axis each side reaches the
  *  farther of the claim and the domain's end, so pixels the content draws
  *  past its data take room only where the domain does not already reach
- *  past them. A delta axis's width is niced from 0. Only a space that renders an
+ *  past them. Only a space that renders an
  *  axis over its interval ({@link axisOver}), or will once placed (a free
  *  magnitude, {@link placeBaseline}), is niced, and only when some node in
  *  the scope draws that axis: `ticks` are that axis's ticks, which the
@@ -261,8 +262,8 @@ export const niceScope = <S extends UnderlyingSpace | undefined>(
  *  the part of it its own data covers. It is the arithmetic {@link niceScope}
  *  uses ({@link widenTo}): the claim widens to hold the domain. A domain the
  *  type already covers leaves both unchanged,
- *  and so does a space with no axis over its interval (an ordinal, a spread
- *  of magnitudes). */
+ *  and so does a space that maps no domain ({@link domainOver}: an ordinal,
+ *  a spread of magnitudes). */
 export const widenScope = <S extends UnderlyingSpace | undefined>(
   space: S,
   extent: Extent | undefined,
@@ -270,13 +271,13 @@ export const widenScope = <S extends UnderlyingSpace | undefined>(
 ): [S, Extent | undefined] => {
   if (domain === undefined || space === undefined || !isCONTINUOUS(space))
     return [space, extent];
-  const axis = axisOver(placeBaseline(space));
-  if (axis === undefined) return [space, extent];
+  const kind = domainOver(placeBaseline(space));
+  if (kind === undefined) return [space, extent];
   const iv = space.dataInterval;
-  // A delta axis has only a width: it widens to the domain's width, from
-  // its own low edge. An absolute axis widens to the union of the two.
+  // Widths widen to the domain's width, from their own low edge. Positions
+  // widen to the union of the two.
   const to =
-    axis === "delta"
+    kind === "widths"
       ? interval(iv.min, iv.min + Math.max(width(domain), width(iv)))
       : union(iv, domain);
   if (to.min === iv.min && to.max === iv.max) return [space, extent];
@@ -288,7 +289,7 @@ export const widenScope = <S extends UnderlyingSpace | undefined>(
  *  the hull of what the content draws, so each side reaches the farther of
  *  the claim and its end of `to`: pixels the content draws past its data (a
  *  mark's size at a datum, a tick label past the plot) need no more room
- *  when the domain already reaches past them. A delta axis comes from
+ *  when the domain already reaches past them. A space of widths comes from
  *  centering (`middle` alignment), so the content sits centered in the wider
  *  width: `to`'s width centered on the claim, by the same farther-end rule,
  *  so widening twice is widening once. */
@@ -300,7 +301,7 @@ const widenTo = <S extends UnderlyingSpace | undefined>(
   const s = space as CONTINUOUS_TYPE;
   const widenedSpace = { ...s, dataInterval: to } as S;
   if (extent === undefined) return [widenedSpace, undefined];
-  if (axisOver(placeBaseline(s)) !== "delta")
+  if (domainOver(placeBaseline(s)) !== "widths")
     return [
       widenedSpace,
       Extent(

@@ -55,8 +55,10 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  *     can still pin it (a baseline align, a glued stack, the `position`
  *     operator). Renders no axis. (The old SIZE.)
  *   - `"none"`: there is no origin at all, only a width. The data interval is
- *     `[0, width]`, and only differences along it mean anything. Renders a
- *     delta axis. Produced by middle-align, and absorbing. (The old DIFFERENCE.)
+ *     `[0, width]`, and only differences along it mean anything. Renders no
+ *     axis: it has no positions to name. At the render root its scale gets a
+ *     length entry in the legend instead (`lengthEntry`). Produced by
+ *     middle-align, and absorbing. (The old DIFFERENCE.)
  *
  * The origin state is the whole placement fact: whether an extent has
  * committed a position (`pinned`), can still be given one (`free`), or can
@@ -282,16 +284,33 @@ export const isOneValue = (
 
 /** The axis a space renders over its data interval, one read of its origin
  *  state: a pinned space has data coordinates, so it renders an `"absolute"`
- *  axis; an origin-less one has only differences, so it renders a `"delta"`
- *  axis; a free magnitude, still waiting for its parent to place it, renders
- *  none (undefined), and neither does a non-continuous space. */
+ *  axis. Every other space renders none (undefined): a free magnitude is
+ *  still waiting for its parent to place it, an origin-less one has only
+ *  widths and no positions for an axis to name (its scale gets a length
+ *  entry in the legend instead), and a non-continuous space has no interval. */
 export const axisOver = (
   space: UnderlyingSpace | undefined
-): "absolute" | "delta" | undefined =>
+): "absolute" | undefined =>
+  domainOver(space) === "positions" ? "absolute" : undefined;
+
+/** The kind of scale a space is, read off its origin state, and so the
+ *  guide it gets. A pinned space is a POSITION scale, `"positions"`: its
+ *  data has places in the plot (`px(d) = σ·d + originPx`), so it is drawn
+ *  in place, as an axis ({@link axisOver}). An origin-less space is a
+ *  LENGTH scale, `"widths"`: it has a scale factor σ and no origin, so its
+ *  data has no place in the plot, only lengths, and it is drawn aside, as
+ *  an entry in the legend (`KeyedDomains.lengthScales`), as a color scale
+ *  is. Undefined for a free magnitude (until its scope places it,
+ *  {@link placeBaseline}) and a non-continuous space. The keyed domains are
+ *  keyed by the same read (`domainId` in keyedDomains.ts), and a scope
+ *  widens widths centered (`widenTo`). */
+export const domainOver = (
+  space: UnderlyingSpace | undefined
+): "positions" | "widths" | undefined =>
   originIs(space, "pinned")
-    ? "absolute"
+    ? "positions"
     : originIs(space, "none")
-      ? "delta"
+      ? "widths"
       : undefined;
 
 /** A space as its scope root places it. A scope root seats a free space's
@@ -309,20 +328,19 @@ export const placeBaseline = <T extends UnderlyingSpace | undefined>(
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
-/** Where a difference axis over `content` (a space with no data 0) spans
- *  its niced width `niced` in the content's frame. That frame measures
- *  widths from the content's start, wherever its interval starts (an
- *  overlay of a free bar below 0 and an origin-less one has a negative
- *  min), and the content sits centered in the niced width, as centering
- *  makes a difference axis: `[−slack, width − slack]`. The axis is drawn
- *  there (`elaborateDifferenceAxis`) and the plot covers it
- *  (`GoFishNode.domainSpan`). */
+/** Where the widths `wide` that a scope maps over `content` (a space with
+ *  no data 0) span in the content's frame. That frame measures widths from
+ *  the content's start, wherever its interval starts (an overlay of a free
+ *  bar below 0 and an origin-less one has a negative min), and the content
+ *  sits centered in the wider width, as centering widens it (`widenTo`):
+ *  `[−slack, width − slack]`. The plot covers it (`GoFishNode.domainSpan`),
+ *  and the legend's length entry ends at its top (`lengthEntry`). */
 export const differenceSpan = (
   content: CONTINUOUS_TYPE,
-  niced: CONTINUOUS_TYPE
+  wide: CONTINUOUS_TYPE
 ): [number, number] => {
-  const slack = (dataWidth(niced) - dataWidth(content)) / 2;
-  return [-slack, dataWidth(niced) - slack];
+  const slack = (dataWidth(wide) - dataWidth(content)) / 2;
+  return [-slack, dataWidth(wide) - slack];
 };
 
 /** What an axis ticks at, which is what a scope that draws the axis nices
@@ -357,7 +375,7 @@ export const cellPartition = (
 ): CalendarPartition | undefined => space.cells?.[0]?.calendar?.partition;
 
 /** Nice the interval a space renders an axis over (issue #659): a pinned
- *  domain's `[min, max]`, or a delta axis's width from 0, rounded outward to
+ *  domain's `[min, max]`, rounded outward to
  *  the axis's ticks (`ticks`): d3-nice bounds for `ticks.count` on a numeric
  *  axis, or the cells of the axis's inner row on a time axis (a calendar
  *  space, {@link axisTickPartition}), so a scope solved with
@@ -394,22 +412,13 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   // An empty interval (min > max: a column of nulls) or a non-finite one
   // (NaN) has no ends to round, over numbers or instants alike.
   if (!isFiniteInterval(iv)) return space;
-  // An absolute axis nices its domain's ends: to round numbers, or, over
-  // instants, to cell starts of its inner row. A delta axis has only a
-  // width, which it nices from 0 so its steps are even (ticks 20, 40, …, 160
-  // rather than 20, 40, …, 140, 147). The low edge of an origin-less
-  // interval means nothing, so it stays.
+  // An axis nices its domain's ends: to round numbers, or, over instants,
+  // to cell starts of its inner row. An origin-less space draws no axis, so
+  // it has no ticks to nice to and is never niced (`axisOver`).
   const [lo, hi] =
-    axis === "absolute"
-      ? spaceZone(s) !== undefined
-        ? niceToCells(
-            iv.min,
-            iv.max,
-            axisTickPartition(s, ticks),
-            spaceZone(s)!
-          )
-        : d3Nice(iv.min, iv.max, ticks.count)
-      : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, ticks.count)[1]];
+    spaceZone(s) !== undefined
+      ? niceToCells(iv.min, iv.max, axisTickPartition(s, ticks), spaceZone(s)!)
+      : d3Nice(iv.min, iv.max, ticks.count);
   return {
     ...(space as CONTINUOUS_TYPE),
     dataInterval: interval(lo, hi),

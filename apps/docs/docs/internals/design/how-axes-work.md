@@ -51,14 +51,14 @@ does not say.
 
 The cases we have met so far, from #1115:
 
-| Chart                  | What the axis has to show                                        | Status                                                                           |
-| ---------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Diverging stacked bars | A center point, with positive labels on both sides of it         | Built: a mirrored axis labels each tick by its distance from 0                   |
-| Time                   | Nested calendar units, e.g. days inside months inside years      | Built: one row of labels per calendar partition (#1066), set with `levels`       |
-| Binning                | Bin edges, not points                                            | Built: cells label between their edges (#1133)                                   |
-| Streamgraph            | A layout with no meaningful zero                                 | Built: a centered layout gets a difference axis that labels steps, not positions |
-| Grouped bars           | Nested categories, with the groups outside and the series inside | Built: nested rows of category labels, set with `levels`                         |
-| Mosaic plot            | Nested conditional shares                                        | Proposed (see [section 5](#_5-the-mosaic-plot))                                  |
+| Chart                  | What the axis has to show                                        | Status                                                                                       |
+| ---------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Diverging stacked bars | A center point, with positive labels on both sides of it         | Built: a mirrored axis labels each tick by its distance from 0                               |
+| Time                   | Nested calendar units, e.g. days inside months inside years      | Built: one row of labels per calendar partition (#1066), set with `levels`                   |
+| Binning                | Bin edges, not points                                            | Built: cells label between their edges (#1133)                                               |
+| Streamgraph            | A layout with no meaningful zero                                 | Built: no axis; a space with no origin is a length scale, so its legend shows a length entry |
+| Grouped bars           | Nested categories, with the groups outside and the series inside | Built: nested rows of category labels, set with `levels`                                     |
+| Mosaic plot            | Nested conditional shares                                        | Proposed (see [section 5](#_5-the-mosaic-plot))                                              |
 
 The built rows each read their shape off the column's type. The diverging case is a
 good example. The schema says the response column has an order with a midpoint, and

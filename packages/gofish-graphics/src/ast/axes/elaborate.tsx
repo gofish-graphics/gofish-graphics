@@ -28,8 +28,6 @@ import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
   isORDINAL,
   isCONTINUOUS,
-  dataWidth,
-  differenceSpan,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
   axisOver,
@@ -92,8 +90,8 @@ export function defaultAxisSide(
  * are built. This replaces the bespoke axis-rendering pipeline (the former
  * shapes/axis.tsx + the budget machinery in _node.ts): an axis is no longer a
  * privileged node type, it's a `Layer` wrapping the content with tick/label
- * shapes pinned via `Constraint.position({ [axis]: datum(v) })` (continuous /
- * difference) or a direct `ref(...)` to the laid-out key (ordinal).
+ * shapes pinned via `Constraint.position({ [axis]: datum(v) })` (continuous
+ * and time) or a direct `ref(...)` to the laid-out key (ordinal).
  *
  * The pass walks the tree bottom-up; any node `resolveAxes` flagged as owning an
  * axis (`axis.x/y === true`) is wrapped. Because the axis becomes a
@@ -128,7 +126,7 @@ export type AxisElaboration = {
    *  its datums are read in (`position`'s `in`). */
   constraints: RingConstraints;
   /** The node the axis's title centers on: the axis's own span. A
-   *  position-like axis (continuous/difference) sets its line; an ordinal
+   *  position-like axis (continuous or time) sets its line; an ordinal
    *  axis sets the span from its first slot to its last (`axisSpan`), so
    *  the title centers on the plot and not on the other axis's gutter. An
    *  ordinal axis with no slots leaves it unset, and the title centers on
@@ -341,10 +339,10 @@ type ExtraLabel = {
 };
 
 /**
- * Shared builder for the "position-like" axes (continuous, time, difference):
+ * Shared builder for the "position-like" axes (continuous and time):
  * an axis line spanning [lineMin,lineMax] via datum endpoints, an anchor + tick
  * nodes pinned at their data values, an optional set of extra labels pinned at
- * data positions (the difference deltas), and the seated gutter. Factoring this
+ * data positions (a time axis's rows), and the seated gutter. Factoring this
  * keeps the two kinds from drifting (e.g. a fix applied to only one).
  */
 function positionAxis(opts: {
@@ -352,7 +350,7 @@ function positionAxis(opts: {
   lineMin: number;
   lineMax: number;
   tickValues: number[];
-  /** Build the node for tick i (labeled for continuous, bare for difference). */
+  /** Build the node for tick i (labeled for continuous, bare for time). */
   tickNode: (v: number, i: number) => GoFishNode;
   /**
    * Build a SEPARATE per-tick label, when the tick itself (`tickNode`) is
@@ -369,8 +367,7 @@ function positionAxis(opts: {
    *  doc comment) — only consulted when `tickLabel` is given. */
   labelRotation?: LabelRotation;
   /** Extra labels placed at a data position, with no tick of their own:
-   *  the delta labels of a difference axis, and the row labels of a time
-   *  axis. Each sits `offset` pixels past the line (default: past the ticks,
+   *  the row labels of a time axis. Each sits `offset` pixels past the line (default: past the ticks,
    *  where a continuous axis's labels sit). `label.angle` does not rotate
    *  them, so they carry no `axisLabel` tag and `label.angle: "auto"` does
    *  not score them. */
@@ -386,8 +383,8 @@ function positionAxis(opts: {
   const tickLabelNodes = opts.tickLabel
     ? tickValues.map((v, i) => opts.tickLabel!(v, i))
     : [];
-  // Extra labels are PLAIN text — no tick mark of their own, or a
-  // difference axis ends up with a second row of ticks at the midpoints.
+  // Extra labels are PLAIN text — no tick mark of their own, or a time
+  // axis ends up with a second row of ticks under its row labels.
   const extra = opts.extraLabels ?? [];
   const labelNodes = extra.map((e) =>
     Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR })
@@ -462,8 +459,8 @@ function positionAxis(opts: {
   };
 
   // `line` is the title anchor: the axis's title centers on the
-  // axis line's span (which may be narrower than the plot — a difference axis
-  // spans the data width, a facet-owned axis spans its facet).
+  // axis line's span (which may be narrower than the plot — a facet-owned
+  // axis spans its facet).
   return {
     nodes: [line, ...tickNodes, ...tickLabelNodes, ...labelNodes],
     constraints,
@@ -626,42 +623,6 @@ function elaborateTimeAxis(
     extraLabels: labels.flatMap((row, k) =>
       row.map((l) => ({ value: l.at, text: l.text, offset: rowOffset[k] }))
     ),
-    side,
-  });
-}
-
-/** One difference axis: bare tick marks at tick values, delta labels at
- *  midpoints. `space` is the content's space; the axis spans its niced width
- *  from 0, and the content sits centered in it: a delta axis comes from
- *  centering (`middle` alignment), so its slack splits evenly. Its plot has
- *  no data 0, so its frame measures from the plot's own 0 (`frameOf`), where
- *  the plot's data starts: the axis's 0 is the slack before it. */
-function elaborateDifferenceAxis(
-  dim: 0 | 1,
-  content: CONTINUOUS_TYPE,
-  ticks: AxisTicks,
-  side: "start" | "end" = "start"
-): AxisElaboration {
-  const space = niceContinuous(content, ticks);
-  // `space` is the axis's niced space (`niceContinuous`), so its width is a
-  // nice value from 0 and the ticks step evenly up to it: the scope that sizes
-  // the content solves against the same niced width (`niceScope`), so ticks
-  // line up with the marks they annotate. The axis counts [0, width], and
-  // it lies at `differenceSpan` in the content's frame, as the plot covers.
-  const width = dataWidth(space);
-  const tickValues = d3Ticks(0, width, ticks.count);
-  const [lineMin, lineMax] = differenceSpan(content, space);
-  const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
-    value: (v + tickValues[i + 1]) / 2 + lineMin,
-    text: fmtNum(tickValues[i + 1] - v),
-  }));
-  return positionAxis({
-    dim,
-    lineMin,
-    lineMax,
-    tickValues: tickValues.map((v) => v + lineMin),
-    tickNode: () => tickRect(dim),
-    extraLabels,
     side,
   });
 }
@@ -1291,7 +1252,7 @@ const continuousCannot = {
 /**
  * Build the elaborations for whichever axes `node` owns; clears its flags.
  * Splits them into two tiers because they place differently:
- *  - `constrained` (continuous/difference) seat a gutter via constraints that
+ *  - `constrained` (continuous and time) seat a gutter via constraints that
  *    SHIFT the content; they must wrap the content directly.
  *  - `refBased` (ordinal) track the content via `ref(...)`, so they must be laid
  *    out AFTER the content is in its final (shifted) position — i.e. in an outer
@@ -1451,7 +1412,7 @@ function elaborationsFor(
     }
     return resolveLabelRotation(setting);
   };
-  // The shared tail of the continuous axes (numeric, time, difference): one
+  // The shared tail of the continuous axes (numeric and time): one
   // gutter of constraints, a title anchor, and its levels (`names`), whose
   // per-level settings must be ones a continuous level takes. A continuous
   // axis's gutter lies past the ordinal rows inside it.
@@ -1522,12 +1483,6 @@ function elaborationsFor(
         ),
         numericNames(dim)
       );
-    } else if (kind === "delta" && isCONTINUOUS(s)) {
-      continuousAxis(
-        dim,
-        elaborateDifferenceAxis(dim, s, ticks, axisSide(dim)),
-        numericNames(dim)
-      );
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
       // A hidden level draws nothing and takes no space, but the node still
@@ -1594,7 +1549,7 @@ function elaborationsFor(
 // inside it:
 //
 //   content                  the node itself, without chrome
-//   ↳ axis gutters           continuous/difference axes
+//   ↳ axis gutters           continuous and time axes
 //   ↳ category label rows    ordinal axes, tracked by `ref`
 //   ↳ axis titles            centered on the axis they name
 //   ↳ legend                 beside all of the above
@@ -1774,8 +1729,8 @@ export async function elaborateChrome(
 //
 // A title names an axis its owner draws. It is placed RELATIVE TO the axis
 // shape it describes: the axis's own span. That is the axis line for a
-// continuous axis, which may span less than the whole plot (a difference
-// axis spans the data width), and the run from the first slot to the last
+// continuous axis, which may span less than the whole plot (a facet's
+// axis spans its facet), and the run from the first slot to the last
 // for a row of category labels. It falls back to the owner's content box only
 // for a category axis with no slots.
 

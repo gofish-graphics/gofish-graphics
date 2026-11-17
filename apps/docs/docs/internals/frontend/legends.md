@@ -45,9 +45,10 @@ ring. The
 `axes` option plays no part, so a legend appears whenever a color encoding
 resolved.
 
-The chart option `legend: false` is the one veto. With it, the root gets no
-legend ring, and nothing reserves the column's width. The scale still colors
-the marks. A chart with 72 categories can keep its colors and drop a swatch
+The chart option `legend` sets which entries the ring holds: `false` drops
+all of them, and `{ color: false }` or `{ y: false }` drops one. With no
+entries the root gets no legend ring, and nothing reserves the column's
+width. The scale still colors the marks. A chart with 72 categories can keep its colors and drop a swatch
 column that would be taller than the chart.
 
 `legendRing` reads the resolved `scaleContext.unit` (the `color` map for a
@@ -124,6 +125,48 @@ gate (the same way ORDINAL siblings are filtered). The swatch column resolves to
 UNDEFINED on both axes (fixed-pixel shapes, no data-driven extent), so the
 ring's space is the content's space. See
 [Underlying Space](/internals/core/underlying-space).
+
+## Length entries
+
+Axes are for scales that have positions. Legends are for scales that do not.
+The one read that sorts them is `domainOver(space)` in `underlyingSpace.ts`: a
+pinned space maps `"positions"` and gets an axis, drawn in place. A space with
+no origin maps only `"widths"`: it is a length scale, with a σ and no origin,
+so its data has lengths but no places. It gets no axis. Its guide goes in the
+legend, as a color scale's does. The keyed domains are keyed by the same read
+(`domainId`), so `KeyedDomains.lengthScales(root, axis)` lists the root's
+length scales directly.
+
+Each length scale gets one entry (`lengthEntryNode`): a thin bracket, a line
+with a short tick at each end, and one label beside it. Its length is a round
+amount near a quarter of the scale's widest extent (`entryAmount`, d3's
+`tickStep(0, width, 4)`), and the label is that amount and the measure's name
+(`fmtNum`, as an axis labels its ticks), or the title from
+`legend: { y: { title } }`. Titles do not flow from `axes`: a dimension with
+no origin draws no axis, so `axes.y` does not apply there.
+
+The entry is not pinned in pixels. Its line is an ordinary `Rect` whose
+length along the scale's axis is the amount as data (`datum(amount)`), so the
+solver sizes it as it sizes a mark: the ring's claim is the hull of what it
+holds, and the entry adds an ordinary term in σ to the root's claim. A
+datum has no unit, so it joins the scale's keyed domain. The root maps that
+domain at the plot's σ: when it fits its content to the render's size, the
+entry shares the σ it solves, and when a node with a size of its own maps the
+domain (`chart({ w, h })`), the root takes that node's σ
+(`ScopeRegistry.keyedSigma`, `rootSizes` in `gofish.tsx`). The render's size
+sets no second σ for the entry.
+
+The entries are stacked in the legend column: length entries first, then the
+swatches or colorbar, each distributed down the column 14 px apart and aligned
+at the start. A horizontal stack's entry lies along x. Small multiples whose
+stacks share the root's space share one entry.
+
+The entry is drawn at the root's σ, so two cases are not covered yet
+(TODO(#1322)). A length scale that a coordinate transform maps, such as a
+polar stream, is mapped in the coord's units, not in pixels of the page, so
+`lengthScales` skips a coord's space root. And where sized panels map one
+domain at different σs, there is no one σ to show: the root fits its own,
+and the entry is drawn at it.
 
 ## Sizing: the legend takes room
 

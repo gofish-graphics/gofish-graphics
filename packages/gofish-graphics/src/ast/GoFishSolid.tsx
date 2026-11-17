@@ -1,5 +1,5 @@
 import { Component, onCleanup, type JSX, createEffect } from "solid-js";
-import { gofish, type AxesOptions } from "./gofish";
+import { gofish, type AxesOptions, type LegendOptions } from "./gofish";
 import { type GoFishNode } from "./_node";
 
 interface GoFishComponentProps {
@@ -12,7 +12,7 @@ interface GoFishComponentProps {
   defs?: JSX.Element[];
   children: GoFishNode;
   axes?: AxesOptions;
-  legend?: boolean;
+  legend?: LegendOptions;
 }
 
 export const GoFishSolid: Component<GoFishComponentProps> = (props) => {

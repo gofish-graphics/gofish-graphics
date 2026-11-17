@@ -10,7 +10,7 @@ import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
 import { slotOf } from "../constraints/shared";
 import { breadthFirst, fmtNum, type ChromeRing } from "../elaborationUtils";
-import { ticks as d3Ticks } from "d3-array";
+import { ticks as d3Ticks, tickStep } from "d3-array";
 import { datum } from "../data";
 import type { CategoricalScale, ContinuousColorScale } from "../gofish";
 import { orientSide, wrapperDirection } from "../axisDirection";
@@ -224,11 +224,75 @@ export async function legendColorbar(
   return root;
 }
 
+/** A length scale's entry: the axis its lengths lie along, a round amount
+ *  of it, and its label. */
+export type LengthEntry = { dim: 0 | 1; amount: number; label: string };
+
+/** The amount a length entry shows for a length scale of width `width`: a
+ *  round number near a quarter of it, the step d3 ticks the width at in
+ *  about four steps (`tickStep`, the nicing numeric ticks use). */
+export const entryAmount = (width: number): number =>
+  width > 0 ? tickStep(0, width, 4) : 0;
+
+const ENTRY_TICK = 6; // length of the tick at each end of the bracket
+const ENTRY_LABEL_GAP = 4; // gap between the bracket and its label
+const ENTRY_SWATCH_GAP = 14; // gap between the entry and the swatches below
+
+/**
+ * A length entry: a bracket (a line with a short tick at each end) whose
+ * length is the entry's amount as DATA, `datum(amount)`, and its label.
+ * The bracket is an ordinary shape with a data length: it takes the σ of
+ * the scope it sits in, as every data-sized shape does, and claims that
+ * many pixels, so the legend column's claim is a claim in σ and the fit
+ * solves the plot's room and the entry's length together.
+ */
+async function lengthEntryNode(e: LengthEntry): Promise<GoFishNode> {
+  const along = e.dim === 1 ? "y" : "x";
+  const across = e.dim === 1 ? "x" : "y";
+  const line = Rect(
+    e.dim === 1
+      ? { w: 1, h: datum(e.amount), fill: LABEL_COLOR }
+      : { w: datum(e.amount), h: 1, fill: LABEL_COLOR }
+  );
+  const ticks = [0, 1].map(() =>
+    Rect(
+      e.dim === 1
+        ? { w: ENTRY_TICK, h: 1, fill: LABEL_COLOR }
+        : { w: 1, h: ENTRY_TICK, fill: LABEL_COLOR }
+    )
+  );
+  const bracket = (await (layer as any)([line, ...ticks])) as GoFishNode;
+  const at = slotOf(bracket);
+  await bracket.INTERNAL_relate([
+    // The ticks hang from the line, one at each end, on the side the label
+    // is on.
+    Constraint.align({ [across]: "start" } as any, [
+      at(line),
+      at(ticks[0]),
+      at(ticks[1]),
+    ]),
+    Constraint.align({ [along]: "start" } as any, [at(line), at(ticks[0])]),
+    Constraint.align({ [along]: "end" } as any, [at(line), at(ticks[1])]),
+  ]);
+  const text = Text({
+    text: e.label,
+    fontSize: LABEL_FONT_SIZE,
+    fill: LABEL_COLOR,
+  });
+  // The label sits past the bracket's ticks, across from its middle.
+  return (await (Spread as any)(
+    { dir: "x", spacing: ENTRY_LABEL_GAP, alignment: "middle" },
+    [bracket, text]
+  )) as GoFishNode;
+}
+
 /**
  * The legend ring of `owner`'s chrome (see `elaborateChrome` in
- * axes/elaborate.tsx): a swatch column for a categorical scale, or a colorbar
- * for a continuous (gradient) one, seated just right of the box inside the
- * ring (the owner with its axes and titles) and top-aligned with it.
+ * axes/elaborate.tsx): one column of entries, one per scale that has no
+ * place in the plot, seated just right of the box inside the ring (the
+ * owner with its axes and titles) and top-aligned with it. Length entries
+ * head the column (`lengthEntryNode`), and the color scale's swatch column,
+ * or its colorbar for a continuous (gradient) scale, hangs below them.
  *
  * `owner` is the node the legend describes, without its chrome: a
  * categorical legend lists its entries in the order `owner` lays them down
@@ -236,26 +300,49 @@ export async function legendColorbar(
  * the axis order of the rings around it.
  */
 export async function legendRing(
-  scale: CategoricalScale | ContinuousColorScale,
+  scales: {
+    color?: CategoricalScale | ContinuousColorScale;
+    lengths: LengthEntry[];
+  },
   owner: GoFishNode
-): Promise<ChromeRing> {
-  const legend =
-    "scaleFn" in scale
-      ? await legendColorbar(scale.scaleFn, scale.domain)
-      : await legendColumn(legendEntries(scale, owner));
+): Promise<ChromeRing | undefined> {
+  const { color, lengths } = scales;
+  const entries = [
+    ...(await Promise.all(lengths.map(lengthEntryNode))),
+    ...(color === undefined
+      ? []
+      : [
+          "scaleFn" in color
+            ? await legendColorbar(color.scaleFn, color.domain)
+            : await legendColumn(legendEntries(color, owner)),
+        ]),
+  ];
+  if (entries.length === 0) return undefined;
   // The legend tops out with the content.
-  const top = orientSide("start", wrapperDirection(owner));
+  const top = orientSide<"start" | "end">("start", wrapperDirection(owner));
+  // Down the screen is toward the start of a y that grows upward.
+  const down = top === "end" ? [...entries].reverse() : entries;
   return {
-    nodes: [legend],
+    nodes: entries,
     constraints: (at, inner) => [
       // Seat the column just right of the full box inside (incl. axis labels
       // and titles).
       Constraint.distribute({ dir: "x", spacing: LEGEND_CONTENT_GAP }, [
         inner,
-        at(legend),
+        at(entries[0]),
       ]),
       // Top-align the column with the box's top.
-      Constraint.align({ y: top }, [inner, at(legend)]),
+      Constraint.align({ y: top }, [inner, at(entries[0])]),
+      // The rest of the column, start-aligned under the first entry.
+      ...(entries.length > 1
+        ? [
+            Constraint.align({ x: "start" }, entries.map(at)),
+            Constraint.distribute(
+              { dir: "y", spacing: ENTRY_SWATCH_GAP },
+              down.map(at)
+            ),
+          ]
+        : []),
     ],
   };
 }

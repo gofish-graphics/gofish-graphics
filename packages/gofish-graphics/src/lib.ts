@@ -87,6 +87,8 @@ export {
 } from "./ast/gofish";
 export type {
   GoFishRenderOptions,
+  LegendOptions,
+  LengthEntryOptions,
   GoFishExportOptions,
   View,
 } from "./ast/gofish";

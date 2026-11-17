@@ -280,7 +280,8 @@ This is one of the most important passes. It determines the **underlying space**
     `h: "value"` with no min), `[−descent, ascent]` about its baseline; no
     position scale.
   - `origin: "none"` — **DIFFERENCE**: unanchorable, only differences are
-    meaningful (stacked/centered); delta axis over `[0, width]`.
+    meaningful (stacked/centered); a length scale, so no axis, and a length
+    entry in the legend.
 - **`ORDINAL`**: Discrete categorical scale (e.g., `spread("category")`)
 - **`UNDEFINED`**: No data-driven encoding
 
@@ -376,9 +377,11 @@ The chart's options describe the chrome of the chart root. `layout()` passes
   field). A space with no measure has no title. The title is read off the
   root's space before elaboration re-resolves it, so it names the OUTERMOST
   grouping (`lake`, not the inner `species`).
-- **The legend.** The color scale is resolved once, from the root, so the root
-  carries the legend whenever the scale has something to show and the `legend`
-  option is not `false`.
+- **The legend.** Axes are for scales that have positions; legends are for
+  scales that do not. The color scale is resolved once, from the root, and
+  each length scale the root maps (a space with no origin) is read off the
+  keyed domains (`KeyedDomains.lengthScales`), so the root carries one
+  legend with an entry for each that the `legend` option leaves on.
 
 Each title is a ring seated past the root's axes and centered on the axis line
 it describes. The legend is the ring outside that, so it is seated past the
@@ -429,9 +432,12 @@ the claim, and a coord's budget does not warn. The root's size is that box,
 so a root whose claim overflows the render's size is its claim, seated at
 the canvas's top-left: a y-up root overflows past the bottom, not the top. A
 layer with a size of its own is that size whatever its content claims, so it
-reads its size, not the box. On an axis the render does not size, a root whose nodes with a
-literal size map its keyed domain maps it at the σ they solved
-(`ScopeRegistry.keyedSigma`). Any other unsized root is fitted to the default
+reads its size, not the box. A root whose nodes with a literal size map its
+keyed domain maps it at the σ they solved (`ScopeRegistry.keyedSigma`), on
+an axis the render does not size, and on one it does where the root's
+content claims no data of its own there (its plot has a size of its own, and
+only chrome such as a legend's length entry maps the domain): the render's
+slot sets no second σ. Any other unsized root is fitted to the default
 canvas, which is not a limit: it grows to hold what does not fit, so the fit
 does not warn there (#1179). A pinned axis hands its content the map
 `px(d) = σ·d + originPx`; a free root is placed at `originPx`. A one-value
@@ -946,10 +952,8 @@ fixed-size nodes report their size).
   `GoFishNode.widenToDomain` applies for every reader) takes the farther of
   the claim and the domain's end on each side. A tick label past the last
   tick, or a mark past its datum, takes room only where the domain does not
-  already reach past it. On a difference axis the claim is centered in the
-  niced width, by the same farther-end rule, so widening twice is widening
-  once. The plot an axis is seated beside covers its whole niced domain
-  (`_axesBeside`), a difference axis's centered width included: its plan
+  already reach past it, so widening twice is widening once. The plot an
+  axis is seated beside covers its whole niced domain (`_axesBeside`): its plan
   (`domainPlan` in `layer`) and its layout box (`GoFishNode.domainSpan`)
   both reach the domain's ends, so its axes frame the domain's corner, and
   the room handed to it counts the domain as plot, not as dressing.
