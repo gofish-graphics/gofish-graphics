@@ -33,7 +33,7 @@ import {
 import { execSync, execFileSync } from "node:child_process";
 import {
   publicSurface,
-  ts as packageTs,
+  ts as libTs,
 } from "../docs/.vitepress/data/publicExports.mjs";
 
 const require = createRequire(import.meta.url);
@@ -231,7 +231,6 @@ const NAME_DIAGNOSTICS = new Set([
 ]);
 
 function checkSnippetNames(examples) {
-  const ts = packageTs;
   const surface = publicSurface();
   const root = resolve(__dirname, "../.snippet-check");
   const storiesFile = resolve(
@@ -253,20 +252,19 @@ function checkSnippetNames(examples) {
   // The snippets run in a bundler (the live editor), so they resolve as one.
   const options = {
     ...surface.options,
-    jsx: ts.JsxEmit.Preserve,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    jsx: libTs.JsxEmit.Preserve,
+    module: libTs.ModuleKind.ESNext,
+    moduleResolution: libTs.ModuleResolutionKind.Bundler,
   };
-  const host = ts.createCompilerHost(options);
-  const { getSourceFile, fileExists, readFile } = host;
-  const { directoryExists } = host;
+  const host = libTs.createCompilerHost(options);
+  const { getSourceFile, fileExists, readFile, directoryExists } = host;
   host.fileExists = (f) => files.has(f) || fileExists.call(host, f);
   host.directoryExists = (d) =>
     d === root || d.startsWith(root + "/") || directoryExists.call(host, d);
   host.readFile = (f) => files.get(f) ?? readFile.call(host, f);
   host.getSourceFile = (f, lang, ...rest) =>
     files.has(f)
-      ? ts.createSourceFile(f, files.get(f), lang, true)
+      ? libTs.createSourceFile(f, files.get(f), lang, true)
       : getSourceFile.call(host, f, lang, ...rest);
   host.resolveModuleNameLiterals = (literals, containingFile) =>
     literals.map((lit) => {
@@ -278,14 +276,14 @@ function checkSnippetNames(examples) {
       // A package the snippet names resolves from the stories' package,
       // whose dependencies the stories use (computeNpmDeps reads the same).
       const from = lit.text.startsWith(".") ? containingFile : storiesFile;
-      return ts.resolveModuleName(lit.text, from, options, host);
+      return libTs.resolveModuleName(lit.text, from, options, host);
     });
-  const program = ts.createProgram([...files.keys()], options, host);
+  const program = libTs.createProgram([...files.keys()], options, host);
   const byId = new Map();
   for (const [file, id] of owner) {
     const sf = program.getSourceFile(file);
     for (const d of program.getSemanticDiagnostics(sf)) {
-      const text = ts.flattenDiagnosticMessageText(d.messageText, " ");
+      const text = libTs.flattenDiagnosticMessageText(d.messageText, " ");
       // A member a namespace import lacks (`Coord.clocky`) is the general
       // "property does not exist" error (2339, or 2551 with a suggestion),
       // on the namespace's module type.

@@ -238,22 +238,47 @@ function publicImport(
   if (imp.form === "namespace") {
     const r = surface.resolveNamespace(file);
     if (!r) return undefined;
-    return r.name === undefined
-      ? { form: "namespace", specifier: r.specifier, name: imp.name }
-      : {
-          form: "named",
-          specifier: r.specifier,
-          binding: r.name === imp.name ? r.name : `${r.name} as ${imp.name}`,
-        };
+    if (r.name === undefined)
+      return { form: "namespace", specifier: r.specifier, name: imp.name };
+    return named(r, imp.name);
   }
   const exported = imp.form === "named" ? imp.imported! : "default";
   const r = surface.resolveName(file, exported, { value: !imp.isTypeOnly });
-  if (!r) return undefined;
-  return {
-    form: "named",
-    specifier: r.specifier,
-    binding: r.name === imp.name ? r.name : `${r.name} as ${imp.name}`,
-  };
+  return r && named(r, imp.name);
+}
+
+/** A named import of the public `r.name`, bound to `local`. */
+const named = (
+  r: { specifier: string; name: string },
+  local: string
+): PublicImport => ({
+  form: "named",
+  specifier: r.specifier,
+  binding: r.name === local ? local : `${r.name} as ${local}`,
+});
+
+/** The import lines of `pubs`: one named import per specifier, in sorted
+ *  order, then the namespace imports, as a story's are written. */
+function publicImportLines(pubs: PublicImport[]): string[] {
+  const byModule = new Map<string, Set<string>>();
+  const namespaces: string[] = [];
+  for (const pub of pubs) {
+    if (pub.form === "namespace")
+      namespaces.push(`import * as ${pub.name} from "${pub.specifier}";`);
+    else {
+      if (!byModule.has(pub.specifier)) byModule.set(pub.specifier, new Set());
+      byModule.get(pub.specifier)!.add(pub.binding);
+    }
+  }
+  return [
+    ...[...byModule.entries()]
+      .sort()
+      .map(
+        ([module, names]) =>
+          `import { ${[...names].sort().join(", ")} } from "${module}";`
+      ),
+    ...namespaces.sort(),
+  ];
 }
 
 /** The error for an import that is not public ({@link publicImport}). */
@@ -329,6 +354,45 @@ interface ParsedFile {
   imports: ImportBinding[];
 }
 
+/** The bindings one import declaration makes (none for a side-effect
+ *  import). */
+function importBindings(stmt: ts.ImportDeclaration): ImportBinding[] {
+  const module = (stmt.moduleSpecifier as ts.StringLiteral).text;
+  const clause = stmt.importClause;
+  if (!clause) return [];
+  const declTypeOnly = !!clause.isTypeOnly;
+  const out: ImportBinding[] = [];
+  if (clause.name) {
+    out.push({
+      name: clause.name.text,
+      module,
+      form: "default",
+      isTypeOnly: declTypeOnly,
+    });
+  }
+  if (clause.namedBindings) {
+    if (ts.isNamespaceImport(clause.namedBindings)) {
+      out.push({
+        name: clause.namedBindings.name.text,
+        module,
+        form: "namespace",
+        isTypeOnly: declTypeOnly,
+      });
+    } else {
+      for (const el of clause.namedBindings.elements) {
+        out.push({
+          name: el.name.text,
+          imported: el.propertyName?.text ?? el.name.text,
+          module,
+          form: "named",
+          isTypeOnly: declTypeOnly || !!el.isTypeOnly,
+        });
+      }
+    }
+  }
+  return out;
+}
+
 function parseFile(storyFile: string): ParsedFile {
   const source = readFileSync(storyFile, "utf-8");
   const sourceFile = parse(storyFile, source);
@@ -338,38 +402,7 @@ function parseFile(storyFile: string): ParsedFile {
 
   for (const stmt of sourceFile.statements) {
     if (ts.isImportDeclaration(stmt)) {
-      const module = (stmt.moduleSpecifier as ts.StringLiteral).text;
-      const clause = stmt.importClause;
-      if (!clause) continue;
-      const declTypeOnly = !!clause.isTypeOnly;
-      if (clause.name) {
-        imports.push({
-          name: clause.name.text,
-          module,
-          form: "default",
-          isTypeOnly: declTypeOnly,
-        });
-      }
-      if (clause.namedBindings) {
-        if (ts.isNamespaceImport(clause.namedBindings)) {
-          imports.push({
-            name: clause.namedBindings.name.text,
-            module,
-            form: "namespace",
-            isTypeOnly: declTypeOnly,
-          });
-        } else {
-          for (const el of clause.namedBindings.elements) {
-            imports.push({
-              name: el.name.text,
-              imported: el.propertyName?.text ?? el.name.text,
-              module,
-              form: "named",
-              isTypeOnly: declTypeOnly || !!el.isTypeOnly,
-            });
-          }
-        }
-      }
+      imports.push(...importBindings(stmt));
       continue;
     }
 
@@ -696,8 +729,7 @@ function transformStory(
   }
 
   // ----- build imports -----
-  // Package specifier → the bindings imported from it.
-  const publicNamed = new Map<string, Set<string>>();
+  const publicImports: PublicImport[] = [];
   const datasetNames = new Set<string>();
   const datasetModules = new Set<string>();
   const keepLines: string[] = [];
@@ -721,13 +753,7 @@ function transformStory(
       case "source": {
         const pub = publicImport(imp, target.file);
         if (!pub) throw notPublic(imp, storyFile);
-        if (pub.form === "namespace")
-          keepNamespace.set(pub.specifier, pub.name);
-        else {
-          if (!publicNamed.has(pub.specifier))
-            publicNamed.set(pub.specifier, new Set());
-          publicNamed.get(pub.specifier)!.add(pub.binding);
-        }
+        publicImports.push(pub);
         break;
       }
       case "dataset":
@@ -766,12 +792,7 @@ function transformStory(
     }
   }
 
-  const importLines: string[] = [];
-  for (const [module, names] of [...publicNamed.entries()].sort()) {
-    importLines.push(
-      `import { ${[...names].sort().join(", ")} } from "${module}";`
-    );
-  }
+  const importLines = publicImportLines(publicImports);
   for (const [module, names] of [...keepNamed.entries()].sort()) {
     importLines.push(
       `import { ${[...names].sort().join(", ")} } from "${module}";`
@@ -1064,53 +1085,16 @@ function datasetImport(
 ): string {
   const spec = (stmt.moduleSpecifier as ts.StringLiteral).text;
   const file = resolveModuleFile(resolve(dirname(modulePath), spec));
-  const clause = stmt.importClause;
-  const bindings: ImportBinding[] = [];
-  if (clause?.name)
-    bindings.push({
-      name: clause.name.text,
-      module: spec,
-      form: "default",
-      isTypeOnly: !!clause.isTypeOnly,
-    });
-  const named = clause?.namedBindings;
-  if (named && ts.isNamespaceImport(named))
-    bindings.push({
-      name: named.name.text,
-      module: spec,
-      form: "namespace",
-      isTypeOnly: !!clause!.isTypeOnly,
-    });
-  else if (named)
-    for (const el of named.elements)
-      bindings.push({
-        name: el.name.text,
-        imported: el.propertyName?.text ?? el.name.text,
-        module: spec,
-        form: "named",
-        isTypeOnly: !!clause!.isTypeOnly || el.isTypeOnly,
-      });
+  const bindings = importBindings(stmt);
   const pubs = bindings.map((b) => publicImport(b, file));
-  const missing = bindings.find((_, i) => pubs[i] === undefined);
+  const missing = bindings[pubs.indexOf(undefined)];
   if (missing) {
     const helper = parse(file, readFileSync(file, "utf-8"));
     if (helper.statements.some(ts.isImportDeclaration))
       throw notPublic(missing, modulePath);
     return `// ---- ${relative(dirname(modulePath), file)} ----\n${inlineDataModule(file, preview)}`;
   }
-  const byModule = new Map<string, string[]>();
-  const lines: string[] = [];
-  for (const pub of pubs as PublicImport[]) {
-    if (pub.form === "namespace")
-      lines.push(`import * as ${pub.name} from "${pub.specifier}";`);
-    else {
-      if (!byModule.has(pub.specifier)) byModule.set(pub.specifier, []);
-      byModule.get(pub.specifier)!.push(pub.binding);
-    }
-  }
-  for (const [module, names] of byModule)
-    lines.unshift(`import { ${names.join(", ")} } from "${module}";`);
-  return lines.join("\n");
+  return publicImportLines(pubs as PublicImport[]).join("\n");
 }
 
 function resolveJsonPath(modulePath: string, spec: string): string {

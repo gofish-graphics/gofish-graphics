@@ -114,8 +114,8 @@ let cached;
  * - `resolveNamespace(file)`: how a namespace import of `file` is public:
  *   `{ specifier }` when `file` is an entry, `{ specifier, name }` when an
  *   entry exports it as a namespace (`export * as Coord`), else undefined.
- * - `program`, `options`: the program over the entries, and its options,
- *   for a caller that type checks code against the packages.
+ * - `options`: the program's compiler options, for a caller that type
+ *   checks code against the packages.
  */
 export function publicSurface() {
   if (cached) return cached;
@@ -174,7 +174,6 @@ export function publicSurface() {
     names: (specifier) => exported.get(specifier),
     resolveName,
     resolveNamespace,
-    program,
     options,
   };
   return cached;
