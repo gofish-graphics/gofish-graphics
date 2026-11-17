@@ -487,7 +487,10 @@ the titles of the ordinals it overlays, in order. So `spaceTitle(space)` reads a
 **both** continuous and ordinal kinds (only `UNDEFINED` has none), which is what
 lets an axis name itself off its own resolved space — a continuous axis by its
 quantity names, an ordinal axis by its grouping field (see [the layout
-passes](/internals/layout/passes)).
+passes](/internals/layout/passes)). A quantity may have no name (a
+distribution family's variable, in its location column's unit but not that
+column): it titles nothing, and with no declared unit its unit is a fresh
+unknown that binds nothing else.
 
 An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, the cells in
 order of their starts, as `CONTINUOUS_TYPE.cells` holds them; a key is its
@@ -2818,9 +2821,13 @@ knows about the other.
 Two other folds give a `Dist`, on the same lift. `field(x).density()` (and
 `support`, `cdf`, `quantile(p)`) is the fold `sample` and a member: the
 group's values as `Dist.sample`, a normal kernel density with Silverman's
-bandwidth (`silvermanBandwidth` in `overlap.ts`), reflected at the least and
-the greatest value, with area the row count; its quantile is the values'
-type-7 quantile, so its median is `median()`'s. A family,
+bandwidth (`silvermanBandwidth` in `overlap.ts`), drawn from 3 bandwidths
+below the least value to 3 above the greatest (`SAMPLE_CUT`, seaborn's
+`cut=3`), with area the row count less the kernels' tails past that, at most
+Φ(−3) ≈ 0.135% of a value's kernel at each end; its quantile is the values'
+type-7 quantile, so its median is `median()`'s, and its cdf is the inverse
+of that quantile, 0 over the tail below the least value and 1 over the tail
+above the greatest. A family,
 `Dist.normal({ mean, sd })`, is its own expression (`DistExpr` in
 `distExpr.ts`, wire `{ type: "dist", family, params, ops }`): `evalGroup`
 reads its parameters over the group's rows (`distOf`), makes the family's
@@ -2835,7 +2842,10 @@ the line and for a family binned with `d.bin(p)` (`distEntries`, whose cells
 are `distributionCells` over the density's interval, each holding every
 row). Three leaves read it, and only when their variable is the cell's: a
 family's `distOf` restricts the whole group's `Dist` (`restrictDist`), the
-`sample` fold restricts the whole rows' sample (`sampleIn`), and
+`sample` fold restricts the whole rows' sample (`sampleIn`; the cells of a
+column cover its values, so a cell that reaches the least or the greatest
+value also holds the density's tail past it, and the cells partition the
+whole support), and
 `bandOfRows` builds the band through the whole rows and restricts both
 edges to the cell, so the bands in neighboring cells meet. A distribution of
 another column reads the cell's own rows, which is its distribution given
@@ -2846,7 +2856,8 @@ the cell.
 A fold that lifts says the quantity of each leaf (`FoldStep.lift`). A
 reduce reads its `unit` option. A `Dist` reads its variable
 (`distQuantities`): the support, the quantiles, the median and the mean are
-amounts of the variable (the column, or a family's location column), so
+amounts of the variable (the column; for a family, a quantity with no name
+in its location column's unit, since the variable is not that column), so
 their axes join; the density is the mass per the variable's unit, or per
 its difference unit (a density over instants is per duration), with
 `CanSum`, so densities stack; the cdf is a `ratio`, which does not add up.

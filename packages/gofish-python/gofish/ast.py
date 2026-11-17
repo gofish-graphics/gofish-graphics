@@ -3405,15 +3405,15 @@ class FieldAccessor(dict):
 
     def density(self) -> "FieldAccessor":
         """The group's values as a sample: their kernel density, with area
-        the number of values and Silverman's bandwidth, over the values' own
-        range. It is in the values' count per unit, so the densities of
+        the number of values and Silverman's bandwidth, drawn from 3
+        bandwidths below the least value to 3 above the greatest. It is in
+        the values' count per unit, so the densities of
         several groups add up. Valid only in a channel of ``ribbon`` or
         ``line``. Mirrors JS ``field(name).density()``."""
         return self._sample_member("density")
 
     def support(self) -> "FieldAccessor":
-        """``t`` over the values' own range, the interval :meth:`density`
-        is drawn over: the position channel that reads the density at the
+        """``t`` over the interval :meth:`density` is drawn over: the position channel that reads the density at the
         mark's parameter. In the values' unit."""
         return self._sample_member("support")
 

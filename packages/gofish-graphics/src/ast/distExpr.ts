@@ -70,9 +70,10 @@ export type DistParams<F extends FamilyName> = {
 };
 
 /** The parameter of each family that is an amount of the variable, whose
- *  column's quantity the variable has (an axis over `d.support()` joins
- *  one over that column). A family with none is over a variable named
- *  "value". */
+ *  column's unit the variable is in (an axis over `d.support()` joins one
+ *  in that unit). The variable is not that column, so it takes the unit
+ *  and not the column's name, and titles no axis. A family with none is
+ *  over a variable with no name and no declared unit. */
 const LOCATION: Record<FamilyName, string | undefined> = {
   normal: "mean",
   lognormal: undefined,
@@ -240,9 +241,12 @@ const PROBABILITY_QUANTITY: Quantity = {
   unit: PROBABILITY,
 };
 
-/** The variable a family is over, when it reads no column: amounts of an
- *  unknown unit named "value", as a function accessor's are. */
-const VALUE_QUANTITY: Quantity = { name: "value" };
+/** The variable a family is over: amounts in the unit of its location
+ *  parameter's quantity `location` (see {@link LOCATION}), with no name.
+ *  Without one, or with a location in no declared unit, its unit is
+ *  unknown. */
+const variableIn = (location: Quantity | undefined): Quantity =>
+  location?.unit !== undefined ? { unit: location.unit } : {};
 
 /**
  * One parameter's value for the group `rows`, and its quantity: a number as
@@ -325,14 +329,17 @@ export function distOf(
   const names = FAMILY_PARAMS[expr.family] as readonly string[];
   if (names === undefined) throw new Error(`Dist: no family "${expr.family}".`);
   const values: Record<string, number> = {};
-  let variable = VALUE_QUANTITY;
+  let location: Quantity | undefined;
   for (const k of names) {
     const p = paramOf(where, k, expr.params[k], rows);
     values[k] = p.value;
     if (k === LOCATION[expr.family] && p.quantity !== undefined)
-      variable = p.quantity;
+      location = p.quantity;
   }
-  return { dist: familyDist(expr.family, values as any), variable };
+  return {
+    dist: familyDist(expr.family, values as any),
+    variable: variableIn(location),
+  };
 }
 
 /** Whether `v` is a distribution binned into cells, `d.bin(p)`: a key. */

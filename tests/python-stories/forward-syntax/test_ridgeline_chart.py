@@ -17,9 +17,11 @@ DAYS = [
     {**d, "month": MONTH_NAMES[int(d["date"][5:7]) - 1]}
     for d in SEATTLE_WEATHER
 ]
-_temps = [d["temp_max"] for d in SEATTLE_WEATHER]
-MIN_TEMP = min(_temps)
-MAX_TEMP = max(_temps)
+# The rules under the ridges run across the whole x axis, past the tails
+# of every month's density (each runs three bandwidths past its month's
+# days), so each month's name sits left of every ridge.
+RULE_FROM = -10
+RULE_TO = 40
 
 # Fixed row-to-row pitch shared by the ridge spread and the label spread
 # below, so a month's rule+label always sit at the same baseline as its
@@ -74,9 +76,8 @@ def story_default():
         # that can't line up with 12 overlapping, unevenly-tall silhouettes.
         # The rules are the same fixed-pitch baseline spread as the ridges, a
         # bare rect per month, so each registers exactly on its ribbon's zero
-        # line. Each rule spans every day's high, from the least to the
-        # greatest. Each rule carries its month as a label outside its left end,
-        # standing on the rule. `.z_order(-1)` paints the rules BEHIND the
+        # line. Each rule spans the x axis. Each rule carries its month as a
+        # label outside its left end, standing on the rule. `.z_order(-1)` paints the rules BEHIND the
         # ribbons, visible only outside the silhouettes, the classic look.
         .layer(
             chart([{"month": month} for month in MONTH_NAMES])
@@ -90,8 +91,8 @@ def story_default():
             )
             .mark(
                 rect(
-                    x=datum(MIN_TEMP),
-                    w=datum(MAX_TEMP - MIN_TEMP),
+                    x=datum(RULE_FROM),
+                    w=datum(RULE_TO - RULE_FROM),
                     h=1,
                     fill="#999",
                 ).label(

@@ -13,9 +13,11 @@
  *
  * - `density`: the mass times the probability density, over the support.
  *   For a family the mass is 1, so it is the pdf. For a sample it is a
- *   kernel density whose area is the number of values, so the densities of
- *   several groups add up.
+ *   kernel density whose area is the number of values (less the kernels'
+ *   tails past the support), so the densities of several groups add up.
  * - `cdf`: the share of the mass at or below t, a ratio, over the support.
+ *   For a sample it is the inverse of its quantile, so it is the values'
+ *   own share, not the integral of the smoothed density.
  * - `quantile(p)`: the value with the share p of the mass at or below it.
  * - `median`, `mean`.
  * - `support`: t itself (`identity`), over the same interval as `density`,
@@ -24,8 +26,9 @@
  *
  * The interval the functions run over is where the density is drawn, as
  * ggdist draws it: a family over its support, or between its 0.001 and
- * 0.999 quantiles at an end where the support is unbounded; a sample over
- * its own values, from the least to the greatest.
+ * 0.999 quantiles at an end where the support is unbounded; a sample from
+ * three bandwidths below its least value to three above its greatest
+ * (seaborn's `cut=3`), so its density tapers to near zero at both ends.
  *
  * A cell of a partition is the Dist restricted to the cell
  * ({@link restrictDist}): the same density inside, the cell's share of the
@@ -269,6 +272,16 @@ export function familyDist<F extends FamilyName>(
  *  normal density is below 1e-14 of its peak. */
 const KERNEL_REACH = 8;
 
+/** How far past its least and greatest value a sample's density is drawn,
+ *  in bandwidths (seaborn's `cut=3`). A kernel has the share Φ(−3) ≈
+ *  0.00135 of its mass past 3 bandwidths on one side, so the area over the
+ *  support is the number of values less at most that share of each
+ *  extreme value's kernel at each end.
+ *  TODO(stack-profiles): an option for a sample's density could choose how
+ *  far past the values it runs, and a bounded estimator (reflection at a
+ *  hard limit, such as 0 for counts) for values that cannot go past one. */
+const SAMPLE_CUT = 3;
+
 /** The first index of the ascending `xs` at or above `v`. */
 const lowerBound = (xs: readonly number[], v: number): number => {
   let a = 0;
@@ -282,23 +295,16 @@ const lowerBound = (xs: readonly number[], v: number): number => {
 };
 
 /**
- * The kernel density of the ascending `sorted` over `[lo, hi]`, with area
- * the number of values: a normal kernel of standard deviation `bw` on each
- * value, reflected at both ends of the interval (Silverman's reflection
- * estimator, as ggdist's `density_bounded`), so no mass leaks past the
- * ends and the density does not drop toward them.
+ * The kernel density of the ascending `sorted` over `domain`: a normal
+ * kernel of standard deviation `bw` on each value, summed, so its area over
+ * the whole line is the number of values.
  */
 function kernelDensity(
   sorted: readonly number[],
-  { min: lo, max: hi }: Interval,
+  domain: Interval,
   bw: number
 ): Fun<number> {
-  // The values and their mirror images at each end, ascending.
-  const points = [
-    ...sorted.map((x) => 2 * lo - x).reverse(),
-    ...sorted,
-    ...sorted.map((x) => 2 * hi - x).reverse(),
-  ];
+  const points = sorted;
   const reach = KERNEL_REACH * bw;
   return opaque(
     (t) => {
@@ -311,7 +317,7 @@ function kernelDensity(
         s += phi((t - points[i]) / bw);
       return s / bw;
     },
-    { domain: { min: lo, max: hi } }
+    { domain }
   );
 }
 
@@ -320,7 +326,7 @@ function kernelDensity(
  * the type-7 quantile of the values (R's and numpy's default, d3's
  * `quantileSorted`), so its median is `field(...).median()`'s, and its cdf
  * is the inverse of that quantile, linear between the values, 0 below the
- * least and 1 above the greatest.
+ * least and 1 above the greatest (over the density's tails past them).
  */
 function sampleOver(
   sorted: readonly number[],
@@ -390,10 +396,11 @@ function sortedValues(values: readonly unknown[], where: string): number[] {
  * (`dist_sample`): its quantiles, median and mean are the values' (type-7
  * quantiles, so they agree with `field(x).median()`), and its density is a
  * normal kernel density with the bandwidth `bandwidth` (Silverman's rule
- * when omitted, R's `bw.nrd0`), reflected at the least and the greatest
- * value, over which it is drawn. Its mass is the number of values, so the
- * area under the density is that number. Missing values (null, undefined)
- * are left out. It needs two different values.
+ * when omitted, R's `bw.nrd0`), drawn from {@link SAMPLE_CUT} bandwidths
+ * below the least value to as many above the greatest. Its mass is the
+ * number of values, the area under the density over the whole line.
+ * Missing values (null, undefined) are left out. It needs two different
+ * values.
  */
 export function sample(
   values: readonly unknown[],
@@ -404,7 +411,7 @@ export function sample(
   if (options?.bandwidth !== undefined)
     positive(where, "bandwidth", options.bandwidth);
   const n = sorted.length;
-  const domain =
+  const range =
     n === 0 ? { min: 0, max: 0 } : { min: sorted[0], max: sorted[n - 1] };
   // A sample of fewer than two different values has quantiles but no
   // density: there is no spread to smooth over. Its density is an error
@@ -416,23 +423,38 @@ export function sample(
           `values are ${n === 0 ? "none" : `all ${sorted[0]}`}.`
       );
     };
-    return sampleOver(sorted, domain, opaque(none, { domain }));
+    return sampleOver(sorted, range, opaque(none, { domain: range }));
   }
   const bw = options?.bandwidth ?? silvermanBandwidth(sorted);
+  const domain = {
+    min: range.min - SAMPLE_CUT * bw,
+    max: range.max + SAMPLE_CUT * bw,
+  };
   return sampleOver(sorted, domain, kernelDensity(sorted, domain, bw));
 }
 
-/** The sample `whole` restricted to `cell`: the values of the cell (`values`,
- *  what a split puts in the cell), with the whole sample's density inside
- *  the cell, over the part of its interval in the cell. The values in the
- *  cell are the whole sample conditioned on being in it, so this is
- *  {@link restrictDist} for a sample, read exactly off its values. */
+/** The sample `whole` restricted to `cell`, a cell of its values' line:
+ *  the values of the cell (`values`, what a split puts in the cell), with
+ *  the whole sample's density inside the cell, over the part of its
+ *  interval in the cell. The values in the cell are the whole sample
+ *  conditioned on being in it, so this is {@link restrictDist} for a
+ *  sample, read exactly off its values.
+ *
+ *  The density runs past the values (its tails), and the cells of the
+ *  values' line cover the values only, so a cell that reaches the least
+ *  value (its 0 quantile) holds the tail below it, and one that reaches the
+ *  greatest holds the tail above: the cells of one sample partition its
+ *  whole support. */
 export function sampleIn(
   values: readonly unknown[],
   whole: Dist,
   cell: Interval
 ): Dist {
-  const domain = meet(whole.support.domain, cell);
+  const support = whole.support.domain;
+  const domain = meet(support, {
+    min: cell.min <= (whole.quantile(0) ?? cell.min) ? support.min : cell.min,
+    max: cell.max >= (whole.quantile(1) ?? cell.max) ? support.max : cell.max,
+  });
   return sampleOver(
     sortedValues(values, "Dist.sample"),
     domain,
@@ -518,15 +540,17 @@ export function distQuantities(
   variable: Quantity,
   mass: Quantity
 ): Record<keyof Dist, Quantity> {
+  const named = (suffix: string) =>
+    variable.name !== undefined ? { name: `${variable.name} ${suffix}` } : {};
   const density: Quantity = {
-    name: `${variable.name} density`,
+    ...named("density"),
     ...(variable.unit !== undefined && mass.unit !== undefined
       ? { unit: densityUnit(variable.unit, mass.unit) }
       : {}),
   };
   return {
     density,
-    cdf: { name: `${variable.name} cdf`, unit: RATIO },
+    cdf: { ...named("cdf"), unit: RATIO },
     quantile: variable,
     median: variable,
     mean: variable,

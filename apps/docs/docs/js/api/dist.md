@@ -78,13 +78,14 @@ error. A family's wire form is data, so it serializes.
 The functions run over the interval the density is drawn over. For a family
 that is its support, cut at the 0.001 and 0.999 quantiles where the support
 has no end: a normal runs from its 0.001 to its 0.999 quantile, a lognormal
-and an exponential from 0 to their 0.999 quantile. For a sample it is the
-least value to the greatest.
+and an exponential from 0 to their 0.999 quantile. For a sample it runs from
+3 bandwidths below the least value to 3 above the greatest, so the density
+tapers to near zero at both ends.
 
-The variable of a family is the quantity of the column its location
+The variable of a family is in the unit of the column its location
 parameter reads (`mean` for `normal`, `min` for `uniform`), so the axis of
-`d.support()` joins an axis over that column. Otherwise it is named
-"value". A density is in the mass per the variable's unit, or per a
+`d.support()` joins an axis in that unit. It is not that column, so it has
+no name, and its axis has no title unless you give one. A density is in the mass per the variable's unit, or per a
 difference of two of its values (a density over times is per duration). A
 density adds up, so densities stack.
 
@@ -108,12 +109,18 @@ partition({ by: d.bin(Bin.quantiles(5)), dir: "x" });
 
 The distribution of a sample of values, as R's distributional package holds
 one (`dist_sample`). Its quantiles, median and mean are the values' own
-(type-7 quantiles, as `field(x).median()`). Its density is a normal kernel
-density with area the number of values, over the least to the greatest
-value, reflected at both ends. `bandwidth` is the kernel's standard
-deviation; without it, it is Silverman's rule (R's `bw.nrd0`). Missing
-values are left out. A sample of fewer than two different values has
-quantiles but no density.
+(type-7 quantiles, as `field(x).median()`), and its cdf is the share of the
+values at or below `t`, so it is 0 below the least value and 1 above the
+greatest. Its density is a normal kernel density with area the number of
+values, drawn from 3 bandwidths below the least value to 3 above the
+greatest, as seaborn's `cut=3` draws it. Past 3 bandwidths a kernel has
+0.135% of its mass, so the area over the drawn interval is the number of
+values less at most that share at each end. `bandwidth` is the kernel's
+standard deviation; without it, it is Silverman's rule (R's `bw.nrd0`).
+Missing values are left out. A sample of fewer than two different values has
+quantiles but no density. There is no option yet to choose how far past the
+values the density runs, or to bound it at a hard limit, such as 0 for
+counts.
 
 `Dist.sample` gives a distribution at run time, not an expression. A
 [`reduce`](/js/api/operators/spread#map-and-reduce) that returns one is

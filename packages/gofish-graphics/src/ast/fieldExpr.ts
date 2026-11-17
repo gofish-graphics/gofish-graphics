@@ -327,17 +327,17 @@ export class FieldExpr<
   }
 
   /** The group's values as a sample ({@link Dist}): their kernel density,
-   *  with area the number of values and Silverman's bandwidth, over the
-   *  values' own range (`Dist.sample` in dist.ts). It is in the values'
-   *  count per unit, so the densities of several groups add up. Valid only
-   *  in a channel of ribbon or line. */
+   *  with area the number of values and Silverman's bandwidth, drawn 3
+   *  bandwidths past the least and the greatest value (`Dist.sample` in
+   *  dist.ts). It is in the values' count per unit, so the densities of
+   *  several groups add up. Valid only in a channel of ribbon or line. */
   density(): FunctionExpr {
     return this._member("density") as FunctionExpr;
   }
 
-  /** `t ↦ t` over the values' own range, the interval
-   *  {@link FieldExpr.density} is drawn over: the position channel that
-   *  reads the density at the mark's parameter. In the values' unit. */
+  /** `t ↦ t` over the interval {@link FieldExpr.density} is drawn over:
+   *  the position channel that reads the density at the mark's parameter.
+   *  In the values' unit. */
   support(): FunctionExpr {
     return this._member("support") as FunctionExpr;
   }

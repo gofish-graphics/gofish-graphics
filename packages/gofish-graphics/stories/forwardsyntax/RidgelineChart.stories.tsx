@@ -1,15 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seattleWeather } from "../../src/data/seatle-weather";
-import {
-  chart,
-  spread,
-  layer,
-  field,
-  rect,
-  datum,
-  Unit,
-} from "../../src/lib";
+import { chart, spread, layer, field, rect, datum, Unit } from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
@@ -46,9 +38,11 @@ const days = seattleWeather.map((d) => ({
   ...d,
   month: monthNames[new Date(d.date).getUTCMonth()],
 }));
-const temps = seattleWeather.map((d) => d.temp_max);
-const minTemp = Math.min(...temps);
-const maxTemp = Math.max(...temps);
+// The rules under the ridges run across the whole x axis, past the tails
+// of every month's density (each runs three bandwidths past its month's
+// days), so each month's name sits left of every ridge.
+const ruleFrom = -10;
+const ruleTo = 40;
 
 // Fixed row-to-row pitch shared by the ridge spread and the rule spread
 // below, so a month's rule and label sit at the same baseline as its
@@ -109,9 +103,8 @@ export const Default: StoryObj<Args> = {
       // that can't line up with 12 overlapping, unevenly-tall silhouettes.
       // The rules are the same fixed-pitch baseline spread as the ridges, a
       // bare rect per month, so each registers exactly on its ribbon's zero
-      // line. Each rule spans every day's high, from the least to the
-      // greatest. Each rule carries its month as a label outside its left end,
-      // standing on the rule. `.zOrder(-1)` paints the rules BEHIND the
+      // line. Each rule spans the x axis. Each rule carries its month as a
+      // label outside its left end, standing on the rule. `.zOrder(-1)` paints the rules BEHIND the
       // ribbons, visible only outside the silhouettes, the classic look.
       .layer(
         chart(monthNames.map((month) => ({ month })))
@@ -125,8 +118,8 @@ export const Default: StoryObj<Args> = {
           )
           .mark(
             rect({
-              x: datum(minTemp),
-              w: datum(maxTemp - minTemp),
+              x: datum(ruleFrom),
+              w: datum(ruleTo - ruleFrom),
               h: 1,
               fill: "#999",
             }).label("month", {

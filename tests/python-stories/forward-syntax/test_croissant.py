@@ -91,7 +91,7 @@ def story_croissant():
                 ]
             )
         ),
-        {"w": 480, "h": 200, "axes": {"x": True, "y": False}},
+        {"w": 480, "h": 200, "axes": {"x": {"title": "x"}, "y": False}},
     )
 
 

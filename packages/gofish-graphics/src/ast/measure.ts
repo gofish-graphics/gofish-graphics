@@ -50,8 +50,12 @@ import type { ColumnType, HasUnit, UnitTraits } from "./schema";
 /** What one channel's values are amounts of, as its column says (pure data,
  *  carried by a datum value). */
 export type Quantity = {
-  /** Titles the axis and names the unit variable. */
-  name: string;
+  /** Titles the axis and names the unit variable. Absent: the values are
+   *  amounts of no named quantity, though they may be in a declared unit (a
+   *  distribution family's variable is in its location column's unit, but
+   *  is not that column): they title no axis, and their unknown unit is a
+   *  fresh variable, which claims nothing. */
+  name?: string;
   /** The declared unit, if any, with its traits when they are known.
    *  Absent: unknown, the variable `name`. */
   unit?: HasUnit;
@@ -159,7 +163,7 @@ export const sqrtQuantity = (q: Quantity): Quantity => {
   let root = sqrtQuantities.get(q);
   if (root === undefined) {
     root = {
-      name: `√${q.name}`,
+      ...(q.name !== undefined ? { name: `√${q.name}` } : {}),
       rootOf: q,
       ...(q.unit !== undefined
         ? {
@@ -233,7 +237,7 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
       `lengths), declare it with ` +
       `Unit("${unit}", { traits: [Trait.summable()] }). If ` +
       `they do not (temperatures, prices, rates), average them instead, ` +
-      `e.g. field("${q.column ?? q.name}").mean().`
+      `e.g. field("${q.column ?? q.name ?? "value"}").mean().`
   );
 }
 
@@ -248,7 +252,9 @@ export type UnitOccurrence = { traits?: UnitTraits; who: Quantity };
 export const whoOf = (q: Quantity): string =>
   q.column !== undefined
     ? `the column "${q.column}"`
-    : `the values of "${q.name}"`;
+    : q.name !== undefined
+      ? `the values of "${q.name}"`
+      : `the values in "${q.unit?.unit}"`;
 
 /** How a definition of unit `name` with `traits` is written. */
 const definitionOf = (name: string, traits: UnitTraits): string =>
@@ -482,8 +488,10 @@ export class Units {
   }
 
   /** The variable of unknown quantity `q`'s name, shared by every unknown
-   *  quantity of that name. */
+   *  quantity of that name. A quantity with no name has a fresh one of its
+   *  own, which unifies with anything and binds nothing else. */
   variable(q: Quantity): UnitVar {
+    if (q.name === undefined) return new UnitVar("value");
     let v = this.vars.get(q.name);
     if (v === undefined) {
       v = new UnitVar(q.name);
@@ -510,7 +518,7 @@ const withTraits = (q: Quantity, traits: UnitTraits): Quantity => ({
 export const unitOf = (q: Quantity): UnitVar => {
   if (q.unit === undefined) return currentUnits().variable(q);
   currentUnits().meet(q);
-  return declaredVar(q.name, q.unit, q.column);
+  return declaredVar(q.name ?? q.unit.unit, q.unit, q.column);
 };
 
 let current: Units | undefined;

@@ -678,7 +678,7 @@ export type UnitRecord = {
 
 /** The units of values of quantity `q`: its unit (`unitOf`: its declared
  *  unit, zone and all, else the variable of its name in the type walk's
- *  union-find), its name as the title, and `q` itself as a summand when its
+ *  union-find), its name as the title (none when it has no name), and `q` itself as a summand when its
  *  unit is declared. */
 export const quantityUnits = (
   q: Quantity | undefined
@@ -687,7 +687,7 @@ export const quantityUnits = (
     ? undefined
     : {
         unit: unitOf(q),
-        titles: [q.name],
+        titles: q.name === undefined ? [] : [q.name],
         ...(q.unit !== undefined ? { summands: [q] } : {}),
       };
 

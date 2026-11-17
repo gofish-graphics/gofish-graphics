@@ -90,7 +90,7 @@ export const Croissant: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: { x: true, y: false },
+        axes: { x: { title: "x" }, y: false },
       });
     return container;
   },

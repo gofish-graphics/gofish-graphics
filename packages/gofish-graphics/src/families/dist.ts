@@ -62,8 +62,9 @@ export const exponential = (params: { rate: DistParam }): DistExpr =>
  * The distribution of a sample of values, as R's distributional package
  * holds one (`dist_sample`). Its quantiles, median and mean are the
  * values' own (type-7 quantiles, as `field(x).median()`). Its density is a
- * normal kernel density with area the number of values, over the values'
- * range, reflected at both ends; `bandwidth` is the kernel's standard
+ * normal kernel density with area the number of values, drawn from 3
+ * bandwidths below the least value to 3 above the greatest, so it tapers
+ * to near zero at both ends; `bandwidth` is the kernel's standard
  * deviation, Silverman's rule (R's `bw.nrd0`) when omitted. Missing values
  * are left out.
  */

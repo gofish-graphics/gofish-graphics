@@ -75,10 +75,10 @@ cut at the 0.001 and 0.999 quantiles where the support has no end. A normal
 runs from its 0.001 to its 0.999 quantile, a lognormal and an exponential
 from 0 to their 0.999 quantile.
 
-The variable of a family is the quantity of the column its location
+The variable of a family is in the unit of the column its location
 parameter reads (`mean` for `normal`, `min` for `uniform`), so the axis of
-`d.support()` joins an axis over that column. Otherwise it is named
-"value". A density is in the mass per the variable's unit, or per a
+`d.support()` joins an axis in that unit. It is not that column, so it has
+no name, and its axis has no title unless you give one. A density is in the mass per the variable's unit, or per a
 difference of two of its values (a density over times is per duration). A
 density adds up, so densities stack.
 
