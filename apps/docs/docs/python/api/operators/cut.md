@@ -43,9 +43,9 @@ combinator's children list; the runtime flat-expands it into its N slice nodes
 in place:
 
 ```python
-from gofish import stack, cut, image, datum
+from gofish import spread, cut, image, datum
 
-stack(
+spread(
     [
         cut(
             image(href=href, w=193, h=600),
@@ -55,6 +55,7 @@ stack(
         )
     ],
     dir="y",
+    spacing=0,
 )
 ```
 
@@ -106,9 +107,8 @@ chart(data).flow(
 The inner `spread` consumes the expand mark (cutting one bottle per group and
 arranging its slices into a single node — with `spacing=14`, so each bottle
 reads as an exploded stack of its slices), so the outer `spread(by=...)` sees a
-single node per group — no throw. Use `stack` instead of `spread` here to
-recompose each bottle's slices flush into a whole (no gaps), since `stack` has
-no `spacing`.
+single node per group — no throw. Give the inner `spread` `spacing=0` to
+recompose each bottle's slices flush into a whole (no gaps).
 
 ## Size semantics
 
@@ -166,8 +166,8 @@ Because `cut` only ever produces the slice array, the surrounding combinator
 decides everything spatial. The same `cut(...)` re-arranges freely:
 
 ```python
-# stack recomposes the slices back into the whole source (no gaps):
-stack([cut(source, dir="y", size=size)], dir="y")
+# spread with no spacing recomposes the slices back into the whole source:
+spread([cut(source, dir="y", size=size)], dir="y", spacing=0)
 
 # spread explodes them apart:
 spread(

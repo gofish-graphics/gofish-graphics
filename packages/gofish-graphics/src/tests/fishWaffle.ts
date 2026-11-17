@@ -5,13 +5,10 @@ import { d as $d } from "../components/data"; */
 
 import { value } from "../ast/data";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
-import { stackX } from "../ast/graphicalOperators/stackX";
-import { stackY } from "../ast/graphicalOperators/stackY";
-import { map, groupBy, stackX, stackY } from "../lib";
+import { map, groupBy, spreadX, spreadY } from "../lib";
 const fishColors = {
   Bass: color.blue[5],
   Trout: color.red[5],
@@ -21,19 +18,19 @@ const fishColors = {
 };
 
 export const testFishWaffle = (opts) =>
-  stackX(
-    { spacing: 8 },
+  spreadX(
+    { spacing: 0},
     _(seafood)
       .groupBy("lake")
       .map((d) =>
-        stackY(
-          { spacing: 2, alignment: "start" },
+        spreadY(
+          { spacing: 0, alignment: "start" },
           _(d)
             .flatMap((d) => Array(d.count).fill(d))
             .chunk(opts.chunkSize)
             .map((d) =>
-              stackX(
-                { spacing: 2 },
+              spreadX(
+                { spacing: 0},
                 d.map((d) => rect({ w: 8, h: 8, fill: value(d.species) }))
               )
             )
@@ -44,11 +41,11 @@ export const testFishWaffle = (opts) =>
   );
 
 export const testFishWaffleWithFor = () =>
-  stackX(
-    { spacing: 8 },
+  spreadX(
+    { spacing: 0},
     map(groupBy(seafood, "lake"), (d) =>
-      stackY(
-        { spacing: 2, alignment: "start" },
+      spreadY(
+        { spacing: 0, alignment: "start" },
         map(
           _(d)
             .reverse()
@@ -56,8 +53,8 @@ export const testFishWaffleWithFor = () =>
             .chunk(4)
             .reverse(),
           (d) =>
-            stackX(
-              { spacing: 2 },
+            spreadX(
+              { spacing: 0},
               map(d, (d) => rect({ w: 8, h: 8, fill: value(d.species) }))
             )
         )

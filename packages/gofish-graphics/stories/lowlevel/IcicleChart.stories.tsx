@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { stackX, stackY, rect } from "../../src/lib";
+import { spreadX, spreadY, rect } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import _ from "lodash";
 
@@ -21,14 +21,14 @@ export const Simplified: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    stackX({ alignment: "middle" }, [
+    spreadX({ alignment: "middle", spacing: 0 }, [
       rect({
         w: 40,
         h: _(titanic).sumBy("count") / 10,
         fill: neutral,
       }),
-      stackY(
-        { alignment: "middle" },
+      spreadY(
+        { alignment: "middle", spacing: 0 },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
@@ -59,40 +59,42 @@ export const Default: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    stackX({ alignment: "middle" }, [
+    spreadX({ alignment: "middle", spacing: 0 }, [
       rect({
         w: 40,
         h: _(titanic).sumBy("count") / 10,
         fill: neutral,
       }),
-      stackY(
-        { alignment: "middle" },
+      spreadY(
+        { alignment: "middle", spacing: 0 },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
-            stackX(
+            spreadX(
               {
                 h: _(items).sumBy("count") / 10,
                 alignment: "start",
+                spacing: 0,
               },
               [
                 rect({ w: 40, fill: classColor[cls] }),
-                stackY(
-                  { alignment: "middle" },
+                spreadY(
+                  { alignment: "middle", spacing: 0 },
                   _(items)
                     .groupBy("sex")
                     .map((items, sex) =>
-                      stackX({ alignment: "middle" }, [
+                      spreadX({ alignment: "middle", spacing: 0 }, [
                         rect({
                           w: 0,
                           h: _(items).sumBy("count") / 10,
                           fill: sex === "Female" ? color6[4] : color6[5],
                         }),
-                        stackY(
+                        spreadY(
                           {
                             w: 40,
 
                             alignment: "middle",
+                            spacing: 0,
                           },
                           _(items)
                             .groupBy("survived")

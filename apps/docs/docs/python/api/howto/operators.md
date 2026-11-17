@@ -107,7 +107,7 @@ up.
 chart(data).flow(
     spread(by="month", dir="x"),
     stack(by="category", dir="y"),
-).mark(rect(fill="category"))
+).mark(rect(h="value", fill="category"))
 ```
 
 ## scatter

@@ -6,7 +6,6 @@ import { d as $d } from "../components/data"; */
 import { value } from "../ast/data";
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
@@ -14,7 +13,7 @@ import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { ribbon, Curve } from "../lib";
+import { ribbon, Curve, spread } from "../lib";
 const data = [
   { category: "A", group: "x", value: 0.1 },
   { category: "A", group: "y", value: 0.6 },
@@ -54,16 +53,15 @@ export const testPolarCenterRibbon = (size: { width: number; height: number }) =
     { width: size.width, height: size.height, transform: { x: 200, y: 100 } },
     coord({ transform: polar_DEPRECATED() }, [
       layer([
-        stack(
+        spread(
           {
             x: 50,
             dir: 1,
-            spacing: (2 * Math.PI) / 8,
+            spacing: 0,
             alignment: "start",
-            anchor: "middle",
           },
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
-            stack({ dir: 0,
+            spread({ dir: 0,
                 spacing: 0,
                 alignment: "middle",
               },

@@ -132,10 +132,10 @@ chart(seafood).flow(
     stack(by="species", dir="y"),
 ).mark(rect(h="count", fill="species"))
 
-# Grouped bars: stack along x instead
+# Grouped bars: the bars only touch along x, so they are a spread with no spacing
 chart(seafood).flow(
     spread(by="lake", dir="x"),
-    stack(by="species", dir="x"),
+    spread(by="species", dir="x", spacing=0),
 ).mark(rect(h="count", fill="species"))
 ```
 

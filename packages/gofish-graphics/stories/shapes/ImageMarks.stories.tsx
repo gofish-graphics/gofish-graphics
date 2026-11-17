@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { image, spread, stack, text } from "../../src/lib";
+import { image, spread, text } from "../../src/lib";
 import bottleJpg from "../assets/bottle.jpg";
 import bottlePhotoPng from "../assets/maja7777-glass-bottle-free-2451180_1280.png";
 import flowerPng from "../assets/schwarzenarzisse-isolated-2437759_1280.png";
@@ -25,7 +25,7 @@ const inlineBadgeSvg = `data:image/svg+xml;utf8,${encodeURIComponent(
 )}`;
 
 const labeledImage = (label: string, imageNode: any) =>
-  stack({ dir: "y", spacing: 8, alignment: "start" },
+  spread({ dir: "y", spacing: 0, alignment: "start" },
     [
       text({ text: label, fontSize: 14, fill: "#1f2937" }),
       imageNode,

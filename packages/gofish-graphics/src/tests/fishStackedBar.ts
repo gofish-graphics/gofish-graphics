@@ -5,13 +5,12 @@ import { d as $d } from "../components/data"; */
 
 import { value } from "../ast/data";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { map } from "../ast/iterators/map";
+import { spreadX } from "../ast/graphicalOperators/spreadX";
 const fishColors = {
   Bass: color.blue[5],
   Trout: color.red[5],
@@ -21,8 +20,8 @@ const fishColors = {
 };
 
 export const testFishStackedBar = () =>
-  stackX(
-    { spacing: 8 },
+  spreadX(
+    { spacing: 0},
     map(_(seafood).groupBy("lake"), (d, key) =>
       stackY(
         { key: key as string, spacing: 0 },

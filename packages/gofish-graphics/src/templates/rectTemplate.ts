@@ -1,6 +1,6 @@
 import { MaybeValue, value } from "../ast/data";
 import { rect } from "../ast/shapes/rect";
-import { stackXTemplate } from "./stackXTemplate";
+import { spreadXTemplate } from "./spreadXTemplate";
 import { stackYTemplate } from "./stackYTemplate";
 
 export const rectTemplate = (
@@ -15,10 +15,10 @@ export const rectTemplate = (
     strokeWidth?: number;
   }
 ) => {
-  return stackXTemplate(
+  return spreadXTemplate(
     data,
     {
-      spacing: options.x.spacing,
+      spacing: 0,
       groupBy: { field: options.x.field, sort: options.x.sort },
     },
     (dataX) =>

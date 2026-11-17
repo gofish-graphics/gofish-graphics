@@ -5,7 +5,6 @@ import {
   layer,
   spreadX,
   spreadY,
-  stackY,
   rect,
   map,
   ribbon,
@@ -42,7 +41,7 @@ export const Default: StoryObj = {
     const internalSpacing = 2;
     layer([
       spreadX({ spacing: layerSpacing, alignment: "middle" }, [
-        stackY(
+        spreadY(
           // y-down: reverse every vertical ordering so the tiers read the same
           // way they did under the old y-up convention. See issue #143/#16.
           { spacing: 0, alignment: "middle", reverse: true },
@@ -58,7 +57,7 @@ export const Default: StoryObj = {
           { spacing: internalSpacing, alignment: "middle", reverse: true },
           map(groupBy(titanic, "class"), (items, cls) =>
             spreadX({ spacing: layerSpacing, alignment: "middle" }, [
-              stackY(
+              spreadY(
                 { spacing: 0, alignment: "middle", reverse: true },
                 map(groupBy(items, "sex"), (items, sex) =>
                   rect({
@@ -77,7 +76,7 @@ export const Default: StoryObj = {
                 },
                 map(groupBy(items, "sex"), (items, sex) =>
                   spreadX({ spacing: layerSpacing, alignment: "middle" }, [
-                    stackY(
+                    spreadY(
                       {
                         spacing: 0,
                         alignment: "middle",

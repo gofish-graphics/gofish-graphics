@@ -1213,7 +1213,7 @@ async function main() {
 
     const built = chart(groupData)
       .flow(
-        stack({ by: "lake", dir: "x" }).label("lake", {
+        stack({ by: "lake", dir: "y" }).label("lake", {
           position: "outset-top",
         })
       )
@@ -1243,7 +1243,7 @@ async function main() {
   {
     const built = chart(groupData)
       .flow(
-        stack({ by: "lake", dir: "x" })
+        stack({ by: "lake", dir: "y" })
           .label("lake", { position: "outset-top" })
           .label(field("count").sum(), { position: "center" })
       )
@@ -1335,7 +1335,7 @@ async function main() {
   // Mark-level .label(field(...).sum())
   {
     const built = chart(groupData)
-      .flow(stack({ by: "lake", dir: "x" }))
+      .flow(stack({ by: "lake", dir: "y" }))
       .mark(rect({ h: "count" }).label(field("count").sum()));
     const doc = await built.toJSON();
     validateDoc(doc, "chart with mark field-expr .label()");
@@ -1361,7 +1361,7 @@ async function main() {
   // Operator-level .label(field(...).sum())
   {
     const built = chart(groupData)
-      .flow(stack({ by: "lake", dir: "x" }).label(field("count").sum()))
+      .flow(stack({ by: "lake", dir: "y" }).label(field("count").sum()))
       .mark(rect({ h: "count" }));
     const doc = await built.toJSON();
     validateDoc(doc, "chart with operator field-expr .label()");
@@ -1468,7 +1468,7 @@ async function main() {
   // the round trip.
   {
     const c = chart([{ a: 1 }]).mark(
-      stack({ dir: "y" }, [rect({ h: 10 }), rect({ h: 20 })])
+      stack({ dir: "y" }, [rect({ h: "a" }), rect({ h: "a" })])
     );
     const doc = await c.toJSON();
     validateDoc(doc, "combinator-form stack");

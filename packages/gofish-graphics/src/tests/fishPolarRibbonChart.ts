@@ -6,7 +6,6 @@ import { d as $d } from "../components/data"; */
 import { value } from "../ast/data";
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
@@ -15,9 +14,8 @@ import { ref } from "../ast/shapes/ref";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { clock } from "../ast/coordinateTransforms/clock";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { ribbon } from "../lib";
+import { ribbon, spreadX } from "../lib";
 // import { fishData } from "../data/fish";
 
 const colorScale = {
@@ -31,12 +29,11 @@ const colorScale = {
 /* TODO: I need to redo the coordinate system so that it start from the bottom left corner... */
 export const testFishPolarRibbonChart = () =>
   layer({ coord: clock() }, [
-    stackX(
+    spreadX(
       {
         y: 50,
-        spacing: (2 * Math.PI) / 6,
+        spacing: 0,
         alignment: "start",
-        anchor: "middle",
       },
       Object.entries(_.groupBy(seafood, "lake")).map(([lake, items]) =>
         stackY(

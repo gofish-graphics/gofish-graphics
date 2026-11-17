@@ -1,7 +1,6 @@
 import _ from "lodash";
 import { gofish } from "../ast/gofish";
 import { value } from "../ast/data";
-import { stack } from "../ast/graphicalOperators/stack";
 import { rect } from "../ast/shapes/rect";
 import {
   black,
@@ -13,7 +12,7 @@ import {
   white,
 } from "../color";
 import { titanic } from "../data/titanic";
-import { stackY } from "../lib";
+import { stackY, spread, spreadY } from "../lib";
 
 const data = [
   { origin: "Europe", cylinders: "4", count: 66 },
@@ -35,19 +34,19 @@ const classColor = {
 };
 
 export const testNestedMosaic = () =>
-  stackY(
-    { spacing: 4, alignment: "middle" },
+  spreadY(
+    { spacing: 0, alignment: "middle" },
     // TODO: I could probably make the width be uniform flexible basically
     _(titanic)
       .groupBy("class")
       .map(
         (items, cls) =>
-          stack(
+          spread(
             {
               key: cls,
               h: _(items).sumBy("count") / 10,
               dir: "x",
-              spacing: 2,
+              spacing: 0,
               alignment: "middle",
             },
             _(items)

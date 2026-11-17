@@ -1,9 +1,9 @@
 import { olympicMedals } from "../data/olympic-medals";
-import { map, groupBy, rect, stackX, stackY, v } from "../lib";
+import { map, groupBy, rect, stackY, v, spreadX } from "../lib";
 
 export const testOlympicMedalsStackedBars = () => {
-  return stackX(
-    { spacing: 15 },
+  return spreadX(
+    { spacing: 0},
     map(groupBy(olympicMedals, "Country_Code"), (d, key) =>
       stackY(
         { key: key as string, spacing: 0 },

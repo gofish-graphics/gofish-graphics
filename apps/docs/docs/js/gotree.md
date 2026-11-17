@@ -244,9 +244,9 @@ Any function with shape `(children: any[]) => any` works. For example, a sibling
 combiner that adds a small label below each spread group:
 
 ```ts no-check
-import { layer, stackY } from "gofish-graphics";
+import { layer, spreadY } from "gofish-graphics";
 
-sibling: (kids) => stackY({ spacing: 8 }, [
+sibling: (kids) => spreadY({ spacing: 0 }, [
   spread({ dir: "x", spacing: 16 })(kids),
   text({ text: `${kids.length} items` }),
 ]),

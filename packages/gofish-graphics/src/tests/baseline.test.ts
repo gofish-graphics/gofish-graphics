@@ -275,9 +275,10 @@ async function main() {
 
   console.log("\n# a centered baseline on a size-strong part");
   {
-    // `a` has no width of its own: align "size" gives it src's. The stack's
-    // baseline is a's middle, which seats at data 0 (src's x) whether or not
-    // the part is size-strong.
+    // `a` has no width of its own: align "size" gives it src's. A part with
+    // no data width is no amount, so the chain is a spread with no spacing,
+    // not a stack. Its baseline is a's middle, which seats at data 0 (src's
+    // x) whether or not the part is size-strong.
     const stacked = (strong: boolean) =>
       layer([
         rect({ x: v(0), w: v(10), y: 0, h: 5 }).name("src"),
@@ -291,7 +292,7 @@ async function main() {
         Constraint.distribute(
           {
             dir: "x",
-            glue: true,
+            spacing: 0,
             baseline: { kind: "at", part: g.a, point: 0.5 },
           },
           [g.a, g.b]

@@ -15,7 +15,6 @@ import {
   chart,
   derive,
   spread,
-  stack,
   rect,
   gradient,
   assignGradientColor,
@@ -37,7 +36,7 @@ chart(pairedBars)
       });
     }),
     spread({ by: "pair", dir: "x" }),
-    stack({ by: "type", dir: "x" })
+    spread({ by: "type", dir: "x", spacing: 0 })
   )
   .mark(rect({ h: "value", fill: "color" }))
   .render(container, { w: 400, h: 400 });

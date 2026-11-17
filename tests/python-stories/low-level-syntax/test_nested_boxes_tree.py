@@ -11,7 +11,7 @@ Pure-spec story (no JS-only options); its normalized DOM should match the JS
 NestedBoxesTree story.
 """
 
-from gofish import Constraint, layer, mark, rect, stack, text
+from gofish import Constraint, layer, mark, rect, spread, text
 
 sample = {
     "name": "project",
@@ -90,10 +90,10 @@ def buildSubtree(node, depth):
         return header
 
     # Stack [header, ...childSubtrees] vertically — header on top, children below.
-    inner = stack(
+    inner = spread(
         [header, *[Subtree(node=c, depth=depth + 1) for c in node["children"]]],
         dir="y",
-        spacing=8,
+        spacing=0,
         alignment="middle",
     )
 

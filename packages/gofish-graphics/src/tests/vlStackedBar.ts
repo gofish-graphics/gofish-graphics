@@ -2,10 +2,9 @@ import { value } from "../ast/data";
 import { rect } from "../ast/shapes/rect";
 import _ from "lodash";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { seattleWeather } from "../data/seatle-weather";
 import { layer } from "../ast/graphicalOperators/layer";
-import { ribbon } from "../lib";
+import { ribbon, spreadX } from "../lib";
 import { ref } from "../ast/shapes/ref";
 
 const colorScale = {
@@ -37,8 +36,8 @@ const stackedBarDataset = _(seattleWeather).groupBy((d) => {
 
 export const testVLStackedBar = () =>
   layer([
-    stackX(
-      { spacing: 20 },
+    spreadX(
+      { spacing: 0},
       _(stackedBarDataset)
         .toPairs()
         .sortBy(([month]) => {

@@ -66,11 +66,11 @@ async function main() {
     );
   }
 
-  console.log("\n# a stack's filler takes what is left");
+  console.log("\n# a spread's filler takes what is left");
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: 30 }),
           rect({ w: 10 }),
         ]),
@@ -87,7 +87,7 @@ async function main() {
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: 20 }),
           rect({ w: 10 }),
           rect({ w: 10 }),
@@ -108,7 +108,7 @@ async function main() {
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: percent(100) }),
           rect({ w: 10, h: 40 }),
         ]),
@@ -125,7 +125,7 @@ async function main() {
   {
     const rects = await rectsOf(
       layer({ w: 100, h: 100 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           rect({ w: 10, h: fr(1) }),
           rect({ w: 10, h: fr(3) }),
         ]),
@@ -221,7 +221,7 @@ async function main() {
     for (const axes of [true, false]) {
       const rects = await rectsOf(
         layer({ w: 300, h: 300 }, [
-          stack({ dir: "y", spacing: 0 }, [
+          spread({ dir: "y", spacing: 0 }, [
             rect({ w: 10, h: fr(1), fill: "red" }),
             chart(data, { w: 100, h: 50, axes }).mark(
               rect({ x: "v", w: 5, h: 5 })
@@ -274,7 +274,7 @@ async function main() {
     const data = [{ v: 1 }, { v: 5 }];
     const rects = await rectsOf(
       layer({ w: 600, h: 300 }, [
-        stack({ dir: "y", spacing: 0 }, [
+        spread({ dir: "y", spacing: 0 }, [
           chart(data, { w: 100, h: fr(2) }).mark(rect({ x: "v", w: 5 })),
           chart(data, { w: 100, h: fr(1) }).mark(rect({ x: "v", w: 5 })),
         ]),

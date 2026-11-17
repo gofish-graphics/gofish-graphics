@@ -1,7 +1,6 @@
 import _, { groupBy } from "lodash";
 import { gofish } from "../ast/gofish";
 import { value } from "../ast/data";
-import { stack } from "../ast/graphicalOperators/stack";
 import {
   black,
   color,
@@ -15,7 +14,7 @@ import {
   mix,
 } from "../color";
 import { titanic } from "../data/titanic";
-import { map, rect, stackX, stackY } from "../lib";
+import { map, rect, spread, spreadX, spreadY } from "../lib";
 
 const data = [
   { origin: "Europe", cylinders: "4", count: 66 },
@@ -54,29 +53,29 @@ const classColor = {
 };
 
 export const testIcicle = () =>
-  stack({ dir: "x", alignment: "middle" }, [
+  spread({ spacing: 0, dir: "x", alignment: "middle" }, [
     rect({
       w: 40,
       h: _(titanic).sumBy("count") / 10,
       fill: neutral,
     }),
-    stackY(
-        { alignment: "middle" },
+    spreadY(
+        { spacing: 0, alignment: "middle" },
       _(titanic)
         .groupBy("class")
         .map((items, cls) =>
-          stack({ dir: "x",
+          spread({ spacing: 0, dir: "x",
               h: _(items).sumBy("count") / 10,
               alignment: "start",
             },
             [
               rect({ w: 40, fill: classColor[cls as keyof typeof classColor] }),
-              stackY(
-                  { alignment: "middle" },
+              spreadY(
+                  { spacing: 0, alignment: "middle" },
                 _(items)
                   .groupBy("sex")
                   .map((items, sex) =>
-                    stack({ dir: "x", alignment: "middle" }, [
+                    spread({ spacing: 0, dir: "x", alignment: "middle" }, [
                       rect({
                         w: 0,
                         h: _(items).sumBy("count") / 10,
@@ -87,8 +86,8 @@ export const testIcicle = () =>
                         // ),
                         fill: sex === "Female" ? color6[4] : color6[5],
                       }),
-                      stackY(
-                        {
+                      spreadY(
+                        { spacing: 0,
                           w: 40,
                           alignment: "middle",
                         },
@@ -130,30 +129,30 @@ export const testIcicle = () =>
   ]);
 
 export const testIcicleWithFor = () =>
-  stackX({ alignment: "middle" }, [
+  spreadX({ spacing: 0, alignment: "middle" }, [
     rect({
       w: 40,
       h: _(titanic).sumBy("count") / 10,
       fill: gray,
     }),
-    stackY(
-            { alignment: "middle" },
+    spreadY(
+            { spacing: 0, alignment: "middle" },
       map(groupBy(titanic, "class"), (items, cls) =>
-        stackX(
-          { h: _(items).sumBy("count") / 10, alignment: "start" },
+        spreadX(
+          { spacing: 0, h: _(items).sumBy("count") / 10, alignment: "start" },
           [
             rect({ w: 40, fill: classColor[cls as keyof typeof classColor] }),
-            stackY(
-                    { alignment: "middle" },
+            spreadY(
+                    { spacing: 0, alignment: "middle" },
               map(groupBy(items, "sex"), (items, sex) =>
-                stackX({ alignment: "middle" }, [
+                spreadX({ spacing: 0, alignment: "middle" }, [
                   rect({
                     w: 40,
                     h: _(items).sumBy("count") / 10,
                     fill: sex === "Female" ? color6_old[2] : color6_old[3],
                   }),
-                  stackY(
-                    {
+                  spreadY(
+                    { spacing: 0,
                       w: 40,
 
                     },

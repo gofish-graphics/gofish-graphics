@@ -352,7 +352,10 @@ chart(seafood)
 
 ```ts
 chart(seafood)
-  .flow(spread("lake", { dir: "x" }), stack("species", { dir: "x" }))
+  .flow(
+    spread("lake", { dir: "x" }),
+    spread("species", { dir: "x", spacing: 0 })
+  )
   .mark(rect({ h: "count", fill: "species" }));
 ```
 
@@ -569,7 +572,10 @@ const boxAndWhisker = createMark((data, { q0, q25, q50, q75, q100, fill }) => [
 ]);
 
 plot(genderPayGap)
-  .flow(spread("Pay Grade", { dir: "x" }), stack("Gender", { dir: "x" }))
+  .flow(
+    spread("Pay Grade", { dir: "x" }),
+    spread("Gender", { dir: "x", spacing: 0 })
+  )
   .mark(
     boxAndWhisker({
       q0: "Min",
