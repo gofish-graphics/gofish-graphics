@@ -94,7 +94,11 @@ import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
 import { GoFishRef } from "../_ref";
-import { functionInChannelError, isFunValue } from "../groupExpr";
+import {
+  functionInChannelError,
+  isFunValue,
+  type ValueExpr,
+} from "../groupExpr";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -777,7 +781,12 @@ export type ChannelAnnotations<Options> = MarkChannelAnnotations<
  */
 type ChannelInput<Spec, Datum> = Spec extends { type: infer Type; entry: true }
   ? Type extends "size"
-    ? (keyof Datum & string) | FieldExpr | MaybeValue<number>[] | undefined
+    ?
+        | (keyof Datum & string)
+        | FieldExpr
+        | ValueExpr
+        | MaybeValue<number>[]
+        | undefined
     : Type extends "pos"
       ? (keyof Datum & string) | MaybeValue<number>[] | undefined
       : Type extends "color"

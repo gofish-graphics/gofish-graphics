@@ -50,7 +50,7 @@ import {
   type DistExpr,
   type DistExprWire,
 } from "./distExpr";
-import { setGroupCell } from "./groupCell";
+import { groupCellOf, setGroupCell } from "./groupCell";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -771,9 +771,36 @@ export function splitEntries<T extends Record<string, any>>(
         );
     }
   }
+  keepCell(byOpt, d, entries);
   return ordered
     ? Object.assign(entries, { hasOrder: true as const })
     : entries;
+}
+
+/**
+ * A cell's rows split again (a spread by species in a cell of a binned
+ * partition) are still in the cell: each group keeps the cell's interval,
+ * and its whole is the group the same split gives for its rows in the
+ * cell's whole. So a distribution in it is that group's restricted to the
+ * cell. A group that is a cell of its own keeps its own.
+ */
+function keepCell<T>(
+  byOpt: SplitBy | undefined,
+  d: T[],
+  entries: Map<SplitKey, T[]>
+): void {
+  const c = groupCellOf(d);
+  if (c === undefined) return;
+  let wholeOf: Map<unknown, readonly unknown[]> | undefined;
+  for (const group of entries.values()) {
+    if (group.length === 0 || groupCellOf(group) !== undefined) continue;
+    if (wholeOf === undefined) {
+      wholeOf = new Map();
+      for (const g of splitEntries(byOpt, c.whole as any[]).values())
+        for (const row of g) wholeOf.set(row, g);
+    }
+    setGroupCell(group, { ...c, whole: wholeOf.get(group[0]) ?? group });
+  }
 }
 
 /** Which axes a scatter-family opts object positions: `x`/`y` true when a

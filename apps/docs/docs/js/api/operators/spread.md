@@ -231,7 +231,8 @@ field(name).reduce((xs) => result, { unit? })
 `map` gives one new value per row: `fn(x, i, xs)`, where `xs` is all of the
 group's values. Maps come before a reduce. On an operator's `size` channel, a
 map with no reduce after it runs over the entries' values instead, as
-`normalize` does.
+`normalize` does. So does a map after a named method:
+`field("n").count().normalize()` is each entry's share of the counts.
 
 `reduce` runs once per group on the group's values. Its result is lifted by
 its shape:

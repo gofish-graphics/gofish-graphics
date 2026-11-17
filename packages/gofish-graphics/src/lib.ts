@@ -46,6 +46,7 @@ export { map } from "./ast/iterators/map";
 // group, which the shape form of ribbon and line reads at one parameter t.
 export { fun } from "./ast/groupExpr";
 export type {
+  FoldExpr,
   FunValue,
   FunctionExpr,
   Lift,

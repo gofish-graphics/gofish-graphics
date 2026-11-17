@@ -47,7 +47,7 @@ export const setGroupCell = <T>(rows: T, cell: GroupCell): T =>
   tagArray(rows, GROUP_CELL, cell);
 
 /** The cell `rows` is a group of, if any. */
-const groupCellOf = (rows: unknown): GroupCell | undefined =>
+export const groupCellOf = (rows: unknown): GroupCell | undefined =>
   rows != null
     ? ((rows as any)[GROUP_CELL] as GroupCell | undefined)
     : undefined;

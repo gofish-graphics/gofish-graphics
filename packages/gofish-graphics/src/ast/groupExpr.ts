@@ -36,6 +36,18 @@ export interface ValueExpr {
   readonly [exprKind]: "value";
 }
 
+/** Type-level only: a named fold's value (`field("n").count()`). In the
+ *  size channel of an operator (spread, stack), a map after it runs over
+ *  the entries' values: `field("n").count().normalize()` is each entry's
+ *  share of the counts. Anywhere else a map after it is an error. */
+export interface FoldExpr extends ValueExpr {
+  normalize(): FoldExpr;
+  map(
+    fn: (x: number, i: number, xs: number[]) => number,
+    options?: { unit?: UnitLike }
+  ): FoldExpr;
+}
+
 /** Type-level only: a function expression, one function of the mark's
  *  parameter per group. Only `ribbon` and `line` take one in a channel. */
 export interface FunctionExpr {

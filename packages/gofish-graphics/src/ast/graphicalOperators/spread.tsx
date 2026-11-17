@@ -19,6 +19,7 @@ import { axisName, childSlots, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
+import type { ValueExpr } from "../groupExpr";
 import { withWire, wireOf } from "../wire";
 
 // Utility function to unwrap lodash wrapped arrays
@@ -259,7 +260,7 @@ export type SpreadOptions<T = any> = {
    *  entries) becomes a data-driven size claim, whose box nests that entry's
    *  subtree, so its segments fill the box in proportion to their share (see
    *  the `Spread` doc comment above). */
-  size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
+  size?: (keyof T & string) | FieldExpr | ValueExpr | MaybeValue<number>[];
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };

@@ -2067,9 +2067,11 @@ case. Its segments _fill_ the extent in proportion to their value:
 `.normalize()` is a **data** transform, the built-in map `x / Σxs`,
 evaluated once, up front, by `applyChannels` (`marks/createOperator.ts`) via
 `splitWindowMaps`/`applyWindowMaps` in `fieldExpr.ts`. On an operator's
-per-entry `size` channel, maps with no fold after them run over the entries'
-values (the window) instead of a group's rows; `normalize` is one such map,
-and a user's `map` is another. For each of the
+per-entry `size` channel, the maps at the end of an expression, after its
+named fold or with no fold, run over the entries' values (the window)
+instead of a group's rows (`hasWindowMaps`); `normalize` is one such map,
+and a user's `map` is another. Each entry's value is the expression before
+them: `field("n").count().normalize()` is each entry's share of the counts. For each of the
 operator's own split entries it computes the entry's **share** of their sum,
 `v_e / Σv_e`, tagged with a share [unit](#measures-units-are-types)
 (`"<base> share by <by>"`, via `shareQuantity`) so a share axis can never
@@ -2775,9 +2777,11 @@ error rather than silently doing the wrong thing:
   the values: `map`'s `fn(x, i, xs)` on each, or `normalize`'s shares), at
   most one fold (a user's `reduce`, or `sum`, `mean`, `median`, `count`,
   `distinct` from the `NAMED_FOLDS` table), and then the members a lifted
-  result is read through (`{ op: "member", name, args }`). A map after the
-  fold, or a member after a named fold, is the chaining error: nothing
-  chains after a value.
+  result is read through (`{ op: "member", name, args }`). A member after
+  a named fold, or anything but a member after a lifted result, is the
+  chaining error: nothing chains after a value. A map after a named fold
+  is the chaining error too, except on an operator's `size` channel, where
+  it runs over the entries' values (the window).
 
 ### Lifting a reduce's result
 
@@ -2841,7 +2845,13 @@ types are): the variable, a column name or a family's identity, the cell's
 interval, and the whole rows. `splitEntries` writes it for a field binned on
 the line and for a family binned with `d.bin(p)` (`distEntries`, whose cells
 are `distributionCells` over the density's interval, each holding every
-row). Three leaves read it, and only when their variable is the cell's: a
+row). A split inside a cell (a spread by species in a binned partition)
+keeps the cell (`keepCell`): each of its groups gets the cell's interval,
+and its whole is the group the same split gives for its rows in the cell's
+whole, so a species' density in a cell is that species' density restricted
+to the cell. A group that is a cell of its own keeps its own; a group holds
+one cell, so a split binned on a second variable replaces the first's.
+Three leaves read it, and only when their variable is the cell's: a
 family's `distOf` restricts the whole group's `Dist` (`restrictDist`; a
 family is drawn from its 0.001 to its 0.999 quantile, so a cell at an end
 of that interval also holds the tail past it), the

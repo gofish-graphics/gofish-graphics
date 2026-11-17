@@ -14,11 +14,28 @@
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
-import { evalGroup, FieldExpr, meanOf, medianOf, sumOf } from "../ast/fieldExpr";
+import {
+  evalGroup,
+  FieldExpr,
+  meanOf,
+  medianOf,
+  sumOf,
+} from "../ast/fieldExpr";
 import { fun } from "../ast/groupExpr";
 import { penguins } from "../data/penguins";
 
-const { chart, spread, stack, rect, ribbon, Unit, Trait } = GoFish as any;
+const {
+  chart,
+  spread,
+  stack,
+  rect,
+  ribbon,
+  text,
+  partition,
+  Bin,
+  Unit,
+  Trait,
+} = GoFish as any;
 /** The dist build's field and fun, which its charts read. */
 const F = (GoFish as any).field as (name: string) => any;
 const dfun = (GoFish as any).fun;
@@ -80,7 +97,10 @@ async function main() {
       nested: { hi: Math.max(...xs) },
     }));
     const lo = evalGroup(s.lo() as any, rows, undefined);
-    check("a record's member is read with s.lo()", lo.kind === "value" && lo.value === 1);
+    check(
+      "a record's member is read with s.lo()",
+      lo.kind === "value" && lo.value === 1
+    );
     const at = evalGroup(s.at(2) as any, rows, undefined);
     check(
       "a method member keeps its arguments",
@@ -133,11 +153,19 @@ async function main() {
   console.log("\n# errors");
   {
     const arr = await errorOf(() =>
-      evalGroup(field("v").reduce((xs) => [...xs] as any) as any, rows, undefined)
+      evalGroup(
+        field("v").reduce((xs) => [...xs] as any) as any,
+        rows,
+        undefined
+      )
     );
     check("a returned array is an error", arr.includes("is an array"), arr);
     const rec = await errorOf(() =>
-      evalGroup(field("v").reduce((xs) => ({ lo: xs[0] })) as any, rows, undefined)
+      evalGroup(
+        field("v").reduce((xs) => ({ lo: xs[0] })) as any,
+        rows,
+        undefined
+      )
     );
     check(
       "a record at a channel says to read a member",
@@ -157,11 +185,15 @@ async function main() {
       after
     );
     const mapAfter = await errorOf(() =>
-      evalGroup((field("v").sum() as any).map((x: number) => x), rows, undefined)
+      evalGroup(
+        (field("v").sum() as any).map((x: number) => x),
+        rows,
+        undefined
+      )
     );
     check(
-      "a map after a fold is a chaining error",
-      mapAfter.includes("nothing chains after a value"),
+      "a map after a fold in one group is a chaining error",
+      mapAfter.includes("put .map(...) before .sum(...)"),
       mapAfter
     );
     const two = await errorOf(() =>
@@ -189,7 +221,9 @@ async function main() {
         .mark(
           rect({
             w: 10,
-            h: F("v").reduce((xs: number[]) => dfun((t) => t, { domain: [0, xs.length] })),
+            h: F("v").reduce((xs: number[]) =>
+              dfun((t) => t, { domain: [0, xs.length] })
+            ),
           })
         )
         .toDisplayList({ w: 200, h: 200, axes: false })
@@ -205,7 +239,11 @@ async function main() {
   {
     const q = (e: any) => (evalGroup(e, rows, undefined) as any).quantity;
     const one = q(field("v").reduce((xs) => xs.length, { unit: "g" }));
-    check("one unit names the value's unit", one?.unit?.unit === "g", JSON.stringify(one));
+    check(
+      "one unit names the value's unit",
+      one?.unit?.unit === "g",
+      JSON.stringify(one)
+    );
     const s = field("v").reduce((xs) => ({ lo: xs[0], hi: xs[1] }), {
       unit: { lo: "g" },
     });
@@ -274,6 +312,34 @@ async function main() {
       calls === 3,
       `${calls} calls for 3 species`
     );
+
+    // The cache is keyed by the rows a step ran on, and every render reads
+    // a fresh copy of the chart's data (`resolveData` types a copy), so
+    // rows changed in place between renders are read again.
+    const data = [{ v: 1 }, { v: 2 }];
+    const label = async (t: unknown) => {
+      const out: string[] = [];
+      const walk = (it: any) => {
+        if (it.kind === "text") out.push(String(it.text));
+        for (const c of it.children ?? []) walk(c);
+      };
+      (
+        await chart(data)
+          .mark(text({ text: t }))
+          .toDisplayList({ w: 100, h: 100, axes: false })
+      ).items.forEach(walk);
+      return out.join();
+    };
+    const sum = F("v").sum();
+    const total = F("v").reduce((xs: number[]) => xs[0] + xs[1]);
+    const before = [await label(sum), await label(total)].join();
+    data[0].v = 50;
+    const after = [await label(sum), await label(total)].join();
+    check(
+      "a re-render after the rows change in place reads them again",
+      before === "3,3" && after === "52,52",
+      `${before} then ${after}`
+    );
   }
 
   console.log("\n# the named methods are their callbacks");
@@ -290,11 +356,7 @@ async function main() {
       ["mean", F(col).mean(), F(col).reduce(meanOf)],
       ["median", F(col).median(), F(col).reduce(medianOf)],
       ["count", F(col).count(), F(col).reduce((xs) => xs.length)],
-      [
-        "distinct",
-        F(col).distinct(),
-        F(col).reduce((xs) => new Set(xs).size),
-      ],
+      ["distinct", F(col).distinct(), F(col).reduce((xs) => new Set(xs).size)],
     ];
     for (const [name, named, callback] of pairs) {
       const a = await draw(named);
@@ -327,6 +389,75 @@ async function main() {
     );
   }
 
+  console.log("\n# a map after a named fold, on an operator's size");
+  {
+    // Each entry's share of the counts, as on main (`applyEntryNormalize`):
+    // a has 2 rows, b 1 and c 3, so the shares are 2/6, 1/6 and 3/6 of the
+    // stack's 300 px.
+    const counted = [
+      { k: "a" },
+      { k: "a" },
+      { k: "b" },
+      { k: "c" },
+      { k: "c" },
+      { k: "c" },
+    ];
+    const widths = async (size: unknown) =>
+      rectsOf(
+        await chart(counted)
+          .flow(stack({ by: "k", dir: "x", size }))
+          .mark(rect({ h: 20 }))
+          .toDisplayList({ w: 300, h: 100, axes: false })
+      ).map((r) => Math.round(r[2] * 1000) / 1000);
+    const shares = await widths(F("k").count().normalize());
+    check(
+      "field(...).count().normalize() is each entry's share of the counts",
+      JSON.stringify(shares) === JSON.stringify([100, 50, 150]),
+      JSON.stringify(shares)
+    );
+    const doubled = await widths(
+      F("k")
+        .count()
+        .map((x: number, _i: number, xs: number[]) => x / Math.max(...xs), {
+          unit: Unit("of most", { traits: [Trait.summable()] }),
+        })
+        .normalize()
+    );
+    check(
+      "a map after a named fold maps the entries' counts",
+      JSON.stringify(doubled) === JSON.stringify([100, 50, 150]),
+      JSON.stringify(doubled)
+    );
+    const inMark = await errorOf(() =>
+      evalGroup((field("v").sum() as any).normalize(), rows, undefined)
+    );
+    check(
+      "outside an operator's size it says where the map runs",
+      inMark.includes("only the size channel of spread or stack has") &&
+        inMark.includes("put .normalize(...) before .sum(...)"),
+      inMark
+    );
+    const afterReduce = await errorOf(() =>
+      chart(counted)
+        .flow(
+          stack({
+            by: "k",
+            dir: "x",
+            size: (
+              F("k").reduce((xs: unknown[]) => xs.length) as any
+            ).normalize(),
+          })
+        )
+        .mark(rect({ h: 20 }))
+        .toDisplayList({ w: 300, h: 100, axes: false })
+    );
+    check(
+      "a lifted result still takes no map, even on an operator's size",
+      afterReduce.length > 0,
+      afterReduce
+    );
+  }
+
   console.log("\n# a reduce that returns a function, in a ribbon");
   {
     const dl = await chart(measured)
@@ -345,6 +476,45 @@ async function main() {
     };
     dl.items.forEach(walk);
     check("one function ribbon per group", paths === 3, `${paths} paths`);
+  }
+
+  console.log("\n# a density in a split inside a binned partition's cell");
+  {
+    // Each species' density is cut at the cells: its pieces meet, and no
+    // two of them overlap, as the pieces of one curve.
+    const dl = await chart(measured)
+      .flow(
+        partition({ by: F(col()).bin(Bin.step(1000)), dir: "x" }),
+        spread({ by: "Species", dir: "y" })
+      )
+      .mark(ribbon({ x: F(col()).support(), h: F(col()).density() }))
+      .toDisplayList({ w: 500, h: 200, axes: false });
+    const spans = new Map<string, [number, number][]>();
+    const walk = (it: any) => {
+      if (it.kind === "path") {
+        const nums = String(it.d)
+          .match(/-?\d+(\.\d+)?(e-?\d+)?/g)!
+          .map(Number);
+        const xs = nums.filter((_, i) => i % 2 === 0);
+        const species = String(it.datum?.[0]?.Species ?? it.datum?.Species);
+        if (!spans.has(species)) spans.set(species, []);
+        spans.get(species)!.push([Math.min(...xs), Math.max(...xs)]);
+      }
+      for (const c of it.children ?? []) walk(c);
+    };
+    dl.items.forEach(walk);
+    const overlaps = [...spans.entries()].flatMap(([species, s]) => {
+      const sorted = [...s].sort((a, b) => a[0] - b[0]);
+      return sorted
+        .slice(1)
+        .filter((sp, i) => sp[0] < sorted[i][1] - 0.01)
+        .map((sp) => `${species} ${JSON.stringify(sp)}`);
+    });
+    check(
+      "a species' pieces do not overlap",
+      spans.size === 3 && overlaps.length === 0,
+      `${[...spans.keys()].join(", ")}: ${overlaps.join("; ")}`
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

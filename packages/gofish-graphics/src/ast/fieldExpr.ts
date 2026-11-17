@@ -21,10 +21,11 @@
 //     produces, sum and mean are both the identity. Neither side knows about
 //     the other.
 //   - On an operator's (`spread`/`stack`) entry-flagged `size` channel, the
-//     maps at the end of an expression with no fold run over the entries'
-//     values, the window, instead of a group's rows — see
-//     `hasWindowMaps`/`splitWindowMaps`/`applyWindowMaps` below. That is
-//     how `normalize` gives each entry its share.
+//     maps at the end of an expression, after its named fold or with no
+//     fold, run over the entries' values, the window, instead of a group's
+//     rows — see `hasWindowMaps`/`splitWindowMaps`/`applyWindowMaps` below.
+//     That is how `normalize` gives each entry its share
+//     (`field("n").count().normalize()`).
 //
 // Only type-only imports from `data.ts` (no runtime import) so `data.ts` can
 // import THIS module's class at runtime without a cycle.
@@ -50,6 +51,7 @@ import type {
   Lift,
   LiftError,
   Units,
+  FoldExpr,
   ValueExpr,
 } from "./groupExpr";
 import { distQuantities, sample, sampleIn, type Dist } from "./dist";
@@ -246,34 +248,34 @@ export class FieldExpr<
 
   /** `reduce(xs => Σ xs)`: the sum of the group's values, missing values
    *  aside. Valid only in a value (size/pos) slot. */
-  sum(): ValueExpr {
-    return this._withOp({ op: "sum" }) as unknown as ValueExpr;
+  sum(): FoldExpr {
+    return this._withOp({ op: "sum" }) as unknown as FoldExpr;
   }
 
   /** `reduce(xs => Σ xs / n)`: the mean of the group's values, missing
    *  values aside. Valid only in a value (size/pos) slot. */
-  mean(): ValueExpr {
-    return this._withOp({ op: "mean" }) as unknown as ValueExpr;
+  mean(): FoldExpr {
+    return this._withOp({ op: "mean" }) as unknown as FoldExpr;
   }
 
   /** `reduce(xs => d3.median(xs))`: the median of the group's values (the
    *  type-7 quantile at 0.5: the mean of the two middle values when there is
    *  an even number), missing values aside. Valid only in a value (size/pos)
    *  slot. */
-  median(): ValueExpr {
-    return this._withOp({ op: "median" }) as unknown as ValueExpr;
+  median(): FoldExpr {
+    return this._withOp({ op: "median" }) as unknown as FoldExpr;
   }
 
   /** `reduce(xs => xs.length)`: the number of rows, in the unit "count".
    *  Valid only in a value (size/pos) slot. */
-  count(): ValueExpr {
-    return this._withOp({ op: "count" }) as unknown as ValueExpr;
+  count(): FoldExpr {
+    return this._withOp({ op: "count" }) as unknown as FoldExpr;
   }
 
   /** `reduce(xs => new Set(xs).size)`: the number of distinct values, in
    *  the unit "count". Valid only in a value (size/pos) slot. */
-  distinct(): ValueExpr {
-    return this._withOp({ op: "distinct" }) as unknown as ValueExpr;
+  distinct(): FoldExpr {
+    return this._withOp({ op: "distinct" }) as unknown as FoldExpr;
   }
 
   /**
@@ -281,7 +283,8 @@ export class FieldExpr<
    * the values. `unit` is the new values' unit; without one their unit is
    * unknown, and they cannot be summed or stacked. In an operator's
    * per-entry size channel, maps with no fold after them run over the
-   * entries' values instead (as `normalize` does).
+   * entries' values instead (as `normalize` does), and so do maps after a
+   * named fold: `.count().map(...)` maps the entries' counts.
    */
   map(
     fn: (x: any, i: number, xs: any[]) => number,
@@ -717,7 +720,10 @@ const isBatchFn = (
 
 /** What a step computed for a group, by its op and the rows it ran on: each
  *  user callback runs once per group. Named steps are kept too, so every
- *  step takes the one path. */
+ *  step takes the one path. A render never reads the rows of an earlier
+ *  one: a chart's data is typed as a copy where it enters (`resolveData`
+ *  in chartBuilder.ts) and each split makes new groups, so rows changed in
+ *  place are read again on the next render. */
 const stepCache = new WeakMap<object, WeakMap<object, { v: unknown }>>();
 const cachedStep = (
   op: object,
@@ -989,14 +995,26 @@ function stepsOf(
   return { maps, fold, members };
 }
 
-/** The error for an op chained after a value: a fold's result is a value
- *  (or a function), not a column, so nothing chains after it. */
-const liftChainError = (name: string, fold: FieldOp, next: string): Error =>
-  new Error(
-    `field("${name}").${fold.op}(...).${next}(...): ${fold.op} gives one ` +
-      `value per group, and nothing chains after a value. Put ` +
-      `${next === "map" || next === "normalize" ? `.${next}(...) before .${fold.op}(...)` : `the computation inside one reduce`}.`
+/** The error for an op chained after a fold. A named fold gives one value
+ *  per group; a map after it runs over an operator's entries, which only
+ *  an operator's size channel has ({@link hasWindowMaps}), so it reaches
+ *  this path only elsewhere. A lifted result (a reduce's, a sample's) is
+ *  read only through its members. */
+const liftChainError = (name: string, fold: FieldOp, next: string): Error => {
+  const head = `field("${name}").${fold.op}(...).${next}(...)`;
+  const isMap = next === "map" || next === "normalize";
+  if (isMap && fold.op in NAMED_FOLDS)
+    return new Error(
+      `${head}: ${fold.op} gives one value per group, and a map after it ` +
+        `runs over the values of an operator's entries, which only the ` +
+        `size channel of spread or stack has. To map the rows here, put ` +
+        `.${next}(...) before .${fold.op}(...).`
+    );
+  return new Error(
+    `${head}: ${fold.op} gives one value per group, and nothing chains ` +
+      `after a value. Put the computation inside one reduce.`
   );
+};
 
 /** Whether `v` is a function value (`Fun`): an `at` and a domain. */
 const isFunLike = (v: unknown): v is Fun<number> =>
@@ -1274,27 +1292,33 @@ export const holdsClosureStep = (accessor: unknown): boolean =>
     (op) => typeof (op as any).fn === "function" && !isBatchFn((op as any).fn)
   );
 
-/** The maps at the end of an expression with no fold: in an operator's
- *  per-entry size channel they run over the entries' values (the window),
- *  not over a group's rows. */
+/** Whether an expression ends in maps that, in an operator's per-entry
+ *  size channel, run over the entries' values (the window), not over a
+ *  group's rows: the maps after its named fold, or all its maps when it has
+ *  no fold. Each entry's value is the expression before them, the entry's
+ *  fold or the channel's own sum. A lifted result (a reduce's, a sample's)
+ *  is read only through its members, so no map follows it. */
 export function hasWindowMaps(accessor: unknown): boolean {
   const ops = getFieldOps(accessor);
-  const last = ops[ops.length - 1];
+  const i = trailingMapsStart(ops);
   return (
-    last !== undefined &&
-    (last.op === "map" || last.op === "normalize") &&
-    !ops.some((op) => stepOfKind(op) === "fold")
+    i < ops.length &&
+    !ops
+      .slice(0, i)
+      .some(
+        (op) => op.op === "reduce" || op.op === "sample" || op.op === "member"
+      )
   );
 }
 
-const stepOfKind = (op: FieldOp): "map" | "fold" | "member" | "domain" =>
-  op.op === "map" || op.op === "normalize"
-    ? "map"
-    : op.op === "reduce" || op.op === "sample" || op.op in NAMED_FOLDS
-      ? "fold"
-      : op.op === "member"
-        ? "member"
-        : "domain";
+/** Where the maps at the end of `ops` start (`ops.length` when it ends in
+ *  none). */
+const trailingMapsStart = (ops: readonly FieldOp[]): number => {
+  let i = ops.length;
+  while (i > 0 && (ops[i - 1].op === "map" || ops[i - 1].op === "normalize"))
+    i--;
+  return i;
+};
 
 /**
  * Split an expression for an operator's per-entry size channel: `pre` is
@@ -1312,8 +1336,7 @@ export function splitWindowMaps(
 } {
   if (!hasWindowMaps(accessor)) return { pre: accessor, maps: [] };
   const ops = getFieldOps(accessor);
-  let i = ops.length;
-  while (i > 0 && stepOfKind(ops[i - 1]) === "map") i--;
+  const i = trailingMapsStart(ops);
   const name =
     accessor instanceof FieldExpr ? accessor.name : (accessor as any).name;
   const preOps = ops.slice(0, i);

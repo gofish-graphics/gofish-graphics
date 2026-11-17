@@ -3,7 +3,7 @@
  * package typecheck (`tsc --noEmit`) compiles this file, and a wrong type is
  * a compile error. The run-time half is `tests/groupExpr.test.ts`.
  */
-import { field, fun, line, rect, ribbon } from "../../lib";
+import { field, fun, line, rect, ribbon, stack } from "../../lib";
 
 export function lifts() {
   // A number is a value, for any value channel.
@@ -50,6 +50,17 @@ export function lifts() {
   field("v").sum().sum();
   // @ts-expect-error a value has no map
   n.map((x: number) => x);
+  // A map after a named fold runs over an operator's entries.
+  stack({ by: "k", dir: "x", size: field("n").count().normalize() });
+  stack({
+    by: "k",
+    dir: "x",
+    size: field("n")
+      .sum()
+      .map((x) => x * 2),
+  });
+  // @ts-expect-error a reduce's value takes no map, even a normalize
+  n.normalize();
 
   // The unit option mirrors the result's shape.
   const g = field("v").reduce((xs) => ({ lo: xs[0] as number }), {

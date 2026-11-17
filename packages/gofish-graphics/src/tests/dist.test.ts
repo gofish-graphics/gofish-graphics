@@ -559,6 +559,32 @@ console.log("\n# a field's cells");
     "a distribution of another column is the cell rows' own",
     near(other.fun.at(200), own.fun.at(200), 1e-9)
   );
+
+  // A split inside a cell (a spread by species in a binned partition) keeps
+  // the cell: each species' density is its whole sample's, restricted.
+  const [, mid] = groups[1];
+  const bySpecies = [...splitEntries("Species" as any, mid)];
+  const adelie = bySpecies.find(([k]) => k === "Adelie")![1];
+  const nested = evalGroup(mass.density() as any, adelie, undefined) as any;
+  const adelieWhole = evalGroup(
+    mass.density() as any,
+    rows.filter((r: any) => r.Species === "Adelie"),
+    undefined
+  ) as any;
+  const cellDomain = (evalGroup(mass.support() as any, mid, undefined) as any)
+    .fun.domain;
+  const tn = (cellDomain.min + cellDomain.max) / 2;
+  check(
+    "a split inside a cell keeps the cell",
+    nested.fun.domain.min === cellDomain.min &&
+      nested.fun.domain.max === cellDomain.max,
+    `${JSON.stringify(nested.fun.domain)} vs ${JSON.stringify(cellDomain)}`
+  );
+  check(
+    "and its density is its own whole's, restricted",
+    near(nested.fun.at(tn), adelieWhole.fun.at(tn), 1e-9),
+    `${nested.fun.at(tn)} vs ${adelieWhole.fun.at(tn)}`
+  );
 }
 
 {
