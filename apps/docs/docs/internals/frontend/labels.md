@@ -84,9 +84,9 @@ legend past it. It has three phases:
    (`labelPlacement`, below), as `arrow` and the `line` connector do, and it
    is the thing labeled.
 2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it,
-   each spec resolved once to its position on its target (`positionOf`),
+   each spec resolved once to its placement on its target (`placementOf`),
    into one list: a subtree's labels before those of the nodes that hold
-   it, and siblings' in order. The target and the position travel with the
+   it, and siblings' in order. The target and the placement travel with the
    spec from then on.
 3. **The chart's layer** — each label goes to its home (`homeOf`): the
    nearest node above its target, the target included, that holds a

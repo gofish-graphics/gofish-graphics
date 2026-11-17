@@ -12,7 +12,6 @@
  */
 import { time, type TransitionOptions } from "../ast/marks/time";
 import { resolveMethod } from "../interpolate";
-import { withKindValues } from "../ast/strategyKind";
 import {
   resolveEase,
   type Ease,
@@ -47,10 +46,7 @@ export type TweenOptions = {
  *  phase. `rect(...).transition({ update: Animation.tween({ curve:
  *  Curve.linear() }) })` is `.layer(time.transition({ curve: Curve.linear()
  *  }))`. */
-export const tween = (options: TweenOptions = {}): TweenEffect => {
-  // A strategy kind used bare (`Curve.linear`) is read as its value here,
-  // where the options enter, as at every other door (`withKindValues`).
-  const opts = withKindValues(options);
+export const tween = (opts: TweenOptions = {}): TweenEffect => {
   const ease = opts.ease === undefined ? undefined : resolveEase(opts.ease);
   // An unknown curve fails here, where it was written, and the resolved one
   // is what tells two tweens apart (`sameTween`).

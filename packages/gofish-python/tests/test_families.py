@@ -32,6 +32,7 @@ FAMILIES = {
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Effect": ("effect", ["grayscale", "luminance_to_alpha"]),
+    "Shape": ("shape", ["box", "oval", "fillet", "blob", "hull", "spine"]),
     "Placement": ("placement", ["around", "along", "start", "end", "interior"]),
     "Tiling": ("tiling", ["squarify", "slice", "dice", "binary", "voronoi"]),
     "Binning": ("binning", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
@@ -112,10 +113,18 @@ def test_curves_are_calls_on_the_wire():
         line(curve={"kind": "perfectArrows", "padEnd": 4})
 
 
+# The families whose modules are written by hand: Color's scales are not in
+# the gofish-ir STRATEGIES table, and a Domain or Trait value never reaches
+# the wire (`Unit` turns it into the trait it declares).
+HAND_WRITTEN = {"Color", "Domain", "Trait"}
+
+
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families and Coord is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
-    for module_name in ("tiling", "overlap", "curve", "binning", "calendar", "placement", "effect", "coord"):
+    for namespace, (module_name, _) in FAMILIES.items():
+        if namespace in HAND_WRITTEN:
+            continue
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")

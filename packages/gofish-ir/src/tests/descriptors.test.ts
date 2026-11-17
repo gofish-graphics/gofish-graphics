@@ -19,11 +19,16 @@
  */
 
 import {
+  COMBINATOR_MARKS,
   LABEL_OPTIONS,
+  LEAF_MARKS,
+  MARK_BASE_FIELDS,
   OPERATORS,
   OPTION_TYPES,
   STRATEGIES,
   resolveFields,
+  withEffect,
+  type FieldGroup,
   type FieldType,
 } from "../frontend/descriptors.js";
 import type {
@@ -387,6 +392,100 @@ for (const [family, spec] of Object.entries(STRATEGIES)) {
         !(name in kinds) &&
         Object.keys(preset.values).every((k) => k in kinds[preset.kind].params)
     );
+  }
+}
+
+/**
+ * The naming rule for strategy families (`apps/docs/docs/internals/design/
+ * api-design.md`, "Strategy families are uppercase namespaces", #1355): a
+ * family's lowercase name is never a construct's name, and an option that
+ * takes one family's value is named by that family in lowercase (`tiling:
+ * Tiling.squarify()`).
+ */
+console.log("\n# Strategy families follow the naming rule");
+const CONSTRUCT_TABLES = { OPERATORS, LEAF_MARKS, COMBINATOR_MARKS };
+for (const family of Object.keys(STRATEGIES)) {
+  const lower = family.toLowerCase();
+  for (const [table, entries] of Object.entries(CONSTRUCT_TABLES)) {
+    check(
+      `${family}: "${lower}" is not a key of ${table}`,
+      !Object.hasOwn(entries, lower)
+    );
+  }
+}
+
+/** Option keys that take a family's value but name the role it plays, not
+ *  the family. */
+const ROLE_NAMED_SLOTS: Readonly<Record<string, string>> = {
+  // A list of Calendar units, one per level of the axis: its entries are
+  // levels, and a `true`/`false` entry keeps or hides one.
+  levels: "Calendar",
+};
+
+/** The strategy families a field's type takes directly: its refs to a
+ *  family, through unions, arrays and records. */
+function familiesOf(type: FieldType): string[] {
+  switch (type.kind) {
+    case "ref":
+      return Object.hasOwn(STRATEGIES, type.name) ? [type.name] : [];
+    case "union":
+      return type.options.flatMap(familiesOf);
+    case "array":
+      return familiesOf(type.items);
+    case "record":
+      return familiesOf(type.valueType);
+    default:
+      return [];
+  }
+}
+
+/** The object types reachable from `type` through unions, arrays, records
+ *  and tuples: the field groups nested in it. */
+function objectsIn(type: FieldType): Readonly<FieldGroup>[] {
+  switch (type.kind) {
+    case "object":
+      return [type.fields];
+    case "union":
+      return type.options.flatMap(objectsIn);
+    case "array":
+      return objectsIn(type.items);
+    case "record":
+      return objectsIn(type.valueType);
+    case "tuple":
+      return type.items.flatMap(objectsIn);
+    default:
+      return [];
+  }
+}
+
+function checkFamilyKeys(where: string, fields: Readonly<FieldGroup>): void {
+  for (const [key, spec] of Object.entries(fields)) {
+    for (const family of new Set(familiesOf(spec.type))) {
+      const roleNamed = ROLE_NAMED_SLOTS[key] === family;
+      check(
+        roleNamed
+          ? `${where}.${key} takes ${family}, and names its role`
+          : `${where}.${key} takes ${family}, so is named ${family.toLowerCase()}`,
+        roleNamed || key === family.toLowerCase()
+      );
+    }
+    for (const nested of objectsIn(spec.type)) {
+      checkFamilyKeys(`${where}.${key}`, nested);
+    }
+  }
+}
+
+for (const [table, entries] of Object.entries(CONSTRUCT_TABLES)) {
+  for (const [name, descriptor] of Object.entries(entries)) {
+    checkFamilyKeys(`${table}.${name}`, resolveFields(descriptor));
+  }
+}
+checkFamilyKeys("LABEL_OPTIONS", LABEL_OPTIONS);
+checkFamilyKeys("withEffect", withEffect);
+checkFamilyKeys("MARK_BASE_FIELDS", MARK_BASE_FIELDS);
+for (const [name, spec] of Object.entries(OPTION_TYPES)) {
+  for (const fields of objectsIn(spec.type)) {
+    checkFamilyKeys(`OPTION_TYPES.${name}`, fields);
   }
 }
 

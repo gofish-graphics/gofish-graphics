@@ -78,7 +78,7 @@ export type LabelPlaceItem = {
   node: LabelNode;
   /** Its strategy, or `"outline"`: read from its mark's outline
    *  ({@link placeByOutline}). */
-  place: Placement | "outline";
+  placement: Placement | "outline";
   /** The label's `offset` option (see {@link placeOffset}). */
   offset?: number;
   /** `ref()` stand-ins of the nodes it avoids. */
@@ -267,18 +267,18 @@ export function applyLabelPlacement(
   // label the note counts.
   const calls = new Map<unknown, Resolved[]>();
   for (const item of constraint.items) {
-    const place =
-      item.place === "outline"
+    const placement =
+      item.placement === "outline"
         ? placeByOutline(shapeOf(item.target))
-        : item.place;
-    if (place === undefined) {
+        : item.placement;
+    if (placement === undefined) {
       hide(get(item.label), item.node, centerOf(shapeOf(item.target)));
       continue;
     }
     const resolved = {
       ...item,
-      place,
-      offset: placeOffset(place, item.offset),
+      placement,
+      offset: placeOffset(placement, item.offset),
     };
     const list = calls.get(item.group);
     if (list) list.push(resolved);
@@ -306,7 +306,7 @@ export function applyLabelPlacement(
    *  spot), or hide it when it took none, counting it for the render's
    *  note. */
   const settle = (item: Resolved, spot: Spot | undefined, size: HalfSize) => {
-    const key = `${item.call} with ${placeName(item.place)}`;
+    const key = `${item.call} with ${placeName(item.placement)}`;
     const entry = hiddenLabels.get(key) ?? { hidden: 0, total: 0 };
     entry.total++;
     hiddenLabels.set(key, entry);
@@ -328,7 +328,7 @@ export function applyLabelPlacement(
     // where its label goes, often past the area (a line chart's end labels
     // take the margin), and the labels join the layout's box.
     for (const which of ["start", "end"] as const) {
-      const ends = items.filter((i) => i.place.kind === which);
+      const ends = items.filter((i) => i.placement.kind === which);
       const spots = endSpots(ends, which, shapeOf).map((e) => ({
         ...e,
         ok: clear(
@@ -343,13 +343,13 @@ export function applyLabelPlacement(
     }
     // The rest take their first free candidate in the frame, in data order.
     for (const item of items) {
-      const { place } = item;
-      if (place.kind === "start" || place.kind === "end") continue;
+      const { placement } = item;
+      if (placement.kind === "start" || placement.kind === "end") continue;
       const shape = shapeOf(item.target);
       const angle = item.node.state.angle;
       const size = item.node.halfSize(angle);
       let chosen: Candidate | undefined;
-      for (const c of candidatesFor(place, item.offset, shape, size, angle))
+      for (const c of candidatesFor(placement, item.offset, shape, size, angle))
         if (inFrame(corners(c, size)) && clear(c, size, shape, group)) {
           chosen = c;
           break;
@@ -360,8 +360,8 @@ export function applyLabelPlacement(
 }
 
 /** A label to place, with its strategy and its offset resolved. */
-type Resolved = Omit<LabelPlaceItem, "place" | "offset"> & {
-  place: Placement;
+type Resolved = Omit<LabelPlaceItem, "placement" | "offset"> & {
+  placement: Placement;
   offset: number;
 };
 
@@ -398,26 +398,26 @@ function centerOf(shape: TargetShape): Pt {
  *  `offset`, when neither it nor the label gives one. */
 const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4, interior: 0 };
 
-/** The pixels between the outline and a label placed by `place`: the
+/** The pixels between the outline and a label placed by `placement`: the
  *  strategy's `offset`, else the label's, else the strategy's default. */
-const placeOffset = (place: Placement, label: number | undefined): number =>
-  ("offset" in place ? place.offset : undefined) ??
+const placeOffset = (placement: Placement, label: number | undefined): number =>
+  ("offset" in placement ? placement.offset : undefined) ??
   label ??
-  DEFAULT_OFFSET[place.kind];
+  DEFAULT_OFFSET[placement.kind];
 
 /** The candidates of a strategy that offers several, best first. */
 function candidatesFor(
-  place: AroundPlacement | AlongPlacement | InteriorPlacement,
+  placement: AroundPlacement | AlongPlacement | InteriorPlacement,
   offset: number,
   shape: TargetShape,
   size: HalfSize,
   angle: number
 ): Iterable<Candidate> {
-  switch (place.kind) {
+  switch (placement.kind) {
     case "around":
-      return aroundCandidates(shape, size, angle, place, offset);
+      return aroundCandidates(shape, size, angle, placement, offset);
     case "along":
-      return alongCandidates(shape, size, angle, place, offset);
+      return alongCandidates(shape, size, angle, placement, offset);
     case "interior":
       return interiorCandidates(shape, size, angle);
   }

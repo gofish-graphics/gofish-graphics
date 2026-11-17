@@ -222,6 +222,9 @@ export const layer = createNodeOperatorSequential(
     const children = Array.isArray(childrenOrOptions)
       ? childrenOrOptions
       : maybeChildren || [];
+    // `effect` filters the layer's whole drawing (`drawEffect.ts`), with a
+    // coord or without. It is checked once, here.
+    const filter = displayFilter(options.effect, "layer({ effect })");
 
     // With a coord, the layer is the coordinate space's box: the space takes
     // the layer's dims (`w`, `h`, `dims`, ...), key, axes and padding (#535).
@@ -242,7 +245,7 @@ export const layer = createNodeOperatorSequential(
           { ...rest, transform: coordTransform },
           children.filter((c): c is GoFishNode => c instanceof GoFishNode)
         ),
-        displayFilter(options.effect, "layer({ effect })")
+        filter
       );
     }
 
@@ -1681,9 +1684,6 @@ export const layer = createNodeOperatorSequential(
     // found anywhere in this layer's subtree, kept apart so a later
     // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).
     node._paintDefaults = applyRelationalZBelowDefaults(node, children);
-    return applyFilter(
-      node,
-      displayFilter(options.effect, "layer({ effect })")
-    );
+    return applyFilter(node, filter);
   }
 );

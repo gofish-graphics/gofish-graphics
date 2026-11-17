@@ -1060,20 +1060,22 @@ function writeFamilyModule(opts: {
   const { family, doc, table, wire, factories } = opts;
   // The module is the family's name in lowercase. A Python package's
   // submodule and its attribute share one name, so a family module named
-  // like an operator would replace that operator on import. The naming rule
-  // is that a family never shares its name with an operator
-  // (`apps/docs/docs/internals/design/api-design.md`, #1355), so such a
-  // family is an error, not a renamed module.
+  // like a construct would replace that construct on import. The naming rule
+  // forbids the clash (`descriptors.test.ts` checks it); this is a backstop.
   const lower = family.toLowerCase();
-  if (Object.hasOwn(OPERATORS, lower))
+  const clash = (
+    [
+      ["operator", OPERATORS],
+      ["mark", LEAF_MARKS],
+      ["mark", COMBINATOR_MARKS],
+    ] as const
+  ).find(([, table]) => Object.hasOwn(table, lower));
+  if (clash !== undefined)
     throw new Error(
-      `[gofish-python gen] the strategy family ${family} shares its name with ` +
-        `the operator ${lower}: importing gofish.${lower} would replace it. A ` +
-        `family never shares its name with an operator; rename one of them ` +
-        `(see apps/docs/docs/internals/design/api-design.md, "Strategy ` +
-        `families are uppercase namespaces").`
+      `[gofish-python gen] the strategy family ${family} clashes with the ` +
+        `${clash[0]} ${lower}: importing gofish.${lower} would replace it. ` +
+        `Rename one of them (apps/docs/docs/internals/design/api-design.md).`
     );
-  const module = lower;
   const example = factories[0].name;
   const bareExample = wire.bare
     ? factories.find((f) =>
@@ -1099,7 +1101,7 @@ function writeFamilyModule(opts: {
     `The \`\`${family}\`\` family. ${doc}`,
     ``,
     `The package binds this module as \`\`${family}\`\`, so \`\`${family}.${example}\`\` and`,
-    `\`\`from gofish.${module} import ${example}\`\` reach the same member. Each member`,
+    `\`\`from gofish.${lower} import ${example}\`\` reach the same member. Each member`,
     `returns a plain dict, \`\`{"${wire.tag}": ..., **params}\`\`, with`,
     ...keys,
     `Mirrors JS \`\`gofish-graphics/${lower}\`\`.`,
@@ -1124,7 +1126,7 @@ function writeFamilyModule(opts: {
     code,
     ``,
   ].join("\n");
-  const outFile = join(HERE, "..", "gofish", `${module}.py`);
+  const outFile = join(HERE, "..", "gofish", `${lower}.py`);
   writeFileSync(outFile, source);
   console.log(`wrote ${outFile}`);
 }

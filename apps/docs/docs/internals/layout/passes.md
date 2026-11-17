@@ -760,7 +760,7 @@ order. Three parents make one, and two nodes read it:
   moves every site to its cell's centroid, then fits the weights with a
   damped Newton step, until each cell's area is within 2% of its share
   and the sites have settled). Every
-  `Tiling` strategy is one function, a `TilingFn` in `tile.tsx`, from the
+  `Tiling` strategy is one function, a `CellsFn` in `tile.tsx`, from the
   region and the weights to one ring per child, so the `tile` has one
   placement loop. The child's size is the ring's box, and the ring is
   shifted into it (`inItsBox`). On an axis where the child fills its room

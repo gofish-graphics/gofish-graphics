@@ -18,10 +18,11 @@
  * value once, there, at any depth ({@link kindValue},
  * {@link withKindValues}): a chart's options (`chart(data, options)`), an
  * operator's and a mark's options (`createOperator`, `createMark`,
- * `createRelationalMark`), a `.bin(...)` partition (`checkBinStep`), the
- * options of `interpolate` and `Animation.tween`, and an axis's `levels` (`levelsFromOption`, which render options reach without
- * passing a chart). So no reader of a strategy, the IR encoder included,
- * ever sees a function.
+ * `createRelationalMark`), a `.bin(...)` partition (`checkBinStep`), and an
+ * axis's `levels` (`levelsFromOption`, which render options reach without
+ * passing a chart). `curveName` and `displayFilter` read a bare kind
+ * themselves. So no reader of a strategy, the IR encoder included, ever sees
+ * a function.
  */
 
 import { Frontend } from "gofish-ir";

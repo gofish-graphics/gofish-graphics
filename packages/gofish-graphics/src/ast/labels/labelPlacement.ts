@@ -24,7 +24,7 @@ export interface LabelOptions {
    *  `Placement.end()` for an open path, `Placement.interior()` for a filled region
    *  and `Placement.around()` for one with no fill; and `"outset"` for anything
    *  else. */
-  placement?: LabelPosition | Placement;
+  placement?: LabelPlacement;
   /** Nodes a `Placement` label keeps off, beside the labeled marks and the
    *  other labels: a list of nodes or refs, or one `selectAll(name)`. */
   avoiding?: Nodes;
@@ -132,6 +132,9 @@ export type LabelPosition =
   | "outset"
   | `${LabelSide}-${LabelEdge}`
   | `${LabelSide}-${LabelEdge}-${LabelAlignment}`;
+
+/** Where a label goes: a position string, or a `Placement` strategy. */
+export type LabelPlacement = LabelPosition | Placement;
 
 const SIDES = new Set<string>(["inset", "outset"]);
 const EDGES = new Set<string>(["top", "bottom", "left", "right"]);

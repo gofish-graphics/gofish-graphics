@@ -151,11 +151,10 @@ import {
 import {
   type LabelAccessor,
   type LabelOptions,
+  type LabelPlacement,
   type LabelSpec,
 } from "./labels/labelPlacement";
 import type { HiddenLabels } from "./labels/placeStep";
-import type { Placement as PlacementStrategy } from "../families/placement";
-import type { LabelPosition } from "./labels/labelPlacement";
 import { withKindValues } from "./strategyKind";
 import { packEnclose } from "d3-hierarchy";
 import type { KeyCell } from "./cells";
@@ -831,7 +830,7 @@ export class GoFishNode {
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
   /** Where a `.label()` with no `placement` goes (see the constructor). */
-  public labelPlacement?: LabelPosition | PlacementStrategy | "outline";
+  public labelPlacement?: LabelPlacement | "outline";
   /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
    *  today the label `Text`s the label pass seats for it in the tier above
    *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
@@ -1072,7 +1071,7 @@ export class GoFishNode {
        *  open path, around a closed outline with no fill, inside a filled
        *  one. Default `"outset"` (above its box). A node that sets it draws
        *  its own ink and is itself the target of a `.label()` on it. */
-      labelPlacement?: LabelPosition | PlacementStrategy | "outline";
+      labelPlacement?: LabelPlacement | "outline";
     },
     children: GoFishAST[]
   ) {

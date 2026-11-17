@@ -31,7 +31,6 @@ import {
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";
 import { UnderlyingSpace, UNDEFINED, magnitude } from "../underlyingSpace";
-import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
 import { rejectLength, type LengthValue } from "../length";
 import { createOperator } from "../marks/createOperator";
@@ -51,9 +50,9 @@ import {
 } from "../geometry/ring";
 import { voronoiTiling } from "../geometry/voronoiTiling";
 
-/** What a tiling reads from the `tile` operator: its options, the size of its box,
- *  and how an error message names it (`where`). */
-type TilingOptions = {
+/** What a strategy's cells read from the `tile` operator: its options, the
+ *  size of its box, and how an error message names it (`where`). */
+type CellsInput = {
   spacing: number;
   padding: number;
   round: boolean;
@@ -62,17 +61,17 @@ type TilingOptions = {
 };
 
 /**
- * A tiling: the cells of a region, one per weight, each with its weight's
- * share of the region's area, in weight order and in the operator's frame.
- * `region` is the shape the operator fills, or `undefined` for its whole box
+ * The cells of a region, one per weight, each with its weight's share of the
+ * region's area, in weight order and in the operator's frame. `region` is the
+ * shape the operator fills, or `undefined` for its whole box
  * `[0, size[0]] × [0, size[1]]`. Every `Tiling` strategy names one
- * (`tilingFnOf`), and the operator lays its children out in the cells the same
+ * (`cellsOf`), and the operator lays its children out in the cells the same
  * way whatever the strategy.
  */
-type TilingFn = (
+type CellsFn = (
   region: Ring | undefined,
   weights: readonly number[],
-  options: TilingOptions
+  options: CellsInput
 ) => Ring[];
 
 /** A rectangular tiling: one of d3-hierarchy's methods, which tile a box. */
@@ -101,12 +100,12 @@ const VORONOI_SEED = Frontend.STRATEGIES.Tiling.kinds.voronoi.params.seed
 /** The spelling of a tiling in an error message: `Tiling.squarify`. */
 const tilingName = (strategy: Tiling) => `Tiling.${strategy.kind}`;
 
-/** A rectangular tiling: d3 tiles the box, `padding` in from its edge and
+/** A rectangular tiling's cells: d3 tiles the box, `padding` in from its edge and
  *  `spacing` between siblings, and each tile is a box ring. It tiles only a
  *  box: in any other shape its tiles would not have the areas their weights
  *  give them. */
-const d3Tiling =
-  (strategy: RectTiling): TilingFn =>
+const d3Cells =
+  (strategy: RectTiling): CellsFn =>
   (region, weights, { spacing, padding, round, size, where }) => {
     if (!isWholeBox(region, size[0], size[1]))
       throw new Error(
@@ -143,14 +142,14 @@ const d3Tiling =
     return rings;
   };
 
-/** The Voronoi tiling: one convex cell per weight (`voronoiTiling`), in the
+/** The Voronoi tiling's cells: one convex cell per weight (`voronoiTiling`), in the
  *  region drawn in by the padding, with siblings `spacing` apart; the
  *  spacing leaves the region's own edges alone, as d3's paddingInner does.
  *  A region with no area holds only empty cells. Its cells are not
  *  rounded: `round` snaps a box's edges to whole pixels, and a cell's
  *  slanted edges have no pixel to snap to. */
-const voronoiTilingOf =
-  (seed: number): TilingFn =>
+const voronoiCells =
+  (seed: number): CellsFn =>
   (region, weights, { spacing, padding, size, where }) => {
     const whole = region ?? boxRing(size[0], size[1]);
     if (!hasArea(whole)) return weights.map(() => []);
@@ -168,11 +167,11 @@ const boxCenter = (ring: Ring): [number, number] => {
   return [at[0] + size[0] / 2, at[1] + size[1] / 2];
 };
 
-/** The tiling a `Tiling` strategy names. */
-const tilingFnOf = (strategy: Tiling): TilingFn =>
+/** The cells a `Tiling` strategy makes. */
+const cellsOf = (strategy: Tiling): CellsFn =>
   strategy.kind === "voronoi"
-    ? voronoiTilingOf(strategy.seed ?? VORONOI_SEED)
-    : d3Tiling(strategy);
+    ? voronoiCells(strategy.seed ?? VORONOI_SEED)
+    : d3Cells(strategy);
 
 type TileSort = "asc" | "desc" | "none";
 
@@ -267,9 +266,9 @@ const TileNode = createNodeOperator(
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
           // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
           // to a Value), emit SIZE so the parent faceting spread can co-solve a
-          // scale shared across sibling tilings. Otherwise the operator orders
-          // nothing along the axis by data: it has no axis there and fills the
-          // slot it is given.
+          // scale shared across sibling `tile` operators. Otherwise the
+          // operator orders nothing along the axis by data: it has no axis
+          // there and fills the slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace => {
             const size = own.dataSize(i);
             return isValue(size) ? magnitude(size) : UNDEFINED;
@@ -366,7 +365,7 @@ const TileNode = createNodeOperator(
             );
 
           // One cell per child, in the operator's frame, in weight order.
-          const cells = tilingFnOf(tiling)(
+          const cells = cellsOf(tiling)(
             region,
             leafData.map((d) => d.weight),
             {

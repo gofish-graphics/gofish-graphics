@@ -21,7 +21,6 @@ import { SMOOTH_CURVES, type SmoothCurve, channelSpline } from "./spline";
 import { lerp } from "./util";
 import type { Curve } from "./families/curve";
 import { curveName } from "./ast/graphicalOperators/routers";
-import { withKindValues } from "./ast/strategyKind";
 
 /** How a run is read between its knots, from the least to the most smooth.
  *  These are readings of values over a parameter; the screen-space
@@ -36,12 +35,12 @@ const METHODS: readonly InterpolationMethod[] = [
 ];
 
 /**
- * The method a `curve` option names. Unset is
- * `"monotone"`: the field is numeric, so the run is a sample of a continuous
- * variable and smooths — the same conclusion `connect`'s auto rule reaches for
- * a continuous connection axis, and the reason a transition traces the curve
- * a smooth threaded line draws. Anything else that is not a method throws,
- * naming `where` the option was written.
+ * The method a `curve` option names. Unset is `"monotone"`: the field is
+ * numeric, so the run is a sample of a continuous variable and smooths — the
+ * same conclusion `connect`'s auto rule reaches for a continuous connection
+ * axis, and the reason a transition traces the curve a smooth threaded line
+ * draws. Anything else that is not a method throws, naming `where` the option
+ * was written.
  */
 export function resolveMethod(
   curve: Curve | undefined,
@@ -282,11 +281,8 @@ export type InterpolateOptions = {
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
-  options: InterpolateOptions
+  { along, key, at, curve, fields }: InterpolateOptions
 ): Record<string, unknown>[] {
-  // A strategy kind used bare (`Curve.monotone`) is read as its value here,
-  // where the options enter, as at every other door (`withKindValues`).
-  const { along, key, at, curve, fields } = withKindValues(options);
   const method = resolveMethod(curve, "interpolate({ curve })");
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
