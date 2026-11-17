@@ -95,10 +95,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   stack: [
     "by",
     "dir",
-    "spacing",
-    "glue",
     "alignment",
-    "anchor",
     "reverse",
     "baseline",
     "axes",

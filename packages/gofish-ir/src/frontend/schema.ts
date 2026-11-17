@@ -336,19 +336,12 @@ export interface StackOperator
     OperatorFlagsIR,
     OperatorBoxIR {
   type: "stack";
-  /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
+  /** See `SpreadOperator.label`. */
   label?: LabelIR;
   by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
-  /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
-   *  true})`, so producers may put spread's options on the wire. Glue
-   *  semantics force the effective gap to 0. */
-  spacing?: number;
-  /** Spread-parity passthrough; stack always glues regardless. */
-  glue?: boolean;
   alignment?: string;
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Where the stack puts its own 0 (`Baseline`). */
   baseline?: BaselineIR;
