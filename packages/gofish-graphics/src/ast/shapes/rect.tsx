@@ -25,6 +25,9 @@ import {
   Transform,
   centerOf,
   positionOf,
+  orDefaultSize,
+  signedExtent,
+  sizeOf,
 } from "../dims";
 import { glyphAxis } from "../underlyingSpace";
 import { literalBoxExtents } from "../extent";
@@ -35,8 +38,8 @@ import {
   roundedBoxOutline,
   type Box,
 } from "../geometry";
-import { aesthetic, continuous, Domain, posFn, pxOf } from "../domain";
-import { computeAesthetic, computeSize } from "../../util";
+import { aesthetic, continuous, Domain, posFn } from "../domain";
+import { computeAesthetic } from "../../util";
 import {
   UNDEFINED,
   UnderlyingSpace,
@@ -66,8 +69,6 @@ import {
   rectItemFromBox,
   roleFor,
 } from "../displayList/lowerHelpers";
-
-const DEFAULT_RECT_SIZE = 16;
 
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Rect = ({
@@ -224,25 +225,21 @@ export const Rect = ({
           const d = node.fixedBox(k);
           const at = (v: MaybeValue<number> | undefined) =>
             computeAesthetic(v, pos[k], undefined)!;
-          const map = scales?.[k]?.map;
-          let s: number | undefined;
-          if (isValue(d.min) && isValue(d.max)) {
-            // Both ends are values: the box spans [min, max] in data space.
-            s = at(d.max) - at(d.min);
-          } else if (isValue(d.min) && isValue(d.size)) {
-            // A data start and size: map both ends, then subtract.
-            s = at(value(getValue(d.min)! + getValue(d.size)!)) - at(d.min);
-          } else if (isValue(d.size) && map) {
-            // A data size with no start: measured from the baseline, data 0,
-            // through the map.
-            s = pxOf(map, getValue(d.size)!) - pxOf(map, 0);
-          } else {
-            s = computeSize(d.size, scales?.[k]?.sigma!, size[k]);
-          }
           // When parent constraints are unresolved and the size is
           // unspecified, keep a visible default instead of propagating
-          // undefined.
-          return s === undefined || !Number.isFinite(s) ? DEFAULT_RECT_SIZE : s;
+          // undefined (`orDefaultSize`).
+          if (isValue(d.min) && isValue(d.max)) {
+            // Both ends are values: the box spans [min, max] in data space.
+            return orDefaultSize(at(d.max) - at(d.min));
+          }
+          if (isValue(d.min) && isValue(d.size)) {
+            // A data start and size: map both ends, then subtract.
+            return orDefaultSize(
+              at(value(getValue(d.min)! + getValue(d.size)!)) - at(d.min)
+            );
+          }
+          // A size with no start of its own (`sizeOf`).
+          return sizeOf(d.size, scales?.[k], size[k]);
         };
         let w = sizeOn(0);
         let h = sizeOn(1);
@@ -276,13 +273,11 @@ export const Rect = ({
               // endpoint and its size is the magnitude. Every derivation site
               // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
               // reads a non-negative `size` and never needs `Math.abs`.
-              min: Math.min(0, w),
-              size: Math.abs(w),
+              ...signedExtent(w),
               embedded: dims[0].embedded,
             },
             1: {
-              min: Math.min(0, h),
-              size: Math.abs(h),
+              ...signedExtent(h),
               embedded: dims[1].embedded,
             },
           },

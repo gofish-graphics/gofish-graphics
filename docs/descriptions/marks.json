@@ -26,7 +26,7 @@
     },
     "polygon": {
       "type": "polygon",
-      "description": "A closed polygon defined by explicit local-coordinate points (GoFish-native y-up); its bounding box is computed from the points."
+      "description": "A closed outline: points in the frame, or SVG path data drawn in a unit box stretched to w by h."
     },
     "blank": {
       "type": "blank",

@@ -23,6 +23,7 @@ from gofish import (
     ribbon,
     ellipse,
     petal,
+    polygon,
     text,
     image,
     Constraint,
@@ -527,6 +528,15 @@ class TestNewMarks:
         assert d["type"] == "petal"
         assert d["w"] == "size"
         assert d["h"] == "size"
+
+    def test_polygon_outline_mark(self):
+        """Test a polygon with a path outline and a box."""
+        m = polygon(w="size", h="size", d="M0 0 L0 1 L1 1 L1 0 Z")
+        d = ir(m)
+        assert d["type"] == "polygon"
+        assert d["w"] == "size"
+        assert d["h"] == "size"
+        assert d["d"] == "M0 0 L0 1 L1 1 L1 0 Z"
 
     def test_text_mark(self):
         """Test text mark creation."""
