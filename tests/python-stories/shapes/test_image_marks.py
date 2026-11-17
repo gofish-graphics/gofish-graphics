@@ -58,7 +58,7 @@ def _labeled_image(label, image_node):
             image_node,
         ],
         dir="y",
-        spacing=0,
+        spacing=8,
         alignment="start",
     )
 

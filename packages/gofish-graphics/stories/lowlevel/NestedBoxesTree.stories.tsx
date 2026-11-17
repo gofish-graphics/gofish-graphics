@@ -86,7 +86,7 @@ function buildSubtree(node: TreeNode, depth: number): any {
   if (!node.children?.length) return header;
 
   // Stack [header, ...childSubtrees] vertically — header on top, children below.
-  const inner = spreadY({ spacing: 0, alignment: "middle" }, [
+  const inner = spreadY({ spacing: 8, alignment: "middle" }, [
     header,
     ...node.children.map((c) => Subtree({ node: c, depth: depth + 1 })),
   ]);

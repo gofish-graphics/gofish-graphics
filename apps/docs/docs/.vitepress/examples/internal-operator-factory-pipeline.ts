@@ -58,7 +58,7 @@ const outlinePill = (label, color, w) =>
 
 // One lane: piece -> arrow -> mark.
 const lane = (i) =>
-  gf.spreadX({ spacing: 0, alignment: "middle" }, [
+  gf.spreadX({ spacing: 14, alignment: "middle" }, [
     outlinePill(`piece ${i}`, PIECE, 108),
     lbl("→", 16, "#aaa"),
     filledPill(`mark(p${i})`, NODE, 116),
@@ -66,14 +66,14 @@ const lane = (i) =>
 
 // y up — reverse so the first lane reads at the top.
 const lanes = gf.spreadY(
-  { spacing: 0, alignment: "middle" },
+  { spacing: 11, alignment: "middle" },
   Array.from({ length: N }, (_, i) => lane(i)).reverse()
 );
 
 // Whole pipeline. Reverse for top-to-bottom reading order:
 // data → split → lanes (fmap implicit) → combine → GoFishNode.
 gf.spreadY(
-  { spacing: 0, alignment: "middle" },
+  { spacing: 14, alignment: "middle" },
   [
     filledPill("data", DATA, 132),
     lbl("↓  split", 13, "#999", "600"),

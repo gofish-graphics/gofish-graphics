@@ -246,7 +246,7 @@ combiner that adds a small label below each spread group:
 ```ts no-check
 import { layer, spreadY } from "gofish-graphics";
 
-sibling: (kids) => spreadY({ spacing: 0 }, [
+sibling: (kids) => spreadY({ spacing: 8 }, [
   spread({ dir: "x", spacing: 16 })(kids),
   text({ text: `${kids.length} items` }),
 ]),

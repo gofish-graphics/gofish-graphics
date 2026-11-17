@@ -393,7 +393,7 @@ not tied to an argument like `h`, we'll need to pass a `key` field to the object
 
 ```ts
 spreadX(
-  { spacing: 0 },
+  { spacing: 8 },
   map(_.groupBy(seafood, "lake"), (lake, key) =>
     rect({ key, w: 32, h: v(_.sumBy(lake, "count")), fill: gf.color.green[5] })
   )

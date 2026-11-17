@@ -93,7 +93,7 @@ def buildSubtree(node, depth):
     inner = spread(
         [header, *[Subtree(node=c, depth=depth + 1) for c in node["children"]]],
         dir="y",
-        spacing=0,
+        spacing=8,
         alignment="middle",
     )
 

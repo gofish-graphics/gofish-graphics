@@ -25,7 +25,7 @@ const inlineBadgeSvg = `data:image/svg+xml;utf8,${encodeURIComponent(
 )}`;
 
 const labeledImage = (label: string, imageNode: any) =>
-  spread({ dir: "y", spacing: 0, alignment: "start" },
+  spread({ dir: "y", spacing: 8, alignment: "start" },
     [
       text({ text: label, fontSize: 14, fill: "#1f2937" }),
       imageNode,
