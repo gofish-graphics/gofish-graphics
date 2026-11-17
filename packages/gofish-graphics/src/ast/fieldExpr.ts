@@ -1392,7 +1392,7 @@ export const shareQuantity = (
  * `shareQuantity`'s (see its doc for why that is load-bearing). A user's
  * map gives the quantity its `unit` declares.
  *
- * TODO(stack-profiles): a Python map here is not resolved over the window
+ * TODO(#1369): a Python map here is not resolved over the window
  * (`resolveGroupSteps` resolves rows of groups), so it is an error.
  */
 export function applyWindowMaps(

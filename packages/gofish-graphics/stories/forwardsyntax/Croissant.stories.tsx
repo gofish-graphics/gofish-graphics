@@ -42,7 +42,7 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * the column's whole domain, the same in every month, so
  * `field(x).bin(Bin.quantiles(5))` would cut every month at the year's
  * quintiles, not its own.
- * TODO(stack-profiles): a key for the cells of each group's own sample of a
+ * TODO(#1370): a key for the cells of each group's own sample of a
  * column, so the ridgeline is a partition too.
  */
 const meta: Meta = { title: "Forward Syntax/Croissant" };

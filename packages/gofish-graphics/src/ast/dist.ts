@@ -278,7 +278,7 @@ const KERNEL_REACH = 8;
  *  0.00135 of its mass past 3 bandwidths on one side, so the area over the
  *  support is the number of values less at most that share of each
  *  extreme value's kernel at each end.
- *  TODO(stack-profiles): an option for a sample's density could choose how
+ *  TODO(#1371): an option for a sample's density could choose how
  *  far past the values it runs, and a bounded estimator (reflection at a
  *  hard limit, such as 0 for counts) for values that cannot go past one. */
 const SAMPLE_CUT = 3;

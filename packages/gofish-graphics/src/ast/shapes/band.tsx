@@ -567,7 +567,7 @@ function affineOf(f: Fun<number>): { a: number; b: number } | undefined {
  * - The position must be one increasing line in t (`f.support()` is
  *   `t ↦ t`), so the band's cross-sections stay functions of its position.
  *   The values are then read through it exactly ({@link reparameterize}).
- *   TODO(stack-profiles): a position that bends in t (a P-P plot,
+ *   TODO(#1374): a position that bends in t (a P-P plot,
  *   `line({ x: a.cdf(), y: b.cdf() })`) needs the values read through the
  *   inverse of the position; it is an error until then.
  * - `value` is an amount or a position, as for {@link bandOfRows}.

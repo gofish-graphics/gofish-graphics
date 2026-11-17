@@ -648,7 +648,7 @@ export type StackPlace = { offset: Fun<number>; reach: Interval.Interval };
  * is then laid out by its chain of translates, as a stack of bars is.
  * Undefined too when a part has no origin (the stack is then a spread).
  *
- * TODO(stack-profiles): a shortcut. A stack of boxes could be laid out by
+ * TODO(#1368): a shortcut. A stack of boxes could be laid out by
  * data offsets too, each a constant function, so there would be one path
  * for every stack. That opens questions the box path answers today: a part
  * with no data baseline (a pinned or origin-less part, whose tail is its
@@ -696,7 +696,7 @@ export function stackPlaces(
  *  head, or one of its anchors. Its box spans `[−descent, ascent]` about its
  *  tail, and `"baseline"`, its own 0, is the tail itself.
  *
- *  TODO(stack-profiles): a shortcut. That is exact for a part with a
+ *  TODO(#1373): a shortcut. That is exact for a part with a
  *  data baseline. Placement reads `"baseline"` as the part's own 0
  *  (`stackOriginOffset` in placementSolver.ts), and a part with no data
  *  baseline (a nested spread or a middle stack) has its own 0 where its

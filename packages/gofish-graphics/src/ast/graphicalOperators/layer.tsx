@@ -322,7 +322,7 @@ export const layer = createNodeOperatorSequential(
     // that changes along u (`stackPlaces`): the interval it covers about the
     // stack's 0 over every u, times σ. That is the box it draws, sheared;
     // its own claim is the box it would draw unmoved.
-    // TODO(stack-profiles): a shortcut. The claim is exact only while a
+    // TODO(#1368): a shortcut. The claim is exact only while a
     // part's cross-section is all data (σ times an interval). A part with a
     // pixel term in the box of its cross-section would claim the envelope
     // over u of `a(u)·σ + b(u)`, an envelope of lines in σ over the knots,

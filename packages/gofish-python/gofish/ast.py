@@ -3625,7 +3625,7 @@ def fun(at: Any, *, domain: Any, knots: Any = None) -> Any:
     Raises:
         NotImplementedError: always.
     """
-    # TODO(stack-profiles): a Python function value needs the bridge to read
+    # TODO(#1369): a Python function value needs the bridge to read
     # it at t. Layout and drawing read a function value synchronously, many
     # times (to find its extent, and to draw it to half a pixel), but the
     # bridge to the Python kernel is asynchronous, so there is no call that
