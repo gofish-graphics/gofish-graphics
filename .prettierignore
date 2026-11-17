@@ -13,3 +13,4 @@ __snapshots__/
 tests/tmp/
 prototypes/gallery/renders.js
 proposals/dragology/demo/demos.js
+proposals/dragology/artifact/demos.js
