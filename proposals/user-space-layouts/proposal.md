@@ -14,35 +14,53 @@ Names: this page uses `tile({ tiling: Tiling.squarify })` and `Placement`, the s
 
 ## The API: `layout` and `measure`
 
-Two functions, both sketches. Each returns GoFish, so a layout written with them is ordinary operators all the way down.
+Two functions and one type, all sketches. A layout written with them returns GoFish, so it is ordinary operators all the way down.
 
 <!-- id: p-api -->
 
 ```ts
-// The space this node was offered: a width and height, and a convex shape
-// when its parent hands one down. The result is whatever the body returns.
+// A length before the scale is chosen: a function of the scale that the
+// engine can solve for. Inside the engine this is `Pwl.Value`, a
+// piecewise-linear function of pixels per data unit.
+type Length = {
+  add(other: Length | number): Length;
+  sub(other: Length | number): Length;
+  scale(k: number): Length;
+  // Its pixels, for a length with no scale in it. An error otherwise.
+  readonly px: number;
+};
+declare const Length: { max(...lengths: (Length | number)[]): Length };
+
+// A child's geometry, in lengths, before the scale is chosen.
+declare function measure(child: Node): Geometry;
+
+type Geometry = {
+  box: { min: [Length, Length]; max: [Length, Length] };
+  enclosingCircle: { cx: Length; cy: Length; r: Length };
+  outline: Outline[];
+};
+
+// The space this node was offered, in pixels, after the scale is chosen.
+// The result is whatever the body returns.
 declare function layout(
   body: (space: { w: number; h: number; shape?: Ring }) => Node
 ): Node;
-
-// A child's geometry once it is laid out in the given space. The space
-// defaults to the one the enclosing `layout` was offered.
-declare function measure(
-  child: Node,
-  space?: { w?: number; h?: number }
-): Geometry;
-
-type Geometry = {
-  box: { min: [number, number]; max: [number, number] };
-  enclosingCircle: { cx: number; cy: number; r: number };
-  outline: Outline[];
-};
 ```
 
-- `layout` is called where a node goes. Its body runs during layout, once the parent has decided how much room this node gets.
-- `measure` is called inside a `layout` body. It lays the child out and answers with its geometry: its box, its enclosing circle and its outline. These are the three answers the engine's `geometry()` has today. A contour would be a fourth.
-- Neither places anything. The body returns operators (`stack`, `layer`, `position`), and those do the placing.
-- `measure` answers in pixels, after scales are chosen. A layout that sizes itself from measurements does not take part in fitting the chart to its room. See "The layout protocol" below.
+The engine is symbolic, and the types have to show it. Before the scale is chosen, every node tells its parent how much room it needs as a function of the scale (in the code, an `Extent` whose sides are `Pwl.Value`). The engine composes those, solves for the scale once per scope, and only then hands pixels down. Its own placement code is written once over an abstract arithmetic (`Arith`: add, subtract, scale by a number, max) and runs first in formulas and then in numbers. A user layout meets the same two moments:
+
+| Kind of layout                                         | Example                                      | What it reads                          | Its own size                                                                                        |
+| ------------------------------------------------------ | -------------------------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Divides the room it is given                           | squarify, any tiling                         | `layout`: the space offered, in pixels | none. It takes the room it is given, as `treemap` does today and as SwiftUI's `GeometryReader` does |
+| Builds up from its children with add, subtract and max | a tidy tree by contours, anything stack-like | `measure`: the children's lengths      | falls out of what it returns, as a length, so it takes part in fitting                              |
+| Builds up from its children with other arithmetic      | circle packing, the greedy rule              | `measure`, then `.px`                  | pixels only. To take part in fitting it has to say how it scales, which is not designed here (#967) |
+
+- `measure` answers in lengths. Arithmetic that stays inside `Length` (add, subtract, scale by a number, max) keeps the result solvable, which is the same rule the engine's own code follows.
+- `.px` leaves the symbolic world. It works only for a length with no scale in it. A comparison, a product of two lengths, a square root or a division needs `.px`.
+- `layout` gives pixels, because space comes down after the scale is solved. Its body runs then, so a `layout` node cannot ask for room of its own.
+- Neither places anything. The function returns operators (`stack`, `layer`, `position`), and those do the placing. `position` takes lengths as well as numbers.
+- A function that calls `measure` needs its children's types resolved first, so it runs inside the engine and not when the spec is built. How it is registered (a lazy operator, issue #1334) is not designed here.
+- Decisions are the catch. Kennedy's mean uses only add, subtract, max and halving, so it stays symbolic. Walker's spread and the by-position `fit` compare positions, so they need pixels wherever a position depends on the scale.
 
 `layout` in use, a treemap that reads its box (the squarify plan and drawing are below, under "Squarify, as nested stacks"):
 
@@ -67,35 +85,41 @@ Today the same code types the size twice, once for the plan and once for the ren
 <!-- id: p-measure -->
 
 ```js
-// Circle packing in user space, once children can be measured.
-const packed = (children) =>
-  layout(() => {
-    const circles = children.map((c) => measure(c).enclosingCircle);
-    const at = frontChain(circles); // plain JS: d3's packSiblings, or the greedy rule
-    return layer(
-      children.map((c, i) => position({ x: at[i].x, y: at[i].y }, [c]))
-    );
-  });
+// Circle packing in user space. The packing needs real radii, so it asks
+// each length for its pixels. That is an error if a radius depends on the
+// scale, which is the error the built-in `pack` raises today.
+const packed = (children) => {
+  const circles = children.map((c) => measure(c).enclosingCircle);
+  const at = frontChain(circles.map((c) => c.r.px)); // plain JS
+  return layer(
+    children.map((c, i) => position({ x: at[i].x, y: at[i].y }, [c]))
+  );
+};
 ```
 
-Today the prototype can only pack circles whose radii are literal pixels, because user code cannot ask a child how big it came out.
+Today the prototype can only pack circles whose radii are literal pixels, because user code cannot ask a child how big it is.
 
-In Python the two functions take a function, so they go through the callback runner, as `derive` does:
+`measure` in use where the result stays symbolic, the contour fit of a tidy tree:
+
+<!-- id: p-fit-lengths -->
+
+```js
+// Kennedy's fit over lengths. It only subtracts, adds a number and takes a
+// max, so its result is still a length and the tree takes part in fitting.
+const fit = (p, q) =>
+  Length.max(
+    0,
+    ...p.slice(0, q.length).map(([, right], d) => right.sub(q[d][0]).add(GAP))
+  );
+```
+
+In Python `layout` takes a function, so it goes through the callback runner, as `derive` does. A function that calls `measure` runs inside the engine, so in Python it is a callback too:
 
 <!-- id: p-api-py -->
 
 ```python
 def squarified(items):
     return layout(lambda space: draw_squarify(squarify(items, (space.w, space.h))))
-
-
-def packed(children):
-    def body(space):
-        circles = [measure(c).enclosing_circle for c in children]
-        at = front_chain(circles)
-        return layer([position([c], x=p.x, y=p.y) for c, p in zip(children, at)])
-
-    return layout(body)
 ```
 
 (A sketch. The Python calls were not run.)
@@ -660,7 +684,7 @@ Two differences from the UI toolkits matter.
 
 **GoFish passes shapes, not only boxes.** A SwiftUI child answers a measurement with a width and height. A GoFish child answers with `geometry()`, which today has its box, its enclosing circle and its outline. `pack` and the beeswarm read the circle. `enclose` and label placement read the outline. A contour would be a fourth answer. Going down, a parent can offer a convex polygon along with the box, which is how a Voronoi cell hands its region to the tiling inside it. So `measure(child)` returns that geometry, and circle packing in user space reads `measure(child).enclosingCircle` (the sketch is at the top of this page).
 
-**GoFish has scales, and that is the hard part.** A node describes itself to its parent twice. Before layout it says how big it wants to be as a function of the scale, which is what lets a chart fit its room. That answer is one number per axis today, so it is a box. After layout it has its full geometry in pixels. `measure` reads the second. A layout that only measures works in pixels and cannot take part in fitting, which is why `pack` does not fit its room today (#967). The layout-synthesis essay names the rule any richer before-layout answer has to keep: "responses must be monotone in the proposal". The silhouette note in `notes/design/` is the start of that design. It is the real work here, more than any one algorithm.
+**GoFish has scales, and that is the hard part.** A node describes itself to its parent twice. Before the scale is chosen it says how much room it needs as a function of the scale (an `Extent` in `Pwl.Value`), which is what lets a chart fit its room. That answer is one extent per axis today, so it is a box. After layout it has its full geometry in pixels: `geometry()`, with the circle and the outline. So of the `Geometry` that `measure` is sketched to return, only the box exists in lengths today. The circle and the outline exist only in pixels, which is why `pack` reads them after layout and does not fit its room (#967). Carrying a circle, an outline or a contour in lengths is the engine work this proposal depends on. The layout-synthesis essay names the rule any such answer has to keep: "responses must be monotone in the proposal". The silhouette note in `notes/design/` is the start of that design. It is the real work here, more than any one algorithm.
 
 ## The review: every algorithm, side by side
 
