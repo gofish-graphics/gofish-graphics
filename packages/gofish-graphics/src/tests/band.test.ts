@@ -9,6 +9,7 @@ import { setGroupCell } from "../ast/groupCell";
 import { GoFishNode } from "../ast/_node";
 import { chart, group, line, ribbon, Unit, Domain, Trait } from "../lib";
 import { linear, monotone } from "../families/curve";
+import { add, constant, reparameterize, scale } from "../ast/fun";
 
 let passed = 0;
 let failed = 0;
@@ -171,6 +172,34 @@ console.log("# path: exact segments");
   ok(
     "a straight edge is drawn as lines",
     straight.every((s) => s.type === "line")
+  );
+}
+{
+  // Hourly readings in epoch milliseconds, read in pixels: each piece's end,
+  // summed from its own polynomial, meets the next piece's start only up to
+  // rounding, and a continuous curve draws no jump there.
+  const start = Date.UTC(2024, 1, 28);
+  const rows = Array.from({ length: 85 }, (_, i) => ({
+    x: start + i * 36e5,
+    h:
+      Math.round(
+        (4 -
+          5 * Math.cos(((i - 3) / 24) * 2 * Math.PI) +
+          0.4 * Math.sin(i * 1.7)) *
+          10
+      ) / 10,
+  }));
+  const { edges } = bandOfRows("line", rows, x, y, monotone(), undefined);
+  // As layout reads it: the parameter in local pixels, then the values
+  // through the scale.
+  const sigma = 480 / (84 * 36e5);
+  const along = reparameterize(edges.upper, sigma, -sigma * start);
+  const px = add(scale(along, -20), constant(122.6667, along.domain));
+  const path = edgePath(px, (u, v) => [u, v]);
+  ok(
+    "a continuous curve in large units draws no jump at its knots",
+    path.length === 84 && path.every((s) => s.type === "bezier"),
+    JSON.stringify(path.filter((s) => s.type === "line"))
   );
 }
 

@@ -19,6 +19,7 @@
  */
 import { identity, opaque, type Fun } from "./fun";
 import type { Quantity } from "./measure";
+import { DistExpr } from "./distExpr";
 import {
   evalGroup,
   holdsClosureStep,
@@ -178,10 +179,14 @@ export function groupFun(
 }
 
 /** Whether `v` has no wire form: a JS closure, or an expression that holds
- *  one (a function value, a JS map or reduce). The emitter drops such a
- *  value as it drops an accessor (`wireFields` in serialize/toJSON.ts). */
+ *  one (a function value, a JS map or reduce, a distribution with such a
+ *  parameter). The emitter drops such a value as it drops an accessor
+ *  (`wireFields` in serialize/toJSON.ts). */
 export const hasNoWireForm = (v: unknown): boolean =>
-  typeof v === "function" || isFunValue(v) || holdsClosureStep(v);
+  typeof v === "function" ||
+  isFunValue(v) ||
+  holdsClosureStep(v) ||
+  (v instanceof DistExpr && Object.values(v.params).some(hasNoWireForm));
 
 /** The error for a function value in a channel of a mark that does not draw
  *  along a path. */

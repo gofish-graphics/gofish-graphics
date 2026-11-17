@@ -29,7 +29,6 @@ import {
   curve as bezierCurve,
   mapPathPoints,
   reversePath,
-  samePoint,
   segment,
   transformPath,
   type Path,
@@ -146,6 +145,19 @@ const overUnit = (p: Piece<number>): number[] => {
   return shiftPoly(p.coeffs, p.from - p.at0).map((d, k) => d * h ** k);
 };
 
+/** Whether a piece's end, read from its own polynomial, is the point the
+ *  next piece starts at. The two are computed by different sums, so they
+ *  agree only up to rounding, and the rounding grows with the size of the
+ *  numbers: a few units in the last place of the larger coordinate. A
+ *  step's jump is far larger than that. */
+const meets = (p: Point, q: Point): boolean => {
+  const tolerance =
+    1e-9 * Math.max(1, Math.abs(p[0]), Math.abs(p[1]), Math.abs(q[1]));
+  return (
+    Math.abs(p[0] - q[0]) <= tolerance && Math.abs(p[1] - q[1]) <= tolerance
+  );
+};
+
 /**
  * The path an exact edge draws, through `point(u, v)`: a line for each
  * piece of degree 0 or 1, a cubic Bézier for each piece of degree 2 or 3,
@@ -160,7 +172,7 @@ export function edgePath(
   const out: Path = [];
   let at: Point | undefined;
   const jumpTo = (p: Point) => {
-    if (at !== undefined && !samePoint(at, p)) out.push(segment(at, p));
+    if (at !== undefined && !meets(at, p)) out.push(segment(at, p));
     at = p;
   };
   for (const p of f.pieces) {

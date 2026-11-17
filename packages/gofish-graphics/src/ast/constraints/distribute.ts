@@ -49,6 +49,7 @@ import {
   scale,
   subtract,
   upperEnvelope,
+  restrict,
   zip,
   type Fun,
 } from "../fun";
@@ -746,10 +747,14 @@ export function wiggleZero(
   const slope = isConstant(total)
     ? scale(weighted, reciprocalOf(total))
     : zip(weighted, total, (n, d) => (d === 0 ? 0 : n / d), [0, 0]);
-  const first = [...middles, ...thicknesses]
+  const ends = [...middles, ...thicknesses]
     .flatMap(breakpoints)
     .filter(Number.isFinite);
-  return antiderivative(slope, first.length > 0 ? Math.min(...first) : 0);
+  if (ends.length === 0) return antiderivative(slope, 0);
+  // A box is one interval over the whole line, so the zero is drawn over
+  // the parts' finite ends, where the bands are.
+  const over = { min: Math.min(...ends), max: Math.max(...ends) };
+  return antiderivative(restrict(slope, over), over.min);
 }
 
 /** The whole line. */

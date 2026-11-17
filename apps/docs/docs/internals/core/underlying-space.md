@@ -2826,8 +2826,9 @@ below the least value to 3 above the greatest (`SAMPLE_CUT`, seaborn's
 `cut=3`), with area the row count less the kernels' tails past that, at most
 Φ(−3) ≈ 0.135% of a value's kernel at each end; its quantile is the values'
 type-7 quantile, so its median is `median()`'s, and its cdf is the inverse
-of that quantile, 0 over the tail below the least value and 1 over the tail
-above the greatest. A family,
+of that quantile, linear between the values and jumping at a tied value
+(the quantile is flat across its copies), 0 over the tail below the least
+value and 1 over the tail above the greatest. A family,
 `Dist.normal({ mean, sd })`, is its own expression (`DistExpr` in
 `distExpr.ts`, wire `{ type: "dist", family, params, ops }`): `evalGroup`
 reads its parameters over the group's rows (`distOf`), makes the family's
@@ -2841,7 +2842,9 @@ interval, and the whole rows. `splitEntries` writes it for a field binned on
 the line and for a family binned with `d.bin(p)` (`distEntries`, whose cells
 are `distributionCells` over the density's interval, each holding every
 row). Three leaves read it, and only when their variable is the cell's: a
-family's `distOf` restricts the whole group's `Dist` (`restrictDist`), the
+family's `distOf` restricts the whole group's `Dist` (`restrictDist`; a
+family is drawn from its 0.001 to its 0.999 quantile, so a cell at an end
+of that interval also holds the tail past it), the
 `sample` fold restricts the whole rows' sample (`sampleIn`; the cells of a
 column cover its values, so a cell that reaches the least or the greatest
 value also holds the density's tail past it, and the cells partition the

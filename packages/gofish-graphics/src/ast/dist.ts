@@ -38,6 +38,7 @@
 import { quantileSorted } from "d3-array";
 import { Frontend } from "gofish-ir";
 import {
+  add,
   constant,
   identity,
   integrate,
@@ -339,31 +340,47 @@ function sampleOver(
       throw new Error(`quantile: p must be in [0, 1], got ${p}.`);
     return n === 0 ? undefined : quantileSorted(sorted as number[], p);
   };
-  // The cdf at each distinct value: the share whose type-7 quantile is the
-  // last copy of it, i / (n − 1). One value has all of the mass.
+  // The type-7 quantile is the ith value at the share i / (n − 1), linear
+  // between, and flat across the copies of a tied value. So its inverse,
+  // the cdf, runs linearly from each value's last copy to the next value's
+  // first, and jumps at a tie from its first copy's share to its last
+  // copy's. One value has all of the mass: the cdf jumps from 0 to 1 there.
+  // The cdf is drawn as a continuous line plus a step that holds the
+  // jumps, each over one knot per distinct value.
   const knots: number[] = [];
-  const shares: number[] = [];
+  const first: number[] = [];
+  const last: number[] = [];
   sorted.forEach((x, i) => {
     const share = n === 1 ? 1 : i / (n - 1);
     if (knots.length > 0 && knots[knots.length - 1] === x)
-      shares[shares.length - 1] = share;
+      last[last.length - 1] = share;
     else {
       knots.push(x);
-      shares.push(share);
+      first.push(n === 1 ? 0 : share);
+      last.push(share);
     }
   });
   if (knots.length === 0 || knots[0] > domain.min) {
     knots.unshift(domain.min);
-    shares.unshift(0);
+    first.unshift(0);
+    last.unshift(0);
   }
   if (knots[knots.length - 1] < domain.max) {
     knots.push(domain.max);
-    shares.push(1);
+    first.push(1);
+    last.push(1);
   }
+  // The jumps up to and at each knot, and the line the cdf is less them.
+  const jumps: number[] = [];
+  last.forEach((l, j) => jumps.push((jumps[j - 1] ?? 0) + l - first[j]));
+  const line = last.map((l, j) => l - jumps[j]);
   const cdf =
     knots.length === 1
-      ? constant(shares[0], domain)
-      : through(knots, shares, { kind: "linear" });
+      ? constant(last[0], domain)
+      : add(
+          through(knots, line, { kind: "linear" }),
+          through(knots, jumps, { kind: "step" })
+        );
   return {
     density,
     cdf,
@@ -488,13 +505,20 @@ function meet(domain: Interval, cell: Interval): Interval {
  */
 export function restrictDist(d: Dist, cell: Interval): Dist {
   const domain = meet(d.support.domain, cell);
-  const below = d.cdf.at(domain.min);
-  const w = d.cdf.at(domain.max) - below;
+  // A family is drawn over less than its support (from its 0.001 to its
+  // 0.999 quantile), so a cell at an end of the drawn interval holds the
+  // tail past it too: the cells share all of the mass, as a sample's do
+  // (`sampleIn`).
+  const support = d.support.domain;
+  const below = domain.min <= support.min ? 0 : d.cdf.at(domain.min);
+  const w = (domain.max >= support.max ? 1 : d.cdf.at(domain.max)) - below;
   const density = restrict(d.density, domain);
   const quantile = (p: number) => {
     if (!(p >= 0 && p <= 1))
       throw new Error(`quantile: p must be in [0, 1], got ${p}.`);
-    return w > 0 ? d.quantile(below + p * w) : domain.min;
+    if (!(w > 0)) return domain.min;
+    const q = d.quantile(below + p * w)!;
+    return Math.min(domain.max, Math.max(domain.min, q));
   };
   const area = integrate(density);
   return {

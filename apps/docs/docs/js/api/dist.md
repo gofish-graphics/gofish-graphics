@@ -97,7 +97,8 @@ interval the density is drawn over. `Bin.quantiles(n)` cuts at the
 distribution's own quantiles, so each cell holds `1 / n` of the mass. In a
 cell, every member is the distribution restricted to the cell: the density
 and the support run over the cell, `d.mass()` is the cell's share of the
-mass, and `d.median()` is the median of the mass in the cell. A member of a
+mass (a cell at an end of the interval also holds the tail past it), and
+`d.median()` is the median of the mass in the cell. A member of a
 distribution, such as `d.density().bin(p)`, is not binned, and is an error.
 
 ```ts
@@ -109,10 +110,10 @@ partition({ by: d.bin(Bin.quantiles(5)), dir: "x" });
 
 The distribution of a sample of values, as R's distributional package holds
 one (`dist_sample`). Its quantiles, median and mean are the values' own
-(type-7 quantiles, as `field(x).median()`), and its cdf is the share of the
-values at or below `t`, so it is 0 below the least value and 1 above the
-greatest. Its density is a normal kernel density with area the number of
-values, drawn from 3 bandwidths below the least value to 3 above the
+(type-7 quantiles, as `field(x).median()`), and its cdf is the inverse of
+its quantile: linear between the values, with a jump at a tied value, 0
+below the least value and 1 above the greatest. Its density is a normal
+kernel density with area the number of values, drawn from 3 bandwidths below the least value to 3 above the
 greatest, as seaborn's `cut=3` draws it. Past 3 bandwidths a kernel has
 0.135% of its mass, so the area over the drawn interval is the number of
 values less at most that share at each end. `bandwidth` is the kernel's

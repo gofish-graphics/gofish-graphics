@@ -95,7 +95,8 @@ interval the density is drawn over. `Bin.quantiles(n)` cuts at the
 distribution's own quantiles, so each cell holds `1 / n` of the mass. In a
 cell, every member is the distribution restricted to the cell: the density
 and the support run over the cell, `d.mass()` is the cell's share of the
-mass, and `d.median()` is the median of the mass in the cell. A member of a
+mass (a cell at an end of the interval also holds the tail past it), and
+`d.median()` is the median of the mass in the cell. A member of a
 distribution, such as `d.density().bin(p)`, is not binned, and raises a
 `ValueError`.
 

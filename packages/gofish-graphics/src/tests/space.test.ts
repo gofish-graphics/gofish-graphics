@@ -1144,6 +1144,24 @@ console.log("# space: a wiggle stack's 0");
       ).at(0)
     ) === JSON.stringify({ ascent: 5, descent: 0 })
   );
+  // A box is one interval over the whole line; beside a band of changing
+  // thickness the wiggle zero is drawn over the band's interval, so the
+  // fold reads, and the layer names the box as a part it cannot move.
+  const boxAndBand = chainFold(
+    [
+      F.constant({ ascent: 3, descent: 0 }),
+      F.record({
+        ascent: F.through([0, 1, 2], [1, 3, 2], { kind: "linear" }),
+        descent: F.constant(0, { min: 0, max: 2 }),
+      }),
+    ],
+    { kind: "wiggle" }
+  ).at(1);
+  ok(
+    "a wiggle over a box and a band of changing thickness is read",
+    Number.isFinite(boxAndBand.ascent) && Number.isFinite(boxAndBand.descent),
+    JSON.stringify(boxAndBand)
+  );
   const middled = chainFold(
     [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
     { kind: "middle" }

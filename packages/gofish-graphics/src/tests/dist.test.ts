@@ -17,6 +17,7 @@ import {
 } from "../ast/dist";
 import { evalGroup, FieldExpr, medianOf, meanOf } from "../ast/fieldExpr";
 import { integrate } from "../ast/fun";
+import { hasNoWireForm } from "../ast/groupExpr";
 import * as DistNS from "../families/dist";
 import * as BinNS from "../families/bin";
 import { splitEntries } from "../ast/datumProjection";
@@ -163,6 +164,21 @@ const masses = penguins
       `with no ties its cdf inverts its quantile at ${p}`,
       near(distinct.cdf.at(distinct.quantile(p)!), p, 1e-12)
     );
+  // A tie is a jump: the quantile is flat across its copies, so the cdf
+  // runs from one value's last copy to the next value's first and jumps
+  // between a tie's first copy and its last.
+  const tied = sample([1, 2, 2, 3]);
+  check(
+    "with a tie its cdf is linear between values and jumps at the tie",
+    near(tied.cdf.at(1.5), 1 / 6, 1e-12) &&
+      near(tied.cdf.at(2), 2 / 3, 1e-12) &&
+      near(tied.cdf.at(2.5), 5 / 6, 1e-12)
+  );
+  const tiedLeast = sample([1, 1, 2, 3]);
+  check(
+    "with a tie at the least value its cdf is 0 below it and jumps there",
+    tiedLeast.cdf.at(0.99) === 0 && near(tiedLeast.cdf.at(1), 1 / 3, 1e-12)
+  );
   check(
     "missing values are left out",
     sample([1, null, 3, undefined, 2]).mass === 3
@@ -542,6 +558,42 @@ console.log("\n# a field's cells");
   check(
     "a distribution of another column is the cell rows' own",
     near(other.fun.at(200), own.fun.at(200), 1e-9)
+  );
+}
+
+{
+  // A family is drawn from its 0.001 to its 0.999 quantile; the cells at
+  // the ends of that interval hold the tails past it, so the quintiles of
+  // a normal hold a fifth of its mass each.
+  const d = familyDist("normal", { mean: 0, sd: 1 });
+  const { min, max } = d.support.domain;
+  const edges = [min, ...[0.2, 0.4, 0.6, 0.8].map(d.quantile), max];
+  const cells = edges
+    .slice(0, -1)
+    .map((lo, i) => restrictDist(d, { min: lo, max: edges[i + 1] }));
+  check(
+    "a family's quantile cells each hold their share, the tails included",
+    cells.every((c) => near(c.mass, 0.2, 1e-9)),
+    JSON.stringify(cells.map((c) => c.mass))
+  );
+  check(
+    "an end cell's median is the family's quantile at the middle of its share",
+    near(cells[0].median!, d.quantile(0.1), 1e-9) &&
+      cells[0].quantile(0) === min
+  );
+}
+{
+  // A distribution whose parameter is a JS reduce has no wire form, as the
+  // reduce alone has none: the emitter drops it rather than write the
+  // reduce without its function.
+  const closure = DistNS.normal({
+    mean: new FieldExpr("t").reduce((xs: number[]) => xs[0]),
+    sd: 1,
+  });
+  const named = DistNS.normal({ mean: new FieldExpr("t").mean(), sd: 1 });
+  check(
+    "a distribution with a JS reduce parameter has no wire form",
+    hasNoWireForm(closure.density()) && !hasNoWireForm(named.density())
   );
 }
 
