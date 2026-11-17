@@ -203,7 +203,7 @@ export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";
 export * as Curve from "./families/curve";
 export { tile } from "./ast/graphicalOperators/tile";
-export * as Tile from "./families/tile";
+export * as Tiling from "./families/tiling";
 export type { TileOptions } from "./ast/graphicalOperators/tile";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";

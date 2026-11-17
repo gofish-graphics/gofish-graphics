@@ -77,7 +77,7 @@ from . import filter_ as Filter
 from . import overlap as Overlap
 from . import place as Place
 from . import shape as Shape
-from . import tile_ as Tile
+from . import tiling as Tiling
 from . import trait as Trait
 
 __all__ = [
@@ -152,7 +152,7 @@ __all__ = [
     "Overlap",
     "Place",
     "Shape",
-    "Tile",
+    "Tiling",
 ]
 
 __version__ = "0.1.0"

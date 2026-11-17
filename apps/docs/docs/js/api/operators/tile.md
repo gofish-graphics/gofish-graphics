@@ -5,7 +5,7 @@ order: 60
 
 # tile
 
-Lays out children into a treemap: a 2D tiling of rectangles, or of convex polygons with `Tile.voronoi`, whose **areas are proportional to a weight**.
+Lays out children into a treemap: a 2D tiling of rectangles, or of convex polygons with `Tiling.voronoi`, whose **areas are proportional to a weight**.
 
 :::: gofish
 
@@ -69,27 +69,27 @@ tile(options, children); // combinator form
 
 ## Strategies
 
-The `tile` option holds the tiling strategy, a member of the `Tile` family. You make a
+The `method` option holds the tiling strategy, a member of the `Tiling` family. You make a
 strategy with a function call. A strategy with no required option is also a
-value as it is: `Tile.voronoi` is `Tile.voronoi()`. The family is also the
-module `gofish-graphics/tile`, so
-`import { squarify } from "gofish-graphics/tile"` gives the same function as
-`Tile.squarify`.
+value as it is: `Tiling.voronoi` is `Tiling.voronoi()`. The family is also the
+module `gofish-graphics/tiling`, so
+`import { squarify } from "gofish-graphics/tiling"` gives the same function as
+`Tiling.squarify`.
 
 The first four are tiling methods from d3-hierarchy. They tile a rectangle,
 so they need a rectangular region: inside a Voronoi cell or the oval of an
-[`enclose`](./enclose.md), they are an error that names `Tile.voronoi`.
+[`enclose`](./enclose.md), they are an error that names `Tiling.voronoi`.
 
-- `Tile.squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
+- `Tiling.squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
   `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
   and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
-  d3's default, the golden ratio. `Tile.squarify({ ratio: 1 })` aims for square
+  d3's default, the golden ratio. `Tiling.squarify({ ratio: 1 })` aims for square
   tiles, which suits one circle per leaf.
-- `Tile.slice()` puts the tiles in one column, stacked along y.
-- `Tile.dice()` puts the tiles in one row, side by side along x.
-- `Tile.binary()` splits the tiles into two halves of about equal weight, and
+- `Tiling.slice()` puts the tiles in one column, stacked along y.
+- `Tiling.dice()` puts the tiles in one row, side by side along x.
+- `Tiling.binary()` splits the tiles into two halves of about equal weight, and
   repeats on each half.
-- `Tile.voronoi({ seed? })` cuts the region into convex cells with rounded,
+- `Tiling.voronoi({ seed? })` cuts the region into convex cells with rounded,
   irregular shapes, by a weighted Voronoi diagram (Nocaj and Brandes 2012).
   It tiles any convex region, so a Voronoi level can sit inside a Voronoi
   cell, inside a rectangle of a squarified level, or inside the oval of an
@@ -102,7 +102,7 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
 gf.tile({
   by: "genre",
   size: "gross",
-  tile: gf.Tile.squarify({ ratio: 1 }),
+  method: gf.Tiling.squarify({ ratio: 1 }),
 });
 ```
 
@@ -114,14 +114,14 @@ draws the cell it is in. `spacing` is the gap between sibling cells, and
 ::: gofish example:voronoi-treemap
 :::
 
-The classic slice-and-dice treemap alternates `Tile.slice` and `Tile.dice` by
+The classic slice-and-dice treemap alternates `Tiling.slice` and `Tiling.dice` by
 level, one flow step each:
 
 ```js
 chart(countryPopulations)
   .flow(
-    tile({ by: "continent", size: "pop", tile: Tile.slice }),
-    tile({ by: "region", size: "pop", tile: Tile.dice })
+    tile({ by: "continent", size: "pop", method: Tiling.slice }),
+    tile({ by: "region", size: "pop", method: Tiling.dice })
   )
   .mark(rect({ fill: "continent" }));
 ```

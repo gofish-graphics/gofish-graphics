@@ -64,7 +64,7 @@ class instance. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
 `tile`, `pack`, `derive`, `resolve`, and `join` (`tile` takes a tiling
-strategy object such as `Tile.squarify()` as its `tile`, never a string, and
+strategy object such as `Tiling.squarify()` as its `method`, never a string, and
 `scatter` takes an overlap strategy such as `Overlap.separate()` or
 `Overlap.jitter()` the same way; `resolve` dereferences reference columns into
 drawn node refs, driving the ribbon / node-link / labeling patterns via
@@ -78,7 +78,7 @@ or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
 array of `ref(...)` children. The shape of the drawn path is a single `curve`
 key, backed by the internal router registry in
 `ast/graphicalOperators/routers`, which `lib.ts` does not export: the curve
-family is closed, like `Tile` and `Overlap` (user-defined strategies are
+family is closed, like `Tiling` and `Overlap` (user-defined strategies are
 designed in #1101). Every curve is a member of the `Curve` family:
 `Curve.linear`, `Curve.bezier`, `Curve.orthogonal`, `Curve.arc`,
 `Curve.perfectArrows`, and the curves that thread a whole run,
@@ -132,7 +132,7 @@ it a strategy family.
 
 An option whose value is one choice from a set of named strategies, at least
 one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
-(`scatter`'s `overlap`), `Tile` (`tile`'s `tile`), `Curve` (the `curve` of
+(`scatter`'s `overlap`), `Tiling` (`tile`'s `method`), `Curve` (the `curve` of
 `line`, `ribbon`, `time.transition` and `Animation.tween`, and
 `interpolate`'s `method`), `Bin` (the cells of `field(x).bin(...)` and
 `struct({ x, y }).bin(...)`), `Calendar` (the cells of a time column's

@@ -754,13 +754,13 @@ order. Three parents make one, and two nodes read it:
   still go through the data position above; only the outline goes through
   the shape.
 - A `tile` hands each child its cell: a box for a rectangular tiling
-  (`boxRing`), a convex polygon for `Tile.voronoi`
+  (`boxRing`), a convex polygon for `Tiling.voronoi`
   (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
   clipped half-plane by half-plane with `clipToHalfPlane`. Each round
   moves every site to its cell's centroid, then fits the weights with a
   damped Newton step, until each cell's area is within 2% of its share
   and the sites have settled). Every
-  `Tile` strategy is one function, a `Tiling` in `tile.tsx`, from the
+  `Tiling` strategy is one function, a `TilingFn` in `tile.tsx`, from the
   region and the weights to one ring per child, so the `tile` has one
   placement loop. The child's size is the ring's box, and the ring is
   shifted into it (`inItsBox`). On an axis where the child fills its room
@@ -769,7 +769,7 @@ order. Three parents make one, and two nodes read it:
   convex cell, where a polygon's box center may not be. A ring with no area
   (`hasArea`: a tile rounded to no width, a cell its `spacing` ate, or a
   Voronoi region with no area, whose cells are all empty) gets a child laid
-  out at size zero with no shape, at the cell's center. `Tile.voronoi`
+  out at size zero with no shape, at the cell's center. `Tiling.voronoi`
   checks that its region is convex whatever the padding, and does not
   `round` its cells. The `tile`'s own box is always the region it was
   given, `[0, w] × [0, h]`, so its `padding` stays inside it.

@@ -6,7 +6,7 @@ order: 60
 # tile
 
 Lays children out into a treemap: a 2D tiling of rectangles, or of convex
-polygons with `Tile.voronoi`, whose **areas are proportional to a weight**.
+polygons with `Tiling.voronoi`, whose **areas are proportional to a weight**.
 
 `tile` has two forms:
 
@@ -58,28 +58,27 @@ tile(children, **options) -> Mark
 
 ## Strategies
 
-The `tile` option holds the tiling strategy, a member of the `Tile` family. You make a
+The `method` option holds the tiling strategy, a member of the `Tiling` family. You make a
 strategy with a function call. A strategy with no required option is also a
-value as it is: `Tile.voronoi` is `Tile.voronoi()`. On the wire a strategy is
+value as it is: `Tiling.voronoi` is `Tiling.voronoi()`. On the wire a strategy is
 a plain object, such as `{"kind": "squarify", "ratio": 1}`. The family is also
-the module `gofish.tile_`, so `from gofish.tile_ import squarify` gives the same
-function as `Tile.squarify`. The module name ends in an underscore because
-`gofish.tile` is the `tile` operator.
+the module `gofish.tiling`, so `from gofish.tiling import squarify` gives the
+same function as `Tiling.squarify`.
 
 The first four are tiling methods from d3-hierarchy. They tile a rectangle,
 so they need a rectangular region: inside a Voronoi cell or the oval of an
-[`enclose`](./enclose.md), they are an error that names `Tile.voronoi`.
+[`enclose`](./enclose.md), they are an error that names `Tiling.voronoi`.
 
-- `Tile.squarify(ratio=None)` makes tiles as close as it can to the aspect ratio
+- `Tiling.squarify(ratio=None)` makes tiles as close as it can to the aspect ratio
   `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
   and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
-  d3's default, the golden ratio. `Tile.squarify(ratio=1)` aims for square tiles,
+  d3's default, the golden ratio. `Tiling.squarify(ratio=1)` aims for square tiles,
   which suits one circle per leaf.
-- `Tile.slice()` puts the tiles in one column, stacked along y.
-- `Tile.dice()` puts the tiles in one row, side by side along x.
-- `Tile.binary()` splits the tiles into two halves of about equal weight, and
+- `Tiling.slice()` puts the tiles in one column, stacked along y.
+- `Tiling.dice()` puts the tiles in one row, side by side along x.
+- `Tiling.binary()` splits the tiles into two halves of about equal weight, and
   repeats on each half.
-- `Tile.voronoi(seed=None)` cuts the region into convex cells with rounded,
+- `Tiling.voronoi(seed=None)` cuts the region into convex cells with rounded,
   irregular shapes, by a weighted Voronoi diagram (Nocaj and Brandes 2012).
   It tiles any convex region, so a Voronoi level can sit inside a Voronoi
   cell, inside a rectangle of a squarified level, or inside the oval of an
@@ -89,9 +88,9 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
   between them.
 
 ```python
-from gofish import tile, Tile
+from gofish import tile, Tiling
 
-tile(by="genre", size="gross", tile=Tile.squarify(ratio=1))
+tile(by="genre", size="gross", method=Tiling.squarify(ratio=1))
 ```
 
 Each `tile` in a flow is one level, and each level can use its own
@@ -104,23 +103,23 @@ edge, under every tiling.
 :::
 
 ```python
-from gofish import Shape, Tile, chart, enclose, region, tile
+from gofish import Shape, Tiling, chart, enclose, region, tile
 
 chart(country_populations, axes=False, w=480, h=480).flow(
     enclose(shape=Shape.oval, fill="none"),
-    tile(by="continent", size="pop", spacing=5, tile=Tile.voronoi),
-    tile(by="region", size="pop", spacing=2.5, tile=Tile.voronoi),
-    tile(size="pop", spacing=1, tile=Tile.voronoi),
+    tile(by="continent", size="pop", spacing=5, method=Tiling.voronoi),
+    tile(by="region", size="pop", spacing=2.5, method=Tiling.voronoi),
+    tile(size="pop", spacing=1, method=Tiling.voronoi),
 ).mark(region(fill="continent"))
 ```
 
-The classic slice-and-dice treemap alternates `Tile.slice` and `Tile.dice` by
+The classic slice-and-dice treemap alternates `Tiling.slice` and `Tiling.dice` by
 level, one flow step each:
 
 ```python
 chart(country_populations).flow(
-    tile(by="continent", size="pop", tile=Tile.slice),
-    tile(by="region", size="pop", tile=Tile.dice),
+    tile(by="continent", size="pop", method=Tiling.slice),
+    tile(by="region", size="pop", method=Tiling.dice),
 ).mark(rect(fill="continent"))
 ```
 

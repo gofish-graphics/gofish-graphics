@@ -30,7 +30,7 @@
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
  *    nested option dict (`axes={"x": {"label": {"angle": 45}}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
- *  - The strategy family modules, `gofish/<family>.py` (`tile_.py`,
+ *  - The strategy family modules, `gofish/<family>.py` (`tiling.py`,
  *    `overlap.py`, `curve.py`, `bin.py`, `calendar.py`), one factory per kind
  *    and per preset of the STRATEGIES table. Each builds
  *    `{"kind": ..., **params}` with snake_case keys, which `_to_wire` renames
@@ -149,7 +149,7 @@ function acceptsDict(type: FieldType): boolean {
 
 /** The field that tells the branches of a tagged union apart: a dict value's
  *  `kind` names the branch it means. It is the convention the strategy
- *  objects (`tile`'s `tile`, scatter `overlap`) already follow. */
+ *  objects (`tile`'s `method`, scatter `overlap`) already follow. */
 const DISCRIMINATOR = "kind";
 
 /** The `kind` values that select an object branch of a tagged union, or null

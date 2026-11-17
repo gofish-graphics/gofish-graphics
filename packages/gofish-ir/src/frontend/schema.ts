@@ -493,7 +493,7 @@ export interface TileOperator
   padding?: number;
   round?: boolean;
   /** The tiling strategy. Default `{ kind: "squarify" }`. */
-  tile?: TileIR;
+  method?: TilingIR;
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
@@ -575,10 +575,10 @@ export interface PartitionOperator
 // type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
 // these kinds and params agree with the table.
 
-/** How `tile` tiles its region, made by a call in the `Tile` family
- *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
- *  `Tile.voronoi()`). */
-export type TileIR =
+/** How `tile` tiles its region, made by a call in the `Tiling` family
+ *  (`Tiling.squarify()`, `Tiling.slice()`, `Tiling.dice()`, `Tiling.binary()`,
+ *  `Tiling.voronoi()`). */
+export type TilingIR =
   | { kind: "squarify"; ratio?: number }
   | { kind: "slice" }
   | { kind: "dice" }

@@ -55,9 +55,9 @@
       "types": "./dist/families/shape.d.ts",
       "import": "./dist/shape.js"
     },
-    "./tile": {
-      "types": "./dist/families/tile.d.ts",
-      "import": "./dist/tile.js"
+    "./tiling": {
+      "types": "./dist/families/tiling.d.ts",
+      "import": "./dist/tiling.js"
     },
     "./trait": {
       "types": "./dist/families/trait.d.ts",

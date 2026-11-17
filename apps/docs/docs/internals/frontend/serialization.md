@@ -169,9 +169,9 @@ There is no inline form: a chart with rows has a table, by one rule
 wherever it sits, so a nested chart's rows cross as Arrow too, with their
 column types (#1088). Operators are a flat list (`derive`, `resolve`,
 `join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `tile`,
-`pack`). `tile`'s `tile` is a strategy object made by a call in the `Tile`
-family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
-`Tile.binary()`, `Tile.voronoi({ seed })` in both languages). Every strategy has
+`pack`). `tile`'s `method` is a strategy object made by a call in the `Tiling`
+family (`Tiling.squarify({ ratio })`, `Tiling.slice()`, `Tiling.dice()`,
+`Tiling.binary()`, `Tiling.voronoi({ seed })` in both languages). Every strategy has
 one shape, `{ kind, ...params }`, which is both the JS value and the wire
 form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
 dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
@@ -616,12 +616,12 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape` and `Place`. For each it lists the kinds, each with its
+`Tiling`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape` and `Place`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
-so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")`,
+so the strategy options are `t.ref("Tiling")`, `t.ref("Overlap")`,
 `t.ref("Curve")`, `t.ref("Shape")` and `t.ref("Place")`. A kind may take a param by position
 (`positional: "size"`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
@@ -712,7 +712,7 @@ two surfaces but not in this table: a coordinate transform is a JS object of
 functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
 
-`schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
+`schema.ts` keeps the TypeScript types of the strategies, `TilingIR`,
 `OverlapIR`, `CurveIR`, `BinIR`, `CalendarPartitionIR`, `ShapeIR` and `PlaceIR`, by hand, and each family's JS type is one of them
 (`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR`). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
@@ -737,9 +737,9 @@ payload collects its callbacks too). One function, `pyType` in
 signatures (the strategy modules' too) annotate with it and the Python docs
 tables print it, so the two agree. A ref prints as its `pyClass` when it has
 one, else as the Python type it stands for (`AxesOptions` is `bool | dict`).
-A strategy family's entry names its Python namespace (`pyFamily`: `Tile`,
+A strategy family's entry names its Python namespace (`pyFamily`: `Tiling`,
 `Overlap`, `Curve`): the docs print that name, since users write
-`Tile.squarify(...)`, and a signature annotates the value it makes (`dict`),
+`Tiling.squarify(...)`, and a signature annotates the value it makes (`dict`),
 since a namespace is not a type.
 
 **What's still authored, not in the table**: the envelope
@@ -900,7 +900,7 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
 first) and emits `gofish/_generated.py` and the family modules
-`gofish/tile_.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
+`gofish/tiling.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
 and `gofish/calendar.py` (from `STRATEGIES`) and `gofish/coord.py` (from
 `COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
@@ -957,7 +957,7 @@ honest. A union may have only one branch that a dict could match (a channel
 branch does not count, for the reason just given), or generation fails,
 since `_to_wire` would have to guess. The one exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
-`kind` value (a strategy family: `tile`'s `tile`, `{kind: "squarify",
+`kind` value (a strategy family: `tile`'s `method`, `{kind: "squarify",
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
@@ -990,15 +990,14 @@ It emits:
   `enclose(clearance=-1)` raises `ValueError`, as JS's
   `enclose({ clearance: -1 })` throws at render. Every generated function
   does this, the cores and the leaf and combinator-only factories.
-- One module per **strategy family** in `STRATEGIES` (`gofish/tile_.py`,
+- One module per **strategy family** in `STRATEGIES` (`gofish/tiling.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`
-  under the family name (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
+  under the family name (`Tiling`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
   `Filter`): one factory per kind and per preset, named by `pyKwarg`
   (`Curve.catmull_rom`, `Overlap.separate`). A module whose name is an
   operator's gets a trailing underscore, as a keyword kwarg does: `gofish.filter`
-  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`, and
-  `gofish.tile` is the `tile` operator, so the `Tile` family is `gofish/tile_.py`.
+  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the

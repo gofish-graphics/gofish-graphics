@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * The Voronoi tiling of `Tile.voronoi` (#1222): one level of a Voronoi
+ * The Voronoi tiling of `Tiling.voronoi` (#1222): one level of a Voronoi
  * treemap. It cuts a convex region into one convex cell per value, each with
  * an area proportional to its value.
  *

@@ -9,7 +9,7 @@ import pytest
 import gofish
 
 from ._ir import ir
-from gofish import Bin, Calendar, Coord, Curve, Overlap, Place, Tile, field, line, ribbon, scatter, chart, circle, select_all
+from gofish import Bin, Calendar, Coord, Curve, Overlap, Place, Tiling, field, line, ribbon, scatter, chart, circle, select_all
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -32,7 +32,7 @@ FAMILIES = {
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Place": ("place", ["around", "along", "start", "end", "interior"]),
-    "Tile": ("tile_", ["squarify", "slice", "dice", "binary", "voronoi"]),
+    "Tiling": ("tiling", ["squarify", "slice", "dice", "binary", "voronoi"]),
     "Bin": ("bin", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
     "Calendar": (
         "calendar",
@@ -114,7 +114,7 @@ def test_curves_are_calls_on_the_wire():
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families and Coord is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
-    for module_name in ("tile_", "overlap", "curve", "bin", "calendar", "place", "coord"):
+    for module_name in ("tiling", "overlap", "curve", "bin", "calendar", "place", "coord"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")
@@ -124,8 +124,8 @@ def test_strategy_modules_are_generated():
 # STRATEGIES table: ValueError for a value of the right Python type that is out
 # of range, TypeError for a wrong type or an unknown kwarg.
 BAD_VALUES = [
-    (lambda: Tile.squarify(ratio=0.5), "Tile.squarify(ratio=...) must be >= 1, got 0.5"),
-    (lambda: Tile.squarify(ratio=float("nan")), "must not be NaN"),
+    (lambda: Tiling.squarify(ratio=0.5), "Tiling.squarify(ratio=...) must be >= 1, got 0.5"),
+    (lambda: Tiling.squarify(ratio=float("nan")), "must not be NaN"),
     (lambda: Overlap.separate(padding=-1), "Overlap.separate(padding=...) must be >= 0, got -1"),
     (lambda: Overlap.separate(padding=math.inf), "must be finite, got inf"),
     (lambda: Overlap.noise(randomness="pink"), "Overlap.noise(randomness=...) must be one of"),
@@ -154,7 +154,7 @@ BAD_VALUES = [
 ]
 
 WRONG_TYPES = [
-    (lambda: Tile.squarify(ratio="2"), "Tile.squarify(ratio=...) must be a number >= 1, got str"),
+    (lambda: Tiling.squarify(ratio="2"), "Tiling.squarify(ratio=...) must be a number >= 1, got str"),
     (lambda: Overlap.separate(padding=True), "got bool"),
     (lambda: Overlap.noise(seed="1"), "Overlap.noise(seed=...) must be a finite number, got str"),
     (lambda: Overlap.noise(smoothing=[1]), "got list"),
@@ -174,7 +174,7 @@ WRONG_TYPES = [
 ]
 
 UNKNOWN_KWARGS = [
-    lambda: Tile.slice(ratio=2),
+    lambda: Tiling.slice(ratio=2),
     lambda: Overlap.separate(randomness="blue"),
     lambda: Overlap.sina(bandwidth=1),
     lambda: Curve.perfect_arrows(padEnd=4),
@@ -202,7 +202,7 @@ def test_strategy_unknown_kwarg_is_a_type_error(call):
 
 
 def test_strategy_values_in_range_pass():
-    assert Tile.squarify(ratio=1) == {"kind": "squarify", "ratio": 1}
+    assert Tiling.squarify(ratio=1) == {"kind": "squarify", "ratio": 1}
     assert Overlap.separate(padding=0) == {"kind": "separate", "padding": 0}
     assert Overlap.noise(smoothing=math.inf)["smoothing"] == math.inf
     assert Overlap.noise(smoothing="silverman", seed=3, randomness="quasi")["seed"] == 3
@@ -215,8 +215,8 @@ def test_strategy_values_in_range_pass():
 BARE = [
     (Curve, "monotone"),
     (Curve, "perfect_arrows"),
-    (Tile, "squarify"),
-    (Tile, "voronoi"),
+    (Tiling, "squarify"),
+    (Tiling, "voronoi"),
     (Overlap, "separate"),
     (Overlap, "jitter"),
     (Calendar, "month"),
@@ -239,7 +239,7 @@ def test_bare_kind_is_its_call(family, name):
 def test_every_kind_without_a_required_option_is_bare():
     from gofish._strategy import StrategyKind
 
-    for family in (Tile, Overlap, Curve, Calendar, Place):
+    for family in (Tiling, Overlap, Curve, Calendar, Place):
         for name in family.__all__:
             assert isinstance(getattr(family, name), StrategyKind), name
     # A kind with a required option is a function only.

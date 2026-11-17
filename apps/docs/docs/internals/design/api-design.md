@@ -235,7 +235,11 @@ several named strategies, the family is a capitalized namespace such as
 `Overlap.separate` or `Curve.monotone` (#1013). A kind with no required option
 is a value as it is, and calling it sets options: `Curve.monotone` is
 `Curve.monotone()`, and `Calendar.month({ every: 3 })` sets the step. A kind
-with a required option is a call only, as in `Bin.step(0.5)` (#1133). The
+with a required option is a call only, as in `Bin.step(0.5)` (#1133). A
+strategy option is named for its role, as `scatter`'s `overlap` is. When the
+operator's own name is that role, the key is `method` and the family is the
+operator's gerund, as in `tile({ method: Tiling.voronoi })`, and `pack` will
+follow it (`Packing`) when it gets a second strategy (#1355). The
 details, and why an option with one strategy has no option at all, are in
 [Three Surfaces](/internals/design-evolution/three-surfaces).
 

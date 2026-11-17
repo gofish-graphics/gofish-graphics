@@ -11,7 +11,7 @@ no size or position of its own: on each axis where it is in a cell, it is
 that cell, placed by its data through the partition's scale, and on an axis
 where it is in no cell, it fills the space it is given.
 A region in a cell with an outline, such as a hexagon or a Voronoi cell of a
-partition over a binned struct, a cell of a `tile` with `Tile.voronoi`, or
+partition over a binned struct, a cell of a `tile` with `Tiling.voronoi`, or
 the oval of an [`enclose`](/js/api/operators/enclose) around it,
 is drawn as that outline; any other region is drawn as a rectangle.
 

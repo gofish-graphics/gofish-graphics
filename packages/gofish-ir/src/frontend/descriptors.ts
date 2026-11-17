@@ -105,7 +105,7 @@ export interface FieldSpec {
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
   /** On a strategy family's `OPTION_TYPES` entry: the Python namespace whose
-   *  calls make a value (`Tile`, as in `Tile.squarify()`). The docs name the
+   *  calls make a value (`Tiling`, as in `Tiling.squarify()`). The docs name the
    *  option by it; a signature annotates the value's own type instead
    *  (`dict`), since a namespace is not a type ({@link pyType}). */
   pyFamily?: string;
@@ -558,8 +558,8 @@ export interface StrategyPreset {
 
 /** A strategy family: an option's value is one choice from its kinds, made
  *  by a member of the family's namespace. A kind with no required params is
- *  a value as it is, and calling it sets options: `Tile.squarify` is
- *  `Tile.squarify()`, and `Tile.squarify({ ratio: 1 })` sets its ratio. A
+ *  a value as it is, and calling it sets options: `Tiling.squarify` is
+ *  `Tiling.squarify()`, and `Tiling.squarify({ ratio: 1 })` sets its ratio. A
  *  kind with a required param is a call only (`Bin.step(0.5)`). */
 export interface StrategyFamily {
   doc: string;
@@ -634,7 +634,7 @@ const placeOffset = (fallback: number): FieldSpec => ({
  * wire keys at the option it is passed to, like any nested option dict.
  *
  * Read by: the `OPTION_TYPES` entry each family derives (so a field takes a
- * strategy with `t.ref("Tile")`, and the validator, the JSON Schema and the
+ * strategy with `t.ref("Tiling")`, and the validator, the JSON Schema and the
  * Python generator all see one shape), `checkStrategy` in validate.ts (the
  * one check the JS layout runs on a strategy it is handed), and the Python
  * generator, which writes `gofish/<family>.py` from it.
@@ -664,8 +664,8 @@ export const STRATEGIES = {
       },
     },
   },
-  Tile: {
-    doc: "How `tile` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
+  Tiling: {
+    doc: "How `tile` tiles its region: the value of its `method` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
     kinds: {
       squarify: {
         doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
@@ -1097,7 +1097,7 @@ export const STRATEGIES = {
   },
 } satisfies Record<string, StrategyFamily>;
 
-/** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
+/** The name of a strategy family: `"Tiling"`, `"Overlap"`, `"Curve"`,
  *  `"Bin"`, `"Calendar"`, `"Shape"` or `"Place"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
@@ -1329,7 +1329,7 @@ export function refPyClass(name: string): string | undefined {
  * (`"doc"`). A channel takes a literal or a field name; a named type is its
  * Python class when it has one, else the type it stands for. The one
  * difference between the two uses: a strategy family is a namespace, not a
- * type, so the docs name it (`Tile`) and an annotation spells the value it
+ * type, so the docs name it (`Tiling`) and an annotation spells the value it
  * makes (`dict`).
  */
 export function pyType(
@@ -1838,12 +1838,12 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       round: {
         type: t.boolean,
         default: true,
-        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
+        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tiling.voronoi cells are not rounded.",
       },
-      tile: {
-        type: t.ref("Tile"),
+      method: {
+        type: t.ref("Tiling"),
         default: { kind: "squarify" },
-        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
+        doc: "The tiling strategy, made by a call in the Tiling family: Tiling.squarify({ ratio? }), Tiling.slice(), Tiling.dice(), Tiling.binary(), or Tiling.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tiling.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, tile, rect, field, Tile } from "../../src/lib";
+import { chart, tile, rect, field, Tiling } from "../../src/lib";
 import { gray } from "../../src/color";
 import data from "vega-datasets";
 
@@ -45,7 +45,7 @@ export const Default: StoryObj<Args> = {
           spacing: args.spacing,
           padding: args.spacing,
           round: true,
-          tile: Tile.squarify(),
+          method: Tiling.squarify(),
         })
       )
       .mark(

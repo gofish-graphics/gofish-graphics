@@ -640,8 +640,8 @@ async function main() {
             )
             .mark(circle({ r: 3 })),
       ],
-      // (A JS `tile` has no IR form yet, so Tile is covered by
-      // families.test.ts, which compares each Tile kind's JSON.)
+      // (A JS `tile` has no IR form yet, so Tiling is covered by
+      // families.test.ts, which compares each Tiling kind's JSON.)
       [
         "Calendar.month in field(x).bin(...) and an axis's levels",
         (s) =>

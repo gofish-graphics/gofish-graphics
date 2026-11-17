@@ -2310,13 +2310,13 @@ def tile(
         **options: The generated ``_tile_opts`` core's options (the
             combinator form's: ``_tile_combinator_opts``); see the docs
             options table. ``size`` sizes each leaf's tile area, one value
-            per split entry. ``tile`` takes a strategy from the ``Tile``
-            family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
-            ``Tile.dice()``, ``Tile.binary()``, or ``Tile.voronoi()``.
+            per split entry. ``method`` takes a strategy from the ``Tiling``
+            family: ``Tiling.squarify()`` (the default), ``Tiling.slice()``,
+            ``Tiling.dice()``, ``Tiling.binary()``, or ``Tiling.voronoi()``.
 
     The largest tile (under the default sort) lands at the top left.
 
-    Mirrors JS ``tile({ by, size, tile, sort, spacing, ... })`` in
+    Mirrors JS ``tile({ by, size, method, sort, spacing, ... })`` in
     ``.flow()`` and ``tile({ size, ... }, marks)`` as a combinator.
 
     Returns:

@@ -1693,12 +1693,12 @@ for the API.
         },
         "round": {
           "type": "boolean",
-          "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
+          "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tiling.voronoi cells are not rounded.",
           "default": true
         },
-        "tile": {
-          "$ref": "#/$defs/Tile",
-          "description": "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
+        "method": {
+          "$ref": "#/$defs/Tiling",
+          "description": "The tiling strategy, made by a call in the Tiling family: Tiling.squarify({ ratio? }), Tiling.slice(), Tiling.dice(), Tiling.binary(), or Tiling.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tiling.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
           "default": {
             "kind": "squarify"
           }
@@ -4005,7 +4005,7 @@ for the API.
       ],
       "description": "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape."
     },
-    "Tile": {
+    "Tiling": {
       "anyOf": [
         {
           "type": "object",
@@ -4063,7 +4063,7 @@ for the API.
           "required": ["kind"]
         }
       ],
-      "description": "How `tile` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
+      "description": "How `tile` tiles its region: the value of its `method` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
     },
     "Overlap": {
       "anyOf": [

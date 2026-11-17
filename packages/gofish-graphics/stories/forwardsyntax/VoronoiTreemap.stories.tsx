@@ -7,7 +7,7 @@ import {
   rect,
   region,
   Shape,
-  Tile,
+  Tiling,
   tile,
 } from "../../src/lib";
 
@@ -32,15 +32,15 @@ export const Default: StoryObj = {
           by: "continent",
           size: "pop",
           spacing: 5,
-          tile: Tile.voronoi,
+          method: Tiling.voronoi,
         }),
         tile({
           by: "region",
           size: "pop",
           spacing: 2.5,
-          tile: Tile.voronoi,
+          method: Tiling.voronoi,
         }),
-        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);
@@ -70,15 +70,15 @@ export const Circle: StoryObj = {
           by: "continent",
           size: "pop",
           spacing: 5,
-          tile: Tile.voronoi,
+          method: Tiling.voronoi,
         }),
         tile({
           by: "region",
           size: "pop",
           spacing: 2.5,
-          tile: Tile.voronoi,
+          method: Tiling.voronoi,
         }),
-        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);
@@ -100,9 +100,9 @@ export const SquarifyThenVoronoi: StoryObj = {
           by: "region",
           size: "pop",
           spacing: 2.5,
-          tile: Tile.voronoi,
+          method: Tiling.voronoi,
         }),
-        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);
@@ -119,8 +119,8 @@ export const SliceThenDice: StoryObj = {
 
     chart(countryPopulations, { axes: false, w: 320, h: 320 })
       .flow(
-        tile({ by: "continent", size: "pop", spacing: 4, tile: Tile.slice }),
-        tile({ by: "region", size: "pop", spacing: 2, tile: Tile.dice })
+        tile({ by: "continent", size: "pop", spacing: 4, method: Tiling.slice }),
+        tile({ by: "region", size: "pop", spacing: 2, method: Tiling.dice })
       )
       .mark(rect({ fill: "continent" }))
       .render(container);
@@ -142,7 +142,7 @@ export const ContinentOutlines: StoryObj = {
           by: "continent",
           size: "pop",
           spacing: 6,
-          tile: Tile.voronoi,
+          method: Tiling.voronoi,
         }),
         enclose({
           shape: Shape.box,
@@ -150,8 +150,8 @@ export const ContinentOutlines: StoryObj = {
           stroke: "#333",
           strokeWidth: 1.5,
         }),
-        tile({ by: "region", size: "pop", spacing: 3, tile: Tile.voronoi }),
-        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ by: "region", size: "pop", spacing: 3, method: Tiling.voronoi }),
+        tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);

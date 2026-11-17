@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import chart, circle, tile, Color, Tile
+from gofish import chart, circle, tile, Color, Tiling
 
 
 def story_default():
@@ -32,7 +32,7 @@ def story_default():
                 h="fare",
                 size="fare",
                 spacing=0,
-                tile=Tile.squarify(ratio=1),
+                method=Tiling.squarify(ratio=1),
                 sort="desc",
             )
         )

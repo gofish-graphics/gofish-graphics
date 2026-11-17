@@ -52,7 +52,7 @@ from gofish import (
     Bin,
     Color,
     Overlap,
-    Tile,
+    Tiling,
 )
 
 
@@ -325,39 +325,39 @@ def test_bounded_pixel_options_pass_when_in_range():
     assert ir(pack(spacing=2))["spacing"] == 2
 
 
-def test_tile_serializes_tile_strategy_and_gaps():
-    d = ir(tile(by="g", tile=Tile.squarify(ratio=1), spacing=2, padding=3))
-    assert d["tile"] == {"kind": "squarify", "ratio": 1}
+def test_tile_serializes_method_strategy_and_gaps():
+    d = ir(tile(by="g", method=Tiling.squarify(ratio=1), spacing=2, padding=3))
+    assert d["method"] == {"kind": "squarify", "ratio": 1}
     assert d["spacing"] == 2
     assert d["padding"] == 3
-    assert Tile.squarify() == {"kind": "squarify"}
-    assert [f()["kind"] for f in (Tile.slice, Tile.dice, Tile.binary, Tile.voronoi)] == [
+    assert Tiling.squarify() == {"kind": "squarify"}
+    assert [f()["kind"] for f in (Tiling.slice, Tiling.dice, Tiling.binary, Tiling.voronoi)] == [
         "slice",
         "dice",
         "binary",
         "voronoi",
     ]
-    assert "tile" not in ir(tile())
+    assert "method" not in ir(tile())
 
 
-def test_tile_tile_is_a_tagged_union():
-    # `tile` is a union of dict shapes told apart by `kind`; `_to_wire` picks
+def test_tile_method_is_a_tagged_union():
+    # `method` is a union of dict shapes told apart by `kind`; `_to_wire` picks
     # the branch by the dict's `kind` and checks its keys against that branch.
-    assert ir(tile(by="g", tile=Tile.squarify(ratio=1)))["tile"] == {
+    assert ir(tile(by="g", method=Tiling.squarify(ratio=1)))["method"] == {
         "kind": "squarify",
         "ratio": 1,
     }
-    assert ir(tile(by="g", tile=Tile.voronoi(seed=7)))["tile"] == {
+    assert ir(tile(by="g", method=Tiling.voronoi(seed=7)))["method"] == {
         "kind": "voronoi",
         "seed": 7,
     }
-    assert ir(tile(by="g", tile=Tile.voronoi))["tile"] == {"kind": "voronoi"}
+    assert ir(tile(by="g", method=Tiling.voronoi))["method"] == {"kind": "voronoi"}
     with pytest.raises(TypeError, match="ratio"):
-        tile(by="g", tile={"kind": "slice", "ratio": 2})
+        tile(by="g", method={"kind": "slice", "ratio": 2})
     with pytest.raises(TypeError, match="'nope'"):
-        tile(by="g", tile={"kind": "nope"})
+        tile(by="g", method={"kind": "nope"})
     with pytest.raises(TypeError, match="missing"):
-        tile(by="g", tile={"ratio": 2})
+        tile(by="g", method={"ratio": 2})
 
 
 def test_tile_combinator_accepts_key():

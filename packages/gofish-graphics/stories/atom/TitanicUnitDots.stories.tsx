@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { tile, circle, chart, Tile, Color } from "../../src/lib";
+import { tile, circle, chart, Tiling, Color } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
@@ -35,7 +35,7 @@ export const Default: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     }).facet({by: "pclass", dir: "x"})
-      .flow(tile({ h: "fare", size: "fare", spacing: args.spacing, tile: Tile.squarify({ ratio: 1 }), sort: "desc" }))
+      .flow(tile({ h: "fare", size: "fare", spacing: args.spacing, method: Tiling.squarify({ ratio: 1 }), sort: "desc" }))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container);
     return container;

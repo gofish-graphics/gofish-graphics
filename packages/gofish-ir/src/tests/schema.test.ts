@@ -1321,11 +1321,11 @@ console.log("\n# Strategies");
     }
   };
   const accepts: Array<[Parameters<typeof checkStrategy>[0], unknown]> = [
-    ["Tile", { kind: "squarify" }],
-    ["Tile", { kind: "squarify", ratio: 1 }],
-    ["Tile", { kind: "squarify", ratio: undefined }],
-    ["Tile", { kind: "voronoi" }],
-    ["Tile", { kind: "voronoi", seed: 7 }],
+    ["Tiling", { kind: "squarify" }],
+    ["Tiling", { kind: "squarify", ratio: 1 }],
+    ["Tiling", { kind: "squarify", ratio: undefined }],
+    ["Tiling", { kind: "voronoi" }],
+    ["Tiling", { kind: "voronoi", seed: 7 }],
     ["Overlap", { kind: "separate", padding: 2 }],
     ["Overlap", { kind: "noise", smoothing: Infinity, randomness: "uniform" }],
     ["Overlap", { kind: "noise", smoothing: { $numberDouble: "Infinity" } }],
@@ -1358,12 +1358,12 @@ console.log("\n# Strategies");
         }),
         /expected object, got function/,
       ],
-      ["Tile", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
-      ["Tile", "squarify", /expected object/],
-      ["Tile", { kind: "squarify", ratio: 0.5 }, /at least 1/],
-      ["Tile", { kind: "slice", ratio: 2 }, /unknown field "ratio"/],
-      ["Tile", { kind: "sliceDice" }, /unknown kind "sliceDice"/],
-      ["Tile", { kind: "voronoi", seed: NaN }, /seed/],
+      ["Tiling", { kind: "strip" }, /where\.kind: unknown kind "strip"/],
+      ["Tiling", "squarify", /expected object/],
+      ["Tiling", { kind: "squarify", ratio: 0.5 }, /at least 1/],
+      ["Tiling", { kind: "slice", ratio: 2 }, /unknown field "ratio"/],
+      ["Tiling", { kind: "sliceDice" }, /unknown kind "sliceDice"/],
+      ["Tiling", { kind: "voronoi", seed: NaN }, /seed/],
       ["Overlap", { kind: "separate", padding: -1 }, /at least 0/],
       ["Overlap", { kind: "separate", padding: Infinity }, /finite/],
       ["Overlap", { kind: "noise", randomness: "pink" }, /randomness/],
@@ -1460,14 +1460,14 @@ console.log("\n# Strategies");
   );
 
   // The validator walks a strategy option the same way.
-  const doc = (tile: unknown) =>
+  const doc = (method: unknown) =>
     ({
       irVersion: 0,
       ir: "gofish-frontend",
       root: {
         type: "chart",
         data: { type: "table", id: "t0" },
-        operators: [{ type: "tile", tile }],
+        operators: [{ type: "tile", method }],
         mark: { type: "rect" },
       },
     }) as unknown as FrontendIRDocument;
@@ -1477,7 +1477,7 @@ console.log("\n# Strategies");
     !unknownKind.valid &&
       unknownKind.errors.some(
         (e) =>
-          /tile\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
+          /method\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
       ),
     JSON.stringify(unknownKind)
   );

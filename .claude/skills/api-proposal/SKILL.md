@@ -84,7 +84,7 @@ memory for it before guessing.
 ## 2. Survey what's already here
 
 - **The codebase.** Find the nearest existing abstractions: marks, operators,
-  strategy families (`Curve`, `Tile`, `Overlap`, …), the `STRATEGIES` table in
+  strategy families (`Curve`, `Tiling`, `Overlap`, …), the `STRATEGIES` table in
   gofish-ir, and how they cross to Python. Note what the new feature could reuse
   and what it would desugar into.
 - **Nearby API decisions, for consistency.** Find the recent GoFish designs

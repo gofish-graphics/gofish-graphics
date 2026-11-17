@@ -1,5 +1,7 @@
 # Naming the strategy option of `tile` (#1355)
 
+Status: accepted on 2026-11-17 and implemented in PR #1366.
+
 After #1355 renamed `treemap` to `tile`, a non-default tiling reads `tile({ size: "pop", tile: Tile.voronoi })`, with one word as the operator, the option key and the strategy family.
 The key and the family are two separate choices: the key can be `tile`, `method` or `tiling`, and the family can be `Tile` or `Tiling`.
 This page shows each candidate on real examples, rendered, in JS and Python.
