@@ -24,9 +24,9 @@ each example, the lines that changed since the last step are highlighted.
 ## Naming a planet
 
 Here is the diagram from the end of Basics, with one new line. To label Mercury
-we need a way to point at it, so we give each planet a name with `.name()`. We
-also leave the size out of `render()` from now on, so GoFish fits the drawing
-to whatever we add.
+we need a way to point at it, so we give each planet a name with `.name()`. As
+in Basics, we leave the size out of `render()`, so GoFish fits the drawing to
+whatever we add.
 
 ::: gofish
 

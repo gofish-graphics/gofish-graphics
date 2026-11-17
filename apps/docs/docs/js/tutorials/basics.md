@@ -17,7 +17,7 @@ gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 });
 
 `r` is the radius in pixels. `stroke` is the color of the outline, and `strokeWidth` is how thick it is.
 
-To render it, you can call the `render` method with a root HTML container and the width and height you want for the GoFish graphic:
+To render it, you can call the `render` method with a root HTML container:
 
 ::: gofish
 
@@ -32,9 +32,9 @@ gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }).render(
 `root` here is the DOM element the picture is drawn into. In your own code you
 would write something like `document.getElementById("chart")`.
 
-The second argument to `.render()` is the size of the drawing surface in
-pixels. If you leave `w` or `h` out, GoFish works out a size that fits the
-content.
+`.render()` also takes a second argument, the size of the drawing surface in
+pixels, such as `{ w: 400, h: 300 }`. We leave it out here, so GoFish works out
+a size that fits the content.
 
 This circle is Mercury. Next we'll add the other three planets.
 
