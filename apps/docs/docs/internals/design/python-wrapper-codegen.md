@@ -398,7 +398,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   `LABEL_OPTIONS`, `_line_opts`, ...), so they never rename by hand. To route the `spread` combinator and the `stack` operator and
   combinator through generated cores (before, they passed their kwargs to
   the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
-  the box position `x`/`y` (as `treemap` does), and their combinator
+  the box position `x`/`y` (as `tile` does), and their combinator
   entries declare `key`.
 
 - **Snake case keys in nested option dicts.** The keys a user types inside
@@ -418,7 +418,7 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   unchanged. A union with several dict branches is allowed only when it is
   tagged: each branch is an object with a `kind` literal or enum, the
   `kind` values do not overlap, and `_to_wire` picks the branch by the
-  dict's `kind` (treemap's `tile` strategies); any other such union fails
+  dict's `kind` (`tile`'s `tile` strategies); any other such union fails
   generation. The JSON Schema and the validator read the same `OPTION_TYPES`
   entries, which replaced their hand-written axes shapes; those had fallen
   behind the JS type and lacked `side` and `labelAngle`. See
