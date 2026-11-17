@@ -9,6 +9,7 @@ import {
   rect,
   datum,
   Unit,
+  Spacing,
 } from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
@@ -75,8 +76,8 @@ const ridgelineData = monthNames.flatMap((month) =>
 
 // Fixed row-to-row pitch shared by the ridge spread and the rule spread
 // below, so a month's rule and label sit at the same baseline as its
-// silhouette. Both tiers chain their rows with `anchor: "baseline"` at this
-// pitch, and both rows put their semantic baseline at local 0 (the ribbon's
+// silhouette. Both tiers chain their rows with `Spacing.pitch(rowPitch, { at:
+// "baseline" })`, and both rows put their semantic baseline at local 0 (the ribbon's
 // zero-count line; the rule), so the two chains solve to identical lines.
 const rowPitch = 24;
 
@@ -108,8 +109,7 @@ export const Default: StoryObj<Args> = {
         spread({
           by: field("month").sort(monthNames),
           dir: "y",
-          anchor: "baseline",
-          spacing: rowPitch,
+          spacing: Spacing.pitch(rowPitch, { at: "baseline" }),
         }),
         scatter({ x: "temp_max", h: ridgeHeight })
       )
@@ -140,8 +140,7 @@ export const Default: StoryObj<Args> = {
             spread({
               by: field("month").sort(monthNames),
               dir: "y",
-              anchor: "baseline",
-              spacing: rowPitch,
+              spacing: Spacing.pitch(rowPitch, { at: "baseline" }),
             })
           )
           .mark(

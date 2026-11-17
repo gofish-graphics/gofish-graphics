@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve } from "gofish-graphics";
+import { circle, Coord, Curve, Spacing } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — deep-tree (a deep radial node-link, sunburst family).
@@ -16,7 +16,7 @@ import { combine, byDepth, mount } from "./_shared";
 //   sibling = (distribute θ, align r) :
 //     - θ distribute → siblings spread angularly (spacing in radians).
 //     - r align → all siblings share a radius (same ring).
-// Point-like circle nodes ⇒ anchor: "middle" on every distribute so spacing is read
+// Point-like circle nodes ⇒ a middle pitch on every distribute so spacing is read
 // in domain units (radians for θ, r-units for r) and pixel bboxes don't
 // accumulate. Same layout family as the Sunburst / RadialTree stories, deeper.
 //
@@ -82,16 +82,14 @@ export const DeepTree: StoryObj = {
           // r: one ring per depth (center mode → spacing in r-units).
           y: {
             kind: "distribute",
-            spacing: 151,
-            anchor: "middle",
+            spacing: Spacing.pitch(151, { at: "middle" }),
           },
         }),
         sibling: combine({
           // θ: spread siblings angularly (spacing in radians, center mode).
           x: {
             kind: "distribute",
-            spacing: (2 * Math.PI) / 10,
-            anchor: "middle",
+            spacing: Spacing.pitch((2 * Math.PI) / 10, { at: "middle" }),
           },
           // r: all siblings share a radius (same ring).
           y: { kind: "align", alignment: "middle" },

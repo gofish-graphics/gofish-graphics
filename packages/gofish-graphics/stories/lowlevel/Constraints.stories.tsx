@@ -8,6 +8,7 @@ import {
   text,
   value,
   Coord,
+  Spacing,
 } from "../../src/lib";
 import type { RelateFn } from "../../src/ast/constraints/relate";
 
@@ -184,19 +185,22 @@ export const SpreadX_Spacing_AlignEnd: StoryObj<Args> = equivalence(
 // ──────────────────────────────────────────────────────────
 
 /**
- * spread({ dir: "x", alignment: "start", spacing: 60, anchor: "middle" })
- *   ≡ align({ dir: "y", alignment: "start" }) + distribute({ dir: "x", spacing: 60, anchor: "middle" })
+ * spread({ dir: "x", alignment: "start", spacing: Spacing.pitch(60, { at: "middle" }) })
+ *   ≡ align({ dir: "y", alignment: "start" }) + distribute({ dir: "x", spacing: Spacing.pitch(60, { at: "middle" }) })
  */
 export const SpreadX_CenterToCenter: StoryObj<Args> = equivalence(
   makeCenterToCenterRects,
-  { dir: "x", alignment: "start", spacing: 60, anchor: "middle" },
+  {
+    dir: "x",
+    alignment: "start",
+    spacing: Spacing.pitch(60, { at: "middle" }),
+  },
   ({ a, b, c }) => [
     Constraint.align({ y: "start" }, [a, b, c]),
-    Constraint.distribute({ dir: "x", spacing: 60, anchor: "middle" }, [
-      a,
-      b,
-      c,
-    ]),
+    Constraint.distribute(
+      { dir: "x", spacing: Spacing.pitch(60, { at: "middle" }) },
+      [a, b, c]
+    ),
   ],
   { w: 460, h: 160 }
 );

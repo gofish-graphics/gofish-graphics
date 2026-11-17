@@ -310,10 +310,10 @@ export interface SpreadOperator
   by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
-  /** Pixels, or a length (`percent(n)`, `fr(k)`). */
-  spacing?: number | LengthIR;
+  /** A `Spacing` strategy, or a bare amount, which is `Spacing.box(amount)`:
+   *  pixels, or a length (`percent(n)`, `fr(k)`). */
+  spacing?: number | LengthIR | SpacingIR;
   alignment?: string;
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
@@ -345,7 +345,6 @@ export interface StackOperator
   /** Spread-parity passthrough; stack always glues regardless. */
   glue?: boolean;
   alignment?: string;
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Per-entry size — see `SpreadOperator`. */
   size?: ChannelValue;
@@ -618,6 +617,17 @@ export type OverlapIR =
       smoothing?: number | "silverman";
       padding?: number;
       seed?: number;
+    };
+
+/** How far apart `spread` sets its neighbors, made by a call in the
+ *  `Spacing` family (`Spacing.box(4)`, `Spacing.pitch(70, { at: "baseline" })`).
+ *  `spread`'s `spacing` also takes a bare amount, which is `Spacing.box`'s. */
+export type SpacingIR =
+  | { kind: "box"; gap: number | LengthIR }
+  | {
+      kind: "pitch";
+      distance: number | LengthIR;
+      at?: "start" | "middle" | "end" | "baseline";
     };
 
 /** How a path runs through its points, made by a call in the `Curve` family

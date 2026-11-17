@@ -1145,20 +1145,18 @@ for the API.
             },
             {
               "$ref": "#/$defs/Length"
+            },
+            {
+              "$ref": "#/$defs/Spacing"
             }
           ],
-          "description": "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
+          "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
           "default": 8
         },
         "alignment": {
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "anchor": {
-          "enum": ["edge", "start", "middle", "end", "baseline"],
-          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
-          "default": "edge"
         },
         "reverse": {
           "type": "boolean",
@@ -1263,11 +1261,6 @@ for the API.
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "anchor": {
-          "enum": ["edge", "start", "middle", "end", "baseline"],
-          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
-          "default": "edge"
         },
         "reverse": {
           "type": "boolean",
@@ -4788,6 +4781,56 @@ for the API.
         }
       ],
       "description": "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
+    },
+    "Spacing": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "box"
+            },
+            "gap": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "$ref": "#/$defs/Length"
+                }
+              ],
+              "description": "The gap between facing edges, in pixels. A negative gap overlaps the children. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+            }
+          },
+          "required": ["kind", "gap"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "pitch"
+            },
+            "distance": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "$ref": "#/$defs/Length"
+                }
+              ],
+              "description": "The distance between the points, in pixels. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+            },
+            "at": {
+              "enum": ["start", "middle", "end", "baseline"],
+              "description": "The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). \"middle\" is center to center.",
+              "default": "baseline"
+            }
+          },
+          "required": ["kind", "distance"]
+        }
+      ],
+      "description": "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`."
     }
   }
 }

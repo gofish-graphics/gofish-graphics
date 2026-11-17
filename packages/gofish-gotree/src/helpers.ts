@@ -1,4 +1,9 @@
-import { spread as gfSpread, layer, Constraint } from "gofish-graphics";
+import {
+  spread as gfSpread,
+  layer,
+  Constraint,
+  type Spacing,
+} from "gofish-graphics";
 import type { Combiner, DepthCombiner, Alignment } from "./spec";
 
 /**
@@ -20,16 +25,16 @@ export const alternate = (combiners: Combiner[]): DepthCombiner => ({
 
 export type SpreadOptions = {
   dir: "x" | "y";
-  spacing?: number;
-  alignment?: Alignment;
   /**
-   * `"edge"` (default) sums children's bbox widths into the stack span;
-   * `"middle"` places child centers `spacing` apart and ignores bbox widths.
-   * Use `"middle"` under polar (or any coord transform) where nodes render
+   * A bare number (or `Spacing.box(n)`) is a gap between facing edges, so
+   * children's bbox widths sum into the stack span; `Spacing.pitch(n, { at:
+   * "middle" })` places child centers `n` apart and ignores bbox widths.
+   * Use the pitch under polar (or any coord transform) where nodes render
    * as points — bbox accumulation would otherwise overflow the transform's
    * domain. Spacing is in domain units (radians for polar theta).
    */
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
+  spacing?: number | Spacing.Spacing;
+  alignment?: Alignment;
 };
 
 /**
@@ -48,8 +53,8 @@ export const spread = (opts: SpreadOptions): Combiner => {
 
 export type DistributeOptions = {
   dir: "x" | "y";
-  spacing?: number;
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
+  /** A bare number is `Spacing.box(n)`, a gap between facing edges. */
+  spacing?: number | Spacing.Spacing;
   /** "forward" (default): index 0 at low coord, walking up. "reverse": flip. */
   order?: "forward" | "reverse";
   /**
@@ -87,7 +92,6 @@ export const distribute = (opts: DistributeOptions): Combiner => {
           {
             dir: opts.dir,
             spacing: opts.spacing ?? 0,
-            anchor: opts.anchor ?? "edge",
             order: opts.order ?? "forward",
           },
           refs(c)
@@ -119,9 +123,8 @@ export type CombineAxis =
   | { kind: "align"; alignment?: Alignment }
   | {
       kind: "distribute";
-      spacing?: number;
+      spacing?: number | Spacing.Spacing;
       order?: "forward" | "reverse";
-      anchor?: "edge" | "start" | "middle" | "end" | "baseline";
     }
   | { kind: "nest"; pad?: number };
 
@@ -161,7 +164,6 @@ export const combine = (opts: CombineOptions): Combiner => {
                 dir: axis,
                 spacing: spec.spacing ?? 0,
                 order: spec.order ?? "forward",
-                anchor: spec.anchor ?? "edge",
               },
               refs(c)
             )

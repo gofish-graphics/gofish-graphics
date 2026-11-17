@@ -580,8 +580,77 @@ check(
 );
 
 check(
-  "stack with bad anchor rejected",
-  !validate(chart([{ type: "stack", anchor: "elsewhere" }])).valid
+  "stack with anchor rejected (anchor is gone; spread takes Spacing.pitch)",
+  !validate(chart([{ type: "stack", anchor: "middle" }])).valid
+);
+
+check(
+  "spread with anchor rejected (anchor is gone)",
+  !validate(chart([{ type: "spread", dir: "x", anchor: "middle" }])).valid
+);
+
+check(
+  "spread with a Spacing.box spacing accepts",
+  validate(
+    chart([{ type: "spread", dir: "x", spacing: { kind: "box", gap: 4 } }])
+  ).valid
+);
+
+check(
+  "spread with a Spacing.pitch spacing accepts",
+  validate(
+    chart([
+      {
+        type: "spread",
+        dir: "y",
+        spacing: { kind: "pitch", distance: 70, at: "baseline" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "spread with a Spacing.pitch of a percent accepts",
+  validate(
+    chart([
+      {
+        type: "spread",
+        dir: "y",
+        spacing: {
+          kind: "pitch",
+          distance: { type: "length", percent: 10 },
+          at: "middle",
+        },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "spread with an unknown Spacing kind rejected",
+  !validate(
+    chart([{ type: "spread", dir: "x", spacing: { kind: "contour", gap: 4 } }])
+  ).valid
+);
+
+check(
+  "spread with a bad Spacing.pitch at rejected",
+  !validate(
+    chart([
+      {
+        type: "spread",
+        dir: "x",
+        spacing: { kind: "pitch", distance: 4, at: "edge" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "spread with a Spacing.pitch missing its distance rejected",
+  !validate(
+    chart([{ type: "spread", dir: "x", spacing: { kind: "pitch", at: "end" } }])
+  ).valid
 );
 
 check(
@@ -1340,6 +1409,16 @@ console.log("\n# Strategies");
     ["Calendar", { kind: "month" }],
     ["Calendar", { kind: "month", every: 3 }],
     ["Calendar", { kind: "week", every: 2, start: "sunday" }],
+    ["Spacing", { kind: "box", gap: 4 }],
+    ["Spacing", { kind: "box", gap: -20 }],
+    ["Spacing", { kind: "box", gap: { type: "length", fr: 1 } }],
+    ["Spacing", { kind: "pitch", distance: 70 }],
+    ["Spacing", { kind: "pitch", distance: 70, at: "baseline" }],
+    ["Spacing", { kind: "pitch", distance: 0.42, at: "middle" }],
+    [
+      "Spacing",
+      { kind: "pitch", distance: { type: "length", percent: 10 }, at: "end" },
+    ],
   ];
   for (const [family, value] of accepts) {
     const why = thrown(family, value);
@@ -1390,6 +1469,13 @@ console.log("\n# Strategies");
       ],
       ["Calendar", { kind: "weekday", every: 2 }, /unknown field "every"/],
       ["Curve", () => ({ kind: "monotone" }), /expected object, got function/],
+      ["Spacing", { kind: "contour", gap: 4 }, /unknown kind "contour"/],
+      ["Spacing", { kind: "edge", gap: 4 }, /unknown kind "edge"/],
+      ["Spacing", { kind: "box" }, /gap/],
+      ["Spacing", { kind: "pitch", at: "middle" }, /distance/],
+      ["Spacing", { kind: "pitch", distance: 4, at: "edge" }, /at/],
+      ["Spacing", { kind: "box", gap: 4, at: "middle" }, /unknown field "at"/],
+      ["Spacing", { kind: "box", gap: "4" }, /gap/],
     ];
   for (const [family, value, pattern] of rejects) {
     const why = thrown(family, value);

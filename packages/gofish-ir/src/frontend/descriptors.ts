@@ -1095,10 +1095,44 @@ export const STRATEGIES = {
       },
     },
   },
+  Spacing: {
+    doc: "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`.",
+    kinds: {
+      box: {
+        doc: "A gap between the facing edges of each child's box: the end of one child to the start of the next. The distance between the children depends on their sizes.",
+        positional: "gap",
+        params: {
+          gap: {
+            type: t.union(t.number, t.ref("Length")),
+            required: true,
+            doc:
+              "The gap between facing edges, in pixels. A negative gap overlaps the children." +
+              PERCENT_FR,
+          },
+        },
+      },
+      pitch: {
+        doc: "A fixed distance between the same point on each child: from that point on one child to that point on the next. The distance does not depend on the children's sizes.",
+        positional: "distance",
+        params: {
+          distance: {
+            type: t.union(t.number, t.ref("Length")),
+            required: true,
+            doc: "The distance between the points, in pixels." + PERCENT_FR,
+          },
+          at: {
+            type: t.enum("start", "middle", "end", "baseline"),
+            default: "baseline",
+            doc: 'The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). "middle" is center to center.',
+          },
+        },
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
-/** The name of a strategy family: `"Tile"`, `"Overlap"`, `"Curve"`,
- *  `"Bin"`, `"Calendar"`, `"Shape"` or `"Place"`. */
+/** The name of a strategy family: `"Filter"`, `"Tile"`, `"Overlap"`,
+ *  `"Curve"`, `"Bin"`, `"Calendar"`, `"Shape"`, `"Place"` or `"Spacing"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -1626,19 +1660,14 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
       },
       spacing: {
-        type: t.union(t.number, t.ref("Length")),
+        type: t.union(t.number, t.ref("Length"), t.ref("Spacing")),
         default: 8,
-        doc: "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
       },
       alignment: {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      anchor: {
-        type: t.enum("edge", "start", "middle", "end", "baseline"),
-        default: "edge",
-        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
       reverse: {
         type: t.boolean,
@@ -1683,11 +1712,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      anchor: {
-        type: t.enum("edge", "start", "middle", "end", "baseline"),
-        default: "edge",
-        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
       reverse: {
         type: t.boolean,
