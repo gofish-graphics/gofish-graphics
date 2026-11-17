@@ -203,7 +203,7 @@ for the API.
       }
     },
     "StructAccessor": {
-      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
+      "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Binning.hex or Binning.voronoi). Valid as a partition's `by` only once binned.",
       "type": "object",
       "required": ["type", "fields"],
       "additionalProperties": false,
@@ -305,7 +305,7 @@ for the API.
               "const": "bin"
             },
             "partition": {
-              "description": "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+              "description": "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Binning.step(size), Binning.thresholds(countOrEdges) or Binning.quantiles(countOrProbabilities), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               "oneOf": [
                 {
                   "$ref": "#/$defs/Partition"
@@ -672,20 +672,20 @@ for the API.
                   }
                 ]
               },
-              "position": {
+              "placement": {
                 "anyOf": [
                   {
                     "type": "string"
                   },
                   {
-                    "$ref": "#/$defs/Place"
+                    "$ref": "#/$defs/Placement"
                   }
                 ],
-                "description": "Where the label goes: a position string, one spot by the mark's box (\"center\", \"outset\", \"outset-top\", \"inset-bottom-start\", ...), or a Place strategy, which reads the mark's outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Place.around() for a dot, Place.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Place.end() for an open path, Place.interior() for a filled region and Place.around() for one with no fill; and \"outset\" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is \"outset\"."
+                "description": "Where the label goes: a position string, one spot by the mark's box (\"center\", \"outset\", \"outset-top\", \"inset-bottom-start\", ...), or a Placement strategy, which reads the mark's outline and tries spots in order (Placement.around(), Placement.along({at}), Placement.start(), Placement.end(), Placement.interior()). The labels of one .label() call that a Placement strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Placement.around() for a dot, Placement.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Placement.end() for an open path, Placement.interior() for a filled region and Placement.around() for one with no fill; and \"outset\" for anything else. In a polar or other curved coordinate space a Placement strategy is an error, and the default is \"outset\"."
               },
               "avoiding": {
                 "$ref": "#/$defs/NodeSelectionIR",
-                "description": "Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it."
+                "description": "Nodes a Placement label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it."
               },
               "halo": {
                 "type": "object",
@@ -738,7 +738,7 @@ for the API.
                     "default": [2, 1]
                   }
                 },
-                "description": "A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot."
+                "description": "A filled box drawn behind the text. An empty object draws the default box. A Placement label counts the box as part of the label when it looks for a free spot."
               },
               "fontSize": {
                 "$ref": "#/$defs/Number",
@@ -750,7 +750,7 @@ for the API.
               },
               "offset": {
                 "$ref": "#/$defs/Number",
-                "description": "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end)."
+                "description": "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Placement strategy's own `offset` overrides it; omitted in both, a Placement label is 3 pixels from the outline (4 for Placement.start and Placement.end)."
               },
               "rotate": {
                 "$ref": "#/$defs/Number",
@@ -1696,7 +1696,7 @@ for the API.
           "description": "Round pixel positions and sizes. Applies to the rectangular tilings; Tiling.voronoi cells are not rounded.",
           "default": true
         },
-        "method": {
+        "tiling": {
           "$ref": "#/$defs/Tiling",
           "description": "The tiling strategy, made by a call in the Tiling family: Tiling.squarify({ ratio? }), Tiling.slice(), Tiling.dice(), Tiling.binary(), or Tiling.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tiling.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
           "default": {
@@ -1793,7 +1793,7 @@ for the API.
               "$ref": "#/$defs/StructAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Binning.step(size), Binning.thresholds(countOrEdges), Binning.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Binning.hex({ radius })) or .bin(Binning.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -1959,16 +1959,16 @@ for the API.
           "description": "Opacity, 0 to 1.",
           "default": 1
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -2091,16 +2091,16 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "r": {
           "$ref": "#/$defs/ChannelValue",
@@ -2239,16 +2239,16 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2369,16 +2369,16 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -2486,16 +2486,16 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -2666,16 +2666,16 @@ for the API.
           },
           "description": "Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "key": {
           "type": "string",
@@ -2740,16 +2740,16 @@ for the API.
         "type": {
           "const": "polygon"
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "points": {
           "anyOf": [
@@ -2914,7 +2914,7 @@ for the API.
       }
     },
     "RegionMark": {
-      "description": "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
+      "description": "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Binning.hex, a cell of Binning.voronoi), and a rectangle otherwise.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -2940,16 +2940,16 @@ for the API.
           "description": "Opacity, 0 to 1.",
           "default": 1
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "inset": {
           "$ref": "#/$defs/Number",
@@ -3002,16 +3002,16 @@ for the API.
         "type": {
           "const": "line"
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3134,16 +3134,16 @@ for the API.
         "type": {
           "const": "ribbon"
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "fill": {
           "$ref": "#/$defs/ChannelValue",
@@ -3254,16 +3254,16 @@ for the API.
         "type": {
           "const": "enclose"
         },
-        "filter": {
+        "effect": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Filter"
+              "$ref": "#/$defs/Effect"
             },
             {
               "type": "string"
             }
           ],
-          "description": "A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
+          "description": "A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`\"blur(2px)\"`, `\"url(#shadow)\"`)."
         },
         "padding": {
           "$ref": "#/$defs/ChannelValue",
@@ -3917,7 +3917,7 @@ for the API.
           "required": ["kind", "quantiles"]
         }
       ],
-      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities)."
+      "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Binning.step(size), Binning.thresholds(countOrEdges) or Binning.quantiles(countOrProbabilities)."
     },
     "StructBin": {
       "anyOf": [
@@ -3973,9 +3973,9 @@ for the API.
           "required": ["kind", "seeds"]
         }
       ],
-      "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds })."
+      "description": "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Binning.hex({ radius }) or Binning.voronoi({ seeds })."
     },
-    "Filter": {
+    "Effect": {
       "anyOf": [
         {
           "type": "object",
@@ -4003,7 +4003,7 @@ for the API.
           "required": ["kind"]
         }
       ],
-      "description": "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape."
+      "description": "How a mark's or a layer's drawing is filtered as one picture: the value of its `effect` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape."
     },
     "Tiling": {
       "anyOf": [
@@ -4063,7 +4063,7 @@ for the API.
           "required": ["kind"]
         }
       ],
-      "description": "How `tile` tiles its region: the value of its `method` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
+      "description": "How `tile` tiles its region: the value of its `tiling` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
     },
     "Overlap": {
       "anyOf": [
@@ -4258,7 +4258,7 @@ for the API.
       ],
       "description": "How a path runs through its points: the value of the `curve` option of `line` and `ribbon`. `linear`, `step`, `monotone` and `smooth` are read over the parameter of the run, from the least to the most smooth; `catmullRom` is a shape on screen; `bezier`, `orthogonal`, `arc` and `perfectArrows` route each pair of neighboring points."
     },
-    "Bin": {
+    "Binning": {
       "anyOf": [
         {
           "type": "object",
@@ -4624,7 +4624,7 @@ for the API.
       ],
       "description": "The outline `enclose` draws around its members: the value of its `shape` option. `padding` and the paint stay on `enclose`."
     },
-    "Place": {
+    "Placement": {
       "anyOf": [
         {
           "type": "object",
@@ -4787,7 +4787,7 @@ for the API.
           "required": ["kind"]
         }
       ],
-      "description": "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
+      "description": "Where a label goes on the mark it labels: the value of `.label()`'s `placement` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
     }
   }
 }

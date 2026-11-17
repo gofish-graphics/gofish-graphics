@@ -9,7 +9,7 @@ import pytest
 import gofish
 
 from ._ir import ir
-from gofish import Bin, Calendar, Coord, Curve, Overlap, Place, Tiling, field, line, ribbon, scatter, chart, circle, select_all
+from gofish import Binning, Calendar, Coord, Curve, Overlap, Placement, Tiling, field, line, ribbon, scatter, chart, circle, select_all
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -31,9 +31,10 @@ FAMILIES = {
         ],
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
-    "Place": ("place", ["around", "along", "start", "end", "interior"]),
+    "Effect": ("effect", ["grayscale", "luminance_to_alpha"]),
+    "Placement": ("placement", ["around", "along", "start", "end", "interior"]),
     "Tiling": ("tiling", ["squarify", "slice", "dice", "binary", "voronoi"]),
-    "Bin": ("bin", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
+    "Binning": ("binning", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
     "Calendar": (
         "calendar",
         ["second", "minute", "hour", "day", "weekday", "week", "month", "quarter", "year"],
@@ -114,7 +115,7 @@ def test_curves_are_calls_on_the_wire():
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families and Coord is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
-    for module_name in ("tiling", "overlap", "curve", "bin", "calendar", "place", "coord"):
+    for module_name in ("tiling", "overlap", "curve", "binning", "calendar", "placement", "effect", "coord"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")
@@ -139,14 +140,14 @@ BAD_VALUES = [
     (lambda: Curve.arc(direction="left"), "Curve.arc(direction=...) must be one of"),
     (lambda: Curve.orthogonal(bend="always"), 'must be "auto"'),
     (lambda: Curve.perfect_arrows(bow=float("nan")), "Curve.perfect_arrows(bow=...)"),
-    (lambda: Bin.thresholds(0), "Bin.thresholds(thresholds) must be >= 1, got 0"),
-    (lambda: Bin.thresholds([]), "Bin.thresholds(thresholds) must have at least 1 item, got []"),
-    (lambda: Bin.quantiles(0), "Bin.quantiles(quantiles) must be >= 1, got 0"),
-    (lambda: Bin.quantiles([0.5, 1]), "Bin.quantiles(quantiles) item must be < 1, got 1"),
-    (lambda: Bin.quantiles([0, 0.5]), "Bin.quantiles(quantiles) item must be > 0, got 0"),
+    (lambda: Binning.thresholds(0), "Binning.thresholds(thresholds) must be >= 1, got 0"),
+    (lambda: Binning.thresholds([]), "Binning.thresholds(thresholds) must have at least 1 item, got []"),
+    (lambda: Binning.quantiles(0), "Binning.quantiles(quantiles) must be >= 1, got 0"),
+    (lambda: Binning.quantiles([0.5, 1]), "Binning.quantiles(quantiles) item must be < 1, got 1"),
+    (lambda: Binning.quantiles([0, 0.5]), "Binning.quantiles(quantiles) item must be > 0, got 0"),
     (
-        lambda: Bin.quantiles([0.5, 0.5]),
-        "Bin.quantiles(quantiles) must not hold an item twice, got [0.5, 0.5]",
+        lambda: Binning.quantiles([0.5, 0.5]),
+        "Binning.quantiles(quantiles) must not hold an item twice, got [0.5, 0.5]",
     ),
     (lambda: Coord.geo("robinson"), 'Coord.geo(projection) must be one of "equalEarth", "mercator"'),
     (lambda: Coord.polar(center=(1, 2, 3)), "Coord.polar(center=...) must have 2 items"),
@@ -162,12 +163,12 @@ WRONG_TYPES = [
     (lambda: Curve.arc(direction=3), 'Curve.arc(direction=...) must be one of "up", "down", got int'),
     (lambda: Curve.perfect_arrows(flip="yes"), "Curve.perfect_arrows(flip=...) must be a bool, got str"),
     (lambda: Curve.perfect_arrows(pad_end="4"), "must be a number, got str"),
-    (lambda: Bin.thresholds(2.5), "Bin.thresholds(thresholds) must be a whole number >= 1 or a list"),
+    (lambda: Binning.thresholds(2.5), "Binning.thresholds(thresholds) must be a whole number >= 1 or a list"),
     # A required param is required: None is not a value of it.
-    (lambda: Bin.step(None), "Bin.step(size) must be a finite number > 0, got NoneType"),
-    (lambda: Bin.thresholds(None), "Bin.thresholds(thresholds) must be a whole number >= 1"),
-    (lambda: Bin.hex(radius=None), "Bin.hex(radius=...) must be a finite number > 0 or a dict"),
-    (lambda: Bin.voronoi(seeds=None), "Bin.voronoi(seeds=...) must be a table"),
+    (lambda: Binning.step(None), "Binning.step(size) must be a finite number > 0, got NoneType"),
+    (lambda: Binning.thresholds(None), "Binning.thresholds(thresholds) must be a whole number >= 1"),
+    (lambda: Binning.hex(radius=None), "Binning.hex(radius=...) must be a finite number > 0 or a dict"),
+    (lambda: Binning.voronoi(seeds=None), "Binning.voronoi(seeds=...) must be a table"),
     (lambda: Coord.geo(None), "Coord.geo(projection) must be one of"),
     (lambda: Coord.polar(inner_radius="0.5"), "Coord.polar(inner_radius=...) must be a number, got str"),
     (lambda: Coord.geo("mercator", lon="-170"), "Coord.geo(lon=...) must be a list or tuple of 2 items"),
@@ -221,8 +222,8 @@ BARE = [
     (Overlap, "jitter"),
     (Calendar, "month"),
     (Calendar, "week"),
-    (Place, "around"),
-    (Place, "interior"),
+    (Placement, "around"),
+    (Placement, "interior"),
 ]
 
 
@@ -239,12 +240,12 @@ def test_bare_kind_is_its_call(family, name):
 def test_every_kind_without_a_required_option_is_bare():
     from gofish._strategy import StrategyKind
 
-    for family in (Tiling, Overlap, Curve, Calendar, Place):
+    for family in (Tiling, Overlap, Curve, Calendar, Placement):
         for name in family.__all__:
             assert isinstance(getattr(family, name), StrategyKind), name
     # A kind with a required option is a function only.
-    for name in Bin.__all__:
-        assert not isinstance(getattr(Bin, name), dict), name
+    for name in Binning.__all__:
+        assert not isinstance(getattr(Binning, name), dict), name
 
 
 def test_bare_kind_wire_form_at_an_option():
@@ -273,11 +274,11 @@ def test_bare_kind_errors_name_its_options():
         Curve.arc(bend="auto")
 
 
-def test_place_at_a_label_crosses_as_its_plain_object():
+def test_placement_at_a_label_crosses_as_its_plain_object():
     spec = ir(
         line(stroke_width=2).label(
             "s",
-            position=Place.along(at=0.6, side=["above", "below"], orient="sloped"),
+            placement=Placement.along(at=0.6, side=["above", "below"], orient="sloped"),
             halo={"color": "#fafafa", "width": 2},
             background={"fill": "#eee", "padding": [3, 2]},
             font_weight=600,
@@ -285,7 +286,7 @@ def test_place_at_a_label_crosses_as_its_plain_object():
     )["label"][0]
     assert spec == {
         "accessor": "s",
-        "position": {
+        "placement": {
             "kind": "along",
             "at": 0.6,
             "side": ["above", "below"],
@@ -296,11 +297,11 @@ def test_place_at_a_label_crosses_as_its_plain_object():
         "fontWeight": 600,
     }
     # A bare kind is its call; a position string is as it was.
-    assert ir(circle(r=3).label("c", position=Place.end))["label"][0][
-        "position"
+    assert ir(circle(r=3).label("c", placement=Placement.end))["label"][0][
+        "placement"
     ] == {"kind": "end"}
-    assert ir(circle(r=3).label("c", position="center"))["label"][0][
-        "position"
+    assert ir(circle(r=3).label("c", placement="center"))["label"][0][
+        "placement"
     ] == "center"
 
 

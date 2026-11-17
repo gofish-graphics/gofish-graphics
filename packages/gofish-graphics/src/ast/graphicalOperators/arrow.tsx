@@ -6,7 +6,7 @@ import {
   type ToPixel,
 } from "../_node";
 import { outlinePaint, pathOutline } from "../geometry";
-import { end } from "../../families/place";
+import { end } from "../../families/placement";
 import { Size } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -78,7 +78,7 @@ export const arrow = createNodeOperator(
         type: "arrow",
         strokeOverhang: outlineOverhang(props.stroke, props.strokeWidth),
         // A path is labeled at its end.
-        labelPosition: end(),
+        labelPlacement: end(),
         resolveUnderlyingSpace: (
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: readonly GoFishAST[]

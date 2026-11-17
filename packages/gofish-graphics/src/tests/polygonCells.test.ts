@@ -1,6 +1,6 @@
 /**
  * Cells of the plane (#1059): `struct({ x, y }).bin(b)` maps each row's point
- * to its cell, for `b` a call in the Bin family. Covers the hex grid (a
+ * to its cell, for `b` a call in the Binning family. Covers the hex grid (a
  * point's hexagon, including points on an edge, the grid covering the
  * domain, a radius per axis), Voronoi cells (nearest seed, clipping to the
  * box of the data and seeds, seeds at one point), the struct key (its wire
@@ -25,12 +25,12 @@ import {
 import { splitEntries } from "../ast/datumProjection";
 import { applySchema } from "../ast/schema";
 import { struct } from "../ast/structExpr";
-import * as Bin from "../families/bin";
+import * as Binning from "../families/binning";
 import { field } from "../ast/data";
 import { partition as srcPartition } from "../lib";
 
 const { chart, partition, region, circle } = GoFish as any;
-const DistBin = (GoFish as any).Bin;
+const DistBin = (GoFish as any).Binning;
 const distStruct = (GoFish as any).struct;
 const distField = (GoFish as any).field;
 /** The domain of `values` (a column's `HasDomain`): their least and
@@ -342,7 +342,7 @@ async function main() {
 
   console.log("\n# struct keys");
   {
-    const key = struct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 0.5 }));
+    const key = struct({ x: "a", y: "b" }).bin(Binning.hex({ radius: 0.5 }));
     check(
       "a binned struct writes its wire form",
       JSON.stringify(key.toJSON()) ===
@@ -359,8 +359,8 @@ async function main() {
       )
     );
     check(
-      "a struct is binned only by a call in the Bin family",
-      /Bin family/.test(
+      "a struct is binned only by a call in the Binning family",
+      /Binning family/.test(
         errorOf(() => struct({ x: "a", y: "b" }).bin({ size: 1 } as any)) ??
           ""
       )
@@ -368,19 +368,19 @@ async function main() {
     {
       const why = errorOf(() =>
         struct({ x: "a", y: "b" }).bin(
-          // @ts-expect-error Bin.step bins one field, not a struct
-          Bin.step(1)
+          // @ts-expect-error Binning.step bins one field, not a struct
+          Binning.step(1)
         )
       );
       check(
-        "a Bin kind of one field on a struct is an error naming field",
-        /Bin\.step bins one field/.test(why ?? "") &&
-          (why ?? "").includes("field(x).bin(Bin.step(...))"),
+        "a Binning kind of one field on a struct is an error naming field",
+        /Binning\.step bins one field/.test(why ?? "") &&
+          (why ?? "").includes("field(x).bin(Binning.step(...))"),
         why
       );
     }
     const zero = errorOf(() =>
-      struct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 0 }))
+      struct({ x: "a", y: "b" }).bin(Binning.hex({ radius: 0 }))
     );
     check("a hex radius must be above 0", /above 0/.test(zero ?? ""), zero);
     const rows = await applySchema([
@@ -689,14 +689,14 @@ export function structKeyTypes(): void {
   {
     // @ts-expect-error a struct with no bin has no region
     srcPartition({ by: struct({ x: "a", y: "b" }) });
-    srcPartition({ by: struct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 1 })) });
+    srcPartition({ by: struct({ x: "a", y: "b" }).bin(Binning.hex({ radius: 1 })) });
     srcPartition({
-      by: struct({ x: "a", y: "b" }).bin(Bin.voronoi({ seeds: [] })),
+      by: struct({ x: "a", y: "b" }).bin(Binning.voronoi({ seeds: [] })),
     });
     // @ts-expect-error a struct divides both axes, so it takes no dir
-    srcPartition({ by: struct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 1 })), dir: "x" });
-    // @ts-expect-error a field is binned by a 1D partition, not a Bin call
-    field("a").bin(Bin.hex({ radius: 1 }));
+    srcPartition({ by: struct({ x: "a", y: "b" }).bin(Binning.hex({ radius: 1 })), dir: "x" });
+    // @ts-expect-error a field is binned by a 1D partition, not a Binning call
+    field("a").bin(Binning.hex({ radius: 1 }));
   }
 }
 

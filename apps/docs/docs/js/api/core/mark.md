@@ -100,7 +100,7 @@ adds its own label (e.g. a value centered inside a bar plus a category name
 above it), and all of them round-trip through the IR as an array. See the
 [labels guide](/js/guides/labels#multiple-labels-per-mark) for the full
 options list, including `fontFamily`/`fontWeight`/`fontStyle`. A label's
-`position` may also be a value of the [`Place`](/js/api/place) family, which
+`placement` may also be a value of the [`Placement`](/js/api/placement) family, which
 reads the mark's outline and keeps the labels of one call off the marks, off
 each other, and off the nodes in `avoiding`; `halo` and `background` draw an
 outline or a box behind the text. See
@@ -180,7 +180,9 @@ mark instance:
 
 ```ts
 chart(data)
-  .flow(stack({ by: "class", dir: "y" }).label("class", { position: "center" }))
+  .flow(
+    stack({ by: "class", dir: "y" }).label("class", { placement: "center" })
+  )
   .mark(rect({ h: "count" }));
 ```
 

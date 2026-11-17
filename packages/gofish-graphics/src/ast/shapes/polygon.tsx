@@ -88,7 +88,7 @@ export const Polygon = ({
     {
       type: "polygon",
       // Labeled by its outline: inside it when filled, around it when not.
-      labelPosition: "outline",
+      labelPlacement: "outline",
       // Used to seed the unit color scale. Prefer whichever channel is
       // data-driven — the same rule `rect` follows.
       color: isValue(fill) ? fill : stroke,

@@ -230,9 +230,9 @@ both backends write as SVG attributes). The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
-  list can't fold away, and the group a node with a `filter` option draws its whole
-  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
-  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
+  list can't fold away, and the group a node with an `effect` option draws its whole
+  drawing in (`drawEffect.ts`). Its `filter` is a CSS filter value
+  (`{ kind: "css", value: "grayscale(1)" }`, which `Effect.grayscale` lowers to) or
   `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
   SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
   render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`

@@ -110,7 +110,7 @@ Helpers for the function `derive` takes:
   each row a position `x` and the `density` there, in any order, with no two rows at one position (call it after the split into curves).
   The density is integrated by the trapezoid rule. Each row made holds `x`
   and every column whose value is the same in all of `rows` (a group's
-  `month`). [`Bin.quantiles`](/js/api/bin#bin-quantiles) and
+  `month`). [`Binning.quantiles`](/js/api/binning#bin-quantiles) and
   `field(x).median()` over the result read the curve instead of the grid.
   It stands in for first-class distributions
   ([#980](https://github.com/gofish-graphics/gofish-graphics/issues/980)),
@@ -120,7 +120,7 @@ Helpers for the function `derive` takes:
 // The quantiles of a drawn density, cut into ten equal-mass cells
 .flow(
   derive((rows) => quantileRows(rows, { x: "x", density: "pdf", n: 1000 })),
-  partition({ by: field("x").bin(Bin.quantiles(10)), dir: "x" })
+  partition({ by: field("x").bin(Binning.quantiles(10)), dir: "x" })
 )
 .mark(circle({ cx: field("x").median(), r: 3 }))
 ```

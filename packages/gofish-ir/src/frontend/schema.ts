@@ -493,7 +493,7 @@ export interface TileOperator
   padding?: number;
   round?: boolean;
   /** The tiling strategy. Default `{ kind: "squarify" }`. */
-  method?: TilingIR;
+  tiling?: TilingIR;
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
@@ -544,7 +544,7 @@ export type FlowStepMarkIR = LeafMarkIR & { type: "enclose" };
  * continuous scale. `partition({ by: { x, y } })` divides both axes: it is
  * the partition on x, then the partition on y. `partition({ by:
  * struct({ x, y }).bin(cells) })` divides the plane into the polygon cells
- * of a `Bin` strategy (hexagons, Voronoi cells). Operator-only: its children
+ * of a `Binning` strategy (hexagons, Voronoi cells). Operator-only: its children
  * are the groups of its key. Mirrors JS's `PartitionOptions`
  * (`graphicalOperators/partition.tsx`).
  */
@@ -586,9 +586,9 @@ export type TilingIR =
   | { kind: "voronoi"; seed?: number };
 
 /** How a mark's or a layer's drawing is filtered, made by a call in the
- *  `Filter` family (`Filter.grayscale()`, `Filter.luminanceToAlpha()`). The
- *  `filter` option also takes a raw CSS filter string. */
-export type FilterIR =
+ *  `Effect` family (`Effect.grayscale()`, `Effect.luminanceToAlpha()`). The
+ *  `effect` option also takes a raw CSS filter string. */
+export type EffectIR =
   | { kind: "grayscale"; amount?: number }
   | { kind: "luminanceToAlpha" };
 
@@ -643,21 +643,21 @@ export type CurveIR =
       straights?: boolean;
     };
 
-/** The cells a key is binned into, made by a call in the `Bin` family.
- *  `Bin.step(size)`, `Bin.thresholds(countOrEdges)` and
- *  `Bin.quantiles(countOrProbabilities)` bin one field
- *  (`field(x).bin(...)`, {@link FieldBinIR}); `Bin.hex({ radius })` and
- *  `Bin.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
+/** The cells a key is binned into, made by a call in the `Binning` family.
+ *  `Binning.step(size)`, `Binning.thresholds(countOrEdges)` and
+ *  `Binning.quantiles(countOrProbabilities)` bin one field
+ *  (`field(x).bin(...)`, {@link FieldBinIR}); `Binning.hex({ radius })` and
+ *  `Binning.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
  *  {@link StructBinIR}). */
-export type BinIR = FieldBinIR | StructBinIR;
+export type BinningIR = FieldBinIR | StructBinIR;
 
-/** The `Bin` kinds that cut the line of one field into intervals. */
+/** The `Binning` kinds that cut the line of one field into intervals. */
 export type FieldBinIR =
   | { kind: "step"; size: number }
   | { kind: "thresholds"; thresholds: number | number[] }
   | { kind: "quantiles"; quantiles: number | number[] };
 
-/** The `Bin` kinds that divide the plane of two fields into polygons. */
+/** The `Binning` kinds that divide the plane of two fields into polygons. */
 export type StructBinIR =
   | { kind: "hex"; radius: number | { x: number; y: number } }
   | { kind: "voronoi"; seeds: Record<string, unknown>[] };
@@ -693,8 +693,8 @@ export type ShapeIR =
       separate?: boolean;
     };
 
-/** A screen direction from a mark, for `Place.around`. */
-export type PlaceDirectionIR =
+/** A screen direction from a mark, for `Placement.around`. */
+export type PlacementDirectionIR =
   | "top-right"
   | "top-left"
   | "bottom-right"
@@ -704,8 +704,8 @@ export type PlaceDirectionIR =
   | "top"
   | "bottom";
 
-/** A side of an outline, for `Place.along`. */
-export type PlaceSideIR =
+/** A side of an outline, for `Placement.along`. */
+export type PlacementSideIR =
   | "on"
   | "above"
   | "below"
@@ -714,12 +714,12 @@ export type PlaceSideIR =
   | "inset"
   | "outset";
 
-/** Where a label goes on the mark it labels, made by a call in the `Place`
- *  family: a value of a label's `position` beside the position strings. */
-export type PlaceIR =
+/** Where a label goes on the mark it labels, made by a call in the `Placement`
+ *  family: a value of a label's `placement` beside the position strings. */
+export type PlacementIR =
   | {
       kind: "around";
-      directions?: PlaceDirectionIR[];
+      directions?: PlacementDirectionIR[];
       side?: "outset" | "inset" | ("outset" | "inset")[];
       offset?: number;
     }
@@ -734,7 +734,7 @@ export type PlaceIR =
         | "x-max"
         | "y-min"
         | "y-max";
-      side?: PlaceSideIR | PlaceSideIR[];
+      side?: PlacementSideIR | PlacementSideIR[];
       orient?: "horizontal" | "sloped";
       offset?: number;
     }
@@ -972,8 +972,8 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  aggregate ops (`sum`/`mean`/`median`/`count`/`distinct`) and, only on an
  *  operator's entry-flagged `size` channel, `normalize`. */
 /** A partition's wire form (`field(x).bin(p)`): a Calendar value, or a
- *  `Bin` kind that bins one field (`Bin.step(size)`,
- *  `Bin.thresholds(countOrEdges)`, `Bin.quantiles(countOrProbabilities)`).
+ *  `Binning` kind that bins one field (`Binning.step(size)`,
+ *  `Binning.thresholds(countOrEdges)`, `Binning.quantiles(countOrProbabilities)`).
  *  One tagged union, told apart by `kind`
  *  (`OPTION_TYPES.Partition`). */
 export type PartitionIR = CalendarPartitionIR | FieldBinIR;
@@ -987,7 +987,7 @@ export interface FieldAccessor {
 /** A key built from two fields at once, emitted by `struct({ x, y })`
  *  (after polars' `pl.struct`), with the cells it is binned into. `fields`
  *  names the column read on each axis. Its one op is `bin`, which takes a
- *  `Bin` strategy; a struct is a key only once it is binned (a
+ *  `Binning` strategy; a struct is a key only once it is binned (a
  *  `partition`'s `by`). Mirrors gofish-graphics' `StructExpr`
  *  (`ast/structExpr.ts`). */
 export interface StructAccessor {
@@ -1015,8 +1015,8 @@ export type FieldOpIR =
   | {
       op: "bin";
       /** The partition each value is binned into: a Calendar value,
-       *  `Bin.step(size)`, `Bin.thresholds(countOrEdges)` or
-       *  `Bin.quantiles(countOrProbabilities)`, or a product of
+       *  `Binning.step(size)`, `Binning.thresholds(countOrEdges)` or
+       *  `Binning.quantiles(countOrProbabilities)`, or a product of
        *  Calendar values (`[year, month]`: one cell where they meet).
        *  Absent: about 10 cells. A second `bin` op splits the cells of the
        *  one before it (`.bin(Calendar.year).bin(Calendar.month)`). */
@@ -1068,9 +1068,9 @@ export interface BridgeLambdaSentinel {
  */
 export interface LabelSpecIR {
   accessor: string | FieldAccessor;
-  /** A position string (`"outset-top"`), or a `Place` strategy. */
-  position?: string | PlaceIR;
-  /** Nodes a `Place` label keeps off. */
+  /** A position string (`"outset-top"`), or a `Placement` strategy. */
+  placement?: string | PlacementIR;
+  /** Nodes a `Placement` label keeps off. */
   avoiding?: NodeSelectionIR;
   /** An outline behind the glyphs. */
   halo?: { color?: string; width?: number };

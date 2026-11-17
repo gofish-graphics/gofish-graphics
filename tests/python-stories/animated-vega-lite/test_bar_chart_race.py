@@ -29,7 +29,7 @@ def story_frame2000():
         )
         .mark(
             rect(w="value", fill="category").label(
-                "name", position="outset-right"
+                "name", placement="outset-right"
             )
         ),
         {"axes": {"x": True, "y": False}},

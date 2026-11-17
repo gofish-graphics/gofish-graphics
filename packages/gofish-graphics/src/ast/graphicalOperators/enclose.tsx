@@ -25,7 +25,7 @@
  * The node's geometry is its outline, so a parent that reads geometry
  * (`pack`) lays out the outline, and an outer `enclose` hugs it.
  */
-import type { FilterOptions } from "../drawFilter";
+import type { WithEffect } from "../drawEffect";
 import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 
 import { Frontend, type DisplayList } from "gofish-ir";
@@ -79,7 +79,7 @@ import {
 import type { Size } from "../dims";
 import type { AxisScale } from "../domain";
 
-export type EncloseOptions = FilterOptions & {
+export type EncloseOptions = WithEffect & {
   /** Pixels between the members and the outline, or a field name or
    *  accessor read once per enclosed group (constant within it). Default 2. */
   padding?: number | string | ((d: any) => number);

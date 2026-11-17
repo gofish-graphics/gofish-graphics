@@ -3,7 +3,7 @@
  * options is a value as it is, and calling it sets options:
  * `Curve.monotone` is `Curve.monotone()`, `Calendar.month` is
  * `Calendar.month()`, and `Calendar.month({ every: 3 })` sets its step. A
- * kind with a required option stays a call only (`Bin.step(0.5)`). d3 does
+ * kind with a required option stays a call only (`Binning.step(0.5)`). d3 does
  * the same (`d3.timeMonth`, `d3.curveMonotoneX`), and so do SwiftUI's
  * leading-dot values.
  *
@@ -18,8 +18,8 @@
  * value once, there, at any depth ({@link kindValue},
  * {@link withKindValues}): a chart's options (`chart(data, options)`), an
  * operator's and a mark's options (`createOperator`, `createMark`,
- * `createRelationalMark`), a `.bin(...)` partition (`checkBinStep`), and an
- * axis's `levels` (`levelsFromOption`, which render options reach without
+ * `createRelationalMark`), a `.bin(...)` partition (`checkBinStep`), the
+ * options of `interpolate` and `Animation.tween`, and an axis's `levels` (`levelsFromOption`, which render options reach without
  * passing a chart). So no reader of a strategy, the IR encoder included,
  * ever sees a function.
  */

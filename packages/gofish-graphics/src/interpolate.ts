@@ -21,6 +21,7 @@ import { SMOOTH_CURVES, type SmoothCurve, channelSpline } from "./spline";
 import { lerp } from "./util";
 import type { Curve } from "./families/curve";
 import { curveName } from "./ast/graphicalOperators/routers";
+import { withKindValues } from "./ast/strategyKind";
 
 /** How a run is read between its knots, from the least to the most smooth.
  *  These are readings of values over a parameter; the screen-space
@@ -35,7 +36,7 @@ const METHODS: readonly InterpolationMethod[] = [
 ];
 
 /**
- * The method a `curve` (or `method`) option names. Unset is
+ * The method a `curve` option names. Unset is
  * `"monotone"`: the field is numeric, so the run is a sample of a continuous
  * variable and smooths — the same conclusion `connect`'s auto rule reaches for
  * a continuous connection axis, and the reason a transition traces the curve
@@ -254,7 +255,7 @@ export type InterpolateOptions = {
    *  same reason (the field is numeric, so the run is a sample of something
    *  continuous). `Curve.step()` does not blend at all: each keyframe's values
    *  hold until the next one's time arrives. */
-  method?: Curve;
+  curve?: Curve;
   /** Which fields to interpolate. By default every field whose value is a
    *  finite number at every keyframe of the run, apart from `along` and
    *  `key`. */
@@ -281,9 +282,12 @@ export type InterpolateOptions = {
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
-  { along, key, at, method: written, fields }: InterpolateOptions
+  options: InterpolateOptions
 ): Record<string, unknown>[] {
-  const method = resolveMethod(written, "interpolate({ method })");
+  // A strategy kind used bare (`Curve.monotone`) is read as its value here,
+  // where the options enter, as at every other door (`withKindValues`).
+  const { along, key, at, curve, fields } = withKindValues(options);
+  const method = resolveMethod(curve, "interpolate({ curve })");
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
   const runs = Map.groupBy(rows, (row) => row[key]);

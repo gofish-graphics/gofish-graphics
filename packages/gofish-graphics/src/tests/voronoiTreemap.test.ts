@@ -184,7 +184,7 @@ const rows = [
 console.log("# region() fills a `tile` cell");
 {
   const dl = await chart(rows, { axes: false })
-    .flow(tile({ by: "k", size: "v", method: Tiling.voronoi }))
+    .flow(tile({ by: "k", size: "v", tiling: Tiling.voronoi }))
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 200, h: 100 });
   const paths = items(dl).filter((it) => it.kind === "path");
@@ -215,7 +215,7 @@ console.log("# enclose hands its oval down to a `tile`");
   const dl = await chart(rows, { axes: false })
     .flow(
       enclose({ shape: Shape.oval, padding: 0, fill: "none" }),
-      tile({ by: "k", size: "v", method: Tiling.voronoi })
+      tile({ by: "k", size: "v", tiling: Tiling.voronoi })
     )
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 200, h: 200 });
@@ -240,7 +240,7 @@ for (const strategy of [Tiling.squarify, Tiling.voronoi]) {
   const dl = await chart(rows, { axes: false })
     .flow(
       spread({ by: "g", dir: "x", spacing: 0 }),
-      tile({ by: "k", size: "v", padding: 10, w: 200, h: 100, method: strategy })
+      tile({ by: "k", size: "v", padding: 10, w: 200, h: 100, tiling: strategy })
     )
     .mark(region({ fill: "#888" }))
     .toDisplayList({ w: 400, h: 100 });
@@ -266,8 +266,8 @@ console.log("# a rectangular tiling in a Voronoi cell is an error");
   const message = await errorOf(() =>
     chart(countryPopulations, { axes: false })
       .flow(
-        tile({ by: "continent", size: "pop", method: Tiling.voronoi }),
-        tile({ by: "region", size: "pop", method: Tiling.squarify })
+        tile({ by: "continent", size: "pop", tiling: Tiling.voronoi }),
+        tile({ by: "region", size: "pop", tiling: Tiling.squarify })
       )
       .mark(region({ fill: "continent" }))
       .toDisplayList({ w: 300, h: 300 })
@@ -283,7 +283,7 @@ console.log("# a rectangular tiling in a Voronoi cell is an error");
     chart(countryPopulations, { axes: false })
       .flow(
         enclose({ shape: Shape.box, fill: "none" }),
-        tile({ by: "region", size: "pop", method: Tiling.squarify })
+        tile({ by: "region", size: "pop", tiling: Tiling.squarify })
       )
       .mark(rect({ fill: "continent" }))
       .toDisplayList({ w: 300, h: 300 })
@@ -299,7 +299,7 @@ console.log(
     chart(rows, { axes: false })
       .flow(
         enclose({ shape: Shape.fillet, fill: "none" }),
-        tile({ by: "k", size: "v", method: Tiling.voronoi })
+        tile({ by: "k", size: "v", tiling: Tiling.voronoi })
       )
       .mark(region({ fill: "#888" }))
       .toDisplayList({ w: 200, h: 200 })
@@ -359,7 +359,7 @@ console.log("# a cell with no area holds an empty child, with no error");
     )
       .flow(
         tile({ by: "g", size: "v" }),
-        tile({ by: "k", size: "v", padding: 1, method: Tiling.voronoi })
+        tile({ by: "k", size: "v", padding: 1, tiling: Tiling.voronoi })
       )
       .mark(region({ fill: "#888" }))
       .toDisplayList({ w: 200, h: 100 })
@@ -381,7 +381,7 @@ console.log("# a child that does not fill its cell sits at its centroid");
     { k: "s", v: 2 },
     { k: "t", v: 1 },
   ];
-  const flow = tile({ by: "k", size: "v", method: Tiling.voronoi });
+  const flow = tile({ by: "k", size: "v", tiling: Tiling.voronoi });
   const cellOf = new Map<string, Pt[]>(
     items(
       await chart(skew, { axes: false })

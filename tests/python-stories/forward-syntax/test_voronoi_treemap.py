@@ -13,9 +13,9 @@ def story_default():
     return (
         chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
         .flow(
-            tile(by="continent", size="pop", spacing=5, method=Tiling.voronoi),
-            tile(by="region", size="pop", spacing=2.5, method=Tiling.voronoi),
-            tile(size="pop", spacing=1, method=Tiling.voronoi),
+            tile(by="continent", size="pop", spacing=5, tiling=Tiling.voronoi),
+            tile(by="region", size="pop", spacing=2.5, tiling=Tiling.voronoi),
+            tile(size="pop", spacing=1, tiling=Tiling.voronoi),
         )
         .mark(region(fill="continent")),
         {},
@@ -29,9 +29,9 @@ def story_circle():
         chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
         .flow(
             enclose(shape=Shape.oval, fill="none"),
-            tile(by="continent", size="pop", spacing=5, method=Tiling.voronoi),
-            tile(by="region", size="pop", spacing=2.5, method=Tiling.voronoi),
-            tile(size="pop", spacing=1, method=Tiling.voronoi),
+            tile(by="continent", size="pop", spacing=5, tiling=Tiling.voronoi),
+            tile(by="region", size="pop", spacing=2.5, tiling=Tiling.voronoi),
+            tile(size="pop", spacing=1, tiling=Tiling.voronoi),
         )
         .mark(region(fill="continent")),
         {},
@@ -43,8 +43,8 @@ def story_squarify_then_voronoi():
         chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
         .flow(
             tile(by="continent", size="pop", spacing=8),
-            tile(by="region", size="pop", spacing=2.5, method=Tiling.voronoi),
-            tile(size="pop", spacing=1, method=Tiling.voronoi),
+            tile(by="region", size="pop", spacing=2.5, tiling=Tiling.voronoi),
+            tile(size="pop", spacing=1, tiling=Tiling.voronoi),
         )
         .mark(region(fill="continent")),
         {},
@@ -55,8 +55,8 @@ def story_slice_then_dice():
     return (
         chart(COUNTRY_POPULATIONS, axes=False, w=320, h=320)
         .flow(
-            tile(by="continent", size="pop", spacing=4, method=Tiling.slice),
-            tile(by="region", size="pop", spacing=2, method=Tiling.dice),
+            tile(by="continent", size="pop", spacing=4, tiling=Tiling.slice),
+            tile(by="region", size="pop", spacing=2, tiling=Tiling.dice),
         )
         .mark(rect(fill="continent")),
         {},
@@ -68,10 +68,10 @@ def story_continent_outlines():
     return (
         chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
         .flow(
-            tile(by="continent", size="pop", spacing=6, method=Tiling.voronoi),
+            tile(by="continent", size="pop", spacing=6, tiling=Tiling.voronoi),
             enclose(shape=Shape.box, fill="none", stroke="#333", stroke_width=1.5),
-            tile(by="region", size="pop", spacing=3, method=Tiling.voronoi),
-            tile(size="pop", spacing=1, method=Tiling.voronoi),
+            tile(by="region", size="pop", spacing=3, tiling=Tiling.voronoi),
+            tile(size="pop", spacing=1, tiling=Tiling.voronoi),
         )
         .mark(region(fill="continent")),
         {},

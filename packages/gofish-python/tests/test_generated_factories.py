@@ -49,7 +49,7 @@ from gofish import (
     table,
     text,
     tile,
-    Bin,
+    Binning,
     Color,
     Overlap,
     Tiling,
@@ -79,18 +79,18 @@ def test_repeated_label_calls_append():
     `labelModifier` accumulation."""
     mark = (
         text(text="hi")
-        .label("name", position="center", color="white", font_weight="bold")
-        .label("count", position="outset-top", font_size=9)
+        .label("name", placement="center", color="white", font_weight="bold")
+        .label("count", placement="outset-top", font_size=9)
     )
     d = ir(mark)
     assert d["label"] == [
         {
             "accessor": "name",
-            "position": "center",
+            "placement": "center",
             "color": "white",
             "fontWeight": "bold",
         },
-        {"accessor": "count", "position": "outset-top", "fontSize": 9},
+        {"accessor": "count", "placement": "outset-top", "fontSize": 9},
     ]
 
 
@@ -134,8 +134,8 @@ def test_partition_requires_a_key_with_a_region():
 
 
 def test_partition_key_per_axis_is_two_partitions():
-    a = field("a").bin(Bin.step(1))
-    b = field("b").bin(Bin.step(0.5))
+    a = field("a").bin(Binning.step(1))
+    b = field("b").bin(Binning.step(0.5))
     product = partition(by={"x": a, "y": b})
     assert [ir(op) for op in product.operators] == [
         ir(partition(by=a, dir="x")),
@@ -144,7 +144,7 @@ def test_partition_key_per_axis_is_two_partitions():
 
 
 def test_partition_key_per_axis_checks():
-    a = field("a").bin(Bin.step(1))
+    a = field("a").bin(Binning.step(1))
     with pytest.raises(ValueError, match="exactly the keys x and y"):
         partition(by={"x": a})
     with pytest.raises(ValueError, match="divides both axes"):
@@ -158,7 +158,7 @@ def test_partition_key_per_axis_checks():
 
 
 def test_partition_serializes_a_binned_struct():
-    key = struct(x="lon", y="lat").bin(Bin.hex(radius={"x": 2, "y": 500}))
+    key = struct(x="lon", y="lat").bin(Binning.hex(radius={"x": 2, "y": 500}))
     d = ir(partition(by=key))
     assert "dir" not in d
     assert d["by"] == {
@@ -167,40 +167,40 @@ def test_partition_serializes_a_binned_struct():
         "ops": [{"op": "bin", "partition": {"kind": "hex", "radius": {"x": 2, "y": 500}}}],
     }
     seeds = [{"lon": 1, "lat": 2}]
-    v = struct(x="lon", y="lat").bin(Bin.voronoi(seeds=seeds))
+    v = struct(x="lon", y="lat").bin(Binning.voronoi(seeds=seeds))
     assert v["ops"][0]["partition"] == {"kind": "voronoi", "seeds": seeds}
 
 
 def test_partition_struct_checks():
     with pytest.raises(ValueError, match="has none until it is binned"):
         partition(by=struct(x="a", y="b"))
-    key = struct(x="a", y="b").bin(Bin.hex(radius=1))
+    key = struct(x="a", y="b").bin(Binning.hex(radius=1))
     with pytest.raises(ValueError, match="divides both axes at once"):
         partition(by=key, dir="x")
     with pytest.raises(ValueError, match="already binned"):
-        key.bin(Bin.hex(radius=1))
-    with pytest.raises(TypeError, match="Bin family"):
+        key.bin(Binning.hex(radius=1))
+    with pytest.raises(TypeError, match="Binning family"):
         struct(x="a", y="b").bin({"size": 1})
-    with pytest.raises(TypeError, match=r"field\(x\)\.bin\(Bin\.step"):
-        struct(x="a", y="b").bin(Bin.step(1))
+    with pytest.raises(TypeError, match=r"field\(x\)\.bin\(Binning\.step"):
+        struct(x="a", y="b").bin(Binning.step(1))
 
 
 def test_bin_factories_check_their_params():
-    assert Bin.hex(radius=0.5) == {"kind": "hex", "radius": 0.5}
+    assert Binning.hex(radius=0.5) == {"kind": "hex", "radius": 0.5}
     with pytest.raises(ValueError, match="must be > 0"):
-        Bin.hex(radius=0)
+        Binning.hex(radius=0)
     with pytest.raises(TypeError, match="missing the key 'y'"):
-        Bin.hex(radius={"x": 1})
+        Binning.hex(radius={"x": 1})
     with pytest.raises(TypeError, match="unexpected key 'z'"):
-        Bin.hex(radius={"x": 1, "y": 1, "z": 1})
+        Binning.hex(radius={"x": 1, "y": 1, "z": 1})
     with pytest.raises(ValueError, match=r"\['x'\] must be > 0"):
-        Bin.hex(radius={"x": -1, "y": 1})
+        Binning.hex(radius={"x": -1, "y": 1})
 
 
 def test_voronoi_seeds_take_a_dataframe():
     import pandas as pd
 
-    rows = Bin.voronoi(seeds=pd.DataFrame({"lon": [1.5, 2.0], "lat": [3.0, 4.0]}))
+    rows = Binning.voronoi(seeds=pd.DataFrame({"lon": [1.5, 2.0], "lat": [3.0, 4.0]}))
     assert rows["seeds"] == [{"lon": 1.5, "lat": 3.0}, {"lon": 2.0, "lat": 4.0}]
 
 
@@ -325,9 +325,9 @@ def test_bounded_pixel_options_pass_when_in_range():
     assert ir(pack(spacing=2))["spacing"] == 2
 
 
-def test_tile_serializes_method_strategy_and_gaps():
-    d = ir(tile(by="g", method=Tiling.squarify(ratio=1), spacing=2, padding=3))
-    assert d["method"] == {"kind": "squarify", "ratio": 1}
+def test_tile_serializes_tiling_strategy_and_gaps():
+    d = ir(tile(by="g", tiling=Tiling.squarify(ratio=1), spacing=2, padding=3))
+    assert d["tiling"] == {"kind": "squarify", "ratio": 1}
     assert d["spacing"] == 2
     assert d["padding"] == 3
     assert Tiling.squarify() == {"kind": "squarify"}
@@ -337,27 +337,27 @@ def test_tile_serializes_method_strategy_and_gaps():
         "binary",
         "voronoi",
     ]
-    assert "method" not in ir(tile())
+    assert "tiling" not in ir(tile())
 
 
-def test_tile_method_is_a_tagged_union():
-    # `method` is a union of dict shapes told apart by `kind`; `_to_wire` picks
+def test_tile_tiling_is_a_tagged_union():
+    # `tiling` is a union of dict shapes told apart by `kind`; `_to_wire` picks
     # the branch by the dict's `kind` and checks its keys against that branch.
-    assert ir(tile(by="g", method=Tiling.squarify(ratio=1)))["method"] == {
+    assert ir(tile(by="g", tiling=Tiling.squarify(ratio=1)))["tiling"] == {
         "kind": "squarify",
         "ratio": 1,
     }
-    assert ir(tile(by="g", method=Tiling.voronoi(seed=7)))["method"] == {
+    assert ir(tile(by="g", tiling=Tiling.voronoi(seed=7)))["tiling"] == {
         "kind": "voronoi",
         "seed": 7,
     }
-    assert ir(tile(by="g", method=Tiling.voronoi))["method"] == {"kind": "voronoi"}
+    assert ir(tile(by="g", tiling=Tiling.voronoi))["tiling"] == {"kind": "voronoi"}
     with pytest.raises(TypeError, match="ratio"):
-        tile(by="g", method={"kind": "slice", "ratio": 2})
+        tile(by="g", tiling={"kind": "slice", "ratio": 2})
     with pytest.raises(TypeError, match="'nope'"):
-        tile(by="g", method={"kind": "nope"})
+        tile(by="g", tiling={"kind": "nope"})
     with pytest.raises(TypeError, match="missing"):
-        tile(by="g", method={"ratio": 2})
+        tile(by="g", tiling={"ratio": 2})
 
 
 def test_tile_combinator_accepts_key():

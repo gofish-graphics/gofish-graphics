@@ -32,15 +32,15 @@ import type {
   FieldPredicateIR,
   AxisOptions,
   AxisLabelOptions,
-  BinIR,
+  BinningIR,
   CalendarPartitionIR,
   CurveIR,
   ShapeIR,
-  PlaceIR,
+  PlacementIR,
   LabelSpecIR,
   OverlapIR,
   TilingIR,
-  FilterIR,
+  EffectIR,
 } from "../frontend/schema.js";
 
 declare const process: { exit(code: number): never };
@@ -133,7 +133,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "spacing",
     "padding",
     "round",
-    "method",
+    "tiling",
     "sort",
     "size",
   ],
@@ -235,7 +235,7 @@ for (const [name, keys] of Object.entries(SCHEMA_OPTION_TYPE_KEYS)) {
 console.log("\n# LABEL_OPTIONS agree with schema.ts LabelSpecIR");
 {
   const schemaKeys = Object.keys({
-    position: true,
+    placement: true,
     avoiding: true,
     halo: true,
     background: true,
@@ -270,10 +270,10 @@ const SCHEMA_STRATEGY_KEYS: Record<
   keyof typeof STRATEGIES,
   Record<string, Record<string, true>>
 > = {
-  Filter: {
+  Effect: {
     grayscale: { amount: true },
     luminanceToAlpha: {},
-  } satisfies StrategyKeys<FilterIR>,
+  } satisfies StrategyKeys<EffectIR>,
   Tiling: {
     squarify: { ratio: true },
     slice: {},
@@ -305,13 +305,13 @@ const SCHEMA_STRATEGY_KEYS: Record<
       straights: true,
     },
   } satisfies StrategyKeys<CurveIR>,
-  Bin: {
+  Binning: {
     step: { size: true },
     thresholds: { thresholds: true },
     quantiles: { quantiles: true },
     hex: { radius: true },
     voronoi: { seeds: true },
-  } satisfies StrategyKeys<BinIR>,
+  } satisfies StrategyKeys<BinningIR>,
   Calendar: {
     second: { every: true },
     minute: { every: true },
@@ -335,17 +335,17 @@ const SCHEMA_STRATEGY_KEYS: Record<
       separate: true,
     },
   } satisfies StrategyKeys<ShapeIR>,
-  Place: {
+  Placement: {
     around: { directions: true, side: true, offset: true },
     along: { at: true, side: true, orient: true, offset: true },
     start: { offset: true },
     end: { offset: true },
     interior: {},
-  } satisfies StrategyKeys<PlaceIR>,
+  } satisfies StrategyKeys<PlacementIR>,
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts FilterIR / TilingIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR"
+  "\n# STRATEGIES agree with schema.ts EffectIR / TilingIR / OverlapIR / CurveIR / BinningIR / CalendarPartitionIR / ShapeIR / PlacementIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<

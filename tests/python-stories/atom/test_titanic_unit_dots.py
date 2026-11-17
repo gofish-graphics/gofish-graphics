@@ -32,7 +32,7 @@ def story_default():
                 h="fare",
                 size="fare",
                 spacing=0,
-                method=Tiling.squarify(ratio=1),
+                tiling=Tiling.squarify(ratio=1),
                 sort="desc",
             )
         )

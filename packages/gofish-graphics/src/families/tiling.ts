@@ -1,5 +1,5 @@
 /**
- * The `Tiling` family: the tiling strategies of `tile`'s `method` option.
+ * The `Tiling` family: the tiling strategies of `tile`'s `tiling` option.
  *
  * `lib.ts` binds this module as `Tiling` (`Tiling.squarify({ ratio: 1 })`), and
  * `gofish-graphics/tiling` exports the same module. No kind has a required
@@ -17,7 +17,7 @@ import type { Frontend } from "gofish-ir";
 import { bareKind } from "../ast/strategyKind";
 
 /**
- * How `tile` tiles its region: the value of its `method` option.
+ * How `tile` tiles its region: the value of its `tiling` option.
  */
 export type Tiling = Frontend.TilingIR;
 

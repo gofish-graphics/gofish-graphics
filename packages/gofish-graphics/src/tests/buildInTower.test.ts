@@ -457,7 +457,7 @@ console.log("# the race: chained .transition() vs .layer(time.transition())");
     );
   const bar = () =>
     rect({ w: "value", fill: "category" }).label("name", {
-      position: "outset-right",
+      placement: "outset-right",
     });
   const view = { w: 600, h: 600, axes: { x: true, y: false } };
   /** The race as the Bar Chart Race story writes it. */

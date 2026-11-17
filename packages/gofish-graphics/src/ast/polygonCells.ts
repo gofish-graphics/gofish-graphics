@@ -4,7 +4,7 @@
 
 /**
  * Polygon cells (#1059, #48): what `struct({ x, y }).bin(b)` turns a row into,
- * for a `Bin` strategy `b` (families/bin.ts).
+ * for a `Binning` strategy `b` (families/binning.ts).
  *
  * A cell system of the plane divides the plane of two fields into cells that
  * do not overlap. A {@link PolygonCell} is one cell: an id, its outline (a
@@ -16,8 +16,8 @@
  * carries), not over the rows of one group, so every group of a split sees
  * the same cells and an empty cell is kept:
  *
- *  - `Bin.hex({ radius })`: the hexagons of a fixed grid that meet the box.
- *  - `Bin.voronoi({ seeds })`: one cell per seed, clipped to the box that
+ *  - `Binning.hex({ radius })`: the hexagons of a fixed grid that meet the box.
+ *  - `Binning.voronoi({ seeds })`: one cell per seed, clipped to the box that
  *    holds the domain and the seeds, so every seed has a cell.
  */
 import { Delaunay } from "d3-delaunay";
@@ -169,12 +169,12 @@ function hexMeetsBox(c: Point, b: UnitBox): boolean {
 
 /** A hex radius per axis: a number (both axes) or `{ x, y }`. */
 const radii = (
-  radius: Extract<Frontend.BinIR, { kind: "hex" }>["radius"]
+  radius: Extract<Frontend.BinningIR, { kind: "hex" }>["radius"]
 ): [number, number] =>
   typeof radius === "number" ? [radius, radius] : [radius.x, radius.y];
 
 /**
- * The hexagons of `Bin.hex({ radius })` over the domain `x × y` (the box of
+ * The hexagons of `Binning.hex({ radius })` over the domain `x × y` (the box of
  * the two columns' domains). The grid is pointy-top, with a hexagon centered
  * on (0, 0); the radius is per axis, so a hexagon is the unit hexagon scaled
  * by the x radius on x and the y radius on y.
@@ -186,7 +186,7 @@ const radii = (
  * such hexagon holds. No domain (a column with no values) has no cells.
  */
 export function hexCells(
-  bin: Extract<Frontend.BinIR, { kind: "hex" }>,
+  bin: Extract<Frontend.BinningIR, { kind: "hex" }>,
   _fields: PlaneFields,
   x: HasDomain | undefined,
   y: HasDomain | undefined,
@@ -297,7 +297,7 @@ const NEIGHBORS: readonly (readonly [number, number])[] = [
 // ---------------------------------------------------------------------------
 
 /**
- * The cells of `Bin.voronoi({ seeds })`: one per seed, the points nearer to
+ * The cells of `Binning.voronoi({ seeds })`: one per seed, the points nearer to
  * it than to any other seed, clipped to the box that holds the domain
  * (`xs × ys`) and the seeds, so every seed has a cell. Seeds at the same point
  * share one cell, that of the first. A point goes to its nearest seed.
@@ -306,7 +306,7 @@ const NEIGHBORS: readonly (readonly [number, number])[] = [
  * dual Voronoi diagram clipped to a box).
  */
 export function voronoiCells(
-  bin: Extract<Frontend.BinIR, { kind: "voronoi" }>,
+  bin: Extract<Frontend.BinningIR, { kind: "voronoi" }>,
   fields: PlaneFields,
   x: HasDomain | undefined,
   y: HasDomain | undefined,
@@ -314,7 +314,7 @@ export function voronoiCells(
 ): PolygonCells {
   const seeds = bin.seeds;
   if (!Array.isArray(seeds) || seeds.length === 0)
-    throw new Error(`${where}: Bin.voronoi needs at least one seed.`);
+    throw new Error(`${where}: Binning.voronoi needs at least one seed.`);
   // Each seed's point (the first seed at each point), with that seed's
   // index, and the box that holds the seeds.
   const points: Point[] = [];
@@ -355,7 +355,7 @@ export function voronoiCells(
   ];
   if (xRange[0] === xRange[1] || yRange[0] === yRange[1])
     throw new Error(
-      `${where}: Bin.voronoi needs the data and seeds to spread out on both ` +
+      `${where}: Binning.voronoi needs the data and seeds to spread out on both ` +
         `"${fields.x}" and "${fields.y}"; they lie on one line, so the cells ` +
         `would have no area.`
     );
@@ -388,7 +388,7 @@ export function voronoiCells(
   };
 }
 
-/** The cells of `bin` (a `Bin` strategy) over the domain `x × y`, the two
+/** The cells of `bin` (a `Binning` strategy) over the domain `x × y`, the two
  *  columns' domains. */
 export function planeCells(
   bin: Frontend.StructBinIR,

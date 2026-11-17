@@ -168,7 +168,7 @@ export type HasQuantity = { name: string };
  *  result's own. A binned key's cells cover it (cells.ts), so every group
  *  of a split over the column has the same cells, whatever rows it holds.
  *  `sorted` gives the same values in order, for the cells of
- *  `Bin.quantiles`, which are quantiles of them: it reads them off the rows
+ *  `Binning.quantiles`, which are quantiles of them: it reads them off the rows
  *  on its first call only, so a column no quantile reads is never copied
  *  or sorted. */
 export type HasDomain = {

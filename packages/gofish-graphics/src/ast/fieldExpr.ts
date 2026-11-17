@@ -172,8 +172,8 @@ export class FieldExpr<
    *  - a product of calendar levels, `[Calendar.year, Calendar.month]`: one
    *    cell where one cell of each level meet, each level a part of the one
    *    before it (the June of 2015, labeled "Jun 2015").
-   *  - `Bin.step(size)`, `Bin.thresholds(countOrEdges)` (a count or a list
-   *    of edges), or `Bin.quantiles(countOrProbabilities)` (a count or a
+   *  - `Binning.step(size)`, `Binning.thresholds(countOrEdges)` (a count or a list
+   *    of edges), or `Binning.quantiles(countOrProbabilities)` (a count or a
    *    list of probabilities); about 10 cells when omitted.
    *
    *  A second `.bin(...)` splits each cell of the first (a chain:
@@ -277,7 +277,7 @@ export class FieldExpr<
     // fight every concrete row type at the call site.
   ): FieldPredicate {
     // The predicate is outside the op pipeline, so an expression carrying ops
-    // would silently drop them (`field("x").bin(Bin.step(10)).between(...)` would test the
+    // would silently drop them (`field("x").bin(Binning.step(10)).between(...)` would test the
     // RAW x). Say so instead of ignoring them.
     if (this._ops.length > 0) {
       throw new Error(

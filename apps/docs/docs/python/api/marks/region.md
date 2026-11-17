@@ -19,13 +19,13 @@ is drawn as that outline; any other region is drawn as a rectangle.
 :::
 
 ```python
-from gofish import Bin, Color, chart, field, partition, region
+from gofish import Binning, Color, chart, field, partition, region
 
 chart(movies, color=Color.gradient("blues"), axes=True).flow(
     partition(
         by={
-            "x": field("IMDB Rating").bin(Bin.step(0.5)),
-            "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+            "x": field("IMDB Rating").bin(Binning.step(0.5)),
+            "y": field("Rotten Tomatoes Rating").bin(Binning.step(5)),
         }
     )
 ).mark(region(fill=field("IMDB Rating").count())).render(w=480, h=320)

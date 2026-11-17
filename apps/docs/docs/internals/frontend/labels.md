@@ -11,7 +11,7 @@ covers:
   - packages/gofish-graphics/src/ast/labels/strategies.ts
   - packages/gofish-graphics/src/ast/labels/placeStep.ts
   - packages/gofish-graphics/src/ast/labels/collide.ts
-  - packages/gofish-graphics/src/families/place.ts
+  - packages/gofish-graphics/src/families/placement.ts
 ---
 
 # Labels
@@ -81,7 +81,7 @@ legend past it. It has three phases:
    operator factory stamps `datum` on each group leaf it produces, so the push-down
    stops there. A mark that draws its own ink between or around its
    children keeps its label too: it says where its label goes
-   (`labelPosition`, below), as `arrow` and the `line` connector do, and it
+   (`labelPlacement`, below), as `arrow` and the `line` connector do, and it
    is the thing labeled.
 2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it,
    each spec resolved once to its position on its target (`positionOf`),
@@ -247,9 +247,9 @@ warns when it draws past a canvas it does (see `drawnOverflow` in
 
 ## Placement strategies
 
-`position` takes a position string, or a value of the `Place` family
-(`families/place.ts`): `Place.around()`, `Place.along({ at, side, orient })`,
-`Place.start()`, `Place.end()` and `Place.interior()`. A strategy reads the
+`position` takes a position string, or a value of the `Placement` family
+(`families/placement.ts`): `Placement.around()`, `Placement.along({ at, side, orient })`,
+`Placement.start()`, `Placement.end()` and `Placement.interior()`. A strategy reads the
 target's `outline` geometry (see
 [Layout Calculation](/internals/layout/passes)) and proposes candidate spots,
 best first (`strategies.ts`):
@@ -282,7 +282,7 @@ best first (`strategies.ts`):
   stopping once no unread edge can be nearer.
 
 A strategy that needs geometry the target lacks is an error that names it
-(`Place.interior needs a filled region; connect has an open one`). A
+(`Placement.interior needs a filled region; connect has an open one`). A
 polygon with fill `"none"` has a closed outline but no filled region, so
 `interior` is an error on it too.
 
@@ -329,20 +329,20 @@ labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).
 
 A position string never goes through the chooser, so it places exactly as
 before. With no `position`, the default comes from the target's node
-definition (`labelPosition`): `ellipse` gives `Place.around()` and `arrow`
-`Place.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
+definition (`labelPlacement`): `ellipse` gives `Placement.around()` and `arrow`
+`Placement.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
 give `"outline"`, which the chooser reads from the outline the mark draws
-(`placeByOutline`): `Place.end()` for an open path, `Place.interior()` for a
-filled region, `Place.around()` for a closed outline with no fill. A mark
+(`placeByOutline`): `Placement.end()` for an open path, `Placement.interior()` for a
+filled region, `Placement.around()` for a closed outline with no fill. A mark
 that draws no outline (a ring an inset emptied) has nothing to describe,
 so its label is hidden, and the note does not count it. Anything
 else gets `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
 outlines are not on the screen yet, so a default falls back to `"outset"` and
 a strategy written out is an error that cites #1201. Before that, a strategy
-is checked against the `Place` family with `checkStrategy` (an unknown kind,
+is checked against the `Placement` family with `checkStrategy` (an unknown kind,
 an undeclared param or a value out of bounds throws the validator's own
 message). The family's kinds and params are declared once in `STRATEGIES`
-(`descriptors.ts`), which also gives the wire form, the Python `Place`
+(`descriptors.ts`), which also gives the wire form, the Python `Placement`
 module, and the docs; a label's `avoiding`, `halo` and `background` are
 `LABEL_OPTIONS` fields (see [Frontend IR](/internals/frontend/serialization)).
 
@@ -373,7 +373,7 @@ Whether the label is inside is read from where it landed: its center is inside
 one of its target's filled closed outlines. Inside an unfilled one the page shows
 through, so it counts as outside. So a `"center"` label on a C-shaped polygon,
 whose box center falls in the C's opening, is colored for the page, and a
-`Place.interior()` label for the fill.
+`Placement.interior()` label for the fill.
 
 The label is read against the color directly behind its glyphs. That is the white
 page, under the target's fill when the label is inside, under the label's
@@ -439,7 +439,7 @@ The former bespoke pipeline is gone:
   its `valueLabelItems` lowering — deleted outright (#741 stage 2); every
   caller that used it (`Treemap`, `CircleTreemap`, `BarStackedWithLabels`, and
   their Python mirrors) migrated to
-  `.label(field, { position: "center", color: "white", fontSize: 12 })`.
+  `.label(field, { placement: "center", color: "white", fontSize: 12 })`.
 
 `.label()` itself, and the operator-level boolean shorthand (`label: false` to
 suppress a group's inherited label — used by `Ribbon`), are unaffected: they

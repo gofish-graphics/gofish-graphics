@@ -1141,20 +1141,20 @@ check(
 );
 check(
   "label: [{ accessor }] accepts (array-of-specs form)",
-  validate(chartWithLabel([{ accessor: "amount", position: "outset" }])).valid
+  validate(chartWithLabel([{ accessor: "amount", placement: "outset" }])).valid
 );
 check(
   "label: [{ accessor }, { accessor }] accepts (multiple specs)",
   validate(
     chartWithLabel([
-      { accessor: "amount", position: "outset" },
-      { accessor: "count", position: "center", fontWeight: "bold" },
+      { accessor: "amount", placement: "outset" },
+      { accessor: "count", placement: "center", fontWeight: "bold" },
     ])
   ).valid
 );
 check(
   "label: { accessor } is rejected (bare object shorthand was dropped; must be an array)",
-  !validate(chartWithLabel({ accessor: "amount", position: "outset" })).valid
+  !validate(chartWithLabel({ accessor: "amount", placement: "outset" })).valid
 );
 check(
   "label: number is rejected (not a recognized shape)",
@@ -1333,10 +1333,10 @@ console.log("\n# Strategies");
     ["Curve", { kind: "monotone" }],
     ["Curve", { kind: "arc", direction: "down" }],
     ["Curve", { kind: "perfectArrows", bow: 0.3, padEnd: 4 }],
-    ["Bin", { kind: "step", size: 0.5 }],
-    ["Bin", { kind: "thresholds", thresholds: 20 }],
-    ["Bin", { kind: "thresholds", thresholds: [0, 5, 10] }],
-    ["Bin", { kind: "hex", radius: 1 }],
+    ["Binning", { kind: "step", size: 0.5 }],
+    ["Binning", { kind: "thresholds", thresholds: 20 }],
+    ["Binning", { kind: "thresholds", thresholds: [0, 5, 10] }],
+    ["Binning", { kind: "hex", radius: 1 }],
     ["Calendar", { kind: "month" }],
     ["Calendar", { kind: "month", every: 3 }],
     ["Calendar", { kind: "week", every: 2, start: "sunday" }],
@@ -1375,12 +1375,12 @@ console.log("\n# Strategies");
       ["Curve", { type: "monotone" }, /unknown kind undefined/],
       ["Curve", { kind: "arc", direction: "left" }, /direction/],
       ["Curve", { kind: "linear", options: {} }, /unknown field "options"/],
-      ["Bin", { kind: "step", size: 0 }, /above 0/],
-      ["Bin", { kind: "step", size: Infinity }, /finite/],
-      ["Bin", { kind: "step" }, /size/],
-      ["Bin", { step: 1 }, /unknown kind undefined/],
-      ["Bin", { kind: "thresholds", thresholds: 0 }, /at least 1/],
-      ["Bin", { kind: "quantiles", quantiles: [1] }, /below 1/],
+      ["Binning", { kind: "step", size: 0 }, /above 0/],
+      ["Binning", { kind: "step", size: Infinity }, /finite/],
+      ["Binning", { kind: "step" }, /size/],
+      ["Binning", { step: 1 }, /unknown kind undefined/],
+      ["Binning", { kind: "thresholds", thresholds: 0 }, /at least 1/],
+      ["Binning", { kind: "quantiles", quantiles: [1] }, /below 1/],
       ["Calendar", { kind: "month", every: 0 }, /at least 1/],
       ["Calendar", { kind: "month", every: 1.5 }, /whole number/],
       [
@@ -1400,7 +1400,7 @@ console.log("\n# Strategies");
     );
   }
 
-  // A Bin kind is valid only on its key, and the error names the key that
+  // A Binning kind is valid only on its key, and the error names the key that
   // takes it.
   const errorIn = (fn: () => void): string => {
     try {
@@ -1423,8 +1423,9 @@ console.log("\n# Strategies");
       checkPartition({ kind: "hex", radius: 1 }, "where")
     );
     check(
-      "checkPartition rejects Bin.hex, naming struct",
-      /Bin\.hex bins two fields/.test(why) && why.includes("struct({ x, y })"),
+      "checkPartition rejects Binning.hex, naming struct",
+      /Binning\.hex bins two fields/.test(why) &&
+        why.includes("struct({ x, y })"),
       why
     );
   }
@@ -1433,8 +1434,8 @@ console.log("\n# Strategies");
       checkStructBin({ kind: "step", size: 1 }, "where")
     );
     check(
-      "checkStructBin rejects Bin.step, naming field",
-      /Bin\.step bins one field/.test(why) && why.includes("field(x).bin"),
+      "checkStructBin rejects Binning.step, naming field",
+      /Binning\.step bins one field/.test(why) && why.includes("field(x).bin"),
       why
     );
   }
@@ -1460,14 +1461,14 @@ console.log("\n# Strategies");
   );
 
   // The validator walks a strategy option the same way.
-  const doc = (method: unknown) =>
+  const doc = (tiling: unknown) =>
     ({
       irVersion: 0,
       ir: "gofish-frontend",
       root: {
         type: "chart",
         data: { type: "table", id: "t0" },
-        operators: [{ type: "tile", method }],
+        operators: [{ type: "tile", tiling }],
         mark: { type: "rect" },
       },
     }) as unknown as FrontendIRDocument;
@@ -1477,7 +1478,7 @@ console.log("\n# Strategies");
     !unknownKind.valid &&
       unknownKind.errors.some(
         (e) =>
-          /method\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
+          /tiling\.kind$/.test(e.path) && /unknown kind "strip"/.test(e.message)
       ),
     JSON.stringify(unknownKind)
   );

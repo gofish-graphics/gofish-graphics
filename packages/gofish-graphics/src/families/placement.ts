@@ -3,15 +3,15 @@
 // </gofish-wiki>
 
 /**
- * The `Place` family: where a label goes on the mark it labels, the values
- * of `.label()`'s `position` option beside today's position strings
+ * The `Placement` family: where a label goes on the mark it labels, the values
+ * of `.label()`'s `placement` option beside today's position strings
  * (`"outset-top"`, `"center"`, ...).
  *
- * `lib.ts` binds this module as `Place` (`Place.along({ at: 0.6 })`), and
- * `gofish-graphics/place` exports the same module. A strategy is a plain
+ * `lib.ts` binds this module as `Placement` (`Placement.along({ at: 0.6 })`), and
+ * `gofish-graphics/placement` exports the same module. A strategy is a plain
  * object, `{ kind, ...params }`. No strategy has a required option, so each
- * is a value as it is, and calling it sets options: `Place.end` is
- * `Place.end()` (#1133, `ast/strategyKind.ts`).
+ * is a value as it is, and calling it sets options: `Placement.end` is
+ * `Placement.end()` (#1133, `ast/strategyKind.ts`).
  *
  * Each strategy reads one kind of geometry from the labeled mark's outline
  * (`ast/geometry/outline.ts`) and proposes candidate spots in order. The
@@ -23,31 +23,31 @@
 import type { Frontend } from "gofish-ir";
 import { bareKind, given } from "../ast/strategyKind";
 
-/** Every placement strategy: a value of `.label()`'s `position`. */
-export type Place = Frontend.PlaceIR;
+/** Every placement strategy: a value of `.label()`'s `placement`. */
+export type Placement = Frontend.PlacementIR;
 
 /** `around()`: at the outline's extreme point in each direction. See
  *  {@link around}. */
-export type AroundPlace = Extract<Place, { kind: "around" }>;
+export type AroundPlacement = Extract<Placement, { kind: "around" }>;
 
 /** `along()`: on an outline. See {@link along}. */
-export type AlongPlace = Extract<Place, { kind: "along" }>;
+export type AlongPlacement = Extract<Placement, { kind: "along" }>;
 
 /** `start()`: past the first point of an open path. See {@link start}. */
-export type StartPlace = Extract<Place, { kind: "start" }>;
+export type StartPlacement = Extract<Placement, { kind: "start" }>;
 
 /** `end()`: past the last point of an open path. See {@link end}. */
-export type EndPlace = Extract<Place, { kind: "end" }>;
+export type EndPlacement = Extract<Placement, { kind: "end" }>;
 
 /** `interior()`: inside a region. See {@link interior}. */
-export type InteriorPlace = Extract<Place, { kind: "interior" }>;
+export type InteriorPlacement = Extract<Placement, { kind: "interior" }>;
 
 /** A screen direction from a mark: the four sides and the four corners. */
-export type Direction = Frontend.PlaceDirectionIR;
+export type Direction = Frontend.PlacementDirectionIR;
 
 /** Which side of a region's boundary a label sits on. */
 export type BoundarySide = Exclude<
-  NonNullable<AroundPlace["side"]>,
+  NonNullable<AroundPlacement["side"]>,
   readonly unknown[]
 >;
 
@@ -58,12 +58,12 @@ export type BoundarySide = Exclude<
  * and `"right"` are the path's own, of its direction of travel. On a closed
  * outline, `"inset"` and `"outset"` are inside and outside.
  */
-export type Side = Frontend.PlaceSideIR;
+export type Side = Frontend.PlacementSideIR;
 
 /** Where along an outline: a fraction of its length (the label is centered
  *  there), its start, middle or end (the label's start or end is flush with
  *  the path's), or one of the mark's parts (the label stays within it). */
-export type At = NonNullable<AlongPlace["at"]>;
+export type At = NonNullable<AlongPlacement["at"]>;
 
 /** A box's edges, named by axis in the mark's own frame (`y-max` is the
  *  top of a bar on a continuous y). */
@@ -71,7 +71,7 @@ export type Part = Exclude<At, number | "start" | "middle" | "end">;
 
 /** How a label along an outline is turned: level, or turned to the chord of
  *  the outline across the label's width. */
-export type Orient = NonNullable<AlongPlace["orient"]>;
+export type Orient = NonNullable<AlongPlacement["orient"]>;
 
 /**
  * Around a mark, by screen direction: each candidate sits at the point of
@@ -87,13 +87,13 @@ export type Orient = NonNullable<AlongPlace["orient"]>;
  * @param side `"outset"` (default) or `"inset"`, or a list tried in order at
  *   each direction: a bar's value goes above it, or inside its top when there
  *   is no room above, with
- *   `Place.around({ directions: ["top"], side: ["outset", "inset"] })`.
+ *   `Placement.around({ directions: ["top"], side: ["outset", "inset"] })`.
  * @param offset Pixels between the outline and the label. Default: the
  *   label's `offset`, or 3.
  */
 export const around = bareKind(
-  "Place.around",
-  (opts: Omit<AroundPlace, "kind"> = {}): AroundPlace => ({
+  "Placement.around",
+  (opts: Omit<AroundPlacement, "kind"> = {}): AroundPlacement => ({
     kind: "around",
     ...given(opts),
   })
@@ -120,8 +120,8 @@ export const around = bareKind(
  *   the label's `offset`, or 3.
  */
 export const along = bareKind(
-  "Place.along",
-  (opts: Omit<AlongPlace, "kind"> = {}): AlongPlace => ({
+  "Placement.along",
+  (opts: Omit<AlongPlacement, "kind"> = {}): AlongPlacement => ({
     kind: "along",
     ...given(opts),
   })
@@ -137,8 +137,8 @@ export const along = bareKind(
  *   label's `offset`, or 4.
  */
 export const start = bareKind(
-  "Place.start",
-  (opts: Omit<StartPlace, "kind"> = {}): StartPlace => ({
+  "Placement.start",
+  (opts: Omit<StartPlacement, "kind"> = {}): StartPlacement => ({
     kind: "start",
     ...given(opts),
   })
@@ -154,8 +154,8 @@ export const start = bareKind(
  *   label's `offset`, or 4.
  */
 export const end = bareKind(
-  "Place.end",
-  (opts: Omit<EndPlace, "kind"> = {}): EndPlace => ({
+  "Placement.end",
+  (opts: Omit<EndPlacement, "kind"> = {}): EndPlacement => ({
     kind: "end",
     ...given(opts),
   })
@@ -168,8 +168,8 @@ export const end = bareKind(
  * size. The default for a band (`ribbon`, `area`) and a `polygon`.
  */
 export const interior = bareKind(
-  "Place.interior",
-  (opts: Omit<InteriorPlace, "kind"> = {}): InteriorPlace => ({
+  "Placement.interior",
+  (opts: Omit<InteriorPlacement, "kind"> = {}): InteriorPlacement => ({
     kind: "interior",
     ...given(opts),
   })

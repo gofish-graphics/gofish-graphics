@@ -368,7 +368,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     StructAccessor: {
       description:
-        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
+        "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Binning.hex or Binning.voronoi). Valid as a partition's `by` only once binned.",
       type: "object",
       required: ["type", "fields"],
       additionalProperties: false,
@@ -437,7 +437,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "bin" },
             partition: {
               description:
-                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
+                "The partition each value is binned into: a Calendar value (Calendar.month({ every: 3 }) is { kind: month, every: 3 }), Binning.step(size), Binning.thresholds(countOrEdges) or Binning.quantiles(countOrProbabilities), told apart by kind; or a product of Calendar values (a list, [year, month]: one cell where they meet). Absent: about 10 cells. A second bin op splits the cells of the one before it.",
               oneOf: [
                 { $ref: "#/$defs/Partition" },
                 {

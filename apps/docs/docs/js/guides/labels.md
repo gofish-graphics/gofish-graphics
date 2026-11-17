@@ -36,7 +36,7 @@ gf.chart(seafood, { axes: true })
   .mark(
     gf
       .rect({ h: "count", fill: "species" })
-      .label("count", { position: "center", fontSize: 10 })
+      .label("count", { placement: "center", fontSize: 10 })
   )
   .render(root, { w: 400, h: 250 });
 ```
@@ -73,7 +73,7 @@ Special values:
 
 | Option       | Type               | Default | Description                                      |
 | ------------ | ------------------ | ------- | ------------------------------------------------ |
-| `position`   | `string`           | auto    | Label position (see above)                       |
+| `placement`  | `string`           | auto    | Label position (see above)                       |
 | `fontSize`   | `number`           | —       | Font size in pixels                              |
 | `color`      | `string`           | auto    | Text color (auto-contrasts against fill)         |
 | `offset`     | `number`           | `6`     | Distance from the shape edge                     |
@@ -97,11 +97,11 @@ gf.chart(seafood, { axes: true })
     gf
       .rect({ h: gf.field("count").sum() })
       .label(gf.field("count").sum(), {
-        position: "center",
+        placement: "center",
         color: "white",
         fontWeight: "bold",
       })
-      .label("lake", { position: "outset-top", fontSize: 9 })
+      .label("lake", { placement: "outset-top", fontSize: 9 })
   )
   .render(root, { w: 400, h: 300 });
 ```
@@ -133,7 +133,7 @@ gf.chart(heatData, {
   .mark(
     gf
       .rect({ fill: "value" })
-      .label("value", { position: "center", fontSize: 11 })
+      .label("value", { placement: "center", fontSize: 11 })
   )
   .render(root, { w: 350, h: 250 });
 ```
@@ -152,7 +152,7 @@ gf.chart(seafood, { axes: true })
   .mark(
     gf
       .rect({ h: "count" })
-      .label("lake", { position: "outset", rotate: 45, fontSize: 10 })
+      .label("lake", { placement: "outset", rotate: 45, fontSize: 10 })
   )
   .render(root, { w: 400, h: 280 });
 ```
@@ -168,7 +168,9 @@ instead of one label per mark instance:
 
 ```ts
 chart(data)
-  .flow(stack({ by: "class", dir: "y" }).label("class", { position: "center" }))
+  .flow(
+    stack({ by: "class", dir: "y" }).label("class", { placement: "center" })
+  )
   .mark(rect({ h: "count" }));
 ```
 
@@ -213,7 +215,7 @@ Pass a function instead of a field name for computed labels.
 // Function accessor — receives the datum, returns display text
 .mark(
   rect({ w: "proportion", fill: "sex" })
-    .label((d) => d[0].people.toLocaleString(), { position: "center", color: "white" })
+    .label((d) => d[0].people.toLocaleString(), { placement: "center", color: "white" })
 )
 ```
 
@@ -226,14 +228,14 @@ Pass a function instead of a field name for computed labels.
 
 // Center labels on stacked bars — one bar per (lake, species) pair, so
 // "count" is already constant within each bar's group
-.mark(rect({ h: "count", fill: "species" }).label("count", { position: "center" }))
+.mark(rect({ h: "count", fill: "species" }).label("count", { placement: "center" }))
 
 // Right-aligned labels on horizontal bars (group total again)
-.mark(rect({ w: "count" }).label(field("count").sum(), { position: "outset-right", offset: 15 }))
+.mark(rect({ w: "count" }).label(field("count").sum(), { placement: "outset-right", offset: 15 }))
 
 // Heatmap with auto-contrast
-.mark(rect({ fill: "value" }).label("value", { position: "center", fontSize: 11 }))
+.mark(rect({ fill: "value" }).label("value", { placement: "center", fontSize: 11 }))
 
 // Rotated labels above bars, labeled by the (constant) by-field
-.mark(rect({ h: "count" }).label("lake", { position: "outset", rotate: 60 }))
+.mark(rect({ h: "count" }).label("lake", { placement: "outset", rotate: 60 }))
 ```

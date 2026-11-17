@@ -31,7 +31,7 @@
  *    nested option dict (`axes={"x": {"label": {"angle": 45}}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
  *  - The strategy family modules, `gofish/<family>.py` (`tiling.py`,
- *    `overlap.py`, `curve.py`, `bin.py`, `calendar.py`), one factory per kind
+ *    `overlap.py`, `curve.py`, `binning.py`, `calendar.py`), one factory per kind
  *    and per preset of the STRATEGIES table. Each builds
  *    `{"kind": ..., **params}` with snake_case keys, which `_to_wire` renames
  *    at the option the strategy is passed to (each family is an OPTION_TYPES
@@ -149,7 +149,7 @@ function acceptsDict(type: FieldType): boolean {
 
 /** The field that tells the branches of a tagged union apart: a dict value's
  *  `kind` names the branch it means. It is the convention the strategy
- *  objects (`tile`'s `method`, scatter `overlap`) already follow. */
+ *  objects (`tile`'s `tiling`, scatter `overlap`) already follow. */
 const DISCRIMINATOR = "kind";
 
 /** The `kind` values that select an object branch of a tagged union, or null
@@ -1059,12 +1059,21 @@ function writeFamilyModule(opts: {
 }): void {
   const { family, doc, table, wire, factories } = opts;
   // The module is the family's name in lowercase. A Python package's
-  // submodule and its attribute share one name, so importing
-  // `gofish.filter` would replace the `filter` operator: a module whose
-  // name is also an operator's takes a trailing `_` (`gofish.filter_`), as
-  // a kwarg that is a Python keyword does (`from_=`).
+  // submodule and its attribute share one name, so a family module named
+  // like an operator would replace that operator on import. The naming rule
+  // is that a family never shares its name with an operator
+  // (`apps/docs/docs/internals/design/api-design.md`, #1355), so such a
+  // family is an error, not a renamed module.
   const lower = family.toLowerCase();
-  const module = Object.hasOwn(OPERATORS, lower) ? `${lower}_` : lower;
+  if (Object.hasOwn(OPERATORS, lower))
+    throw new Error(
+      `[gofish-python gen] the strategy family ${family} shares its name with ` +
+        `the operator ${lower}: importing gofish.${lower} would replace it. A ` +
+        `family never shares its name with an operator; rename one of them ` +
+        `(see apps/docs/docs/internals/design/api-design.md, "Strategy ` +
+        `families are uppercase namespaces").`
+    );
+  const module = lower;
   const example = factories[0].name;
   const bareExample = wire.bare
     ? factories.find((f) =>

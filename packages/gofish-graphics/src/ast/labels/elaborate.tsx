@@ -18,7 +18,7 @@ import {
   type LabelPlaceItem,
 } from "./placeStep";
 import { avoidedRefs } from "../nodeRefs";
-import type { Place } from "../../families/place";
+import type { Placement } from "../../families/placement";
 import { wrapPreservingIdentity, wrapRing } from "../elaborationUtils";
 import { Frontend } from "gofish-ir";
 import {
@@ -105,13 +105,13 @@ const autoLabelColor =
       backdrop
     );
 
-/** Where a label goes on its target: a position string, a `Place`
+/** Where a label goes on its target: a position string, a `Placement`
  *  strategy, or `"outline"`, a default the chooser reads from the target's
- *  outline (see `GoFishNode.labelPosition`). */
-type TargetPosition = LabelPosition | Place | "outline";
+ *  outline (see `GoFishNode.labelPlacement`). */
+type TargetPosition = LabelPosition | Placement | "outline";
 
-/** Is this position value a `Place` strategy (not a position string)? */
-const isPlace = (p: unknown): p is Place =>
+/** Is this position value a `Placement` strategy (not a position string)? */
+const isPlacement = (p: unknown): p is Placement =>
   p !== null && typeof p === "object" && "kind" in (p as object);
 
 /** The coordinate space a node is drawn in when it is not linear (a polar
@@ -134,21 +134,21 @@ function callName(accessor: LabelSpec["accessor"]): string {
 
 /**
  * The position a spec places its label at on `target`: its own, or the
- * target's default (`GoFishNode.labelPosition`), or `"outset"`. A `Place`
+ * target's default (`GoFishNode.labelPlacement`), or `"outset"`. A `Placement`
  * strategy reads the target's outline in screen space, which a polar or
  * other warped coordinate space does not give yet: there, a default falls
  * back to `"outset"` (by the box, as before), and a strategy written out is
  * an error.
  */
 function positionOf(spec: LabelSpec, target: GoFishNode): TargetPosition {
-  const given = spec.position;
-  if (isPlace(given))
-    Frontend.checkStrategy("Place", given, ".label({ position })");
+  const given = spec.placement;
+  if (isPlacement(given))
+    Frontend.checkStrategy("Placement", given, ".label({ placement })");
   const space = warpedSpace(target);
   if (given !== undefined) {
-    if (isPlace(given) && space !== undefined)
+    if (isPlacement(given) && space !== undefined)
       throw new Error(
-        `[gofish] .label({ position: Place.${given.kind}() }): Place ` +
+        `[gofish] .label({ placement: Placement.${given.kind}() }): Placement ` +
           `strategies read a mark's outline on the screen, which a ${space} ` +
           `coordinate space does not give yet (#1201: ` +
           `https://github.com/gofish-graphics/gofish-graphics/issues/1201). Use a position string, which places the label ` +
@@ -157,7 +157,7 @@ function positionOf(spec: LabelSpec, target: GoFishNode): TargetPosition {
     return given;
   }
   if (space !== undefined) return "outset";
-  return target.labelPosition ?? "outset";
+  return target.labelPlacement ?? "outset";
 }
 
 /**
@@ -168,7 +168,7 @@ function positionOf(spec: LabelSpec, target: GoFishNode): TargetPosition {
  * combinator that stamped its own subdata) keeps its own label rather than
  * propagating it further, and so does a mark that draws its own ink between
  * or around its children (an `arrow`, a `line`), which says where its label
- * goes (`labelPosition`). Mirrors the old `GoFishNode.resolveLabels()`,
+ * goes (`labelPlacement`). Mirrors the old `GoFishNode.resolveLabels()`,
  * generalized to an array of specs. Runs ONCE, top-down, before the
  * elaboration walk below.
  */
@@ -177,7 +177,7 @@ function resolveLabelTargets(node: GoFishNode): void {
     node._labels &&
     node._labels.length > 0 &&
     node.datum === undefined &&
-    node.labelPosition === undefined &&
+    node.labelPlacement === undefined &&
     node.children.some((c) => c instanceof GoFishNode)
   ) {
     for (const child of node.children) {
@@ -322,11 +322,11 @@ type LabelPair = {
   position: TargetPosition;
 };
 
-/** Whether a position is placed by the chooser after the solve (a `Place`
+/** Whether a position is placed by the chooser after the solve (a `Placement`
  *  strategy, or a default read from the outline) rather than by the solve
  *  (a position string). */
-const isChosen = (p: TargetPosition): p is Place | "outline" =>
-  p === "outline" || isPlace(p);
+const isChosen = (p: TargetPosition): p is Placement | "outline" =>
+  p === "outline" || isPlacement(p);
 
 /**
  * Wrap `node`, a chart's content, in ONE Layer tier carrying, per label
@@ -364,7 +364,7 @@ async function wrapWithLabels(
       text: GoFishNode;
       avoid: GoFishAST[];
       spec: LabelSpec;
-      place: Place | "outline";
+      place: Placement | "outline";
       node: ReturnType<typeof LabelText>;
     }[] = [];
     // The nodes each call keeps off, read through refs made once per call.

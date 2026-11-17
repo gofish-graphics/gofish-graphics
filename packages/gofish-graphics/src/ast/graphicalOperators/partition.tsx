@@ -99,7 +99,7 @@ export type PartitionProductOptions = PartitionCommon & {
 };
 
 /** The plane form: divide both axes at once into the polygon cells of a
- *  binned struct, `struct({ x, y }).bin(Bin.hex({ radius }))`. */
+ *  binned struct, `struct({ x, y }).bin(Binning.hex({ radius }))`. */
 export type PartitionPlaneOptions = PartitionCommon & {
   by: StructExpr<true>;
   dir?: never;
@@ -117,14 +117,14 @@ const noRegion = (by: unknown): Error => {
     return new Error(
       `partition: \`by\` must be a key that has a region, and ` +
         `struct({ x: "${by.fields.x}", y: "${by.fields.y}" }) has none until ` +
-        `it is binned: add .bin(Bin.hex({ radius })) or ` +
-        `.bin(Bin.voronoi({ seeds })), so each group is placed in its cell.`
+        `it is binned: add .bin(Binning.hex({ radius })) or ` +
+        `.bin(Binning.voronoi({ seeds })), so each group is placed in its cell.`
     );
   const name = typeof by === "string" ? by : isField(by) ? by.name : "x";
   return new Error(
     `partition: \`by\` must be a key that has a region, such as ` +
       `field("${name}").bin(Calendar.month) or ` +
-      `field("${name}").bin(Bin.step(1)). Each group is placed in its ` +
+      `field("${name}").bin(Binning.step(1)). Each group is placed in its ` +
       `cell, so the key must say what the cells are. To give each value an ` +
       `equal slot instead, use spread({ by, dir }).`
   );
@@ -303,8 +303,8 @@ const isProductKey = (by: unknown): by is PartitionProductOptions["by"] =>
  * - `partition({ by: field(x).bin(p), dir })` divides one axis.
  * - `partition({ by: { x: field(a).bin(p), y: field(b).bin(q) } })` divides
  *   both: it is the 1D partition on x, then the 1D partition on y.
- * - `partition({ by: struct({ x: a, y: b }).bin(Bin.hex({ radius })) })`
- *   divides both at once, into hexagons (or Voronoi cells, `Bin.voronoi`).
+ * - `partition({ by: struct({ x: a, y: b }).bin(Binning.hex({ radius })) })`
+ *   divides both at once, into hexagons (or Voronoi cells, `Binning.voronoi`).
  *
  * It has only the operator form: its children are the groups of its key, so
  * there is no list of children to pass it.

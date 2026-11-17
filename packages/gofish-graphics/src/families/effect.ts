@@ -1,30 +1,30 @@
 /**
- * The `Filter` family: the strategies of the `filter` option every mark and
+ * The `Effect` family: the strategies of the `effect` option every mark and
  * `layer` take (#1267). The option filters the node's whole drawing as one
  * picture, and also takes a raw CSS filter string (`"blur(2px)"`).
  *
- * `lib.ts` binds this module as `Filter` (`Filter.grayscale()`), and
- * `gofish-graphics/filter` exports the same module. No strategy has a
+ * `lib.ts` binds this module as `Effect` (`Effect.grayscale()`), and
+ * `gofish-graphics/effect` exports the same module. No strategy has a
  * required option, so each is a value as it is, and calling it sets options:
- * `Filter.grayscale` is `Filter.grayscale()` (#1133, `ast/strategyKind.ts`).
+ * `Effect.grayscale` is `Effect.grayscale()` (#1133, `ast/strategyKind.ts`).
  * A strategy is a plain object, `{ kind, ...params }`, and that object is
  * also its wire form. The kinds and their params are declared once, in
- * gofish-ir's `STRATEGIES` table. The filter is drawn in `_node.ts`
+ * gofish-ir's `STRATEGIES` table. The effect is drawn in `_node.ts`
  * (`INTERNAL_lower`), as a display-list group with a `filter`.
  */
 import type { Frontend } from "gofish-ir";
 import { bareKind, given } from "../ast/strategyKind";
 
-/** Every built-in filter strategy. */
-export type Filter = Frontend.FilterIR;
+/** Every built-in effect strategy. */
+export type Effect = Frontend.EffectIR;
 
 /** `grayscale()`: the drawing in grays. See {@link grayscale}. */
-export type GrayscaleFilter = Extract<Filter, { kind: "grayscale" }>;
+export type GrayscaleEffect = Extract<Effect, { kind: "grayscale" }>;
 
 /** `luminanceToAlpha()`: the drawing as a luminance mask. See
  *  {@link luminanceToAlpha}. */
-export type LuminanceToAlphaFilter = Extract<
-  Filter,
+export type LuminanceToAlphaEffect = Extract<
+  Effect,
   { kind: "luminanceToAlpha" }
 >;
 
@@ -35,8 +35,8 @@ export type LuminanceToAlphaFilter = Extract<
  *   Default 1.
  */
 export const grayscale = bareKind(
-  "Filter.grayscale",
-  (opts: Omit<GrayscaleFilter, "kind"> = {}): GrayscaleFilter => ({
+  "Effect.grayscale",
+  (opts: Omit<GrayscaleEffect, "kind"> = {}): GrayscaleEffect => ({
     kind: "grayscale",
     ...given(opts),
   })
@@ -49,6 +49,6 @@ export const grayscale = bareKind(
  * does. Drawn as SVG `feColorMatrix type="luminanceToAlpha"`, in sRGB.
  */
 export const luminanceToAlpha = bareKind(
-  "Filter.luminanceToAlpha",
-  (): LuminanceToAlphaFilter => ({ kind: "luminanceToAlpha" })
+  "Effect.luminanceToAlpha",
+  (): LuminanceToAlphaEffect => ({ kind: "luminanceToAlpha" })
 );

@@ -21,7 +21,7 @@ is drawn as that outline; any other region is drawn as a rectangle.
 ## Signature
 
 ```ts
-region({ fill?, stroke?, strokeWidth?, opacity?, filter?, inset?, debug? })
+region({ fill?, stroke?, strokeWidth?, opacity?, effect?, inset?, debug? })
 ```
 
 ## Parameters
@@ -37,8 +37,8 @@ chart(movies, { color: Color.gradient("blues"), axes: true })
   .flow(
     partition({
       by: {
-        x: field("IMDB Rating").bin(Bin.step(0.5)),
-        y: field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+        x: field("IMDB Rating").bin(Binning.step(0.5)),
+        y: field("Rotten Tomatoes Rating").bin(Binning.step(5)),
       },
     })
   )

@@ -298,7 +298,7 @@ pipelines on `field(...)`, `.sort()` on domains, `.normalize()` on measures). Co
 there: labels are one more field slot accepting `string | Field`, and aggregations
 (`.sum()`, `.mean()`, `.distinct()`) are pipeline stages, group-relative with the node's
 datum as the default window — the same windowing story as `.normalize({over})`. That lands
-`BarWithLabels` as `rect({h:"count"}).label(field("count").sum(), {position:"outset-top"})`
+`BarWithLabels` as `rect({h:"count"}).label(field("count").sum(), {placement:"outset-top"})`
 whenever #700 does, and retires the `resolveLabelText`-vs-`inferSize` duplication as a side
 effect. Not tracked further in this essay.
 

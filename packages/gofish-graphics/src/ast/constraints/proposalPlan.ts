@@ -106,7 +106,7 @@ export type ChildSpan = {
  * interval that pins it there, and of the cell a `region` gives it there (a
  * {@link PositionRegion}: a `partition`'s cell); and the cell's outline as
  * its shape (#1222, `geometry/ring.ts`), when the cell has one (a hexagon
- * of `Bin.hex`, a cell of `Bin.voronoi`). `posScales` are the scales the
+ * of `Binning.hex`, a cell of `Binning.voronoi`). `posScales` are the scales the
  * layer resolves its position constraints against; a datum edge with no
  * scale gives nothing.
  *

@@ -408,7 +408,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   `tag.label = {accessor: {type: "field", name, ops?}, ...options}`;
   a function accessor warns and is dropped from the emitted IR (functions
   aren't serializable). The options are read through `withKindValues`, so a
-  bare `Place` kind (`position: Place.end`) is stored as its value; the
+  bare `Placement` kind (`placement: Placement.end`) is stored as its value; the
   emitter keeps only the `LABEL_OPTIONS` keys (`wireLabels` in `toJSON.ts`).
   `.translate()`'s wrapper has no tag of its own by
   default (the wrapped function is new), so `translateOperator` copies the

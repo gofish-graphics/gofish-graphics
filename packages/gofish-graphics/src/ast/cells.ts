@@ -10,18 +10,18 @@
  *
  *  - a Calendar value (`Calendar.month`, `Calendar.hour({ every: 6 })`,
  *    `Calendar.week({ start: "sunday" })`, calendar.ts), for a time column;
- *  - `Bin.step(size)`: cells `size` wide, aligned to multiples of `size`;
- *  - `Bin.thresholds(n)`: about `n` cells, with the step a numeric axis with
+ *  - `Binning.step(size)`: cells `size` wide, aligned to multiples of `size`;
+ *  - `Binning.thresholds(n)`: about `n` cells, with the step a numeric axis with
  *    `n` ticks would use, so the edges are round numbers;
- *  - `Bin.thresholds([t1, t2, ...])`: cells that end and start at the given
+ *  - `Binning.thresholds([t1, t2, ...])`: cells that end and start at the given
  *    edges, with the domain's ends as the outer edges;
- *  - `Bin.quantiles(n)` / `Bin.quantiles([p1, p2, ...])`: cells whose inner
+ *  - `Binning.quantiles(n)` / `Binning.quantiles([p1, p2, ...])`: cells whose inner
  *    edges are quantiles of the column's values, with the domain's ends as
  *    the outer edges.
  *
- * The three `Bin` kinds are {@link StepBin}, {@link ThresholdsBin} and
+ * The three `Binning` kinds are {@link StepBin}, {@link ThresholdsBin} and
  * {@link QuantilesBin}: each is
- * its Bin strategy object, `{ kind, ...params }`, with a `.format(fn)` for
+ * its Binning strategy object, `{ kind, ...params }`, with a `.format(fn)` for
  * its cells' labels, as a Calendar value has one.
  *
  * A {@link Cell} is one cell: the interval `[start, end)` (its region), an id,
@@ -31,13 +31,13 @@
  * group: {@link binCells} takes the column's domain, `[lo, hi]`, which its
  * column type carries (`HasDomain` in schema.ts, computed once when the data
  * is typed), so each group of a split sees the same cells, in the same order,
- * empty cells included. A count-based partition (`Bin.thresholds(20)`) picks
- * its step from that domain too, and `Bin.quantiles` reads the column's
+ * empty cells included. A count-based partition (`Binning.thresholds(20)`) picks
+ * its step from that domain too, and `Binning.quantiles` reads the column's
  * values in the data it was typed with, which the domain carries.
  *
- * A cell holds its start and not its end. A Calendar value or a `Bin.step`
+ * A cell holds its start and not its end. A Calendar value or a `Binning.step`
  * puts every value in the cell that holds it, whatever the domain: March 1
- * is in March. A `Bin.thresholds` partition is fitted to the domain, so it
+ * is in March. A `Binning.thresholds` partition is fitted to the domain, so it
  * covers the domain with its ends included: when the largest value sits on
  * a cell boundary, it falls in the cell that ends there rather than in a new
  * cell of its own, as numpy's `histogram` and d3's `bin` do.
@@ -68,9 +68,9 @@ import {
 export type NumberCellFormat = (cell: Cell) => string;
 
 /**
- * A partition of the number line, made by a call in the `Bin` family
- * (families/bin.ts). Its own keys are its wire form, `{ kind, ...params }`,
- * as for every `Bin` strategy. `.format(fn)` labels its cells; a function
+ * A partition of the number line, made by a call in the `Binning` family
+ * (families/binning.ts). Its own keys are its wire form, `{ kind, ...params }`,
+ * as for every `Binning` strategy. `.format(fn)` labels its cells; a function
  * cannot be serialized, so a partition with one has no wire form, as a
  * Calendar value with a `.format(fn)` has none.
  */
@@ -91,7 +91,7 @@ abstract class NumberBin {
   /** The partition's params, without a format. */
   protected abstract wire(): Frontend.FieldBinIR;
 
-  /** The builder spelling, `Bin.step(0.5)`, for error messages. */
+  /** The builder spelling, `Binning.step(0.5)`, for error messages. */
   protected abstract spelling(): string;
 
   /** The wire form. A partition with a `.format(fn)` has none (a loud
@@ -108,7 +108,7 @@ abstract class NumberBin {
   }
 }
 
-/** `Bin.step(size)`: cells `size` wide, aligned to multiples of `size`. */
+/** `Binning.step(size)`: cells `size` wide, aligned to multiples of `size`. */
 export class StepBin extends NumberBin {
   readonly kind = "step" as const;
   readonly size: number;
@@ -129,11 +129,11 @@ export class StepBin extends NumberBin {
   }
 
   protected spelling(): string {
-    return `Bin.step(${describe(this.size)})`;
+    return `Binning.step(${describe(this.size)})`;
   }
 }
 
-/** `Bin.thresholds(countOrEdges)`: about `count` cells with round edges, or
+/** `Binning.thresholds(countOrEdges)`: about `count` cells with round edges, or
  *  the cells between the given edges. */
 export class ThresholdsBin extends NumberBin {
   readonly kind = "thresholds" as const;
@@ -158,11 +158,11 @@ export class ThresholdsBin extends NumberBin {
   }
 
   protected spelling(): string {
-    return `Bin.thresholds(${describe(this.thresholds)})`;
+    return `Binning.thresholds(${describe(this.thresholds)})`;
   }
 }
 
-/** `Bin.quantiles(countOrProbabilities)`: `count` cells holding about the
+/** `Binning.quantiles(countOrProbabilities)`: `count` cells holding about the
  *  same number of values, or the cells between the quantiles at the given
  *  probabilities. */
 export class QuantilesBin extends NumberBin {
@@ -188,12 +188,12 @@ export class QuantilesBin extends NumberBin {
   }
 
   protected spelling(): string {
-    return `Bin.quantiles(${describe(this.quantiles)})`;
+    return `Binning.quantiles(${describe(this.quantiles)})`;
   }
 }
 
-/** A partition of the number line: `Bin.step(size)`,
- *  `Bin.thresholds(countOrEdges)` or `Bin.quantiles(countOrProbabilities)`. */
+/** A partition of the number line: `Binning.step(size)`,
+ *  `Binning.thresholds(countOrEdges)` or `Binning.quantiles(countOrProbabilities)`. */
 export type NumberPartition = StepBin | ThresholdsBin | QuantilesBin;
 
 /** What `field(x).bin(p)` takes: a Calendar value or a numeric partition. */
@@ -228,7 +228,7 @@ export abstract class KeyCell {
    *  the cell of the bin before it that holds it: a month's year. */
   declare readonly parent?: KeyCell;
   /** The bin that made the cell, as written (`Calendar.month`,
-   *  `[Calendar.year, Calendar.month]`, `Bin.step(0.5)`): an axis names its
+   *  `[Calendar.year, Calendar.month]`, `Binning.step(0.5)`): an axis names its
    *  levels with it. */
   declare readonly bin?: string;
 
@@ -348,8 +348,8 @@ export type Cells = {
 /** Check a partition as the user (or the wire) wrote it, and return it in
  *  its builder form: a CalendarPartition, a {@link StepBin}, or a
  *  {@link ThresholdsBin}. The wire form is told apart by its `kind`
- *  (`Frontend.checkPartition`); a `Bin` kind that bins two fields
- *  (`Bin.hex`) is an error naming `struct({ x, y }).bin`. */
+ *  (`Frontend.checkPartition`); a `Binning` kind that bins two fields
+ *  (`Binning.hex`) is an error naming `struct({ x, y }).bin`. */
 export function checkPartition(given: unknown, where: string): Partition {
   // A Calendar kind used bare is read as its value from here on.
   const p = kindValue(given);
@@ -411,7 +411,7 @@ const isPart = (p: Partition): boolean =>
 /** Whether a key binned by `step` first is binned into the parts of a cycle
  *  (`Calendar.month`, `[Calendar.month, Calendar.day]`), not into cells of
  *  the line (`Calendar.year`, `[Calendar.year, Calendar.month]`,
- *  `Bin.step(1)`). */
+ *  `Binning.step(1)`). */
 export const isCycleStep = (step: BinStep): boolean =>
   isPart(Array.isArray(step) ? step[0] : (step as Partition));
 
@@ -442,7 +442,7 @@ function checkProduct(list: readonly unknown[], where: string): Product {
         `${at(i)}: ${String(q)} cannot be in a product: a product combines ` +
           `a Calendar level with its parts (a year with its months), and ` +
           `numeric cells have no parts. To split numeric cells, chain the ` +
-          `bins: .bin(Bin.step(10)).bin(Bin.step(2)).`
+          `bins: .bin(Binning.step(10)).bin(Binning.step(2)).`
       );
     if (q.formatCell !== undefined)
       throw new Error(
@@ -525,7 +525,7 @@ export function checkChain(steps: readonly BinStep[], where: string): void {
     if (cal[0] !== cal[1])
       throw new Error(
         `${say}: a chain bins one column, but a Calendar value bins times ` +
-          `and Bin.step, Bin.thresholds and Bin.quantiles bin numbers.`
+          `and Binning.step, Binning.thresholds and Binning.quantiles bin numbers.`
       );
     const finer =
       prev instanceof CalendarPartition && p instanceof CalendarPartition
@@ -610,7 +610,7 @@ function numberEdges(
   return edges;
 }
 
-/** The edges of `Bin.quantiles` over `domain`: the domain's ends, and
+/** The edges of `Binning.quantiles` over `domain`: the domain's ends, and
  *  between them the type-7 quantiles (d3's `quantileSorted`, numpy's
  *  default) of the column's values at `p`'s probabilities, `i / n` for a
  *  count `n`. Two edges at one value (many equal values there, or an empty
@@ -627,7 +627,7 @@ function quantileEdges(
     throw new Error(
       `${where}: ${String(p)} needs a column with more than one value, but ` +
         `every value of this column is ${round12(domain.lo)}. Bin it with ` +
-        `Bin.step or Bin.thresholds, or leave it unbinned.`
+        `Binning.step or Binning.thresholds, or leave it unbinned.`
     );
   const given = p.quantiles;
   const ps = Array.isArray(given)

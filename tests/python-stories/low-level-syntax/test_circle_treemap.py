@@ -25,7 +25,7 @@ def story_default():
         )
         .mark(
             circle(fill="Major Genre", stroke=GRAY, stroke_width=1).label(
-                "Major Genre", position="center", color="white", font_size=12
+                "Major Genre", placement="center", color="white", font_size=12
             )
         ),
         {},

@@ -154,7 +154,7 @@ import {
   type LabelSpec,
 } from "./labels/labelPlacement";
 import type { HiddenLabels } from "./labels/placeStep";
-import type { Place } from "../families/place";
+import type { Placement as PlacementStrategy } from "../families/placement";
 import type { LabelPosition } from "./labels/labelPlacement";
 import { withKindValues } from "./strategyKind";
 import { packEnclose } from "d3-hierarchy";
@@ -830,8 +830,8 @@ export class GoFishNode {
   public paintedStyle?: DisplayList.Style;
   public colorConfig?: ColorConfig;
   public _labels?: LabelSpec[];
-  /** Where a `.label()` with no `position` goes (see the constructor). */
-  public labelPosition?: LabelPosition | Place | "outline";
+  /** Where a `.label()` with no `placement` goes (see the constructor). */
+  public labelPlacement?: LabelPosition | PlacementStrategy | "outline";
   /** Nodes that belong to this node as a mark but live OUTSIDE its subtree:
    *  today the label `Text`s the label pass seats for it in the tier above
    *  (`labels/elaborate.tsx`), which stay out of the subtree so they never
@@ -858,7 +858,7 @@ export class GoFishNode {
   /** Set when a node is built as one that never paints (`blank()`): it is
    *  hidden whatever `.hidden()` says ({@link isHidden}). */
   public _neverPaints = false;
-  /** Set by a `filter` option (`drawFilter.ts`): the filter the node's
+  /** Set by an `effect` option (`drawEffect.ts`): the filter the node's
    *  whole drawing is drawn under. A filtered node is a bake boundary. */
   public _filter: DisplayList.DisplayFilter | undefined = undefined;
   private renderSession?: RenderSession;
@@ -1051,7 +1051,7 @@ export class GoFishNode {
       geometry,
       color,
       strokeOverhang,
-      labelPosition,
+      labelPlacement,
     }: {
       key?: string;
       type: string;
@@ -1065,14 +1065,14 @@ export class GoFishNode {
       color?: MaybeValue<string>;
       /** See {@link GoFishNode.strokeOverhang}. */
       strokeOverhang?: number;
-      /** Where a `.label()` with no `position` goes on this node: a
-       *  position or a `Place` strategy by convention (a dot is labeled
+      /** Where a `.label()` with no `placement` goes on this node: a
+       *  position or a `Placement` strategy by convention (a dot is labeled
        *  around itself, an arrow at its end), or `"outline"`, read from the
        *  outline the node draws when the label is placed: at the end of an
        *  open path, around a closed outline with no fill, inside a filled
        *  one. Default `"outset"` (above its box). A node that sets it draws
        *  its own ink and is itself the target of a `.label()` on it. */
-      labelPosition?: LabelPosition | Place | "outline";
+      labelPlacement?: LabelPosition | PlacementStrategy | "outline";
     },
     children: GoFishAST[]
   ) {
@@ -1094,7 +1094,7 @@ export class GoFishNode {
     this.args = args;
     this.color = color;
     this.strokeOverhang = strokeOverhang ?? 0;
-    this.labelPosition = labelPosition;
+    this.labelPlacement = labelPlacement;
   }
 
   /** This node's sharing plan: its rule ({@link ResolveSharing}) applied to
@@ -3307,7 +3307,7 @@ export class GoFishNode {
     return drawn;
   }
 
-  /** The node's drawing under its `filter` option, which filters the whole
+  /** The node's drawing under its `effect` option, which filters the whole
    *  drawing as one picture. Both {@link INTERNAL_lower} and a lent drawing
    *  ({@link INTERNAL_lendDrawing}) draw through it. */
   private filtered(
@@ -3696,7 +3696,7 @@ export class GoFishNode {
 
   /** Whether the bake stops at this node, which lowers its own subtree
    *  (`coordinateTransforms/bake.ts`): a boundary type, or a node with a
-   *  `filter`, which draws its subtree as one filtered picture. */
+   *  `effect`, which draws its subtree as one filtered picture. */
   public isBakeBoundary(): boolean {
     return BAKE_BOUNDARY_TYPES.has(this.type) || this._filter !== undefined;
   }

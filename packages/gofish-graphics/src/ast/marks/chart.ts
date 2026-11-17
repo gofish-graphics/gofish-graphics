@@ -65,9 +65,9 @@ import type { BlendMode } from "../blendMode";
 import {
   applyFilter,
   displayFilter,
-  type FilterOption,
-  type FilterOptions,
-} from "../drawFilter";
+  type EffectOption,
+  type WithEffect,
+} from "../drawEffect";
 import {
   encloseNode,
   type EncloseOptions,
@@ -795,10 +795,10 @@ export function createRelationalMark<O extends Record<string, unknown>>(
     // A strategy kind used bare is read as its value from here on.
     const opts = withKindValues((options ?? {}) as O);
     const liveChannels = liveChannelsOf(opts);
-    // Its `filter` filters each connector's whole drawing; checked once.
+    // Its `effect` filters each connector's whole drawing; checked once.
     const filter = displayFilter(
-      opts.filter as FilterOption | undefined,
-      `${type}({ filter })`
+      opts.effect as EffectOption | undefined,
+      `${type}({ effect })`
     );
     /** The cell `ChartBuilder` writes the computed split / travel direction /
      *  time tier into — see `tagRelationalFusable`'s doc comment. Declared
@@ -1011,7 +1011,7 @@ export function createRelationalMark<O extends Record<string, unknown>>(
   return relational;
 }
 
-export type LineOptions = FilterOptions & {
+export type LineOptions = WithEffect & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;
@@ -1076,7 +1076,7 @@ export const line = createRelationalMark<LineOptions>(
     )
 );
 
-export type RibbonOptions = FilterOptions & {
+export type RibbonOptions = WithEffect & {
   fill?: MaybeValue<string> | LiveValue;
   stroke?: MaybeValue<string> | LiveValue;
   strokeWidth?: number | LiveValue;

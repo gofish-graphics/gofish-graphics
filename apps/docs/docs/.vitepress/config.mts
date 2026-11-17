@@ -584,9 +584,9 @@ export default defineConfig({
               items: [{ text: "Curve", link: "/js/api/curve" }],
             },
             {
-              text: "Bin",
+              text: "Binning",
               collapsed: true,
-              items: [{ text: "Bin", link: "/js/api/bin" }],
+              items: [{ text: "Binning", link: "/js/api/binning" }],
             },
             {
               text: "Shape",
@@ -594,9 +594,9 @@ export default defineConfig({
               items: [{ text: "Shape", link: "/js/api/shape" }],
             },
             {
-              text: "Place",
+              text: "Placement",
               collapsed: true,
-              items: [{ text: "Place", link: "/js/api/place" }],
+              items: [{ text: "Placement", link: "/js/api/placement" }],
             },
             {
               text: "Reactivity",
@@ -713,9 +713,9 @@ export default defineConfig({
               items: [{ text: "Curve", link: "/python/api/curve" }],
             },
             {
-              text: "Bin",
+              text: "Binning",
               collapsed: true,
-              items: [{ text: "Bin", link: "/python/api/bin" }],
+              items: [{ text: "Binning", link: "/python/api/binning" }],
             },
             {
               text: "Shape",
@@ -723,9 +723,9 @@ export default defineConfig({
               items: [{ text: "Shape", link: "/python/api/shape" }],
             },
             {
-              text: "Place",
+              text: "Placement",
               collapsed: true,
-              items: [{ text: "Place", link: "/python/api/place" }],
+              items: [{ text: "Placement", link: "/python/api/placement" }],
             },
             {
               text: "GoTree",

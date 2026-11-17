@@ -68,7 +68,7 @@ const {
   partition,
   region,
   struct,
-  Bin,
+  Binning,
   Calendar,
   ribbon,
   line,
@@ -878,7 +878,7 @@ console.log("# measure: titles are Quantity (unit)");
   // quantity, in x's unit.
   const histOf = (schema: any) =>
     chart(penguins, { schema, axes: true })
-      .flow(partition({ by: field("flipper").bin(Bin.step(20)), dir: "x" }))
+      .flow(partition({ by: field("flipper").bin(Binning.step(20)), dir: "x" }))
       .mark(rect({ h: field("flipper").count() }));
   const hist = textsOf(await histOf({}).toDisplayList(SIZE));
   ok(
@@ -1001,7 +1001,7 @@ console.log("# measure: titles are Quantity (unit)");
       .flow(
         partition({
           by: struct({ x: "flipper", y: "mass" }).bin(
-            Bin.hex({ radius: { x: 10, y: 100 } })
+            Binning.hex({ radius: { x: 10, y: 100 } })
           ),
         })
       )

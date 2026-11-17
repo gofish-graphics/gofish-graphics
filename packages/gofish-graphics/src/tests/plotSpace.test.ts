@@ -360,7 +360,7 @@ async function main() {
         { c: "b", v: 30 },
       ])
         .flow(spread({ by: "c", dir: "x" }))
-        .mark(rect({ h: "v" }).label("v", position ? { position } : {}))
+        .mark(rect({ h: "v" }).label("v", position ? { placement: position } : {}))
         .resolve();
       const data = await runLayout({ w: 200, h: 100, axes: true }, node);
       const layered = labelLayer(data.child);

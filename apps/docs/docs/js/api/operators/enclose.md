@@ -133,8 +133,8 @@ with no size they are an error that names `Shape.box()` and `Shape.oval()`.
 chart(countryPopulations, { axes: false, w: 480, h: 480 })
   .flow(
     enclose({ shape: Shape.oval, fill: "none" }),
-    tile({ by: "continent", size: "pop", spacing: 5, method: Tiling.voronoi }),
-    tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
+    tile({ by: "continent", size: "pop", spacing: 5, tiling: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, tiling: Tiling.voronoi })
   )
   .mark(region({ fill: "continent" }));
 ```

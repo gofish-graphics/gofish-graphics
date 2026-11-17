@@ -3,7 +3,7 @@
 import math
 from datetime import datetime, timedelta, timezone
 
-from gofish import chart, rect, field, spread, stack, partition, table, Unit, Calendar, Bin, Color
+from gofish import chart, rect, field, spread, stack, partition, table, Unit, Calendar, Binning, Color
 from python_stories.data import SEATTLE_WEATHER
 
 # Seventy-two movie ratings from 1 to 9.5, none from 2 to 2.5: a hump around
@@ -24,7 +24,7 @@ MOVIES = [
 def story_rating_histogram():
     return (
         chart(MOVIES, axes=True, w=560, h=200)
-        .flow(spread(by=field("rating").bin(Bin.step(0.5)), dir="x", spacing=1))
+        .flow(spread(by=field("rating").bin(Binning.step(0.5)), dir="x", spacing=1))
         .mark(rect(h=field("rating").count(), fill="steelblue")),
         {},
     )
@@ -83,7 +83,7 @@ def story_stacked_monthly_bars():
 def story_rating_histogram_continuous():
     return (
         chart(MOVIES, axes=True, w=560, h=200)
-        .flow(partition(by=field("rating").bin(Bin.step(0.5)), dir="x"))
+        .flow(partition(by=field("rating").bin(Binning.step(0.5)), dir="x"))
         .mark(rect(h=field("rating").count(), fill="steelblue", inset=0.5)),
         {},
     )

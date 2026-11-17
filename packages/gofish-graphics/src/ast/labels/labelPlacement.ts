@@ -4,7 +4,7 @@
 
 import { evalFieldValues, FieldExpr, FieldExprWire } from "../fieldExpr";
 import { resolveColumn } from "../channels";
-import type { Place } from "../../families/place";
+import type { Placement } from "../../families/placement";
 import type { Nodes } from "../nodeSelection";
 import type { LabelBackground, LabelHalo } from "./labelNode";
 
@@ -16,16 +16,16 @@ export type LabelAccessor<D = any> =
 
 export interface LabelOptions {
   /** Where the label goes: a position string, one spot by the mark's box
-   *  (`"outset-top"`, `"center"`, ...), or a `Place` strategy, which reads
-   *  the mark's outline and tries spots in order (`Place.around()`,
-   *  `Place.along({ at: 0.6 })`, `Place.end()`, `Place.interior()`).
-   *  Default: by the mark, `Place.around()` for a dot, `Place.end()` for
+   *  (`"outset-top"`, `"center"`, ...), or a `Placement` strategy, which reads
+   *  the mark's outline and tries spots in order (`Placement.around()`,
+   *  `Placement.along({ at: 0.6 })`, `Placement.end()`, `Placement.interior()`).
+   *  Default: by the mark, `Placement.around()` for a dot, `Placement.end()` for
    *  an arrow; for a line, a band or a polygon, by the outline it draws,
-   *  `Place.end()` for an open path, `Place.interior()` for a filled region
-   *  and `Place.around()` for one with no fill; and `"outset"` for anything
+   *  `Placement.end()` for an open path, `Placement.interior()` for a filled region
+   *  and `Placement.around()` for one with no fill; and `"outset"` for anything
    *  else. */
-  position?: LabelPosition | Place;
-  /** Nodes a `Place` label keeps off, beside the labeled marks and the
+  placement?: LabelPosition | Placement;
+  /** Nodes a `Placement` label keeps off, beside the labeled marks and the
    *  other labels: a list of nodes or refs, or one `selectAll(name)`. */
   avoiding?: Nodes;
   /** A text outline behind the glyphs. */

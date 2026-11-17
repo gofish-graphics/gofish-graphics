@@ -73,7 +73,7 @@ class Operator:
 
         Python has no function-accessor form; use one of the above.
 
-        `options` are the label options (``position``, ``font_size``,
+        `options` are the label options (``placement``, ``font_size``,
         ``color``, ...), the same as on :meth:`Mark.label`; see the generated
         ``_label_opts`` or the docs options table.
 
@@ -711,7 +711,7 @@ class Mark(_Root):
                 true by construction for a `by` field; raises otherwise), or
                 a `field(...)` aggregate (`field("count").sum()`, etc.)
                 folding the group's rows to one value.
-            **options: Label options (``position``, ``font_size``, ``color``,
+            **options: Label options (``placement``, ``font_size``, ``color``,
                 ...): see the generated ``_label_opts`` or the docs options
                 table. An unknown option raises TypeError.
 
@@ -2085,17 +2085,17 @@ def partition(
 
         chart(movies).flow(
             partition(by={
-                "x": field("IMDB Rating").bin(Bin.step(0.5)),
-                "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+                "x": field("IMDB Rating").bin(Binning.step(0.5)),
+                "y": field("Rotten Tomatoes Rating").bin(Binning.step(5)),
             })
         ).mark(region(fill=field("IMDB Rating").count()))
 
     With two fields binned together, ``struct(x=..., y=...).bin(...)``, it
-    divides the plane into the polygon cells of a ``Bin`` call, hexagons or
+    divides the plane into the polygon cells of a ``Binning`` call, hexagons or
     Voronoi cells:
 
         chart(airports).flow(
-            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+            partition(by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=1)))
         ).mark(region(fill=field("longitude").count()))
 
     Args:
@@ -2122,7 +2122,7 @@ def partition(
             raise ValueError(
                 f"partition: `by` must be a key that has a region, such as "
                 f'field("{name}").bin(Calendar.month) or '
-                f'field("{name}").bin(Bin.step(1)). Each group is placed in its '
+                f'field("{name}").bin(Binning.step(1)). Each group is placed in its '
                 f"cell, so the key must say what the cells are. To give each "
                 f"value an equal slot instead, use spread(by=..., dir=...)."
             )
@@ -2133,8 +2133,8 @@ def partition(
             raise ValueError(
                 f"partition: `by` must be a key that has a region, and "
                 f'struct(x="{fields["x"]}", y="{fields["y"]}") has none until '
-                f"it is binned: add .bin(Bin.hex(radius=...)) or "
-                f".bin(Bin.voronoi(seeds=...)), so each group is placed in its "
+                f"it is binned: add .bin(Binning.hex(radius=...)) or "
+                f".bin(Binning.voronoi(seeds=...)), so each group is placed in its "
                 f"cell."
             )
         if dir is not None or "alignment" in options:
@@ -2310,13 +2310,13 @@ def tile(
         **options: The generated ``_tile_opts`` core's options (the
             combinator form's: ``_tile_combinator_opts``); see the docs
             options table. ``size`` sizes each leaf's tile area, one value
-            per split entry. ``method`` takes a strategy from the ``Tiling``
+            per split entry. ``tiling`` takes a strategy from the ``Tiling``
             family: ``Tiling.squarify()`` (the default), ``Tiling.slice()``,
             ``Tiling.dice()``, ``Tiling.binary()``, or ``Tiling.voronoi()``.
 
     The largest tile (under the default sort) lands at the top left.
 
-    Mirrors JS ``tile({ by, size, method, sort, spacing, ... })`` in
+    Mirrors JS ``tile({ by, size, tiling, sort, spacing, ... })`` in
     ``.flow()`` and ``tile({ size, ... }, marks)`` as a combinator.
 
     Returns:
@@ -3214,10 +3214,10 @@ class FieldAccessor(dict):
           ``.bin([Calendar.year, Calendar.month])``, one cell where one cell
           of each level meet, each level a part of the one before it (the
           June of 2015, labeled "Jun 2015").
-        - cells of one width (``.bin(Bin.step(0.5))``),
-          ``Bin.thresholds(...)``, a cell count or a list of edges
-          (``.bin(Bin.thresholds(20))``), or ``Bin.quantiles(...)``, a cell
-          count or a list of probabilities (``.bin(Bin.quantiles(10))``).
+        - cells of one width (``.bin(Binning.step(0.5))``),
+          ``Binning.thresholds(...)``, a cell count or a list of edges
+          (``.bin(Binning.thresholds(20))``), or ``Binning.quantiles(...)``, a cell
+          count or a list of probabilities (``.bin(Binning.quantiles(10))``).
           About 10 cells when none is given.
 
         A second ``.bin(...)`` splits each cell of the first, a chain:
@@ -3399,10 +3399,10 @@ def chunk(size: int) -> ChunkKey:
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     """The cells a key is binned into, in their wire form, on the key that
     takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
-    value, ``Bin.step``, ``Bin.thresholds`` and ``Bin.quantiles``, and
+    value, ``Binning.step``, ``Binning.thresholds`` and ``Binning.quantiles``, and
     ``"struct"`` for
-    ``struct(x=..., y=...).bin(...)``, which takes ``Bin.hex`` and
-    ``Bin.voronoi``. A kind of the other key is a TypeError naming the key
+    ``struct(x=..., y=...).bin(...)``, which takes ``Binning.hex`` and
+    ``Binning.voronoi``. A kind of the other key is a TypeError naming the key
     that takes it. The kinds of each key are the ``Partition`` and
     ``StructBin`` option types, each one tagged union (gofish-ir
     ``BIN_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
@@ -3416,24 +3416,24 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     if kind in _OPTION_TYPES[other][2] and kind not in _OPTION_TYPES["Calendar"][2]:
         if key == "field":
             raise TypeError(
-                f"{where}: Bin.{kind} bins two fields together into cells of "
-                f"the plane. Bin them with struct(x=..., y=...).bin(Bin.{kind}(...)); "
-                "field(x).bin takes Bin.step(size), Bin.thresholds(count_or_edges), "
-                "Bin.quantiles(count_or_probabilities), or a Calendar value."
+                f"{where}: Binning.{kind} bins two fields together into cells of "
+                f"the plane. Bin them with struct(x=..., y=...).bin(Binning.{kind}(...)); "
+                "field(x).bin takes Binning.step(size), Binning.thresholds(count_or_edges), "
+                "Binning.quantiles(count_or_probabilities), or a Calendar value."
             )
         raise TypeError(
-            f"{where}: Bin.{kind} bins one field. Bin each field with "
-            f"field(x).bin(Bin.{kind}(...)); struct(x=..., y=...).bin takes "
-            "Bin.hex(radius=...) or Bin.voronoi(seeds=...)."
+            f"{where}: Binning.{kind} bins one field. Bin each field with "
+            f"field(x).bin(Binning.{kind}(...)); struct(x=..., y=...).bin takes "
+            "Binning.hex(radius=...) or Binning.voronoi(seeds=...)."
         )
     if kind not in _OPTION_TYPES[own][2]:
         expected = (
-            "a Calendar value (Calendar.month, ...), Bin.step(size), "
-            "Bin.thresholds(count_or_edges), or "
-            "Bin.quantiles(count_or_probabilities)"
+            "a Calendar value (Calendar.month, ...), Binning.step(size), "
+            "Binning.thresholds(count_or_edges), or "
+            "Binning.quantiles(count_or_probabilities)"
             if key == "field"
-            else "a call in the Bin family, Bin.hex(radius=...) or "
-            "Bin.voronoi(seeds=...)"
+            else "a call in the Binning family, Binning.hex(radius=...) or "
+            "Binning.voronoi(seeds=...)"
         )
         raise TypeError(f"{where}: expected {expected}, got {value!r}")
     return _to_wire(_OPTION_TYPES[own], value, where)
@@ -3444,13 +3444,13 @@ class StructAccessor(dict):
     The ``{type: "struct", fields: {x, y}, ops?}`` wire shape: a key that
     reads two fields at once, built by :func:`struct`. Mirrors JS's
     ``StructExpr`` (``ast/structExpr.ts``). Its one op is ``bin``, which takes
-    a call in the ``Bin`` family; the JS side bins the rows.
+    a call in the ``Binning`` family; the JS side bins the rows.
     """
 
     def bin(self, cells: Dict[str, Any]) -> "StructAccessor":
         """Map each row's point ``(x, y)`` to its cell in ``cells``, a call
-        in the ``Bin`` family: ``Bin.hex(radius=...)`` or
-        ``Bin.voronoi(seeds=...)``. The groups are the cells over the two
+        in the ``Binning`` family: ``Binning.hex(radius=...)`` or
+        ``Binning.voronoi(seeds=...)``. The groups are the cells over the two
         columns' domain in the chart's data, so every group of a split sees
         the same cells, and empty cells are kept. Emits the wire op
         ``{"op": "bin", "partition": ...}``."""
@@ -3481,11 +3481,11 @@ def struct(*, x: str, y: str) -> StructAccessor:
     """
     A key that reads two fields at once, named after polars' ``pl.struct``:
     ``struct(x="lon", y="lat")``. ``x`` and ``y`` name the column read on each
-    axis. Bin it with ``.bin(...)``, a call in the ``Bin`` family, to give
+    axis. Bin it with ``.bin(...)``, a call in the ``Binning`` family, to give
     each group its cell of the plane:
 
         chart(airports).flow(
-            partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+            partition(by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=1)))
         ).mark(region(fill=field("longitude").count()))
 
     Mirrors JS ``struct({ x, y })``. A struct is a key only once it is binned.
@@ -3539,7 +3539,7 @@ def repeat(row: dict, field: str) -> List[dict]:
 def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dict]:
     """
     ``n`` rows at the quantiles of the density that ``rows`` sample, one at
-    each probability ``(i + 0.5) / n``, so ``Bin.quantiles`` and
+    each probability ``(i + 0.5) / n``, so ``Binning.quantiles`` and
     ``field(x).median()`` over them read the curve, not the grid. Mirrors JS
     ``quantileRows``.
 

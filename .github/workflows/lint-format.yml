@@ -78,7 +78,7 @@ jobs:
       - name: Check generated Python factory layer is in sync
         run: |
           pnpm --filter gofish-python gen
-          git diff --exit-code -- packages/gofish-python/gofish/_generated.py packages/gofish-python/gofish/tiling.py packages/gofish-python/gofish/overlap.py packages/gofish-python/gofish/curve.py packages/gofish-python/gofish/bin.py packages/gofish-python/gofish/calendar.py packages/gofish-python/gofish/coord.py
+          git diff --exit-code -- packages/gofish-python/gofish/_generated.py packages/gofish-python/gofish/tiling.py packages/gofish-python/gofish/overlap.py packages/gofish-python/gofish/curve.py packages/gofish-python/gofish/binning.py packages/gofish-python/gofish/calendar.py packages/gofish-python/gofish/coord.py packages/gofish-python/gofish/effect.py packages/gofish-python/gofish/placement.py
 
       - name: Check generated mark channel maps are in sync
         run: |

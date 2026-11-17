@@ -1,8 +1,8 @@
 /**
- * The `filter` option (#1267): a mark's or a layer's whole drawing is drawn
- * in one group under its filter, a `Filter` strategy or a raw CSS string.
+ * The `effect` option (#1267): a mark's or a layer's whole drawing is drawn
+ * in one group under its filter, an `Effect` strategy or a raw CSS string.
  *
- * Run: `pnpm build && tsx src/tests/filter.test.ts` (wired as `pnpm test:filter`).
+ * Run: `pnpm build && tsx src/tests/effect.test.ts` (wired as `pnpm test:effect`).
  */
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
@@ -18,7 +18,7 @@ const {
   createMark,
   intersect,
   Coord,
-  Filter,
+  Effect,
   Serialize,
 } = GoFish as any;
 
@@ -37,7 +37,7 @@ const all = (items: any[]): any[] =>
 console.log("# a mark's filter wraps its drawing");
 {
   const dl = await layer([
-    rect({ w: 10, h: 10, fill: "red", filter: Filter.grayscale }),
+    rect({ w: 10, h: 10, fill: "red", effect: Effect.grayscale }),
     circle({ r: 5, fill: "blue" }),
   ]).toDisplayList({ w: 100, h: 100 });
   const g = groups(dl);
@@ -54,8 +54,8 @@ console.log("# a mark's filter wraps its drawing");
 console.log("# a raw CSS string and an amount");
 {
   const dl = await layer([
-    rect({ w: 10, h: 10, fill: "red", filter: "blur(2px)" }),
-    rect({ w: 10, h: 10, fill: "red", filter: Filter.grayscale({ amount: 0.5 }) }),
+    rect({ w: 10, h: 10, fill: "red", effect: "blur(2px)" }),
+    rect({ w: 10, h: 10, fill: "red", effect: Effect.grayscale({ amount: 0.5 }) }),
   ]).toDisplayList({ w: 100, h: 100 });
   const values = groups(dl).map((g: any) => g.filter.value);
   check(
@@ -68,7 +68,7 @@ console.log("# a raw CSS string and an amount");
 console.log("# a layer's filter wraps its whole subtree");
 {
   const dl = await layer([
-    layer({ filter: Filter.luminanceToAlpha }, [
+    layer({ effect: Effect.luminanceToAlpha }, [
       rect({ w: 10, h: 10, fill: "white" }),
       rect({ x: 20, w: 10, h: 10, fill: "black" }),
     ]),
@@ -91,7 +91,7 @@ console.log("# a layer's filter wraps its whole subtree");
   const id = /<filter id="([^"]+)"/.exec(svg)?.[1];
   check(
     "the group's filter names the def",
-    id !== undefined && svg.includes(`filter="url(#${id})"`),
+    id !== undefined && svg.includes(`effect="url(#${id})"`),
     svg
   );
 }
@@ -106,7 +106,7 @@ console.log("# a mark built from an operator takes a filter");
       rect({ w: 10, h: 10, fill: "blue" }),
     ])
   );
-  const dl = await layer([pair({ filter: "blur(2px)" })]).toDisplayList({
+  const dl = await layer([pair({ effect: "blur(2px)" })]).toDisplayList({
     w: 100,
     h: 100,
   });
@@ -128,7 +128,7 @@ console.log("# a filter inside a coordinate space");
   // filtered node, which filters its subtree as one picture.
   const dl = await chart([{ v: 1 }], { coord: Coord.polar() })
     .mark(() =>
-      layer({ filter: "blur(2px)" }, [
+      layer({ effect: "blur(2px)" }, [
         rect({ w: 10, h: 10, fill: "red" }),
         rect({ x: 20, w: 10, h: 10, fill: "blue" }),
       ])
@@ -167,7 +167,7 @@ console.log("# a bad strategy is an error");
   let threw = false;
   try {
     await layer([
-      rect({ w: 10, h: 10, filter: { kind: "sepia" } }),
+      rect({ w: 10, h: 10, effect: { kind: "sepia" } }),
     ]).toDisplayList({ w: 100, h: 100 });
   } catch {
     threw = true;
@@ -177,12 +177,12 @@ console.log("# a bad strategy is an error");
 
 console.log("# the wire");
 {
-  const built = layer([rect({ w: 10, h: 10, filter: Filter.grayscale })]);
+  const built = layer([rect({ w: 10, h: 10, effect: Effect.grayscale })]);
   const ir = await Serialize.toJSON(built);
   const json = JSON.stringify(ir);
   check(
-    "filter crosses as its strategy object",
-    json.includes('"filter":{"kind":"grayscale"}'),
+    "effect crosses as its strategy object",
+    json.includes('"effect":{"kind":"grayscale"}'),
     json
   );
 }

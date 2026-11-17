@@ -36,7 +36,7 @@ chart(movies_raw).flow(
     )
 ).mark(
     circle(fill="Major Genre", stroke="gray", stroke_width=1).label(
-        "Major Genre", position="center", color="white", font_size=12
+        "Major Genre", placement="center", color="white", font_size=12
     )
 ).render(w=700, h=420)
 ```
@@ -58,7 +58,7 @@ tile(children, **options) -> Mark
 
 ## Strategies
 
-The `method` option holds the tiling strategy, a member of the `Tiling` family. You make a
+The `tiling` option holds the tiling strategy, a member of the `Tiling` family. You make a
 strategy with a function call. A strategy with no required option is also a
 value as it is: `Tiling.voronoi` is `Tiling.voronoi()`. On the wire a strategy is
 a plain object, such as `{"kind": "squarify", "ratio": 1}`. The family is also
@@ -90,7 +90,7 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
 ```python
 from gofish import tile, Tiling
 
-tile(by="genre", size="gross", method=Tiling.squarify(ratio=1))
+tile(by="genre", size="gross", tiling=Tiling.squarify(ratio=1))
 ```
 
 Each `tile` in a flow is one level, and each level can use its own
@@ -107,9 +107,9 @@ from gofish import Shape, Tiling, chart, enclose, region, tile
 
 chart(country_populations, axes=False, w=480, h=480).flow(
     enclose(shape=Shape.oval, fill="none"),
-    tile(by="continent", size="pop", spacing=5, method=Tiling.voronoi),
-    tile(by="region", size="pop", spacing=2.5, method=Tiling.voronoi),
-    tile(size="pop", spacing=1, method=Tiling.voronoi),
+    tile(by="continent", size="pop", spacing=5, tiling=Tiling.voronoi),
+    tile(by="region", size="pop", spacing=2.5, tiling=Tiling.voronoi),
+    tile(size="pop", spacing=1, tiling=Tiling.voronoi),
 ).mark(region(fill="continent"))
 ```
 
@@ -118,8 +118,8 @@ level, one flow step each:
 
 ```python
 chart(country_populations).flow(
-    tile(by="continent", size="pop", method=Tiling.slice),
-    tile(by="region", size="pop", method=Tiling.dice),
+    tile(by="continent", size="pop", tiling=Tiling.slice),
+    tile(by="region", size="pop", tiling=Tiling.dice),
 ).mark(rect(fill="continent"))
 ```
 

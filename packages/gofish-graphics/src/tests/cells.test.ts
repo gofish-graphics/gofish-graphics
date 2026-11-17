@@ -23,7 +23,7 @@ import {
   CycleCell,
   StepBin,
 } from "../ast/cells";
-import * as Bin from "../families/bin";
+import * as Binning from "../families/binning";
 import { mergeCells } from "../ast/underlyingSpace";
 import { inferPos, inferSize } from "../ast/channels";
 import { evalFieldValues } from "../ast/fieldExpr";
@@ -62,7 +62,7 @@ const {
 } = GoFish as any;
 const DistCalendar = (GoFish as any).Calendar;
 const distField = (GoFish as any).field;
-const DistBin = (GoFish as any).Bin;
+const DistBin = (GoFish as any).Binning;
 
 declare const process: { exit(code: number): never; execPath: string };
 
@@ -119,8 +119,8 @@ async function main() {
 
   console.log("\n# numeric partitions");
   {
-    const fractional = errorOf(() => field("x").bin(Bin.thresholds(2.5)));
-    const noEdges = errorOf(() => field("x").bin(Bin.thresholds([])));
+    const fractional = errorOf(() => field("x").bin(Binning.thresholds(2.5)));
+    const noEdges = errorOf(() => field("x").bin(Binning.thresholds([])));
     check(
       "a count of thresholds is a whole number, and a list of edges is not " +
         "empty",
@@ -128,7 +128,7 @@ async function main() {
         noEdges?.includes("expected at least 1 item") === true,
       `${fractional} / ${noEdges}`
     );
-    const step = binCells(Bin.step(0.5), over([1.2, 2.6, 3]), undefined, "t");
+    const step = binCells(Binning.step(0.5), over([1.2, 2.6, 3]), undefined, "t");
     check(
       "a step covers the domain with cells aligned to its multiples",
       same(edges(step.cells), [
@@ -150,7 +150,7 @@ async function main() {
         String(step.cells[1]) === "1.5" &&
         step.cells[1].label === "1.5–2"
     );
-    const tenth = binCells(Bin.step(0.1), over([0, 0.3]), undefined, "t");
+    const tenth = binCells(Binning.step(0.1), over([0, 0.3]), undefined, "t");
     check(
       "edges are rounded multiples of the step",
       same(
@@ -161,7 +161,7 @@ async function main() {
     );
 
     const count = binCells(
-      Bin.thresholds(10),
+      Binning.thresholds(10),
       over([0, 37, 99]),
       undefined,
       "t"
@@ -173,14 +173,14 @@ async function main() {
         count.cells[9].end === 100,
       JSON.stringify(edges(count.cells))
     );
-    const closed = binCells(Bin.thresholds(10), over([0, 100]), undefined, "t");
+    const closed = binCells(Binning.thresholds(10), over([0, 100]), undefined, "t");
     check(
       "a thresholds partition puts the domain's top value in the last cell",
       closed.cells.length === 10 && closed.cellOf(100)?.start === 90,
       JSON.stringify(edges(closed.cells))
     );
     const list = binCells(
-      Bin.thresholds([2, 5, 50]),
+      Binning.thresholds([2, 5, 50]),
       over([1, 3, 9]),
       undefined,
       "t"
@@ -195,7 +195,7 @@ async function main() {
       JSON.stringify(edges(list.cells))
     );
     const formatted = binCells(
-      Bin.step(10).format((c: Cell) => `${c.start}–${c.end - 1}`),
+      Binning.step(10).format((c: Cell) => `${c.start}–${c.end - 1}`),
       over([25, 34]),
       undefined,
       "t"
@@ -207,21 +207,21 @@ async function main() {
     );
     check(
       "no values, no cells",
-      binCells(Bin.step(1), over([null, undefined]), undefined, "t").cells
+      binCells(Binning.step(1), over([null, undefined]), undefined, "t").cells
         .length === 0
     );
 
-    // Bin.quantiles: inner edges at type-7 quantiles of the values, outer
+    // Binning.quantiles: inner edges at type-7 quantiles of the values, outer
     // edges at the domain's ends.
     const oneToNine = [1, 2, 3, 4, 5, 6, 7, 8, 9];
     const quartiles = binCells(
-      Bin.quantiles(4),
+      Binning.quantiles(4),
       over(oneToNine),
       undefined,
       "t"
     );
     check(
-      "Bin.quantiles(n) cuts at the i/n quantiles, the domain's ends outside",
+      "Binning.quantiles(n) cuts at the i/n quantiles, the domain's ends outside",
       same(edges(quartiles.cells), [
         [1, 3],
         [3, 5],
@@ -231,13 +231,13 @@ async function main() {
       JSON.stringify(edges(quartiles.cells))
     );
     const interpolated = binCells(
-      Bin.quantiles([0.5, 0.1]),
+      Binning.quantiles([0.5, 0.1]),
       over([0, 10, 20, 30]),
       undefined,
       "t"
     );
     check(
-      "Bin.quantiles([p...]) interpolates between values, in order (type 7)",
+      "Binning.quantiles([p...]) interpolates between values, in order (type 7)",
       same(
         edges(interpolated.cells).map((e) => e.map((v) => +v.toFixed(9))),
         [
@@ -249,9 +249,9 @@ async function main() {
       JSON.stringify(edges(interpolated.cells))
     );
     check(
-      "Bin.quantiles(n) gives n cells holding about as many values each",
+      "Binning.quantiles(n) gives n cells holding about as many values each",
       binCells(
-        Bin.quantiles(10),
+        Binning.quantiles(10),
         over(Array.from({ length: 1000 }, (_, i) => i ** 2)),
         undefined,
         "t"
@@ -260,7 +260,7 @@ async function main() {
     const tied = (() => {
       try {
         binCells(
-          Bin.quantiles(4),
+          Binning.quantiles(4),
           over([1, 2, 2, 2, 2, 2, 2, 3]),
           undefined,
           'field("x").bin(...)'
@@ -271,20 +271,20 @@ async function main() {
       }
     })();
     check(
-      "Bin.quantiles throws when two edges meet, naming the field",
+      "Binning.quantiles throws when two edges meet, naming the field",
       tied.includes('field("x")') &&
-        tied.includes("Bin.quantiles(4)") &&
+        tied.includes("Binning.quantiles(4)") &&
         tied.includes("fewer cells"),
       tied
     );
     check(
-      "Bin.quantiles has its wire form, and reads it back",
-      same(Bin.quantiles([0.25, 0.75]).toJSON(), {
+      "Binning.quantiles has its wire form, and reads it back",
+      same(Binning.quantiles([0.25, 0.75]).toJSON(), {
         kind: "quantiles",
         quantiles: [0.25, 0.75],
       }) &&
         checkPartition({ kind: "quantiles", quantiles: 5 }, "t").toString() ===
-          "Bin.quantiles(5)"
+          "Binning.quantiles(5)"
     );
     const badP = (() => {
       try {
@@ -312,7 +312,7 @@ async function main() {
       repeatedP.includes("twice") && !repeatedP.includes("fewer cells"),
       repeatedP
     );
-    for (const p of [Bin.quantiles(1), Bin.quantiles(4)]) {
+    for (const p of [Binning.quantiles(1), Binning.quantiles(4)]) {
       const constant = (() => {
         try {
           binCells(p, over([7, 7, 7]), undefined, 'field("x").bin(...)');
@@ -715,7 +715,7 @@ async function main() {
         [Calendar.year({ every: 5 }), Calendar.month],
         "5 years",
       ],
-      ["a numeric bin", [Bin.step(1), Bin.step(2)], "cannot be in a product"],
+      ["a numeric bin", [Binning.step(1), Binning.step(2)], "cannot be in a product"],
       [
         "a format",
         [Calendar.year, Calendar.month.format(() => "")],
@@ -791,7 +791,7 @@ async function main() {
       JSON.stringify(cut.map((c) => [c.label, c.start, c.end]))
     );
     const nums = chainCells(
-      [Bin.step(10), Bin.step(5)],
+      [Binning.step(10), Binning.step(5)],
       over([0, 3, 12, 19]),
       undefined,
       "t"
@@ -832,10 +832,10 @@ async function main() {
       ],
       [
         "times and numbers",
-        [Calendar.year, Bin.step(1)],
+        [Calendar.year, Binning.step(1)],
         "a chain bins one column",
       ],
-      ["a wider step", [Bin.step(2), Bin.step(5)], "is not finer"],
+      ["a wider step", [Binning.step(2), Binning.step(5)], "is not finer"],
     ] as const) {
       const why = errorOf(() =>
         chainCells(steps as any, over([t("2024-01-01")]), "UTC", "t")
@@ -892,17 +892,17 @@ async function main() {
         })
     );
     check(
-      "a Bin strategy's own keys are its wire form",
-      same(Object.keys(Bin.step(0.5)).sort(), ["kind", "size"]) &&
-        same(Object.keys(Bin.thresholds(20).format(() => "")).sort(), [
+      "a Binning strategy's own keys are its wire form",
+      same(Object.keys(Binning.step(0.5)).sort(), ["kind", "size"]) &&
+        same(Object.keys(Binning.thresholds(20).format(() => "")).sort(), [
           "kind",
           "thresholds",
         ])
     );
     for (const [name, p] of [
-      ["a negative step", Bin.step(-1)],
-      ["an infinite step", Bin.step(Infinity)],
-      ["a count below 1", Bin.thresholds(0)],
+      ["a negative step", Binning.step(-1)],
+      ["an infinite step", Binning.step(Infinity)],
+      ["a count below 1", Binning.thresholds(0)],
       ["two partitions", { kind: "step", size: 1, thresholds: 3 }],
       ["a bare number", 10],
       ["the untagged step", { step: 1 }],
@@ -915,18 +915,18 @@ async function main() {
       );
     }
     {
-      const why = errorOf(() => field("x").bin(Bin.hex({ radius: 1 }) as any));
+      const why = errorOf(() => field("x").bin(Binning.hex({ radius: 1 }) as any));
       check(
-        "a Bin kind of two fields on a field is an error naming struct",
-        why?.includes("struct({ x, y }).bin(Bin.hex(...))") === true,
+        "a Binning kind of two fields on a field is an error naming struct",
+        why?.includes("struct({ x, y }).bin(Binning.hex(...))") === true,
         why
       );
     }
     {
       const why = errorOf(() => checkPartition({ step: 1 }, "t"));
       check(
-        "the untagged form's error names Bin.step",
-        why?.includes("Bin.step(size)") === true,
+        "the untagged form's error names Binning.step",
+        why?.includes("Binning.step(size)") === true,
         why
       );
     }
@@ -938,12 +938,12 @@ async function main() {
           .toJSON().ops,
         [{ op: "bin", partition: { kind: "month", every: 3 } }]
       ) &&
-        same(field("x").bin(Bin.step(0.5)).toJSON().ops, [
+        same(field("x").bin(Binning.step(0.5)).toJSON().ops, [
           { op: "bin", partition: { kind: "step", size: 0.5 } },
         ])
     );
     const noWire = errorOf(() =>
-      JSON.stringify(field("x").bin(Bin.step(1).format(() => "")))
+      JSON.stringify(field("x").bin(Binning.step(1).format(() => "")))
     );
     check(
       "a partition with a format has no wire form",
@@ -966,7 +966,7 @@ async function main() {
     // domain among them (createOperator copies them).
     const groups = splitEntries("g", rows);
     for (const leaf of groups.values()) copyColumnTypes(leaf, rows);
-    const byCell = field("x").bin(Bin.step(2));
+    const byCell = field("x").bin(Binning.step(2));
     const a = splitEntries(byCell, groups.get("A")!);
     const b = splitEntries(byCell, groups.get("B")!);
     check(
@@ -992,7 +992,7 @@ async function main() {
         )
     );
     const sorted = splitEntries(
-      field("x").bin(Bin.step(2)).reverse(),
+      field("x").bin(Binning.step(2)).reverse(),
       groups.get("A")!
     );
     check(
@@ -1005,7 +1005,7 @@ async function main() {
     const leaf = setColumnTypes([{ x: 5 }], {
       x: { HasDomain: { lo: 0, hi: 30 } },
     });
-    const own = splitEntries(field("x").bin(Bin.step(10)), leaf);
+    const own = splitEntries(field("x").bin(Binning.step(10)), leaf);
     check(
       "a split's cells follow its column type's domain, not its rows",
       same([...own.keys()].map(String), ["0", "10", "20", "30"]) &&
@@ -1015,13 +1015,13 @@ async function main() {
         ),
       [...own.keys()].map(String).join(" ")
     );
-    const count = splitEntries(field("x").bin(Bin.thresholds(3)), leaf);
+    const count = splitEntries(field("x").bin(Binning.thresholds(3)), leaf);
     check(
       "a threshold count picks its edges over the type's domain",
       same(
         [...count.keys()].map(String),
         binCells(
-          Bin.thresholds(3),
+          Binning.thresholds(3),
           { lo: 0, hi: 30 },
           undefined,
           "t"
@@ -1030,7 +1030,7 @@ async function main() {
       [...count.keys()].map(String).join(" ")
     );
     const untyped = errorOf(() =>
-      splitEntries(field("x").bin(Bin.step(10)), [{ x: 5 }])
+      splitEntries(field("x").bin(Binning.step(10)), [{ x: 5 }])
     );
     check(
       "rows with no column types have no domain: binning them is an error",
@@ -1038,7 +1038,7 @@ async function main() {
       untyped
     );
     const stray = errorOf(() =>
-      splitEntries(field("x").bin(Bin.step(1)), [{ x: "a" }])
+      splitEntries(field("x").bin(Binning.step(1)), [{ x: "a" }])
     );
     check(
       "binning a column with no domain and values is an error that names it",
@@ -2477,11 +2477,11 @@ async function main() {
       { x: Infinity, a: 1, b: Infinity },
     ]);
     for (const [name, by, column] of [
-      ["a step", field("x").bin(Bin.step(1)), 'column "x"'],
-      ["a threshold count", field("x").bin(Bin.thresholds(10)), 'column "x"'],
+      ["a step", field("x").bin(Binning.step(1)), 'column "x"'],
+      ["a threshold count", field("x").bin(Binning.thresholds(10)), 'column "x"'],
       [
         "hexagons",
-        srcStruct({ x: "a", y: "b" }).bin(Bin.hex({ radius: 1 })),
+        srcStruct({ x: "a", y: "b" }).bin(Binning.hex({ radius: 1 })),
         'column "b"',
       ],
     ] as const) {
@@ -2547,7 +2547,7 @@ async function main() {
       byAge(),
     ]);
     const ownCells = binCells(
-      Bin.thresholds(10),
+      Binning.thresholds(10),
       { lo: 0, hi: 40 },
       undefined,
       "t"
@@ -2558,7 +2558,7 @@ async function main() {
       `${derived} / ${ownCells}`
     );
 
-    // Bin.quantiles reads the values of the data the column was typed with:
+    // Binning.quantiles reads the values of the data the column was typed with:
     // the chart's, in every group, or a derive's, in each group it runs in.
     const cellXs = async (flow: unknown[]) =>
       chart(ages, { axes: false })
@@ -2587,7 +2587,7 @@ async function main() {
         });
     const shared = await cellXs([]);
     check(
-      "Bin.quantiles gives every group the cells of the chart's data",
+      "Binning.quantiles gives every group the cells of the chart's data",
       shared.length === 2 &&
         shared[0].length === 4 &&
         same(shared[0], shared[1]),
@@ -2595,7 +2595,7 @@ async function main() {
     );
     const own = await cellXs([GoFish.derive((rows: any[]) => rows)]);
     check(
-      "Bin.quantiles after a derive in each group gives each group its own",
+      "Binning.quantiles after a derive in each group gives each group its own",
       own.length === 2 &&
         own.every((xs) => xs.length === 4) &&
         !same(own[0], own[1]),
@@ -2666,18 +2666,18 @@ export function partitionKeyTypes(): void {
   // @ts-expect-error a field with no `.bin(p)` has no region
   srcPartition({ by: field("rating"), dir: "x" });
   // @ts-expect-error an aggregate folds the region away
-  srcPartition({ by: field("rating").bin(Bin.step(1)).count(), dir: "x" });
-  srcPartition({ by: field("rating").bin(Bin.step(1)), dir: "x" });
-  srcPartition({ by: field("rating").bin(Bin.step(1)).reverse(), dir: "x" });
+  srcPartition({ by: field("rating").bin(Binning.step(1)).count(), dir: "x" });
+  srcPartition({ by: field("rating").bin(Binning.step(1)), dir: "x" });
+  srcPartition({ by: field("rating").bin(Binning.step(1)).reverse(), dir: "x" });
   srcPartition({
-    by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(1)) },
+    by: { x: field("a").bin(Binning.step(1)), y: field("b").bin(Binning.step(1)) },
   });
   // @ts-expect-error each axis's key needs a region too
-  srcPartition({ by: { x: field("a"), y: field("b").bin(Bin.step(1)) } });
+  srcPartition({ by: { x: field("a"), y: field("b").bin(Binning.step(1)) } });
   // @ts-expect-error a product divides both axes, so it takes no dir
   srcPartition({ by: { x: field("a").bin(), y: field("b").bin() }, dir: "x" });
-  field("a").bin(Bin.thresholds([0, 5, 10]).format((c) => String(c.start)));
-  srcPartition({ by: field("a").bin(Bin.quantiles(10)), dir: "x" });
+  field("a").bin(Binning.thresholds([0, 5, 10]).format((c) => String(c.start)));
+  srcPartition({ by: field("a").bin(Binning.quantiles(10)), dir: "x" });
   // @ts-expect-error a month of the year has no one region on the time line
   srcPartition({ by: field("d").bin(Calendar.month), dir: "x" });
   srcPartition({ by: field("d").bin(Calendar.year), dir: "x" });
@@ -2694,9 +2694,9 @@ export function partitionKeyTypes(): void {
     by: field("d").bin(Calendar.month).bin(Calendar.day),
     dir: "x",
   });
-  // @ts-expect-error Bin.hex bins two fields together, not one
-  field("a").bin(Bin.hex({ radius: 1 }));
-  // @ts-expect-error the untagged form is gone: write Bin.step(1)
+  // @ts-expect-error Binning.hex bins two fields together, not one
+  field("a").bin(Binning.hex({ radius: 1 }));
+  // @ts-expect-error the untagged form is gone: write Binning.step(1)
   field("a").bin({ step: 1 });
 }
 

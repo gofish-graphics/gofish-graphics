@@ -11,8 +11,8 @@ captured DOM is byte-identical.
 import os
 
 from gofish import (
-    Bin,
-    Filter,
+    Binning,
+    Effect,
     atop,
     chart,
     circle,
@@ -55,7 +55,7 @@ def _build_children():
     """The shared `image + rect` pair — the image full-size in grays, the rect
     over the bottom half."""
     return [
-        image(href=BOTTLE_PNG, x=0, y=0, w=W, h=H, filter=Filter.grayscale),
+        image(href=BOTTLE_PNG, x=0, y=0, w=W, h=H, effect=Effect.grayscale),
         rect(x=0, y=SPLIT_Y_PX, w=W, h=SPLIT_H, fill=BG_COLOR),
     ]
 
@@ -96,7 +96,7 @@ def story_luminance_mask():
                     y=0,
                     w=W,
                     h=H,
-                    filter=Filter.luminance_to_alpha,
+                    effect=Effect.luminance_to_alpha,
                 ).hidden(),
                 cover,
             ]
@@ -137,7 +137,7 @@ def story_intersect_in_cells():
     # cell draws its own copy, centered in that cell, as a layer would be.
     return (
         chart([{"v": 5}, {"v": 15}, {"v": 25}], w=480)
-        .flow(partition(by=field("v").bin(Bin.step(10)), dir="x"))
+        .flow(partition(by=field("v").bin(Binning.step(10)), dir="x"))
         .mark(
             intersect(
                 [

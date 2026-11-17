@@ -66,7 +66,7 @@ type TilingOptions = {
  * share of the region's area, in weight order and in the operator's frame.
  * `region` is the shape the operator fills, or `undefined` for its whole box
  * `[0, size[0]] × [0, size[1]]`. Every `Tiling` strategy names one
- * (`tiling`), and the operator lays its children out in the cells the same
+ * (`tilingFnOf`), and the operator lays its children out in the cells the same
  * way whatever the strategy.
  */
 type TilingFn = (
@@ -88,10 +88,10 @@ const D3_TILES = {
 /** The d3 tiling method of a rectangular `Tiling` strategy (a squarify ratio
  *  of at least 1 is checked with its family, since d3 would clamp it
  *  silently). */
-const d3Tile = (method: RectTiling) =>
-  method.kind === "squarify" && method.ratio !== undefined
-    ? treemapSquarify.ratio(method.ratio)
-    : D3_TILES[method.kind];
+const d3Tile = (strategy: RectTiling) =>
+  strategy.kind === "squarify" && strategy.ratio !== undefined
+    ? treemapSquarify.ratio(strategy.ratio)
+    : D3_TILES[strategy.kind];
 
 /** `Tiling.voronoi()`'s seed when it is given none, as the `Tiling` family
  *  declares it. */
@@ -99,18 +99,18 @@ const VORONOI_SEED = Frontend.STRATEGIES.Tiling.kinds.voronoi.params.seed
   .default as number;
 
 /** The spelling of a tiling in an error message: `Tiling.squarify`. */
-const tilingName = (method: Tiling) => `Tiling.${method.kind}`;
+const tilingName = (strategy: Tiling) => `Tiling.${strategy.kind}`;
 
 /** A rectangular tiling: d3 tiles the box, `padding` in from its edge and
  *  `spacing` between siblings, and each tile is a box ring. It tiles only a
  *  box: in any other shape its tiles would not have the areas their weights
  *  give them. */
 const d3Tiling =
-  (method: RectTiling): TilingFn =>
+  (strategy: RectTiling): TilingFn =>
   (region, weights, { spacing, padding, round, size, where }) => {
     if (!isWholeBox(region, size[0], size[1]))
       throw new Error(
-        `${where}: ${tilingName(method)} needs a rectangular region, but this ` +
+        `${where}: ${tilingName(strategy)} needs a rectangular region, but this ` +
           `tile operator sits in a shape that is not a box (a Voronoi cell, an ` +
           `oval, or a polygon cell of a partition). Use Tiling.voronoi here.`
       );
@@ -127,7 +127,7 @@ const d3Tiling =
       .paddingInner(spacing)
       .paddingOuter(padding)
       .round(round)
-      .tile(d3Tile(method))(root)
+      .tile(d3Tile(strategy))(root)
       .leaves();
     const rings: Ring[] = new Array(weights.length);
     for (const { x0, y0, x1, y1, data } of leaves) {
@@ -169,10 +169,10 @@ const boxCenter = (ring: Ring): [number, number] => {
 };
 
 /** The tiling a `Tiling` strategy names. */
-const tiling = (method: Tiling): TilingFn =>
-  method.kind === "voronoi"
-    ? voronoiTilingOf(method.seed ?? VORONOI_SEED)
-    : d3Tiling(method);
+const tilingFnOf = (strategy: Tiling): TilingFn =>
+  strategy.kind === "voronoi"
+    ? voronoiTilingOf(strategy.seed ?? VORONOI_SEED)
+    : d3Tiling(strategy);
 
 type TileSort = "asc" | "desc" | "none";
 
@@ -184,7 +184,7 @@ type TileProps = {
   padding?: number;
   round?: boolean;
   /** The tiling strategy. Default `Tiling.squarify()`. */
-  method?: Tiling;
+  tiling?: Tiling;
   sort?: TileSort;
   /** Per-entry weight driving each leaf's tile area — one value per child, in
    *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */
@@ -221,7 +221,7 @@ const TileNode = createNodeOperator(
       spacing = 0,
       padding = 0,
       round = true,
-      method = squarify(),
+      tiling = squarify(),
       sort = "desc",
       size: sizeChannel,
       ...fancyDims
@@ -253,7 +253,7 @@ const TileNode = createNodeOperator(
           spacing,
           padding,
           round,
-          method,
+          tiling,
           sort,
           size: sizeChannel,
           dims,
@@ -328,7 +328,7 @@ const TileNode = createNodeOperator(
 
           const resolvedSize: Size = [resolveAxisSize(0), resolveAxisSize(1)];
 
-          Frontend.checkStrategy("Tiling", method, "tile({ method })");
+          Frontend.checkStrategy("Tiling", tiling, "tile({ tiling })");
           if (childAsts.length === 0) {
             return {
               intrinsicDims: {
@@ -366,7 +366,7 @@ const TileNode = createNodeOperator(
             );
 
           // One cell per child, in the operator's frame, in weight order.
-          const cells = tiling(method)(
+          const cells = tilingFnOf(tiling)(
             region,
             leafData.map((d) => d.weight),
             {

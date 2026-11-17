@@ -37,7 +37,7 @@ gf.tile(
         rx: 3,
         ry: 3,
       })
-      .label("name", { position: "center", color: "white", fontSize: 12 })(
+      .label("name", { placement: "center", color: "white", fontSize: 12 })(
       d,
       d.name
     )
@@ -69,7 +69,7 @@ tile(options, children); // combinator form
 
 ## Strategies
 
-The `method` option holds the tiling strategy, a member of the `Tiling` family. You make a
+The `tiling` option holds the tiling strategy, a member of the `Tiling` family. You make a
 strategy with a function call. A strategy with no required option is also a
 value as it is: `Tiling.voronoi` is `Tiling.voronoi()`. The family is also the
 module `gofish-graphics/tiling`, so
@@ -102,7 +102,7 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
 gf.tile({
   by: "genre",
   size: "gross",
-  method: gf.Tiling.squarify({ ratio: 1 }),
+  tiling: gf.Tiling.squarify({ ratio: 1 }),
 });
 ```
 
@@ -120,8 +120,8 @@ level, one flow step each:
 ```js
 chart(countryPopulations)
   .flow(
-    tile({ by: "continent", size: "pop", method: Tiling.slice }),
-    tile({ by: "region", size: "pop", method: Tiling.dice })
+    tile({ by: "continent", size: "pop", tiling: Tiling.slice }),
+    tile({ by: "region", size: "pop", tiling: Tiling.dice })
   )
   .mark(rect({ fill: "continent" }));
 ```

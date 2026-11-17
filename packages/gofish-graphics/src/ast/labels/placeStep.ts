@@ -4,7 +4,7 @@
 
 /**
  * The label chooser: the post-solve step that places the labels whose
- * `position` is a `Place` strategy. Like `overlap` (`constraints/overlap.ts`)
+ * `placement` is a `Placement` strategy. Like `overlap` (`constraints/overlap.ts`)
  * it is not a difference constraint, so the placement solver never sees it:
  * the label layer runs it after the solve, when the labeled marks are placed
  * and can be read through their `ref()` stand-ins.
@@ -15,7 +15,7 @@
  * mark is read as its outline only), the labels already placed (by this
  * step, or by the solve for a position string; a hidden one takes no room),
  * and the nodes in the call's `avoiding`. A label with no
- * free candidate is hidden. `Place.start()` and `Place.end()` labels have
+ * free candidate is hidden. `Placement.start()` and `Placement.end()` labels have
  * one spot each, past their paths' ends: the ones of a call that overlap
  * there slide apart vertically, and one that still covers an obstacle is
  * hidden.
@@ -32,11 +32,11 @@ import {
   around,
   end,
   interior,
-  type AlongPlace,
-  type AroundPlace,
-  type InteriorPlace,
-  type Place,
-} from "../../families/place";
+  type AlongPlacement,
+  type AroundPlacement,
+  type InteriorPlacement,
+  type Placement,
+} from "../../families/placement";
 import { ringExtent } from "../geometry/box";
 import { turnedCorners } from "../geometry/plane";
 import {
@@ -78,7 +78,7 @@ export type LabelPlaceItem = {
   node: LabelNode;
   /** Its strategy, or `"outline"`: read from its mark's outline
    *  ({@link placeByOutline}). */
-  place: Place | "outline";
+  place: Placement | "outline";
   /** The label's `offset` option (see {@link placeOffset}). */
   offset?: number;
   /** `ref()` stand-ins of the nodes it avoids. */
@@ -361,21 +361,21 @@ export function applyLabelPlacement(
 
 /** A label to place, with its strategy and its offset resolved. */
 type Resolved = Omit<LabelPlaceItem, "place" | "offset"> & {
-  place: Place;
+  place: Placement;
   offset: number;
 };
 
-/** A strategy's name as written: `Place.around()`. */
-const placeName = (p: Place): string => `Place.${p.kind}()`;
+/** A strategy's name as written: `Placement.around()`. */
+const placeName = (p: Placement): string => `Placement.${p.kind}()`;
 
 /**
  * The strategy of a label whose default is read from its mark's outline
- * (`labelPosition: "outline"`): inside a filled region (a ring of 3 points
+ * (`labelPlacement: "outline"`): inside a filled region (a ring of 3 points
  * or more), around any other closed outline, and at the end of an open
  * path. A mark that draws no outline, or only empty ones, has none:
  * undefined.
  */
-const placeByOutline = (t: TargetShape): Place | undefined => {
+const placeByOutline = (t: TargetShape): Placement | undefined => {
   const drawn = t.outlines.filter((o) => o.points.length > 0);
   return drawn.some((o) => o.closed && o.filled && o.points.length >= 3)
     ? interior()
@@ -400,14 +400,14 @@ const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4, interior: 0 };
 
 /** The pixels between the outline and a label placed by `place`: the
  *  strategy's `offset`, else the label's, else the strategy's default. */
-const placeOffset = (place: Place, label: number | undefined): number =>
+const placeOffset = (place: Placement, label: number | undefined): number =>
   ("offset" in place ? place.offset : undefined) ??
   label ??
   DEFAULT_OFFSET[place.kind];
 
 /** The candidates of a strategy that offers several, best first. */
 function candidatesFor(
-  place: AroundPlace | AlongPlace | InteriorPlace,
+  place: AroundPlacement | AlongPlacement | InteriorPlacement,
   offset: number,
   shape: TargetShape,
   size: HalfSize,
@@ -424,7 +424,7 @@ function candidatesFor(
 }
 
 /**
- * The spots of one call's `Place.start()` or `Place.end()` labels: each at
+ * The spots of one call's `Placement.start()` or `Placement.end()` labels: each at
  * its path's end, then the labels whose boxes overlap in x slid apart
  * vertically, a run of them at a time (labels apart in x keep the heights
  * their ends want). In input order, with each label's box size.

@@ -25,7 +25,7 @@ def story_default():
                 spacing=2,
                 padding=2,
                 round=True,
-                method=Tiling.squarify(),
+                tiling=Tiling.squarify(),
             )
         )
         .mark(
@@ -35,7 +35,7 @@ def story_default():
                 stroke_width=1,
                 rx=2,
                 ry=2,
-            ).label("Major Genre", position="center", color="white", font_size=12)
+            ).label("Major Genre", placement="center", color="white", font_size=12)
         ),
         {},
     )
