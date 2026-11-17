@@ -228,20 +228,28 @@ export const inferEntrySize = <T>(
 ): MaybeValue<number>[] | undefined => {
   if (accessor === undefined) return undefined;
   if (Array.isArray(accessor)) return accessor;
+  const summable = (field: string) =>
+    checkSummable(
+      resolveColumn(data, field).quantity,
+      "A per-row size channel"
+    );
   if (typeof accessor === "function") {
+    const named = new Set<string>();
     return data.map((d) => {
       const r: unknown = accessor(d);
       if (isLiteral(r)) return r.value as number;
-      if (typeof r === "string")
+      if (typeof r === "string") {
+        if (!named.has(r)) summable(r);
+        named.add(r);
         return value(hasField(d, r) ? Number((d as any)[r]) || 0 : 0);
+      }
+      // No value or a missing one is a missing data value, as before.
+      if (r === undefined || r === null) return value(r as any);
       return r as MaybeValue<number>;
     });
   }
   if (typeof accessor === "string") {
-    checkSummable(
-      resolveColumn(data, accessor).quantity,
-      "A per-row size channel"
-    );
+    summable(accessor);
     return data.map((d) => value(Number((d as any)[accessor]) || 0));
   }
   return undefined;
@@ -394,8 +402,7 @@ export function directValue(
   if (typeof accessor !== "function") return accessor;
   if (rows.length === 0) return undefined;
   const results = rows.map((row) => (accessor as (r: unknown) => unknown)(row));
-  const keys = results.map(eqKey);
-  if (keys.every((k) => k === keys[0]))
+  if (results.every((r) => sameValue(r, results[0])))
     // `null` is a missing data value, which the channel folds as it folds
     // a missing value of a field.
     return results[0] === null ? () => null : results[0];
@@ -403,7 +410,7 @@ export function directValue(
   results.forEach((r, i) => {
     const data = dataOf(r, rows[i]);
     if (data === NOT_DATA) {
-      const shown = [...new Set(keys)].slice(0, 4).join(", ");
+      const shown = [...new Set(results.map(eqKey))].slice(0, 4).join(", ");
       throw new Error(
         `[gofish] a channel function's value is not constant across the ` +
           `rows of one mark (${shown}). One mark has one value, so the rows ` +
@@ -415,6 +422,17 @@ export function directValue(
   });
   return (row: unknown) => byRow.get(row);
 }
+
+/** Whether two results of a channel function are one value: the same
+ *  primitive (`3` and `"3"` are not), or objects equal by {@link eqKey}. */
+export const sameValue = (a: unknown, b: unknown): boolean =>
+  a === b ||
+  Object.is(a, b) ||
+  (typeof a === "object" &&
+    a !== null &&
+    typeof b === "object" &&
+    b !== null &&
+    eqKey(a) === eqKey(b));
 
 const NOT_DATA = Symbol("not data");
 
@@ -687,7 +705,9 @@ export const CHANNEL_INFER: Record<
   },
 };
 
-/** A `dims` bag without its slots that have no value given. */
+/** A `dims` bag without its slots that have no value given. An interval
+ *  whose every slot was left out goes too; one that was given only
+ *  `embedded` stays as it was given. */
 const withoutAbsent = <A>(dims: AxisDims<A>): AxisDims<A> => {
   const out: AxisDims<A> = {};
   for (const [name, entry] of Object.entries(dims)) {
@@ -696,11 +716,11 @@ const withoutAbsent = <A>(dims: AxisDims<A>): AxisDims<A> => {
       out[name] = entry;
       continue;
     }
-    const kept = Object.fromEntries(
-      Object.entries(entry).filter(([, v]) => v !== undefined)
-    );
-    if (Object.keys(kept).some((k) => k !== "embedded"))
-      out[name] = kept as any;
+    const slots = Object.entries(entry);
+    const kept = slots.filter(([, v]) => v !== undefined);
+    const emptied =
+      kept.length < slots.length && kept.every(([k]) => k === "embedded");
+    if (!emptied) out[name] = Object.fromEntries(kept) as any;
   }
   return out;
 };

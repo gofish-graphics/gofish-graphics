@@ -50,6 +50,7 @@ import {
   CHANNEL_INFER,
   directValue,
   isBatchAccessor,
+  sameValue,
   resolveChannelAccessors,
   resolveValue,
   axisSlotKind,
@@ -1135,22 +1136,36 @@ function applyChannel(
   // add a spurious conflict-throw site.
   const numeric = type === "size" || type === "area" || type === "pos";
   // A function is read as the value it returns would be, written in the
-  // channel, over each entry's rows or the whole data (`directValue`). The
-  // column is then the returned value's (a field name's), off `wholeData`.
+  // channel (`directValue`), over each entry's rows or the whole data. When
+  // every entry gives the same value, that value is what is written, so it
+  // takes the path below as written (a category field on a discrete
+  // position, a `normalize()`). Otherwise each entry's value is inferred on
+  // its own, and the column is that value's (a field name's), off
+  // `wholeData`.
   if (typeof val === "function") {
-    const at = (items: any[]) => {
-      const given = directValue(val, items);
-      // No value given: the channel is absent, as an option left out is.
-      if (given === undefined) return undefined;
-      return CHANNEL_INFER[type](
-        given,
-        items,
-        numeric ? resolveColumn(wholeData, given) : undefined
+    const groups =
+      perEntry && entries !== undefined ? [...entries.values()] : [wholeData];
+    const given = groups.map((items) => directValue(val, items));
+    const first = given[0];
+    if (
+      first !== undefined &&
+      typeof first !== "function" &&
+      given.every((g) => sameValue(g, first))
+    ) {
+      val = first;
+    } else {
+      const inferred = given.map((g, i) =>
+        // No value given: the channel is absent, as an option left out is.
+        g === undefined
+          ? undefined
+          : CHANNEL_INFER[type](
+              g,
+              groups[i],
+              numeric ? resolveColumn(wholeData, g) : undefined
+            )
       );
-    };
-    return perEntry && entries !== undefined
-      ? [...entries.values()].map(at)
-      : at(wholeData);
+      return perEntry && entries !== undefined ? inferred : inferred[0];
+    }
   }
   // The column (its measure and its schema type) is loop-invariant across
   // split entries (it depends only on the accessor and what `wholeData`

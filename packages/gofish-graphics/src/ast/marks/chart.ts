@@ -20,7 +20,12 @@ import {
   type MaybeValue,
   type Value,
 } from "../data";
-import { predicateWire, sumIn, type FieldExpr } from "../fieldExpr";
+import {
+  getFieldOps,
+  predicateWire,
+  sumIn,
+  type FieldExpr,
+} from "../fieldExpr";
 import { columnQuantity } from "../measure";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
@@ -28,7 +33,12 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { colorValue, directValue, resolveChannelAccessors } from "../channels";
+import {
+  CHANNEL_INFER,
+  colorValue,
+  directValue,
+  resolveChannelAccessors,
+} from "../channels";
 import { isThenable } from "../../util";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import {
@@ -104,7 +114,12 @@ import {
 } from "./chartBuilder";
 import { resolveRefData } from "./resolveRefData";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
-import { projectByValues, projectPath, rowsReached } from "../datumProjection";
+import {
+  eqKey,
+  projectByValues,
+  projectPath,
+  rowsReached,
+} from "../datumProjection";
 import {
   applySchema,
   columnType,
@@ -670,8 +685,9 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   group: unknown
 ): Promise<O> {
   const paint = groupChannelsOf(type);
-  const rows = rowsReached(group);
-  const pending = resolveChannelAccessors(opts, paint, () => rows);
+  let rows: unknown[] | undefined;
+  const rowsOf = () => (rows ??= rowsReached(group));
+  const pending = resolveChannelAccessors(opts, paint, rowsOf);
   let resolved = isThenable(pending) ? await pending : pending;
   const notConstant = (key: string, what: string) =>
     new Error(
@@ -684,16 +700,33 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   for (const key of Object.keys(paint)) {
     let raw = (resolved as any)[key];
     if (typeof raw === "function") {
-      raw = directValue(raw, rows);
-      if (typeof raw === "function")
-        throw notConstant(key, "the accessor's value");
+      const read = directValue(raw, rowsOf());
+      if (typeof read === "function") {
+        // The rows' values are data, which must still be one value. A
+        // missing one gives no color, so the mark keeps its default.
+        const data = rowsOf().map(read as (row: unknown) => unknown);
+        if (new Set(data.map(eqKey)).size > 1)
+          throw notConstant(key, "the accessor's value");
+        raw =
+          data[0] === null
+            ? undefined
+            : paint[key] === "raw"
+              ? data[0]
+              : colorValue(data[0]);
+      } else raw = read;
     }
+    // A pipeline with an aggregate folds the group's rows into its one
+    // value, as on a mark; a bare field reads as its name does.
+    if (isField(raw))
+      raw =
+        getFieldOps(raw).length > 0
+          ? CHANNEL_INFER[paint[key]](raw, rowsOf())
+          : raw.name;
     if (isLiteral(raw)) raw = raw.value;
-    else if (isField(raw)) raw = raw.name;
     else if (typeof raw === "string") {
       const name = toPath(raw)[0];
       // A string no row has as a field is a literal.
-      if (name !== undefined && rows.some((row) => hasField(row, name))) {
+      if (name !== undefined && rowsOf().some((row) => hasField(row, name))) {
         const values = projectByValues(group, raw);
         if (values.length > 1) throw notConstant(key, `"${raw}"`);
         raw = paint[key] === "raw" ? values[0] : colorValue(values[0], raw);

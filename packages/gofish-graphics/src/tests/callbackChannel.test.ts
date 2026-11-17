@@ -21,6 +21,7 @@ import {
   text,
   line,
   literal,
+  field,
   v,
 } from "../lib";
 import { check, items, report, textsOf } from "./testHelpers";
@@ -230,6 +231,79 @@ async function main() {
     "an empty string names no field, so it is a literal",
     same((await strokes(() => "")).strokes, ["", ""]),
     JSON.stringify(await strokes(() => ""))
+  );
+  check(
+    "field(...) reads its field, as the field name does",
+    same(await strokes(field("g")), await strokes("g")),
+    JSON.stringify(await strokes(field("g")))
+  );
+  check(
+    "a missing value in every row is no color, as undefined is",
+    same(await strokes(() => null), await strokes(() => undefined)),
+    JSON.stringify(await strokes(() => null))
+  );
+
+  console.log("\n# one mark of several rows");
+
+  const oneMark = (h: any) =>
+    chart(rows, { axes: false })
+      .mark(rect({ w: 10, h }))
+      .toDisplayList({ w: 300, h: 200 });
+  let threw = "";
+  try {
+    await oneMark((d: Row) => (d.k === "a" ? 3 : "3"));
+  } catch (e) {
+    threw = String(e);
+  }
+  check(
+    "3 and \"3\" are two values, so a mark of both rows throws",
+    threw.includes("not constant"),
+    threw
+  );
+
+  console.log("\n# an operator's channel");
+
+  const scatterXs = async (x: any) => {
+    const d = await chart(rows, { axes: false })
+      .flow(scatter({ by: "k", x }))
+      .mark(rect({ w: 10, h: 10 }))
+      .toDisplayList({ w: 300, h: 200 });
+    return items(d)
+      .filter((it) => it.kind === "rect")
+      .map((it) => Math.round(it.x ?? 0));
+  };
+  check(
+    "a field name of a category places the entries as the name does",
+    same(await scatterXs(() => "k"), await scatterXs("k")),
+    JSON.stringify(await scatterXs("k"))
+  );
+
+  console.log("\n# a row with a getter");
+
+  class Bar {
+    constructor(
+      readonly k: string,
+      private readonly n: number
+    ) {}
+    get count() {
+      return this.n;
+    }
+  }
+  const classBars = await chart(
+    rows.map((r) => new Bar(r.k, r.count)),
+    { axes: false }
+  )
+    .flow(spread({ by: "k", dir: "x" }))
+    .mark(rect({ h: "count" }))
+    .toDisplayList({ w: 300, h: 200 });
+  check(
+    "a field its class gives it is a field",
+    same(
+      items(classBars)
+        .filter((it) => it.kind === "rect")
+        .map((it) => Math.round(it.h ?? 0)),
+      byCount.heights
+    )
   );
 
   report();
