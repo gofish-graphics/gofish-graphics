@@ -6,7 +6,7 @@
  * JSON Schema for the GoFish frontend IR (v0).
  *
  * The envelope (Root/ChartIR/LayerChainIR/DataIR/MarkIR union, ChannelValue,
- * ConstraintIR, ...) stays hand-written below — these are structural/
+ * ...) stays hand-written below — these are structural/
  * recursive shapes, not flat field bags, and are cheap to keep authored.
  *
  * The per-operator `$defs` (a discriminated `oneOf`, one member per operator
@@ -16,7 +16,8 @@
  * `buildOperatorDefs()` / `buildLeafMarkDefs()` below, merged into the
  * authored `$defs` object, as are the named option types (`AxesOptions`,
  * `AxisOptions`, `AxisInterval`, `AxisDimsValue`) from `OPTION_TYPES`
- * (`buildOptionTypeDefs()`), `ChartOptions` among them. Field-level coverage matches `validate.ts` (which
+ * (`buildOptionTypeDefs()`), `ChartOptions` among them, and the
+ * constraints from `CONSTRAINTS` (`buildConstraintDefs()`). Field-level coverage matches `validate.ts` (which
  * interprets the same descriptor table); this file is the wire artifact
  * (consumed by external tooling, language servers, and the Python wrapper's
  * parity-test harness).
@@ -24,6 +25,7 @@
 
 import {
   CHART_OPTIONS,
+  CONSTRAINTS,
   LABEL_OPTIONS,
   LEAF_MARKS,
   MARK_BASE_FIELDS,
@@ -229,8 +231,39 @@ function buildOptionTypeDefs(): Record<string, unknown> {
   return fieldsToProperties(OPTION_TYPES).properties;
 }
 
+/** One `$def` per constraint type (`AlignConstraint`, ...) plus the
+ *  `ConstraintIR` union referencing them: `{ type, options?, refs }`, the
+ *  options as `CONSTRAINTS` declares them. Open to other keys, as the
+ *  operator `$defs` are: rejecting one is validate.ts's job. */
+function buildConstraintDefs(): Record<string, unknown> {
+  const defs: Record<string, unknown> = {};
+  const refs: Record<string, unknown>[] = [];
+  for (const descriptor of Object.values(CONSTRAINTS)) {
+    const defName = `${pascalCase(descriptor.type)}Constraint`;
+    const { properties, required } = fieldsToProperties(descriptor.fields);
+    defs[defName] = {
+      ...(descriptor.doc ? { description: descriptor.doc } : {}),
+      type: "object",
+      required: ["type", "refs", ...(required.length > 0 ? ["options"] : [])],
+      properties: {
+        type: { const: descriptor.type },
+        options: {
+          type: "object",
+          ...(required.length > 0 ? { required } : {}),
+          properties,
+        },
+        refs: { type: "array", items: { $ref: "#/$defs/RelateOperandIR" } },
+      },
+    };
+    refs.push({ $ref: `#/$defs/${defName}` });
+  }
+  defs.ConstraintIR = { oneOf: refs };
+  return defs;
+}
+
 const GENERATED_DEFS: Record<string, unknown> = {
   ...buildOperatorDefs(),
+  ...buildConstraintDefs(),
   ...buildLeafMarkDefs(),
   ...buildOptionTypeDefs(),
 };
@@ -723,17 +756,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { $ref: "#/$defs/RefMarkIR" },
         { required: ["scope"], properties: { selection: { type: "string" } } },
       ],
-    },
-    ConstraintIR: {
-      type: "object",
-      required: ["type", "refs"],
-      properties: {
-        type: {
-          enum: ["align", "distribute", "position", "nest", "zAbove", "zBelow"],
-        },
-        options: { type: "object" },
-        refs: { type: "array", items: { $ref: "#/$defs/RelateOperandIR" } },
-      },
     },
     ChannelValue: {
       description:

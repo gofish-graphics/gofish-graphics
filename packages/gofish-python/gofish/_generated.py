@@ -1276,6 +1276,76 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
             opts[_k] = _v
     return opts
 
+def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | list] = None) -> Dict[str, Any]:
+    """Align the operands on one or both axes. At least one of `x`, `y` is required.
+
+    Args:
+        x: How the operands line up on x: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.
+        y: How the operands line up on y: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", x),
+        ("y", y),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
+    """Lay the operands out one after another along `dir`.
+
+    Args:
+        dir: The axis to lay the operands out along.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)` or `Spacing.pitch(distance, { at })`. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. Default 8.
+        order: The order the operands are laid out in. Default "forward".
+        glue: Stack semantics: the operands are glued together and their sizes sum; spacing is 0. Default false.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("dir", dir),
+        ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
+        ("order", order),
+        ("glue", glue),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _position_constraint_opts(*, x: Optional[Any] = None, y: Optional[Any] = None, anchor: Optional[str] = None) -> Dict[str, Any]:
+    """Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.
+
+    Args:
+        x: A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them.
+        y: A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them.
+        anchor: Which point of the operand lands on a point coordinate. Default "middle".
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", x),
+        ("y", y),
+        ("anchor", anchor),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _nest_constraint_opts(*, x: Optional[float] = None, y: Optional[float] = None) -> Dict[str, Any]:
+    """Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.
+
+    Args:
+        x: Padding on x, in pixels.
+        y: Padding on y, in pixels.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", x),
+        ("y", y),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
 def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
     """Chart-level options for chart(data, **options).
 

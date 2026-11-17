@@ -74,6 +74,7 @@ import {
   pyType,
   refPyClass,
   AUTHORED_REFS,
+  CONSTRAINTS,
 } from "gofish-ir/frontend";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -694,6 +695,16 @@ for (const name of ["line", "ribbon", "enclose"]) {
 {
   const d = COMBINATOR_MARKS["layer"];
   parts.push(renderOptsCore("_layer_opts", resolveFields(d), d.doc) + "\n");
+}
+
+// Constraint.align(refs, **options), ...: each constraint's options
+// (CONSTRAINTS). The hand-written Constraint methods in ast.py take the refs
+// first and pass their options through these cores.
+for (const d of Object.values(CONSTRAINTS)) {
+  if (Object.keys(d.fields).length === 0) continue;
+  parts.push(
+    renderOptsCore(`_${d.type}_constraint_opts`, d.fields, d.doc) + "\n"
+  );
 }
 
 // chart(data, **options): the chart-level options (CHART_OPTIONS).

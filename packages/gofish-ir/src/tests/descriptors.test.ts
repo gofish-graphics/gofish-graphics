@@ -19,6 +19,7 @@
  */
 
 import {
+  CONSTRAINTS,
   LABEL_OPTIONS,
   OPERATORS,
   OPTION_TYPES,
@@ -38,6 +39,7 @@ import type {
   ShapeIR,
   PlaceIR,
   SpacingIR,
+  ConstraintIR,
   LabelSpecIR,
   OverlapIR,
   TileIR,
@@ -392,6 +394,57 @@ for (const [family, spec] of Object.entries(STRATEGIES)) {
     );
   }
 }
+
+/** The options keys of `ConstraintIR`, per constraint type. Typed so that a
+ *  type checker flags a type or an option added to or removed from the
+ *  schema.ts union; the runtime check below compares them with
+ *  `CONSTRAINTS`. */
+type ConstraintOptions<T extends ConstraintIR["type"]> = NonNullable<
+  Extract<ConstraintIR, { type: T }>["options"]
+>;
+const SCHEMA_CONSTRAINT_KEYS = {
+  align: { x: true, y: true } satisfies Record<
+    keyof ConstraintOptions<"align">,
+    true
+  >,
+  distribute: {
+    dir: true,
+    spacing: true,
+    order: true,
+    glue: true,
+  } satisfies Record<keyof ConstraintOptions<"distribute">, true>,
+  position: { x: true, y: true, anchor: true } satisfies Record<
+    keyof ConstraintOptions<"position">,
+    true
+  >,
+  nest: { x: true, y: true } satisfies Record<
+    keyof ConstraintOptions<"nest">,
+    true
+  >,
+  zAbove: {},
+  zBelow: {},
+} satisfies Record<ConstraintIR["type"], Record<string, true>>;
+
+console.log("\n# CONSTRAINTS agree with schema.ts ConstraintIR");
+check(
+  "CONSTRAINTS types === ConstraintIR types",
+  JSON.stringify(Object.keys(CONSTRAINTS).sort()) ===
+    JSON.stringify(Object.keys(SCHEMA_CONSTRAINT_KEYS).sort())
+);
+for (const [type, keys] of Object.entries(SCHEMA_CONSTRAINT_KEYS)) {
+  const schemaKeys = Object.keys(keys).sort();
+  const descriptorKeys = Object.keys(CONSTRAINTS[type]?.fields ?? {}).sort();
+  check(
+    `${type}: CONSTRAINTS fields === ConstraintIR options keys`,
+    JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
+    JSON.stringify({ schemaKeys, descriptorKeys })
+  );
+}
+check(
+  "distribute's spacing is spread's spacing type",
+  CONSTRAINTS.distribute.fields.spacing.type ===
+    OPERATORS.spread.fields.spacing.type
+);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

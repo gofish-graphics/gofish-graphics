@@ -1532,6 +1532,15 @@ const spreadSizeField: FieldGroup = group({
   ),
 });
 
+/** How far apart a chain's neighbors are: `spread`'s `spacing` and
+ *  `Constraint.distribute`'s, one type. A bare amount (pixels, or a length)
+ *  is `Spacing.box(amount)`. */
+const SPACING_TYPE: FieldType = t.union(
+  t.number,
+  t.ref("Length"),
+  t.ref("Spacing")
+);
+
 /** The options of `enclose`, shared by its bag form and flow step
  *  (LEAF_MARKS.enclose) and its combinator form (COMBINATOR_MARKS.enclose). */
 const ENCLOSE_FIELDS: FieldGroup = group({
@@ -1660,7 +1669,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
       },
       spacing: {
-        type: t.union(t.number, t.ref("Length"), t.ref("Spacing")),
+        type: SPACING_TYPE,
         default: 8,
         doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
       },
@@ -2616,6 +2625,115 @@ export const COORDS: Record<string, ConstructDescriptor> = {
       },
     },
   }),
+};
+
+// ---------------------------------------------------------------------------
+// Constraints: the clauses of a `.relate()` callback (`Constraint.align`, ...)
+// ---------------------------------------------------------------------------
+
+/** A constraint over the operands of a `.relate()` call. On the wire it is
+ *  `{ type, options?, refs }` (`ConstraintIR` in schema.ts): `fields` are the
+ *  keys of its `options`, which the validator checks and the Python
+ *  generator builds `_<type>_constraint_opts` from. */
+export interface ConstraintDescriptor {
+  /** The wire discriminator (the constraint's `type` tag). */
+  type: string;
+  doc?: string;
+  /** The keys of the constraint's `options`. */
+  fields: FieldGroup;
+}
+
+const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
+
+/** An axis of `Constraint.align`: one anchor or interval statistic for every
+ *  operand, or one anchor per operand. */
+const alignAxis = (axis: string): FieldSpec => ({
+  type: t.union(
+    t.enum(...ALIGN_ANCHORS, "span", "size"),
+    t.array(t.enum(...ALIGN_ANCHORS))
+  ),
+  doc: `How the operands line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.`,
+});
+
+/** Every constraint that crosses the wire, by its `type` tag. JS-only
+ *  options that no producer writes to the IR (distribute's `measure`,
+ *  `hasOrder` and `origin`, which spread sets; position's `region`,
+ *  `override` and `frame`, which partition, scatter and chrome set) are not
+ *  declared, so a document that holds one is rejected. */
+export const CONSTRAINTS: Record<string, ConstraintDescriptor> = {
+  align: {
+    type: "align",
+    doc: "Align the operands on one or both axes. At least one of `x`, `y` is required.",
+    fields: { x: alignAxis("x"), y: alignAxis("y") },
+  },
+  distribute: {
+    type: "distribute",
+    doc: "Lay the operands out one after another along `dir`.",
+    fields: {
+      dir: {
+        type: t.enum("x", "y"),
+        required: true,
+        doc: "The axis to lay the operands out along.",
+      },
+      spacing: {
+        type: SPACING_TYPE,
+        default: 8,
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)` or `Spacing.pitch(distance, { at })`. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope.",
+      },
+      order: {
+        type: t.enum("forward", "reverse"),
+        default: "forward",
+        doc: "The order the operands are laid out in.",
+      },
+      glue: {
+        type: t.boolean,
+        default: false,
+        doc: "Stack semantics: the operands are glued together and their sizes sum; spacing is 0.",
+      },
+    },
+  },
+  position: {
+    type: "position",
+    doc: "Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.",
+    fields: {
+      // TODO: a position coordinate is a pixel, a `datum(v)`, or an interval
+      // `[lo, hi]` of either, and the IR has no type for a datum on its own
+      // (it is one branch of a channel value, which also takes a field
+      // name). Declaring that type is a design decision, so x and y are not
+      // checked here yet.
+      x: {
+        type: t.any,
+        doc: "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them.",
+      },
+      y: {
+        type: t.any,
+        doc: "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them.",
+      },
+      anchor: {
+        type: t.enum(...ALIGN_ANCHORS),
+        default: "middle",
+        doc: "Which point of the operand lands on a point coordinate.",
+      },
+    },
+  },
+  nest: {
+    type: "nest",
+    doc: "Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.",
+    fields: {
+      x: { type: t.number, doc: "Padding on x, in pixels." },
+      y: { type: t.number, doc: "Padding on y, in pixels." },
+    },
+  },
+  zAbove: {
+    type: "zAbove",
+    doc: "The first operand paints in front of the second.",
+    fields: {},
+  },
+  zBelow: {
+    type: "zBelow",
+    doc: "The first operand paints behind the second.",
+    fields: {},
+  },
 };
 
 // ---------------------------------------------------------------------------

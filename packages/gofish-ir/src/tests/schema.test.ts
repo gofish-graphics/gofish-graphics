@@ -1559,6 +1559,101 @@ console.log("# a .relate() operand's scope");
   );
 }
 
+console.log("# a constraint's options, as CONSTRAINTS declares them");
+{
+  const withClause = (clause: Record<string, unknown>) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "layer",
+        __combinator: true,
+        children: [
+          { type: "rect", name: "a" },
+          { type: "rect", name: "b" },
+        ],
+        relate: {
+          scope: "r1",
+          clauses: [
+            {
+              ...clause,
+              refs: [
+                { type: "ref", selection: "a", scope: "r1" },
+                { type: "ref", selection: "b", scope: "r1" },
+              ],
+            },
+          ],
+        },
+      },
+    }) as unknown as FrontendIRDocument;
+  const distribute = (options: Record<string, unknown>) =>
+    validate(withClause({ type: "distribute", options }));
+  const accepts: Array<[string, unknown]> = [
+    ["a bare number", 8],
+    ["a length", { type: "length", percent: 10 }],
+    ["Spacing.box", { kind: "box", gap: 4 }],
+    ["Spacing.pitch", { kind: "pitch", distance: 70, at: "middle" }],
+  ];
+  for (const [what, spacing] of accepts)
+    check(
+      `a distribute spacing of ${what} validates`,
+      distribute({ dir: "y", spacing }).valid
+    );
+  const rejects: Array<[string, unknown, RegExp]> = [
+    ["an unknown Spacing kind", { kind: "contour", gap: 4 }, /kind/],
+    [
+      "a non-finite pitch",
+      { kind: "pitch", distance: encodeNonFinite(Infinity) },
+      /distance/,
+    ],
+    ["a string", "50", /spacing/],
+  ];
+  for (const [what, spacing, pattern] of rejects) {
+    const r = distribute({ dir: "y", spacing });
+    check(
+      `a distribute spacing of ${what} is rejected`,
+      !r.valid && r.errors.some((e) => pattern.test(`${e.path} ${e.message}`)),
+      JSON.stringify(r.errors)
+    );
+  }
+  const unknownKey = distribute({ dir: "y", anchor: "middle" });
+  check(
+    "a distribute option the table does not declare is rejected",
+    !unknownKey.valid &&
+      unknownKey.errors.some((e) => e.path.endsWith(".options.anchor")),
+    JSON.stringify(unknownKey.errors)
+  );
+  check(
+    "a distribute without its dir is rejected",
+    !validate(withClause({ type: "distribute", options: {} })).valid
+  );
+  check(
+    "an align of a list of anchors validates",
+    validate(withClause({ type: "align", options: { x: ["middle", "start"] } }))
+      .valid
+  );
+  check(
+    "an align of an unknown anchor is rejected",
+    !validate(withClause({ type: "align", options: { x: "center" } })).valid
+  );
+  check(
+    "a nest with padding validates",
+    validate(withClause({ type: "nest", options: { x: 4 } })).valid
+  );
+  check(
+    "a nest with no padding is rejected",
+    !validate(withClause({ type: "nest", options: {} })).valid
+  );
+  check(
+    "a zAbove with no options validates",
+    validate(withClause({ type: "zAbove" })).valid
+  );
+  check(
+    "an unknown constraint type is rejected",
+    !validate(withClause({ type: "grid", options: {} })).valid
+  );
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {
   process.exit(1);

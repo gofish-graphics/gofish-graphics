@@ -38,6 +38,7 @@ import {
 import {
   AUTHORED_REFS,
   BIN_KINDS,
+  CONSTRAINTS,
   taggedBranches,
   LABEL_OPTIONS,
   OPTION_TYPES,
@@ -1372,17 +1373,12 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     return;
   }
   const t = node.type;
-  if (
-    t !== "align" &&
-    t !== "distribute" &&
-    t !== "position" &&
-    t !== "nest" &&
-    t !== "zAbove" &&
-    t !== "zBelow"
-  ) {
+  if (typeof t !== "string" || !Object.hasOwn(CONSTRAINTS, t)) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `constraint type must be "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow"`,
+      message: `constraint type must be ${Object.keys(CONSTRAINTS)
+        .map((k) => JSON.stringify(k))
+        .join(" | ")}`,
     });
     return;
   }
@@ -1396,27 +1392,34 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
       });
     }
   });
-  if (t === "nest") {
-    // nest options: per-axis padding `{ x?: number, y?: number }`, at least
-    // one axis present. (The space-fold / centering direction is resolved
-    // engine-side; the IR carries only the padding.)
-    expectField(node, "options", path, ctx, (v, p) => {
-      expectObject(v, p, ctx);
-      if (!isObject(v)) return;
-      optionalField(v, "x", p, ctx, expectNumber);
-      optionalField(v, "y", p, ctx, expectNumber);
-      if (v.x === undefined && v.y === undefined) {
-        ctx.errors.push({
-          path: p,
-          message: "nest options must specify at least one of x, y",
-        });
-      }
-      rejectUnknown(v, ["x", "y"], p, ctx);
+  // The constraint's options, as its CONSTRAINTS entry declares them. They
+  // are required when one of them is.
+  const fields = CONSTRAINTS[t].fields;
+  walkDescriptorFields(
+    node,
+    path,
+    ctx,
+    {
+      options: {
+        type: { kind: "object", fields },
+        required: Object.values(fields).some((f) => f.required),
+      },
+    },
+    ["type", "refs"]
+  );
+  // nest pads at least one axis. (The space-fold / centering direction is
+  // resolved engine-side; the IR carries only the padding.)
+  const options = node.options;
+  if (
+    t === "nest" &&
+    (options === undefined ||
+      (isObject(options) && options.x === undefined && options.y === undefined))
+  ) {
+    ctx.errors.push({
+      path: `${path}.options`,
+      message: "nest options must specify at least one of x, y",
     });
-  } else {
-    optionalField(node, "options", path, ctx, expectObject);
   }
-  rejectUnknown(node, ["type", "refs", "options"], path, ctx);
 }
 
 function walkBaseFields(

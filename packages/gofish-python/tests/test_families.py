@@ -412,3 +412,52 @@ def test_distribute_takes_a_spacing_strategy():
         "dir": "y",
         "spacing": {"kind": "pitch", "distance": 60, "at": "middle"},
     }
+
+
+def test_distribute_spacing_is_spreads():
+    """Constraint.distribute's spacing is spread's: the same values pass and
+    the same values fail, with the same errors."""
+
+    def spacing_of(spacing):
+        return Constraint.distribute([], dir="x", spacing=spacing).options["spacing"]
+
+    assert spacing_of(8) == 8
+    assert spacing_of(percent(5)) == {"type": "length", "percent": 5}
+    assert spacing_of(Spacing.box(fr(1))) == {
+        "kind": "box",
+        "gap": {"type": "length", "fr": 1},
+    }
+    with pytest.raises(TypeError, match=r"spacing\['kind'\] got an unexpected value 'gap'"):
+        spacing_of({"kind": "gap", "gap": 8})
+    with pytest.raises(TypeError, match="unexpected key 'at'"):
+        spacing_of({"kind": "box", "gap": 8, "at": "middle"})
+    with pytest.raises(TypeError, match="missing the key 'kind'"):
+        spacing_of(chunk(5))
+
+
+def test_distribute_pitch_matches_the_js_wire_fixture():
+    # The document JS's spacing.test.ts validates and rebuilds: both compare
+    # with one fixture, so Python's IR is the one JS lays out.
+    import json
+    import pathlib
+
+    from gofish import layer, rect
+
+    fixture = pathlib.Path(__file__).parents[2] / (
+        "gofish-graphics/src/tests/fixtures/relate-distribute-pitch.json"
+    )
+    doc = layer(
+        [
+            rect(w=10, h=20, fill="red").name("a"),
+            rect(w=30, h=40, fill="blue").name("b"),
+        ]
+    ).relate(
+        lambda a, b: [
+            Constraint.distribute(
+                [a, b], dir="x", spacing=Spacing.pitch(50, at="middle")
+            )
+        ]
+    ).to_ir()
+    scope = doc["root"]["relate"]["scope"]
+    text = json.dumps(doc).replace(scope, "relate-1")
+    assert json.loads(text) == json.loads(fixture.read_text(encoding="utf-8"))

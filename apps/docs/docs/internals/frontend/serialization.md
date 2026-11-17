@@ -493,6 +493,24 @@ layer schedules the clauses exactly as it would for a JS author. The field was
 called `constraints`, and held constraints only, before the `.constrain()` →
 `.relate()` rename.
 
+A constraint's `options` are declared in `CONSTRAINTS` (descriptors.ts), one
+entry per `type`: `align`'s `x`/`y`, `distribute`'s `dir`, `spacing`,
+`order` and `glue`, `position`'s `x`/`y`/`anchor`, `nest`'s padding, and no
+options for `zAbove`/`zBelow`. The validator walks a clause's options
+through its entry as it walks an operator's fields, so a key the entry does
+not declare is an error, and the JSON Schema's `ConstraintIR` is generated
+from the same table. `distribute`'s `spacing` has spread's `spacing` type,
+one `FieldType` both entries name, so a `Spacing` strategy in a constraint
+is checked as it is in a spread. The Python `Constraint.*` methods keep
+their refs-first signatures and build their options with the generated
+`_<type>_constraint_opts` cores, so a nested value is routed through
+`_to_wire` there too. Options that only JS sets (spread's `origin`,
+`measure` and `hasOrder` on its distribute; partition's `region` and
+scatter's `override` on a position) are not declared. A position's `x`/`y`
+is typed `any` for now: the IR has no type for a datum on its own (it is
+one branch of a channel value, which also takes a field name), and adding
+one is its own decision.
+
 ## A worked example
 
 ```ts
@@ -748,7 +766,9 @@ since a namespace is not a type.
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
-Constraints likewise stay authored.
+`ConstraintIR` stays authored in `schema.ts` as a union by `type`, which
+descriptors.test.ts checks against `CONSTRAINTS`; its JSON Schema is
+generated.
 
 A `dims` option is `t.record(t.ref("AxisDimsValue"))`: each value is a bare
 `ChannelValue` or an interval object with only
@@ -830,8 +850,8 @@ Six consumers read the table:
 ## The JSON Schema
 
 The schema is Draft 2020-12. Its envelope (`Root`, `ChartIR`, `LayerChainIR`,
-`DataIR`, `ChannelValue`, `ConstraintIR`, `LabelIR`, and friends) is
-hand-written; the per-operator and per-leaf-mark `$defs` are generated
+`DataIR`, `ChannelValue`, `LabelIR`, and friends) is
+hand-written; the per-operator, per-leaf-mark and per-constraint `$defs` are generated
 from `descriptors.ts` at call time (see the previous section) and merged
 in. It lives in source at
 [`packages/gofish-ir/src/frontend/jsonSchema.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/jsonSchema.ts)
@@ -865,7 +885,7 @@ The high-level structure:
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR, LayerChainIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
-    "ConstraintIR": { /* type, options, refs */ },
+    "ConstraintIR": { /* GENERATED oneOf: AlignConstraint | DistributeConstraint | ... */ },
     "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] },
     "ChartOptions": { /* GENERATED from CHART_OPTIONS: w, h, coord, color, axes, ... */ },
     "AxesOptions":  { /* GENERATED from OPTION_TYPES, as are AxisOptions, AxisInterval, AxisDimsValue, FieldPredicate */ }

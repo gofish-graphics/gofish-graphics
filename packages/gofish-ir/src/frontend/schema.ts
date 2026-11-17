@@ -312,7 +312,7 @@ export interface SpreadOperator
   dir?: string;
   /** A `Spacing` strategy, or a bare amount, which is `Spacing.box(amount)`:
    *  pixels, or a length (`percent(n)`, `fr(k)`). */
-  spacing?: number | LengthIR | SpacingIR;
+  spacing?: SpacingOptionIR;
   alignment?: string;
   reverse?: boolean;
   /** Stack semantics: glue children together (sizes sum into a position at
@@ -622,6 +622,10 @@ export type OverlapIR =
 /** How far apart `spread` sets its neighbors, made by a call in the
  *  `Spacing` family (`Spacing.box(4)`, `Spacing.pitch(70, { at: "baseline" })`).
  *  `spread`'s `spacing` also takes a bare amount, which is `Spacing.box`'s. */
+/** How far apart a chain's neighbors are, spread's and distribute's
+ *  `spacing`: a bare amount, which is `Spacing.box(amount)`, or a strategy. */
+export type SpacingOptionIR = number | LengthIR | SpacingIR;
+
 export type SpacingIR =
   | { kind: "box"; gap: number | LengthIR }
   | {
@@ -1119,14 +1123,51 @@ export interface LabelSpecIR {
  */
 export type LabelIR = boolean | LabelSpecIR[];
 
-export interface ConstraintIR {
-  type: "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow";
-  /** Positioning/sizing constraints (`align`/`distribute`/`position`/`nest`)
-   *  carry `options`; z-order constraints don't. `nest` options are
-   *  `{ x?: number, y?: number }` (per-axis padding) over `refs: [outer, inner]`. */
-  options?: Record<string, unknown>;
-  refs: RelateOperandIR[];
-}
+/** A point on an operand that `align` and `position` line up. */
+export type AlignAnchorIR = "start" | "middle" | "end" | "baseline";
+
+/** One axis of an `align` constraint: an anchor or interval statistic for
+ *  every operand, or one anchor per operand. */
+export type AlignAxisIR = AlignAnchorIR | "span" | "size" | AlignAnchorIR[];
+
+/** A constraint over the operands of a `.relate()` call: `{ type, options?,
+ *  refs }`. The keys of each kind's `options` are declared once, in
+ *  gofish-ir's `CONSTRAINTS` table (descriptors.ts), which the validator and
+ *  the Python generator read; these types are checked against it
+ *  (descriptors.test.ts). */
+export type ConstraintIR =
+  | {
+      type: "align";
+      options?: { x?: AlignAxisIR; y?: AlignAxisIR };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "distribute";
+      options: {
+        dir: "x" | "y";
+        spacing?: SpacingOptionIR;
+        order?: "forward" | "reverse";
+        glue?: boolean;
+      };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "position";
+      /** `x`/`y`: a pixel, a `datum(v)`, or an interval `[lo, hi]` of them. */
+      options?: { x?: unknown; y?: unknown; anchor?: AlignAnchorIR };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "nest";
+      /** Per-axis padding over `refs: [outer, inner]`. */
+      options: { x?: number; y?: number };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "zAbove" | "zBelow";
+      options?: Record<string, never>;
+      refs: RelateOperandIR[];
+    };
 
 /**
  * A `.relate()` operand on the wire: a ref by name (`RefMarkIR`) whose

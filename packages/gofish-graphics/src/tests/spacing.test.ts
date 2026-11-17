@@ -22,6 +22,7 @@ import {
   spacingOf,
 } from "../ast/constraints/distribute";
 import { check, items, report } from "./testHelpers";
+import relateDistributePitch from "./fixtures/relate-distribute-pitch.json";
 
 declare const process: { exit(code: number): never };
 
@@ -234,6 +235,31 @@ async function main() {
       "the IR rebuilds to the same layout",
       JSON.stringify(rebuilt.map((i) => [i.kind, i.x, i.y])) ===
         JSON.stringify(direct.map((i) => [i.kind, i.x, i.y]))
+    );
+  }
+
+  console.log("\n# a distribute constraint from Python");
+  {
+    // The document Python's test_families.py writes for a `.relate()` of a
+    // `Constraint.distribute` with a pitch: it validates, and JS lays it out.
+    const valid = Frontend.validate(relateDistributePitch as any);
+    check(
+      "the fixture validates",
+      valid.valid,
+      JSON.stringify((valid as any).errors)
+    );
+    const rebuilt = items(
+      await (
+        Serialize.buildIR(relateDistributePitch as any) as any
+      ).toDisplayList({})
+    )
+      .filter((i) => i.kind === "rect")
+      .sort((p, q) => p.x! - q.x!);
+    const middles = rebuilt.map((r) => r.x! + r.w! / 2);
+    check(
+      "its operands' middles are 50 px apart",
+      rebuilt.length === 2 && close(middles[1] - middles[0], 50),
+      rebuilt.map((r) => [r.x, r.w])
     );
   }
   report();

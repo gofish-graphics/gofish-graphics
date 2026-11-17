@@ -885,31 +885,6 @@ for the API.
         }
       ]
     },
-    "ConstraintIR": {
-      "type": "object",
-      "required": ["type", "refs"],
-      "properties": {
-        "type": {
-          "enum": [
-            "align",
-            "distribute",
-            "position",
-            "nest",
-            "zAbove",
-            "zBelow"
-          ]
-        },
-        "options": {
-          "type": "object"
-        },
-        "refs": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RelateOperandIR"
-          }
-        }
-      }
-    },
     "ChannelValue": {
       "description": "Right-hand side of a channel slot. Bare primitives for the shorthand path; tagged objects for the explicit field/datum/literal constructors and Python-bridge sentinels.",
       "oneOf": [
@@ -1861,6 +1836,229 @@ for the API.
         },
         {
           "$ref": "#/$defs/EncloseMark"
+        }
+      ]
+    },
+    "AlignConstraint": {
+      "description": "Align the operands on one or both axes. At least one of `x`, `y` is required.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "align"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "anyOf": [
+                {
+                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": ["start", "middle", "end", "baseline"]
+                  }
+                }
+              ],
+              "description": "How the operands line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every operand, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per operand."
+            },
+            "y": {
+              "anyOf": [
+                {
+                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": ["start", "middle", "end", "baseline"]
+                  }
+                }
+              ],
+              "description": "How the operands line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every operand, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per operand."
+            }
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "DistributeConstraint": {
+      "description": "Lay the operands out one after another along `dir`.",
+      "type": "object",
+      "required": ["type", "refs", "options"],
+      "properties": {
+        "type": {
+          "const": "distribute"
+        },
+        "options": {
+          "type": "object",
+          "required": ["dir"],
+          "properties": {
+            "dir": {
+              "enum": ["x", "y"],
+              "description": "The axis to lay the operands out along."
+            },
+            "spacing": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number"
+                },
+                {
+                  "$ref": "#/$defs/Length"
+                },
+                {
+                  "$ref": "#/$defs/Spacing"
+                }
+              ],
+              "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)` or `Spacing.pitch(distance, { at })`. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope.",
+              "default": 8
+            },
+            "order": {
+              "enum": ["forward", "reverse"],
+              "description": "The order the operands are laid out in.",
+              "default": "forward"
+            },
+            "glue": {
+              "type": "boolean",
+              "description": "Stack semantics: the operands are glued together and their sizes sum; spacing is 0.",
+              "default": false
+            }
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "PositionConstraint": {
+      "description": "Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "position"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "description": "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them."
+            },
+            "y": {
+              "description": "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them."
+            },
+            "anchor": {
+              "enum": ["start", "middle", "end", "baseline"],
+              "description": "Which point of the operand lands on a point coordinate.",
+              "default": "middle"
+            }
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "NestConstraint": {
+      "description": "Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "nest"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Number",
+              "description": "Padding on x, in pixels."
+            },
+            "y": {
+              "$ref": "#/$defs/Number",
+              "description": "Padding on y, in pixels."
+            }
+          }
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "ZAboveConstraint": {
+      "description": "The first operand paints in front of the second.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "zAbove"
+        },
+        "options": {
+          "type": "object",
+          "properties": {}
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "ZBelowConstraint": {
+      "description": "The first operand paints behind the second.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "zBelow"
+        },
+        "options": {
+          "type": "object",
+          "properties": {}
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "ConstraintIR": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AlignConstraint"
+        },
+        {
+          "$ref": "#/$defs/DistributeConstraint"
+        },
+        {
+          "$ref": "#/$defs/PositionConstraint"
+        },
+        {
+          "$ref": "#/$defs/NestConstraint"
+        },
+        {
+          "$ref": "#/$defs/ZAboveConstraint"
+        },
+        {
+          "$ref": "#/$defs/ZBelowConstraint"
         }
       ]
     },

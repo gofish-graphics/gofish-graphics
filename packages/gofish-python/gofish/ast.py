@@ -940,6 +940,10 @@ from ._generated import (  # noqa: E402
     _layer_opts,
     _chart_opts,
     _label_opts,
+    _align_constraint_opts,
+    _distribute_constraint_opts,
+    _position_constraint_opts,
+    _nest_constraint_opts,
 )
 
 
@@ -1176,19 +1180,14 @@ class Constraint:
         """
         if x is None and y is None:
             raise ValueError("Constraint.align requires at least one of x, y")
-        options: Dict[str, Any] = {}
-        if x is not None:
-            options["x"] = x
-        if y is not None:
-            options["y"] = y
-        return AlignConstraint(refs, options)
+        return AlignConstraint(refs, _align_constraint_opts(x=x, y=y))
 
     @staticmethod
     def distribute(
         refs: List[RefSentinel],
         *,
         dir: str,
-        spacing: Optional[Union[float, Dict[str, Any]]] = None,
+        spacing: Optional[Union[float, "LengthValue", Dict[str, Any]]] = None,
         order: Optional[str] = None,
         glue: Optional[bool] = None,
     ) -> DistributeConstraint:
@@ -1208,14 +1207,12 @@ class Constraint:
                 into a position at the layer) instead of slicing a budget.
                 Forces `spacing` to 0. Mirrors spread's `glue`.
         """
-        options: Dict[str, Any] = {"dir": dir}
-        if spacing is not None:
-            options["spacing"] = spacing
-        if order is not None:
-            options["order"] = order
-        if glue is not None:
-            options["glue"] = glue
-        return DistributeConstraint(refs, options)
+        return DistributeConstraint(
+            refs,
+            _distribute_constraint_opts(
+                dir=dir, spacing=spacing, order=order, glue=glue
+            ),
+        )
 
     @staticmethod
     def position(
@@ -1244,14 +1241,9 @@ class Constraint:
             raise ValueError(
                 "Constraint.position requires at least one of x, y"
             )
-        options: Dict[str, Any] = {}
-        if x is not None:
-            options["x"] = x
-        if y is not None:
-            options["y"] = y
-        if anchor is not None:
-            options["anchor"] = anchor
-        return PositionConstraint(refs, options)
+        return PositionConstraint(
+            refs, _position_constraint_opts(x=x, y=y, anchor=anchor)
+        )
 
     @staticmethod
     def nest(
@@ -1288,12 +1280,7 @@ class Constraint:
                 "Constraint.nest requires exactly 2 refs [outer, inner], "
                 f"got {len(refs)}"
             )
-        options: Dict[str, Any] = {}
-        if x is not None:
-            options["x"] = x
-        if y is not None:
-            options["y"] = y
-        return NestConstraint(refs, options)
+        return NestConstraint(refs, _nest_constraint_opts(x=x, y=y))
 
     @staticmethod
     def z_above(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:

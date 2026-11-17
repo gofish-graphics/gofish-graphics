@@ -399,7 +399,10 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   combinator through generated cores (before, they passed their kwargs to
   the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
   the box position `x`/`y` (as `treemap` does), and their combinator
-  entries declare `key`.
+  entries declare `key`. The `Constraint.*` methods (`align`,
+  `distribute`, `position`, `nest`) keep their refs-first signatures and
+  build their options with `_<type>_constraint_opts` cores generated from
+  `CONSTRAINTS`, the table of each constraint's options.
 
 - **Snake case keys in nested option dicts.** The keys a user types inside
   a nested option dict are in snake case too:
