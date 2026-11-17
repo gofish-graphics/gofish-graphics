@@ -474,11 +474,23 @@ def test_line_and_ribbon_fill_take_a_function():
     assert call(m, ir(m)["fill"]["__gofish_lambda"], [{"g": "a"}]) == [
         {"type": "literal", "value": "red"}
     ]
+    # A lambda's values cross as one column of one type, so a mix of plain
+    # and wrapped values fails with how to wrap them.
+    m = line(fill=lambda d: "red" if d["g"] == "a" else datum(d["g"]))
+    with pytest.raises(TypeError, match="wrap the plain ones too"):
+        call(m, ir(m)["fill"]["__gofish_lambda"], [{"g": "a"}, {"g": "b"}])
     # stroke is a color channel too, as in JS.
     assert "__gofish_lambda" in ir(line(stroke=lambda d: datum(d["g"])))["stroke"]
     # A non-channel option still rejects a function.
     with pytest.raises(TypeError, match="only channel options take a function"):
         line(stroke_width=lambda d: 2)
+
+
+def test_literal_is_a_leaf_in_dims():
+    # A literal(...) is one value, as a datum(...) is, not an interval.
+    assert ir(rect(dims={"x": literal(5)}))["dims"] == {
+        "x": {"type": "literal", "value": 5}
+    }
 
 
 def test_wire_does_not_copy_options_without_accessors():

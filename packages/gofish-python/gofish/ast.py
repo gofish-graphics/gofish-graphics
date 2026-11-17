@@ -279,9 +279,9 @@ def _holds_node(v: Any) -> bool:
 
 
 def _is_tagged(v: Any) -> bool:
-    """A `field(...)` or `datum(...)` value: a dict subclass that already holds
-    wire data, so the option walks treat it as a leaf."""
-    return isinstance(v, (FieldAccessor, DatumValue))
+    """A `field(...)`, `datum(...)` or `literal(...)` value: a dict subclass
+    that already holds wire data, so the option walks treat it as a leaf."""
+    return isinstance(v, (FieldAccessor, DatumValue, LiteralValue))
 
 
 def _channel(v: Any) -> Any:
@@ -3071,7 +3071,15 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
-def literal(value: Any) -> dict:
+class LiteralValue(dict):
+    """
+    The `{type: "literal", value}` wire shape, as a dict subclass so the
+    option walks treat it as a leaf (`_is_tagged`), as they do a datum: a
+    `dims` entry tells it from an interval.
+    """
+
+
+def literal(value: Any) -> LiteralValue:
     """
     Wrap a value as a constant: the channel uses it as it is and never reads
     it as a field name or maps it through a scale. Mirrors the JS
@@ -3087,7 +3095,7 @@ def literal(value: Any) -> dict:
     Args:
         value: The constant: a color, a text, or a number of pixels.
     """
-    return {"type": "literal", "value": value}
+    return LiteralValue({"type": "literal", "value": value})
 
 
 class LengthValue(dict):
@@ -4002,8 +4010,27 @@ def _table_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
 
 def _accessor_reply(fn: Callable[[Any], Any]) -> _Reply:
     """The callback of an accessor: its reply's root names the table of
-    ``fn``'s values, one per row it was called with."""
-    return _table_reply(lambda rows: [fn(r) for r in rows])
+    ``fn``'s values, one per row it was called with.
+
+    The values cross as one Arrow column, which holds one type, so they are
+    all wrapped values (`datum(...)`, `literal(...)`) or all plain ones;
+    `None` goes with either. A mix fails here, with how to fix it, rather
+    than as a type conflict deep in the Arrow conversion."""
+
+    def values(rows: List[Any]) -> List[Any]:
+        out = [fn(r) for r in rows]
+        kinds = {isinstance(v, dict) for v in out if v is not None}
+        if len(kinds) > 1:
+            raise TypeError(
+                "a channel function returned a plain value for some rows and "
+                "a wrapped one (datum(...), literal(...)) for others. Its "
+                "values cross to JS as one column of one type, so wrap the "
+                "plain ones too: literal(x) for a constant, datum(x) for "
+                "data (datum(d[\"name\"]) for a field's value)."
+            )
+        return out
+
+    return _table_reply(values)
 
 
 def _mark_fn_reply(fn: Callable[[List[Any]], Any]) -> _Reply:
