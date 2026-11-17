@@ -11,8 +11,9 @@
  * answer. Each query lives in its own file and joins the interface below with
  * `extends`.
  *
- * Geometry is available only after layout. A sizing-time form, so that an
- * operator like `pack` can fit itself to the space it is given, is #967.
+ * Geometry is available only after layout. The enclosing circle's form before
+ * layout, so that `pack` can fit itself to the space it is given (#967), is a
+ * node's radius claim (`GoFishNode.enclosingRadius`).
  */
 import type { HasBox } from "./box";
 import type { HasEnclosingCircle } from "./enclosingCircle";

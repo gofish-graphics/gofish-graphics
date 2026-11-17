@@ -265,6 +265,9 @@ type ClaimMemo = {
   /** Per axis, what its own size is ({@link GoFishNode.sizeKind}), once
    *  read. */
   sizeKinds?: [SizeKind, SizeKind];
+  /** Its enclosing radius claim ({@link GoFishNode.enclosingRadius}), once
+   *  read (boxed, since the answer may be undefined). */
+  radius?: { value: Pwl.Value | undefined };
 };
 
 /** One chain of a layer along an axis (a `distribute` there): its members
@@ -604,6 +607,20 @@ export type ResolveExtent = (
   constraints: readonly ConstraintSpec[]
 ) => Size<Extent | undefined>;
 
+/**
+ * A node's enclosing-radius claim hook (#967): the radius of the smallest
+ * circle around it, as a function of σ, before layout. It is the claim form
+ * of the `enclosingCircle` geometry query (`geometry/enclosingCircle.ts`),
+ * as an {@link Extent} is the claim form of the box: at the σ layout solves,
+ * it is the radius `enclosingCircle` gives after layout. A circle answers it
+ * (`r·σ` for a data radius, a constant for a pixel one) and so does `pack`.
+ * Like a claim, it may read the resolved types and its children's radius
+ * claims. Optional: a node without it has no radius claim (undefined).
+ */
+export type ResolveEnclosingRadius = (
+  childNodes: readonly GoFishAST[]
+) => Pwl.Value | undefined;
+
 /** Depth of type-hook calls in progress. A claim walk started from inside a
  *  type hook throws: types never read claims. */
 let typeWalkDepth = 0;
@@ -731,6 +748,7 @@ export class GoFishNode {
   private _resolveSharing: ResolveSharing;
   private _sharing?: SharingPlan;
   private _resolveExtent: ResolveExtent;
+  private _resolveEnclosingRadius?: ResolveEnclosingRadius;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   public _extent?: Size<Extent | undefined> = undefined;
   /** Set by a node's claim hook when its plot claim differs from its claim
@@ -1045,6 +1063,7 @@ export class GoFishNode {
       args,
       resolveUnderlyingSpace,
       resolveExtent,
+      resolveEnclosingRadius,
       resolveSharing,
       layout,
       lower,
@@ -1058,6 +1077,7 @@ export class GoFishNode {
       args?: any;
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       resolveExtent?: ResolveExtent;
+      resolveEnclosingRadius?: ResolveEnclosingRadius;
       resolveSharing?: ResolveSharing;
       layout: Layout;
       lower?: Lower;
@@ -1081,6 +1101,7 @@ export class GoFishNode {
     this._resolveSharing = resolveSharing ?? shareAll;
     this._resolveExtent =
       resolveExtent ?? ((_ce, _cs, spaces) => impliedExtents(spaces));
+    this._resolveEnclosingRadius = resolveEnclosingRadius;
     this._layout = layout;
     this._lower = lower;
     this._ownLower = lower;
@@ -1693,6 +1714,24 @@ export class GoFishNode {
     }
     this._extent = extent;
     return extent;
+  }
+
+  /** This node's enclosing-radius claim ({@link ResolveEnclosingRadius}),
+   *  memoized with its claims: the radius of the smallest circle around it
+   *  as a function of σ, or undefined when it does not answer. Read after
+   *  the types, like a claim. */
+  public enclosingRadius(): Pwl.Value | undefined {
+    const memo = this._claimMemo.radius;
+    if (memo !== undefined) return memo.value;
+    if (typeWalkDepth > 0)
+      throw new Error(
+        `[gofish] ${this.type}: a radius claim was read during type ` +
+          `inference. Types never read claims.`
+      );
+    this.resolveUnderlyingSpace();
+    const value = this._resolveEnclosingRadius?.(this.children);
+    this._claimMemo.radius = { value };
+    return value;
   }
 
   /** The outline this node's claim reaches past its box by: its
@@ -2627,7 +2666,8 @@ export class GoFishNode {
   /**
    * This node's shape in its LOCAL layout frame (see {@link GeometryFn}),
    * computed on first call after layout and memoized until the next layout.
-   * Geometry exists only after layout; a sizing-time form is #967.
+   * Geometry exists only after layout; the enclosing circle's form before
+   * layout is {@link enclosingRadius} (#967).
    */
   public geometry(): Geometry {
     if (!this.intrinsicDims)

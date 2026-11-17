@@ -17,6 +17,8 @@ import {
 import type { MarkChild } from "../types";
 import { SplitBy, splitEntries } from "../datumProjection";
 import { boxOfDims, enclosingCircle, translateOutline } from "../geometry";
+import { Extent } from "../extent";
+import * as Pwl from "../solver/pwl";
 
 type PackProps = {
   key?: string;
@@ -37,6 +39,15 @@ type PackProps = {
  * themselves, so the gap is only between siblings. There is one packing
  * strategy, so there is no option to choose one (#1013).
  *
+ * It fits itself to its room when every child's radius comes from data
+ * (#967). The packing scales exactly (multiplying every radius by k
+ * multiplies the layout by k), so such a pack's enclosing radius is
+ * `R(1)·σ`, where `R(1)` is the radius of the pack of the children's radius
+ * claims at σ = 1 (`GoFishNode.enclosingRadius`). It answers that radius
+ * claim, and claims `2·R(1)·σ` on each axis, so the scope around it solves
+ * σ and the pack fills its room. Children with pixel radii only give a
+ * constant radius and claim no room, as before.
+ *
  * Its outline is its children's outlines, so an `enclose` around a pack hugs
  * what it packed, not the pack's box. TODO(#1233): every node with children
  * should answer its outline this way; only pack does so far.
@@ -50,44 +61,77 @@ export const Pack = createNodeOperator(
           `number of pixels at least 0.`
       );
     const pad = spacing / 2;
-    return new GoFishNode(
+    const node: GoFishNode = new GoFishNode(
       {
         type: "pack",
         args: { key },
         key,
-        // TODO(#967): pack does not fit itself to the available size; radii stay in pixels. See issue #967.
-        // Its size is whatever its children's pixel sizes pack into, which is
-        // what a literal-sized shape reports: no data-driven extent.
+        // Its children are its own separate spaces, so it has no data axis.
+        // Its room comes from its claim (below).
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => [
           UNDEFINED,
           UNDEFINED,
         ],
+        // Its enclosing radius before layout, packed from its children's.
+        // Pixel radii only are a constant: pack them as layout will. Data
+        // radii only, with no spacing, are linear: one pack at σ = 1.
+        // TODO(#967): pixel and data radii mixed, or data radii with a pixel
+        // `spacing`, give a radius that is no line in σ (`r_i = a_i·σ + b_i`
+        // packs to no closed form), so such a pack has no radius claim, claims
+        // no room, and cannot lay out its data radii. It needs a claim kind
+        // that is not closed form (a monotone function inverted by search, as
+        // issue #967 describes); this effort adds none.
+        resolveEnclosingRadius: (childAsts) => {
+          const radii: Pwl.Affine[] = [];
+          for (const child of childAsts) {
+            const r =
+              child instanceof GoFishNode ? child.enclosingRadius() : undefined;
+            if (r === undefined || !Pwl.isAffine(r)) return undefined;
+            radii.push(r);
+          }
+          if (radii.every((r) => r.slope === 0))
+            return Pwl.constant(
+              packCircles(
+                radii.map((r) => r.intercept),
+                pad
+              ).R
+            );
+          if (pad === 0 && radii.every((r) => r.intercept === 0))
+            return Pwl.affine(
+              packCircles(
+                radii.map((r) => r.slope),
+                0
+              ).R,
+              0
+            );
+          return undefined;
+        },
+        // A pack whose radius grows with σ claims its circle's square, so the
+        // scope around it fits it; any other claims no room, and its size is
+        // whatever its children's pixel sizes pack into.
+        resolveExtent: () => {
+          const r = node.enclosingRadius();
+          if (r === undefined || Pwl.isConstant(r))
+            return [undefined, undefined];
+          const side = Extent(Pwl.scale(2, r));
+          return [side, side];
+        },
         layout: (size, scales, childAsts) => {
           const placed = childAsts.map((child) => child.layout(size, scales));
           const local = placed.map((p) => enclosingCircle(p.geometry()));
           for (const c of local) {
             if (!Number.isFinite(c.r) || c.r < 0)
               throw new Error(
-                "[gofish] pack: a child has no pixel size. pack keeps its " +
-                  "children at their pixel size and cannot yet scale " +
-                  "data-driven sizes (#967)."
+                "[gofish] pack: a child has no pixel size. pack fits data " +
+                  "radii only when every child's radius is data and " +
+                  "`spacing` is 0; it cannot yet mix data radii with pixel " +
+                  "radii or a pixel spacing (#967)."
               );
           }
 
-          // Circles in data order, each grown by half the spacing, so
-          // neighbors keep `spacing` apart; packSiblings writes their x, y.
-          const packed = packSiblings(local.map((c) => ({ r: c.r + pad })));
-          // The smallest circle around the children themselves (not their
-          // grown circles), so the spacing is between siblings only: a pack
-          // carries no margin past its outermost children. Its radius is
-          // measured here about d3's center rather than taken from d3, so
-          // every child lies inside it exactly.
-          const at = packed.map((c, i) => ({ x: c.x, y: c.y, r: local[i].r }));
-          // (d3 encloses no circles in nothing; an empty pack is a point.)
-          const { x: ex, y: ey } = packEnclose(at) ?? { x: 0, y: 0 };
-          const R = at.reduce(
-            (m, c) => Math.max(m, Math.hypot(c.x - ex, c.y - ey) + c.r),
-            0
+          const { at, ex, ey, R } = packCircles(
+            local.map((c) => c.r),
+            pad
           );
 
           placed.forEach((p, i) => {
@@ -134,8 +178,31 @@ export const Pack = createNodeOperator(
       },
       children
     );
+    return node;
   }
 );
+
+/**
+ * Pack circles of radii `radii` in data order, each grown by `pad`, so
+ * neighbors keep `2·pad` apart (d3's front chain, `packSiblings`). Returns
+ * each circle's center with its own radius (`at`), and the smallest circle
+ * around the circles themselves (not their grown circles), so the spacing is
+ * between siblings only: a pack carries no margin past its outermost
+ * children. Its center `(ex, ey)` is d3's, and its radius `R` is measured
+ * about it rather than taken from d3, so every circle lies inside it exactly.
+ * The claim and the layout both pack through here, so they agree.
+ */
+const packCircles = (radii: readonly number[], pad: number) => {
+  const packed = packSiblings(radii.map((r) => ({ r: r + pad })));
+  const at = packed.map((c, i) => ({ x: c.x, y: c.y, r: radii[i] }));
+  // (d3 encloses no circles in nothing; an empty pack is a point.)
+  const { x: ex, y: ey } = packEnclose(at) ?? { x: 0, y: 0 };
+  const R = at.reduce(
+    (m, c) => Math.max(m, Math.hypot(c.x - ex, c.y - ey) + c.r),
+    0
+  );
+  return { at, ex, ey, R };
+};
 
 export type PackOptions = {
   /** Pixels between sibling circles. Default 0. */

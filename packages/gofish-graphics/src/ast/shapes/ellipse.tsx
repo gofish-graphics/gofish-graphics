@@ -26,6 +26,7 @@ import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
 import { around } from "../../families/place";
 import { literalBoxExtents } from "../extent";
+import * as Pwl from "../solver/pwl";
 import { type LengthValue } from "../length";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -90,6 +91,9 @@ export const Ellipse = ({
           [node.fixedBox(0), node.fixedBox(1)],
           aspectRatio
         ),
+      // Its enclosing circle before layout (#967), the circle of its larger
+      // radius as `geometry` gives it: for the box its layout draws.
+      resolveEnclosingRadius: () => enclosingRadiusOf(node, dims, aspectRatio),
       layout: (size, scales, children) => {
         const [wSize, hSize] = [node.fixedSize(0), node.fixedSize(1)];
         let w = isValue(wSize)
@@ -316,6 +320,52 @@ export const Ellipse = ({
   );
   own.bind(node);
   return node;
+};
+
+/**
+ * An ellipse's enclosing-radius claim (#967): half the larger side of the box
+ * its layout draws, as a function of σ. A literal box is a constant. Under an
+ * aspect lock with a data size, the box is that size times σ on both axes:
+ * the layout fits the box inside both data sizes, so one σ, the smaller of
+ * the two axes' (the shared one where #1087 ties the unit), sizes both. Any
+ * other box (one that fills its room, two data sizes with no lock, data on
+ * one axis and pixels on the other, or a glyph size, which is in its glyph
+ * scale) has no claim.
+ */
+const enclosingRadiusOf = (
+  node: GoFishNode,
+  dims: readonly { size?: unknown }[],
+  aspectRatio: number | undefined
+): Pwl.Value | undefined => {
+  if (node.isGlyph(0) || node.isGlyph(1)) return undefined;
+  const [w, h] = [dims[0].size, dims[1].size];
+  const lock = aspectRatio !== undefined && aspectRatio > 0;
+  // The box's width per σ (data) or in pixels (literal), as the layout fits
+  // it; its height is the width over the ratio under a lock.
+  const radiusOf = (width: number, height: number) =>
+    Math.max(Math.abs(width), Math.abs(height)) / 2;
+  if (typeof w === "number" && typeof h === "number") {
+    if (!lock) return Pwl.constant(radiusOf(w, h));
+    const fitW = Math.min(w, h * aspectRatio!);
+    return Pwl.constant(radiusOf(fitW, fitW / aspectRatio!));
+  }
+  if (!lock) return undefined;
+  const data = (d: unknown) =>
+    isValue(d as MaybeValue<number>)
+      ? getValue(d as MaybeValue<number>)
+      : undefined;
+  const [dw, dh] = [data(w), data(h)];
+  const fitW =
+    dw !== undefined && dh !== undefined
+      ? Math.min(dw, dh * aspectRatio!)
+      : dw !== undefined
+        ? dw
+        : dh !== undefined
+          ? dh * aspectRatio!
+          : undefined;
+  return fitW === undefined
+    ? undefined
+    : Pwl.affine(radiusOf(fitW, fitW / aspectRatio!), 0);
 };
 
 export const ellipse = createMark(Ellipse, MARK_CHANNELS.ellipse, "ellipse");
