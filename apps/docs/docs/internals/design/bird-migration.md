@@ -36,7 +36,7 @@ implemented and uncommitted. Each step below says so.
 
 | Animated Vega-Lite                                                          | GoFish reading                                                                                      | status                    |
 | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------- |
-| `projection: {type: "equalEarth"}` + `longitude`/`latitude` channels        | a `geo(...)` coordinate transform, `scatter({ x: "lon", y: "lat" })` under it                       | new                       |
+| `projection: {type: "equalEarth"}` + `longitude`/`latitude` channels        | a `geo(...)` coordinate transform, `scatter({ cx: "lon", cy: "lat" })` under it                     | new                       |
 | `geoshape` basemap layer                                                    | `polygon({ points: <field> })` rows under the same transform                                        | half new                  |
 | `time` encoding channel (keyframes, band time scale)                        | `timer({ domain, duration, step })` — a scale from the field's domain onto wall time, read backward | implemented (uncommitted) |
 | default timer selection + filter transform                                  | `timer()` plus the `filter` flow operator; no elaboration, the two are written out                  | implemented (uncommitted) |
@@ -124,7 +124,7 @@ basemap
     chart(birds)
       .flow(
         group({ by: "species" }),
-        scatter({ by: "day", x: "lon", y: "lat" })
+        scatter({ by: "day", cx: "lon", cy: "lat" })
       )
       .mark(line({ stroke: "species", strokeWidth: 1, opacity: 0.5 }))
   )
@@ -150,7 +150,7 @@ const hover = pointer();
 const hot = (d: Bird[]) => hover.datum()?.[0]?.species === d[0]?.species;
 
 chart(birds)
-  .flow(group({ by: "species" }), scatter({ by: "day", x: "lon", y: "lat" }))
+  .flow(group({ by: "species" }), scatter({ by: "day", cx: "lon", cy: "lat" }))
   .mark(
     line({
       stroke: "species",
@@ -172,7 +172,7 @@ Tooltip, two options:
   ```ts
   .layer(
     chart(hover)
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(text({ text: (d) => d.datum?.species ?? "" }))
   )
   ```
@@ -271,7 +271,7 @@ basemap() // chart(world110m, { coord: geo(...), legend: false })
     chart(birds)
       .flow(
         filter((d) => d.day === day()),
-        scatter({ x: "lon", y: "lat" })
+        scatter({ cx: "lon", cy: "lat" })
       )
       .mark(circle({ r: 3, fill: "species" }))
   )
@@ -343,7 +343,7 @@ basemap()
         filter((d) =>
           between((day() - d.day + 365) % 365, 0, 20, { closed: "left" })
         ),
-        scatter({ x: "lon", y: "lat" })
+        scatter({ cx: "lon", cy: "lat" })
       )
       .mark(
         circle({
@@ -372,7 +372,7 @@ basemap()
     chart(birds)
       .flow(
         time.sequence({ by: "day", on: day, cyclic: true }),
-        scatter({ x: "lon", y: "lat" })
+        scatter({ cx: "lon", cy: "lat" })
       )
       .mark(
         layer([
@@ -425,7 +425,7 @@ const map = basemap({ padding: 0 }).layer(
   chart(birds)
     .flow(
       time.sequence({ by: "day", on: day, cyclic: true }),
-      scatter({ x: "lon", y: "lat" })
+      scatter({ cx: "lon", cy: "lat" })
     )
     .mark(
       layer([

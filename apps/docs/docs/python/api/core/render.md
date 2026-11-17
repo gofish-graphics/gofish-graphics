@@ -86,7 +86,7 @@ with the keys `kind`, `node`, `axis`, `needed`, `available`, `parts` and
 w = chart(barley).flow(
     spread(by="site", dir="x", spacing=110),
     spread(by="year", dir="x", spacing=36),
-    scatter(by="variety", y="yield"),
+    scatter(by="variety", cy="yield"),
 ).mark(line(stroke="variety")).render(w=700, h=350)   # display this cell
 
 # In a later cell, after it has rendered:

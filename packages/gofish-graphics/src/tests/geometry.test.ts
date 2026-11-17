@@ -398,7 +398,7 @@ console.log("# outline: line and ribbon connectors");
     { x: 2, y: 2, s: "a" },
   ];
   const lineChart = (await chart(rows)
-    .flow(scatter({ x: "x", y: "y" }))
+    .flow(scatter({ cx: "x", cy: "y" }))
     .mark(line())
     .resolve()) as GoFishNode;
   await lineChart.toDisplayList({ w: 200, h: 100, axes: false });
@@ -444,7 +444,7 @@ console.log("# outline: line and ribbon connectors");
   // too: the connector is built from its value when the chart resolves,
   // and draws that value until the input changes.
   const liveChart = (await chart(rows)
-    .flow(scatter({ x: "x", y: "y" }))
+    .flow(scatter({ cx: "x", cy: "y" }))
     .mark(line({ strokeWidth: live(() => 4) }))
     .resolve()) as GoFishNode;
   const doc = await liveChart.toDisplayList({ w: 200, h: 100, axes: false });

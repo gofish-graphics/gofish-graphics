@@ -1127,7 +1127,7 @@ function applyChannel(
 ): any {
   // User already supplied the final-form array — leave it alone. This is
   // also the path for combinator-form callsites that pre-built per-child
-  // arrays (e.g. `scatter({x: [0, 1, 2]}, [...marks])`), and for entry-
+  // arrays (e.g. `scatter({cx: [0, 1, 2]}, [...marks])`), and for entry-
   // flagged channels where the user passed an explicit array.
   if (Array.isArray(val)) return val;
   // The column (its measure and its schema type) is loop-invariant across

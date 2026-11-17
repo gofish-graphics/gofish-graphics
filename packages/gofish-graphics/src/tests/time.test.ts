@@ -942,7 +942,7 @@ async function main() {
         ],
         { schema: { t: Unit.time() }, axes: true }
       )
-        .flow(scatter({ x: "t", y: "v" }))
+        .flow(scatter({ cx: "t", cy: "v" }))
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 200, h: 100 })
     );
@@ -1057,14 +1057,14 @@ async function main() {
       schema: { date: Unit.time() },
       axes: { x: { title: false }, y: false },
     })
-      .flow(scatter({ by: "date", x: "date", y: "price" }))
+      .flow(scatter({ by: "date", cx: "date", cy: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
     const weekDl = await chart(prices.slice(0, 10), {
       schema: { date: Unit.time() },
       axes: { x: { title: false, levels: [DistCalendar.weekday] }, y: false },
     })
-      .flow(scatter({ by: "date", x: "date", y: "price" }))
+      .flow(scatter({ by: "date", cx: "date", cy: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
     const weekWords = textsOf(weekDl).map((t) => t.text);
@@ -1139,7 +1139,7 @@ async function main() {
         y: false,
       },
     })
-      .flow(scatter({ by: "date", x: "date", y: "price" }))
+      .flow(scatter({ by: "date", cx: "date", cy: "price" }))
       .mark(line())
       .toDisplayList({ w: 560, h: 200 });
     check(
@@ -1157,7 +1157,7 @@ async function main() {
       chart([{ a: 1, b: 2 }], {
         axes: { x: { levels: [DistCalendar.month] } },
       })
-        .flow(scatter({ by: "a", x: "a", y: "b" }))
+        .flow(scatter({ by: "a", cx: "a", cy: "b" }))
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 100, h: 100 })
     );
@@ -1186,7 +1186,7 @@ async function main() {
       })
         .flow(
           spread({ by: "city", dir: "x" }),
-          scatter({ by: "date", x: "date", y: "v", axes: { x: true } })
+          scatter({ by: "date", cx: "date", cy: "v", axes: { x: true } })
         )
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 400, h: 200 })
@@ -1205,7 +1205,7 @@ async function main() {
         schema: { date: Unit.time() },
         axes: { x: { title: false }, y: false },
       })
-        .flow(scatter({ by: "date", x: "date", y: "v" }))
+        .flow(scatter({ by: "date", cx: "date", cy: "v" }))
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 300, h: 100 })
     ).map((t) => t.text);

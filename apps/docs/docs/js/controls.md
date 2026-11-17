@@ -104,7 +104,7 @@ const map = basemap({ w: 600, h: 600 }).layer(
       // One keyframe per day. Day-of-year is cyclic, so early in January the
       // trail reaches back into December instead of stopping.
       time.sequence({ by: "day", on: day, cyclic: true }),
-      scatter({ x: "lon", y: "lat" })
+      scatter({ cx: "lon", cy: "lat" })
     )
     .mark(
       // A faint circle kept on screen for 20 days after its own (the trail),

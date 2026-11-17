@@ -469,7 +469,7 @@ import { layer, chart, scatter, circle } from "../src/lib";
 const rows = [{ x: 1 }, { x: 2 }];
 const mk = () =>
   chart(rows)
-    .flow(scatter({ x: "x" }))
+    .flow(scatter({ cx: "x" }))
     .mark(circle({ r: 3 }));
 await layer([mk()])
   .relate(() => [mk()])
@@ -529,7 +529,7 @@ const rows = [
 ];
 const pts = () =>
   chart(rows)
-    .flow(scatter({ x: "x", y: "y" }))
+    .flow(scatter({ cx: "x", cy: "y" }))
     .mark(circle({ r: 3 }).name("points"));
 
 // As a plain child:

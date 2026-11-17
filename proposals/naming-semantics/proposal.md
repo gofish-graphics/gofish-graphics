@@ -99,7 +99,7 @@ chart(monthlyDensity, { axes: { x: { title: "Daily high (°C)" }, y: false } })
   .mark(
     layer([
       chart()
-        .flow(scatter({ x: "temp_max", h: 34 }))
+        .flow(scatter({ cx: "temp_max", h: 34 }))
         .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
     ]).relate(({ density }) => [
       chart()
@@ -137,7 +137,7 @@ chart(monthlyDensity, { axes: { x: { title: "Daily high (°C)" }, y: false } })
         layer(
             [
                 chart()
-                .flow(scatter(x="temp_max", h=34))
+                .flow(scatter(cx="temp_max", h=34))
                 .mark(ribbon(h="pdf", fill="none").name("density"))
             ]
         ).relate(
@@ -182,7 +182,7 @@ A callout is drawn inside the outer `.relate()`. The callout is its own layer wi
 ```js
 layer([
   chart(normalGrid, { w: 240, h: 160 })
-    .flow(scatter({ x: "x" }))
+    .flow(scatter({ cx: "x" }))
     .mark(ribbon({ h: "pdf" }).name("density")),
 ]).relate(({ density }) => [
   // A callout above the peak, built by a helper that happens to name its
@@ -198,7 +198,7 @@ layer([
 layer(
     [
         chart(normal_grid, w=240, h=160)
-        .flow(scatter(x="x"))
+        .flow(scatter(cx="x"))
         .mark(ribbon(h="pdf").name("density")),
     ]
 ).relate(
@@ -248,7 +248,7 @@ A line through monthly mean highs, drawn as a clause. The same line as a plain c
 
 ```js
 const means = chart(monthlyMean)
-  .flow(scatter({ x: "month", y: "mean" }))
+  .flow(scatter({ cx: "month", cy: "mean" }))
   .mark(circle({ r: 3.5 }).name("means"));
 
 layer([means]).relate(() => [chart(selectAll("means")).mark(line())]);
@@ -257,7 +257,7 @@ layer([means]).relate(() => [chart(selectAll("means")).mark(line())]);
 ```python
 means = (
     chart(monthly_mean)
-    .flow(scatter(x="month", y="mean"))
+    .flow(scatter(cx="month", cy="mean"))
     .mark(circle(r=3.5).name("means"))
 )
 
@@ -293,7 +293,7 @@ const ridges = chart(monthlyDensity)
   .mark(
     layer([
       chart()
-        .flow(scatter({ x: "temp_max", h: 34 }))
+        .flow(scatter({ cx: "temp_max", h: 34 }))
         .mark(ribbon({ h: "pdf" })),
       chart()
         .flow(
@@ -320,7 +320,7 @@ ridges = (
     .mark(
         layer(
             [
-                chart().flow(scatter(x="temp_max", h=34)).mark(ribbon(h="pdf")),
+                chart().flow(scatter(cx="temp_max", h=34)).mark(ribbon(h="pdf")),
                 chart()
                 .flow(
                     derive(

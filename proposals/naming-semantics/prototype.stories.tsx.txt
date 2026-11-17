@@ -133,7 +133,7 @@ const ridgeline = () =>
     .mark(
       layer([
         chart()
-          .flow(scatter({ x: "temp_max", h: 34 }))
+          .flow(scatter({ cx: "temp_max", h: 34 }))
           .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
       ]).relate(({ density }) => [
         chart()
@@ -170,7 +170,7 @@ export const RidgelineA = story(true, ridgeline, {}, { w: 520, h: 0 });
 const nestedCapture = () =>
   layer([
     chart(normalGrid, { w: 240, h: 180 })
-      .flow(scatter({ x: "x" }))
+      .flow(scatter({ cx: "x" }))
       .mark(ribbon({ h: "pdf", fill: FILL, stroke: STROKE }).name("density")),
   ]).relate(({ density }) => [
     position({ x: 280, y: 30 }, [
@@ -190,7 +190,7 @@ export const NestedCaptureA = story(true, nestedCapture, { axes: false }, { w: 5
 // --- Example 3a: selectAll inside a clause (bug b).
 const meanDots = () =>
   chart(monthlyMean)
-    .flow(scatter({ x: "month", y: "mean" }))
+    .flow(scatter({ cx: "month", cy: "mean" }))
     .mark(circle({ r: 3.5, fill: STROKE }).name("means"));
 const clauseSelectAll = () =>
   layer([meanDots()]).relate(() => [
@@ -222,7 +222,7 @@ const ridgeWithMedians = () =>
     .mark(
       layer([
         chart()
-          .flow(scatter({ x: "temp_max", h: 34 }))
+          .flow(scatter({ cx: "temp_max", h: 34 }))
           .mark(ribbon({ h: "pdf", fill: FILL, stroke: STROKE })),
         chart()
           .flow(

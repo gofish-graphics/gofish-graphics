@@ -54,7 +54,7 @@ export const ScatterPointLabels: StoryObj = {
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
     chart(context.loaded.countries, { w: 640, h: 440 })
-      .flow(scatter({ by: "country", x: "fertility", y: "life_expect" }))
+      .flow(scatter({ by: "country", cx: "fertility", cy: "life_expect" }))
       .mark(circle({ r: 4 }).label("country"))
       .render(container, { axes: true });
     return container;
@@ -106,7 +106,7 @@ export const LineEndLabels: StoryObj = {
     chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
       .flow(
         group({ by: "symbol" }),
-        scatter({ by: "date", x: "date", y: "price" })
+        scatter({ by: "date", cx: "date", cy: "price" })
       )
       .mark(
         line({ stroke: "symbol", strokeWidth: 2 }).label("symbol", {
@@ -137,7 +137,7 @@ export const InlineSlopedLabels: StoryObj = {
     chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
       .flow(
         group({ by: "symbol" }),
-        scatter({ by: "date", x: "date", y: "price" })
+        scatter({ by: "date", cx: "date", cy: "price" })
       )
       .mark(
         line({ stroke: "symbol", strokeWidth: 2 }).label("symbol", {
@@ -379,7 +379,7 @@ const budget = [
 ];
 const budgetChart = (side: "above" | ("above" | "below")[]) =>
   chart(budget, { w: 360, h: 220 })
-    .flow(group({ by: "series" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(group({ by: "series" }), scatter({ by: "x", cx: "x", cy: "y" }))
     .mark(
       line({ stroke: "series", strokeWidth: 2 }).label("series", {
         position: Place.along({ at: 0.5, side, orient: "sloped" }),
@@ -430,7 +430,7 @@ const trendScatter = (countries: any[]) => {
   // The trend line is drawn first, so it is placed when the labels look
   // for it.
   return chart(ends, { w: 640, h: 440 })
-    .flow(scatter({ by: "fertility", x: "fertility", y: "life_expect" }))
+    .flow(scatter({ by: "fertility", cx: "fertility", cy: "life_expect" }))
     .mark(blank().name("ends"))
     .layer(
       chart(selectAll("ends")).mark(
@@ -439,7 +439,7 @@ const trendScatter = (countries: any[]) => {
     )
     .layer(
       chart(countries)
-        .flow(scatter({ by: "country", x: "fertility", y: "life_expect" }))
+        .flow(scatter({ by: "country", cx: "fertility", cy: "life_expect" }))
         .mark(
           circle({ r: 4 }).label("country", { avoiding: selectAll("trend") })
         )

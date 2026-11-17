@@ -11,7 +11,7 @@ def story_penguin_mass():
         chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
+            scatter(cx="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
         )
         .mark(circle(r=3, fill="Species")),
         {},
@@ -23,7 +23,7 @@ def story_penguin_mass_sina():
         chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
+            scatter(cx="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
         )
         .mark(circle(r=3, fill="Species")),
         {},
@@ -35,7 +35,7 @@ def story_penguin_mass_jitter():
         chart(WEIGHED, w=560)
         .flow(
             spread(by="Species", dir="y", spacing=16),
-            scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.jitter()),
+            scatter(cx="Body Mass (g)", alignment="middle", overlap=Overlap.jitter()),
         )
         .mark(circle(r=3, fill="Species")),
         {},
@@ -47,7 +47,7 @@ def _dense(overlap):
         chart(DENSE_MASSES, w=640)
         .flow(
             spread(by="group", dir="y", spacing=16),
-            scatter(x="mass", alignment="middle", overlap=overlap),
+            scatter(cx="mass", alignment="middle", overlap=overlap),
         )
         .mark(circle(r=2, fill="group")),
         {},

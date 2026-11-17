@@ -214,7 +214,7 @@ layer([
     .flow(partition(by=key.bin(Bin.voronoi(seeds=beaked))))
     .mark(region(fill="#f4f1ea", stroke="#b9b2a3", stroke_width=0.5)),
     chart(beaked)
-    .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+    .flow(scatter(cx="Beak Length (mm)", cy="Beak Depth (mm)"))
     .mark(circle(r=2.5, fill="Species")),
 ]).render(w=480, h=360, axes=True)
 ```

@@ -21,7 +21,7 @@ def story_faceted_scatter_driving():
         chart(DRIVING_SHIFTS, w=800, h=400)
         .flow(
             spread(by="side", dir="x", spacing=50),
-            scatter(x="year", y="miles", axes={"x": True, "y": False}),
+            scatter(cx="year", cy="miles", axes={"x": True, "y": False}),
         )
         .mark(circle(r=3, fill="#4682b4")),
         {},
@@ -33,7 +33,7 @@ def story_faceted_scatter_y():
         chart(DRIVING_SHIFTS, w=400, h=800)
         .flow(
             spread(by="side", dir="y", spacing=50),
-            scatter(x="year", y="gas", axes={"x": False, "y": True}),
+            scatter(cx="year", cy="gas", axes={"x": False, "y": True}),
         )
         .mark(circle(r=3, fill="#e07b39")),
         {},

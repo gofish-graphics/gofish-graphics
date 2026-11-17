@@ -194,7 +194,7 @@ def story_airports_by_nearest_hub():
                 )
                 .mark(region(fill=field("iata").count(), stroke="white")),
                 chart(hubs)
-                .flow(scatter(x="longitude", y="latitude"))
+                .flow(scatter(cx="longitude", cy="latitude"))
                 .mark(circle(r=3, fill="black")),
             ],
             w=600,
@@ -223,7 +223,7 @@ def story_penguin_beak_voronoi():
                 .flow(partition(by=key.bin(Bin.voronoi(seeds=BEAKED))))
                 .mark(region(fill="#f4f1ea", stroke="#b9b2a3", stroke_width=0.5)),
                 chart(BEAKED)
-                .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+                .flow(scatter(cx="Beak Length (mm)", cy="Beak Depth (mm)"))
                 .mark(circle(r=2.5, fill="Species")),
             ],
             w=480,

@@ -27,7 +27,7 @@ def story_sunflower():
             w=640,
             h=380,
         )
-        .flow(scatter(x="x", y="y"))
+        .flow(scatter(cx="x", cy="y"))
         .mark(circle(r=4, fill="i")),
         {},
     )
@@ -41,7 +41,7 @@ def story_uncoupled():
             w=640,
             h=380,
         )
-        .flow(scatter(x="x", y="y"))
+        .flow(scatter(cx="x", cy="y"))
         .mark(circle(r=4, fill="i")),
         {},
     )

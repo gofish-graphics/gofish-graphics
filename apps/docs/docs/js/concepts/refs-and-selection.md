@@ -36,7 +36,7 @@ const trips = [
 gf.layer([
   gf
     .chart(trips)
-    .flow(gf.scatter({ by: "year", x: "miles", y: "price" }))
+    .flow(gf.scatter({ by: "year", cx: "miles", cy: "price" }))
     .mark(
       gf
         .circle({ r: 5, fill: "white", stroke: "#4c78a8", strokeWidth: 2 })

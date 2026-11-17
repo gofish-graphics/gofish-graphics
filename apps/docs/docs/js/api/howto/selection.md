@@ -49,7 +49,7 @@ refs directly and read placed geometry off them, so feed them `selectAll`:
 gf.layer([
   gf
     .chart(drivingShifts)
-    .flow(gf.scatter({ by: "year", x: "miles", y: "gas" }))
+    .flow(gf.scatter({ by: "year", cx: "miles", cy: "gas" }))
     .mark(
       gf
         .circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 })
@@ -82,7 +82,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
 gf.layer([
   gf
     .chart(locations)
-    .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
+    .flow(gf.scatter({ by: "lake", cx: "x", cy: "y" }))
     .mark(gf.blank().name("points")),
   gf
     .chart(gf.selectAll("points"))

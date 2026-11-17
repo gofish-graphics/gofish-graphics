@@ -93,7 +93,12 @@ as a key inside `dims`, so the two do not collide:
 
 ```ts
 chart(trips, { coord: Coord.polar() })
-  .flow(scatter({ by: "id", dims: { theta: "bearing", r: "distance" } }))
+  .flow(
+    scatter({
+      by: "id",
+      dims: { theta: { center: "bearing" }, r: { center: "distance" } },
+    })
+  )
   .mark(circle({ r: 4 }));
 ```
 

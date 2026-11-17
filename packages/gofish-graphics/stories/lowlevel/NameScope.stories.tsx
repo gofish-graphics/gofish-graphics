@@ -115,7 +115,7 @@ export const NestedCallout: StoryObj = {
     const container = initializeContainer();
     layer([
       chart(normal, { w: 240, h: 160 })
-        .flow(scatter({ x: "x" }))
+        .flow(scatter({ cx: "x" }))
         .mark(
           ribbon({ h: "pdf", fill: "#D1E4F6", stroke: "#467DA8" }).name(
             "density"
@@ -165,7 +165,7 @@ export const ClauseSelectAll: StoryObj = {
     const container = initializeContainer();
     layer([
       chart(monthlyMeans)
-        .flow(scatter({ x: "month", y: "mean" }))
+        .flow(scatter({ cx: "month", cy: "mean" }))
         .mark(circle({ r: 3.5, fill: "#467DA8" }).name("means")),
     ])
       .relate(() => [
@@ -183,7 +183,7 @@ export const ClauseWithDefaultAxes: StoryObj = {
     const container = initializeContainer();
     const dots = (fill: string, r: number) =>
       chart(monthlyMeans)
-        .flow(scatter({ x: "month", y: "mean" }))
+        .flow(scatter({ cx: "month", cy: "mean" }))
         .mark(circle({ r, fill }));
     layer([dots("#9cc3e6", 6)])
       .relate(() => [dots("#1a5683", 2.5)])
@@ -227,7 +227,7 @@ export const MedianTrend: StoryObj = {
         .mark(
           layer([
             chart()
-              .flow(scatter({ x: "x", h: 28 }))
+              .flow(scatter({ cx: "x", h: 28 }))
               .mark(ribbon({ h: "pdf", fill: "#D1E4F6", stroke: "#467DA8" })),
             chart().mark(
               circle({

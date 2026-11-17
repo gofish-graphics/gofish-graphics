@@ -180,7 +180,7 @@ async function main() {
         ],
         { w: 300, h: 120 }
       )
-        .flow(scatter({ by: "n", x: "x", y: "y" }))
+        .flow(scatter({ by: "n", cx: "x", cy: "y" }))
         .mark(circle({ r: 5 }).label("n"))
         .toDisplayList()) as any
     );
@@ -249,7 +249,7 @@ async function main() {
     // in its layout, so the x axis sits below the 50 px plot, and the
     // chart's box is the box it claimed.
     const node = await chart([{ v: 1 }, { v: 5 }], { w: 100, h: 50 })
-      .flow(scatter({ x: "v" }))
+      .flow(scatter({ cx: "v" }))
       .mark(circle({ r: 3 }))
       .resolve();
     const data = await runLayout({ axes: true }, node);
@@ -565,7 +565,7 @@ async function main() {
       { n: "b", x: 2, y: 30 },
       { n: "c", x: 3, y: 20 },
     ])
-      .flow(scatter({ by: "n", x: "x", y: "y" }))
+      .flow(scatter({ by: "n", cx: "x", cy: "y" }))
       .mark(circle({ r: 5 }).label("n"))
       .resolve();
     const data = await runLayout({ w: 300, h: 200, axes: true }, node);

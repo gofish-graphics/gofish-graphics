@@ -26,7 +26,7 @@ def story_default():
     # as tall as the lake's total catch, with the flower centered on its top.
     return (
         chart(STEM_DATA, axes=False, w=400, h=400)
-        .flow(scatter(by="lake", x="x"))
+        .flow(scatter(by="lake", cx="x"))
         .mark(
             layer([
                 rect(w=4, h="count", fill=COLORS["colorGreen5"]).name("stem"),

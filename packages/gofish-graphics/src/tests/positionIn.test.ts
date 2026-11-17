@@ -129,7 +129,7 @@ async function main() {
         ],
         { w: 200, h: 100 }
       )
-        .flow(scatter({ x: "t", y: "v" }))
+        .flow(scatter({ cx: "t", cy: "v" }))
         .mark(circle({ r: 3 }))
         .toDisplayList();
       ticks = items(dl as any).filter((i) => i.kind === "text").length;

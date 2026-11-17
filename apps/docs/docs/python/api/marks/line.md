@@ -17,7 +17,7 @@ from gofish import layer, chart, scatter, blank, select_all, line
 
 layer([
     chart(catch_locations)
-        .flow(scatter(by="lake", x="x", y="y"))
+        .flow(scatter(by="lake", cx="x", cy="y"))
         .mark(blank().name("points")),
     chart(select_all("points")).mark(line()),
 ]).render(w=500, h=300, axes=True)
@@ -84,7 +84,7 @@ from gofish import chart, spread, scatter, line
 chart(barley, axes=True).flow(
     spread(by="site", dir="x", spacing=110),
     spread(by="year", dir="x", spacing=36),
-    scatter(by="variety", y="yield"),
+    scatter(by="variety", cy="yield"),
 ).mark(line(stroke="variety", stroke_width=2))
 ```
 
@@ -105,7 +105,7 @@ bare `line(...)`:
 from gofish import chart, scatter, circle, line
 
 chart(driving_shifts, axes=True).flow(
-    scatter(by="year", x="miles", y="gas")
+    scatter(by="year", cx="miles", cy="gas")
 ).mark(circle(r=4, fill="white", stroke="black", stroke_width=2)).layer(
     line(stroke="black", stroke_width=2)
 ).render(w=500, h=300)
@@ -124,12 +124,12 @@ skip `.layer()` too:
 
 ```python
 chart(catch_locations).flow(
-    scatter(by="lake", x="x", y="y")
+    scatter(by="lake", cx="x", cy="y")
 ).mark(line())
 
 # ...is sugar for the explicit two-tier form:
 chart(catch_locations).flow(
-    scatter(by="lake", x="x", y="y")
+    scatter(by="lake", cx="x", cy="y")
 ).mark(blank()).layer(line())
 ```
 

@@ -16,7 +16,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
 }));
 
 gf.chart(locations, { axes: true })
-  .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(gf.scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(gf.circle({ r: 8 }))
   .render(root, { w: 400, h: 250 });
 ```
@@ -26,7 +26,7 @@ gf.chart(locations, { axes: true })
 ## Signature
 
 ```ts
-scatter({ by?, x?, y?, x2?, y2?, dims?, alignment?, overlap? })
+scatter({ by?, x?, cx?, x2?, y?, cy?, y2?, dims?, alignment?, overlap? })
 ```
 
 ## Parameters
@@ -34,34 +34,40 @@ scatter({ by?, x?, y?, x2?, y2?, dims?, alignment?, overlap? })
 ::: gofish-ref scatter
 :::
 
-At least one of `x` or `y` is required. On its own, `x` places each child at a
-point. With `x2`, each child spans from `x` to `x2`, as a
-[`rect`](/js/api/marks/rect) does. `y` and `y2` work the
-same way.
+The position keys mean what they mean on a [`rect`](/js/api/marks/rect): `x`
+is where each child's start edge goes, `cx` its center, and `x2` its end edge.
+`y`, `cy` and `y2` work the same way. At least one of them is required. A
+scatter plot uses `cx` and `cy`, so each dot is centered on its point. `x`
+with `x2` is a span: each child spans from `x` to `x2`. Each axis is placed on
+its own, so `scatter({ cx: "lon", y: "lat" })` centers each child across and
+puts its start edge on the point along y. An axis takes at most two of its
+three keys, since two already fix the child's position and size there.
 
 ## Placing by axis name with `dims`
 
 `x` and `y` mean the first and second axis in any coordinate space. To use the
-names the enclosing coordinate space declares, put them in `dims`: a plain
-value is the point, like `x`, and `{ min, max }` is the span, like `x` with
-`x2`.
+names the enclosing coordinate space declares, put them in `dims`. It reads as
+a mark's `dims` does: a plain value or `{ min }` is the start, like `x`;
+`{ center }` is the center, like `cx`; `{ max }` is the end, like `x2`; and
+`{ min, max }` is the span.
 
 ```ts
-// Under Coord.polar(): the same as scatter({ by: "id", x: "bearing", y: "distance" })
-.flow(scatter({ by: "id", dims: { theta: "bearing", r: "distance" } }))
+// Under Coord.polar(): the same as scatter({ by: "id", cx: "bearing", cy: "distance" })
+.flow(scatter({ by: "id", dims: { theta: { center: "bearing" }, r: { center: "distance" } } }))
 .mark(circle({ r: 4 }))
 
-// Under Coord.geo(): the same as scatter({ by: "name", x: "lon", y: "lat" })
-.flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
+// Under Coord.geo(): the same as scatter({ by: "name", cx: "lon", cy: "lat" })
+.flow(scatter({ by: "name", dims: { lon: { center: "lon" }, lat: { center: "lat" } } }))
 ```
 
 A scatter only places its children, so a `size` inside `dims` is an error; size
-the mark instead. Placing an axis twice, such as `x` together with
-`dims.theta`, is an error too. The two ends of a span may come from either
-spelling (`x` with `dims: { x: { max: "hi" } }`), but one end without the
-other is an error. Each value in `dims` is read like its top-level
-counterpart: a point or a `min` like `x`, a `max` like `x2`. The circle's `r` above is
-its radius, not the polar axis: axis names only appear as keys of `dims`.
+the mark instead. Placing an axis anchor twice, such as `cx` together with
+`dims: { theta: { center: ... } }`, is an error too. The anchors of one axis
+may come from either spelling (`x` with `dims: { x: { max: "hi" } }` is a
+span). Each value in `dims` is read like its top-level counterpart: a plain
+value or a `min` like `x`, a `center` like `cx`, a `max` like `x2`. The
+circle's `r` above is its radius, not the polar axis: axis names only appear
+as keys of `dims`.
 
 ## Keeping dots apart with `overlap`
 
@@ -104,7 +110,7 @@ gf.chart(
   .flow(
     gf.spread({ by: "Species", dir: "y", spacing: 16 }),
     gf.scatter({
-      x: "Body Mass (g)",
+      cx: "Body Mass (g)",
       alignment: "middle",
       overlap: gf.Overlap.separate({ padding: 1 }),
     })
@@ -134,7 +140,7 @@ gf.chart(
   .flow(
     gf.spread({ by: "Species", dir: "y", spacing: 16 }),
     gf.scatter({
-      x: "Body Mass (g)",
+      cx: "Body Mass (g)",
       alignment: "middle",
       overlap: gf.Overlap.noise(),
     })
@@ -157,7 +163,7 @@ gf.chart(
   .flow(
     gf.spread({ by: "Species", dir: "y", spacing: 16 }),
     gf.scatter({
-      x: "Body Mass (g)",
+      cx: "Body Mass (g)",
       alignment: "middle",
       overlap: gf.Overlap.sina(),
     })
@@ -250,7 +256,7 @@ grows with the counts, and it leaves extra room so the dots can spread.
 
 Some cases are errors:
 
-- `overlap` when both `x` and `y` come from fields, because then no axis is
+- `overlap` when both axes are placed by fields, because then no axis is
   free.
 - `overlap` inside a coordinate space that is not linear, such as `Coord.polar()`.
   The strategies measure distances in the layout frame, and a polar space
@@ -260,7 +266,7 @@ Some cases are errors:
 ## Example
 
 ```ts
-.flow(scatter({ by: "species", x: "bill_length", y: "flipper_length" }))
+.flow(scatter({ by: "species", cx: "bill_length", cy: "flipper_length" }))
 .mark(rect({ w: 8, h: 8, rx: 4 }))
 
 // Span form: each rect spans its task's start to end in data space
@@ -270,13 +276,16 @@ Some cases are errors:
 
 ## Discrete scatter and translation
 
-When `x` or `y` is categorical, `scatter` uses discrete point placement: each
-group is placed at the center of its allotted position. Use this for cases that
-need center placement without treating child edges as a band layout.
+When a position key names a categorical field, `scatter` uses discrete
+placement: each group gets one position of its own along the axis, and the
+key's anchor goes there, so `cx` centers each group on it, `x` puts its start
+edge there and `x2` its end edge. A span cannot end at a discrete position, so
+`x` with `x2` over a categorical field is an error. Use this for cases that
+need point placement without treating child edges as a band layout.
 
 If you need a fixed offset around the arranged scatter, chain
 `.translate({ x?, y? })` on the operator instead of putting that value in
-`scatter({ x, y })`. The `x` and `y` options on `scatter` are placement
+`scatter({ x, y })`. The position keys on `scatter` are placement
 channels; `.translate()` is an outer pixel translation that preserves the
 scatter-computed axis.
 
@@ -285,7 +294,7 @@ chart(seafood, { coord: Coord.clock() })
   .flow(
     scatter({
       by: "lake",
-      x: "lake",
+      cx: "lake",
       w: 2 * Math.PI,
       axes: { x: false, y: true },
     }).translate({ y: 50 }),
@@ -294,6 +303,6 @@ chart(seafood, { coord: Coord.clock() })
   .mark(rect({ w: 0.1, h: "count", fill: "species" }));
 ```
 
-In that example, `x: "lake"` chooses the discrete angular centers and
-`.translate({ y: 50 })` adds the radial offset. Writing `y: 50` inside
+In that example, `cx: "lake"` chooses the discrete angular centers and
+`.translate({ y: 50 })` adds the radial offset. Writing `cy: 50` inside
 `scatter(...)` would instead mean "use scatter's y-channel semantics."

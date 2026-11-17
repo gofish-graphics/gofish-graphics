@@ -97,7 +97,7 @@ def _epoch_ms(date):
 def story_stacked_area():
     return (
         chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=520, h=330)
-        .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
+        .flow(scatter(by="date", cx="date"), stack(by="category", dir="y"))
         .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
         {},
     )
@@ -110,7 +110,7 @@ def story_circle_timeline():
         chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=440)
         .flow(
             spread(by="category", dir="y", spacing=60),
-            scatter(by="date", x="date", alignment="middle"),
+            scatter(by="date", cx="date", alignment="middle"),
         )
         .mark(circle(area="sales", fill="category", opacity=0.8)),
         {},
@@ -152,13 +152,13 @@ def story_surplus_deficit_line():
             w=560,
             h=340,
         )
-        .flow(group(by="side"), scatter(by="date", x="date"))
+        .flow(group(by="side"), scatter(by="date", cx="date"))
         .mark(ribbon(h="balance", fill="side", curve=Curve.linear()))
         # The line: invisible anchors at the monthly values, then a line
         # through them.
         .layer(
             chart(rows, schema=schema)
-            .flow(scatter(by="date", x="date", y="balance"))
+            .flow(scatter(by="date", cx="date", cy="balance"))
             .mark(blank())
         )
         .layer(line(stroke="#222", stroke_width=1.5, curve=Curve.linear())),

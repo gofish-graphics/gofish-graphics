@@ -79,7 +79,7 @@ const yearRange = (rows: any[]): [number, number] => {
  */
 const yearReadout = (clock: any) =>
   chart([{ fertility: 7.5, life_expect: 83 }])
-    .flow(scatter({ x: "fertility", y: "life_expect" }))
+    .flow(scatter({ cx: "fertility", cy: "life_expect" }))
     .mark(
       text({
         text: live(() => String(Math.floor(clock()))),
@@ -105,7 +105,7 @@ export const SpatialTwin: StoryObj<Args> = {
     chart(gapminder, { legend: false })
       .flow(
         spread({ by: "year", dir: "x", spacing: 12 }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 2.5, fill: "country" }))
       .layer(
@@ -161,7 +161,7 @@ export const Animated: StoryObj<Args> = {
     })
       .flow(
         time.sequence({ by: "year", on: year }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
@@ -191,7 +191,7 @@ export const Paused1975: StoryObj<Args> = {
     })
       .flow(
         time.sequence({ by: "year", playing: false, at: 1975 }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
@@ -226,7 +226,7 @@ export const SequenceOnly: StoryObj<Args> = {
     })
       .flow(
         time.sequence({ by: "year", on: year }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(yearReadout(year))
@@ -282,7 +282,7 @@ const curvePanel = (
   const keyframes = chart(rows, { legend: false, padding: 0, ...size })
     .flow(
       time.sequence({ by: "year", on: clock }),
-      scatter({ by: "country", x: "fertility", y: "life_expect" })
+      scatter({ by: "country", cx: "fertility", cy: "life_expect" })
     )
     .mark(circle({ r: 4, fill: "country" }));
   return curve === null
@@ -583,7 +583,7 @@ const sparkSamples = (samples: Sample[]) =>
   chart(samples, { legend: false, axes: false, padding: 0 })
     .flow(
       spread({ by: "method", dir: "x", spacing: SPARK_GAP, axes: false }),
-      scatter({ by: "t", x: "t", y: "value", axes: false })
+      scatter({ by: "t", cx: "t", cy: "value", axes: false })
     )
     .mark(circle({ r: 2.5 }).hidden());
 
@@ -716,17 +716,17 @@ const highlightPanel = (
   size: PanelSize
 ) => {
   const own = rows.filter((d) => d.country === SPARK_COUNTRY);
-  const place = scatter({ x: "fertility", y: "life_expect" });
+  const place = scatter({ cx: "fertility", cy: "life_expect" });
   return chart(rows, { legend: false, padding: 0, ...size })
     .flow(
       time.sequence({ by: "year", on: clock }),
-      scatter({ by: "country", x: "fertility", y: "life_expect" })
+      scatter({ by: "country", cx: "fertility", cy: "life_expect" })
     )
     .mark(circle({ r: 4, fill: "#bbb", opacity: 0.35 }))
     .layer(time.transition({ curve: curve }))
     .layer(
       chart(own)
-        .flow(scatter({ by: "year", x: "fertility", y: "life_expect" }))
+        .flow(scatter({ by: "year", cx: "fertility", cy: "life_expect" }))
         .mark(blank())
         .layer(
           line({
@@ -848,7 +848,7 @@ export const Frame1955: StoryObj<Args> = {
     })
       .flow(
         filter((d: any) => d.year === 1955),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .render(container);
@@ -894,7 +894,7 @@ const trails = (
   )
     .flow(
       time.sequence({ by: "year", on: clock }),
-      scatter({ by: "country", x: "fertility", y: "life_expect" })
+      scatter({ by: "country", cx: "fertility", cy: "life_expect" })
     )
     .mark(
       layer([

@@ -480,7 +480,7 @@ const day = timer({ domain: [1, 365], step: 1, duration: 10000 });
 chart(birds)
   .flow(
     filter((d) => d.day === day()),
-    scatter({ x: "lon", y: "lat" })
+    scatter({ cx: "lon", cy: "lat" })
   )
   .mark(circle({ r: 3, fill: "species" }))
   .render(container, { w: 600, h: 600 });
@@ -492,7 +492,7 @@ itself, so the window follows the playhead:
 ```ts no-check
 .flow(
   filter((d) => between(day() - d.day, 0, 20, { closed: "left" })),
-  scatter({ x: "lon", y: "lat" })
+  scatter({ cx: "lon", cy: "lat" })
 )
 .mark(circle({ r: 3, fill: "species", opacity: (d) => (d.day === day() ? 1 : 0.1) }))
 ```

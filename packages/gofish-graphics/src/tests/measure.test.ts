@@ -567,11 +567,11 @@ const renders: [string, () => any][] = [
     "surplus-deficit: ribbon h v layered with line y balance",
     () =>
       chart(bal.map((d) => ({ t: d.t, v: d.balance })))
-        .flow(scatter({ by: "t", x: "t" }))
+        .flow(scatter({ by: "t", cx: "t" }))
         .mark(ribbon({ h: "v" }))
         .layer(
           chart(bal)
-            .flow(scatter({ by: "t", x: "t", y: "balance" }))
+            .flow(scatter({ by: "t", cx: "t", cy: "balance" }))
             .mark(line({}))
         ),
   ],
@@ -579,11 +579,11 @@ const renders: [string, () => any][] = [
     "hexbin: x budget layered with x cx",
     () =>
       chart([{ id: 0, budget: 1, gross: 2 }])
-        .flow(scatter({ by: "id", x: "budget", y: "gross" }))
+        .flow(scatter({ by: "id", cx: "budget", cy: "gross" }))
         .mark(rect({ w: 1, h: 1 }))
         .layer(
           chart([{ id: 0, cx: 1, cy: 2 }])
-            .flow(scatter({ by: "id", x: "cx", y: "cy" }))
+            .flow(scatter({ by: "id", cx: "cx", cy: "cy" }))
             .mark(rect({ w: 1, h: 1 }))
         ),
   ],
@@ -594,11 +594,11 @@ const renders: [string, () => any][] = [
         { month: "Jan", i: 0, temp_c: 2 },
         { month: "Jan", i: 1, temp_c: 5 },
       ])
-        .flow(scatter({ by: "i", x: "i", y: "temp_c" }))
+        .flow(scatter({ by: "i", cx: "i", cy: "temp_c" }))
         .mark(rect({ w: 2, h: 2 }))
         .layer(
           chart([{ month: "Jan", tx: 3 }])
-            .flow(scatter({ by: "month", x: 0, y: "tx" }))
+            .flow(scatter({ by: "month", cx: 0, cy: "tx" }))
             .mark(rect({ w: 2, h: 2 }))
         ),
   ],
@@ -915,7 +915,7 @@ console.log("# measure: titles are Quantity (unit)");
         penguins.map((p) => ({ ...p, cm: p.flipper / 10 })),
         { schema: mmSchema }
       )
-        .flow(scatter({ by: "id", x }))
+        .flow(scatter({ by: "id", cx: x }))
         .mark(rect({ w: 2, h: 2 }))
     );
   const overlaid = textsOf(await rawOver("flipper").toDisplayList(SIZE));
@@ -964,7 +964,7 @@ console.log("# measure: titles are Quantity (unit)");
     byTime(field("date").bin([Calendar.year, Calendar.month]))
       .layer(
         chart(sales, { schema: timeSchema })
-          .flow(scatter({ by: "i", x: "price" }))
+          .flow(scatter({ by: "i", cx: "price" }))
           .mark(rect({ w: 2, h: 2 }))
       )
       .toDisplayList(SIZE)
@@ -1079,7 +1079,7 @@ console.log("# measure: titles are Quantity (unit)");
       ],
       { schema: { day: Unit.time() }, axes: true }
     )
-      .flow(scatter({ x: "day", y: "price" }))
+      .flow(scatter({ cx: "day", cy: "price" }))
       .mark(rect({ w: 4, h: 4 }))
       .toDisplayList(SIZE)
   );

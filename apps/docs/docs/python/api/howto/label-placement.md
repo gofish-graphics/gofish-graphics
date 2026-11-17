@@ -16,7 +16,7 @@ from gofish import chart, circle, scatter
 
 (
     chart(countries)
-    .flow(scatter(by="country", x="fertility", y="life_expect"))
+    .flow(scatter(by="country", cx="fertility", cy="life_expect"))
     .mark(circle(r=4).label("country"))
     .render(w=640, h=440, axes=True)
 )
@@ -36,7 +36,7 @@ from gofish import Place, Unit, chart, group, line, scatter
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+    .flow(group(by="symbol"), scatter(by="date", cx="date", cy="price"))
     .mark(line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end()))
     .render(w=560, h=320, axes=True, legend=False)
 )
@@ -58,7 +58,7 @@ from gofish import Place, Unit, chart, group, line, scatter
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+    .flow(group(by="symbol"), scatter(by="date", cx="date", cy="price"))
     .mark(
         line(stroke="symbol", stroke_width=2).label(
             "symbol",
@@ -108,7 +108,7 @@ from gofish import blank, chart, circle, line, scatter, select_all
 
 (
     chart(trend_ends)
-    .flow(scatter(by="fertility", x="fertility", y="life_expect"))
+    .flow(scatter(by="fertility", cx="fertility", cy="life_expect"))
     .mark(blank().name("ends"))
     .layer(
         chart(select_all("ends")).mark(
@@ -117,7 +117,7 @@ from gofish import blank, chart, circle, line, scatter, select_all
     )
     .layer(
         chart(countries)
-        .flow(scatter(by="country", x="fertility", y="life_expect"))
+        .flow(scatter(by="country", cx="fertility", cy="life_expect"))
         .mark(circle(r=4).label("country", avoiding=select_all("trend")))
     )
     .render(w=640, h=440, axes=True)

@@ -9,7 +9,7 @@ def story_field_between():
         chart(PENGUINS, w=400, h=300)
         .flow(
             filter(field("Body Mass (g)").between(3500, 4500, closed="left")),
-            scatter(x="Flipper Length (mm)", y="Beak Length (mm)"),
+            scatter(cx="Flipper Length (mm)", cy="Beak Length (mm)"),
         )
         .mark(circle(r=3, fill="Species")),
         {},

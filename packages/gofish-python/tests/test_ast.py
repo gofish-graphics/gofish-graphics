@@ -1458,7 +1458,7 @@ class TestTime:
                 schema={"t": Unit.time()},
                 axes={"x": {"levels": [Calendar.month, False, True]}},
             )
-            .flow(scatter(by="t", x="t", y="v"))
+            .flow(scatter(by="t", cx="t", cy="v"))
             .mark(line())
             .to_ir()["root"]
         )
@@ -1473,7 +1473,7 @@ class TestTime:
             chart(
                 [{"t": "2024-01-01", "v": 1}],
                 axes={"x": {"rows": [Calendar.month]}},
-            ).flow(scatter(by="t", x="t", y="v")).mark(line()).to_ir()["root"]
+            ).flow(scatter(by="t", cx="t", cy="v")).mark(line()).to_ir()["root"]
 
     def test_datetime_columns_cross_as_arrow_times(self):
         """A datetime column is not marked in the IR: its Arrow type crosses
@@ -1492,7 +1492,7 @@ class TestTime:
                 "n": [1, 2],
             }
         )
-        node = chart(df).flow(scatter(by="naive", x="naive", y="n")).mark(line()).to_ir()["root"]
+        node = chart(df).flow(scatter(by="naive", cx="naive", cy="n")).mark(line()).to_ir()["root"]
         assert "schema" not in (node["options"] or {})
         schema = (
             pa.ipc.open_stream(data_to_arrow_bytes(df))

@@ -80,8 +80,10 @@ discipline:
    split over **all** distribute targets, sized-or-not. A fixed child's unused
    share is simply lost (measured below: a `[50px, fill, fill]` row in a 300px
    container comes out 256px wide).
-3. **The scribble.** `scatter`'s `x`/`x2` span channels (once `xMin`/`xMax`) write the child's
-   translate _and_ its `intrinsicDims` directly (`scatter.tsx:227-248`);
+3. **The scribble.** `scatter`'s `x`/`x2` span channels (once `xMin`/`xMax`) wrote the child's
+   translate _and_ its `intrinsicDims` directly. (They now lower to an
+   interval `Constraint.position`, in the per-child loop of
+   `graphicalOperators/scatter.tsx`.)
    `treemap` does the same with d3's rectangles. Both work because their
    targets are leaves or layout-once subtrees; neither records ownership, and
    a second writer would silently win or silently lose depending on order.
@@ -488,7 +490,8 @@ Current machinery: `Placeable`/`place()` (`_node.ts:77-83`, `523-563`; silent
 no-op at 550), size-request folds (`constraints/distribute.ts:89-156`,
 `constraints/align.ts`), the budget solve (`layer.tsx` "Layer budget solve",
 `spread.tsx` scale solve), the fill policy (`constraints/folds.ts`), the
-scatter interval hack (`scatter.tsx:227-248`), treemap's slot assignment
+scatter interval hack (since replaced by an interval `Constraint.position`
+in `graphicalOperators/scatter.tsx`), treemap's slot assignment
 (`graphicalOperators/treemap.tsx`). Prior art: the gotree `nest` prototype (PR #461, named `contain` there:
 `constraints/contain.ts` + layer pre-pass), Bluefish
 `createLinSysBBox` (`packages/bluefish-solid/src/util/bbox.ts`), PiCCL

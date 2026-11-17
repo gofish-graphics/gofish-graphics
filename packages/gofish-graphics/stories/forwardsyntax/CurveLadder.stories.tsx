@@ -73,7 +73,7 @@ export const Ladder: StoryObj = {
 
       const panel = (x: string, into: HTMLElement, w: number) =>
         chart(drivingShifts, { w, h: 240 })
-          .flow(scatter({ by: "year", x, y: "gas" }))
+          .flow(scatter({ by: "year", cx: x, cy: "gas" }))
           .mark(
             circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 })
           )
@@ -149,10 +149,10 @@ const rings = (gaps: Gap[]) => {
   }));
   return [
     chart(rows)
-      .flow(scatter({ by: "id", x: "miles", y: "gas" }))
+      .flow(scatter({ by: "id", cx: "miles", cy: "gas" }))
       .mark(circle({ r: 16, fill: "none", stroke: RING, strokeWidth: 2 })),
     chart(labels)
-      .flow(scatter({ by: "id", x: "miles", y: "gas" }))
+      .flow(scatter({ by: "id", cx: "miles", cy: "gas" }))
       .mark((group: any[]) =>
         text({ text: group[0].label, fontSize: 12, fill: RING })
       ),
@@ -174,11 +174,11 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
   /** The years as points, placed on the panel. The ghost and the panel's own
    *  curve are each a line threaded along year through their own copy. */
   const points = () =>
-    chart(drivingShifts).flow(scatter({ by: "year", x: "miles", y: "gas" }));
+    chart(drivingShifts).flow(scatter({ by: "year", cx: "miles", cy: "gas" }));
   // The panel's frame and axes, with the ghost of the rung below, if any,
   // drawn first so everything else sits over it.
   let panel: ChartBuilder<any, any> | LayerBuilder = chart(drivingShifts)
-    .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+    .flow(scatter({ by: "year", cx: "miles", cy: "gas" }))
     .mark(circle({ r: 3.5 }).hidden());
   if (below !== undefined) {
     panel = panel.layer(
@@ -210,7 +210,7 @@ const animatedPanel = (curve: LadderCurve, clock: any) => {
       chart(drivingShifts)
         .flow(
           time.sequence({ by: "year", on: clock }),
-          scatter({ x: "miles", y: "gas" })
+          scatter({ cx: "miles", cy: "gas" })
         )
         .mark(
           circle({ r: 7, fill: "#e4572e", stroke: "black", strokeWidth: 1.5 })

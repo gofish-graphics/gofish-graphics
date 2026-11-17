@@ -52,13 +52,13 @@ export function markReturnTypes(rows: Row[]) {
   // A non-relational mark never fuses, so `.mark()` stays a ChartBuilder and
   // keeps `.name(...)`.
   const bars = chart(rows)
-    .flow(scatter({ by: "lake", x: "x" }))
+    .flow(scatter({ by: "lake", cx: "x" }))
     .mark(rect({ w: 4, h: "count" }));
   expectType<Equal<typeof bars, ChartBuilder<Row[], any[]>>>();
   bars.name("bars");
   // A relational mark may fuse into a two-tier layer.
   const path = chart(rows)
-    .flow(scatter({ by: "lake", x: "x" }))
+    .flow(scatter({ by: "lake", cx: "x" }))
     .mark(line({ along: "lake" }).name("path"));
   expectType<Equal<typeof path, ChartBuilder<Row[], any[]> | LayerBuilder>>();
 }
@@ -71,7 +71,7 @@ export function flowerChart(stemData: Row[], container: HTMLElement) {
     .mark(petal({ w: "count", fill: "species" }));
 
   return chart(stemData, { axes: false })
-    .flow(scatter({ by: "lake", x: "x" }))
+    .flow(scatter({ by: "lake", cx: "x" }))
     .mark(
       layer([
         rect({ w: 4, h: "count", fill: "green" }).name("stem"),

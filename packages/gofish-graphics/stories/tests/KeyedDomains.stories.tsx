@@ -108,7 +108,7 @@ export const LayeredChartOwnSizeDataTier: StoryObj = {
           { at: 1, value: 0.5 },
           { at: 3, value: 1.4 },
         ])
-          .flow(scatter({ x: "at", y: "value" }))
+          .flow(scatter({ cx: "at", cy: "value" }))
           .mark(circle({ r: 4, fill: "black" }))
       )
       .render(container, { w: 400, h: 400 });

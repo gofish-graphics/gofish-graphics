@@ -235,7 +235,7 @@ async function main() {
       .mark(
         row({ h: 80 }, [
           chart()
-            .flow(scatter({ x: "x" }))
+            .flow(scatter({ cx: "x" }))
             .mark(rect({ w: 4, h: "pdf" })),
           chart()
             .flow(partition({ by: field("x").bin(Bin.step(1)), dir: "x" }))

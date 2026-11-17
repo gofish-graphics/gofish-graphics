@@ -32,7 +32,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(context.loaded.weather as any[], { axes: { x: true, y: false }, w: args.w })
-      .flow(scatter({ by: "date",  x: "precipitation" }))
+      .flow(scatter({ by: "date",  cx: "precipitation" }))
       .mark(rect({ w: 1, h: 10, fill: "rgb(31, 119, 180)",
         opacity: 0.7,
       }))

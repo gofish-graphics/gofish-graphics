@@ -55,7 +55,7 @@ barChart({ x, y });
 // ≡ .flow(spread({ by: x, dir: "x" })).mark(rect({ h: y }))
 
 lineChart({ x, y });
-// ≡ .flow(scatter({ by: x, x, y })).mark(line())
+// ≡ .flow(scatter({ by: x, cx: x, cy: y })).mark(line())
 ```
 
 Templates are macros with printable equations. They are not new primitives, and the set of them is

@@ -28,7 +28,7 @@ export const PenguinMass: StoryObj = {
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
-          x: "Body Mass (g)",
+          cx: "Body Mass (g)",
           alignment: "middle",
           overlap: Overlap.separate({ padding: 1 }),
         })
@@ -48,7 +48,7 @@ export const OneSided: StoryObj = {
     chart(weighed, { w: 560 })
       .flow(
         scatter({
-          x: "Body Mass (g)",
+          cx: "Body Mass (g)",
           alignment: "start",
           overlap: Overlap.separate({ padding: 1 }),
         })
@@ -69,7 +69,7 @@ export const MixedRadii: StoryObj = {
     chart(weighed.slice(0, 120), { w: 480 })
       .flow(
         scatter({
-          x: "Flipper Length (mm)",
+          cx: "Flipper Length (mm)",
           alignment: "middle",
           overlap: Overlap.separate({ padding: 1 }),
         })

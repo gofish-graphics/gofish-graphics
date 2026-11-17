@@ -508,7 +508,7 @@ console.log("# the chooser, in a chart");
   const saved = console.info;
   console.info = (m: string) => info.push(m);
   const node = (await chart(rows)
-    .flow(scatter({ by: "name", x: "x", y: "y" }))
+    .flow(scatter({ by: "name", cx: "x", cy: "y" }))
     .mark(circle({ r: 3 }).label("name"))
     .resolve()) as GoFishNode;
   const doc = await node.toDisplayList({ w: 120, h: 80 });
@@ -614,7 +614,7 @@ console.log("# a call over marks with different defaults");
     { x: 3, y: 2 },
   ];
   const node = (await chart(rows, { axes: false })
-    .flow(scatter({ x: "x", y: "y" }))
+    .flow(scatter({ cx: "x", cy: "y" }))
     .mark(circle({ r: 3 }))
     .layer(line())
     .resolve()) as GoFishNode;
@@ -640,7 +640,7 @@ console.log("# defaults by geometry");
     { s: "a", x: 2, y: 1.5 },
   ];
   const node = (await chart(rows)
-    .flow(group({ by: "s" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(group({ by: "s" }), scatter({ by: "x", cx: "x", cy: "y" }))
     .mark(line().label("s"))
     .resolve()) as GoFishNode;
   const doc = await node.toDisplayList({ w: 200, h: 100 });
@@ -655,7 +655,7 @@ console.log("# defaults by geometry");
   );
 
   const dot = (await chart([{ x: 1, y: 1, n: "only" }])
-    .flow(scatter({ by: "n", x: "x", y: "y" }))
+    .flow(scatter({ by: "n", cx: "x", cy: "y" }))
     .mark(circle({ r: 5 }).label("n"))
     .resolve()) as GoFishNode;
   const ddoc = await dot.toDisplayList({ w: 100, h: 100 });
@@ -1149,7 +1149,7 @@ console.log("# errors");
       { x: 0, y: 0 },
       { x: 1, y: 1 },
     ])
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(line().label(() => "l", { position: Place.interior() }))
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
@@ -1337,7 +1337,7 @@ console.log("# end labels dodge only labels they overlap");
     { s: "b", x: 6, y: 2 },
   ];
   const node = (await chart(rows, { axes: false })
-    .flow(group({ by: "s" }), scatter({ by: "x", x: "x", y: "y" }))
+    .flow(group({ by: "s" }), scatter({ by: "x", cx: "x", cy: "y" }))
     .mark(line({ strokeWidth: 2 }).label("s"))
     .resolve()) as GoFishNode;
   const doc = await node.toDisplayList({ w: 300, h: 100 });
@@ -1362,7 +1362,7 @@ console.log("# end labels dodge only labels they overlap");
   const saved = console.info;
   console.info = (m: string) => info.push(m);
   const cnode = (await chart(cross, { axes: false })
-    .flow(group({ by: "s" }), scatter({ by: "k", x: "x", y: "y" }))
+    .flow(group({ by: "s" }), scatter({ by: "k", cx: "x", cy: "y" }))
     .mark(line({ strokeWidth: 2 }).label("s", { position: Place.end() }))
     .resolve()) as GoFishNode;
   const cdoc = await cnode.toDisplayList({ w: 300, h: 100 });

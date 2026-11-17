@@ -45,7 +45,7 @@ export const ConnectedDotsPerGroup: StoryObj<Args> = {
       .flow(spread({ by: "store", dir: "x", spacing: 32 }))
       .mark(
         chart({ axes: false })
-          .flow(scatter({ by: "quarter", x: "quarter", y: "sales" }))
+          .flow(scatter({ by: "quarter", cx: "quarter", cy: "sales" }))
           .mark(circle({ r: 4, fill: "#08519c" }))
           .layer(line({ stroke: "#6baed6", strokeWidth: 2 }))
       )
@@ -90,11 +90,11 @@ export const DailyHighsOverReadings: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(readings, { w: args.w, h: args.h })
-      .flow(scatter({ by: "time", x: "time", y: "temp" }))
+      .flow(scatter({ by: "time", cx: "time", cy: "temp" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .layer(
         chart(dailyHighs)
-          .flow(scatter({ by: "time", x: "time", y: "temp" }))
+          .flow(scatter({ by: "time", cx: "time", cy: "temp" }))
           .mark(circle({ r: 4, fill: "firebrick" }))
       )
       .render(container);

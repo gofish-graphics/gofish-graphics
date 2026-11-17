@@ -37,7 +37,7 @@ export const Default: StoryObj<Args> = {
         // Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
         derive((d) => [...d].sort((a, b) => a.cylinders - b.cylinders)),
         spread({ by: "cylinders", dir: "y" }),
-        scatter({ x: "horsepower" })
+        scatter({ cx: "horsepower" })
       )
       .mark(
         rect({

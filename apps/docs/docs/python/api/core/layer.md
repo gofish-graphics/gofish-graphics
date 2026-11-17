@@ -177,7 +177,7 @@ underneath:
 from gofish import chart, scatter, circle, line
 
 chart(driving_shifts, axes=True).flow(
-    scatter(by="year", x="miles", y="gas")
+    scatter(by="year", cx="miles", cy="gas")
 ).mark(circle(r=4, fill="white", stroke="black", stroke_width=2)).layer(
     line(stroke="black", stroke_width=2)
 ).render(w=500, h=300)
@@ -208,7 +208,7 @@ edges = [
     {"source": "c", "target": "d"},
 ]
 
-chart(nodes).flow(scatter(by="id", x="grp", y="id")).mark(
+chart(nodes).flow(scatter(by="id", cx="grp", cy="id")).mark(
     circle(r=14, fill="#4e79a7").name("nodes")
 ).layer(
     chart(edges)

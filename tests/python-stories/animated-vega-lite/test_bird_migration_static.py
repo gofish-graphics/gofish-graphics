@@ -20,7 +20,7 @@ def story_a_static_lines():
         .mark(polygon(points="ring", fill="#f7f7f7", stroke="#aaa"))
         .layer(
             chart(BIRDS)
-            .flow(group(by="species"), scatter(by="day", x="lon", y="lat"))
+            .flow(group(by="species"), scatter(by="day", cx="lon", cy="lat"))
             .mark(line(stroke="species", stroke_width=1, opacity=0.5))
         ),
         {},

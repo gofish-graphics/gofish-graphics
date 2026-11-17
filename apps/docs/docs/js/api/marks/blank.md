@@ -20,7 +20,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
 gf.layer([
   gf
     .chart(locations)
-    .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
+    .flow(gf.scatter({ by: "lake", cx: "x", cy: "y" }))
     .mark(gf.blank().name("points")),
   gf
     .chart(gf.selectAll("points"))

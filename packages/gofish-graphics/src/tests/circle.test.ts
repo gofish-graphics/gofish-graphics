@@ -442,7 +442,7 @@ console.log("# #1087: rect's aspect lock follows the same rules as circle's");
   ];
   const atYears = (mark: unknown) =>
     chart(years, { axes: false })
-      .flow(scatter({ by: "year", x: "year" }))
+      .flow(scatter({ by: "year", cx: "year" }))
       .mark(mark)
       .toDisplayList({ w: 300, h: 300 })
       .then(boxesOf);
@@ -469,7 +469,7 @@ console.log("# #972: a glyph size is a scale of its own");
   // placeholder until chart options set it), whatever the axes' scales.
   const dots = ellipsesOf(
     await chart(rows)
-      .flow(scatter({ by: "a", x: "a", y: "b" }))
+      .flow(scatter({ by: "a", cx: "a", cy: "b" }))
       .mark(circle({ area: "n" }))
       .toDisplayList({ w: 300, h: 300 })
   );
@@ -521,7 +521,7 @@ console.log("# #972: a glyph size is a scale of its own");
         .toDisplayList({ w: 300, h: 300 }),
       ["ellipse", "path"]
     ).map((it) => it.kind);
-  const bubbles = await kinds(scatter({ by: "a", x: "a", y: "b" }));
+  const bubbles = await kinds(scatter({ by: "a", cx: "a", cy: "b" }));
   check(
     "in polar, a scatter's bubbles stay round",
     bubbles.length === 3 && bubbles.every((k) => k === "ellipse"),
@@ -569,7 +569,7 @@ console.log(
   ];
   const draw = (mark: unknown, opts: object = { axes: false }) =>
     chart(years, opts)
-      .flow(scatter({ by: "year", x: "year" }))
+      .flow(scatter({ by: "year", cx: "year" }))
       .mark(mark)
       .toDisplayList({ w: 300, h: 300 });
   // `h` is given on y, where nothing places the circle at a datum, so it is
@@ -646,7 +646,7 @@ console.log("# #972: a glyph unit's σ with no room to bound it");
   const radii = async (ns: number[]) =>
     ellipsesOf(
       await chart(ns.map((n, i) => ({ a: i, b: i, n })))
-        .flow(scatter({ by: "a", x: "a", y: "b" }))
+        .flow(scatter({ by: "a", cx: "a", cy: "b" }))
         .mark(circle({ area: "n" }))
         .toDisplayList({ w: 300, h: 300 })
     ).map((e) => e.rx);
@@ -689,7 +689,7 @@ console.log("# #972: glyph sizes lay out in linear time");
   const start = performance.now();
   const bubbles = ellipsesOf(
     await chart(points)
-      .flow(scatter({ by: "id", x: "a", y: "b" }))
+      .flow(scatter({ by: "id", cx: "a", cy: "b" }))
       .mark(circle({ area: "n" }))
       .toDisplayList({ w: 300, h: 300 })
   );

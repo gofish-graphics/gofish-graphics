@@ -37,7 +37,7 @@ export const PenguinMass: StoryObj = {
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
-          x: "Body Mass (g)",
+          cx: "Body Mass (g)",
           alignment: "middle",
           overlap: Overlap.noise(),
         })
@@ -65,7 +65,7 @@ export const PenguinMassSina: StoryObj = {
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
-          x: "Body Mass (g)",
+          cx: "Body Mass (g)",
           alignment: "middle",
           overlap: Overlap.sina(),
         })
@@ -86,7 +86,7 @@ export const PenguinMassJitter: StoryObj = {
       .flow(
         spread({ by: "Species", dir: "y", spacing: 16 }),
         scatter({
-          x: "Body Mass (g)",
+          cx: "Body Mass (g)",
           alignment: "middle",
           overlap: Overlap.jitter(),
         })
@@ -104,7 +104,7 @@ const denseStory = (overlap: Overlap.Overlap): StoryObj => ({
     chart(dense, { w: 640 })
       .flow(
         spread({ by: "group", dir: "y", spacing: 16 }),
-        scatter({ x: "mass", alignment: "middle", overlap })
+        scatter({ cx: "mass", alignment: "middle", overlap })
       )
       .mark(circle({ r: 2, fill: "group" }))
       .render(container);

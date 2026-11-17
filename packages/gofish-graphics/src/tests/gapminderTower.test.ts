@@ -113,7 +113,7 @@ function firstDifference(a: Circle[], b: Circle[]): string | undefined {
   return undefined;
 }
 
-const SCATTER = { by: "country", x: "fertility", y: "life_expect" };
+const SCATTER = { by: "country", cx: "fertility", cy: "life_expect" };
 
 /** The paused sequence of keyframes, with `layer` (if any) layered over it.
  *  The sugar, the sequence alone and the step transition are this one chart

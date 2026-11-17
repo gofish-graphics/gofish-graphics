@@ -31,7 +31,7 @@ don't thread the data through a callback:
 
 ```ts
 chart(catchLocationsArray)
-  .flow(scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(
     chart({ coord: Coord.clock() }) // no data → inherits this lake's partition
       .flow(stack({ by: "species", dir: "x", h: 20 }))
@@ -73,7 +73,7 @@ chart(sales)
   .flow(spread({ by: "store", dir: "x", spacing: 32 }))
   .mark(
     chart({ axes: false }) // inherits this store's rows
-      .flow(scatter({ by: "quarter", x: "quarter", y: "sales" }))
+      .flow(scatter({ by: "quarter", cx: "quarter", cy: "sales" }))
       .mark(circle({ r: 4, fill: "#08519c" }))
       .layer(line({ stroke: "#6baed6", strokeWidth: 2 })) // connects this store's dots
   );
@@ -165,7 +165,7 @@ Operators returned by `.flow(...)` factories also support `.translate()`:
 
 ```ts
 chart(data)
-  .flow(scatter({ by: "lake", x: "lake" }).translate({ y: 50 }))
+  .flow(scatter({ by: "lake", cx: "lake" }).translate({ y: 50 }))
   .mark(rect({ w: 0.1, h: "count" }));
 ```
 

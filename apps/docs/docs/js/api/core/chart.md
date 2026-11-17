@@ -217,7 +217,7 @@ follows.
 
 ```ts
 chart(data, { schema: { x: "plane", y: "plane" } })
-  .flow(scatter({ x: "x", y: "y" }))
+  .flow(scatter({ cx: "x", cy: "y" }))
   .mark(circle({ r: 4 }))
   .render(container, { w: 640, h: 380 }); // a true circle, not an ellipse
 ```
@@ -257,11 +257,11 @@ Children with the same z-order keep their original array order. The default z-or
 ```ts
 layer([
   chart(data)
-    .flow(scatter({ by: "x", y: "y" }))
+    .flow(scatter({ by: "x", cy: "y" }))
     .mark(line())
     .zOrder(0),
   chart(data)
-    .flow(scatter({ by: "x", y: "y" }))
+    .flow(scatter({ by: "x", cy: "y" }))
     .mark(circle({ r: 5 }))
     .zOrder(1),
 ]);

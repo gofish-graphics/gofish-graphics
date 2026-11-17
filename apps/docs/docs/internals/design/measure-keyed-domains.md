@@ -417,7 +417,7 @@ chart(cells, { color: ORANGES })
   .mark(polygon({ points: "ring", fill: "count" }))
   .layer(
     chart(frame)
-      .flow(scatter({ by: "x", x: "x", y: "y" }))
+      .flow(scatter({ by: "x", cx: "x", cy: "y" }))
       .mark(blank())
   );
 ```
@@ -429,11 +429,11 @@ domain per axis, as the reference intends.
 ```ts
 // stories/forwardsyntax/TimeBenchmarkPorts.stories.tsx (SurplusDeficitLine)
 chart(area, { schema })
-  .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
+  .flow(group({ by: "side" }), scatter({ by: "date", cx: "date" }))
   .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))
   .layer(
     chart(rows, { schema })
-      .flow(scatter({ by: "date", x: "date", y: "balance" }))
+      .flow(scatter({ by: "date", cx: "date", cy: "balance" }))
       .mark(blank())
   )
   .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: Curve.linear() }));
@@ -459,7 +459,7 @@ columns computed in user code. Today each is a `MeasureClash`.
 chart(drivingShifts)
   .flow(
     spread({ by: "side", dir: "x", spacing: 50 }),
-    scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
+    scatter({ cx: "year", cy: "miles", axes: { x: true, y: false } })
   )
   .mark(circle({ r: 3, fill: "#4682b4" }));
 ```
@@ -474,7 +474,7 @@ from 1955 to 2000. `FacetedScatterY` is the same with the directions swapped,
 and its panels share one `"gas"` domain on y.
 
 The ridgeline is the same shape. Its rows are a spread on y, each row a
-`scatter({ x: "temp_max", w: args.w })` of `ribbon({ h: "count" })`. The rows
+`scatter({ cx: "temp_max", w: args.w })` of `ribbon({ h: "count" })`. The rows
 share x through the align, and the `"count"` key is equal along y, so every
 ridge uses one count σ. Today the same picture comes from each row being
 self-scaled over the same domain, plus the axis code that notices the rows agree
@@ -562,7 +562,7 @@ const flower = chart({ coord: Coord.polar(), axes: false })
   .mark(petal({ w: "count", fill: "species" }));
 
 chart(stemData, { axes: false })
-  .flow(scatter({ by: "lake", x: "x" }))
+  .flow(scatter({ by: "lake", cx: "x" }))
   .mark(
     layer([
       rect({ w: 4, h: "count", fill: "green" }).name("stem"),
@@ -590,7 +590,7 @@ const sparkSamples = (samples: Sample[]) =>
   chart(samples, { axes: false, padding: 0 })
     .flow(
       spread({ by: "method", dir: "x", spacing: SPARK_GAP, axes: false }),
-      scatter({ by: "t", x: "t", y: "value", axes: false })
+      scatter({ by: "t", cx: "t", cy: "value", axes: false })
     )
     .mark(circle({ r: 2.5, opacity: 0 }));
 

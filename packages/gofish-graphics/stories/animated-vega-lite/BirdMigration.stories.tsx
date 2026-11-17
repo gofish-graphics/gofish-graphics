@@ -92,7 +92,7 @@ export const B_HoverHighlight: StoryObj<Args> = {
         chart(birds)
           .flow(
             group({ by: "species" }),
-            scatter({ by: "day", x: "lon", y: "lat" })
+            scatter({ by: "day", cx: "lon", cy: "lat" })
           )
           .mark(
             line({
@@ -142,7 +142,7 @@ export const C_Animated: StoryObj<Args> = {
         chart(birds)
           .flow(
             filter((d: any) => d.day === day()),
-            scatter({ x: "lon", y: "lat" })
+            scatter({ cx: "lon", cy: "lat" })
           )
           .mark(circle({ r: 3, fill: "species" }))
       )
@@ -159,7 +159,7 @@ const trails = (day: ReturnType<typeof timer>) =>
       // One keyframe per day. Day-of-year is cyclic, so early in January the
       // trail reaches back into December instead of stopping.
       time.sequence({ by: "day", on: day, cyclic: true }),
-      scatter({ x: "lon", y: "lat" })
+      scatter({ cx: "lon", cy: "lat" })
     )
     .mark(
       // Each day's mark is two layers: a faint circle kept on screen for 20

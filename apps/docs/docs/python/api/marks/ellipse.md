@@ -34,7 +34,7 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
 ```python
 # Data-driven size
-chart(data).flow(scatter(x="x", y="y")).mark(ellipse(w="width", h="height"))
+chart(data).flow(scatter(cx="x", cy="y")).mark(ellipse(w="width", h="height"))
 
 # A circle is an ellipse with equal axes
 ellipse(w=20, h=20, fill="#4e79a7")

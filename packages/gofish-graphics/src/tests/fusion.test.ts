@@ -76,7 +76,7 @@ async function main() {
   let threw: unknown;
   try {
     node = await chart(data, { w: 200, h: 200 })
-      .flow(scatter({ by: "id", x: "x", y: "y" }))
+      .flow(scatter({ by: "id", cx: "x", cy: "y" }))
       .mark(circle({ r: 3, fill: "family" }).name("dots"))
       .layer(
         chart()
@@ -120,7 +120,7 @@ async function main() {
   // whose first tier is that empty scope is bound the same way.
   const layeredOverDots = (tier: any) =>
     chart(data, { w: 200, h: 200 })
-      .flow(scatter({ by: "id", x: "x", y: "y" }))
+      .flow(scatter({ by: "id", cx: "x", cy: "y" }))
       .mark(circle({ r: 3 }))
       .layer(tier)
       .resolve();
@@ -176,7 +176,7 @@ async function main() {
   try {
     fusedInLayer = await ridgeline(
       chart()
-        .flow(scatter({ x: "x" }))
+        .flow(scatter({ cx: "x" }))
         .mark(ribbon({ h: "pdf", fill: "none" }))
     );
   } catch (e) {
@@ -193,7 +193,7 @@ async function main() {
   const byHand = pathsOf(
     await ridgeline(
       chart()
-        .flow(scatter({ x: "x" }))
+        .flow(scatter({ cx: "x" }))
         .mark(blank({ h: "pdf" }))
         .layer(ribbon({ fill: "none" }))
     )
@@ -249,7 +249,7 @@ async function main() {
   let fusedRibbonThrew: unknown;
   try {
     fusedRibbonNode = await chart(rows, { w: 200, h: 200 })
-      .flow(scatter({ by: "lake", x: "lake", y: "count" }))
+      .flow(scatter({ by: "lake", cx: "lake", cy: "count" }))
       .mark(ribbon({ h: "count" }))
       .resolve();
   } catch (e) {
@@ -279,7 +279,7 @@ async function main() {
   // selection is read after the first child has registered its names.
   const crossTier = (producerHasSecondTier: boolean) => {
     const root = chart(data, { w: 200, h: 200 })
-      .flow(scatter({ by: "id", x: "x", y: "y" }))
+      .flow(scatter({ by: "id", cx: "x", cy: "y" }))
       .mark(circle({ r: 3, fill: "steelblue" }).name("bars"));
     return layer({}, [
       // A ChartBuilder child, or the same chain with a `.layer(...)` tier on it
@@ -335,7 +335,7 @@ async function main() {
     let threw: unknown;
     try {
       await chart(data, { w: 200, h: 200 })
-        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .flow(scatter({ by: "id", cx: "x", cy: "y" }))
         .mark(circle({ r: 3 }))
         .layer(text({ text: "caption" }))
         .layer(tier())

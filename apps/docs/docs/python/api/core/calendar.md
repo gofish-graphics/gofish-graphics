@@ -16,7 +16,7 @@ of labels per level.
 from gofish import chart, scatter, line, Calendar
 
 chart(readings, axes={"x": {"levels": [Calendar.hour(every=6), Calendar.day]}}).flow(
-    scatter(by="time", x="time", y="temp")
+    scatter(by="time", cx="time", cy="temp")
 ).mark(line(stroke="steelblue", stroke_width=2)).render(w=560, h=200)
 ```
 
@@ -186,7 +186,7 @@ chart(
     visits,
     schema={"day": Unit.time()},
     axes={"x": {"levels": [Calendar.week, Calendar.month]}, "y": True},
-).flow(scatter(by="day", x="day", y="visits")).mark(
+).flow(scatter(by="day", cx="day", cy="visits")).mark(
     line(stroke="steelblue", stroke_width=2)
 )
 ```

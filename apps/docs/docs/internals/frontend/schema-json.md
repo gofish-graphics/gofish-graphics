@@ -1399,7 +1399,7 @@ for the API.
       }
     },
     "ScatterOperator": {
-      "description": "Position each child at an explicit (x, y) point or a span from x to x2 (y to y2) in data space.",
+      "description": "Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). x with x2 (y with y2) is a span.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1423,26 +1423,34 @@ for the API.
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Each child's point on x, or with `x2` the start of its span."
+          "description": "Where each child's start (left) edge goes on x."
         },
-        "y": {
+        "cx": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Each child's point on y, or with `y2` the start of its span."
+          "description": "Where each child's center goes on x."
         },
         "x2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "The other end of each child's span on x, which starts at `x`."
+          "description": "Where each child's end (right) edge goes on x. With `x`, the child spans from `x` to `x2`."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Where each child's start edge goes on y: its top edge where y reads top-down, its bottom edge where it grows upward."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Where each child's center goes on y."
         },
         "y2": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "The other end of each child's span on y, which starts at `y`."
+          "description": "Where each child's other y edge goes. With `y`, the child spans from `y` to `y2`."
         },
         "dims": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/AxisDimsValue"
           },
-          "description": "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
+          "description": "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Read as a mark's dims: a bare value or {min} is the start, like x; {center} the center, like cx; {max} the end, like x2."
         },
         "alignment": {
           "type": "string",

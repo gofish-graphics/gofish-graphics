@@ -254,7 +254,7 @@ console.log("# intersect with paint");
   try {
     await layer([
       chart(grid)
-        .flow(scatter({ x: "x" }))
+        .flow(scatter({ cx: "x" }))
         .mark(ribbon({ h: "pdf", fill: "none" }).name("density")),
     ])
       .relate(({ density }: any) => [
@@ -466,7 +466,7 @@ console.log("# intersect: a ref operand claims no room");
   try {
     const dl = await layer([
       chart(grid)
-        .flow(scatter({ x: "x" }))
+        .flow(scatter({ cx: "x" }))
         .mark(ribbon({ h: "pdf" }).name("density").hidden()),
     ])
       .relate(({ density }: any) => [

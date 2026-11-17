@@ -21,7 +21,7 @@ def story_spatial_twin():
         chart(_gapminder(), legend=False)
         .flow(
             spread(by="year", dir="x", spacing=12),
-            scatter(by="country", x="fertility", y="life_expect"),
+            scatter(by="country", cx="fertility", cy="life_expect"),
         )
         .mark(circle(r=2.5, fill="country"))
         .layer(
@@ -37,7 +37,7 @@ def story_frame1955():
         chart(_gapminder(), legend=False, w=300, h=300)
         .flow(
             filter(lambda d: d["year"] == 1955),
-            scatter(by="country", x="fertility", y="life_expect"),
+            scatter(by="country", cx="fertility", cy="life_expect"),
         )
         .mark(circle(r=4, fill="country")),
         {},

@@ -77,8 +77,8 @@ Each part of an axis can be set once. `w=0.4` together with
 `x=0` together with `dims={"theta": {"size": 0.4}}` is fine.
 
 A circle's own `r` keyword is still its radius. The polar `r` axis only appears
-as a key inside `dims`, so `scatter(by="id", dims={"theta": "bearing", "r":
-"distance"})` with `circle(r=4)` places each dot by bearing and distance and
+as a key inside `dims`, so `scatter(by="id", dims={"theta": {"center": "bearing"},
+"r": {"center": "distance"}})` with `circle(r=4)` places each dot by bearing and distance and
 draws it with radius 4.
 
 ## Usage

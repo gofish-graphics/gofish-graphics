@@ -224,7 +224,7 @@ console.log("# scatter overlap: rendered");
   const dl = await chart(rows)
     .flow(
       scatter({
-        x: "v",
+        cx: "v",
         alignment: "middle",
         overlap: separate({ padding: 1 }),
       })
@@ -266,7 +266,7 @@ console.log("# scatter overlap: rendered");
   const spreadDl = await chart(rows)
     .flow(
       spread({ by: "g", dir: "y", spacing: 10 }),
-      scatter({ x: "v", alignment: "middle", overlap: separate() })
+      scatter({ cx: "v", alignment: "middle", overlap: separate() })
     )
     .mark(circle({ r: 3 }))
     .toDisplayList({ w: 400, h: 300 });
@@ -284,7 +284,7 @@ console.log("# scatter overlap: rendered");
 
   const both = await errorOf(() =>
     chart(rows)
-      .flow(scatter({ x: "v", y: "v", overlap: separate() }))
+      .flow(scatter({ cx: "v", cy: "v", overlap: separate() }))
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 200 })
   );
@@ -307,7 +307,7 @@ console.log("# scatter overlap: rendered");
   );
   const inPolar = await errorOf(() =>
     chart(rows, { coord: Coord.polar() })
-      .flow(scatter({ x: "v", overlap: separate() }))
+      .flow(scatter({ cx: "v", overlap: separate() }))
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 400 })
   );
@@ -604,7 +604,7 @@ console.log("# scatter overlap noise: rendered");
   }));
   const render = (overlap?: unknown) =>
     chart(rows)
-      .flow(scatter({ x: "v", alignment: "middle", overlap }))
+      .flow(scatter({ cx: "v", alignment: "middle", overlap }))
       .mark(circle({ r: 3 }))
       .toDisplayList({ w: 400, h: 200 });
   const plain = circlesOf(await render());

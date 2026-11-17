@@ -46,7 +46,7 @@ def story_position_scatter_default():
     """POSITION space (scatter) with omitted w/h → 400x400 default."""
     return (
         chart(CATCH_LOCATIONS_ARRAY)
-        .flow(scatter(by="lake", x="x", y="y"))
+        .flow(scatter(by="lake", cx="x", cy="y"))
         .mark(circle(r=5)),
         {},
     )

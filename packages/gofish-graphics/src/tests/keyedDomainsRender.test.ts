@@ -100,7 +100,7 @@ async function main() {
       axes: false,
       schema: { start: Day, width: Day },
     })
-      .flow(scatter({ by: "id", x: "start" }))
+      .flow(scatter({ by: "id", cx: "start" }))
       .mark(rectMark({ w: "width", h: 10, fill: "green" }))
       .toDisplayList({ w: 200, h: 50 });
     const [a, b] = byFill(dl, "green").sort((p, q) => p.x! - q.x!);
@@ -198,7 +198,7 @@ async function main() {
           { at: 1, value: 0.5 },
           { at: 3, value: 1.4 },
         ])
-          .flow(scatter({ x: "at", y: "value" }))
+          .flow(scatter({ cx: "at", cy: "value" }))
           .mark(rectMark({ w: 4, h: 4, fill: "red" }))
       )
       .toDisplayList({ w: 400, h: 400 });
@@ -310,7 +310,7 @@ async function main() {
           { id: 0, x: 0, y: 10 },
           { id: 1, x: 40, y: 50 },
         ])
-          .flow(scatter({ by: "id", x: "x", y: "y" }))
+          .flow(scatter({ by: "id", cx: "x", cy: "y" }))
           .mark(rectMark({ w: 10, h: 2 }))
       ),
       { w: 200, h: 200, axes: true }
@@ -391,7 +391,7 @@ async function main() {
           .flow(spread({ by: "g", dir: "x", spacing: 10 }))
           .mark((d: any) =>
             chart(d, { w: 80, h: 80 })
-              .flow(scatter({ by: "i", x: "x", y: "y" }))
+              .flow(scatter({ by: "i", cx: "x", cy: "y" }))
               .mark(rectMark({ w: 4, h: 4 }))
           )
           .toDisplayList({})
@@ -473,7 +473,7 @@ async function main() {
       await chart(rows)
         .flow(
           spread({ by: "g", dir: "y", spacing: 20 }),
-          scatter({ x: "x", y: "y", axes: { x: false, y: true } })
+          scatter({ cx: "x", cy: "y", axes: { x: false, y: true } })
         )
         .mark(rectMark({ w: 2, h: 2 }))
         .toDisplayList({ w: 200, h: 200 })
@@ -482,7 +482,7 @@ async function main() {
     // of where the x axis line starts.
     const plain = lines(
       await chart(rows)
-        .flow(scatter({ x: "x", y: "y" }))
+        .flow(scatter({ cx: "x", cy: "y" }))
         .mark(rectMark({ w: 2, h: 2 }))
         .toDisplayList({ w: 200, h: 200 })
     );

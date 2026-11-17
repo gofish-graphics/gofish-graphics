@@ -102,14 +102,14 @@ const stations = [
 ];
 
 gf.chart(stations, { axes: false })
-  .flow(gf.scatter({ by: "id", x: "x", y: "y" }))
+  .flow(gf.scatter({ by: "id", cx: "x", cy: "y" }))
   .mark((d) => marker({ fill: d[0].color }))
   .render(root, { w: 260, h: 170 });
 ```
 
 :::
 
-`scatter({ by: "id", x: "x", y: "y" })` splits the data by `id` and gives each
+`scatter({ by: "id", cx: "x", cy: "y" })` splits the data by `id` and gives each
 group a position from its `x` and `y` fields. Then the mark function runs for
 each of those positions, and whatever it returns is drawn there.
 
@@ -145,7 +145,7 @@ const stations = [
 ];
 
 gf.chart(stations, { axes: false })
-  .flow(gf.scatter({ by: "id", x: "x", y: "y" }))
+  .flow(gf.scatter({ by: "id", cx: "x", cy: "y" }))
   .mark((d) => marker(d[0]))
   .render(root, { w: 260, h: 170 });
 ```

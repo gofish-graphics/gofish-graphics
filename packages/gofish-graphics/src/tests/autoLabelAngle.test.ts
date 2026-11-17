@@ -428,7 +428,7 @@ console.log("end to end");
       ],
       { schema: { date: Unit.time() } }
     )
-      .flow(scatter({ by: "date", x: "date", y: "v" }))
+      .flow(scatter({ by: "date", cx: "date", cy: "v" }))
       .mark(line());
     const time = await runLayout(
       { w: 300, h: 200, axes: { x: true, y: false } },

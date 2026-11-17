@@ -89,7 +89,7 @@ axis draws one row per calendar level:
 ```ts
 // stories/forwardsyntax/Time.stories.tsx
 chart(prices, { schema: { date: Unit.time() } })
-  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .flow(scatter({ by: "date", cx: "date", cy: "price" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }));
 ```
 
@@ -193,7 +193,7 @@ scatter as it is written today:
 chart(drivingShifts)
   .flow(
     spread({ by: "side", dir: "x", spacing: 50 }),
-    scatter({ x: "year", y: "miles", axes: { x: true, y: false } })
+    scatter({ cx: "year", cy: "miles", axes: { x: true, y: false } })
   )
   .mark(circle({ r: 3, fill: "#4682b4" }));
 ```

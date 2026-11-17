@@ -19,7 +19,7 @@ a bag form. It also has a flow-step form.
 const beaks = penguins.filter((d) => d["Beak Depth (mm)"] != null);
 
 gf.chart(beaks, { axes: true })
-  .flow(gf.scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+  .flow(gf.scatter({ cx: "Beak Length (mm)", cy: "Beak Depth (mm)" }))
   .mark(gf.circle({ r: 2.5, fill: "Species" }).name("points"))
   .layer(
     gf

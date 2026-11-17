@@ -66,7 +66,7 @@ def story_default():
                 anchor="baseline",
                 spacing=ROW_PITCH,
             ),
-            scatter(x="temp_max", h=RIDGE_HEIGHT),
+            scatter(cx="temp_max", h=RIDGE_HEIGHT),
         )
         .mark(
             ribbon(

@@ -10,7 +10,7 @@ def story_default():
         chart(cars, w=300, h=300)
         .flow(
             log("cars before scatter"),
-            scatter(by="Name", x="Horsepower", y="Miles_per_Gallon", debug=True),
+            scatter(by="Name", cx="Horsepower", cy="Miles_per_Gallon", debug=True),
         )
         .mark(
             circle(

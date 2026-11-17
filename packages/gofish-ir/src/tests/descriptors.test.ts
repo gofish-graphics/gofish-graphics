@@ -109,8 +109,10 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   scatter: [
     "by",
     "x",
-    "y",
+    "cx",
     "x2",
+    "y",
+    "cy",
     "y2",
     "dims",
     "alignment",

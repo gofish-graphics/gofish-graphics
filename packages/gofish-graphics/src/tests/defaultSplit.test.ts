@@ -122,7 +122,7 @@ async function main() {
       chart(data, { w: 200, h: 200 })
         .flow(
           spread({ by: "month", dir: "y", spacing: 50 }),
-          scatter({ x: "x" })
+          scatter({ cx: "x" })
         )
         .mark(ribbon({ h: "y" })),
       { w: 200, h: 200 }
@@ -179,7 +179,7 @@ async function main() {
         .flow(
           spread({ by: "site", dir: "x", spacing: 80 }),
           spread({ by: "year", dir: "x", spacing: 30 }),
-          scatter({ by: "variety", y: "yield" })
+          scatter({ by: "variety", cy: "yield" })
         )
         .mark(line()),
       { w: 300, h: 300 }
@@ -202,7 +202,7 @@ async function main() {
     ];
     const doc = await renderDisplayList(
       chart(data, { w: 200, h: 200 })
-        .flow(scatter({ by: "year", x: "x", y: "y" }))
+        .flow(scatter({ by: "year", cx: "x", cy: "y" }))
         .mark(line()),
       { w: 200, h: 200 }
     );
@@ -323,7 +323,7 @@ async function main() {
         .flow(
           spread({ by: "site", dir: "x", spacing: 80 }),
           spread({ by: "year", dir: "x", spacing: 30 }),
-          scatter({ by: "variety", y: "yield" })
+          scatter({ by: "variety", cy: "yield" })
         )
         .mark(line({ along: "year" })),
       { w: 300, h: 300 }
@@ -372,7 +372,7 @@ async function main() {
     let threw: unknown;
     try {
       chart(data, { w: 200, h: 200 })
-        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .flow(scatter({ by: "id", cx: "x", cy: "y" }))
         .mark(circle({ r: 3 }).name("dots"))
         .layer(
           chart(selectAll("dots"))
@@ -405,7 +405,7 @@ async function main() {
       chart(data, { w: 200, h: 200 })
         .flow(
           spread({ by: "month", dir: "y", spacing: 50 }),
-          scatter({ x: "x" })
+          scatter({ cx: "x" })
         )
         .mark(conn),
       { w: 200, h: 200 }
@@ -434,7 +434,7 @@ async function main() {
     ];
     const doc = await renderDisplayList(
       chart(data, { w: 200, h: 200 })
-        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .flow(scatter({ by: "id", cx: "x", cy: "y" }))
         .mark(circle({ r: 3 }).name("dots"))
         .layer(
           chart(selectAll("dots"))
@@ -537,7 +537,7 @@ async function main() {
     const lines = (fill: unknown) =>
       renderDisplayList(
         chart(data)
-          .flow(group({ by: "g" }), scatter({ by: "x", x: "x", y: "y" }))
+          .flow(group({ by: "g" }), scatter({ by: "x", cx: "x", cy: "y" }))
           .mark(line({ fill } as any)),
         { w: 200, h: 200 }
       );
@@ -567,7 +567,7 @@ async function main() {
       data: { type: "table", id: "t0" },
       operators: [
         { type: "group", by: "g" },
-        { type: "scatter", by: "x", x: "x", y: "y" },
+        { type: "scatter", by: "x", cx: "x", cy: "y" },
       ],
       mark: { type: "line", fill: { __gofish_lambda: "fg" } },
     } as any;
@@ -594,7 +594,7 @@ async function main() {
     const edgesWith = (stroke: unknown) =>
       renderDisplayList(
         chart(nodes)
-          .flow(scatter({ by: "id", x: "x", y: "y" }))
+          .flow(scatter({ by: "id", cx: "x", cy: "y" }))
           .mark(circle({ r: 3 }).name("nodes"))
           .layer(
             chart(edges)
@@ -680,7 +680,7 @@ async function main() {
     const smooth = (by: unknown) =>
       renderDisplayList(
         chart(rows, { w: 200, h: 200 })
-          .flow(spread({ by, dir: "x", spacing: 40 }), scatter({ y: "v" }))
+          .flow(spread({ by, dir: "x", spacing: 40 }), scatter({ cy: "v" }))
           .mark(circle({ r: 3 }))
           .layer(line({ curve: Curve.monotone() })),
         { w: 200, h: 200 }
@@ -714,7 +714,7 @@ async function main() {
         .flow(
           spread({ by: "cat", dir: "x" }),
           spread({ by: chunk(5), dir: "y" }),
-          scatter({ x: "x", y: "y" })
+          scatter({ cx: "x", cy: "y" })
         )
         .mark(circle({ r: 2 }))
         .layer(line({ curve: Curve.linear() })),
@@ -734,7 +734,7 @@ async function main() {
     const byCat = (by: unknown) =>
       renderDisplayList(
         chart(rows, { w: 300, h: 300 })
-          .flow(spread({ by, dir: "x" }), scatter({ x: "x", y: "y" }))
+          .flow(spread({ by, dir: "x" }), scatter({ cx: "x", cy: "y" }))
           .mark(circle({ r: 2 }))
           .layer(line({ curve: Curve.linear() })),
         { w: 300, h: 300 }

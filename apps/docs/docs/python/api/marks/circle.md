@@ -19,7 +19,7 @@ is data.
   radius, is proportional to the value. A data `area` sizes both axes.
 - `w` or `h` is the diameter along that axis. The other axis takes the same
   length, so a data `w` or `h` sizes both axes at one scale. Where the circle
-  is placed at a data value on the other axis (a `scatter` with only `x`),
+  is placed at a data value on the other axis (a `scatter` with only `cx`),
   the other axis follows it in pixels and takes no room there.
 
 With none of them, the circle fills the space it is given. Passing more than
@@ -31,7 +31,7 @@ one is an error.
 ```python
 from gofish import chart, scatter, circle
 
-chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
+chart(catch_locations, axes=True).flow(scatter(by="lake", cx="x", cy="y")).mark(
     circle(r=5)
 ).render(w=500, h=300)
 ```
@@ -57,10 +57,10 @@ on the returned mark rather than passing a `label` option here.
 
 ```python
 # Fixed-size dots
-chart(data).flow(scatter(x="x", y="y")).mark(circle(r=5))
+chart(data).flow(scatter(cx="x", cy="y")).mark(circle(r=5))
 
 # Bubble chart — radius encodes a field
-chart(data).flow(scatter(x="x", y="y")).mark(circle(r="population", fill="region"))
+chart(data).flow(scatter(cx="x", cy="y")).mark(circle(r="population", fill="region"))
 
 # Area proportional to a field, one circle per lake
 chart(data).flow(spread(by="lake", dir="x")).mark(circle(area="count", fill="lake"))
@@ -69,7 +69,7 @@ chart(data).flow(spread(by="lake", dir="x")).mark(circle(area="count", fill="lak
 chart(data).flow(spread(by="category", dir="x")).mark(circle(h="value"))
 
 # Outlined dots
-chart(data).flow(scatter(x="x", y="y")).mark(
+chart(data).flow(scatter(cx="x", cy="y")).mark(
     circle(r=4, fill="white", stroke="black", stroke_width=2)
 )
 ```

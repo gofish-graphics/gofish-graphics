@@ -54,7 +54,7 @@ export const Basic: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(nodes, { axes: false, w: args.w, h: args.h })
-      .flow(scatter({ by: "id", x: "grp", y: "id" }))
+      .flow(scatter({ by: "id", cx: "grp", cy: "id" }))
       .mark(circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
       .layer(
         chart(edges)

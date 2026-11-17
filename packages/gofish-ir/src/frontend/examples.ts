@@ -58,7 +58,7 @@ export const exampleLayer: FrontendIRDocument = {
       {
         type: "chart",
         data: { type: "table", id: "t0" },
-        operators: [{ type: "scatter", x: "x", y: "y" }],
+        operators: [{ type: "scatter", cx: "x", cy: "y" }],
         mark: { type: "circle", origin: { name: "points" }, r: 4 },
       },
       {
@@ -82,7 +82,7 @@ export const exampleScatter: FrontendIRDocument = {
   root: {
     type: "chart",
     data: { type: "table", id: "t0" },
-    operators: [{ type: "scatter", x: "hp", y: "mpg" }],
+    operators: [{ type: "scatter", cx: "hp", cy: "mpg" }],
     mark: { type: "circle", r: 3, fill: "steelblue" },
   },
   tables: {

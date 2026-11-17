@@ -79,7 +79,7 @@ const scatterWith =
   (n) => ({
     render: (container, { w, h }) =>
       chart(points(n), { axes })
-        .flow(scatter({ x: "x", y: "y" }))
+        .flow(scatter({ cx: "x", cy: "y" }))
         .mark(circle({ r: 2 }))
         .render(container, { w, h }),
   });

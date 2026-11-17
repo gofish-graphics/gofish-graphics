@@ -4,7 +4,7 @@ order: 40
 
 # scatter
 
-Positions groups by `x` and `y` data fields rather than packing them along an
+Positions groups by data fields on x and y rather than packing them along an
 axis. The basis for scatter plots and any chart with continuous positioning.
 
 ::: gofish example:scatter-plot hidden
@@ -22,7 +22,7 @@ catch_locations = [
     {"lake": "Lake F", "x": 85.99, "y": 172.78},
 ]
 
-chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
+chart(catch_locations, axes=True).flow(scatter(by="lake", cx="x", cy="y")).mark(
     circle(r=5)
 ).render(w=500, h=300)
 ```
@@ -40,32 +40,38 @@ scatter(*, by=None, **options) -> Operator
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
-At least one of `x` or `y` is required. On its own, `x` places each child at a
-point. With `x2`, each child spans from `x` to `x2`, as a
-[`rect`](/python/api/marks/rect) does. `y` and `y2` work the
-same way.
+The position keys mean what they mean on a [`rect`](/python/api/marks/rect):
+`x` is where each child's start edge goes, `cx` its center, and `x2` its end
+edge. `y`, `cy` and `y2` work the same way. At least one of them is required.
+A scatter plot uses `cx` and `cy`, so each dot is centered on its point. `x`
+with `x2` is a span: each child spans from `x` to `x2`. Each axis is placed on
+its own, so `scatter(cx="lon", y="lat")` centers each child across and puts
+its start edge on the point along y. An axis takes at most two of its three
+keys, since two already fix the child's position and size there.
 
 ## Placing by axis name with `dims`
 
 `x` and `y` mean the first and second axis in any coordinate space. To use the
-names the enclosing coordinate space declares, pass them in the `dims` dict: a
-plain value is the point, like `x`, and `{"min": ..., "max": ...}` is the span,
-like `x` with `x2`.
+names the enclosing coordinate space declares, pass them in the `dims` dict.
+It reads as a mark's `dims` does: a plain value or `{"min": ...}` is the
+start, like `x`; `{"center": ...}` is the center, like `cx`; `{"max": ...}` is
+the end, like `x2`; and `{"min": ..., "max": ...}` is the span.
 
 ```python
-# Under Coord.polar(): the same as scatter(by="id", x="bearing", y="distance")
+# Under Coord.polar(): the same as scatter(by="id", cx="bearing", cy="distance")
 chart(trips, coord=Coord.polar()) \
-    .flow(scatter(by="id", dims={"theta": "bearing", "r": "distance"})) \
+    .flow(scatter(by="id", dims={"theta": {"center": "bearing"}, "r": {"center": "distance"}})) \
     .mark(circle(r=4))
 ```
 
 A scatter only places its children, so a `"size"` inside `dims` is an error;
-size the mark instead. Placing an axis twice, such as `x` together with
-`dims["theta"]`, is an error too. The two ends of a span may come from either
-spelling (`x` with `dims={"x": {"max": "hi"}}`), but one end without the
-other is an error. Each value in `dims` is read like its top-level
-counterpart: a point or a `min` like `x`, a `max` like `x2`. The circle's `r` is its
-radius, not the polar axis: axis names only appear as keys of `dims`.
+size the mark instead. Placing an axis anchor twice, such as `cx` together
+with `dims={"theta": {"center": ...}}`, is an error too. The anchors of one
+axis may come from either spelling (`x` with `dims={"x": {"max": "hi"}}` is a
+span). Each value in `dims` is read like its top-level counterpart: a plain
+value or a `min` like `x`, a `center` like `cx`, a `max` like `x2`. The
+circle's `r` is its radius, not the polar axis: axis names only appear as
+keys of `dims`.
 
 ## Keeping dots apart with `overlap`
 
@@ -108,7 +114,7 @@ weighed = [p for p in penguins if p["Body Mass (g)"] is not None]
 
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
-    scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.separate(padding=1)),
+    scatter(cx="Body Mass (g)", alignment="middle", overlap=Overlap.separate(padding=1)),
 ).mark(circle(r=3, fill="Species")).render(w=560)
 ```
 
@@ -129,7 +135,7 @@ from gofish import chart, circle, scatter, spread, Overlap
 
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
-    scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
+    scatter(cx="Body Mass (g)", alignment="middle", overlap=Overlap.noise()),
 ).mark(circle(r=3, fill="Species")).render(w=560)
 ```
 
@@ -143,7 +149,7 @@ from gofish import chart, circle, scatter, spread, Overlap
 
 chart(weighed, axes=True).flow(
     spread(by="Species", dir="y", spacing=16),
-    scatter(x="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
+    scatter(cx="Body Mass (g)", alignment="middle", overlap=Overlap.sina()),
 ).mark(circle(r=3, fill="Species")).render(w=560)
 ```
 
@@ -229,7 +235,7 @@ grows with the counts, and it leaves extra room so the dots can spread.
 
 Some cases are errors:
 
-- `overlap` when both `x` and `y` come from fields, because then no axis is
+- `overlap` when both axes are placed by fields, because then no axis is
   free.
 - `overlap` inside a coordinate space that is not linear, such as `Coord.polar()`.
   The strategies measure distances in the layout frame, and a polar space
@@ -240,16 +246,20 @@ Some cases are errors:
 
 ```python
 # One point per row
-chart(data).flow(scatter(x="x", y="y")).mark(circle(r=5))
+chart(data).flow(scatter(cx="x", cy="y")).mark(circle(r=5))
 
 # Group by a field — each group centered on its mean
-chart(data).flow(scatter(by="lake", x="x", y="y")).mark(circle(r=8))
+chart(data).flow(scatter(by="lake", cx="x", cy="y")).mark(circle(r=8))
 ```
 
 ## Notes
 
-- With `by`, each group is positioned at the mean of its members' `x`/`y`.
+- With `by`, each group is positioned at the mean of its members' values.
   Without `by`, every row is positioned individually, and the mark gets the
   one-row group `[row]` (see [spread](./spread#without-by)).
 - Give `x2` (or `y2`) with `x` (or `y`) when a group should span an interval
   rather than sit at a point.
+- A position key that names a categorical field gives each group one
+  discrete position along the axis, and the key's anchor goes there. A span
+  cannot end at a discrete position, so `x` with `x2` over a categorical
+  field is an error.

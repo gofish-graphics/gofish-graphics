@@ -73,7 +73,7 @@ def _croissant(grid, n=10, fill=FILL, stroke=STROKE):
     return layer(
         [
             chart(grid)
-            .flow(scatter(x="x"))
+            .flow(scatter(cx="x"))
             .mark(ribbon(h="pdf").name("density").hidden()),
         ]
     ).relate(
@@ -165,7 +165,7 @@ def story_ridgeline():
             layer(
                 [
                     chart()
-                    .flow(scatter(x="temp_max"))
+                    .flow(scatter(cx="temp_max"))
                     .mark(ribbon(h="pdf").name("density").hidden()),
                 ],
                 h=34,
@@ -236,7 +236,7 @@ def story_seattle_highs_by_month():
         layer(
             [
                 chart(HIGHS_2012, schema=SCHEMA_2012)
-                .flow(scatter(x="date"))
+                .flow(scatter(cx="date"))
                 .mark(ribbon(h="temp_smooth").name("temps").hidden()),
             ]
         ).relate(

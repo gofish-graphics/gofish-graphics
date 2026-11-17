@@ -58,7 +58,7 @@ export const Default: StoryObj<Args> = {
     // One plant per lake, planted at the lake's x location: a thin green stem
     // as tall as the lake's total catch, with the flower centered on its top.
     chart(stemData, { axes: false, w: args.w, h: args.h })
-      .flow(scatter({ by: "lake", x: "x" }))
+      .flow(scatter({ by: "lake", cx: "x" }))
       .mark(
         layer([
           rect({ w: 4, h: "count", fill: color.green[5] }).name("stem"),

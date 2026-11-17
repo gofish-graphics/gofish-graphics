@@ -209,7 +209,7 @@ export const Asymptotics: StoryObj<Args> = {
       }));
 
     chart(pts, { color: Color.palette(FAMILY_COLORS), w: args.w, h: args.h })
-      .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ solve ms" }))
+      .flow(scatter({ by: "id", cx: "log₁₀ nodes", cy: "log₁₀ solve ms" }))
       .mark(circle({ r: 2.5, fill: "family" }))
       .layer(
         chart()
@@ -252,7 +252,7 @@ export const PassBreakdown: StoryObj<Args & { family: string }> = {
       );
 
     chart(pts, { color: Color.palette(PASS_COLORS), w: args.w, h: args.h })
-      .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ pass ms" }))
+      .flow(scatter({ by: "id", cx: "log₁₀ nodes", cy: "log₁₀ pass ms" }))
       .mark(circle({ r: 2.5, fill: "pass" }))
       .layer(
         chart()
@@ -382,7 +382,7 @@ export const Trend: StoryObj<Args> = {
     }));
 
     chart(idxPts, { color: Color.palette(PASS_COLORS), w: args.w, h: args.h })
-      .flow(scatter({ by: "id", x: "run", y: "index" }))
+      .flow(scatter({ by: "id", cx: "run", cy: "index" }))
       .mark(circle({ r: 2, fill: "pass" }))
       .layer(
         chart()
@@ -391,7 +391,7 @@ export const Trend: StoryObj<Args> = {
       )
       .layer(
         chart(totalPts, { color: Color.palette(PASS_COLORS) })
-          .flow(scatter({ by: "id", x: "run", y: "index" }))
+          .flow(scatter({ by: "id", cx: "run", cy: "index" }))
           .mark(circle({ r: 3, fill: "pass" }))
       )
       .layer(
@@ -417,7 +417,7 @@ export const Trend: StoryObj<Args> = {
     );
 
     chart(expPts, { color: Color.palette(FAMILY_COLORS), w: args.w, h: args.h })
-      .flow(scatter({ by: "id", x: "run", y: "b" }))
+      .flow(scatter({ by: "id", cx: "run", cy: "b" }))
       .mark(circle({ r: 2, fill: "family" }))
       .layer(
         chart()
@@ -477,7 +477,7 @@ export const Envelope: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
+      .flow(scatter({ by: "id", cx: "log₁₀ nodes", cy: "log₁₀ engine ms" }))
       .mark(circle({ r: 2, fill: "family" }))
       .layer(
         chart()
@@ -489,7 +489,7 @@ export const Envelope: StoryObj<Args> = {
     const final = exPts.length
       ? base.layer(
           chart(exPts)
-            .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
+            .flow(scatter({ by: "id", cx: "log₁₀ nodes", cy: "log₁₀ engine ms" }))
             .mark(circle({ r: 4, fill: "#111", stroke: "white", strokeWidth: 1 }))
         )
       : base;

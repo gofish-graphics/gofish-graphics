@@ -300,7 +300,7 @@ data stays a circle:
 chart(sunflower, {
   schema: { x: "plane", y: "plane" },
 })
-  .flow(scatter({ x: "x", y: "y" }))
+  .flow(scatter({ cx: "x", cy: "y" }))
   .mark(circle({ r: 4, fill: "i" }));
 ```
 
@@ -311,7 +311,7 @@ A column of date strings is a time in `Unit.time()`:
 
 ```ts
 chart(prices, { schema: { date: Unit.time() }, axes: true })
-  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .flow(scatter({ by: "date", cx: "date", cy: "price" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
   .render(container, { w: 560, h: 200 });
 ```

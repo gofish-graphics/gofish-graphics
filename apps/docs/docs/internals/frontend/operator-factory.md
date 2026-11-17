@@ -64,7 +64,7 @@ arg means operator form.
 Both forms also get the standard structural `.translate({ x?, y? })` modifier.
 It wraps the operator's produced node instead of merging `x`/`y` into the
 operator's own options. That distinction matters for operators like `scatter`:
-`scatter({ by: "lake", x: "lake" }).translate({ y: 50 })` keeps `x: "lake"` as
+`scatter({ by: "lake", cx: "lake" }).translate({ y: 50 })` keeps `cx: "lake"` as
 scatter's discrete placement encoding, while `y: 50` belongs to the outer
 translation wrapper.
 
@@ -250,20 +250,21 @@ channels: {
 | `{ type: "pos", entry: true, discrete: true }` | for nonnumeric categorical fields, emit evenly spaced discrete placement coordinates |
 | user passed an array                           | already final form — pass through unchanged                                          |
 
-`scatter` uses `entry: true` for `x`/`y`/`x2`/`y2` so a
-field name like `x: "miles"` becomes a per-group mean position
-(`src/ast/graphicalOperators/scatter.tsx`). Its point channels also set
-`discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
-slot coordinate instead of an invalid numeric mean.
+`scatter` uses `entry: true` for `x`/`cx`/`x2` (and the `y` ones) so a
+field name like `cx: "miles"` becomes a per-group mean position
+(`src/ast/graphicalOperators/scatter.tsx`). All six also set
+`discrete: true`, so a grouped nonnumeric field such as `cx: "lake"` becomes a
+slot coordinate instead of an invalid numeric mean, on whichever anchor the key
+names.
 
 A `{ type: "dims", form }` channel is an axis-name-keyed bag
-(`scatter({ dims: { theta: "bearing", r: "distance" } })`). `form` is the
+(`scatter({ dims: { theta: { center: "bearing" }, r: "distance" } })`). `form` is the
 same `AxisDimsForm` the operator later merges the bag with, and its
 `topLevel` table names the top-level option each anchor stands for. For each
 slot, `applyChannels` looks up that option's own channel spec and applies it,
-so a slot infers exactly as its counterpart: scatter's bare value and
-`center` and its `min` as `x` (per entry, discrete for a nonnumeric field),
-its `max` as `x2` (per entry, never discrete). A counterpart with no channel leaves the
+so a slot infers exactly as its counterpart: scatter's bare value and its
+`min` as `x`, its `center` as `cx`, its `max` as `x2` (each per entry, and
+discrete for a nonnumeric field). A counterpart with no channel leaves the
 slot as given (treemap's `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 
@@ -271,7 +272,7 @@ A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity
 and its type from the chart's `schema`) off the whole input once, and passes
 it to every entry's inference, since a split entry's slice may not carry
 the column types. The value then records the type (`fieldType`), which is
-how a scatter's `x` over a `Unit.time()` column puts its points on a
+how a scatter's `cx` over a `Unit.time()` column puts its points on a
 calendar. Which axis `theta` means is
 not known here: the scatter defers the constraints that need it to the
 [axis-name pass](/internals/layout/passes#pass-5-5-axis-name-resolution).

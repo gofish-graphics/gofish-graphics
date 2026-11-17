@@ -220,7 +220,7 @@ export type InferredRelational = {
    *  the knots of its curve (see `runKnots` in `connect.tsx`). */
   along?: SplitBy;
   /** The axis the path tier places its groups on by its own `by` field, when
-   *  it does: the x of `scatter({ by: "year", x: "year" })`. That axis draws
+   *  it does: the x of `scatter({ by: "year", cx: "year" })`. That axis draws
    *  the connection variable itself, so a `step` curve lets it advance while
    *  every other coordinate holds (`stepPath` in `spline.ts`). */
   parameterAxis?: "x" | "y";

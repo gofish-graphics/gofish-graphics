@@ -56,7 +56,7 @@ export const Sunflower: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(circle({ r: 4, fill: "i" }))
       .render(container);
 
@@ -76,7 +76,7 @@ export const Uncoupled: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(circle({ r: 4, fill: "i" }))
       .render(container);
 

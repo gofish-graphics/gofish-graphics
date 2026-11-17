@@ -132,7 +132,7 @@ BEAKS = [
 def _penguin_shapes(shape, data=BEAKS):
     return (
         chart(data, axes=True, w=420, h=320)
-        .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+        .flow(scatter(cx="Beak Length (mm)", cy="Beak Depth (mm)"))
         .mark(circle(r=2.5, fill="Species").name("points"))
         .layer(
             chart(select_all("points"))

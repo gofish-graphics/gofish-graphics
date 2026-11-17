@@ -12,7 +12,7 @@ def story_default():
     weather = vega_data.seattle_weather()
     return (
         chart(weather, axes={"x": True, "y": False}, w=300)
-        .flow(scatter(by="date", x="precipitation"))
+        .flow(scatter(by="date", cx="precipitation"))
         .mark(rect(w=1, h=10, fill="rgb(31, 119, 180)", opacity=0.7)),
         {},
     )

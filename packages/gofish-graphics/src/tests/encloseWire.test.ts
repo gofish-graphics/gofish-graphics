@@ -217,7 +217,7 @@ console.log("# avoiding: selectAll(name), through JS toJSON and back");
   ];
   const points = () =>
     chart(rows)
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(circle({ r: 4, fill: "g" }).name("pts"));
   const outlines = () =>
     chart(selectAll("pts"))

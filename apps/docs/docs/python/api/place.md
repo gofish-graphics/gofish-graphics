@@ -16,7 +16,7 @@ from gofish import Place, Unit, chart, group, line, scatter
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+    .flow(group(by="symbol"), scatter(by="date", cx="date", cy="price"))
     .mark(
         line(stroke="symbol", stroke_width=2).label(
             "symbol",

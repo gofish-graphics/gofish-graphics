@@ -18,7 +18,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
 gf.layer([
   gf
     .chart(locations)
-    .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
+    .flow(gf.scatter({ by: "lake", cx: "x", cy: "y" }))
     .mark(gf.blank().name("points")),
   gf
     .chart(gf.selectAll("points"))
@@ -81,7 +81,7 @@ chart(barley, { axes: true })
   .flow(
     spread({ by: "site", dir: "x", spacing: 110 }),
     spread({ by: "year", dir: "x", spacing: 36 }),
-    scatter({ by: "variety", y: "yield" })
+    scatter({ by: "variety", cy: "yield" })
   )
   .mark(line({ stroke: "variety", strokeWidth: 2 }));
 ```
@@ -101,7 +101,7 @@ recipe and chain [`.layer()`](/js/api/core/layer) on the builder with a bare
 
 ```ts
 chart(data)
-  .flow(scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
   .layer(line({ stroke: "black", strokeWidth: 2 }));
 ```
@@ -120,12 +120,12 @@ skip `.layer()` too:
 
 ```ts
 chart(data)
-  .flow(scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }));
 
 // ...is sugar for the explicit two-tier form:
 chart(data)
-  .flow(scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(blank())
   .layer(line({ stroke: "steelblue", strokeWidth: 2 }));
 ```

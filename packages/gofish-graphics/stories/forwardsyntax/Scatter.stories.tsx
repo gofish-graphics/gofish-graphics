@@ -30,7 +30,7 @@ export const Basic: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(catchLocationsArray, { w: args.w, h: args.h })
-      .flow(scatter({ by: "lake",  x: "x", y: "y" }))
+      .flow(scatter({ by: "lake",  cx: "x", cy: "y" }))
       .mark(circle({ r: 5 }))
       .render(container);
 
@@ -52,7 +52,7 @@ export const Connected: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(drivingShifts, { w: args.w, h: args.h })
-      .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+      .flow(scatter({ by: "year", cx: "miles", cy: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
       .layer(line({ stroke: "black", strokeWidth: 2 }))
       .render(container);
@@ -75,7 +75,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(catchLocationsArray, { w: args.w, h: args.h })
-      .flow(scatter({ by: "lake",  x: "x", y: "y" }))
+      .flow(scatter({ by: "lake",  cx: "x", cy: "y" }))
       // The glyph chart leaves off its data: as a nested mark it inherits its
       // parent partition (the lake's row), joins in that lake's catch rows, and
       // draws them as a polar pie — no `(data) => chart(data, ...)` callback.
@@ -102,11 +102,47 @@ export const WithPieGlyphsDenormalized: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(catchDataWithLocations, { w: args.w, h: args.h })
-      .flow(scatter({ by: "lake", x: "x", y: "y" }))
+      .flow(scatter({ by: "lake", cx: "x", cy: "y" }))
       .mark(
         chart({ coord: Coord.clock() })
           .flow(stack({ by: "species", dir: "x", h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
+      )
+      .render(container);
+
+    return container;
+  },
+};
+
+// The three anchors a scatter places by, on shared axes. Each tier draws a
+// translucent square at every point: `cx`/`cy` centers it there, `x`/`y`
+// puts its start edges (left, bottom) there, and `x2`/`y2` its end edges
+// (right, top). The black dots sit on the data points.
+const anchorPoints = [
+  { id: "a", u: 2, v: 2 },
+  { id: "b", u: 6, v: 8 },
+  { id: "c", u: 10, v: 4 },
+];
+
+const anchorSquares = (keys: object, fill: string) =>
+  chart(anchorPoints)
+    .flow(scatter({ by: "id", ...keys }))
+    .mark(rect({ w: 60, h: 60, fill, opacity: 0.35 }));
+
+export const Anchors: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(anchorPoints, { w: args.w, h: args.h })
+      .flow(scatter({ by: "id", cx: "u", cy: "v" }))
+      .mark(rect({ w: 60, h: 60, fill: "orange", opacity: 0.35 }))
+      .layer(anchorSquares({ x: "u", y: "v" }, "steelblue"))
+      .layer(anchorSquares({ x2: "u", y2: "v" }, "seagreen"))
+      .layer(
+        chart(anchorPoints)
+          .flow(scatter({ by: "id", cx: "u", cy: "v" }))
+          .mark(circle({ r: 3, fill: "black" }))
       )
       .render(container);
 

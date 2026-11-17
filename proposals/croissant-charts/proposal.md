@@ -204,7 +204,7 @@ const edges = range(1, 10).map((k) =>
 ); // by hand
 
 chart(grid, { axes: { x: true, y: false } })
-  .flow(scatter({ x: "x" }))
+  .flow(scatter({ cx: "x" }))
   .mark(
     ribbon({
       h: "pdf",
@@ -225,7 +225,7 @@ edges = [quantile([r["x"] for r in q], k / 10) for k in range(1, 10)]  # by hand
 
 (
     chart(grid, axes={"x": True, "y": False})
-    .flow(scatter(x="x"))
+    .flow(scatter(cx="x"))
     .mark(
         ribbon(h="pdf", fill="#D1E4F6", stroke="#467DA8", stroke_width=2).cut(
             dir="x",
@@ -264,7 +264,7 @@ of the cell's rows.
 const grid = range(-3, 3.001, 0.02).map((x) => ({ x, pdf: normPdf(x) }));
 
 chart(grid, { axes: { x: true, y: false } })
-  .flow(scatter({ x: "x" }))
+  .flow(scatter({ cx: "x" }))
   .mark(ribbon({ h: "pdf", fill: "none" }).name("density"))
   .layer(
     chart(grid)
@@ -291,7 +291,7 @@ grid = [{"x": x, "pdf": norm_pdf(x)} for x in frange(-3, 3.001, 0.02)]
 
 (
     chart(grid, axes={"x": True, "y": False})
-    .flow(scatter(x="x"))
+    .flow(scatter(cx="x"))
     .mark(ribbon(h="pdf", fill="none").name("density"))
     .layer(
         chart(grid)
@@ -331,7 +331,7 @@ normal one.
 const density = densityOf(penguins, "Body Mass (g)"); // grid rows { x, pdf }
 
 chart(density, { axes: { x: true, y: false } })
-  .flow(scatter({ x: "x" }))
+  .flow(scatter({ cx: "x" }))
   .mark(ribbon({ h: "pdf", fill: "none" }).name("density"))
   .layer(
     chart(density)
@@ -384,7 +384,7 @@ chart(monthlyDensity, { axes: { x: true, y: false } })
       anchor: "baseline",
       spacing: 24,
     }),
-    scatter({ x: "temp_max", h: 40 })
+    scatter({ cx: "temp_max", h: 40 })
   )
   .mark(ribbon({ h: "pdf", fill: "none" }).name("density"))
   .layer(
@@ -434,7 +434,7 @@ February is narrower):
 
 ```js
 chart(daily2012, { schema: { date: Unit.time() }, axes: { x: true, y: true } })
-  .flow(scatter({ x: "date" }))
+  .flow(scatter({ cx: "date" }))
   .mark(ribbon({ h: "temp_smooth", fill: "none" }).name("temps"))
   .layer(
     chart(daily2012)

@@ -285,7 +285,7 @@ export const AirportsByNearestHub: StoryObj<Args> = {
         )
         .mark(region({ fill: field("iata").count(), stroke: "white" })),
       chart(hubs)
-        .flow(scatter({ x: "longitude", y: "latitude" }))
+        .flow(scatter({ cx: "longitude", cy: "latitude" }))
         .mark(circle({ r: 3, fill: "black" })),
     ]).render(container, { axes: true });
     return container;
@@ -319,7 +319,7 @@ export const PenguinBeakVoronoi: StoryObj<Args> = {
         .flow(partition({ by: key.bin(Bin.voronoi({ seeds: beaked })) }))
         .mark(region({ fill: "#f4f1ea", stroke: "#b9b2a3", strokeWidth: 0.5 })),
       chart(beaked)
-        .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+        .flow(scatter({ cx: "Beak Length (mm)", cy: "Beak Depth (mm)" }))
         .mark(circle({ r: 2.5, fill: "Species" })),
     ]).render(container, { axes: true });
     return container;

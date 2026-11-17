@@ -18,7 +18,7 @@ def story_default():
         .flow(
             spread(by="site", dir="x", spacing=128),
             spread(by="year", dir="x", spacing=36),
-            scatter(by="variety", y="yield"),
+            scatter(by="variety", cy="yield"),
         )
         .mark(line(stroke="variety", stroke_width=2)),
         {},

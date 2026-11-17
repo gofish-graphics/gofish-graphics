@@ -65,7 +65,7 @@ export const DailyLine: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(prices, { schema: { date: Unit.time() }, w: args.w, h: args.h })
-      .flow(scatter({ by: "date", x: "date", y: "price" }))
+      .flow(scatter({ by: "date", cx: "date", cy: "price" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
@@ -101,7 +101,7 @@ export const HourlyLine: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(readings, { w: args.w, h: args.h })
-      .flow(scatter({ by: "time", x: "time", y: "temp" }))
+      .flow(scatter({ by: "time", cx: "time", cy: "temp" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
@@ -129,7 +129,7 @@ export const DaylightSavingZone: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ by: "time", x: "time", y: "load" }))
+      .flow(scatter({ by: "time", cx: "time", cy: "load" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
@@ -161,7 +161,7 @@ export const EventTimeline: StoryObj<Args> = {
       axes: { x: true, y: false },
       w: args.w,
     })
-      .flow(scatter({ by: "name", x: "date" }))
+      .flow(scatter({ by: "name", cx: "date" }))
       .mark(circle({ r: 5, fill: "steelblue" }))
       .render(container);
     return container;
@@ -190,7 +190,7 @@ export const WeekOverMonthRows: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(scatter({ by: "day", x: "day", y: "visits" }))
+      .flow(scatter({ by: "day", cx: "day", cy: "visits" }))
       .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
     return container;
@@ -251,7 +251,7 @@ export const VerticalDailyDots: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(prices, { schema: { date: Unit.time() }, w: args.w, h: args.h })
-      .flow(scatter({ by: "date", x: "price", y: "date" }))
+      .flow(scatter({ by: "date", cx: "price", cy: "date" }))
       .mark(circle({ r: 1.5, fill: "steelblue" }))
       .render(container);
     return container;

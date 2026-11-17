@@ -209,7 +209,7 @@ their scales must be equal — a circle stays circular. GoFish does this from th
 ```python
 (
     chart(data, schema={"x": "plane", "y": "plane"})
-    .flow(scatter(x="x", y="y"))
+    .flow(scatter(cx="x", cy="y"))
     .mark(circle(r=4))
     .render(w=640, h=380)  # a true circle, not an ellipse
 )
@@ -279,7 +279,7 @@ that name (mirrors JS `chart.resolve().name(...)`). The relate lambda's
 parameter names match the charts' `.name()` strings:
 
 ```python
-sc = chart(data).flow(scatter(x="x", y="y")).mark(circle(r=3)).name("scatter")
+sc = chart(data).flow(scatter(cx="x", cy="y")).mark(circle(r=3)).name("scatter")
 top = chart(data, h=80).flow(...).mark(rect(h="count")).name("topHist")
 
 layer([sc, top]).relate(lambda scatter, topHist: [
