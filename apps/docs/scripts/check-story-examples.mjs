@@ -279,6 +279,24 @@ function checkSnippetNames(examples) {
       return libTs.resolveModuleName(lit.text, from, options, host);
     });
   const program = libTs.createProgram([...files.keys()], options, host);
+  const checker = program.getTypeChecker();
+  // Whether the diagnostic `d` in `sf` is on a member read from a module
+  // (`Coord.clocky` with `import * as Coord`, or `export * as Coord`).
+  const onModuleMember = (sf, d) => {
+    let node = sf;
+    for (let inner = node; inner; ) {
+      node = inner;
+      inner = node
+        .getChildren(sf)
+        .find((c) => c.getStart(sf) <= d.start && d.start < c.getEnd());
+    }
+    for (; node && !libTs.isPropertyAccessExpression(node); )
+      node = node.parent;
+    let sym = node && checker.getSymbolAtLocation(node.expression);
+    if (sym && sym.flags & libTs.SymbolFlags.Alias)
+      sym = checker.getAliasedSymbol(sym);
+    return !!sym && !!(sym.flags & libTs.SymbolFlags.ValueModule);
+  };
   const byId = new Map();
   for (const [file, id] of owner) {
     const sf = program.getSourceFile(file);
@@ -288,7 +306,7 @@ function checkSnippetNames(examples) {
       // "property does not exist" error (2339, or 2551 with a suggestion),
       // on the namespace's module type.
       const namespaceMember =
-        (d.code === 2339 || d.code === 2551) && text.includes("typeof import(");
+        (d.code === 2339 || d.code === 2551) && onModuleMember(sf, d);
       if (!NAME_DIAGNOSTICS.has(d.code) && !namespaceMember) continue;
       if (!byId.has(id)) byId.set(id, []);
       const where = file.endsWith("dataset.ts") ? "dataset: " : "";

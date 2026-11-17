@@ -109,11 +109,13 @@ let cached;
  * - `names(specifier)`: the names it exports (undefined for an unknown one).
  * - `resolveName(file, name, { value })`: the `{ specifier, name }` under
  *   which the export `name` of the source file `file` is public (under
- *   `name` itself when it is one of its public names), or undefined. With `value: true` only an export that is a value counts,
- *   since a value import of a type does not run.
- * - `resolveNamespace(file)`: how a namespace import of `file` is public:
- *   `{ specifier }` when `file` is an entry, `{ specifier, name }` when an
- *   entry exports it as a namespace (`export * as Coord`), else undefined.
+ *   `name` itself when it is one of its public names), or undefined. With
+ *   `value: true` only a value public as a value counts (not one an entry
+ *   exports with `export type`), since a value import of a type does not run.
+ * - `resolveNamespace(file, local)`: how a namespace import of `file` is
+ *   public: `{ specifier }` when `file` is an entry, `{ specifier, name }`
+ *   when an entry exports it as a namespace (`export * as Coord`), under
+ *   `local` when that is one of its names, else undefined.
  * - `options`: the program's compiler options, for a caller that type
  *   checks code against the packages.
  */
@@ -128,13 +130,23 @@ export function publicSurface() {
 
   const target = (sym) =>
     sym.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym;
+  // An export a type-only declaration (`export type { X }`) makes or passes
+  // on is public as a type only, whatever the symbol it names.
+  const typeOnly = (sym) => {
+    for (let s = sym; s && s.flags & ts.SymbolFlags.Alias; ) {
+      if (s.declarations?.some(ts.isTypeOnlyImportOrExportDeclaration))
+        return true;
+      s = checker.getImmediateAliasedSymbol(s);
+    }
+    return false;
+  };
   const moduleOf = (file) => {
     const sf = program.getSourceFile(file);
     return sf && checker.getSymbolAtLocation(sf);
   };
 
   const exported = new Map(); // specifier -> Set of names
-  const bySymbol = new Map(); // target symbol -> [{ specifier, name }]
+  const bySymbol = new Map(); // target symbol -> [{ specifier, name, typeOnly }]
   const entryOf = new Map(); // module symbol -> specifier
   for (const [specifier, file] of entries) {
     const mod = moduleOf(file);
@@ -145,7 +157,9 @@ export function publicSurface() {
       names.add(sym.name);
       const t = target(sym);
       if (!bySymbol.has(t)) bySymbol.set(t, []);
-      bySymbol.get(t).push({ specifier, name: sym.name });
+      bySymbol
+        .get(t)
+        .push({ specifier, name: sym.name, typeOnly: typeOnly(sym) });
     }
     exported.set(specifier, names);
   }
@@ -157,16 +171,20 @@ export function publicSurface() {
     const t = target(sym);
     if (value && !(t.flags & ts.SymbolFlags.Value)) return undefined;
     // A symbol public under several names (`value`, and `v` for it) keeps
-    // the name it was imported by when that is one of them.
-    const all = bySymbol.get(t) ?? [];
-    return all.find((p) => p.name === name) ?? all[0];
+    // the name it was imported by when that is one of them. A value import
+    // needs a name that is public as a value.
+    const all = (bySymbol.get(t) ?? []).filter((p) => !(value && p.typeOnly));
+    const p = all.find((p) => p.name === name) ?? all[0];
+    return p && { specifier: p.specifier, name: p.name };
   };
 
-  const resolveNamespace = (file) => {
+  const resolveNamespace = (file, local) => {
     const mod = moduleOf(file);
     if (!mod) return undefined;
     if (entryOf.has(mod)) return { specifier: entryOf.get(mod) };
-    return bySymbol.get(mod)?.[0];
+    const all = (bySymbol.get(mod) ?? []).filter((p) => !p.typeOnly);
+    const p = all.find((p) => p.name === local) ?? all[0];
+    return p && { specifier: p.specifier, name: p.name };
   };
 
   cached = {

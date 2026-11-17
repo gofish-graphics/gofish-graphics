@@ -236,7 +236,7 @@ function publicImport(
 ): PublicImport | undefined {
   const surface = publicSurface();
   if (imp.form === "namespace") {
-    const r = surface.resolveNamespace(file);
+    const r = surface.resolveNamespace(file, imp.name);
     if (!r) return undefined;
     if (r.name === undefined)
       return { form: "namespace", specifier: r.specifier, name: imp.name };
@@ -1075,8 +1075,11 @@ function inlineDataModule(modulePath: string, preview: boolean): string {
  * module: the package imports its names are public under, or, when the module
  * is a self-contained helper that the package does not export (the seeded
  * generator `lcg` in src/util), the helper's own source, since the dataset
- * must run on its own. A helper that imports anything is not self-contained,
- * so it throws, as does an import of anything else.
+ * must run on its own. The source declares the names under which it exports
+ * them, so it stands only for a named import that keeps those names. A
+ * helper that imports or re-exports anything is not self-contained, so it
+ * throws, as does an import of anything else. A type-only binding is erased
+ * at run time, so it needs nothing.
  */
 function datasetImport(
   stmt: ts.ImportDeclaration,
@@ -1085,13 +1088,20 @@ function datasetImport(
 ): string {
   const spec = (stmt.moduleSpecifier as ts.StringLiteral).text;
   const file = resolveModuleFile(resolve(dirname(modulePath), spec));
-  const bindings = importBindings(stmt);
+  const bindings = importBindings(stmt).filter((b) => !b.isTypeOnly);
   const pubs = bindings.map((b) => publicImport(b, file));
   const missing = bindings[pubs.indexOf(undefined)];
   if (missing) {
     const helper = parse(file, readFileSync(file, "utf-8"));
-    if (helper.statements.some(ts.isImportDeclaration))
-      throw notPublic(missing, modulePath);
+    const selfContained = !helper.statements.some(
+      (st) =>
+        ts.isImportDeclaration(st) ||
+        (ts.isExportDeclaration(st) && st.moduleSpecifier !== undefined)
+    );
+    const sameNames = bindings.every(
+      (b) => b.form === "named" && b.imported === b.name
+    );
+    if (!selfContained || !sameNames) throw notPublic(missing, modulePath);
     return `// ---- ${relative(dirname(modulePath), file)} ----\n${inlineDataModule(file, preview)}`;
   }
   return publicImportLines(pubs as PublicImport[]).join("\n");
