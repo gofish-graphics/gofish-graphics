@@ -47,7 +47,9 @@ A scatter plot uses `cx` and `cy`, so each dot is centered on its point. `x`
 with `x2` is a span: each child spans from `x` to `x2`. Each axis is placed on
 its own, so `scatter(cx="lon", y="lat")` centers each child across and puts
 its start edge on the point along y. An axis takes at most two of its three
-keys, since two already fix the child's position and size there.
+keys, since two already fix the child's position and size there. Any two make
+a span: `cx` with `x2` spans from `2 * cx - x2` to `x2`, and this other edge
+is computed in data space, so it is exact only on a linear scale.
 
 ## Placing by axis name with `dims`
 
@@ -257,9 +259,9 @@ chart(data).flow(scatter(by="lake", cx="x", cy="y")).mark(circle(r=8))
 - With `by`, each group is positioned at the mean of its members' values.
   Without `by`, every row is positioned individually, and the mark gets the
   one-row group `[row]` (see [spread](./spread#without-by)).
-- Give `x2` (or `y2`) with `x` (or `y`) when a group should span an interval
-  rather than sit at a point.
+- Give two keys of one axis, such as `x2` (or `y2`) with `x` (or `y`), when
+  a group should span an interval rather than sit at a point.
 - A position key that names a categorical field gives each group one
-  discrete position along the axis, and the key's anchor goes there. A span
-  cannot end at a discrete position, so `x` with `x2` over a categorical
-  field is an error.
+  discrete position along the axis, and the key's anchor goes there. A
+  span's ends must be numeric or time values, so two keys of one axis are an
+  error when one of them names a categorical field.

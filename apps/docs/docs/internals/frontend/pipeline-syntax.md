@@ -300,20 +300,20 @@ layer([
 
 ```ts
 chart(seafood)
-  .flow(scatter("lake", { x: "lakeLocX" }), connect())
+  .flow(scatter("lake", { cx: "lakeLocX" }), connect())
   .mark(line());
 ```
 
 ```ts
 chart(seafood)
-  .flow(scatter("lake", { x: "lakeLocX" }))
+  .flow(scatter("lake", { cx: "lakeLocX" }))
   .mark(blank())
   .layer(connect(), line());
 ```
 
 ```ts
 chart(seafood)
-  .flow(scatter("lake", { x: "lakeLocX" }))
+  .flow(scatter("lake", { cx: "lakeLocX" }))
   .mark(blank())
   .layer(chart().flow(connect()).mark(line()));
 ```

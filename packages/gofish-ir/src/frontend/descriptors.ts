@@ -1712,7 +1712,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   scatter: operator("scatter", {
-    doc: "Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). x with x2 (y with y2) is a span.",
+    doc: "Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). Any two keys of one axis are a span.",
     fields: {
       by: splitBy(
         "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."

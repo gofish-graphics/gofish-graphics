@@ -1,6 +1,17 @@
 import { axisOverrideOf, GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { MaybeValue, type PositionValue } from "../data";
+import {
+  DatumValueImpl,
+  MaybeValue,
+  getQuantity,
+  getValue,
+  getValueField,
+  getValueFieldType,
+  getValueOffset,
+  isDiscretePosition,
+  isValue,
+  type PositionValue,
+} from "../data";
 import {
   type Direction,
   MARK_DIMS,
@@ -92,12 +103,68 @@ const SLOT_ANCHOR = { min: "start", center: "middle", max: "end" } as const;
 type PlacementSlot = keyof typeof SLOT_ANCHOR;
 const SLOTS = Object.keys(SLOT_ANCHOR) as PlacementSlot[];
 
+/** The placement per axis that a scatter's top-level keys give, before
+ *  `dims` is merged in. */
+const topLevelAxes = <T,>(
+  xy: Partial<Record<PlacementKey, T>>
+): Interval<T>[] => [
+  { min: xy.x, center: xy.cx, max: xy.x2 },
+  { min: xy.y, center: xy.cy, max: xy.y2 },
+];
+
+/** Does this axis place the children (by any of its anchors)? */
+const isPlaced = (axis: Interval<unknown>): boolean =>
+  SLOTS.some((key) => axis[key] !== undefined);
+
+/**
+ * The anchor across `center` from `edge`: `2 · center − edge`, the other
+ * edge of a child whose center is `center` and one edge `edge`. The sum is
+ * taken in data space, so it is the true other edge only on a linear scale.
+ * Two pixel literals give a pixel literal and two data values a data value
+ * (its pixel offsets combine the same way). A pixel literal and a data value
+ * have no such sum, since one is before the scale and the other after it.
+ */
+function mirror(
+  center: PositionValue,
+  edge: PositionValue,
+  keys: () => string
+): PositionValue {
+  if (typeof center === "number" && typeof edge === "number")
+    return 2 * center - edge;
+  const c = center as MaybeValue<number>;
+  const e = edge as MaybeValue<number>;
+  if (
+    isValue(c) &&
+    isValue(e) &&
+    typeof getValue(c) === "number" &&
+    typeof getValue(e) === "number"
+  )
+    return new DatumValueImpl(
+      2 * getValue(c) - getValue(e),
+      getQuantity(c),
+      2 * getValueOffset(c) - getValueOffset(e) || undefined,
+      undefined,
+      getValueField(c),
+      getValueFieldType(c)
+    );
+  throw new Error(
+    `scatter: ${keys()} place a child's center and one edge, so its other ` +
+      `edge is computed from them, but one is a pixel literal and the other ` +
+      `a data value. Give both as data values or both as pixels.`
+  );
+}
+
 /**
  * Merge a scatter's top-level x/cx/x2 and y/cy/y2 with its axis-name-keyed
  * `dims` into one placement per axis, resolving the names against `scope`.
  * Each slot may be set once, an axis may set at most two of its three
  * anchors (a child has a position and a size on an axis, and two anchors
  * fix both), and every array must have one entry per child.
+ *
+ * Two anchors on an axis determine an interval, so an axis given its center
+ * and one edge comes back as its two edges ({@link mirror}): every
+ * two-anchor axis is a span, `{ min, max }`, and every other axis has one
+ * anchor or none.
  */
 function scatterAxes(
   xy: ScatterXY,
@@ -105,39 +172,52 @@ function scatterAxes(
   scope: AxisScope,
   count: number
 ): AxisPlacement[] {
-  const axes: AxisPlacement[] = [
-    { min: xy.x, center: xy.cx, max: xy.x2 },
-    { min: xy.y, center: xy.cy, max: xy.y2 },
-  ];
+  const axes: AxisPlacement[] = topLevelAxes(xy);
   const origin = mergeAxisDims(axes, dims ?? {}, scope, SCATTER_DIMS);
+  // The axis's name as the user wrote it: the `dims` name if one placed
+  // this axis, else x or y.
+  const nameOf = (axis: Direction) =>
+    Object.keys(dims ?? {}).find((n) => scope.names[n] === axis) ??
+    axisName(axis);
   for (const axis of [0, 1] as const) {
-    if (SLOTS.every((key) => axes[axis][key] !== undefined))
+    const set = SLOTS.filter((key) => axes[axis][key] !== undefined);
+    const keys = () => set.map((key) => origin(key, axis)).join(", ");
+    if (set.length === 3)
       throw new Error(
-        `scatter: ${SLOTS.map((key) => origin(key, axis)).join(", ")} all ` +
-          `place the children on axis ${axis}, but two anchors already fix ` +
-          `a child's position and size there. Give at most two of them.`
+        `scatter: ${keys()} all place the children on ${nameOf(axis)}, but ` +
+          `two anchors already fix a child's position and size there. Give ` +
+          `at most two of them.`
       );
-  }
-  for (const axis of [0, 1] as const) {
-    for (const key of SLOTS) {
-      const arr = axes[axis][key];
-      if (arr !== undefined && arr.length !== count) {
+    for (const key of set)
+      if (axes[axis][key]!.length !== count)
         throw new Error(
           `Scatter operator ${origin(key, axis)} array must match ` +
             `children length`
         );
-      }
-    }
+    if (set.length < 2) continue;
+    // Two anchors make a span, and a span runs between two values.
+    const discrete = set.find((key) =>
+      axes[axis][key]!.some(isDiscretePosition)
+    );
+    if (discrete !== undefined)
+      throw new Error(
+        `scatter: ${keys()} make a span on ${nameOf(axis)}, but ` +
+          `${origin(discrete, axis)} names a categorical field, which gives ` +
+          `each child a slot, not a value. A span's ends must be numeric or ` +
+          `time values.`
+      );
+    const { min, center, max } = axes[axis];
+    if (center !== undefined)
+      axes[axis] =
+        max !== undefined
+          ? { min: max.map((b, i) => mirror(center[i], b, keys)), max }
+          : { min, max: min!.map((a, i) => mirror(center[i], a, keys)) };
   }
-  if (!axes.some((_, axis) => isPlaced(axes, axis as Direction))) {
+  if (!axes.some(isPlaced)) {
     throw new Error("Scatter operator requires at least one of x or y");
   }
   return axes;
 }
-
-/** Does this axis place the children (by any of its anchors)? */
-const isPlaced = (axes: AxisPlacement[], axis: Direction): boolean =>
-  SLOTS.some((key) => axes[axis][key] !== undefined);
 
 /**
  * An overlap strategy keeps children clear of each other in the layout frame.
@@ -230,10 +310,11 @@ const Scatter = createNodeOperator(
     //                        names (start, middle, end); `override` repositions
     //                        a child that self-placed in its own layout, e.g. a
     //                        layer / coord glyph.
-    //   - x with x2        → interval Constraint.position ({ x: [min, max] }):
+    //   - two of them      → interval Constraint.position ({ x: [min, max] }):
     //                        two edges DETERMINE the size via the linsys bbox
     //                        (#39), and the layer lays the child out in the
-    //                        span's length.
+    //                        span's length. A center with one edge comes in
+    //                        as its two edges (scatterAxes).
     //   - an axis with none → a plain cross-axis align (data-positioned
     //                        children are already placed by their position
     //                        constraints, so the align walk skips them).
@@ -262,36 +343,53 @@ const Scatter = createNodeOperator(
       );
       const refs = childSlots(node);
       const cs: ConstraintSpec[] = [];
+      // Which axes each constraint places is the same for every child, so
+      // group them once: the span axes (two anchors, now both edges) into
+      // one span constraint, and the one-anchor axes into one point
+      // constraint per anchor.
+      const spanAxes = ([0, 1] as const).filter(
+        (axis) =>
+          placement[axis].min !== undefined && placement[axis].max !== undefined
+      );
+      const pointsBySlot = SLOTS.map(
+        (slot) =>
+          [
+            slot,
+            ([0, 1] as const).filter(
+              (axis) =>
+                !spanAxes.includes(axis) && placement[axis][slot] !== undefined
+            ),
+          ] as const
+      ).filter(([, axes]) => axes.length > 0);
+      const coords = <V,>(
+        axes: readonly Direction[],
+        value: (axis: Direction) => V
+      ) => Object.fromEntries(axes.map((a) => [axisName(a), value(a)]));
       childList.forEach((_, i) => {
-        // One point constraint per anchor the child is placed by, and one
-        // span constraint for the axes placed by both ends.
-        const points = new Map<
-          PlacementSlot,
-          { x?: PositionValue; y?: PositionValue }
-        >();
-        const span: { x?: PositionInterval; y?: PositionInterval } = {};
-        ([0, 1] as const).forEach((axis) => {
-          const name = axisName(axis);
-          const at = placement[axis];
-          if (at.min !== undefined && at.max !== undefined) {
-            span[name] = [at.min[i], at.max[i]];
-            return;
-          }
-          for (const slot of SLOTS) {
-            const value = at[slot]?.[i];
-            if (value === undefined) continue;
-            points.set(slot, { ...points.get(slot), [name]: value });
-          }
-        });
-        for (const [slot, coords] of points)
+        for (const [slot, axes] of pointsBySlot)
           cs.push(
             Constraint.position(
-              { ...coords, anchor: SLOT_ANCHOR[slot], override: true },
+              {
+                ...coords(axes, (a) => placement[a][slot]![i]),
+                anchor: SLOT_ANCHOR[slot],
+                override: true,
+              },
               [refs[i]]
             )
           );
-        if (span.x !== undefined || span.y !== undefined)
-          cs.push(Constraint.position(span, [refs[i]]));
+        if (spanAxes.length > 0)
+          cs.push(
+            Constraint.position(
+              coords(
+                spanAxes,
+                (a): PositionInterval => [
+                  placement[a].min![i],
+                  placement[a].max![i],
+                ]
+              ),
+              [refs[i]]
+            )
+          );
       });
       // A cross-axis align over the (data-positioned) points: it shares the
       // frame; `align` leaves the points where their own scale puts them by
@@ -299,7 +397,7 @@ const Scatter = createNodeOperator(
       // strategy takes the align's place: it grows the children away from
       // the same line, keeping them clear of each other.
       const freeAxes = ([0, 1] as const).filter(
-        (axis) => !isPlaced(placement, axis)
+        (axis) => !isPlaced(placement[axis])
       );
       if (overlap !== undefined && freeAxes.length === 0)
         throw new Error(
@@ -329,14 +427,17 @@ const Scatter = createNodeOperator(
  * Per-entry channel inference handles the polymorphism.
  *
  * `dims` places children by axis NAME, the way the enclosing coordinate space
- * names its axes (`{ theta: "bearing", r: "distance" }` in polar,
- * `{ lon: "lon", lat: "lat" }` in geo; `x`/`y` always work). It reads as a
- * mark's `dims` does: a bare value or `{ min }` is the start, like `x`;
- * `{ center }` is the center, like `cx`; `{ max }` is the end, like `x2`.
+ * names its axes (`{ theta: { center: "bearing" }, r: { center: "distance" } }`
+ * in polar, `{ lon: { center: "lon" }, lat: { center: "lat" } }` in geo;
+ * `x`/`y` always work). It reads as a mark's `dims` does: a bare value or
+ * `{ min }` is the start, like `x`; `{ center }` is the center, like `cx`;
+ * `{ max }` is the end, like `x2`.
  *
  * The keys mean what they mean on a mark: `x` is where each child's start
  * (min) edge goes, `cx` its center, `x2` its end (max) edge. Two of them on
- * one axis fix the child's size there; `x` with `x2` is a span.
+ * one axis make a span, which fixes the child's size there: `x` with `x2`
+ * directly, and the center with one edge through the other edge, `2 · cx −
+ * x2` (exact on a linear scale).
  *
  * `by` is a groupBy field — omit for per-item scatter.
  */
@@ -403,9 +504,8 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   arrangement: {
     kind: "value",
     positions: (opts) => {
-      const placed = ([, keys]: (typeof PLACEMENT_KEYS)[number]) =>
-        keys.some((k) => opts[k] !== undefined);
-      return { x: placed(PLACEMENT_KEYS[0]), y: placed(PLACEMENT_KEYS[1]) };
+      const [x, y] = topLevelAxes(opts);
+      return { x: isPlaced(x), y: isPlaced(y) };
     },
   },
   serialize: "scatter",

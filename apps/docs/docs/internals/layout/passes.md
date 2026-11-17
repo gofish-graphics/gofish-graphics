@@ -241,7 +241,10 @@ through the same `mergeAxisDims` and the same anchor table as the marks
 (`MARK_DIMS`): `x` and a bare value are the start (`min`), `cx` the center, `x2`
 the end (`max`). Its one rule of its own is that it sizes nothing, so `size` and
 `embedded` are not keys. An axis may set at most two of its three anchors, checked
-on the merged axis, so `x` with `dims.x.max` is a span. Like the later embedding pass it
+on the merged axis, so `x` with `dims.x.max` is a span. Any two anchors are a span:
+a center with one edge becomes its two edges (the other is `2 · center − edge`, in
+data space, so exact on a linear scale), and every span lowers to one interval
+`Constraint.position`, whose ends feed the position domain. Like the later embedding pass it
 mutates the per-axis dims array by reassigning its elements, so the captured
 layout/space closures observe the result.
 

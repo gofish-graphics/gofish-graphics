@@ -2263,7 +2263,8 @@ def scatter(
         **options: The generated ``_scatter_opts`` core's options; see the
             docs options table. Place each child on an axis by its center
             (``cx``/``cy``), its start edge (``x``/``y``) or its end edge
-            (``x2``/``y2``), as on a mark; ``x`` with ``x2`` is a span. Or use
+            (``x2``/``y2``), as on a mark; any two keys of one axis are a
+            span. Or use
             ``dims`` (placement by axis name, read as a mark's ``dims``, e.g.
             ``dims={"theta": {"center": "bearing"}, "r": {"center": "distance"}}``
             in polar). Give at least one.

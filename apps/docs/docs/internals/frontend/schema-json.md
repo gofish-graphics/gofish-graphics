@@ -1399,7 +1399,7 @@ for the API.
       }
     },
     "ScatterOperator": {
-      "description": "Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). x with x2 (y with y2) is a span.",
+      "description": "Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). Any two keys of one axis are a span.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,

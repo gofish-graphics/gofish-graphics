@@ -429,28 +429,28 @@ async function main() {
       );
     }
     // A non-numeric span has no data interval: either end over a
-    // non-numeric field is a discrete position, which a span cannot end at,
-    // and every spelling throws the same error.
-    const spanErrors: string[] = [];
-    for (const [spelling, opts] of [
-      ["dims {x: {min, max}}", { dims: { x: { min: "name", max: "name" } } }],
-      ["x/x2", { x: "name", x2: "name" }],
-      ["x <non-numeric> with x2 <numeric>", { x: "name", x2: hi }],
-      ["x <numeric> with x2 <non-numeric>", { x: lo, x2: "name" }],
+    // non-numeric field is a discrete position, which a span cannot end at.
+    // The scatter says so, naming the keys as written.
+    for (const [spelling, opts, keys, bad] of [
+      [
+        "dims {x: {min, max}}",
+        { dims: { x: { min: "name", max: "name" } } },
+        "scatter dims.x, scatter dims.x",
+        "scatter dims.x",
+      ],
+      ["x/x2", { x: "name", x2: "name" }, "x, x2", "x"],
+      ["x <non-numeric> with x2 <numeric>", { x: "name", x2: hi }, "x, x2", "x"],
+      ["x <numeric> with x2 <non-numeric>", { x: lo, x2: "name" }, "x, x2", "x2"],
+      ["cx <non-numeric> with x2 <numeric>", { cx: "name", x2: hi }, "cx, x2", "cx"],
     ] as const) {
       const err = await errorOf(() => dots({ ...opts, y: "angle" }));
-      spanErrors.push(err);
       check(
-        `${spelling} over a non-numeric field throws: a span takes no discrete position`,
-        err.includes("not discrete positions"),
+        `${spelling} over a non-numeric field throws a scatter error naming ${keys}`,
+        err.startsWith(`scatter: ${keys} make a span on x, but ${bad} names a categorical field`) &&
+          err.includes("A span's ends must be numeric or time values"),
         err
       );
     }
-    check(
-      "every non-numeric span throws the same error, whichever end",
-      spanErrors.every((e) => e === spanErrors[0]),
-      JSON.stringify(spanErrors)
-    );
 
     const mixed = await errorOf(() =>
       dots({ x: lo, dims: { x: { max: hi } }, y: "angle" })
@@ -497,9 +497,19 @@ async function main() {
       dots({ x: lo, cx: lo, x2: hi, y: "angle" })
     );
     check(
-      "x, cx and x2 on one axis throws, naming all three",
-      three.includes("x, cx, x2") && three.includes("at most two"),
+      "x, cx and x2 on one axis throws, naming all three and the axis",
+      three.includes("x, cx, x2") &&
+        three.includes("on x,") &&
+        three.includes("at most two"),
       three
+    );
+    const threeNamed = await errorOf(() =>
+      dots({ cy: lo, dims: { y: { min: lo, max: hi } }, x: "angle" })
+    );
+    check(
+      "three anchors on y spelled through dims names y, not an axis index",
+      threeNamed.includes("on y,") && !threeNamed.includes("axis 1"),
+      threeNamed
     );
     const loneX2 = await errorOf(() => dots({ x2: "hi", y: "angle" }));
     check("a lone x2 renders", loneX2 === "", loneX2);
@@ -600,6 +610,67 @@ async function main() {
             near(b.x + b.w, dots[i].cx + 2 * unit)
         ),
       JSON.stringify({ boxes, dots, unit })
+    );
+
+    // Two anchors on an axis are a span: a center with one edge places the
+    // child exactly as its two edges do, 2 · center − edge being the other.
+    // That holds for a child with its own width, which the span overrides as
+    // x/x2 does, and for a child laid out in the span's length.
+    const solo = async (opts: any, child: any) =>
+      items(
+        await scatter(
+          opts,
+          vs.map(() => child)
+        ).toDisplayList(SIZE)
+      );
+    const center = at(vs);
+    const hi2 = at(vs.map((v) => v + 3));
+    const lo2 = at(vs.map((v) => v - 3));
+    for (const [what, child] of [
+      ["a rect with its own width", rect({ w: 5, h: 10 })],
+      ["a circle", circle({ r: 4 })],
+      [
+        "a stack whose layout depends on its width",
+        stack({ dir: "x", spacing: 0 }, [rect({ h: 10 }), rect({ h: 10 })]),
+      ],
+    ] as const) {
+      check(
+        `cx with x2 ≡ x/x2, for ${what}`,
+        same(
+          await solo({ cx: center, x2: hi2, cy: center }, child),
+          await solo({ x: lo2, x2: hi2, cy: center }, child)
+        )
+      );
+      check(
+        `x with cx ≡ x/x2, for ${what}`,
+        same(
+          await solo({ x: lo2, cx: center, cy: center }, child),
+          await solo({ x: lo2, x2: hi2, cy: center }, child)
+        )
+      );
+    }
+    // The implied edge is part of the domain: the first child's start edge,
+    // 2 · 0 − 3 = −3, is the smallest value on x, so it sits at the left
+    // of the frame instead of hanging past it.
+    const implied = (
+      await solo({ cx: center, x2: hi2, cy: center }, rect({ h: 10 }))
+    ).filter((it: any) => it.kind === "rect");
+    check(
+      "the start edge cx with x2 implies is in the x domain",
+      implied.length === 3 &&
+        near(Math.min(...implied.map((b: any) => b.x)), 0) &&
+        near(Math.max(...implied.map((b: any) => b.x + b.w)), SIZE.w),
+      JSON.stringify(implied)
+    );
+    // A pixel and a data value have no sum before the scale.
+    const mixedKinds = await errorOf(() =>
+      solo({ cx: center, x2: vs.map((v) => v + 3), cy: center }, rect({ h: 10 }))
+    );
+    check(
+      "cx as data with x2 as pixels throws a scatter error naming both",
+      mixedKinds.startsWith("scatter: cx, x2 place a child's center") &&
+        mixedKinds.includes("pixel literal"),
+      mixedKinds
     );
   }
 

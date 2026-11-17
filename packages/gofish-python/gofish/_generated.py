@@ -747,7 +747,7 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
     return opts
 
 def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). x with x2 (y with y2) is a span.
+    """Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). Any two keys of one axis are a span.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.

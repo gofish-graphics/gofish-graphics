@@ -41,7 +41,9 @@ scatter plot uses `cx` and `cy`, so each dot is centered on its point. `x`
 with `x2` is a span: each child spans from `x` to `x2`. Each axis is placed on
 its own, so `scatter({ cx: "lon", y: "lat" })` centers each child across and
 puts its start edge on the point along y. An axis takes at most two of its
-three keys, since two already fix the child's position and size there.
+three keys, since two already fix the child's position and size there. Any
+two make a span: `cx` with `x2` spans from `2 * cx - x2` to `x2`, and this
+other edge is computed in data space, so it is exact only on a linear scale.
 
 ## Placing by axis name with `dims`
 
@@ -279,8 +281,9 @@ Some cases are errors:
 When a position key names a categorical field, `scatter` uses discrete
 placement: each group gets one position of its own along the axis, and the
 key's anchor goes there, so `cx` centers each group on it, `x` puts its start
-edge there and `x2` its end edge. A span cannot end at a discrete position, so
-`x` with `x2` over a categorical field is an error. Use this for cases that
+edge there and `x2` its end edge. A span's ends must be numeric or time
+values, so two keys of one axis (`x` with `x2`, or `cx` with either) are an
+error when one of them names a categorical field. Use this for cases that
 need point placement without treating child edges as a band layout.
 
 If you need a fixed offset around the arranged scatter, chain

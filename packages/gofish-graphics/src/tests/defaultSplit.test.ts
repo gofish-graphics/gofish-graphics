@@ -191,7 +191,7 @@ async function main() {
     );
   }
 
-  // -- 4. Connected scatterplot: scatter(by, x, y), fused line() -> ONE
+  // -- 4. Connected scatterplot: scatter(by, cx, cy), fused line() -> ONE
   //    connector (positions both axes -> flow order, nothing else to
   //    split). ---------------------------------------------------------
   {
