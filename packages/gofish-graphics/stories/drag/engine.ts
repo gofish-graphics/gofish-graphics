@@ -27,7 +27,14 @@ import { paintDocument } from "../../src/ast/displayList/paintSVG";
 type Row = Record<string, any>;
 type Item = DisplayList.DisplayItem;
 type Affine = { tx: number; ty: number; sx: number; sy: number };
-type Entry = { key: string; item: Item; at: Affine; rows?: Row[] };
+type Entry = {
+  key: string;
+  item: Item;
+  at: Affine;
+  rows?: Row[];
+  /** A label tied to its mark by `attachedTo`: it carries the mark's rows. */
+  label?: boolean;
+};
 type Layout = { entries: Entry[]; byKey: Map<string, Entry> };
 type Vec = { x: number; y: number };
 
@@ -135,18 +142,34 @@ function keyEntries(items: Item[], key: (r: Row) => string): Layout {
   const entries: Entry[] = [];
   flatten(items, ID, entries);
   const counts = new Map<string, number>();
-  const texts = entries.filter((e) => !e.item.datum && e.item.kind === "text");
+  // A mark's rows by its item id, so a label (`attachedTo` that id) joins
+  // its mark's key group: it moves, floats and is raised with the mark.
+  const rowsById = new Map<string, Row[]>();
+  for (const e of entries) {
+    const d = e.item.datum;
+    if (d && e.item.id) rowsById.set(e.item.id, Array.isArray(d) ? d : [d]);
+  }
+  const ownerRows = (e: Entry) =>
+    e.item.attachedTo ? rowsById.get(e.item.attachedTo) : undefined;
+  const texts = entries.filter(
+    (e) => !e.item.datum && e.item.kind === "text" && !ownerRows(e)
+  );
   const anchor = (e: Entry): Vec => {
     const it = e.item as DisplayList.TextItem;
     return { x: e.at.tx + e.at.sx * it.x, y: e.at.ty + e.at.sy * it.y };
   };
   for (const e of entries) {
     const d = e.item.datum;
+    const owner = ownerRows(e);
     let base: string;
     if (d) {
       e.rows = Array.isArray(d) ? d : [d];
       base = `m:${rowsKey(e.rows, key)}:${e.item.kind}`;
       if (e.item.kind === "text") base += `:${e.item.text}`;
+    } else if (owner) {
+      e.rows = owner;
+      e.label = true;
+      base = `m:${rowsKey(owner, key)}:label-${e.item.kind}`;
     } else if (e.item.kind === "text") {
       base = `t:${e.item.text}`;
     } else {
@@ -602,6 +625,7 @@ export function mountDraggable(
     l.entries.filter(
       (e) =>
         e.rows &&
+        !e.label &&
         e.item.kind !== "text" &&
         e.rows.every((r) => opts.drag.marks?.(r) ?? true)
     );

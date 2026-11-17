@@ -943,8 +943,8 @@ chart(catches)
           rest of the picture snaps to the state whose target is nearest the
           tile, with a 150 ms tween, and the tile's size eases to its size in
           that state. On release the tile tweens into its slot. The tile's label
-          stays in the slot, because a label has no row to tie it to its tile
-          (see What GoFish needs first).
+          travels with the tile, because the label's display item names the mark
+          it is attached to.
         </p>
         <p>
           The rule for the default feel: positions on an axis blend along their
@@ -1230,8 +1230,12 @@ chart(catches)
         swatches by their nearest label, which is a guess.
       </li>
       <li>
-        <strong>Stable keys on display items</strong>, including labels. Today a
-        tile's label has no datum, so it does not travel with its tile.
+        <strong>Stable keys on display items.</strong> Labels are done in the
+        prototype: a label's display item now carries <code>attachedTo</code>,
+        the id of the mark it labels, so a label moves with its mark. What
+        remains: marks are still keyed by their rows through a user key
+        function, and ticks, swatches and axis lines have no identity of their
+        own.
       </li>
       <li>
         <strong>Pinned ordinal order during a drag.</strong> Categories are
@@ -1262,6 +1266,25 @@ chart(catches)
       continuous drags, drop targets by bounds, and control of z order. Each of
       these is a possible later member or option of the <code>Drag</code> family
       and none changes the call shape.
+    </p>
+  </section>
+
+  <section class="section" id="two-users">
+    <h2>Two users of the same engine</h2>
+    <p>
+      The engine is separate from the <code>.drag(Drag.…)</code> syntax. It
+      derives the states a drag can reach from the spec, lays each one out, and
+      blends between them under the pointer.
+    </p>
+    <p>
+      A GUI editor for GoFish needs the engine and none of the syntax. There
+      every mark is draggable without being told, and a drag edits the spec: a
+      domain's order, or which field a channel reads. The stack reorder already
+      works this way. The editor is the first user.
+    </p>
+    <p>
+      The <code>.drag()</code> syntax is for authors who want dragging in a
+      published chart. Its spelling stays open until someone needs it.
     </p>
   </section>
 

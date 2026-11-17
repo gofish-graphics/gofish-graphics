@@ -63,6 +63,9 @@ export interface BaseDisplayItem {
   role?: "node" | "overlay";
   /** Optional stable id (e.g. for keyed transitions in a host runtime). */
   id?: string;
+  /** For chrome attached to a mark (a mark's label), the `id` of the mark
+   *  it belongs to, so a host can move, hide or key it with its mark. */
+  attachedTo?: string;
 }
 
 export interface RectItem extends BaseDisplayItem {

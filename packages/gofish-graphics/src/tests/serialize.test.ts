@@ -982,9 +982,11 @@ async function main() {
   // -------------------------------------------------------------------------
   console.log("\n# Place, avoiding, halo and background round-trip");
   {
+    // Node ids count up across renders; a label's `attachedTo` is its mark's
+    // id, so both are left out of the comparison.
     const paint = async (b: any) =>
       JSON.stringify(await b.toDisplayList({ w: 300, h: 200 }), (k, v) =>
-        k === "id" ? undefined : v
+        k === "id" || k === "attachedTo" ? undefined : v
       );
     const dots = [
       { c: "a", x: 1, y: 1 },

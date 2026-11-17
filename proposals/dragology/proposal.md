@@ -111,7 +111,7 @@ chart(leaves)
 
 This is the case for layout. A Dragology author would have to write squarify. Here the tiles re-tile because each reachable state goes through the same layout.
 
-The dragged tile follows the pointer anywhere and is drawn on top. The rest of the picture snaps to the state whose target is nearest the tile, with a 150 ms tween, and the tile's size eases to its size in that state (middle frame). On release the tile tweens into its slot. The tile's label stays in the slot, because a label has no row to tie it to its tile (see What GoFish needs first).
+The dragged tile follows the pointer anywhere and is drawn on top. The rest of the picture snaps to the state whose target is nearest the tile, with a 150 ms tween, and the tile's size eases to its size in that state (middle frame). On release the tile tweens into its slot. The tile's label travels with the tile, because the label's display item names the mark it is attached to.
 
 The rule for the default feel: positions on an axis blend along their track. Layouts with no axis (treemap, pack, tree) use free dragging, with the rest snapping to the nearest state.
 
@@ -165,7 +165,7 @@ The data is a `signal`. A drop calls `set` with the edited rows, and the chart r
 From the prototype's walls. None of these is drag-specific.
 
 1. **A keyed join between one render and the next** (#914, noted as a declared shortcut in the build-in animation code). The drag blend and the drop tween both need it, and so does every animated update. The row key join on the animation grammar branch works on nodes and gives chrome no identity. The prototype keys ticks and legend swatches by their nearest label, which is a guess.
-2. **Stable keys on display items**, including labels. Today a tile's label has no datum, so it does not travel with its tile.
+2. **Stable keys on display items.** Labels are done in the prototype: a label's display item now carries `attachedTo`, the id of the mark it labels, so a label moves with its mark. What remains: marks are still keyed by their rows through a user key function, and ticks, swatches and axis lines have no identity of their own.
 3. **Pinned ordinal order during a drag.** Categories are ordered by first appearance, so editing a row's field can move its category in every reachable state. The prototype declares the domains by hand.
 4. **A public way to paint a display list and to read item boxes and pixel maps from it.** The prototype imports the painter by path.
 5. **A bug found on the way.** The color scale follows the declared levels of a `Unit` only when the same field also splits the marks. Stacked by row id, `fill: "species"` ignores the declared species levels and falls back to first appearance (`src/ast/_node.ts` near lines 1234 to 1258). Not filed yet.
@@ -173,6 +173,14 @@ From the prototype's walls. None of these is drag-specific.
 ## What the prototype leaves out
 
 Dragology features not reproduced: natural neighbor blending, `whenFar`, snap radius, chained drags, constraints on continuous drags, drop targets by bounds, and control of z order. Each of these is a possible later member or option of the `Drag` family and none changes the call shape.
+
+## Two users of the same engine
+
+The engine is separate from the `.drag(Drag.…)` syntax. It derives the states a drag can reach from the spec, lays each one out, and blends between them under the pointer.
+
+A GUI editor for GoFish needs the engine and none of the syntax. There every mark is draggable without being told, and a drag edits the spec: a domain's order, or which field a channel reads. The stack reorder already works this way. The editor is the first user.
+
+The `.drag()` syntax is for authors who want dragging in a published chart. Its spelling stays open until someone needs it.
 
 ## Precedent
 

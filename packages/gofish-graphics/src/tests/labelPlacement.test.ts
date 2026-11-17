@@ -1393,7 +1393,8 @@ console.log("# a label is a text on its chart, whatever groups its mark");
     JSON.stringify(
       items(await node.toDisplayList({ w, h }))
         .filter((i) => i.kind !== "group")
-        .map(({ id, key, name, ...rest }) => rest)
+        // `attachedTo` is the labeled mark's id, which counts up like `id`.
+        .map(({ id, key, name, attachedTo, ...rest }) => rest)
     );
   const rows = [
     { name: "a", v: 3 },

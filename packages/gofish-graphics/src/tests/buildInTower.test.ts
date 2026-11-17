@@ -52,14 +52,22 @@ function ok(name: string, cond: boolean, detail?: string): void {
 }
 
 /** Every drawn item, in paint order, without the node ids (which count up
- *  across charts) and the datum (provenance, not paint). */
+ *  across charts, as does a label's `attachedTo`, its mark's id) and the
+ *  datum (provenance, not paint). */
 function paint(doc: any): unknown[] {
   const out: unknown[] = [];
   const walk = (n: any): void => {
     if (Array.isArray(n)) return n.forEach(walk);
     if (n === null || typeof n !== "object") return;
     if (typeof n.kind === "string") {
-      const { id: _id, datum: _datum, children, items, ...rest } = n;
+      const {
+        id: _id,
+        attachedTo: _to,
+        datum: _datum,
+        children,
+        items,
+        ...rest
+      } = n;
       out.push(rest);
       if (children) walk(children);
       if (items) walk(items);

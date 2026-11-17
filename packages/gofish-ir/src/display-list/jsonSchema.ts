@@ -41,6 +41,7 @@ const BASE_PROPS = {
   },
   role: { enum: ["node", "overlay"] },
   id: { type: "string" },
+  attachedTo: { type: "string" },
 } as const;
 
 export const DISPLAY_LIST_JSON_SCHEMA = {

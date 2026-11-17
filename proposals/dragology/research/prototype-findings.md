@@ -118,9 +118,25 @@ map straight from layout output, with no internal access.
 | Display-list types                                       | `gofish-ir` `DisplayList`                | yes                                   |
 | `render` from `solid-js/web`, `d3-delaunay`, `culori`    | existing dependencies                    | n/a                                   |
 
-No library source was changed. The only repository changes outside the
-prototype folders add the built bundle to `.prettierignore` and to the ESLint
-ignores, so the pre-commit hook does not reformat 830 KB of minified code.
+The repository changes outside the prototype folders add the built bundle to
+`.prettierignore` and to the ESLint ignores, so the pre-commit hook does not
+reformat 830 KB of minified code, and make one library change.
+
+### Library changes
+
+- **`attachedTo` on label display items.** A display item may now carry
+  `attachedTo?: string` (`packages/gofish-ir/src/display-list/schema.ts`, and
+  the JSON schema next to it). Every item a label lowers sets it to the uid of
+  the mark the label is attached to (`src/ast/labels/labelNode.tsx`, from the
+  existing `_attachedTo` link that `INTERNAL_attach` records). The mark's own
+  items already carry that uid as their `id`. It is metadata only: the painter
+  never reads it, so no rendered output changes. Three tests that compare two
+  renders with node ids stripped now strip `attachedTo` too, since it is a
+  node id (`serialize.test.ts`, `buildInTower.test.ts`,
+  `labelPlacement.test.ts`). The wiki essays on labels and rendering say so.
+  I did not put the mark's `datum` on the label, as first suggested: a datum
+  makes an item `role: "node"`, a hit target, and labels are meant to stay
+  `"overlay"` chrome. That would have changed behavior, not just metadata.
 
 I looked at the key join on branch `worktree-animation-grammar-proposal`
 (`src/animation/identity.ts`). I did not borrow it, because it works on the
@@ -234,14 +250,15 @@ which I left out. This version has no resize and no conflict graph.
    coincide. The demo uses `sort: "none"` on both treemap levels. Blending
    between tilings made tiles overlap and leave gaps, so the treemap now uses
    free dragging (`floating`) instead of `between`.
-5. **Labels carry no datum, so a tile's label cannot travel with it.**
-   `.label("id")` text has no `datum`, so it is keyed as chrome by its text.
-   It moves to the label's place in the nearest state, which is the dragged
-   tile's destination slot, and is hidden under the lifted tile. Making it
-   travel with the tile would need the engine to guess which tile a text item
-   belongs to (for example, the box that contains it). That is a geometric
-   heuristic, so I did not add it. GoFish should put the subject's datum (or a
-   reference to the subject) on its label.
+5. **Labels carried no link to their mark (fixed).** `.label("id")` text has
+   no `datum`, so it was keyed as chrome by its text and stayed in the
+   dragged tile's destination slot. With `attachedTo` (see Library changes),
+   the engine gives a label its mark's rows and a key in its mark's group
+   (`m:<rows>:label-text`). The label now blends, is raised and floats with
+   its tile, and nothing is left in the slot. Attached labels are no longer
+   used as anchors for keying ticks and swatches, and they are never grab
+   targets. A label on a group node with no item of its own still has no
+   item to point to, so it falls back to being keyed by its text.
 6. **Chrome has no stable identity.** Tick labels and legend labels are keyed
    by their text. Ticks, swatches, and axis lines are keyed by the nearest
    text item. That is a heuristic. It is fine here, but a tick whose label
@@ -266,8 +283,8 @@ which I left out. This version has no resize and no conflict graph.
   (`node-17`). A `key` taken from the datum through a user key function, and a
   structural id for chrome (axis, tick value, legend entry), would remove the
   whole key-join section and its heuristic.
-- **Datum on labels.** A label should carry its subject's datum, or a reference
-  to the subject, so the label moves with its mark.
+- **Labels tied to their mark.** Done in this branch with `attachedTo` (see
+  Library changes).
 - **A public painter.** `paintDocument` (or a `paintDisplayList(items, svg)`)
   exported from `lib.ts`, so a host can paint a blended display list.
 - **Boxes for every item.** `itemBox` and `walkItems` in

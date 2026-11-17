@@ -254,6 +254,10 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
         };
         if (deg) item.rotate = deg;
         items.push(item);
+        // The mark this label is attached to (`INTERNAL_attach`), whose own
+        // items carry its uid as their `id`.
+        const owner = self._attachedTo?.uid;
+        if (owner) for (const it of items) it.attachedTo = owner;
         return items;
       },
     },

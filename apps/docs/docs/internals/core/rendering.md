@@ -317,7 +317,9 @@ otherwise (a mark resolved at a root has no rows, `NO_ROWS`, so it has no datum)
 so the two fields can never disagree
 and a host can split data from chrome on `role` alone. (Generated chrome carries no
 datum, so axes/legends/value-labels classify as `"overlay"` automatically; before
-this projection they were hard-coded `"node"` and mis-classified as data.) What is
+this projection they were hard-coded `"node"` and mis-classified as data.) Chrome
+attached to a mark (its label) also carries `attachedTo`, the `id` of the mark it
+belongs to, so it stays `"overlay"` while a host can still tie it to its mark. What is
 _gone_ versus the frontend IR or the live tree: no operators,
 no constraints, no underlying-space tags, no channels — the solve consumed all of
 them. What survives is geometry + resolved style + provenance.
