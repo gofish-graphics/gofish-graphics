@@ -595,6 +595,11 @@ export default defineConfig({
               items: [{ text: "Bin", link: "/js/api/bin" }],
             },
             {
+              text: "Dist",
+              collapsed: true,
+              items: [{ text: "Dist", link: "/js/api/dist" }],
+            },
+            {
               text: "Shape",
               collapsed: true,
               items: [{ text: "Shape", link: "/js/api/shape" }],
@@ -728,6 +733,11 @@ export default defineConfig({
               text: "Bin",
               collapsed: true,
               items: [{ text: "Bin", link: "/python/api/bin" }],
+            },
+            {
+              text: "Dist",
+              collapsed: true,
+              items: [{ text: "Dist", link: "/python/api/dist" }],
             },
             {
               text: "Shape",

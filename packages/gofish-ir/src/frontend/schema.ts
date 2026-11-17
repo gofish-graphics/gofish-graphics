@@ -951,8 +951,34 @@ export type ChannelValue =
   | boolean
   | null
   | FieldAccessor
+  | DistAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/** The parameters of each distribution family, by name, as
+ *  `Dist.normal({ mean, sd })` takes them. gofish-graphics' `ast/dist.ts`
+ *  reads this table. */
+export const DIST_FAMILIES = {
+  normal: ["mean", "sd"],
+  lognormal: ["meanlog", "sdlog"],
+  uniform: ["min", "max"],
+  exponential: ["rate"],
+} as const;
+
+/** A distribution family's name. */
+export type DistFamilyIR = keyof typeof DIST_FAMILIES;
+
+/** A distribution as a channel holds it, emitted by `Dist.normal({ mean,
+ *  sd })` and the other families: each parameter is a number, a column
+ *  name, or a value expression, read over each group's rows. `ops` are the
+ *  members it is read through (`d.density()` is one `member` op), as for a
+ *  reduce's result. gofish-graphics' `ast/distExpr.ts` mirrors it. */
+export interface DistAccessor {
+  type: "dist";
+  family: DistFamilyIR;
+  params: Record<string, number | string | FieldAccessor>;
+  ops?: FieldOpIR[];
+}
 
 /**
  * A length (#1176 step 6), as `percent(n)` and `fr(k)` build it: `percent`
@@ -1056,6 +1082,10 @@ export type FieldOpIR =
   /** `reduce(fn, unit=...)`: all of a group's values to one result,
    *  `fn(xs)`, a number or a record of numbers. */
   | { op: "reduce"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** The group's values as a sample, a distribution, read through its
+   *  members: `field("x").density()` is `sample` then the member
+   *  `density`. */
+  | { op: "sample" }
   /** A member of a reduce's result, read with `args` (`s.lo()`). */
   | { op: "member"; name: string; args?: unknown[] };
 

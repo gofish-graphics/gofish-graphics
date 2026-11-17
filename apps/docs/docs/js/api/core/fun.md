@@ -46,12 +46,7 @@ serialize it.
 ## Example
 
 ```ts
-const trend = fun((t) => 1.5 * t + 0.3, { domain: [1, 3] });
+const bump = fun((t) => 1 + Math.exp(-((t - 4) ** 2)), { domain: [0, 10] });
 
-layer([
-  chart(points)
-    .flow(scatter({ x: "x", y: "y" }))
-    .mark(circle({ r: 3 })),
-  line({ x: trend.support(), y: trend }),
-]).render(container, { w: 400, h: 300 });
+line({ x: bump.support(), y: bump }).render(container, { w: 400, h: 300 });
 ```

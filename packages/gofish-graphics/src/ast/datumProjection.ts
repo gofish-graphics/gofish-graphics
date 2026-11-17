@@ -716,6 +716,7 @@ export function splitEntries<T extends Record<string, any>>(
       case "normalize":
       case "map":
       case "reduce":
+      case "sample":
       case "member":
         throw new Error(
           `field(...).${op.op === "member" ? op.name : op.op}(...) computes ` +

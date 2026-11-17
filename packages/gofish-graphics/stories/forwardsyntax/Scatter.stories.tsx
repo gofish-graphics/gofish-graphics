@@ -6,7 +6,8 @@ import {
   seafood,
 } from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { chart, line, rect, stack, join } from "../../src/lib";
+import { penguins } from "../../src/data/penguins";
+import { chart, derive, line, rect, stack, join, Curve } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
@@ -56,6 +57,62 @@ export const Connected: StoryObj<Args> = {
       .flow(scatter({ by: "year", x: "miles", y: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
       .layer(line({ stroke: "black", strokeWidth: 2 }))
+      .render(container);
+
+    return container;
+  },
+};
+
+const measured = penguins.filter(
+  (p) => p["Flipper Length (mm)"] !== null && p["Body Mass (g)"] !== null
+);
+
+/** The least-squares line of `y` on `x` through `rows`, as two rows at the
+ *  least and the greatest `x`, with the same column names as the rows, so
+ *  a line through them shares the scatter's axes. */
+const leastSquares = (rows: Record<string, any>[], x: string, y: string) => {
+  const n = rows.length;
+  const mx = rows.reduce((a, r) => a + r[x], 0) / n;
+  const my = rows.reduce((a, r) => a + r[y], 0) / n;
+  let sxy = 0;
+  let sxx = 0;
+  for (const r of rows) {
+    sxy += (r[x] - mx) * (r[y] - my);
+    sxx += (r[x] - mx) ** 2;
+  }
+  const slope = sxy / sxx;
+  const xs = rows.map((r) => r[x]);
+  return [Math.min(...xs), Math.max(...xs)].map((t) => ({
+    [x]: t,
+    [y]: my + slope * (t - mx),
+  }));
+};
+
+export const TrendLine: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(measured, { w: args.w, h: args.h })
+      .flow(scatter({ x: "Flipper Length (mm)", y: "Body Mass (g)" }))
+      .mark(circle({ r: 2.5, fill: "#9aa7b8" }))
+      .layer(
+        chart(measured)
+          .flow(
+            derive((rows) =>
+              leastSquares(rows, "Flipper Length (mm)", "Body Mass (g)")
+            )
+          )
+          .mark(
+            line({
+              x: "Flipper Length (mm)",
+              y: "Body Mass (g)",
+              stroke: "#c0392b",
+              strokeWidth: 2,
+              curve: Curve.linear(),
+            })
+          )
+      )
       .render(container);
 
     return container;

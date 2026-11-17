@@ -202,6 +202,42 @@ for the API.
         }
       }
     },
+    "DistAccessor": {
+      "description": "A distribution, emitted by Dist.normal({ mean, sd }) and the other families. Each parameter is a number, a column name or a field expression, read over each group's rows; ops are the members it is read through (d.density()).",
+      "type": "object",
+      "required": ["type", "family", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "dist"
+        },
+        "family": {
+          "enum": ["normal", "lognormal", "uniform", "exponential"]
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Number"
+              },
+              {
+                "$ref": "#/$defs/FieldAccessor"
+              }
+            ]
+          }
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOpIR"
+          }
+        }
+      }
+    },
     "StructAccessor": {
       "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
       "type": "object",
@@ -397,6 +433,16 @@ for the API.
             },
             "unit": {
               "$ref": "#/$defs/UnitSpecIR"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["op"],
+          "properties": {
+            "op": {
+              "const": "sample"
             }
           },
           "additionalProperties": false
@@ -980,6 +1026,9 @@ for the API.
         },
         {
           "$ref": "#/$defs/FieldAccessor"
+        },
+        {
+          "$ref": "#/$defs/DistAccessor"
         },
         {
           "type": "object",

@@ -98,6 +98,20 @@ export const COUNT = {
   traits: { CanSum: {} },
 } satisfies HasUnit;
 
+/** The unit of a share of a whole, a cdf's (ast/dist.ts): a plain number
+ *  from 0 to 1, which does not add up. */
+export const RATIO = {
+  unit: "ratio",
+  traits: {},
+} satisfies HasUnit;
+
+/** The unit of a distribution family's mass, a probability. The
+ *  probabilities of parts that do not overlap add up. */
+export const PROBABILITY = {
+  unit: "probability",
+  traits: { CanSum: {} },
+} satisfies HasUnit;
+
 /** The quantities {@link columnQuantity} has made, by column type and
  *  column: one object per column, so the marks that read a column share its
  *  quantity, and a list of quantities (`summands` in underlyingSpace.ts, the

@@ -3379,6 +3379,45 @@ class FieldAccessor(dict):
 
         return _LiftedField(self._with_op(_step_op("reduce", all_groups, unit, where)))
 
+    def _sample_member(self, name: str, args: Optional[List[Any]] = None) -> "FieldAccessor":
+        """The member ``name`` of the group's values as a sample."""
+        op: dict = {"op": "member", "name": name}
+        if args:
+            op["args"] = list(args)
+        return self._with_op({"op": "sample"})._with_op(op)
+
+    def density(self) -> "FieldAccessor":
+        """The group's values as a sample: their kernel density, with area
+        the number of values and Silverman's bandwidth, over the values' own
+        range. It is in the values' count per unit, so the densities of
+        several groups add up. Valid only in a channel of ``ribbon`` or
+        ``line``. Mirrors JS ``field(name).density()``."""
+        return self._sample_member("density")
+
+    def support(self) -> "FieldAccessor":
+        """``t`` over the values' own range, the interval :meth:`density`
+        is drawn over: the position channel that reads the density at the
+        mark's parameter. In the values' unit."""
+        return self._sample_member("support")
+
+    def cdf(self) -> "FieldAccessor":
+        """The share of the group's values at or below t, over the values'
+        own range: the inverse of :meth:`quantile`, linear between the
+        values. A ratio. Valid only in a channel of ``ribbon`` or
+        ``line``."""
+        return self._sample_member("cdf")
+
+    def quantile(self, p: float) -> "FieldAccessor":
+        """The type-7 quantile at ``p`` of the group's values (R's and
+        numpy's default), missing values aside: ``quantile(0.5)`` is
+        ``median()``. Valid only in a value (size/pos) slot."""
+        if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p <= 1:
+            raise ValueError(
+                f'field("{self["name"]}").quantile(p): p must be a number in '
+                f"[0, 1], got {p!r}."
+            )
+        return self._sample_member("quantile", [p])
+
     def between(
         self, lo: float, hi: float, *, closed: Optional[str] = None
     ) -> "FieldPredicate":

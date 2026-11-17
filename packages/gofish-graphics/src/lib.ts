@@ -53,6 +53,9 @@ export type {
   Units,
   ValueExpr,
 } from "./ast/groupExpr";
+// Distributions: `Dist.normal({ mean, sd })`, read through their members
+// (`d.density()`, `d.median()`) as field expressions are.
+export * as Dist from "./families/dist";
 
 // Strategy families (#1013): an option whose value is one choice from a set
 // of named strategies gets one namespace, with a capitalized name. Each is a

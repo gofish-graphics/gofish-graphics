@@ -142,6 +142,19 @@ reach the wire: the wire carries the traits they expand into. Named types such a
 traits, like chart templates over operators, so design the traits
 first.
 
+**GoFish draws data, it does not transform it.** GoFish is a visualization
+library, not a data transformation library. It builds in only simple
+summaries of one column per group: sum, mean, median, min, max, count and
+the like. Computing those beforehand would add columns to the table that
+exist only for the picture. `map` and `reduce` take the user's own callback
+over one column for the same reason. Anything more, such as a fit or a
+computation that combines columns, is a data transform. The user writes it
+in `derive` or before the visualization, and returns rows that keep the
+original column names, so the axes and units join. A least-squares trend
+line over a scatter is a `derive` that returns two rows, the line's ends,
+named like the scatter's columns, drawn with `line({ x, y })`. GoFish has
+no built-in regression, smoothing or other fit.
+
 **Add a type only where a real example forces it.** A type earns its place by
 removing a special case that a real example runs into. For time and binning,
 only "a key is a cell" was needed at first; region types and schema

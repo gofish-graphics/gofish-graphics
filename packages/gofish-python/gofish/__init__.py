@@ -74,6 +74,7 @@ from . import calendar as Calendar
 from . import color as Color
 from . import coord as Coord
 from . import curve as Curve
+from . import dist as Dist
 from . import domain as Domain
 from . import filter_ as Filter
 from . import overlap as Overlap
@@ -152,6 +153,7 @@ __all__ = [
     "Color",
     "Coord",
     "Curve",
+    "Dist",
     "Filter",
     "Overlap",
     "Place",

@@ -34,7 +34,11 @@ replace it.
 It exports `fun(at, { domain })`, a function value over `domain` (`[min,
 max]`) that the shape form of `ribbon` and `line` reads at one parameter t
 (`ast/groupExpr.ts`). It is lowercase because it is a value constructor, like
-`field`, not a family.
+`field`, not a family. The namespace `Dist` holds distributions
+(`ast/distExpr.ts`, `ast/dist.ts`): its families, `Dist.normal({ mean, sd
+})` and the others, are expressions a channel reads through their members
+(`d.density()`, `d.median()`), and `Dist.sample(xs)` is a distribution at
+run time, for a `reduce` to return.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has

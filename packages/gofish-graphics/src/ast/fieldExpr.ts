@@ -45,7 +45,15 @@ import {
 import type { CalendarPartition, CalendarUnit } from "./calendar";
 import { identity, type Fun } from "./fun";
 import type { HasUnit } from "./schema";
-import type { Lift, LiftError, Units, ValueExpr } from "./groupExpr";
+import type {
+  FunctionExpr,
+  Lift,
+  LiftError,
+  Units,
+  ValueExpr,
+} from "./groupExpr";
+import { distQuantities, sample, type Dist } from "./dist";
+import { evalDistGroup, isDistExpr, type DistExprWire } from "./distExpr";
 
 /** The calendar levels that are a part of nothing, so a bin of one alone
  *  gives cells of the time line. */
@@ -97,6 +105,10 @@ export type FieldOp =
   | { op: "map"; fn: unknown; unit?: UnitSpec }
   /** `reduce(fn, { unit })`: all the values to one result, `fn(xs)`. */
   | { op: "reduce"; fn: unknown; unit?: UnitSpec }
+  /** The group's values as a sample, a distribution (`Dist.sample` in
+   *  dist.ts), read through its members: `field("x").density()` is
+   *  `sample` then the member `density`. */
+  | { op: "sample" }
   /** A member of a reduce's result, read with `args`: `s.lo()`,
    *  `s.quantile(0.9)`. */
   | { op: "member"; name: string; args?: unknown[] };
@@ -224,7 +236,7 @@ export class FieldExpr<
   /** Space-filling normalization on an operator's (`spread`/`stack`) `size`
    *  channel: replaces each split entry's size with its SHARE of the window
    *  (`v_e / Σv_e` over the operator's own split entries), turning the stack
-   *  axis into a space-filling spine — see `applyEntryNormalize` below. Valid
+   *  axis into a space-filling spine — see `applyWindowMaps` below. Valid
    *  only there; anywhere else (a plain value slot, or chained after another
    *  op) it throws a clear error. */
   normalize(): FieldExpr<false> {
@@ -311,6 +323,50 @@ export class FieldExpr<
           : {}),
       },
     ]) as any;
+  }
+
+  /** The group's values as a sample ({@link Dist}): their kernel density,
+   *  with area the number of values and Silverman's bandwidth, over the
+   *  values' own range (`Dist.sample` in dist.ts). It is in the values'
+   *  count per unit, so the densities of several groups add up. Valid only
+   *  in a channel of ribbon or line. */
+  density(): FunctionExpr {
+    return this._member("density") as FunctionExpr;
+  }
+
+  /** `t ↦ t` over the values' own range, the interval
+   *  {@link FieldExpr.density} is drawn over: the position channel that
+   *  reads the density at the mark's parameter. In the values' unit. */
+  support(): FunctionExpr {
+    return this._member("support") as FunctionExpr;
+  }
+
+  /** The share of the group's values at or below t, over the values' own
+   *  range: the inverse of {@link FieldExpr.quantile}, linear between the
+   *  values. A ratio. Valid only in a channel of ribbon or line. */
+  cdf(): FunctionExpr {
+    return this._member("cdf") as FunctionExpr;
+  }
+
+  /** The type-7 quantile at `p` of the group's values (R's and numpy's
+   *  default), missing values aside: `quantile(0.5)` is `median()`. In the
+   *  values' unit. Valid only in a value (size/pos) slot. */
+  quantile(p: number): ValueExpr {
+    if (!(typeof p === "number" && p >= 0 && p <= 1))
+      throw new Error(
+        `field("${this.name}").quantile(p): p must be a number in [0, 1], ` +
+          `got ${String(p)}.`
+      );
+    return this._member("quantile", [p]) as ValueExpr;
+  }
+
+  /** The member `name` of the group's sample. */
+  private _member(name: keyof Dist, args?: unknown[]): unknown {
+    return new FieldExpr(this.name, [
+      ...this._ops,
+      { op: "sample" },
+      { op: "member", name, ...(args ? { args } : {}) },
+    ]);
   }
 
   /**
@@ -720,7 +776,8 @@ type MapStep = {
 };
 
 /** A fold step: all the values to one result. A named one says what the
- *  quantity of its number is; a user's reduce has its `unit` option. */
+ *  quantity of its number is; a fold whose result is lifted (a user's
+ *  reduce, a sample) says the quantity of each leaf. */
 type FoldStep = {
   op: FieldOp & object;
   fn: (xs: readonly unknown[]) => unknown;
@@ -729,8 +786,31 @@ type FoldStep = {
   /** A named fold's quantity, given the values' quantity; undefined keeps
    *  the column's (the caller's). */
   quantity?: (base: Quantity | undefined) => Quantity | undefined;
-  /** A user's reduce: its unit option, which the lift reads per leaf. */
-  unit?: unknown;
+  /** A fold whose result is lifted by its shape ({@link liftLeaf}), read
+   *  through members: the quantity of the leaf at `path`, given the
+   *  values' quantity. */
+  lift?: (base: Quantity | undefined) => LeafQuantity;
+  /** What the lift's messages call the fold. */
+  where?: string;
+};
+
+/** The quantity of a lifted result's leaf at `path` (its members, in
+ *  order), a value or a function; undefined keeps the column's. */
+export type LeafQuantity = (
+  path: readonly string[],
+  kind: "value" | "function"
+) => Quantity | undefined;
+
+/** The leaf quantities of a {@link Dist} over values of quantity `variable`
+ *  (`distQuantities`): a function's `support()` is in the variable, as the
+ *  Dist's own `support` is. */
+export const distLeafQuantity = (
+  variable: Quantity,
+  mass: Quantity
+): LeafQuantity => {
+  const q = distQuantities(variable, mass);
+  return (path) =>
+    path[path.length - 1] === "support" ? q.support : q[path[0] as keyof Dist];
 };
 
 /**
@@ -791,12 +871,31 @@ function stepOf(
         },
       };
     }
-    case "reduce":
+    case "reduce": {
+      const where = `field("${name}").reduce(...)`;
       return {
         fold: {
           op,
           fn: op.fn as (xs: readonly unknown[]) => unknown,
-          unit: op.unit,
+          where,
+          // One unit for a function's support keeps the column's quantity:
+          // t is an amount of the column.
+          lift: () => (path, kind) =>
+            kind === "function" &&
+            path[path.length - 1] === "support" &&
+            hasUnitOf(op.unit) !== undefined
+              ? undefined
+              : quantityAt(name, op.unit, path, where),
+        },
+      };
+    }
+    case "sample":
+      return {
+        fold: {
+          op,
+          fn: (xs) => sample(xs),
+          where: `field("${name}")`,
+          lift: (base) => distLeafQuantity(base ?? { name }, COUNT_QUANTITY),
         },
       };
     case "sum":
@@ -836,7 +935,7 @@ function stepsOf(
       maps.push(step.map);
     } else if ("fold" in step) {
       if (fold !== undefined) {
-        if (fold.op.op !== "reduce" && op.op !== "reduce")
+        if (fold.lift === undefined && op.op !== "reduce")
           throw new Error(
             `field(...) can only carry one aggregate op; found ${fold.op.op}, ${op.op}.`
           );
@@ -849,7 +948,7 @@ function stepsOf(
           `field("${name}"): .${step.member.name}() reads a member of a ` +
             `reduce's result, but there is no reduce before it.`
         );
-      if (fold.op.op !== "reduce") throw liftChainError(name, fold.op, op.op);
+      if (fold.lift === undefined) throw liftChainError(name, fold.op, op.op);
       members.push(step.member);
     }
   }
@@ -895,13 +994,12 @@ export type GroupResult =
  * args, until a leaf. An array, a record at the end, or a member of a leaf
  * (other than a function's `support()`) is an error.
  */
-function liftLeaf(
+export function liftLeaf(
   result: unknown,
   members: readonly MemberOp[],
-  name: string,
-  unit: unknown
+  where: string,
+  quantityOf: LeafQuantity
 ): GroupResult {
-  const where = `field("${name}").reduce(...)`;
   let v = result;
   const path: string[] = [];
   let read = where;
@@ -946,21 +1044,18 @@ function liftLeaf(
     path.push(m.name);
     read += `.${m.name}()`;
   }
-  if (v === null || v === undefined || typeof v === "number")
+  if (v === null || v === undefined || typeof v === "number") {
+    const quantity = quantityOf(path, "value");
     return {
       kind: "value",
       value: v ?? undefined,
-      quantity: quantityAt(name, unit, path, where),
+      ...(quantity ? { quantity } : {}),
     };
-  if (isFunLike(v))
-    return {
-      kind: "function",
-      fun: v,
-      quantity:
-        path[path.length - 1] === "support" && hasUnitOf(unit) !== undefined
-          ? undefined
-          : quantityAt(name, unit, path, where),
-    };
+  }
+  if (isFunLike(v)) {
+    const quantity = quantityOf(path, "function");
+    return { kind: "function", fun: v, ...(quantity ? { quantity } : {}) };
+  }
   if (Array.isArray(v))
     throw new Error(
       `${read} is an array. A reduce returns a number, a function or a ` +
@@ -1007,11 +1102,19 @@ const keyOf = <T>(
  * operator's entries are split by, which a share's quantity is qualified by.
  */
 export function evalGroup<T>(
-  accessor: string | ((r: T) => unknown) | FieldExprWire | FieldExpr,
+  accessor:
+    | string
+    | ((r: T) => unknown)
+    | FieldExprWire
+    | FieldExpr
+    | DistExprWire,
   rows: readonly T[],
   column: Quantity | undefined,
   byName?: string
 ): GroupResult {
+  // A distribution expression's result is its Dist, read through its
+  // members by the same lift as a reduce's.
+  if (isDistExpr(accessor)) return evalDistGroup(accessor, rows);
   const name =
     typeof accessor === "string"
       ? accessor
@@ -1037,11 +1140,11 @@ export function evalGroup<T>(
   const result = cachedStep(fold.op, rows, `field("${name}").reduce(...)`, () =>
     fold.fn(values)
   );
-  if (fold.op.op !== "reduce") {
+  if (fold.lift === undefined) {
     const q = fold.quantity?.(quantity) ?? (mapped ? quantity : undefined);
     return { kind: "value", value: result, ...(q ? { quantity: q } : {}) };
   }
-  return liftLeaf(result, members, name, fold.unit);
+  return liftLeaf(result, members, fold.where!, fold.lift(quantity));
 }
 
 /**
@@ -1114,6 +1217,13 @@ export async function resolveGroupSteps(
   }
 }
 
+/** Whether `v`'s result has a shape known only per group, a function or a
+ *  value: it holds a reduce or a sample, or it is a distribution
+ *  expression. */
+export const liftsPerGroup = (v: unknown): boolean =>
+  isDistExpr(v) ||
+  getFieldOps(v).some((op) => op.op === "reduce" || op.op === "sample");
+
 /** Whether a field expression's ops hold a Python callback, which must be
  *  resolved over the groups before inference ({@link resolveGroupSteps}). */
 export const holdsBatchStep = (accessor: unknown): boolean =>
@@ -1142,7 +1252,7 @@ export function hasWindowMaps(accessor: unknown): boolean {
 const stepOfKind = (op: FieldOp): "map" | "fold" | "member" | "domain" =>
   op.op === "map" || op.op === "normalize"
     ? "map"
-    : op.op === "reduce" || op.op in NAMED_FOLDS
+    : op.op === "reduce" || op.op === "sample" || op.op in NAMED_FOLDS
       ? "fold"
       : op.op === "member"
         ? "member"

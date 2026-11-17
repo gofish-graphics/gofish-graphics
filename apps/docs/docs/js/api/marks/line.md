@@ -72,14 +72,9 @@ parameter `t`, as a [`ribbon`](/js/api/marks/ribbon#function-channels) does.
 `x` holds `f.support()`, which is `t` itself over the domain of `f`.
 
 ```ts
-const trend = fun((t) => 1.5 * t + 0.3, { domain: [1, 3] });
+const wave = fun((t) => 1 + 0.6 * Math.sin(t), { domain: [0, 10] });
 
-layer([
-  chart(points)
-    .flow(scatter({ x: "x", y: "y" }))
-    .mark(circle({ r: 3 })),
-  line({ x: trend.support(), y: trend }),
-]);
+line({ x: wave.support(), y: wave });
 ```
 
 ## Connector forms

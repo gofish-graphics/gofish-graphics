@@ -21,8 +21,8 @@ import { identity, opaque, type Fun } from "./fun";
 import type { Quantity } from "./measure";
 import {
   evalGroup,
-  getFieldOps,
   holdsClosureStep,
+  liftsPerGroup,
   type UnitLike,
 } from "./fieldExpr";
 
@@ -158,11 +158,6 @@ export function fun(
  *  which is known per group ({@link groupFun}). */
 export const isFunctionExpr = (v: unknown): boolean => isFunValue(v);
 
-/** Whether `v` holds a reduce, whose result's shape is known only per
- *  group. */
-const holdsReduce = (v: unknown): boolean =>
-  getFieldOps(v).some((op) => op.op === "reduce");
-
 /** The function a function expression gives for one group, and the quantity
  *  its values are amounts of, when it declares one. */
 export type GroupFun = { fun: Fun<number>; quantity?: Quantity };
@@ -180,7 +175,7 @@ export function groupFun(
   column?: Quantity
 ): GroupFun | undefined {
   if (isFunValue(expr)) return { fun: expr };
-  if (!holdsReduce(expr)) return undefined;
+  if (!liftsPerGroup(expr)) return undefined;
   const r = evalGroup(expr as any, rows, column);
   return r.kind === "function"
     ? { fun: r.fun, ...(r.quantity ? { quantity: r.quantity } : {}) }

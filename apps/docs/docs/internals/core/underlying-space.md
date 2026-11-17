@@ -15,6 +15,9 @@ covers:
   - packages/gofish-graphics/src/ast/length.ts
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/fieldExpr.ts
+  - packages/gofish-graphics/src/ast/dist.ts
+  - packages/gofish-graphics/src/ast/distExpr.ts
+  - packages/gofish-graphics/src/families/dist.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
@@ -2792,6 +2795,38 @@ every group the channel will read (`resolveGroupSteps`), one bridge call
 whose input is each group's values and whose reply is one result per group,
 and fills the cache. Reading a Python step on a group it was not resolved
 over is an error, not a silent call.
+
+### Distributions
+
+A distribution is the record `Dist` (`dist.ts`): `density`, `cdf` and
+`support`, each a `Fun<number>` over one interval, `quantile(p)`, `median`,
+`mean` and `mass`. It is a plain record, so a reduce that returns one is
+lifted by the rule above with no case of its own: `d.density()` is a member
+that is a `Fun`, `d.quantile(0.9)` a method member, `d.median()` a number.
+Its `support` member is the identity over the interval `density` is drawn
+over, which is what the generic `support()` of a `Fun` gives too, so
+`d.support()` and `d.density().support()` are the same function. The record
+has the member; a bare `Fun` has the generic rule in `liftLeaf`. Neither
+knows about the other.
+
+Two other folds give a `Dist`, on the same lift. `field(x).density()` (and
+`support`, `cdf`, `quantile(p)`) is the fold `sample` and a member: the
+group's values as `Dist.sample`, a normal kernel density with Silverman's
+bandwidth (`silvermanBandwidth` in `overlap.ts`), reflected at the least and
+the greatest value, with area the row count; its quantile is the values'
+type-7 quantile, so its median is `median()`'s. A family,
+`Dist.normal({ mean, sd })`, is its own expression (`DistExpr` in
+`distExpr.ts`, wire `{ type: "dist", family, params, ops }`): `evalGroup`
+reads its parameters over the group's rows (`distOf`), makes the family's
+`Dist`, and lifts it through its member ops.
+
+A fold that lifts says the quantity of each leaf (`FoldStep.lift`). A
+reduce reads its `unit` option. A `Dist` reads its variable
+(`distQuantities`): the support, the quantiles, the median and the mean are
+amounts of the variable (the column, or a family's location column), so
+their axes join; the density is the mass per the variable's unit, or per
+its difference unit (a density over instants is per duration), with
+`CanSum`, so densities stack; the cdf is a `ratio`, which does not add up.
 
 The `unit` option mirrors the result's shape: one unit for every number
 below it, or a record with a unit per member (`quantityAt`). A number with

@@ -11,6 +11,7 @@
 
 import {
   COMBINATOR_MARK_TYPES,
+  DIST_FAMILIES,
   LEAF_MARK_TYPES,
   OPERATOR_TYPES,
   type ChannelValue,
@@ -849,6 +850,10 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     walkFieldAccessor(obj, path, ctx);
     return;
   }
+  if (obj.type === "dist") {
+    walkDistAccessor(obj, path, ctx);
+    return;
+  }
   if (obj.type === "literal") {
     if (!("value" in obj)) {
       ctx.errors.push({
@@ -889,6 +894,58 @@ function walkFieldAccessor(
     } else {
       obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
     }
+  }
+}
+
+/**
+ * A distribution (`Dist.normal({ mean, sd })`): `{ type: "dist", family,
+ * params, ops? }`, one parameter per name the family takes
+ * (`DIST_FAMILIES`), each a number, a column name or a field expression,
+ * and `ops` its members (and, as a `by` key, its `bin`).
+ */
+function walkDistAccessor(
+  obj: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  rejectUnknown(obj, ["type", "family", "params", "ops"], path, ctx);
+  const family = obj.family;
+  if (typeof family !== "string" || !Object.hasOwn(DIST_FAMILIES, family)) {
+    ctx.errors.push({
+      path: `${path}.family`,
+      message: `dist "family" must be one of ${Object.keys(DIST_FAMILIES).join(", ")}, got ${JSON.stringify(family)}`,
+    });
+    return;
+  }
+  const names = DIST_FAMILIES[family as keyof typeof DIST_FAMILIES];
+  const params = obj.params;
+  if (!isObject(params)) {
+    ctx.errors.push({
+      path: `${path}.params`,
+      message: `dist "params" must be an object of ${names.join(", ")}`,
+    });
+  } else {
+    rejectUnknown(params, [...names], `${path}.params`, ctx);
+    for (const k of names) {
+      const v = params[k];
+      const at = `${path}.params.${k}`;
+      if (v === undefined)
+        ctx.errors.push({ path: at, message: `Dist.${family} needs "${k}"` });
+      else if (isObject(v) && v.type === "field") walkFieldAccessor(v, at, ctx);
+      else if (typeof v !== "string" && !isIRNumber(v))
+        ctx.errors.push({
+          path: at,
+          message: `a dist parameter is a number, a column name or a field expression, got ${typeNameOf(v)}`,
+        });
+    }
+  }
+  if (obj.ops !== undefined) {
+    if (!Array.isArray(obj.ops))
+      ctx.errors.push({
+        path: `${path}.ops`,
+        message: 'dist "ops" must be an array when present',
+      });
+    else obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
   }
 }
 
@@ -962,6 +1019,7 @@ const FIELD_OP_NAMES = [
   "distinct",
   "map",
   "reduce",
+  "sample",
   "member",
 ] as const;
 
@@ -1044,6 +1102,9 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
         });
       if (value.unit !== undefined)
         walkUnitSpec(value.unit, `${path}.unit`, ctx);
+      return;
+    case "sample":
+      rejectUnknown(value, ["op"], path, ctx);
       return;
     case "member":
       rejectUnknown(value, ["op", "name", "args"], path, ctx);

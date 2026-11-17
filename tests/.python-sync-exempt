@@ -37,17 +37,6 @@ packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
 
-# Per-export exemption for ViolinPlot.stories.tsx — the JS story uses
-# `fast-kde`'s density1d, while the idiomatic Python port
-# (tests/python-stories/low-level-syntax/test_violin_plot.py) uses
-# `scipy.stats.gaussian_kde`. Both produce a real KDE curve over the same
-# data with the same violin structure/colors/layout, but the two libraries'
-# default bandwidth/extent choices diverge, so the rendered curve can't
-# byte-match the JS baseline — an accepted algorithm divergence, not a
-# missing feature. The port IS captured and IR-validated (mark/operator
-# structure, data, options); only the pixel-for-pixel DOM diff is skipped.
-packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
-
 # Function-valued channels (stack profiles S9): a function value is read at
 # t during layout, which is synchronous, and a Python function is reachable
 # only across the asynchronous bridge, so Python `fun(...)` raises
