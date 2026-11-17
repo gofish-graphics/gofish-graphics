@@ -1,5 +1,5 @@
 /**
- * Distributions (stack profiles S11): the run-time record (ast/dist.ts),
+ * Distributions: the run-time record (ast/dist.ts),
  * the families and `Dist.sample`, a distribution expression
  * (ast/distExpr.ts) and the field members (`field(x).density()`), their
  * units, and their wire form.

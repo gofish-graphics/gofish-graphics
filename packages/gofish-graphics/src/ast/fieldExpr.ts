@@ -852,7 +852,7 @@ export const distLeafQuantity = (
  * `mean`, `median`, `count` and `distinct` stand for. Each skips missing
  * values as SQL does, except `count`, the number of rows.
  */
-export const NAMED_FOLDS = {
+const NAMED_FOLDS = {
   /** `xs => Σ xs` (missing values aside); the values' unit must add up. */
   sum: {
     fn: (xs: readonly unknown[]) => sumOf(xs),

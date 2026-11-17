@@ -1,5 +1,5 @@
 /**
- * A stack of bands (stack profiles S6): where `stackPlaces` lays each band
+ * A stack of bands: where `stackPlaces` lays each band
  * (its offset along u, and the interval it covers), and what a stacked
  * area draws. Covers the stack's interval as the maximum of the pointwise
  * sum, every band keeping its thickness at its knots, the `middle` baseline

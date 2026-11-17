@@ -41,13 +41,11 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:
  * size[i] }, [child])` on the stack axis. A prop-less child (e.g. a rect with
  * only `fill`) fills its wrapper's proposed size, so the usual mark stays
- * unchanged — only the wrapping is new. This replaces the old `normalize`
- * layout flag: `size: field(<name>).normalize()` computes each entry's SHARE
- * of the window (see fieldExpr.ts's `applyWindowMaps`) as a data-driven
- * SIZE claim on the wrapper, whose content layer.tsx nests in the wrapper's box
- * as a sized node — the same space-filling-spine effect `normalize: true` used
- * to special-case, but now just the general "a data-valued size nests its
- * content" rule.
+ * unchanged; only the wrapping is added. `size: field(<name>).normalize()`
+ * computes each entry's share of the window (see fieldExpr.ts's
+ * `applyWindowMaps`) as a data-driven size claim on the wrapper, whose
+ * content layer.tsx nests in the wrapper's box as a sized node: the general
+ * rule that a data-valued size nests its content.
  */
 export const Spread = createNodeOperator(
   async (

@@ -3,7 +3,7 @@
 // </gofish-wiki>
 
 /**
- * The cell a group is (stack profiles S12): a split by a key binned on a
+ * The cell a group is: a split by a key binned on a
  * line, `field(x).bin(p)` or `d.bin(p)` on a distribution, gives each cell's
  * group the interval of the cell on the key's variable and the rows of the
  * group it was split from. It rides the group's rows ARRAY, as its column
@@ -47,7 +47,7 @@ export const setGroupCell = <T>(rows: T, cell: GroupCell): T =>
   tagArray(rows, GROUP_CELL, cell);
 
 /** The cell `rows` is a group of, if any. */
-export const groupCellOf = (rows: unknown): GroupCell | undefined =>
+const groupCellOf = (rows: unknown): GroupCell | undefined =>
   rows != null
     ? ((rows as any)[GROUP_CELL] as GroupCell | undefined)
     : undefined;

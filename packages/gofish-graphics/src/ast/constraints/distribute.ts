@@ -411,8 +411,8 @@ export type DistributeFoldOptions = {
  * The distribute constraint's *type* contribution — the bottom-up half that
  * makes `layer + distribute` claim the same underlying space a `spread` does.
  * Mirrors spread.tsx's stack-axis dispatch exactly, including the
- * explicit-size override and the glue (stack) variant, so phase-3 spread can
- * delegate to it wholesale:
+ * explicit-size override and the glue (stack) variant, so spread can delegate
+ * to it wholesale:
  *
  *  - explicit `opts.size` (a value) → free `[0, value]` — the spread's own
  *    size wins over any children-derived claim.
@@ -494,8 +494,14 @@ export function distributeSpaceFold(
           currentUnits().sum(q, "stack");
     const { baseline } = opts;
     const sides = targets.map(tailSides);
-    sides.forEach((part, i) => {
-      if (opts.hasMidpoint && maximum(field(part, "descent")) > 0) {
+    // How far each part reaches below its tail: read by the centered
+    // stack's check and by whether the stack holds amounts on both sides.
+    const descents =
+      opts.hasMidpoint || keepsZero(baseline)
+        ? sides.map((part) => maximum(field(part, "descent")))
+        : [];
+    descents.forEach((descent, i) => {
+      if (opts.hasMidpoint && descent > 0) {
         const by = opts.measure === undefined ? "" : `"${opts.measure}"`;
         throw new Error(
           `${by ? `stack({ by: ${by} })` : "stack"}: a centered stack's ` +
@@ -528,8 +534,7 @@ export function distributeSpaceFold(
     // its 0 on both sides.
     return mirrored(
       withProfile(space, record({ min: scale(below, -1), max: above })),
-      keepsZero(baseline) &&
-        sides.every((part) => maximum(field(part, "descent")) <= 0)
+      keepsZero(baseline) && descents.every((descent) => descent <= 0)
     );
   }
 
@@ -690,7 +695,7 @@ export function stackPlaces(
  *  head, or one of its anchors. Its box spans `[−descent, ascent]` about its
  *  tail, and `"baseline"`, its own 0, is the tail itself.
  *
- *  TODO(stack-profiles S7): a shortcut. That is exact for a part with a
+ *  TODO(stack-profiles): a shortcut. That is exact for a part with a
  *  data baseline. Placement reads `"baseline"` as the part's own 0
  *  (`stackOriginOffset` in placementSolver.ts), and a part with no data
  *  baseline (a nested spread or a middle stack) has its own 0 where its

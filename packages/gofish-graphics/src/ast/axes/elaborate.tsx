@@ -335,7 +335,7 @@ function gutterConstraints(
 type ExtraLabel = {
   value: number;
   text: string;
-  offset?: number;
+  offset: number;
 };
 
 /**
@@ -447,7 +447,7 @@ function positionAxis(opts: {
         Constraint.distribute(
           {
             dir: crossName(dim),
-            spacing: e.offset ?? TICK_LEN + LABEL_TICK_GAP,
+            spacing: e.offset,
           },
           // Label sits on the OUTER side of the line — past it toward the gutter,
           // which flips with `side`.

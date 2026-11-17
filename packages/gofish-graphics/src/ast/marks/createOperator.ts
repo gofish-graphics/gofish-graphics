@@ -94,7 +94,7 @@ import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
 import { GoFishRef } from "../_ref";
-import { functionInChannelError, isFunctionExpr } from "../groupExpr";
+import { functionInChannelError, isFunValue } from "../groupExpr";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -1066,8 +1066,7 @@ function applyChannels<Options extends Record<string, any>>(
     const val = out[key];
     if (val === undefined || spec === undefined) continue;
     // Only the shape form of ribbon and line reads a function value.
-    if (isFunctionExpr(val))
-      throw functionInChannelError(operator, String(key));
+    if (isFunValue(val)) throw functionInChannelError(operator, String(key));
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     if (type !== "dims") {
       out[key] = infer(type, spec, val);

@@ -1,5 +1,5 @@
 /**
- * Group expressions (stack profiles S10): `field(...).map` and
+ * Group expressions: `field(...).map` and
  * `field(...).reduce`, and the named methods as built-in callbacks on the
  * same evaluation path. Covers the lift for each result shape, the array
  * and chaining errors, the shape of the `unit` option and an undeclared

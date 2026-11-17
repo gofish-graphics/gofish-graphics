@@ -75,7 +75,7 @@ export type Fun<T> = {
 
 /** The default tolerance of a query on an opaque function, relative to the
  *  width of its domain (for a place) or absolute (for a value). */
-export const TOLERANCE = 1e-9;
+const TOLERANCE = 1e-9;
 
 const SAMPLES = 512;
 
@@ -119,7 +119,10 @@ const evalPoly = <T extends Linear>(c: readonly T[], s: number): T => {
 };
 
 /** The same polynomial expanded about `at0 + d` (a Taylor shift). */
-const shiftPoly = <T extends Linear>(c: readonly T[], d: number): T[] => {
+export const shiftPoly = <T extends Linear>(
+  c: readonly T[],
+  d: number
+): T[] => {
   const out = [...c];
   if (d === 0 || out.length < 2) return out;
   const n = out.length;
@@ -221,7 +224,7 @@ const hull = (a: Interval, b: Interval): Interval => ({
 });
 
 /** Whether `t` is in the domain of `f`. */
-export const inside = (f: Fun<unknown>, t: number): boolean =>
+const inside = (f: Fun<unknown>, t: number): boolean =>
   t >= f.domain.min && t <= f.domain.max;
 
 const isPoint = <T>(p: Piece<T>): boolean => p.from === p.to;
@@ -504,7 +507,7 @@ export const zip = <A, B, C>(
 
 /** Evaluate at `u`. Outside its domain a function of numbers reads 0 (a
  *  thickness of 0). */
-export const evaluate = (f: Fun<number>, u: number): number =>
+const evaluate = (f: Fun<number>, u: number): number =>
   inside(f, u) ? f.at(u) : 0;
 
 /** Add two pointwise, over the hull of their domains. Outside its own

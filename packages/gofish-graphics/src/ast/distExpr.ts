@@ -313,7 +313,7 @@ export function distVariable(expr: DistExpr | DistExprWire): CellVariable {
 /** The family's Dist for the group `rows`, and the quantity of the
  *  variable it is over. In a cell of a key over the same distribution
  *  (`d.bin(p)`), it is the whole group's Dist restricted to the cell. */
-export function distOf(
+function distOf(
   expr: DistExpr | DistExprWire,
   rows: readonly unknown[]
 ): { dist: Dist; variable: Quantity } {
@@ -393,7 +393,7 @@ export function distKeyCells(
 /** The members a distribution expression reads; any other op is an error
  *  in a value channel. */
 const membersOf = (expr: DistExpr | DistExprWire): MemberOp[] =>
-  (expr instanceof DistExpr ? expr._ops : (expr.ops ?? [])).map((op) => {
+  opsOf(expr).map((op) => {
     if (op.op !== "member")
       throw new Error(
         `Dist.${expr.family}(...).${op.op}(...) is a grouping key (\`by\`), ` +

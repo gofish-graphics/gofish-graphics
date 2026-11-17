@@ -51,6 +51,7 @@ import {
   restrict,
   scale,
   add,
+  shiftPoly,
   through,
   type Fun,
   type Interval,
@@ -72,7 +73,7 @@ import {
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import type { Quantity } from "../measure";
-import { interval } from "../../util/interval";
+import { interval, toJSON as showDomain } from "../../util/interval";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -141,15 +142,8 @@ const mapValues = (f: Fun<number>, k: number, c: number): Fun<number> =>
 /** A piece's polynomial over `w` in [0, 1] across the piece (`u = from +
  *  w · (to − from)`), lowest power first. */
 const overUnit = (p: Piece<number>): number[] => {
-  const s0 = p.from - p.at0;
   const h = p.to - p.from;
-  const c = p.coeffs;
-  // Taylor shift by s0, then scale the kth coefficient by hᵏ.
-  const shifted = [...c];
-  for (let i = 0; i < shifted.length - 1; i++)
-    for (let j = shifted.length - 2; j >= i; j--)
-      shifted[j] += shifted[j + 1] * s0;
-  return shifted.map((d, k) => d * h ** k);
+  return shiftPoly(p.coeffs, p.from - p.at0).map((d, k) => d * h ** k);
 };
 
 /**
@@ -499,12 +493,25 @@ function insetEdges(px: BandEdges, inset: number): BandEdges | undefined {
   };
 }
 
+/** The edges of the curve `f` of values of `kind`: a position's are `f`
+ *  twice, an amount's are 0 and `f`. */
+const edgesOf = (
+  f: Fun<number>,
+  kind: "amount" | "position",
+  parameterQuantity: Quantity | undefined,
+  valueQuantity: Quantity | undefined
+): Pick<BandProps, "edges" | "parameterQuantity" | "valueQuantity"> => ({
+  edges:
+    kind === "position"
+      ? { lower: f, upper: f }
+      : { lower: constant(0, f.domain), upper: f },
+  parameterQuantity,
+  valueQuantity,
+});
+
 /** One position channel of the shape form: the option's name and its
  *  accessor. */
 type Channel = { name: string; accessor: unknown };
-
-/** The interval `d` as a message writes it. */
-const showDomain = (d: Interval): string => `[${d.min}, ${d.max}]`;
 
 /** The map `t ↦ a·t + b` that `f` is, when it is exact and one line over its
  *  whole domain: what a position channel at the mark's parameter must be
@@ -604,14 +611,7 @@ export function bandOfFunctions(
     line.a === 1 && line.b === 0
       ? v.fun
       : reparameterize(v.fun, line.a, line.b);
-  return {
-    edges:
-      value.kind === "position"
-        ? { lower: along, upper: along }
-        : { lower: constant(0, along.domain), upper: along },
-    parameterQuantity: t.quantity,
-    valueQuantity: v.quantity,
-  };
+  return edgesOf(along, value.kind, t.quantity, v.quantity);
 }
 
 /**
@@ -746,15 +746,5 @@ export function bandOfRows(
     points.map((p) => p.v),
     curve
   );
-  if (value.kind === "position")
-    return {
-      edges: { lower: curveThrough, upper: curveThrough },
-      parameterQuantity: t.quantity,
-      valueQuantity: v.quantity,
-    };
-  return {
-    edges: { lower: constant(0, curveThrough.domain), upper: curveThrough },
-    parameterQuantity: t.quantity,
-    valueQuantity: v.quantity,
-  };
+  return edgesOf(curveThrough, value.kind, t.quantity, v.quantity);
 }

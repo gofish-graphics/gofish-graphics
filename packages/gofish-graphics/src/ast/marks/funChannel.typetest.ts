@@ -1,5 +1,5 @@
 /**
- * Type-level tests for function-valued channels (stack profiles S9).
+ * Type-level tests for function-valued channels.
  * Nothing here runs: the package typecheck (`tsc --noEmit`) compiles this
  * file, and a wrong type is a compile error. The run-time half is
  * `tests/funChannel.test.ts`.

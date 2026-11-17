@@ -1,6 +1,5 @@
 /**
- * Type-level tests for `field(...).map` and `field(...).reduce` (stack
- * profiles S10): the lift by the result's shape. Nothing here runs: the
+ * Type-level tests for `field(...).map` and `field(...).reduce`: the lift by the result's shape. Nothing here runs: the
  * package typecheck (`tsc --noEmit`) compiles this file, and a wrong type is
  * a compile error. The run-time half is `tests/groupExpr.test.ts`.
  */

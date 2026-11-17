@@ -47,7 +47,7 @@ import {
 import { Band, bandOfFunctions, bandOfRows } from "../shapes/band";
 import {
   groupFun,
-  isFunctionExpr,
+  isFunValue,
   type FunctionExpr,
   type ValueExpr,
 } from "../groupExpr";
@@ -1354,7 +1354,7 @@ export function ribbon(
       ["h", "x"],
       ["w", "y"],
     ] as const)
-      if (isFunctionExpr(options?.[key]))
+      if (isFunValue(options?.[key]))
         throw new Error(
           `[gofish] ribbon({ ${key} }): ${key} holds a function of t, which ` +
             `the shape form reads; give it ${at} too, the function's ` +

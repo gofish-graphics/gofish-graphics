@@ -37,8 +37,7 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * ribbon through the rows over `date` is the year's band restricted to the
  * month.
  *
- * The ridgeline still uses the older form: each month's curve laid out on a
- * grid of rows, hidden, and intersected with each cell's region, over the
+ * The ridgeline lays each month's curve out on a grid of rows, hidden, and intersected with each cell's region, over the
  * quantile rows of the curve (`quantileRows`). A field's cells are those of
  * the column's whole domain, the same in every month, so
  * `field(x).bin(Bin.quantiles(5))` would cut every month at the year's

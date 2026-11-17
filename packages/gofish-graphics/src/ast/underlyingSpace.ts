@@ -49,16 +49,16 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  * Where a continuous space's local origin (its data 0) sits:
  *
  *   - `"pinned"`: the local origin IS data 0, so the data interval is the
- *     absolute data domain. Renders an absolute axis. (The old POSITION.)
+ *     absolute data domain. Renders an absolute axis.
  *   - `"free"`: the extent hangs from a baseline that nothing has placed yet.
  *     The data interval is `[−descent, ascent]` about that baseline. A parent
  *     can still pin it (a baseline align, a glued stack, the `position`
- *     operator). Renders no axis. (The old SIZE.)
+ *     operator). Renders no axis.
  *   - `"none"`: there is no origin at all, only a width. The data interval is
  *     `[0, width]`, and only differences along it mean anything. Renders no
  *     axis: it has no positions to name. At the render root its scale gets a
  *     length entry in the legend instead (`lengthEntry`). Produced by
- *     middle-align, and absorbing. (The old DIFFERENCE.)
+ *     middle-align, and absorbing.
  *
  * The origin state is the whole placement fact: whether an extent has
  * committed a position (`pinned`), can still be given one (`free`), or can

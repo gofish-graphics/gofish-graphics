@@ -1,5 +1,5 @@
 /**
- * Function-valued channels (stack profiles S9): `fun(at, { domain })` in a
+ * Function-valued channels: `fun(at, { domain })` in a
  * channel of the shape form of `ribbon` and `line`. Covers the extent of a
  * function-valued band, a stack of two function ribbons keeping each
  * thickness, the equal-domains error, a column beside a function, and a

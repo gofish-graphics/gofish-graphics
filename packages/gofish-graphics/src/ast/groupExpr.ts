@@ -110,7 +110,7 @@ export const isFunValue = (v: unknown): v is FunValue =>
   typeof v === "object" && v !== null && (v as any)[FUN_VALUE] === true;
 
 /** `f` as a {@link FunValue}. */
-export const funValue = (f: Fun<number>): FunValue => {
+const funValue = (f: Fun<number>): FunValue => {
   const out = {
     ...f,
     [FUN_VALUE]: true as const,
@@ -152,11 +152,6 @@ export function fun(
   const knots = o.knots?.filter((k) => k >= domain.min && k <= domain.max);
   return funValue(opaque(at, { domain, ...(knots ? { knots } : {}) }));
 }
-
-/** Whether `v` is a function expression as the spec is written: a function
- *  value. A reduce's result is one only when its reduce returns a function,
- *  which is known per group ({@link groupFun}). */
-export const isFunctionExpr = (v: unknown): boolean => isFunValue(v);
 
 /** The function a function expression gives for one group, and the quantity
  *  its values are amounts of, when it declares one. */
