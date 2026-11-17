@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve } from "gofish-graphics";
+import { circle, Coord, Curve, Spacing } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — OrthogonalGridEmbedding (polar node-link).
@@ -13,7 +13,7 @@ import { combine, byDepth, mount } from "./_shared";
 //   sibling     = (distribute θ, align r)   — siblings spread around the
 //     circle on a shared radius.
 // Under polar(): x = θ (radians, 0..2π), y = r (radius).
-// Point-like circle nodes ⇒ anchor: "middle" on the distribute axes so spacing is
+// Point-like circle nodes ⇒ a middle pitch on the distribute axes so spacing is
 // read in domain units (radians for θ, r-units for r) and bboxes don't
 // accumulate. Color byDepth() (sequential blue ramp, dark root → light leaves),
 // matching the dsl's Color: depth. This is the same per-axis decomposition as
@@ -59,16 +59,14 @@ export const OrthogonalGridEmbedding: StoryObj = {
           // in r-units).
           y: {
             kind: "distribute",
-            spacing: 138,
-            anchor: "middle",
+            spacing: Spacing.pitch(138, { at: "middle" }),
           },
         }),
         sibling: combine({
           // θ: spread siblings angularly (spacing in radians, center mode).
           x: {
             kind: "distribute",
-            spacing: (2 * Math.PI) / 6,
-            anchor: "middle",
+            spacing: Spacing.pitch((2 * Math.PI) / 6, { at: "middle" }),
           },
           // r: siblings share a radius.
           y: { kind: "align", alignment: "middle" },

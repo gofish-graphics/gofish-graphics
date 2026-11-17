@@ -11,6 +11,7 @@ export {
   BridgeRef,
   FACTORIES,
   OPERATOR_BUILDERS,
+  CONSTRAINT_FACTORIES,
   rebuild,
   type BridgeReply,
   type DeriveBridge,

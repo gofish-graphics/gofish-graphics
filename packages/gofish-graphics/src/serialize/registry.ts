@@ -72,6 +72,11 @@ import { clock } from "../ast/coordinateTransforms/clock";
 import { wavy } from "../ast/coordinateTransforms/wavy";
 import { geo } from "../ast/coordinateTransforms/geo";
 import { GoFishRef } from "../ast/_ref";
+import {
+  Constraint,
+  type ConstraintRef,
+  type ConstraintSpec,
+} from "../ast/constraints";
 import { copyColumnTypes } from "../ast/schema";
 import { Frontend } from "gofish-ir";
 
@@ -252,7 +257,8 @@ export async function callForRows(
  * across the kinds, apart from those dual forms.
  *
  * The serialize test fails when a descriptor has no entry here (or in
- * {@link OPERATOR_BUILDERS}), or when an entry has no descriptor.
+ * {@link OPERATOR_BUILDERS}, or for a constraint in
+ * {@link CONSTRAINT_FACTORIES}), or when an entry has no descriptor.
  */
 export const FACTORIES: Record<string, (...args: any[]) => any> = {
   // Leaf marks.
@@ -299,6 +305,57 @@ export const FACTORIES: Record<string, (...args: any[]) => any> = {
   wavy,
   geo,
 };
+
+/** A constraint's wire options, by its type. */
+type ConstraintOptionsIR<T extends Frontend.ConstraintIR["type"]> = Extract<
+  Frontend.ConstraintIR,
+  { type: T }
+>["options"];
+
+/**
+ * The factory that rebuilds each constraint (gofish-ir's `CONSTRAINTS`), as
+ * `(options, refs)`. Constraints are their own namespace of wire types
+ * (`position` is also a combinator mark), so they are looked up here by
+ * their kind, not in {@link FACTORIES}. Each entry is typed by the wire's
+ * `ConstraintIR` and passes the options to its `Constraint` factory as they
+ * are, so an option the factory renames or retypes is a compile error here.
+ * `zAbove` and `zBelow` take their two refs as `(a, b)`.
+ */
+export const CONSTRAINT_FACTORIES: {
+  [T in Frontend.ConstraintIR["type"]]: (
+    options: ConstraintOptionsIR<T>,
+    refs: ConstraintRef[]
+  ) => ConstraintSpec;
+} = {
+  align: (options, refs) => Constraint.align(options, refs),
+  distribute: (options, refs) => Constraint.distribute(options, refs),
+  position: (options, refs) => Constraint.position(options, refs),
+  // The validator holds a nest to exactly two refs, [outer, inner].
+  nest: (options, refs) =>
+    Constraint.nest(options, refs as [ConstraintRef, ConstraintRef]),
+  zAbove: (_options, [a, b]) => Constraint.zAbove(a, b),
+  zBelow: (_options, [a, b]) => Constraint.zBelow(a, b),
+};
+
+/** The constraints whose wire node has options (not `zAbove`/`zBelow`). */
+type OptionedConstraint = Extract<
+  Frontend.ConstraintIR,
+  { options: object }
+>["type"];
+/** Each wire option key, as `"<type>.<key>"`, that its constraint's factory
+ *  options lack: none, unless a JS option was renamed. (A call above checks
+ *  the types, but an optional key the factory does not name passes it.) */
+type UnknownWireOption = {
+  [T in OptionedConstraint]: `${T}.${Exclude<
+    keyof ConstraintOptionsIR<T>,
+    keyof NonNullable<Parameters<(typeof Constraint)[T]>[0]>
+  > &
+    string}`;
+}[OptionedConstraint];
+// A renamed option fails to compile here, naming it: Property
+// '"distribute.order"' is missing in type '{}'.
+const noUnknownWireOption: Record<UnknownWireOption, never> = {};
+void noUnknownWireOption;
 
 /**
  * Operators whose IR is not their factory's options object, so rebuilding
@@ -369,7 +426,9 @@ export const OPERATOR_BUILDERS: Record<
  * The kind decides the call. An operator, a leaf mark or a coord is
  * `factory(opts)`, and a combinator mark is `factory(opts, children)`: a
  * dual-form factory reads a second argument as the combinator form's
- * children, so an operator must not get one. A descriptor's `positional`
+ * children, so an operator must not get one. A constraint is called as a
+ * combinator mark is, with its refs as the children, from
+ * {@link CONSTRAINT_FACTORIES}. A descriptor's `positional`
  * field goes first, before the rest of the options
  * (`geo(projection, { lon, lat })`); a required one that is missing
  * throws, naming it. Only an {@link OPERATOR_BUILDERS} entry
@@ -386,7 +445,9 @@ export function rebuild(
   if (kind === "operator" && Object.hasOwn(OPERATOR_BUILDERS, type)) {
     return OPERATOR_BUILDERS[type](opts, bridge);
   }
-  const factory = FACTORIES[type];
+  const factories: Record<string, (...args: any[]) => any> =
+    kind === "constraint" ? CONSTRAINT_FACTORIES : FACTORIES;
+  const factory = factories[type];
   if (factory === undefined) return undefined;
   const { positional } = table[type];
   let args: unknown[] = [opts];
@@ -402,7 +463,7 @@ export function rebuild(
     }
     args = [first, rest];
   }
-  return kind === "combinator-mark"
+  return kind === "combinator-mark" || kind === "constraint"
     ? factory(...args, children)
     : factory(...args);
 }

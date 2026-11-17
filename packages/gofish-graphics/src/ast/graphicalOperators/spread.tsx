@@ -14,7 +14,9 @@ import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import { axisName, childSlots, type AlignAnchor } from "../constraints/shared";
+import { axisName, childSlots } from "../constraints/shared";
+import type { Spacing } from "../../families/spacing";
+import type { Gap } from "../constraints/gap";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -53,9 +55,8 @@ export const Spread = createNodeOperator(
     {
       key,
       dir,
-      spacing = 8,
+      spacing,
       alignment = "baseline",
-      anchor = "edge",
       reverse = false,
       glue = false,
       origin,
@@ -69,13 +70,10 @@ export const Spread = createNodeOperator(
       /** The axis to spread along: `x`/`y`, a name the enclosing coordinate
        *  space declares (`theta`, `lon`, ...), or an axis index. */
       dir: AxisName | Direction;
-      spacing?: number | LengthValue;
+      /** How far apart neighbors are: a {@link Spacing} strategy, or a bare
+       *  amount, which is `Spacing.box(amount)`. */
+      spacing?: Gap | Spacing;
       alignment?: Alignment;
-      /** How adjacent children relate on the stack axis: `"edge"` (default)
-       *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
-       *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor
-       *  pitch, content-independent). `"middle"` is the old `mode: "center"`. */
-      anchor?: AlignAnchor | "edge";
       reverse?: boolean;
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
@@ -184,8 +182,7 @@ export const Spread = createNodeOperator(
         Constraint.distribute(
           {
             dir: stackAxis,
-            spacing: glue ? 0 : spacing,
-            anchor,
+            spacing,
             glue,
             order: reverse ? "reverse" : "forward",
             origin: origin && { ...origin, part: refs[origin.part] },
@@ -213,15 +210,14 @@ export type SpreadOptions<T = any> = {
    *  a name the enclosing coordinate space declares (`theta`/`r` in polar,
    *  `lon`/`lat` in geo). */
   dir: AxisName;
-  /** The gap between neighbors: pixels, a percent of the spread's room, or
-   *  an `fr` weight, so the gaps are the flexible parts (#1176 step 6). */
-  spacing?: number | LengthValue;
+  /** How far apart neighbors are, a {@link Spacing} strategy:
+   *  `Spacing.box(gap)`, a gap between facing edges, or
+   *  `Spacing.pitch(distance, { at })`, a fixed distance between the same
+   *  point on each child. A bare amount is `Spacing.box(amount)`: pixels, a
+   *  percent of the spread's room, or an `fr` weight, so the gaps are the
+   *  flexible parts (#1176 step 6). */
+  spacing?: Gap | Spacing;
   alignment?: "start" | "middle" | "end" | "baseline";
-  /** How adjacent children relate on the stack axis: `"edge"` (default)
-   *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
-   *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor pitch,
-   *  content-independent). `"middle"` is the old `mode: "center"`. */
-  anchor?: AlignAnchor | "edge";
   reverse?: boolean;
   glue?: boolean;
   w?: number | (keyof T & string) | LengthValue;

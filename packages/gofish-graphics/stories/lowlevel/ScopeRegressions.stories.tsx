@@ -75,7 +75,7 @@ export const ZOrderedMixed: StoryObj = {
       .relate((c) => [
         // Position side by side (layout), and add a z-order relation between
         // the two wrappers.
-        Constraint.distribute({ dir: "x", spacing: 40, anchor: "edge" }, [
+        Constraint.distribute({ dir: "x", spacing: 40 }, [
           c.barsWrap,
           c.heatWrap,
         ]),

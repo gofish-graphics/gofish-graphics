@@ -504,32 +504,7 @@ for the API.
                 "$ref": "#/$defs/Number"
               },
               {
-                "type": "object",
-                "required": ["type", "datum"],
-                "properties": {
-                  "type": {
-                    "const": "datum"
-                  },
-                  "datum": {},
-                  "offset": {
-                    "$ref": "#/$defs/Number"
-                  },
-                  "colorOps": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "required": ["op", "amount"],
-                      "properties": {
-                        "op": {
-                          "enum": ["lighten", "darken"]
-                        },
-                        "amount": {
-                          "$ref": "#/$defs/Number"
-                        }
-                      }
-                    }
-                  }
-                }
+                "$ref": "#/$defs/DatumValue"
               }
             ]
           }
@@ -885,31 +860,6 @@ for the API.
         }
       ]
     },
-    "ConstraintIR": {
-      "type": "object",
-      "required": ["type", "refs"],
-      "properties": {
-        "type": {
-          "enum": [
-            "align",
-            "distribute",
-            "position",
-            "nest",
-            "zAbove",
-            "zBelow"
-          ]
-        },
-        "options": {
-          "type": "object"
-        },
-        "refs": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/RelateOperandIR"
-          }
-        }
-      }
-    },
     "ChannelValue": {
       "description": "Right-hand side of a channel slot. Bare primitives for the shorthand path; tagged objects for the explicit field/datum/literal constructors and Python-bridge sentinels.",
       "oneOf": [
@@ -939,23 +889,43 @@ for the API.
           }
         },
         {
-          "type": "object",
-          "required": ["type", "datum"],
-          "properties": {
-            "type": {
-              "const": "datum"
-            },
-            "datum": {},
-            "offset": {
-              "$ref": "#/$defs/Number",
-              "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
-            }
-          }
+          "$ref": "#/$defs/DatumValue"
         },
         {
           "$ref": "#/$defs/BridgeLambdaSentinel"
         }
       ]
+    },
+    "DatumValue": {
+      "description": "A data value, emitted by datum(v): it maps through the scale of the slot it is in. A channel value, a cut slice weight, or a Constraint.position coordinate.",
+      "type": "object",
+      "required": ["type", "datum"],
+      "properties": {
+        "type": {
+          "const": "datum"
+        },
+        "datum": {},
+        "offset": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
+        },
+        "colorOps": {
+          "type": "array",
+          "description": "Color transforms applied in order after the datum maps through its color scale (datum(v).lighten(t)).",
+          "items": {
+            "type": "object",
+            "required": ["op", "amount"],
+            "properties": {
+              "op": {
+                "enum": ["lighten", "darken"]
+              },
+              "amount": {
+                "$ref": "#/$defs/Number"
+              }
+            }
+          }
+        }
+      }
     },
     "BridgeLambdaSentinel": {
       "description": "Python-bridge handle for a Python function: JS calls it through the bridge by this lambda id.",
@@ -1141,24 +1111,22 @@ for the API.
         "spacing": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Number"
+              "type": "number"
             },
             {
               "$ref": "#/$defs/Length"
+            },
+            {
+              "$ref": "#/$defs/Spacing"
             }
           ],
-          "description": "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
+          "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
           "default": 8
         },
         "alignment": {
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "anchor": {
-          "enum": ["edge", "start", "middle", "end", "baseline"],
-          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
-          "default": "edge"
         },
         "reverse": {
           "type": "boolean",
@@ -1263,11 +1231,6 @@ for the API.
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "anchor": {
-          "enum": ["edge", "start", "middle", "end", "baseline"],
-          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
-          "default": "edge"
         },
         "reverse": {
           "type": "boolean",
@@ -1868,6 +1831,331 @@ for the API.
         },
         {
           "$ref": "#/$defs/EncloseMark"
+        }
+      ]
+    },
+    "AlignConstraint": {
+      "description": "Align the refs on one or both axes.",
+      "type": "object",
+      "required": ["type", "refs", "options"],
+      "properties": {
+        "type": {
+          "const": "align"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "anyOf": [
+                {
+                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": ["start", "middle", "end", "baseline"]
+                  }
+                }
+              ],
+              "description": "How the refs line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. Omitted, x is left as it is."
+            },
+            "y": {
+              "anyOf": [
+                {
+                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "enum": ["start", "middle", "end", "baseline"]
+                  }
+                }
+              ],
+              "description": "How the refs line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. Omitted, y is left as it is."
+            }
+          },
+          "anyOf": [
+            {
+              "required": ["x"]
+            },
+            {
+              "required": ["y"]
+            }
+          ]
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "DistributeConstraint": {
+      "description": "Lay the refs out one after another along `dir`.",
+      "type": "object",
+      "required": ["type", "refs", "options"],
+      "properties": {
+        "type": {
+          "const": "distribute"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "dir": {
+              "enum": ["x", "y"],
+              "description": "The axis to lay the refs out along."
+            },
+            "spacing": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/Length"
+                },
+                {
+                  "$ref": "#/$defs/Spacing"
+                }
+              ],
+              "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
+              "default": 8
+            },
+            "order": {
+              "enum": ["forward", "reverse"],
+              "description": "The order the refs are laid out in.",
+              "default": "forward"
+            },
+            "glue": {
+              "type": "boolean",
+              "description": "Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis.",
+              "default": false
+            }
+          },
+          "required": ["dir"]
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "PositionConstraint": {
+      "description": "Place the refs at an x and/or y coordinate.",
+      "type": "object",
+      "required": ["type", "refs", "options"],
+      "properties": {
+        "type": {
+          "const": "position"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/DatumValue"
+                    }
+                  ]
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "description": "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers."
+            },
+            "y": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/DatumValue"
+                    }
+                  ]
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
+              "description": "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers."
+            },
+            "anchor": {
+              "enum": ["start", "middle", "end", "baseline"],
+              "description": "Which point of the ref lands on a point coordinate. \"baseline\" is the ref's origin, its local 0.",
+              "default": "middle"
+            }
+          },
+          "anyOf": [
+            {
+              "required": ["x"]
+            },
+            {
+              "required": ["y"]
+            }
+          ]
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "NestConstraint": {
+      "description": "Nest the inner ref in the outer one (`refs: [outer, inner]`) with padding on each given axis.",
+      "type": "object",
+      "required": ["type", "refs", "options"],
+      "properties": {
+        "type": {
+          "const": "nest"
+        },
+        "options": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/Number",
+              "description": "Padding on x, in pixels. Omitted, x is not constrained."
+            },
+            "y": {
+              "$ref": "#/$defs/Number",
+              "description": "Padding on y, in pixels. Omitted, y is not constrained."
+            }
+          },
+          "anyOf": [
+            {
+              "required": ["x"]
+            },
+            {
+              "required": ["y"]
+            }
+          ]
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "ZAboveConstraint": {
+      "description": "The first ref paints in front of the second.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "zAbove"
+        },
+        "options": {
+          "type": "object",
+          "properties": {}
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "ZBelowConstraint": {
+      "description": "The first ref paints behind the second.",
+      "type": "object",
+      "required": ["type", "refs"],
+      "properties": {
+        "type": {
+          "const": "zBelow"
+        },
+        "options": {
+          "type": "object",
+          "properties": {}
+        },
+        "refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RelateOperandIR"
+          }
+        }
+      }
+    },
+    "ConstraintIR": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/AlignConstraint"
+        },
+        {
+          "$ref": "#/$defs/DistributeConstraint"
+        },
+        {
+          "$ref": "#/$defs/PositionConstraint"
+        },
+        {
+          "$ref": "#/$defs/NestConstraint"
+        },
+        {
+          "$ref": "#/$defs/ZAboveConstraint"
+        },
+        {
+          "$ref": "#/$defs/ZBelowConstraint"
         }
       ]
     },
@@ -4788,6 +5076,56 @@ for the API.
         }
       ],
       "description": "Where a label goes on the mark it labels: the value of `.label()`'s `placement` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
+    },
+    "Spacing": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "box"
+            },
+            "gap": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/Length"
+                }
+              ],
+              "description": "The gap between facing edges, in pixels. A negative gap overlaps the children. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+            }
+          },
+          "required": ["kind", "gap"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "pitch"
+            },
+            "distance": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/Length"
+                }
+              ],
+              "description": "The distance between the points, in pixels. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+            },
+            "at": {
+              "enum": ["start", "middle", "end", "baseline"],
+              "description": "The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). \"middle\" is center to center.",
+              "default": "baseline"
+            }
+          },
+          "required": ["kind", "distance"]
+        }
+      ],
+      "description": "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`."
     }
   }
 }

@@ -78,6 +78,8 @@ jobs:
       - name: Check generated Python factory layer is in sync
         run: |
           pnpm --filter gofish-python gen
+          # The whole package, so a new generated family module is covered
+          # without listing it (and an untracked one fails too).
           git diff --exit-code -- packages/gofish-python/gofish
           test -z "$(git status --porcelain -- packages/gofish-python/gofish)"
 

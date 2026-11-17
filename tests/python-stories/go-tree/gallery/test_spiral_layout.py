@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Coord, Curve, circle
+from gofish import Coord, Curve, Spacing, circle
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
@@ -20,25 +20,21 @@ def story_spiral_layout():
             parent_child=combine(
                 x={
                     "kind": "distribute",
-                    "spacing": (2 * math.pi) / 9,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch((2 * math.pi) / 9, at="middle"),
                 },
                 y={
                     "kind": "distribute",
-                    "spacing": 118,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch(118, at="middle"),
                 },
             ),
             sibling=combine(
                 x={
                     "kind": "distribute",
-                    "spacing": (2 * math.pi) / 9,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch((2 * math.pi) / 9, at="middle"),
                 },
                 y={
                     "kind": "distribute",
-                    "spacing": 62,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch(62, at="middle"),
                 },
             ),
             coord=Coord.clock(),

@@ -284,7 +284,8 @@ export type ConstructKind =
   | "operator"
   | "leaf-mark"
   | "combinator-mark"
-  | "coord";
+  | "coord"
+  | "constraint";
 
 export interface ConstructDescriptor {
   /** The wire discriminator (the node's `type` tag). */
@@ -305,6 +306,12 @@ export interface ConstructDescriptor {
    *  `.flow(...)` step (`enclose`): there its IR is the mark's own, and the
    *  step applies the mark to each group's subtree. */
   flowStep?: boolean;
+  /** Fields of which a value must give at least one (`["x", "y"]` for
+   *  `Constraint.align`). Only a constraint sets it (descriptors.test
+   *  checks): the validator reads it in its walk of a nested `options`
+   *  object, and the JSON Schema and the generated Python cores read it
+   *  for constraints only. */
+  requireOneOf?: readonly string[];
 }
 
 /** Merge a descriptor's included groups and own fields into one flat map.
@@ -327,6 +334,7 @@ const operator = makeDef("operator");
 const leafMark = makeDef("leaf-mark");
 const combinatorMark = makeDef("combinator-mark");
 const coordTransform = makeDef("coord");
+const constraint = makeDef("constraint");
 
 // ---------------------------------------------------------------------------
 // Structural base fields — every node of a given family carries these.
@@ -626,6 +634,10 @@ const placeOffset = (fallback: number): FieldSpec => ({
   type: t.num({ finite: true }),
   doc: `Pixels between the outline and the label. Default: the label's \`offset\`, or ${fallback}.`,
 });
+
+/** The points of a box an anchor names: `Spacing.pitch`'s `at`, and
+ *  `Constraint.align`'s and `Constraint.position`'s anchors. */
+const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
 
 /**
  * The strategy families whose values cross the Python↔JS wire, by family
@@ -1095,10 +1107,45 @@ export const STRATEGIES = {
       },
     },
   },
+  Spacing: {
+    doc: "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`.",
+    kinds: {
+      box: {
+        doc: "A gap between the facing edges of each child's box: the end of one child to the start of the next. The distance between the children depends on their sizes.",
+        positional: "gap",
+        params: {
+          gap: {
+            type: t.union(t.num({ finite: true }), t.ref("Length")),
+            required: true,
+            doc:
+              "The gap between facing edges, in pixels. A negative gap overlaps the children." +
+              PERCENT_FR,
+          },
+        },
+      },
+      pitch: {
+        doc: "A fixed distance between the same point on each child: from that point on one child to that point on the next. The distance does not depend on the children's sizes.",
+        positional: "distance",
+        params: {
+          distance: {
+            type: t.union(t.num({ finite: true }), t.ref("Length")),
+            required: true,
+            doc: "The distance between the points, in pixels." + PERCENT_FR,
+          },
+          at: {
+            type: t.enum(...ALIGN_ANCHORS),
+            default: "baseline",
+            doc: 'The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). "middle" is center to center.',
+          },
+        },
+      },
+    },
+  },
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Effect"`, `"Tiling"`, `"Overlap"`,
- *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"` or `"Placement"`. */
+ *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"`, `"Placement"` or
+ *  `"Spacing"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Binning` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -1305,6 +1352,7 @@ export const AUTHORED_REFS: Readonly<
   FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
   StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
   ChunkKey: { pyClass: "ChunkKey", tag: "chunk" },
+  DatumValue: { pyClass: "DatumValue", tag: "datum" },
   LabelIR: {},
   TranslateIR: {},
   BridgeLambdaSentinel: {},
@@ -1498,6 +1546,15 @@ const spreadSizeField: FieldGroup = group({
   ),
 });
 
+/** How far apart a chain's neighbors are: `spread`'s `spacing` and
+ *  `Constraint.distribute`'s, one type. A bare amount (pixels, or a length)
+ *  is `Spacing.box(amount)`. */
+const SPACING_TYPE: FieldType = t.union(
+  t.num({ finite: true }),
+  t.ref("Length"),
+  t.ref("Spacing")
+);
+
 /** The options of `enclose`, shared by its bag form and flow step
  *  (LEAF_MARKS.enclose) and its combinator form (COMBINATOR_MARKS.enclose). */
 const ENCLOSE_FIELDS: FieldGroup = group({
@@ -1626,19 +1683,14 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
       },
       spacing: {
-        type: t.union(t.number, t.ref("Length")),
+        type: SPACING_TYPE,
         default: 8,
-        doc: "Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible.",
       },
       alignment: {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      anchor: {
-        type: t.enum("edge", "start", "middle", "end", "baseline"),
-        default: "edge",
-        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
       reverse: {
         type: t.boolean,
@@ -1683,11 +1735,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      anchor: {
-        type: t.enum("edge", "start", "middle", "end", "baseline"),
-        default: "edge",
-        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
       reverse: {
         type: t.boolean,
@@ -2320,6 +2367,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 // field lists describe (nested, unlike operator fields which spread flat).
 // ---------------------------------------------------------------------------
 
+/** An operator's fields without its data split, for its combinator form. */
+const withoutBy = ({ by: _by, ...fields }: FieldGroup): FieldGroup => fields;
+
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
     doc: "Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.",
@@ -2345,8 +2395,14 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   scatter: combinatorMark("scatter", {
     fields: resolveFields(OPERATORS.scatter),
   }),
-  group: combinatorMark("group", { fields: resolveFields(OPERATORS.group) }),
-  table: combinatorMark("table", { fields: resolveFields(OPERATORS.table) }),
+  // `by` splits the data in the operator form only: a combinator's children
+  // are already given, and its layout never reads `by`.
+  group: combinatorMark("group", {
+    fields: withoutBy(resolveFields(OPERATORS.group)),
+  }),
+  table: combinatorMark("table", {
+    fields: withoutBy(resolveFields(OPERATORS.table)),
+  }),
 
   layer: combinatorMark("layer", {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
@@ -2595,12 +2651,111 @@ export const COORDS: Record<string, ConstructDescriptor> = {
 };
 
 // ---------------------------------------------------------------------------
-// Combined lookup — operators + leaf marks + combinator marks share the same
-// wire-type namespace collision-free EXCEPT for the intentional dual-form
-// overlap (spread/stack/scatter/group/table/line/ribbon appear as both an
-// operator and a combinator mark — the `__combinator` flag disambiguates on
-// the wire, exactly as schema.ts's `CombinatorMarkIR` doc explains). Coord
-// transforms are a separate namespace (chart `options.coord`), not merged in.
+// Constraints: the clauses of a `.relate()` callback (`Constraint.align`, ...)
+// ---------------------------------------------------------------------------
+
+/** An axis of `Constraint.align`: one anchor or interval statistic for every
+ *  operand, or one anchor per operand. */
+const alignAxis = (axis: string): FieldSpec => ({
+  type: t.union(
+    t.enum(...ALIGN_ANCHORS, "span", "size"),
+    t.array(t.enum(...ALIGN_ANCHORS))
+  ),
+  doc: `How the refs line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, ${axis} is left as it is.`,
+});
+
+/** A coordinate of `Constraint.position`: a pixel or a `datum(v)`. */
+const POSITION_POINT: FieldType = t.union(t.number, t.ref("DatumValue"));
+
+/** An axis of `Constraint.position`: a point, or an interval `[lo, hi]`
+ *  of two points. */
+const positionAxis = (axis: string): FieldSpec => ({
+  type: t.union(POSITION_POINT, t.tuple(POSITION_POINT, POSITION_POINT)),
+  doc: `A pixel or \`datum(v)\` coordinate on ${axis}, or an interval \`[lo, hi]\` of them. Only a datum feeds the scale the layer infers.`,
+});
+
+/** Every constraint that crosses the wire, by its `type` tag: the clauses
+ *  of a `.relate()` callback. On the wire a constraint is
+ *  `{ type, options?, refs }` (`ConstraintIR` in schema.ts), so, as a
+ *  combinator mark's, its fields sit under `options`. JS-only options that
+ *  no producer writes to the IR (distribute's `measure`, `hasOrder` and
+ *  `origin`, which spread sets; position's `region`, `override` and `in`,
+ *  which partition, scatter and chrome set) are not declared, so a document
+ *  that holds one is rejected. */
+export const CONSTRAINTS: Record<string, ConstructDescriptor> = {
+  align: constraint("align", {
+    doc: "Align the refs on one or both axes.",
+    fields: { x: alignAxis("x"), y: alignAxis("y") },
+    requireOneOf: ["x", "y"],
+  }),
+  distribute: constraint("distribute", {
+    doc: "Lay the refs out one after another along `dir`.",
+    fields: {
+      dir: {
+        type: t.enum("x", "y"),
+        required: true,
+        doc: "The axis to lay the refs out along.",
+      },
+      spacing: {
+        type: SPACING_TYPE,
+        default: 8,
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
+      },
+      order: {
+        type: t.enum("forward", "reverse"),
+        default: "forward",
+        doc: "The order the refs are laid out in.",
+      },
+      glue: {
+        type: t.boolean,
+        default: false,
+        doc: "Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis.",
+      },
+    },
+  }),
+  position: constraint("position", {
+    doc: "Place the refs at an x and/or y coordinate.",
+    fields: {
+      x: positionAxis("x"),
+      y: positionAxis("y"),
+      anchor: {
+        type: t.enum(...ALIGN_ANCHORS),
+        default: "middle",
+        doc: 'Which point of the ref lands on a point coordinate. "baseline" is the ref\'s origin, its local 0.',
+      },
+    },
+    requireOneOf: ["x", "y"],
+  }),
+  nest: constraint("nest", {
+    doc: "Nest the inner ref in the outer one (`refs: [outer, inner]`) with padding on each given axis.",
+    fields: {
+      x: {
+        type: t.number,
+        doc: "Padding on x, in pixels. Omitted, x is not constrained.",
+      },
+      y: {
+        type: t.number,
+        doc: "Padding on y, in pixels. Omitted, y is not constrained.",
+      },
+    },
+    requireOneOf: ["x", "y"],
+  }),
+  zAbove: constraint("zAbove", {
+    doc: "The first ref paints in front of the second.",
+    fields: {},
+  }),
+  zBelow: constraint("zBelow", {
+    doc: "The first ref paints behind the second.",
+    fields: {},
+  }),
+};
+
+// ---------------------------------------------------------------------------
+// Lookups are by (kind, type): a wire type names a construct only within its
+// kind. The dual-form constructs (spread/stack/scatter/group/table/line/
+// ribbon) are both an operator and a combinator mark — the `__combinator`
+// flag tells them apart on the wire, as schema.ts's `CombinatorMarkIR` doc
+// explains — and `position` is both a combinator mark and a constraint.
 // ---------------------------------------------------------------------------
 
 export const ALL_OPERATOR_DESCRIPTORS: readonly ConstructDescriptor[] =
@@ -2620,7 +2775,26 @@ export const DESCRIPTOR_TABLES: Readonly<
   "leaf-mark": LEAF_MARKS,
   "combinator-mark": COMBINATOR_MARKS,
   coord: COORDS,
+  constraint: CONSTRAINTS,
 };
+
+/** The descriptor tables whose constructs the docs name as a user calls
+ *  them, `<Namespace>.<type>` (`Constraint.align`): their types are a
+ *  namespace of their own (`position` is also a combinator mark). */
+export const DESCRIPTOR_NAMESPACES: Readonly<
+  Record<string, Record<string, ConstructDescriptor>>
+> = { Constraint: CONSTRAINTS };
+
+/** A dotted name's namespace and member (`"Constraint.align"`,
+ *  `"Shape.blob"`); undefined unless it has exactly one dot. */
+export function splitDottedName(
+  name: string
+): { namespace: string; member: string } | undefined {
+  const parts = name.split(".");
+  return parts.length === 2
+    ? { namespace: parts[0], member: parts[1] }
+    : undefined;
+}
 
 /** The kinds of construct whose options sit on a wire node of their own (a
  *  coord transform is itself an option, of a chart or a combinator, so its
@@ -2631,14 +2805,37 @@ export type NodeKind = Exclude<ConstructKind, "coord">;
  *  on the wire. An operator's and a leaf mark's options are spread onto the
  *  node itself, so every base field of its family sits beside them. A
  *  combinator mark nests its options under `options`, where only
- *  COMBINATOR_OPTIONS_BASE_FIELDS ride. */
+ *  COMBINATOR_OPTIONS_BASE_FIELDS ride. A constraint nests its options under
+ *  `options` too, and none ride with them. */
 const OPTIONS_BASE_FIELDS: Readonly<Record<NodeKind, FieldGroup>> = {
   operator: OPERATOR_BASE_FIELDS,
   "leaf-mark": MARK_BASE_FIELDS,
   "combinator-mark": COMBINATOR_OPTIONS_BASE_FIELDS,
+  constraint: {},
 };
 
 const acceptedFieldsCache = new Map<string, FieldGroup>();
+const optionsRequiredCache = new Map<string, boolean>();
+
+/** Whether the options object of a construct that nests its options under
+ *  `options` (a combinator mark, a constraint) must be on the wire: when
+ *  one of its fields is required, or at least one of some fields is
+ *  (`requireOneOf`). Computed once per (kind, type). */
+export function optionsRequired(
+  kind: "combinator-mark" | "constraint",
+  type: string
+): boolean {
+  const cacheKey = `${kind}:${type}`;
+  const cached = optionsRequiredCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const fields = acceptedFields(kind, type);
+  const required =
+    fields !== undefined &&
+    (DESCRIPTOR_TABLES[kind][type].requireOneOf !== undefined ||
+      Object.values(fields).some((f) => f.required));
+  optionsRequiredCache.set(cacheKey, required);
+  return required;
+}
 
 /** Whether `type` is a leaf mark that may stand in a chart's `operators`
  *  as a `.flow(...)` step (its descriptor's `flowStep`). */

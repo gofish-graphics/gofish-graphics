@@ -160,7 +160,11 @@ that survey with the proposal.
 - For layout and placement, look at Typst, SwiftUI, CSS, Apple Auto Layout,
   TikZ and design tools such as Figma. `spread`'s `mode` became `anchor` because
   Auto Layout anchors, TikZ anchors and CSS anchor positioning all use that word
-  for a named point on a box (#762).
+  for a named point on a box (#762). That option then moved into the value of
+  `spacing`, since it changes what the spacing measures: `Spacing.box(gap)`
+  between facing edges, and `Spacing.pitch(distance, { at })` between the same
+  point on each child, the typographic word for a fixed distance between
+  repeated items.
 - For data types, typed precedent wins: Lean mathlib, the JS Temporal API,
   java.time, polars dtypes, and [Flint](/internals/design/flint-chart-notes).
   When a visualization library solves the same problem with a workaround, such
@@ -246,8 +250,10 @@ apply where there is no single keyed slot. Several slots are named by their
 roles, as in `.transition({ enter, exit })`, and a method whose only argument
 is the strategy takes it bare, as in `.bin(Binning.step(0.5))`. `pack` will
 follow the rule with `pack({ packing: Packing.circles })` when it gets a
-second strategy (#1355). Why an option with one strategy has no option at
-all is in [Three Surfaces](/internals/design-evolution/three-surfaces).
+second strategy (#1355). An option may also take a bare value as shorthand
+for one member: a bare `spacing` amount is `Spacing.box(amount)`. The
+details, and why an option with one strategy has no option at all, are in
+[Three Surfaces](/internals/design-evolution/three-surfaces).
 
 **Say "visualization" unless it is a chart.** GoFish draws charts, diagrams,
 simulations and teaching figures on one substrate. Prose and examples say

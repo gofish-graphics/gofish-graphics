@@ -7,6 +7,7 @@ import { value } from "../ast/data";
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
 import { spread } from "../ast/graphicalOperators/spread";
+import { pitch } from "../families/spacing";
 import { color, color6 } from "../color";
 const data = [
   { a: "A", b: 28 },
@@ -23,7 +24,7 @@ const data = [
 export const testCenterBar = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
-    spread({ dir: 0, spacing: 20, alignment: "end", anchor: "middle" },
+    spread({ dir: 0, spacing: pitch(20, { at: "middle" }), alignment: "end" },
       data.map((d) => rect({ w: Math.random() * 15 + 5, h: value(d.b, "value"), fill: color6[0] }))
     )
   );

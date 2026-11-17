@@ -17,6 +17,7 @@ import {
   layer as layerOf,
   value,
   percent,
+  Spacing,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -168,35 +169,33 @@ async function main() {
     );
   }
 
-  console.log("\n# a stack claims its parts end to end, whatever its anchor");
+  console.log("\n# a stack claims its parts end to end");
   {
-    // A stack lays each part's tail on the previous part's head whatever
-    // its anchor, so three 20 px boxes claim 60 px, as they are laid out.
-    for (const anchor of ["edge", "middle", "start"] as const) {
-      const node = await chart(
-        ["a", "b", "c"].map((k) => ({ k })),
-        { axes: false }
-      )
-        .flow(stack({ by: "k", dir: "x", anchor }))
-        .mark(rect({ w: 20, h: 10 }))
-        .resolve();
-      const data = await runLayout({}, node);
-      const walk = (n: GoFishNode): GoFishNode[] => [
-        n,
-        ...n.children.flatMap((c) => (c instanceof GoFishNode ? walk(c) : [])),
-      ];
-      const chain = walk(data.child).find((n) =>
-        n.constraints.some((c) => c.type === "distribute")
-      )!;
-      const claim = chain.resolveExtent()[0]!;
-      check(
-        `anchor "${anchor}": the claim is the laid-out 0..60`,
-        close(-Pwl.at(claim.descent, 1), 0) &&
-          close(Pwl.at(claim.ascent, 1), 60) &&
-          close(chain.dims[0].size, 60),
-        [-Pwl.at(claim.descent, 1), Pwl.at(claim.ascent, 1), chain.dims[0].size]
-      );
-    }
+    // A stack lays each part's tail on the previous part's head, so three
+    // 20 px boxes claim 60 px, as they are laid out.
+    const node = await chart(
+      ["a", "b", "c"].map((k) => ({ k })),
+      { axes: false }
+    )
+      .flow(stack({ by: "k", dir: "x" }))
+      .mark(rect({ w: 20, h: 10 }))
+      .resolve();
+    const data = await runLayout({}, node);
+    const walk = (n: GoFishNode): GoFishNode[] => [
+      n,
+      ...n.children.flatMap((c) => (c instanceof GoFishNode ? walk(c) : [])),
+    ];
+    const chain = walk(data.child).find((n) =>
+      n.constraints.some((c) => c.type === "distribute")
+    )!;
+    const claim = chain.resolveExtent()[0]!;
+    check(
+      "the claim is the laid-out 0..60",
+      close(-Pwl.at(claim.descent, 1), 0) &&
+        close(Pwl.at(claim.ascent, 1), 60) &&
+        close(chain.dims[0].size, 60),
+      [-Pwl.at(claim.descent, 1), Pwl.at(claim.ascent, 1), chain.dims[0].size]
+    );
   }
 
   console.log("\n# a spread claims its parts chained with the spacing");
@@ -230,7 +229,13 @@ async function main() {
       [2, 100, 2].map((h, i) => ({ k: `${i}`, h })),
       { axes: false }
     )
-      .flow(spread({ by: "k", dir: "y", spacing: 30, anchor: "middle" }))
+      .flow(
+        spread({
+          by: "k",
+          dir: "y",
+          spacing: Spacing.pitch(30, { at: "middle" }),
+        })
+      )
       .mark(rect({ w: 10, h: "h" }))
       .resolve();
     const data = await runLayout({}, node);

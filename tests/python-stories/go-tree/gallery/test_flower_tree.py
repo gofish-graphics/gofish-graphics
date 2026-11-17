@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Coord, Curve, circle
+from gofish import Coord, Curve, Spacing, circle
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
@@ -30,8 +30,7 @@ def story_flower_tree():
             sibling=combine(
                 x={
                     "kind": "distribute",
-                    "spacing": (2 * math.pi) / 7,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch((2 * math.pi) / 7, at="middle"),
                 },
                 y={"kind": "align", "alignment": "middle"},
             ),

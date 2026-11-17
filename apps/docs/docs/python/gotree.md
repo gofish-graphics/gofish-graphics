@@ -184,13 +184,15 @@ the positions of its two nodes.
 `parent_child([parent, group])` to put the node with that group. A combiner is
 a function from a list of marks to one mark.
 
-### `spread(dir=, spacing=, alignment=, anchor=)`
+### `spread(dir=, spacing=, alignment=)`
 
 Lays the children out along `dir` with the GoFish `spread` combinator. As a
 `parent_child` combiner it puts the parent first: on the left for `dir="x"`, at
-the top for `dir="y"`.
+the top for `dir="y"`. `spacing` is a bare number, a gap between facing
+edges, or a [`Spacing`](/python/api/spacing) value such as
+`Spacing.pitch(40, at="middle")`.
 
-### `distribute(dir=, spacing=, anchor=, order=, alignment=)`
+### `distribute(dir=, spacing=, order=, alignment=)`
 
 Places the children along `dir` with `Constraint.distribute`, and leaves the
 other axis alone. `alignment` adds a `Constraint.align` on the other axis.
@@ -208,11 +210,11 @@ The general combiner. It picks one constraint for each axis, which is GoTree's
 `Layout(x, y)`. Each axis is `"align"`, `"distribute"` or `"nest"`, or a dict
 with that `kind` and its options:
 
-| Kind         | Options                      | Defaults                   |
-| ------------ | ---------------------------- | -------------------------- |
-| `align`      | `alignment`                  | `"middle"`                 |
-| `distribute` | `spacing`, `order`, `anchor` | `0`, `"forward"`, `"edge"` |
-| `nest`       | `pad`                        | `0`                        |
+| Kind         | Options            | Defaults         |
+| ------------ | ------------------ | ---------------- |
+| `align`      | `alignment`        | `"middle"`       |
+| `distribute` | `spacing`, `order` | `0`, `"forward"` |
+| `nest`       | `pad`              | `0`              |
 
 `nest` needs exactly two children, so it is for `parent_child` only.
 
@@ -248,7 +250,8 @@ sibling = lambda children: layer(children)
 
 `coord=Coord.polar()` draws the whole tree in polar coordinates, with x as the
 angle and y as the radius. Nodes drawn as circles are points there, so give
-their combiners `"anchor": "middle"` and an angular `spacing` in radians.
+their combiners a middle pitch, `Spacing.pitch(angle, at="middle")`, with the
+angle in radians.
 Wedges that should sweep around the circle are rects with `em_x=True` and
 `em_y=True`. The [JavaScript page](/js/gotree#coord-coordinate-transform) has
 the details.

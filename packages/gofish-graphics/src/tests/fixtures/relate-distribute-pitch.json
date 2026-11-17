@@ -1,0 +1,29 @@
+{
+  "irVersion": 0,
+  "ir": "gofish-frontend",
+  "root": {
+    "type": "layer",
+    "__combinator": true,
+    "options": {},
+    "children": [
+      { "type": "rect", "w": 10, "h": 20, "fill": "red", "name": "a" },
+      { "type": "rect", "w": 30, "h": 40, "fill": "blue", "name": "b" }
+    ],
+    "relate": {
+      "scope": "relate-1",
+      "clauses": [
+        {
+          "type": "distribute",
+          "options": {
+            "dir": "x",
+            "spacing": { "kind": "pitch", "distance": 50, "at": "middle" }
+          },
+          "refs": [
+            { "type": "ref", "selection": "a", "scope": "relate-1" },
+            { "type": "ref", "selection": "b", "scope": "relate-1" }
+          ]
+        }
+      ]
+    }
+  }
+}

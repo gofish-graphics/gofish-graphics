@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve } from "gofish-graphics";
+import { circle, Coord, Curve, Spacing } from "gofish-graphics";
 import { combine, byDepth, mount, sampleTree } from "./_shared";
 
 // GoTree gallery port — FlowerTree (polar circle clusters / "petals").
@@ -69,8 +69,7 @@ export const FlowerTree: StoryObj = {
           // point-like circles don't accumulate bboxes around the ring).
           x: {
             kind: "distribute",
-            spacing: (2 * Math.PI) / 7,
-            anchor: "middle",
+            spacing: Spacing.pitch((2 * Math.PI) / 7, { at: "middle" }),
           },
           // r: siblings share a radius band.
           y: { kind: "align", alignment: "middle" },
