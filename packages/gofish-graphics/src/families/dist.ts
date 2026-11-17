@@ -10,7 +10,7 @@
  * A family (`normal`, `lognormal`, `uniform`, `exponential`) is an
  * expression a spec holds: each parameter is a number, a column whose value
  * is one number in each group, or a value expression, and its members
- * (`d.density()`, `d.support()`, `d.median()`) are channels
+ * (`d.density()`, `d.domain()`, `d.median()`) are channels
  * (ast/distExpr.ts). Its wire form is data, so it crosses the Python
  * bridge.
  *
@@ -32,7 +32,7 @@ import { distExpr, type DistExpr, type DistParam } from "../ast/distExpr";
 import type { HasUnit } from "../ast/schema";
 
 /** What a distribution answers: its density, cdf, quantile, median, mean,
- *  support and mass. See ast/dist.ts. */
+ *  domain and mass. See ast/dist.ts. */
 export type Dist = DistRecord;
 
 export type { DistExpr, DistParam };
@@ -88,7 +88,7 @@ const hasUnit = (u: UnitArg, where: string): HasUnit => {
 
 /**
  * The `unit` option of a reduce that returns a {@link Dist} over amounts in
- * `variable`, with its mass in `mass` (a count for a sample): the support,
+ * `variable`, with its mass in `mass` (a count for a sample): the domain,
  * the quantiles, the median and the mean are in `variable`; the density is
  * `mass` per `variable`, which adds up; the cdf is a ratio.
  */
@@ -101,7 +101,7 @@ export function units(variable: UnitArg, mass: UnitArg) {
     quantile: v,
     median: v,
     mean: v,
-    support: v,
+    domain: v,
     mass: m,
   };
 }

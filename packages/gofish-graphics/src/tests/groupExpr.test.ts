@@ -120,9 +120,9 @@ async function main() {
       g.kind === "function" && g.fun.at(1) === 5,
       JSON.stringify(g.kind)
     );
-    const sup = evalGroup(f.support() as any, rows, undefined);
+    const sup = evalGroup(f.domain() as any, rows, undefined);
     check(
-      "a function's support() is t over its domain",
+      "a function's domain() is t over its domain",
       sup.kind === "function" &&
         sup.fun.at(1.5) === 1.5 &&
         sup.fun.domain.max === 2
@@ -464,7 +464,7 @@ async function main() {
       .flow(spread({ by: "Species", dir: "y", spacing: 10 }))
       .mark(
         ribbon({
-          x: F(col()).reduce(spanOf).support(),
+          x: F(col()).reduce(spanOf).domain(),
           h: F(col()).reduce(spanOf),
         })
       )
@@ -487,7 +487,7 @@ async function main() {
         partition({ by: F(col()).bin(Bin.step(1000)), dir: "x" }),
         spread({ by: "Species", dir: "y" })
       )
-      .mark(ribbon({ x: F(col()).support(), h: F(col()).density() }))
+      .mark(ribbon({ x: F(col()).domain(), h: F(col()).density() }))
       .toDisplayList({ w: 500, h: 200, axes: false });
     const spans = new Map<string, [number, number][]>();
     const walk = (it: any) => {

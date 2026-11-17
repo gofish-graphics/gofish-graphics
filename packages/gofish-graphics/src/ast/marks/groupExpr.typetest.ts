@@ -35,8 +35,8 @@ export function lifts() {
   const f = field("v").reduce((xs) =>
     fun((t) => t * xs.length, { domain: [0, 1] })
   );
-  ribbon({ x: f.support(), h: f });
-  line({ x: f.support(), y: f });
+  ribbon({ x: f.domain(), h: f });
+  line({ x: f.domain(), y: f });
   // @ts-expect-error a function expression in a rect channel
   rect({ h: f });
 

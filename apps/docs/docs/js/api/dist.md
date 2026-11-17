@@ -5,7 +5,7 @@ title: Dist
 # Dist
 
 The `Dist` family holds distributions. A distribution is a value a channel
-reads through its members: `d.density()` and `d.support()` are functions of
+reads through its members: `d.density()` and `d.domain()` are functions of
 `t` for the shape form of [`ribbon`](/js/api/marks/ribbon#function-channels)
 and [`line`](/js/api/marks/line#function-channels), and `d.median()` is one
 value per group for any channel.
@@ -16,7 +16,7 @@ value per group for any channel.
 const d = gf.Dist.normal({ mean: "mean", sd: "sd" });
 
 gf.chart([{ mean: 0, sd: 1 }])
-  .mark(gf.ribbon({ x: d.support(), h: d.density(), fill: "#4c78a8" }))
+  .mark(gf.ribbon({ x: d.domain(), h: d.density(), fill: "#4c78a8" }))
   .render(root, { w: 400, h: 200, axes: true });
 ```
 
@@ -34,7 +34,7 @@ Dist.units(variable, mass);
 
 d.density();
 d.cdf();
-d.support();
+d.domain();
 d.quantile(p);
 d.median();
 d.mean();
@@ -69,7 +69,7 @@ error. A family's wire form is data, so it serializes.
 | --------------- | -------------------------------------------------------------------- | ------------------------- |
 | `d.density()`   | a function of `t`: the mass times the probability density            | the mass per the variable |
 | `d.cdf()`       | a function of `t`: the share of the mass at or below `t`             | a ratio                   |
-| `d.support()`   | a function of `t`: `t` itself, over the same interval as the density | the variable              |
+| `d.domain()`    | a function of `t`: `t` itself, over the same interval as the density | the variable              |
 | `d.quantile(p)` | the value with the share `p` of the mass at or below it              | the variable              |
 | `d.median()`    | `d.quantile(0.5)`                                                    | the variable              |
 | `d.mean()`      | the mean                                                             | the variable              |
@@ -82,9 +82,13 @@ and an exponential from 0 to their 0.999 quantile. For a sample it runs from
 3 bandwidths below the least value to 3 above the greatest, so the density
 tapers to near zero at both ends.
 
+`d.domain()` is the interval GoFish draws the density over. It is not the
+distribution's support when the support is unbounded: a normal's support is
+every number, and its `d.domain()` ends at its 0.001 and 0.999 quantiles.
+
 The variable of a family is in the unit of the column its location
 parameter reads (`mean` for `normal`, `min` for `uniform`), so the axis of
-`d.support()` joins an axis in that unit. It is not that column, so it has
+`d.domain()` joins an axis in that unit. It is not that column, so it has
 no name, and its axis has no title unless you give one. A density is in the mass per the variable's unit, or per a
 difference of two of its values (a density over times is per duration). A
 density adds up, so densities stack.
@@ -96,7 +100,7 @@ the cells of `p` (`Bin.step`, `Bin.thresholds` or `Bin.quantiles`) over the
 interval the density is drawn over. `Bin.quantiles(n)` cuts at the
 distribution's own quantiles, so each cell holds `1 / n` of the mass. In a
 cell, every member is the distribution restricted to the cell: the density
-and the support run over the cell, `d.mass()` is the cell's share of the
+and the domain run over the cell, `d.mass()` is the cell's share of the
 mass (a cell at an end of the interval also holds the tail past it), and
 `d.median()` is the median of the mass in the cell. A member of a
 distribution, such as `d.density().bin(p)`, is not binned, and is an error.
@@ -133,7 +137,7 @@ const mass = field("Body Mass (g)").reduce(
   { unit: Dist.units("g", "count") }
 );
 
-ribbon({ x: mass.support(), h: mass.density() });
+ribbon({ x: mass.domain(), h: mass.density() });
 ```
 
 `field(x).density()` and the other

@@ -69,12 +69,12 @@ chart(prices, { schema: { date: Unit.time() } })
 `x` and `y` may hold a function value, made with [`fun`](/js/api/core/fun),
 in place of a column. The line then draws the function itself, read at one
 parameter `t`, as a [`ribbon`](/js/api/marks/ribbon#function-channels) does.
-`x` holds `f.support()`, which is `t` itself over the domain of `f`.
+`x` holds `f.domain()`, which is `t` itself over the domain of `f`.
 
 ```ts
 const wave = fun((t) => 1 + 0.6 * Math.sin(t), { domain: [0, 10] });
 
-line({ x: wave.support(), y: wave });
+line({ x: wave.domain(), y: wave });
 ```
 
 ## Connector forms

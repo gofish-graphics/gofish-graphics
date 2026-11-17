@@ -31,6 +31,8 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 const near = (a: number, b: number, tol = 1e-9) => Math.abs(a - b) < tol;
+// The run-time function a function value holds (`heldFun` in groupExpr.ts).
+const held = (v: any) => v[Symbol.for("gofish.funValue")];
 const errorOf = async (f: () => Promise<unknown>): Promise<string> => {
   try {
     await f();
@@ -84,12 +86,21 @@ const wave = fun((t: number) => 1 + 0.5 * Math.sin(2 * t), {
 async function main() {
   console.log("\n# fun: a function value");
   {
+    const id = bump.domain();
     check(
-      "support() is the identity over the domain",
-      near(bump.support().at(0), 0) &&
-        near(bump.support().at(3), 3) &&
-        bump.support().domain.min === 0 &&
-        bump.support().domain.max === 4
+      "domain() is a function expression, the identity over the interval",
+      held(id) !== undefined &&
+        typeof id.domain === "function" &&
+        near(held(id).at(0), 0) &&
+        near(held(id).at(3), 3) &&
+        held(id).domain.min === 0 &&
+        held(id).domain.max === 4
+    );
+    check(
+      "a function value holds its function and exposes only domain()",
+      near(held(bump).at(2), 2) &&
+        bump.at === undefined &&
+        Object.keys(bump).join(",") === "domain"
     );
     check(
       "a domain that is not [min, max] is an error",
@@ -103,7 +114,7 @@ async function main() {
     // h is 1 + e^{-(t-2)^2}: its maximum is 2 at t = 2, inside the domain,
     // between any samples a resampler would take.
     const root = await chart([{}])
-      .mark(ribbon({ x: bump.support(), h: bump }))
+      .mark(ribbon({ x: bump.domain(), h: bump }))
       .resolve();
     await root.toDisplayList({ w: 400, h: 200, axes: false });
     const find = (n: any): any =>
@@ -128,7 +139,7 @@ async function main() {
       JSON.stringify(py)
     );
     const [band] = pathsOf(
-      await ribbon({ x: bump.support(), h: bump }).toDisplayList({
+      await ribbon({ x: bump.domain(), h: bump }).toDisplayList({
         w: 400,
         h: 200,
         axes: false,
@@ -148,8 +159,8 @@ async function main() {
     const dl = await stack(
       { dir: "y", ...(baseline ? { baseline } : {}) },
       [
-        ribbon({ x: bump.support(), h: bump }),
-        ribbon({ x: wave.support(), h: wave, fill: "red" }),
+        ribbon({ x: bump.domain(), h: bump }),
+        ribbon({ x: wave.domain(), h: wave, fill: "red" }),
       ]
     ).toDisplayList({ w: 400, h: 200, axes: false });
     const bands = pathsOf(dl);
@@ -163,12 +174,12 @@ async function main() {
       return yAt(bands[i].lower, x) - yAt(bands[i].upper, x);
     };
     // Pixels per unit, from the first band at t = 2.
-    const k = thickness(0, 2) / bump.at(2);
+    const k = thickness(0, 2) / held(bump).at(2);
     check(
       `${name}: each band keeps its thickness, to a pixel`,
       bands.length === 2 &&
         bands.every((_, i) =>
-          ts.every((t) => Math.abs(thickness(i, t) - k * fs[i].at(t)) < 1)
+          ts.every((t) => Math.abs(thickness(i, t) - k * held(fs[i]).at(t)) < 1)
         ),
       JSON.stringify(bands.map((_, i) => ts.map((t) => thickness(i, t))))
     );
@@ -193,16 +204,16 @@ async function main() {
     const err = await errorOf(() =>
       layer([
         chart(rows).flow(scatter({ x: "x", y: "y" })).mark(circle({ r: 3 })),
-        line({ x: trend.support(), y: trend }),
+        line({ x: trend.domain(), y: trend }),
       ]).toDisplayList({ w: 300, h: 200 })
     );
-    check("line({ x: f.support(), y: f }) draws beside a scatter", err === "", err);
+    check("line({ x: f.domain(), y: f }) draws beside a scatter", err === "", err);
   }
 
   console.log("\n# serialization");
   {
     const doc = await chart([{ a: 1 }])
-      .mark(ribbon({ x: bump.support(), h: bump, fill: "red" }))
+      .mark(ribbon({ x: bump.domain(), h: bump, fill: "red" }))
       .toJSON();
     const text = JSON.stringify(doc);
     check(
@@ -218,7 +229,7 @@ async function main() {
   {
     const narrow = fun((t: number) => t, { domain: [1, 3] });
     const domains = await errorOf(() =>
-      ribbon({ x: narrow.support(), h: bump }).toDisplayList({ w: 100, h: 100 })
+      ribbon({ x: narrow.domain(), h: bump }).toDisplayList({ w: 100, h: 100 })
     );
     check(
       "unequal domains are an error that names both",
@@ -238,7 +249,7 @@ async function main() {
       column
     );
     const constant = await errorOf(() =>
-      ribbon({ x: bump.support(), h: 2 }).toDisplayList({ w: 100, h: 100 })
+      ribbon({ x: bump.domain(), h: 2 }).toDisplayList({ w: 100, h: 100 })
     );
     check("a constant beside a function is allowed", constant === "", constant);
     const inRect = await errorOf(() =>
@@ -248,12 +259,12 @@ async function main() {
     );
     check(
       "a function in a rect channel is an error that names the mark and the fix",
-      inRect.includes("rect({ h })") && inRect.includes("f.support()"),
+      inRect.includes("rect({ h })") && inRect.includes("f.domain()"),
       inRect
     );
     const curve = await errorOf(() =>
       ribbon({
-        x: bump.support(),
+        x: bump.domain(),
         h: bump,
         curve: GoFish.Curve.linear(),
       }).toDisplayList({ w: 100, h: 100 })

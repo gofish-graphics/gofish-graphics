@@ -3415,10 +3415,10 @@ class FieldAccessor(dict):
         ``line``. Mirrors JS ``field(name).density()``."""
         return self._sample_member("density")
 
-    def support(self) -> "FieldAccessor":
+    def domain(self) -> "FieldAccessor":
         """``t`` over the interval :meth:`density` is drawn over: the position channel that reads the density at the
         mark's parameter. In the values' unit."""
-        return self._sample_member("support")
+        return self._sample_member("domain")
 
     def cdf(self) -> "FieldAccessor":
         """The share of the group's values at or below t, over the values'

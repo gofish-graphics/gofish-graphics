@@ -58,7 +58,7 @@ def story_default():
             layer(
                 [
                     ribbon(
-                        x=temp.support(),
+                        x=temp.domain(),
                         h=temp.density(),
                         fill="steelblue",
                         stroke="white",

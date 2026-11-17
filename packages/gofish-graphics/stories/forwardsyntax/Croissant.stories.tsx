@@ -31,7 +31,7 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * restricted to the cell: `d.bin(Bin.quantiles(5))` cuts the standard normal
  * at its quintiles, and `field(x).bin(Bin.quantiles(10))` cuts the penguins'
  * body mass at the deciles of its values. In each cell a ribbon of the
- * cell's support and density, drawn in by a few pixels (`inset`), is the
+ * cell's domain and density, drawn in by a few pixels (`inset`), is the
  * cell's slice, and the slices meet where the curve is cut. The last story
  * cuts an area into calendar months the same way: in a month's cell, the
  * ribbon through the rows over `date` is the year's band restricted to the
@@ -76,7 +76,7 @@ export const Croissant: StoryObj<Args> = {
       .mark(
         layer([
           ribbon({
-            x: d.support(),
+            x: d.domain(),
             h: d.density(),
             inset: 3,
             fill: PAPER_FILL,
@@ -116,7 +116,7 @@ export const PenguinBodyMass: StoryObj<Args> = {
       .mark(
         layer([
           ribbon({
-            x: mass.support(),
+            x: mass.domain(),
             h: mass.density(),
             inset: 3,
             fill: FILL,

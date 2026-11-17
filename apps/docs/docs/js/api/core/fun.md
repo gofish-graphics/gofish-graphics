@@ -9,7 +9,7 @@ parameter `t`.
 
 ```ts
 fun(at, { domain, knots? })
-f.support()
+f.domain()
 ```
 
 ## Parameters
@@ -25,11 +25,12 @@ f.support()
 A function value is the same function in every group. For one function per
 group, return a function value from a reduce:
 `field("x").reduce((xs) => fun(...))` (see
-[`map` and `reduce`](/js/api/operators/spread#map-and-reduce)). Its methods:
+[`map` and `reduce`](/js/api/operators/spread#map-and-reduce)). It is an
+expression a mark reads, so it has no `at` to call. It has one method:
 
-- `f.support()` is `t ↦ t` over the domain of `f`. It is the position
+- `f.domain()` is `t ↦ t` over the domain of `f`. It is the position
   channel that reads `f` at the mark's parameter:
-  `line({ x: f.support(), y: f })`.
+  `line({ x: f.domain(), y: f })`.
 
 A mark draws a function value by sampling it until the drawn path is within
 half a pixel of the function, and it finds the function's extent the same
@@ -48,5 +49,5 @@ serialize it.
 ```ts
 const bump = fun((t) => 1 + Math.exp(-((t - 4) ** 2)), { domain: [0, 10] });
 
-line({ x: bump.support(), y: bump }).render(container, { w: 400, h: 300 });
+line({ x: bump.domain(), y: bump }).render(container, { w: 400, h: 300 });
 ```

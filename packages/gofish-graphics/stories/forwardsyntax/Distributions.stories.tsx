@@ -25,7 +25,7 @@ export const NormalCurve: StoryObj<Args> = {
 
     const d = Dist.normal({ mean: "mean", sd: "sd" });
     chart([{ mean: 0, sd: 1 }])
-      .mark(ribbon({ x: d.support(), h: d.density(), fill: "#4c78a8" }))
+      .mark(ribbon({ x: d.domain(), h: d.density(), fill: "#4c78a8" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 
     return container;
@@ -40,7 +40,7 @@ export const StackedSpeciesDensities: StoryObj<Args> = {
     const mass = field("Body Mass (g)");
     chart(penguins.filter((p) => p["Body Mass (g)"] !== null))
       .flow(stack({ by: "Species", dir: "y" }))
-      .mark(ribbon({ x: mass.support(), h: mass.density(), fill: "Species" }))
+      .mark(ribbon({ x: mass.domain(), h: mass.density(), fill: "Species" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 
     return container;

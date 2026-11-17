@@ -84,7 +84,7 @@ Only what is drawn changes: the band's box is the same. A negative value in
 parameter `t`, and reads every function channel at the same `t`. Its edges
 are the functions themselves, not curves through rows.
 
-- `x` holds `f.support()`, which is `t` itself over the domain of `f`.
+- `x` holds `f.domain()`, which is `t` itself over the domain of `f`.
 - Every function channel has the same domain, or it is an error that names
   both.
 - `h` may be a number instead, a constant over `t`. A column beside a
@@ -96,8 +96,8 @@ const bump = fun((t) => 1 + Math.exp(-((t - 4) ** 2)), { domain: [0, 10] });
 const wave = fun((t) => 1 + 0.6 * Math.sin(t), { domain: [0, 10] });
 
 stack({ dir: "y" }, [
-  ribbon({ x: bump.support(), h: bump }),
-  ribbon({ x: wave.support(), h: wave }),
+  ribbon({ x: bump.domain(), h: bump }),
+  ribbon({ x: wave.domain(), h: wave }),
 ]);
 ```
 

@@ -8,7 +8,7 @@ def story_normal_curve():
     d = Dist.normal(mean="mean", sd="sd")
     return (
         chart([{"mean": 0, "sd": 1}]).mark(
-            ribbon(x=d.support(), h=d.density(), fill="#4c78a8")
+            ribbon(x=d.domain(), h=d.density(), fill="#4c78a8")
         ),
         {"w": 500, "h": 250, "axes": True},
     )
@@ -19,6 +19,6 @@ def story_stacked_species_densities():
     return (
         chart([p for p in PENGUINS if p["Body Mass (g)"] is not None])
         .flow(stack(by="Species", dir="y"))
-        .mark(ribbon(x=mass.support(), h=mass.density(), fill="Species")),
+        .mark(ribbon(x=mass.domain(), h=mass.density(), fill="Species")),
         {"w": 500, "h": 300, "axes": True},
     )

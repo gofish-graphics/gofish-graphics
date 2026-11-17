@@ -7,7 +7,7 @@ The ``Dist`` family: distributions. The package binds this module as
 A family is an expression a spec holds: each parameter is a number, a
 column whose value is one number in each group, or a value expression
 (``field("t").mean()``). Its members are channels: ``d.density()``,
-``d.cdf()`` and ``d.support()`` are functions of t for ``ribbon`` and
+``d.cdf()`` and ``d.domain()`` are functions of t for ``ribbon`` and
 ``line``, and ``d.median()``, ``d.mean()``, ``d.mass()`` and
 ``d.quantile(p)`` are values for any channel. It goes on the wire as data,
 ``{"type": "dist", "family", "params", "ops"}``, and JS computes it.
@@ -70,10 +70,10 @@ class DistAccessor(dict):
         :meth:`density`. A ratio."""
         return self._member("cdf")
 
-    def support(self) -> "DistAccessor":
+    def domain(self) -> "DistAccessor":
         """``t`` over the interval :meth:`density` is drawn over: the
         position channel that reads it at the mark's parameter."""
-        return self._member("support")
+        return self._member("domain")
 
     def quantile(self, p: float) -> "DistAccessor":
         """The value with probability ``p`` at or below it."""

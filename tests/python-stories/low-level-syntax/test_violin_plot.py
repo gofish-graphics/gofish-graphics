@@ -16,7 +16,7 @@ def story_default():
         .flow(spread(by="Species", dir="x", spacing=64))
         .mark(
             stack(
-                [ribbon(y=mass.support(), w=mass.density(), fill="Species")],
+                [ribbon(y=mass.domain(), w=mass.density(), fill="Species")],
                 dir="x",
                 baseline=Baseline.middle(),
             )

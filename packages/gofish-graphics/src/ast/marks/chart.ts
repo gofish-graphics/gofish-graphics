@@ -1065,7 +1065,7 @@ export type LineOptions = FilterOptions & {
 /** A position or value channel of the shape form of `ribbon` and `line`:
  *  read once per row (a column name, an accessor, or a `field(...)`
  *  expression), or a function expression read at the mark's parameter t
- *  (`fun(...)`, `f.support()`). */
+ *  (`fun(...)`, `f.domain()`). */
 export type ShapeChannel =
   | string
   | ((d: any) => unknown)
@@ -1296,7 +1296,7 @@ export type RibbonOptions = FilterOptions & {
    *  is the same. */
   inset?: number;
   /** The shape form: each row's position along the band, or a function
-   *  expression's `support()`. `x` with `h` is a band over x, of height h
+   *  expression's `domain()`. `x` with `h` is a band over x, of height h
    *  from its baseline; `y` with `w` is a band over y, of width w. */
   x?: ShapeChannel;
   y?: ShapeChannel;
@@ -1358,7 +1358,7 @@ export function ribbon(
         throw new Error(
           `[gofish] ribbon({ ${key} }): ${key} holds a function of t, which ` +
             `the shape form reads; give it ${at} too, the function's ` +
-            `support: ribbon({ ${at}: f.support(), ${key}: f }).`
+            `domain: ribbon({ ${at}: f.domain(), ${key}: f }).`
         );
     if (options?.inset !== undefined)
       throw new Error(

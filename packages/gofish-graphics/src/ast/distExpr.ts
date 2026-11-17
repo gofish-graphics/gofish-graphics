@@ -8,7 +8,7 @@
  * field expression (fieldExpr.ts). Each parameter is a number, a column
  * name, or a value expression (`field("t").mean()`), read over the group's
  * rows. The expression's members are read as a reduce's are, through the
- * one lift (`liftLeaf` in fieldExpr.ts): `d.density()` and `d.support()`
+ * one lift (`liftLeaf` in fieldExpr.ts): `d.density()` and `d.domain()`
  * are functions of t for ribbon and line, `d.median()` and `d.quantile(p)`
  * values for any channel.
  *
@@ -70,7 +70,7 @@ export type DistParams<F extends FamilyName> = {
 };
 
 /** The parameter of each family that is an amount of the variable, whose
- *  column's unit the variable is in (an axis over `d.support()` joins one
+ *  column's unit the variable is in (an axis over `d.domain()` joins one
  *  in that unit). The variable is not that column, so it takes the unit
  *  and not the column's name, and titles no axis. A family with none is
  *  over a variable with no name and no declared unit. */
@@ -86,7 +86,7 @@ type MemberOp = Extract<FieldOp, { op: "member" }>;
 /**
  * `Dist.normal(...)` and the other families return one of these. Immutable:
  * each member method returns a new expression with one more op. A member
- * that is a function (`density`, `cdf`, `support`) is a function
+ * that is a function (`density`, `cdf`, `domain`) is a function
  * expression; one that is a number (`median`, `mean`, `mass`, `quantile`)
  * a value expression.
  */
@@ -121,8 +121,8 @@ export class DistExpr {
 
   /** `t ↦ t` over the interval {@link DistExpr.density} is drawn over: the
    *  position channel that reads it at the mark's parameter. */
-  support(): FunctionExpr {
-    return this._member("support") as unknown as FunctionExpr;
+  domain(): FunctionExpr {
+    return this._member("domain") as unknown as FunctionExpr;
   }
 
   /** The value with probability `p` at or below it. */
@@ -372,7 +372,7 @@ export function distKeyCells(
     where
   );
   const { dist, variable } = distOf(expr, rows);
-  const { min, max } = dist.support.domain;
+  const { min, max } = dist.domain.domain;
   return {
     cells: distributionCells(
       step,

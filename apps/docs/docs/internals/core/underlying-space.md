@@ -2794,13 +2794,16 @@ A reduce's result is lifted by its shape, which is known only when it runs
 (`liftLeaf`). A number, or no value, is a value; a `Fun` is a function of
 `t`, which only the shape form of `ribbon` and `line` reads (`groupFun` in
 `groupExpr.ts` asks per group); a record is read through the members after
-it, a method member called with its arguments; an array is an error. The
+it, a method member called with its arguments; an array is an error. A
+function value a spec writes (`fun(at, { domain })`) is an expression that
+holds a `Fun` (`heldFun`) and is not one, so `liftLeaf` reads the `Fun` it
+holds wherever one appears in the result. The
 expression holds the members as ops, so the spec can name a member before
 the reduce has run: `field(x).reduce(fn)` is a `Proxy` over the expression
 (`lifted`), whose every property but its own wire and the hooks the runtime
 probes (`OWN_KEYS`) is a member method. The types mirror this: `Lift<V>` in
 `groupExpr.ts` maps a number to `ValueExpr`, a `Fun<number>` to
-`FunctionExpr`, a record to one method per member, and an array to a
+`FunctionExpr` (as it maps a `FunValue`), a record to one method per member, and an array to a
 `LiftError`, which no channel takes.
 
 Each step runs once per group. `evalGroup` keeps what a map or a fold
@@ -2817,18 +2820,18 @@ over is an error, not a silent call.
 ### Distributions
 
 A distribution is the record `Dist` (`dist.ts`): `density`, `cdf` and
-`support`, each a `Fun<number>` over one interval, `quantile(p)`, `median`,
+`domain`, each a `Fun<number>` over one interval, `quantile(p)`, `median`,
 `mean` and `mass`. It is a plain record, so a reduce that returns one is
 lifted by the rule above with no case of its own: `d.density()` is a member
 that is a `Fun`, `d.quantile(0.9)` a method member, `d.median()` a number.
-Its `support` member is the identity over the interval `density` is drawn
-over, which is what the generic `support()` of a `Fun` gives too, so
-`d.support()` and `d.density().support()` are the same function. The record
+Its `domain` member is the identity over the interval `density` is drawn
+over, which is what the generic `domain()` of a `Fun` gives too, so
+`d.domain()` and `d.density().domain()` are the same function. The record
 has the member; a bare `Fun` has the generic rule in `liftLeaf`. Neither
 knows about the other.
 
 Two other folds give a `Dist`, on the same lift. `field(x).density()` (and
-`support`, `cdf`, `quantile(p)`) is the fold `sample` and a member: the
+`domain`, `cdf`, `quantile(p)`) is the fold `sample` and a member: the
 group's values as `Dist.sample`, a normal kernel density with Silverman's
 bandwidth (`silvermanBandwidth` in `overlap.ts`), drawn from 3 bandwidths
 below the least value to 3 above the greatest (`SAMPLE_CUT`, seaborn's
@@ -2863,7 +2866,7 @@ of that interval also holds the tail past it), the
 `sample` fold restricts the whole rows' sample (`sampleIn`; the cells of a
 column cover its values, so a cell that reaches the least or the greatest
 value also holds the density's tail past it, and the cells partition the
-whole support), and
+whole interval the density is drawn over), and
 `bandOfRows` builds the band through the whole rows and restricts both
 edges to the cell, so the bands in neighboring cells meet. A distribution of
 another column reads the cell's own rows, which is its distribution given
@@ -2873,7 +2876,7 @@ the cell.
 
 A fold that lifts says the quantity of each leaf (`FoldStep.lift`). A
 reduce reads its `unit` option. A `Dist` reads its variable
-(`distQuantities`): the support, the quantiles, the median and the mean are
+(`distQuantities`): the domain, the quantiles, the median and the mean are
 amounts of the variable (the column; for a family, a quantity with no name
 in its location column's unit, since the variable is not that column), so
 their axes join; the density is the mass per the variable's unit, or per

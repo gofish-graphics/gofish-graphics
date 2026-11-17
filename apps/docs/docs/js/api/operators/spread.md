@@ -292,7 +292,7 @@ Four methods read the group's values as a sample, a
 | Method         | Gives                                                                               |
 | -------------- | ----------------------------------------------------------------------------------- |
 | `.density()`   | a function of `t`: a kernel density of the values, with area the row count          |
-| `.support()`   | a function of `t`: `t` itself, over the interval the density is drawn over          |
+| `.domain()`    | a function of `t`: `t` itself, over the interval the density is drawn over          |
 | `.cdf()`       | a function of `t`: the share of the values at or below `t`, a ratio                 |
 | `.quantile(p)` | one value per group: the type-7 quantile at `p`, so `.quantile(0.5)` is `.median()` |
 
@@ -301,7 +301,7 @@ drawn from 3 bandwidths below the least value to 3 above the greatest, so it
 tapers to near zero at both ends. There is no option yet to choose how far past the
 values it runs, or to bound it at a hard limit, such as 0 for counts. It is in the
 column's count per unit, so the densities of several groups add up and
-stack. `.support()` is in the column's unit, so its axis joins the column's.
+stack. `.domain()` is in the column's unit, so its axis joins the column's.
 In a cell of a [`partition`](/js/api/operators/partition#a-distribution-s-cells)
 by the same field, each method reads the whole group's values restricted to
 the cell.
@@ -311,7 +311,7 @@ const mass = field("Body Mass (g)");
 
 chart(penguins)
   .flow(stack({ by: "Species", dir: "y" }))
-  .mark(ribbon({ x: mass.support(), h: mass.density(), fill: "Species" }));
+  .mark(ribbon({ x: mass.domain(), h: mass.density(), fill: "Species" }));
 ```
 
 One method is neither: `.between(lo, hi, { closed })` returns a **row

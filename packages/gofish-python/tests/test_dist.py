@@ -18,7 +18,7 @@ def test_field_members_are_a_sample_then_a_member():
         "name": "quantile",
         "args": [0.9],
     }
-    assert field("x").support()["ops"][-1]["name"] == "support"
+    assert field("x").domain()["ops"][-1]["name"] == "domain"
     assert field("x").cdf()["ops"][-1]["name"] == "cdf"
 
 

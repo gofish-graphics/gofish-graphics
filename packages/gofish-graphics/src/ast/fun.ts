@@ -381,7 +381,7 @@ export const opaque = <T>(
   o: { domain: Interval; knots?: readonly number[] }
 ): Fun<T> => ({ at, domain: o.domain, ...(o.knots ? { knots: o.knots } : {}) });
 
-/** The identity `t ↦ t` over `domain`: what `support()` gives, the
+/** The identity `t ↦ t` over `domain`: what `domain()` gives, the
  *  parameter itself, for a mark's position channel. It is exact (one
  *  linear piece). */
 export const identity = (domain: Interval): Fun<number> =>

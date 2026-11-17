@@ -87,7 +87,7 @@ export const Default: StoryObj<Args> = {
       .mark(
         layer({ h: ridgeHeight }, [
           ribbon({
-            x: temp.support(),
+            x: temp.domain(),
             h: temp.density(),
             fill: "steelblue",
             stroke: "white",

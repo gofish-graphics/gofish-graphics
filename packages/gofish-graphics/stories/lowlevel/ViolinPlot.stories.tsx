@@ -35,7 +35,7 @@ export const Default: StoryObj<Args> = {
       .flow(spread({ by: "Species", dir: "x", spacing: 64 }))
       .mark(
         stack({ dir: "x", baseline: Baseline.middle() }, [
-          ribbon({ y: mass.support(), w: mass.density(), fill: "Species" }),
+          ribbon({ y: mass.domain(), w: mass.density(), fill: "Species" }),
         ])
       )
       .render(container, { w: args.w, h: args.h, axes: true });

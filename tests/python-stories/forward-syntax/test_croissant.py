@@ -3,7 +3,7 @@
 Croissant charts: a density curve cut at its quantiles into equal-probability
 slices, each drawn on its own with a small gap, with one dot per slice at the
 slice's median. A partition by the distribution's cells gives each cell the
-distribution restricted to it, and a ribbon of its support and density,
+distribution restricted to it, and a ribbon of its domain and density,
 drawn in by a few pixels, draws the cell's slice. The standard normal is cut
 at its quintiles, the penguins' body mass at the deciles of its values. The
 ridgeline still draws each month's curve hidden and intersects it with each
@@ -80,7 +80,7 @@ def story_croissant():
             layer(
                 [
                     ribbon(
-                        x=D.support(),
+                        x=D.domain(),
                         h=D.density(),
                         inset=3,
                         fill=PAPER_FILL,
@@ -106,7 +106,7 @@ def story_penguin_body_mass():
             layer(
                 [
                     ribbon(
-                        x=MASS.support(),
+                        x=MASS.domain(),
                         h=MASS.density(),
                         inset=3,
                         fill=FILL,

@@ -528,7 +528,7 @@ type Channel = { name: string; accessor: unknown };
 /** The map `t ↦ a·t + b` that `f` is, when it is exact and one line over its
  *  whole domain: what a position channel at the mark's parameter must be
  *  for its cross-sections to be functions of the position (the identity of
- *  `support()` is one, with `a = 1`, `b = 0`). */
+ *  `domain()` is one, with `a = 1`, `b = 0`). */
 function affineOf(f: Fun<number>): { a: number; b: number } | undefined {
   if (f.pieces === undefined) return undefined;
   const spans = f.pieces.filter((p) => p.from !== p.to);
@@ -564,7 +564,7 @@ function affineOf(f: Fun<number>): { a: number; b: number } | undefined {
  *   function: a column beside a function is an error, since rows are not
  *   read at t. The value channel may hold a number instead, a constant
  *   function over the parameter's domain.
- * - The position must be one increasing line in t (`f.support()` is
+ * - The position must be one increasing line in t (`f.domain()` is
  *   `t ↦ t`), so the band's cross-sections stay functions of its position.
  *   The values are then read through it exactly ({@link reparameterize}).
  *   TODO(#1374): a position that bends in t (a P-P plot,
@@ -588,7 +588,7 @@ export function bandOfFunctions(
       `[gofish] ${mark}({ ${parameter.name}, ${value.name} }): ` +
         `${value.name} holds a function of t, so ${parameter.name} must too: ` +
         `rows are not read at t. Give ${parameter.name} the function's ` +
-        `support, ${mark}({ ${parameter.name}: f.support(), ${value.name}: f }).`
+        `domain, ${mark}({ ${parameter.name}: f.domain(), ${value.name}: f }).`
     );
   let v = read(value);
   if (v === undefined) {
@@ -615,7 +615,7 @@ export function bandOfFunctions(
   if (line === undefined || !(line.a > 0))
     throw new Error(
       `[gofish] ${mark}({ ${parameter.name} }): the position must be one ` +
-        `increasing line in t, such as f.support() (t itself), so each ` +
+        `increasing line in t, such as f.domain() (t itself), so each ` +
         `${parameter.name} has one value; a position that bends in t is not ` +
         `supported yet.`
     );

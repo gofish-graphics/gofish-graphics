@@ -9,19 +9,23 @@
  * A `Dist` is a plain record of numbers and functions (`fun.ts`). Nothing in
  * it is specific to how it is held, so a `reduce` that returns one is lifted
  * by the general rule (`Lift` in groupExpr.ts): `d.density()`,
- * `d.support()`, `d.quantile(0.9)`. Its members:
+ * `d.domain()`, `d.quantile(0.9)`. Its members:
  *
- * - `density`: the mass times the probability density, over the support.
+ * - `density`: the mass times the probability density, over the interval
+ *   it is drawn over (below).
  *   For a family the mass is 1, so it is the pdf. For a sample it is a
  *   kernel density whose area is the number of values (less the kernels'
- *   tails past the support), so the densities of several groups add up.
- * - `cdf`: the share of the mass at or below t, a ratio, over the support.
+ *   tails past that interval), so the densities of several groups add up.
+ * - `cdf`: the share of the mass at or below t, a ratio, over the same
+ *   interval.
  *   For a sample it is the inverse of its quantile, so it is the values'
  *   own share, not the integral of the smoothed density.
  * - `quantile(p)`: the value with the share p of the mass at or below it.
  * - `median`, `mean`.
- * - `support`: t itself (`identity`), over the same interval as `density`,
- *   so `ribbon({ x: d.support(), h: d.density() })` reads both at one t.
+ * - `domain`: t itself (`identity`), over the same interval as `density`,
+ *   so `ribbon({ x: d.domain(), h: d.density() })` reads both at one t. It
+ *   is the interval the density is drawn over, not the distribution's
+ *   support when that is unbounded.
  * - `mass`: 1 for a family, the number of values for a sample.
  *
  * The interval the functions run over is where the density is drawn, as
@@ -61,7 +65,7 @@ export type Dist = {
   quantile(p: number): number | undefined;
   readonly median: number | undefined;
   readonly mean: number | undefined;
-  readonly support: Fun<number>;
+  readonly domain: Fun<number>;
   readonly mass: number;
 };
 
@@ -174,7 +178,7 @@ function familyOf(o: {
     quantile,
     median: o.median,
     mean: o.mean,
-    support: identity(o.domain),
+    domain: identity(o.domain),
     mass: 1,
   };
 }
@@ -245,7 +249,7 @@ export function familyDist<F extends FamilyName>(
         },
         median: min + w / 2,
         mean: min + w / 2,
-        support: identity(domain),
+        domain: identity(domain),
         mass: 1,
       };
     }
@@ -276,7 +280,7 @@ const KERNEL_REACH = 8;
 /** How far past its least and greatest value a sample's density is drawn,
  *  in bandwidths (seaborn's `cut=3`). A kernel has the share Φ(−3) ≈
  *  0.00135 of its mass past 3 bandwidths on one side, so the area over the
- *  support is the number of values less at most that share of each
+ *  drawn interval is the number of values less at most that share of each
  *  extreme value's kernel at each end.
  *  TODO(#1371): an option for a sample's density could choose how
  *  far past the values it runs, and a bounded estimator (reflection at a
@@ -387,7 +391,7 @@ function sampleOver(
     quantile,
     median: quantile(0.5),
     mean: n === 0 ? undefined : sorted.reduce((a, b) => a + b, 0) / n,
-    support: identity(domain),
+    domain: identity(domain),
     mass: n,
   };
 }
@@ -461,16 +465,16 @@ export function sample(
  *  values' line cover the values only, so a cell that reaches the least
  *  value (its 0 quantile) holds the tail below it, and one that reaches the
  *  greatest holds the tail above: the cells of one sample partition its
- *  whole support. */
+ *  whole drawn interval. */
 export function sampleIn(
   values: readonly unknown[],
   whole: Dist,
   cell: Interval
 ): Dist {
-  const support = whole.support.domain;
-  const domain = meet(support, {
-    min: cell.min <= (whole.quantile(0) ?? cell.min) ? support.min : cell.min,
-    max: cell.max >= (whole.quantile(1) ?? cell.max) ? support.max : cell.max,
+  const drawn = whole.domain.domain;
+  const domain = meet(drawn, {
+    min: cell.min <= (whole.quantile(0) ?? cell.min) ? drawn.min : cell.min,
+    max: cell.max >= (whole.quantile(1) ?? cell.max) ? drawn.max : cell.max,
   });
   return sampleOver(
     sortedValues(values, "Dist.sample"),
@@ -504,14 +508,14 @@ function meet(domain: Interval, cell: Interval): Interval {
  * with `restrict`, so the cells of one Dist meet exactly.
  */
 export function restrictDist(d: Dist, cell: Interval): Dist {
-  const domain = meet(d.support.domain, cell);
+  const drawn = d.domain.domain;
+  const domain = meet(drawn, cell);
   // A family is drawn over less than its support (from its 0.001 to its
   // 0.999 quantile), so a cell at an end of the drawn interval holds the
   // tail past it too: the cells share all of the mass, as a sample's do
   // (`sampleIn`).
-  const support = d.support.domain;
-  const below = domain.min <= support.min ? 0 : d.cdf.at(domain.min);
-  const w = (domain.max >= support.max ? 1 : d.cdf.at(domain.max)) - below;
+  const below = domain.min <= drawn.min ? 0 : d.cdf.at(domain.min);
+  const w = (domain.max >= drawn.max ? 1 : d.cdf.at(domain.max)) - below;
   const density = restrict(d.density, domain);
   const quantile = (p: number) => {
     if (!(p >= 0 && p <= 1))
@@ -535,7 +539,7 @@ export function restrictDist(d: Dist, cell: Interval): Dist {
       area > 0
         ? integrate(opaque((t) => t * density.at(t), { domain })) / area
         : domain.min,
-    support: identity(domain),
+    domain: identity(domain),
     mass: d.mass * w,
   };
 }
@@ -556,7 +560,7 @@ export function densityUnit(variable: HasUnit, mass: HasUnit): HasUnit {
 }
 
 /** The quantity of each member of a Dist over the variable `variable` with
- *  mass in `mass`: the support, the quantile, the median and the mean are
+ *  mass in `mass`: the domain, the quantile, the median and the mean are
  *  amounts of the variable; the density is mass per unit of it; the cdf is
  *  a ratio. A variable whose unit is not declared gives a density whose
  *  unit is not declared either. */
@@ -578,7 +582,7 @@ export function distQuantities(
     quantile: variable,
     median: variable,
     mean: variable,
-    support: variable,
+    domain: variable,
     mass,
   };
 }

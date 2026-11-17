@@ -83,7 +83,7 @@ chart([{ mean: 0, sd: 1 }])
   .flow(partition({ by: d.bin(Bin.quantiles(5)), dir: "x" }))
   .mark(
     layer([
-      ribbon({ x: d.support(), h: d.density(), inset: 3 }),
+      ribbon({ x: d.domain(), h: d.density(), inset: 3 }),
       circle({ cx: d.median(), cy: 6, r: 3 }),
     ])
   );

@@ -87,7 +87,7 @@ d = Dist.normal(mean="mean", sd="sd")
     .mark(
         layer(
             [
-                ribbon(x=d.support(), h=d.density(), inset=3),
+                ribbon(x=d.domain(), h=d.density(), inset=3),
                 circle(cx=d.median(), cy=6, r=3),
             ]
         )

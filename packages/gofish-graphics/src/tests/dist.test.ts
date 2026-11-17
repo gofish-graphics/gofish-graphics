@@ -95,10 +95,10 @@ for (const [name, d, inside] of families) {
   );
   check(`${name}: mass is 1`, d.mass === 1);
   check(
-    `${name}: support is t over the density's interval`,
-    d.support.domain.min === d.density.domain.min &&
-      d.support.domain.max === d.density.domain.max &&
-      d.support.at(d.density.domain.min) === d.density.domain.min
+    `${name}: domain is t over the density's interval`,
+    d.domain.domain.min === d.density.domain.min &&
+      d.domain.domain.max === d.density.domain.max &&
+      d.domain.at(d.density.domain.min) === d.density.domain.min
   );
 }
 check(
@@ -119,7 +119,7 @@ const masses = penguins
 {
   const d = sample(masses);
   // Past 3 bandwidths a kernel has Φ(−3) of its mass on that side, so the
-  // area over the support is short of the count by less than that share of
+  // area over the drawn interval is short of the count by less than that share of
   // the values at each end: at most 2 Φ(−3) n.
   const tail = normalCdf(-3);
   const area = integrate(d.density);
@@ -136,7 +136,7 @@ const masses = penguins
     "it is drawn 3 bandwidths past the values",
     near(d.density.domain.min, Math.min(...masses) - 3 * bw, 1e-9) &&
       near(d.density.domain.max, Math.max(...masses) + 3 * bw, 1e-9) &&
-      d.support.domain.min === d.density.domain.min &&
+      d.domain.domain.min === d.density.domain.min &&
       d.cdf.domain.max === d.density.domain.max
   );
   check(
@@ -268,11 +268,11 @@ console.log("\n# field members are the sample's");
     "density() is a count per unit, named for the variable",
     dens.quantity?.name === `${col} density`
   );
-  const sup = read(field(col).support());
+  const sup = read(field(col).domain());
   check(
-    "support() is t over the density's interval, in the variable",
+    "domain() is t over the density's interval, in the variable",
     sup.kind === "function" &&
-      sup.fun.domain.min === d.support.domain.min &&
+      sup.fun.domain.min === d.domain.domain.min &&
       sup.quantity?.name === col
   );
   const cdf = read(field(col).cdf());
@@ -287,18 +287,18 @@ console.log("\n# field members are the sample's");
     kde.kind === "function" && kde.fun.at(4200) === d.density.at(4200)
   );
   check(
-    "a reduce's Dist: its support() member is its density's support()",
+    "a reduce's Dist: its domain() member is its density's domain()",
     (() => {
       const a = read(
         field(col)
           .reduce((xs) => DistNS.sample(xs))
-          .support()
+          .domain()
       );
       const b = read(
         field(col)
           .reduce((xs) => DistNS.sample(xs))
           .density()
-          .support()
+          .domain()
       );
       return (
         a.kind === "function" &&
@@ -334,13 +334,13 @@ console.log("\n# units");
     "a density over times is per duration",
     tdens.quantity?.unit?.unit === "count per duration"
   );
-  const sup = evalGroup(field("v").support() as any, rows, col);
-  check("a support is in the variable", sup.quantity === col);
+  const sup = evalGroup(field("v").domain() as any, rows, col);
+  check("a domain is in the variable", sup.quantity === col);
   const u = DistNS.units("USD", "count");
   check(
     "Dist.units mirrors the record",
     u.density.HasUnit.unit === "count per USD" &&
-      u.support.HasUnit.unit === "USD" &&
+      u.domain.HasUnit.unit === "USD" &&
       u.cdf.HasUnit.unit === "ratio"
   );
 }
@@ -364,7 +364,7 @@ console.log("\n# a distribution expression");
     "its density, like its variable, has no name",
     dens.quantity !== undefined && dens.quantity.name === undefined
   );
-  const sup = evalGroup(d.support() as any, [params[1]], undefined);
+  const sup = evalGroup(d.domain() as any, [params[1]], undefined);
   check(
     "its variable is not the location column: no name",
     sup.quantity !== undefined && sup.quantity.name === undefined
@@ -372,7 +372,7 @@ console.log("\n# a distribution expression");
   const usd = await applySchema([{ mean: 5, sd: 2 }], {
     mean: { unit: UnitNS("USD") },
   } as any);
-  const supUsd = evalGroup(d.support() as any, usd, undefined);
+  const supUsd = evalGroup(d.domain() as any, usd, undefined);
   check(
     "its variable is in the location column's unit",
     supUsd.quantity?.unit?.unit === "USD" && supUsd.quantity.name === undefined
@@ -490,9 +490,9 @@ console.log("\n# a distribution's cells");
   );
   const mass = (evalGroup(d.mass() as any, second, undefined) as any).value;
   check("the mass in a quintile is 0.2", near(mass, 0.2, 1e-3), String(mass));
-  const sup = evalGroup(d.support() as any, second, undefined) as any;
+  const sup = evalGroup(d.domain() as any, second, undefined) as any;
   check(
-    "the support in a cell is the cell",
+    "the domain in a cell is the cell",
     near(sup.fun.domain.min, normalQuantile(0.2), 1e-3) &&
       near(sup.fun.domain.max, normalQuantile(0.4), 1e-3),
     JSON.stringify(sup.fun.domain)
@@ -521,7 +521,7 @@ console.log("\n# a field's cells");
     `${cell.fun.at(t)} vs ${whole.fun.at(t)}`
   );
   check(
-    "its support ends at the cell's edge",
+    "its domain ends at the cell's edge",
     cell.fun.domain.max <= whole.fun.domain.max &&
       cell.fun.domain.max < whole.fun.domain.max
   );
@@ -537,10 +537,10 @@ console.log("\n# a field's cells");
   );
   const domains = groups.map(
     ([, g]) =>
-      (evalGroup(mass.support() as any, g, undefined) as any).fun.domain
+      (evalGroup(mass.domain() as any, g, undefined) as any).fun.domain
   );
   check(
-    "the cells partition the support",
+    "the cells partition the domain",
     domains.every((dom: any, i: number) =>
       i === 0 ? true : dom.min === domains[i - 1].max
     )
@@ -571,7 +571,7 @@ console.log("\n# a field's cells");
     rows.filter((r: any) => r.Species === "Adelie"),
     undefined
   ) as any;
-  const cellDomain = (evalGroup(mass.support() as any, mid, undefined) as any)
+  const cellDomain = (evalGroup(mass.domain() as any, mid, undefined) as any)
     .fun.domain;
   const tn = (cellDomain.min + cellDomain.max) / 2;
   check(
@@ -592,7 +592,7 @@ console.log("\n# a field's cells");
   // the ends of that interval hold the tails past it, so the quintiles of
   // a normal hold a fifth of its mass each.
   const d = familyDist("normal", { mean: 0, sd: 1 });
-  const { min, max } = d.support.domain;
+  const { min, max } = d.domain.domain;
   const edges = [min, ...[0.2, 0.4, 0.6, 0.8].map(d.quantile), max];
   const cells = edges
     .slice(0, -1)

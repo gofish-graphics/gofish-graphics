@@ -26,8 +26,8 @@ export const StackedFunctions: StoryObj<Args> = {
     const container = initializeContainer();
 
     stack({ dir: "y" }, [
-      ribbon({ x: bump.support(), h: bump, fill: "#4c78a8" }),
-      ribbon({ x: wave.support(), h: wave, fill: "#f58518" }),
+      ribbon({ x: bump.domain(), h: bump, fill: "#4c78a8" }),
+      ribbon({ x: wave.domain(), h: wave, fill: "#f58518" }),
     ]).render(container, { w: args.w, h: args.h });
 
     return container;
@@ -40,8 +40,8 @@ export const StackedFunctionsMiddle: StoryObj<Args> = {
     const container = initializeContainer();
 
     stack({ dir: "y", baseline: Baseline.middle() }, [
-      ribbon({ x: bump.support(), h: bump, fill: "#4c78a8" }),
-      ribbon({ x: wave.support(), h: wave, fill: "#f58518" }),
+      ribbon({ x: bump.domain(), h: bump, fill: "#4c78a8" }),
+      ribbon({ x: wave.domain(), h: wave, fill: "#f58518" }),
     ]).render(container, { w: args.w, h: args.h });
 
     return container;

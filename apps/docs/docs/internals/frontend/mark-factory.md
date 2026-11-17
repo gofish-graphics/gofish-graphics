@@ -573,7 +573,7 @@ connector reads (`dir`, `from`, `to`, `along` and the anchor keys) are an
 error in the shape form.
 
 A channel of the shape form may hold a function expression instead of a
-column: `ribbon({ x: f.support(), h: f })` with `f` made by `fun(at, { domain
+column: `ribbon({ x: f.domain(), h: f })` with `f` made by `fun(at, { domain
 })` (`src/ast/groupExpr.ts`). The mark then has one parameter t, and
 `bandOfFunctions` builds the edges from the functions instead of the rows:
 `groupFun` reads each channel's function for the group, their domains must be

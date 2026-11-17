@@ -75,7 +75,7 @@ import type { Alignment } from "./alignment";
  * (`Bin.quantiles(5)` at its quintiles). Every cell's group holds every row
  * (the rows are the distribution's parameters), and in it the distribution
  * is the whole one restricted to the cell (groupCell.ts), so a
- * `ribbon({ x: d.support(), h: d.density() })` in each cell draws the part
+ * `ribbon({ x: d.domain(), h: d.density() })` in each cell draws the part
  * of the curve over it, and the parts meet. A field's cells do the same
  * for a distribution of the field (`field(x).density()`) and a band
  * through the rows over it.
@@ -290,7 +290,7 @@ const partitionOperator = createOperator<
       if (![...entries.keys()].every((k) => k instanceof RegionCell))
         throw noRegion(by);
       // A distribution's cells are placed along its variable, so the axis
-      // joins one over d.support().
+      // joins one over d.domain().
       const variable = isDistKey(by) ? distKeyCells(by, d).variable : undefined;
       const columns: ColumnDatum[] = isStruct(by)
         ? [columnDatum(d, by.fields.x), columnDatum(d, by.fields.y)]

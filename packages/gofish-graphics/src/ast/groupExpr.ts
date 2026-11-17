@@ -54,7 +54,7 @@ export interface FunctionExpr {
   readonly [exprKind]: "function";
   /** `t ↦ t` over this function's own domain: the position channel that
    *  reads it at the mark's parameter. */
-  support(): FunctionExpr;
+  domain(): FunctionExpr;
 }
 
 /**
@@ -66,7 +66,7 @@ export interface FunctionExpr {
  */
 export type Lift<V> = [V] extends [number | null | undefined]
   ? ValueExpr
-  : V extends Fun<number>
+  : V extends Fun<number> | FunValue
     ? FunctionExpr
     : V extends readonly unknown[]
       ? LiftError<"a reduce returns a number, a function or a record, not an array">
@@ -96,7 +96,7 @@ export type Units<V> =
   | UnitLike
   | ([V] extends [number | null | undefined]
       ? never
-      : V extends Fun<number>
+      : V extends Fun<number> | FunValue
         ? never
         : V extends (...args: never[]) => infer W
           ? Units<W>
@@ -107,30 +107,31 @@ export type Units<V> =
 const FUN_VALUE: unique symbol = Symbol.for("gofish.funValue");
 
 /**
- * A function value as a spec holds it: a `Fun<number>` that is also a
- * function expression, the same function in every group. Its `support()` is
- * the identity over its domain, the position channel that reads it at the
- * mark's parameter: `line({ x: trend.support(), y: trend })`. It is frozen.
+ * A function value as a spec holds it: a function expression, the same
+ * function in every group. It holds its run-time `Fun<number>` (read with
+ * {@link heldFun}) and is not one itself, as a field expression is not the
+ * values it reads. Its one member, `domain()`, is the identity over its
+ * interval, the position channel that reads it at the mark's parameter:
+ * `line({ x: trend.domain(), y: trend })`. It is frozen.
  */
-export type FunValue = Fun<number> &
-  FunctionExpr & {
-    readonly [FUN_VALUE]: true;
-    support(): FunValue;
-  };
+export type FunValue = FunctionExpr & {
+  readonly [FUN_VALUE]: Fun<number>;
+  domain(): FunValue;
+};
 
 /** Whether `v` is a {@link FunValue}. */
 export const isFunValue = (v: unknown): v is FunValue =>
-  typeof v === "object" && v !== null && (v as any)[FUN_VALUE] === true;
+  typeof v === "object" && v !== null && FUN_VALUE in v;
+
+/** The run-time function a {@link FunValue} holds. */
+export const heldFun = (v: FunValue): Fun<number> => v[FUN_VALUE];
 
 /** `f` as a {@link FunValue}. */
-const funValue = (f: Fun<number>): FunValue => {
-  const out = {
-    ...f,
-    [FUN_VALUE]: true as const,
-    support: (): FunValue => funValue(identity(f.domain)),
-  };
-  return Object.freeze(out) as unknown as FunValue;
-};
+const funValue = (f: Fun<number>): FunValue =>
+  Object.freeze({
+    [FUN_VALUE]: f,
+    domain: (): FunValue => funValue(identity(f.domain)),
+  }) as unknown as FunValue;
 
 /**
  * Make a function value: the function and the interval of t it is defined
@@ -182,7 +183,7 @@ export function groupFun(
   rows: readonly unknown[],
   column?: Quantity
 ): GroupFun | undefined {
-  if (isFunValue(expr)) return { fun: expr };
+  if (isFunValue(expr)) return { fun: heldFun(expr) };
   if (!liftsPerGroup(expr)) return undefined;
   const r = evalGroup(expr as any, rows, column);
   return r.kind === "function"
@@ -207,7 +208,7 @@ export const functionInChannelError = (mark: string, channel: string): Error =>
     `[gofish] ${mark}({ ${channel} }): this channel holds a function value ` +
       `(one function of t per group), but ${mark} takes one value per group ` +
       `here. Only ribbon and line read function values, every function ` +
-      `channel at one t: ribbon({ x: f.support(), h: f }). For one number, ` +
+      `channel at one t: ribbon({ x: f.domain(), h: f }). For one number, ` +
       `read the function at a point, or use a value such as ` +
       `field(...).mean().`
   );

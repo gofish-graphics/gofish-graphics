@@ -46,13 +46,15 @@ import {
 import type { CalendarPartition, CalendarUnit } from "./calendar";
 import { identity, type Fun } from "./fun";
 import type { HasUnit } from "./schema";
-import type {
-  FunctionExpr,
-  Lift,
-  LiftError,
-  Units,
-  FoldExpr,
-  ValueExpr,
+import {
+  heldFun,
+  isFunValue,
+  type FunctionExpr,
+  type Lift,
+  type LiftError,
+  type Units,
+  type FoldExpr,
+  type ValueExpr,
 } from "./groupExpr";
 import { distQuantities, sample, sampleIn, type Dist } from "./dist";
 import { cellOn } from "./groupCell";
@@ -341,8 +343,8 @@ export class FieldExpr<
   /** `t ↦ t` over the interval {@link FieldExpr.density} is drawn over:
    *  the position channel that reads the density at the mark's parameter.
    *  In the values' unit. */
-  support(): FunctionExpr {
-    return this._member("support") as FunctionExpr;
+  domain(): FunctionExpr {
+    return this._member("domain") as FunctionExpr;
   }
 
   /** The share of the group's values at or below t, over the values' own
@@ -842,15 +844,15 @@ export type LeafQuantity = (
 ) => Quantity | undefined;
 
 /** The leaf quantities of a {@link Dist} over values of quantity `variable`
- *  (`distQuantities`): a function's `support()` is in the variable, as the
- *  Dist's own `support` is. */
+ *  (`distQuantities`): a function's `domain()` is in the variable, as the
+ *  Dist's own `domain` is. */
 export const distLeafQuantity = (
   variable: Quantity,
   mass: Quantity
 ): LeafQuantity => {
   const q = distQuantities(variable, mass);
   return (path) =>
-    path[path.length - 1] === "support" ? q.support : q[path[0] as keyof Dist];
+    path[path.length - 1] === "domain" ? q.domain : q[path[0] as keyof Dist];
 };
 
 /**
@@ -918,11 +920,11 @@ function stepOf(
           op,
           fn: op.fn as (xs: readonly unknown[]) => unknown,
           where,
-          // One unit for a function's support keeps the column's quantity:
+          // One unit for a function's domain() keeps the column's quantity:
           // t is an amount of the column.
           lift: () => (path, kind) =>
             kind === "function" &&
-            path[path.length - 1] === "support" &&
+            path[path.length - 1] === "domain" &&
             hasUnitOf(op.unit) !== undefined
               ? undefined
               : quantityAt(name, op.unit, path, where),
@@ -1025,6 +1027,10 @@ const isFunLike = (v: unknown): v is Fun<number> =>
   (v as any).domain !== null &&
   typeof (v as any).domain.min === "number";
 
+/** A function value (`fun(...)`) as the run-time `Fun` it holds; any other
+ *  value as it is. */
+const runTime = (v: unknown): unknown => (isFunValue(v) ? heldFun(v) : v);
+
 const isRecordLike = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v) && !isFunLike(v);
 
@@ -1044,7 +1050,8 @@ export type GroupResult =
  * number (or no value: null or undefined) is a value; a `Fun` is a function;
  * a record is read through its members, a method member called with its
  * args, until a leaf. An array, a record at the end, or a member of a leaf
- * (other than a function's `support()`) is an error.
+ * (other than a function's `domain()`) is an error. A function value
+ * (`fun(...)`) anywhere in it is read as the `Fun` it holds.
  */
 export function liftLeaf(
   result: unknown,
@@ -1052,7 +1059,7 @@ export function liftLeaf(
   where: string,
   quantityOf: LeafQuantity
 ): GroupResult {
-  let v = result;
+  let v = runTime(result);
   const path: string[] = [];
   let read = where;
   for (const m of members) {
@@ -1064,15 +1071,15 @@ export function liftLeaf(
           `({ lo, hi }) and read its members.`
       );
     if (isFunLike(v)) {
-      if (m.name === "support" && args.length === 0) {
+      if (m.name === "domain" && args.length === 0) {
         v = identity(v.domain);
-        path.push("support");
-        read += ".support()";
+        path.push("domain");
+        read += ".domain()";
         continue;
       }
       throw new Error(
         `${read}.${m.name}(): ${read} is a function of t, and nothing ` +
-          `chains after it but .support().`
+          `chains after it but .domain().`
       );
     }
     if (!isRecordLike(v))
@@ -1086,13 +1093,13 @@ export function liftLeaf(
           `members are ${Object.keys(v).join(", ")}.`
       );
     const member = v[m.name];
-    if (typeof member === "function") v = member.apply(v, args);
+    if (typeof member === "function") v = runTime(member.apply(v, args));
     else if (args.length > 0)
       throw new Error(
         `${read}.${m.name}(...): ${m.name} is not a method, so it takes no ` +
           `arguments.`
       );
-    else v = member;
+    else v = runTime(member);
     path.push(m.name);
     read += `.${m.name}()`;
   }
@@ -1225,7 +1232,7 @@ export function evalFieldValues<T>(
     `[gofish] field("${(accessor as FieldExpr).name}").reduce(...) gives ` +
       `a function of t here, but this channel takes one value per group. ` +
       `Only ribbon and line read functions, every function channel at one ` +
-      `t: ribbon({ x: f.support(), h: f }).`
+      `t: ribbon({ x: f.domain(), h: f }).`
   );
 }
 
