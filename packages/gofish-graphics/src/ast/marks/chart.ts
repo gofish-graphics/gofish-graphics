@@ -1177,6 +1177,7 @@ function shapeForm(
             )),
         origin: closed ? "free" : "pinned",
         closed,
+        inset: opts.inset,
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth,
@@ -1289,6 +1290,11 @@ export type RibbonOptions = FilterOptions & {
   h?: number | string | Value<number> | FieldExpr | FunctionExpr;
   emX?: boolean;
   emY?: boolean;
+  /** The shape form: pixels the band is drawn in by, from each end of its
+   *  parameter and up from its baseline, so the bands of a partition's
+   *  cells are drawn apart. It changes only what is drawn: the band's box
+   *  is the same. */
+  inset?: number;
   /** The shape form: each row's position along the band, or a function
    *  expression's `support()`. `x` with `h` is a band over x, of height h
    *  from its baseline; `y` with `w` is a band over y, of width w. */
@@ -1354,6 +1360,12 @@ export function ribbon(
             `the shape form reads; give it ${at} too, the function's ` +
             `support: ribbon({ ${at}: f.support(), ${key}: f }).`
         );
+    if (options?.inset !== undefined)
+      throw new Error(
+        "[gofish] ribbon({ inset }): inset draws in the band of the shape " +
+          "form, ribbon({ x, h }) or ribbon({ y, w }). The connector form " +
+          "joins the edges of other marks, which it does not draw in."
+      );
     return children === undefined
       ? ribbonConnector(options)
       : ribbonConnector(options, children);

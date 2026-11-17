@@ -18,6 +18,9 @@ import {
 import { evalGroup, FieldExpr, medianOf, meanOf } from "../ast/fieldExpr";
 import { integrate } from "../ast/fun";
 import * as DistNS from "../families/dist";
+import * as BinNS from "../families/bin";
+import { splitEntries } from "../ast/datumProjection";
+import { applySchema } from "../ast/schema";
 import { penguins } from "../data/penguins";
 import { Frontend } from "gofish-ir";
 
@@ -377,6 +380,72 @@ console.log("\n# the IR");
   check("an unknown family does not", !r3.ok);
   const r4 = ok({ type: "dist", family: "normal", params: { mean: 0 } });
   check("a missing parameter does not", !r4.ok);
+}
+
+console.log("\n# a distribution's cells");
+{
+  const d = DistNS.normal({ mean: "mean", sd: "sd" });
+  const rows = [{ mean: 0, sd: 1 }];
+  const groups = [...splitEntries(d.bin(BinNS.quantiles(5)) as any, rows)];
+  check("Bin.quantiles(5) makes five cells", groups.length === 5);
+  check(
+    "each cell's group holds every row",
+    groups.every(([, g]) => g.length === 1 && g[0] === rows[0])
+  );
+  const [, second] = groups[1];
+  const med = (evalGroup(d.median() as any, second, undefined) as any).value;
+  check(
+    "the median in a cell is the whole's quantile at the cell's middle probability",
+    near(med, normalQuantile(0.3), 1e-3),
+    String(med)
+  );
+  const mass = (evalGroup(d.mass() as any, second, undefined) as any).value;
+  check("the mass in a quintile is 0.2", near(mass, 0.2, 1e-3), String(mass));
+  const sup = evalGroup(d.support() as any, second, undefined) as any;
+  check(
+    "the support in a cell is the cell",
+    near(sup.fun.domain.min, normalQuantile(0.2), 1e-3) &&
+      near(sup.fun.domain.max, normalQuantile(0.4), 1e-3),
+    JSON.stringify(sup.fun.domain)
+  );
+  check(
+    "a member of a distribution is not binned",
+    throws(() => (d.median() as any).bin(BinNS.quantiles(5))) !== ""
+  );
+}
+
+console.log("\n# a field's cells");
+{
+  const mass = field("Body Mass (g)");
+  const rows = await applySchema(
+    penguins.filter((p) => p["Body Mass (g)"] != null),
+    {}
+  );
+  const groups = [...splitEntries(mass.bin(BinNS.quantiles(4)) as any, rows)];
+  const [, first] = groups[0];
+  const whole = evalGroup(mass.density() as any, rows, undefined) as any;
+  const cell = evalGroup(mass.density() as any, first, undefined) as any;
+  const t = (cell.fun.domain.min + cell.fun.domain.max) / 2;
+  check(
+    "the density in a cell is the whole sample's, restricted",
+    near(cell.fun.at(t), whole.fun.at(t), 1e-9),
+    `${cell.fun.at(t)} vs ${whole.fun.at(t)}`
+  );
+  check(
+    "its support ends at the cell's edge",
+    cell.fun.domain.max <= whole.fun.domain.max &&
+      cell.fun.domain.max < whole.fun.domain.max
+  );
+  const other = evalGroup(field("Flipper Length (mm)").density() as any, first, undefined) as any;
+  const own = evalGroup(
+    field("Flipper Length (mm)").density() as any,
+    [...first],
+    undefined
+  ) as any;
+  check(
+    "a distribution of another column is the cell rows' own",
+    near(other.fun.at(200), own.fun.at(200), 1e-9)
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -18,6 +18,7 @@ covers:
   - packages/gofish-graphics/src/ast/dist.ts
   - packages/gofish-graphics/src/ast/distExpr.ts
   - packages/gofish-graphics/src/families/dist.ts
+  - packages/gofish-graphics/src/ast/groupCell.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
@@ -2819,6 +2820,23 @@ type-7 quantile, so its median is `median()`'s. A family,
 `distExpr.ts`, wire `{ type: "dist", family, params, ops }`): `evalGroup`
 reads its parameters over the group's rows (`distOf`), makes the family's
 `Dist`, and lifts it through its member ops.
+
+A partition by a key over a variable gives each group its cell, and the
+cell's distribution is the whole one restricted to it. The group's rows
+array carries a tag (`groupCell.ts`, a symbol on the array, as the column
+types are): the variable, a column name or a family's identity, the cell's
+interval, and the whole rows. `splitEntries` writes it for a field binned on
+the line and for a family binned with `d.bin(p)` (`distEntries`, whose cells
+are `distributionCells` over the density's interval, each holding every
+row). Three leaves read it, and only when their variable is the cell's: a
+family's `distOf` restricts the whole group's `Dist` (`restrictDist`), the
+`sample` fold restricts the whole rows' sample (`sampleIn`), and
+`bandOfRows` builds the band through the whole rows and restricts both
+edges to the cell, so the bands in neighboring cells meet. A distribution of
+another column reads the cell's own rows, which is its distribution given
+the cell. A fold over the cell's rows that is not a distribution, such as
+`median()` of the column, needs no tag: the cell's rows are the values in
+the cell.
 
 A fold that lifts says the quantity of each leaf (`FoldStep.lift`). A
 reduce reads its `unit` option. A `Dist` reads its variable

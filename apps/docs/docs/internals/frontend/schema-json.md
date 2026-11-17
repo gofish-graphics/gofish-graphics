@@ -1904,9 +1904,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/StructAccessor"
+            },
+            {
+              "$ref": "#/$defs/DistAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, d.bin(p) with d a Dist family and p Bin.step, Bin.thresholds or Bin.quantiles: the cells of p over the interval its density is drawn over, Bin.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell. In a cell of a field's or a distribution's line, a distribution of the same variable (field(x).density(), d.density()) is the whole group's restricted to the cell, and so is a ribbon or line through the rows over the field, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -3336,6 +3339,10 @@ for the API.
         "y": {
           "$ref": "#/$defs/ChannelValue",
           "description": "Shape form: each row's y, for a band that runs up the y axis. Needs `w`."
+        },
+        "inset": {
+          "$ref": "#/$defs/Number",
+          "description": "Shape form: pixels the band is drawn in by, from each end of its parameter and up from its baseline, so the bands in the cells of a partition are drawn apart. Where the band is thinner than `inset`, nothing is drawn. It changes only what is drawn: the band's box is the same. Its values must be 0 or more. Not allowed on the connector form."
         },
         "name": {
           "type": "string"

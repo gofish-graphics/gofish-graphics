@@ -6,6 +6,7 @@ import {
   chart,
   circle,
   derive,
+  Dist,
   field,
   intersect,
   layer,
@@ -26,16 +27,24 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * curve cut at its quantiles into equal-probability slices, each drawn on its
  * own with a small gap, with one dot per slice at the slice's median.
  *
- * Each chart is two layers over one table, the curve's grid rows `{ x, pdf }`.
- * The first lays the curve out hidden (`.hidden()`): it sets the scale and is
- * read, and paints nothing. The second
- * turns the grid into quantile rows of the drawn curve (`quantileRows`),
- * partitions them into `Bin.quantiles(n)` cells (five for the standard normal,
- * ten for the penguins, five a month in the ridgeline), and in each cell draws the curve's area intersected with the
- * cell's region, drawn in by a few pixels, plus a dot at the cell's median.
- * The second layer is a `.relate()` clause of the first, so `density` names
- * the curve drawn beside it. The last story cuts an area into calendar months
- * the same way.
+ * A partition by a key over the variable gives each cell the distribution
+ * restricted to the cell: `d.bin(Bin.quantiles(5))` cuts the standard normal
+ * at its quintiles, and `field(x).bin(Bin.quantiles(10))` cuts the penguins'
+ * body mass at the deciles of its values. In each cell a ribbon of the
+ * cell's support and density, drawn in by a few pixels (`inset`), is the
+ * cell's slice, and the slices meet where the curve is cut. The last story
+ * cuts an area into calendar months the same way: in a month's cell, the
+ * ribbon through the rows over `date` is the year's band restricted to the
+ * month.
+ *
+ * The ridgeline still uses the older form: each month's curve laid out on a
+ * grid of rows, hidden, and intersected with each cell's region, over the
+ * quantile rows of the curve (`quantileRows`). A field's cells are those of
+ * the column's whole domain, the same in every month, so
+ * `field(x).bin(Bin.quantiles(5))` would cut every month at the year's
+ * quintiles, not its own.
+ * TODO(stack-profiles): a key for the cells of each group's own sample of a
+ * column, so the ridgeline is a partition too.
  */
 const meta: Meta = { title: "Forward Syntax/Croissant" };
 export default meta;
@@ -47,6 +56,85 @@ const STROKE = "#467DA8";
 // The colors of the paper's "Anatomy of a Croissant Chart" figure.
 const PAPER_FILL = "#CBA45F";
 const PAPER_STROKE = "#745931";
+
+// The standard normal, cut at its quintiles.
+const d = Dist.normal({ mean: "mean", sd: "sd" });
+
+export const Croissant: StoryObj<Args> = {
+  args: { w: 480, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Croissant",
+      description:
+        "A croissant chart of the standard normal distribution: the density curve cut at its quintiles into five slices of equal probability, each with a dot at its median, in the colors of the paper's anatomy figure.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart([{ mean: 0, sd: 1 }])
+      .flow(partition({ by: d.bin(Bin.quantiles(5)), dir: "x" }))
+      .mark(
+        layer([
+          ribbon({
+            x: d.support(),
+            h: d.density(),
+            inset: 3,
+            fill: PAPER_FILL,
+            stroke: PAPER_STROKE,
+            strokeWidth: 2,
+          }),
+          circle({ cx: d.median(), cy: 6, r: 3, fill: PAPER_STROKE }),
+        ])
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+        axes: { x: true, y: false },
+      });
+    return container;
+  },
+};
+
+// Penguin body mass, a skewed sample with two humps (Gentoo penguins are
+// heavier), cut at the deciles of its values.
+const mass = field("Body Mass (g)");
+
+export const PenguinBodyMass: StoryObj<Args> = {
+  args: { w: 520, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Penguin Body Mass Croissant",
+      description:
+        "A croissant chart of penguin body mass: ten equal-probability slices of a kernel density estimate, narrow under the lighter species' hump and wide across the heavier Gentoo shoulder.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    chart(penguins.filter((p) => p["Body Mass (g)"] != null))
+      .flow(partition({ by: mass.bin(Bin.quantiles(10)), dir: "x" }))
+      .mark(
+        layer([
+          ribbon({
+            x: mass.support(),
+            h: mass.density(),
+            inset: 3,
+            fill: FILL,
+            stroke: STROKE,
+            strokeWidth: 2,
+          }),
+          circle({ cx: mass.median(), cy: 6, r: 3, fill: STROKE }),
+        ])
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+        axes: { x: { title: "Body mass (g)" }, y: false },
+      });
+    return container;
+  },
+};
 
 const normPdf = (x: number, mu = 0, sd = 1) =>
   Math.exp(-0.5 * ((x - mu) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
@@ -71,96 +159,6 @@ const kde = (values: number[]) => {
     bw,
     f: (x: number) => values.reduce((s, v) => s + normPdf(x, v, bw), 0) / n,
   };
-};
-
-/**
- * The croissant chart of one density's grid rows `{ x, pdf }`: the curve,
- * unseen, then in each of its `n` equal-probability cells the curve's area
- * intersected with the cell's region, drawn in by 3 pixels, and a dot at the
- * cell's median.
- */
-const croissant = (
-  grid: { x: number; pdf: number }[],
-  { n = 10, fill = FILL, stroke = STROKE } = {}
-) =>
-  layer([
-    chart(grid)
-      .flow(scatter({ x: "x" }))
-      .mark(ribbon({ h: "pdf" }).name("density").hidden()),
-  ]).relate(({ density }) => [
-    chart(grid)
-      .flow(
-        derive((rows) =>
-          quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
-        ),
-        partition({ by: field("x").bin(Bin.quantiles(n)), dir: "x" })
-      )
-      .mark(
-        layer([
-          intersect({ fill, stroke, strokeWidth: 2 }, [
-            density,
-            region({ inset: 3 }),
-          ]),
-          circle({ cx: field("x").median(), cy: 6, r: 3, fill: stroke }),
-        ])
-      ),
-  ]);
-
-// The standard normal on [-4, 4]: wide enough that the outer quantile rows
-// are accurate (on [-3, 3] the missing tails move the outer cells' medians).
-const normalGrid = gridOf((x) => normPdf(x), -4, 4, 401);
-
-export const Croissant: StoryObj<Args> = {
-  args: { w: 480, h: 200 },
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Croissant",
-      description:
-        "A croissant chart of the standard normal distribution: the density curve cut at its quintiles into five slices of equal probability, each with a dot at its median, in the colors of the paper's anatomy figure.",
-    },
-  },
-  render: (args: Args) => {
-    const container = initializeContainer();
-    croissant(normalGrid, {
-      n: 5,
-      fill: PAPER_FILL,
-      stroke: PAPER_STROKE,
-    }).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: { x: true, y: false },
-    });
-    return container;
-  },
-};
-
-// Penguin body mass, a skewed sample with two humps (Gentoo penguins are
-// heavier), as a kernel density estimate on a grid.
-const masses = penguins
-  .map((p) => p["Body Mass (g)"])
-  .filter((v): v is number => v != null);
-const massGrid = gridOf(kde(masses).f, 2200, 6800, 461);
-
-export const PenguinBodyMass: StoryObj<Args> = {
-  args: { w: 520, h: 220 },
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Penguin Body Mass Croissant",
-      description:
-        "A croissant chart of penguin body mass: ten equal-probability slices of a kernel density estimate, narrow under the lighter species' hump and wide across the heavier Gentoo shoulder.",
-    },
-  },
-  render: (args: Args) => {
-    const container = initializeContainer();
-    croissant(massGrid).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: { x: { title: "Body mass (g)" }, y: false },
-    });
-    return container;
-  },
 };
 
 const months = [
@@ -283,35 +281,32 @@ export const SeattleHighsByMonth: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    layer([
-      chart(highs2012, { schema: schema2012 })
-        .flow(scatter({ x: "date" }))
-        .mark(ribbon({ h: "temp_smooth" }).name("temps").hidden()),
-    ])
-      .relate(({ temps }) => [
-        chart(highs2012, { schema: schema2012 })
-          .flow(
-            partition({
-              by: field("date").bin([Calendar.year, Calendar.month]),
-              dir: "x",
-            })
-          )
-          .mark(
-            layer([
-              intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
-                temps,
-                region({ inset: 2 }),
-              ]),
-              text({
-                cx: field("date").median(),
-                y: 6,
-                text: "letter",
-                fontSize: 11,
-                fill: "#333",
-              }),
-            ])
-          ),
-      ])
+    chart(highs2012, { schema: schema2012 })
+      .flow(
+        partition({
+          by: field("date").bin([Calendar.year, Calendar.month]),
+          dir: "x",
+        })
+      )
+      .mark(
+        layer([
+          ribbon({
+            x: "date",
+            h: "temp_smooth",
+            inset: 2,
+            fill: FILL,
+            stroke: STROKE,
+            strokeWidth: 1.5,
+          }),
+          text({
+            cx: field("date").median(),
+            y: 6,
+            text: "letter",
+            fontSize: 11,
+            fill: "#333",
+          }),
+        ])
+      )
       .render(container, {
         w: args.w,
         h: args.h,

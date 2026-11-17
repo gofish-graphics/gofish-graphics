@@ -18,6 +18,10 @@ column whose value is one number in each group, or a value expression
 - ``uniform(min, max)``.
 - ``exponential(rate)``: drawn from 0 to its 0.999 quantile.
 
+``d.bin(Bin.quantiles(n))`` is a key for ``partition``: the cells of the
+distribution at its own quantiles, each group the distribution restricted
+to its cell.
+
 The distribution of a group's values is ``field(x).density()`` and the
 other field members. JS's ``Dist.sample`` and ``Dist.units`` have no
 Python mirror: a Python reduce cannot return a distribution, since its
@@ -89,8 +93,31 @@ class DistAccessor(dict):
         return self._member("mean")
 
     def mass(self) -> "DistAccessor":
-        """The probability in the distribution: 1."""
+        """The probability in the distribution: 1, or, in a cell of
+        :meth:`bin`, the cell's share of it."""
         return self._member("mass")
+
+    def bin(self, cells: Dict[str, Any]) -> "DistAccessor":
+        """A grouping key with regions: the cells of ``cells`` (``Bin.step``,
+        ``Bin.thresholds`` or ``Bin.quantiles``) over the interval the
+        density is drawn over, ``Bin.quantiles(n)`` at the distribution's
+        own quantiles. Each group is the distribution restricted to its
+        cell. Valid only as ``partition``'s ``by``."""
+        if self.get("ops"):
+            raise ValueError(
+                f"Dist.{self['family']}(...).bin: bin a distribution itself, "
+                f"not one of its members or its cells."
+            )
+        kind = cells.get("kind") if isinstance(cells, dict) else None
+        if kind not in ("step", "thresholds", "quantiles"):
+            raise ValueError(
+                f"Dist.{self['family']}(...).bin: a distribution's cells are "
+                f"intervals of numbers: use Bin.step, Bin.thresholds or "
+                f"Bin.quantiles, got {cells!r}."
+            )
+        out = DistAccessor(copy.deepcopy(dict(self)))
+        out["ops"] = [{"op": "bin", "partition": dict(cells)}]
+        return out
 
 
 def _dist(family: str, **params: Any) -> DistAccessor:

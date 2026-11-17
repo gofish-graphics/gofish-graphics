@@ -12,11 +12,32 @@
  * are functions of t for ribbon and line, `d.median()` and `d.quantile(p)`
  * values for any channel.
  *
+ * `d.bin(p)` is a grouping key: the cells of a numeric partition over the
+ * distribution's interval (`Bin.quantiles(5)` at its quintiles), each
+ * group the distribution restricted to its cell (groupCell.ts).
+ *
  * Its wire form is `{ type: "dist", family, params, ops? }`, the params as
  * written (a field expression in its own wire form) and the ops its
- * members, so it crosses the Python bridge as data.
+ * members (or, as a key, its one `bin`), so it crosses the Python bridge as
+ * data.
  */
-import { familyDist, FAMILY_PARAMS, type Dist, type FamilyName } from "./dist";
+import {
+  binStepToJSON,
+  checkBinStep,
+  DEFAULT_PARTITION,
+  distributionCells,
+  type BinStep,
+  type Cell,
+  type NumberPartition,
+  type Partition,
+} from "./cells";
+import {
+  familyDist,
+  FAMILY_PARAMS,
+  restrictDist,
+  type Dist,
+  type FamilyName,
+} from "./dist";
 import {
   distLeafQuantity,
   evalGroup,
@@ -29,6 +50,7 @@ import {
 import type { FunctionExpr, ValueExpr } from "./groupExpr";
 import { columnQuantity, PROBABILITY, type Quantity } from "./measure";
 import { columnType } from "./schema";
+import { cellOn, type CellVariable } from "./groupCell";
 
 /** A parameter of a family: a number, a column whose value is one number
  *  in each group, or a value expression. */
@@ -122,9 +144,27 @@ export class DistExpr {
     return this._member("mean") as unknown as ValueExpr;
   }
 
-  /** The probability in the distribution: 1. */
+  /** The probability in the distribution: 1, or, in a cell of
+   *  {@link DistExpr.bin}, the cell's share of it. */
   mass(): ValueExpr {
     return this._member("mass") as unknown as ValueExpr;
+  }
+
+  /** A grouping key with regions: the cells of `p` over the interval the
+   *  density is drawn over, `Bin.quantiles(n)` at the distribution's own
+   *  quantiles, so each cell holds `1 / n` of it. Each group is the
+   *  distribution restricted to its cell. Valid only in a `by` slot, such
+   *  as `partition`'s. */
+  bin(p: Partition): DistExpr {
+    const where = `Dist.${this.family}(...).bin`;
+    if (this._ops.length > 0)
+      throw new Error(
+        `${where}: bin a distribution itself, not one of its members or ` +
+          `its cells.`
+      );
+    return new DistExpr(this.family, this.params, [
+      { op: "bin", partition: numberStep(checkBinStep(p, where), where) },
+    ]);
   }
 
   toJSON(): DistExprWire {
@@ -137,7 +177,18 @@ export class DistExpr {
           v instanceof FieldExpr ? v.toJSON() : v,
         ])
       ),
-      ...(this._ops.length ? { ops: [...this._ops] } : {}),
+      ...(this._ops.length
+        ? {
+            ops: this._ops.map((op) =>
+              op.op === "bin" && op.partition !== undefined
+                ? {
+                    op: "bin" as const,
+                    partition: binStepToJSON(op.partition as BinStep),
+                  }
+                : op
+            ),
+          }
+        : {}),
     };
   }
 }
@@ -231,12 +282,45 @@ function paramOf(
   return { value: Number(values[0]), quantity: r.quantity ?? column };
 }
 
+/** A distribution's cells are of numbers: a Calendar value or a product is
+ *  an error. */
+function numberStep(step: BinStep, where: string): NumberPartition {
+  const kind = Array.isArray(step)
+    ? undefined
+    : (step as { kind?: unknown }).kind;
+  if (kind !== "step" && kind !== "thresholds" && kind !== "quantiles")
+    throw new Error(
+      `${where}: a distribution's cells are intervals of numbers: use ` +
+        `Bin.step, Bin.thresholds or Bin.quantiles, not ${String(step)}.`
+    );
+  return step as NumberPartition;
+}
+
+/** The variable a distribution is over, as a group's cell names it: its
+ *  family and its parameters as the wire writes them. Two expressions of
+ *  one family over the same parameters are over the same variable,
+ *  whatever members they read. */
+export function distVariable(expr: DistExpr | DistExprWire): CellVariable {
+  const { family, params } =
+    expr instanceof DistExpr ? expr.toJSON() : (expr as DistExprWire);
+  return { kind: "dist", id: JSON.stringify({ family, params }) };
+}
+
 /** The family's Dist for the group `rows`, and the quantity of the
- *  variable it is over. */
+ *  variable it is over. In a cell of a key over the same distribution
+ *  (`d.bin(p)`), it is the whole group's Dist restricted to the cell. */
 export function distOf(
   expr: DistExpr | DistExprWire,
   rows: readonly unknown[]
 ): { dist: Dist; variable: Quantity } {
+  const cell = cellOn(rows, distVariable(expr));
+  if (cell !== undefined) {
+    const whole = distOf(expr, cell.whole);
+    return {
+      dist: restrictDist(whole.dist, cell.cell),
+      variable: whole.variable,
+    };
+  }
   const where = `Dist.${expr.family}`;
   const names = FAMILY_PARAMS[expr.family] as readonly string[];
   if (names === undefined) throw new Error(`Dist: no family "${expr.family}".`);
@@ -249,6 +333,54 @@ export function distOf(
       variable = p.quantity;
   }
   return { dist: familyDist(expr.family, values as any), variable };
+}
+
+/** Whether `v` is a distribution binned into cells, `d.bin(p)`: a key. */
+export const isDistKey = (v: unknown): v is DistExpr | DistExprWire =>
+  isDistExpr(v) && opsOf(v).some((op) => op.op === "bin");
+
+const opsOf = (expr: DistExpr | DistExprWire): readonly FieldOp[] =>
+  expr instanceof DistExpr ? expr._ops : (expr.ops ?? []);
+
+/** The cells of the key `d.bin(p)` over the group `rows`, in order, and
+ *  the quantity of the variable they are intervals of: the partition's
+ *  cells over the interval the group's distribution is drawn over. */
+export function distKeyCells(
+  expr: DistExpr | DistExprWire,
+  rows: readonly unknown[]
+): { cells: Cell[]; variable: Quantity } {
+  const where = `Dist.${expr.family}(...).bin`;
+  const ops = opsOf(expr);
+  if (ops.length !== 1 || ops[0].op !== "bin")
+    throw new Error(
+      `${where}: a key is the distribution binned once, d.bin(p), with no ` +
+        `member.`
+    );
+  const step = numberStep(
+    checkBinStep(
+      (ops[0] as Extract<FieldOp, { op: "bin" }>).partition ??
+        DEFAULT_PARTITION,
+      where
+    ),
+    where
+  );
+  const { dist, variable } = distOf(expr, rows);
+  const { min, max } = dist.support.domain;
+  return {
+    cells: distributionCells(
+      step,
+      min,
+      max,
+      (p) => {
+        const q = dist.quantile(p);
+        if (q === undefined)
+          throw new Error(`${where}: the distribution has no values to cut.`);
+        return q;
+      },
+      where
+    ),
+    variable,
+  };
 }
 
 /** The members a distribution expression reads; any other op is an error

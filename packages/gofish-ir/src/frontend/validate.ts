@@ -657,6 +657,16 @@ function walkRefType(
     case "StructAccessor":
       walkStructAccessor(value, path, ctx);
       return;
+    case "DistAccessor":
+      if (!isObject(value) || value.type !== "dist") {
+        ctx.errors.push({
+          path,
+          message: `expected a distribution (Dist.normal(...).bin(p)), got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      walkDistAccessor(value, path, ctx);
+      return;
     case "ChunkKey":
       if (!isObject(value) || value.type !== "chunk") {
         ctx.errors.push({

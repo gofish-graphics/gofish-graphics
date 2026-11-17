@@ -75,6 +75,13 @@ bands before it. Outside its own rows a band has thickness 0.
 )
 ```
 
+A shape-form ribbon of amounts takes `inset`, a number of pixels. It is
+drawn in by `inset` from each end of its `x` and up by `inset` from its
+baseline, so the bands in the cells of a [`partition`](/python/api/operators/partition#a-distribution-s-cells)
+are drawn apart. Where the band is thinner than `inset`, nothing is drawn.
+Only what is drawn changes: the band's box is the same. A negative value in
+`h` with an `inset` is an error.
+
 ## Function channels
 
 In JavaScript, the shape form reads a function value made with

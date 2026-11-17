@@ -33,6 +33,7 @@ d.quantile(p)
 d.median()
 d.mean()
 d.mass()
+d.bin(p)
 ```
 
 The family is also a module of its own:
@@ -85,3 +86,20 @@ The distribution of a group's values is `field(x).density()` and the other
 [distribution members](/python/api/operators/spread#distribution-members) of
 a field. A Python reduce cannot return a distribution: its density is a
 function of `t`, which cannot cross the bridge.
+
+## Cells: `d.bin(p)`
+
+`d.bin(p)` is a key for [`partition`](/python/api/operators/partition#a-distribution-s-cells):
+the cells of `p` (`Bin.step`, `Bin.thresholds` or `Bin.quantiles`) over the
+interval the density is drawn over. `Bin.quantiles(n)` cuts at the
+distribution's own quantiles, so each cell holds `1 / n` of the mass. In a
+cell, every member is the distribution restricted to the cell: the density
+and the support run over the cell, `d.mass()` is the cell's share of the
+mass, and `d.median()` is the median of the mass in the cell. A member of a
+distribution, such as `d.density().bin(p)`, is not binned, and raises a
+`ValueError`.
+
+```python
+d = Dist.normal(mean="mean", sd="sd")
+partition(by=d.bin(Bin.quantiles(5)), dir="x")
+```

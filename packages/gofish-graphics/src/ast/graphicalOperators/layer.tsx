@@ -324,11 +324,13 @@ export const layer = createNodeOperatorSequential(
     // its own claim is the box it would draw unmoved.
     // TODO(stack-profiles): a shortcut. The claim is exact only while a
     // part's cross-section is all data (σ times an interval). A part with a
-    // pixel term in its cross-section (a ribbon's inset) would claim the
-    // envelope over u of `a(u)·σ + b(u)`, an envelope of lines in σ over
-    // the knots, which is no single interval times σ. No band has a pixel
-    // term yet; the one that adds it (a ribbon's `inset`) makes a sheared
-    // part with one an error here until this claim reads that envelope.
+    // pixel term in the box of its cross-section would claim the envelope
+    // over u of `a(u)·σ + b(u)`, an envelope of lines in σ over the knots,
+    // which is no single interval times σ. No band has one: a ribbon's
+    // `inset` draws its ink in and keeps its box, the data box, so a
+    // sheared band with an inset still claims exactly this. A pixel term
+    // that grows a box would be an error here until this claim reads that
+    // envelope.
     const placeExtent = (i: number, axis: 0 | 1): Extent | undefined => {
       const place = layerTypes?.places[axis].get(i);
       return place === undefined

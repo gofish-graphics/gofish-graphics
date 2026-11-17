@@ -60,3 +60,21 @@ def test_dist_is_the_module():
     assert gofish.Dist is gofish.dist
     assert "Dist" in gofish.__all__
     assert "normal" not in gofish.__all__
+
+
+def test_a_distribution_binned_is_a_partition_key():
+    from gofish import Bin, partition
+
+    d = Dist.normal(mean="mean", sd="sd")
+    key = d.bin(Bin.quantiles(5))
+    assert key["ops"] == [
+        {"op": "bin", "partition": {"kind": "quantiles", "quantiles": 5}}
+    ]
+    assert "ops" not in d
+    partition(by=key, dir="x")
+    with pytest.raises(ValueError):
+        partition(by=d, dir="x")
+    with pytest.raises(ValueError):
+        partition(by=key)
+    with pytest.raises(ValueError):
+        d.median().bin(Bin.quantiles(5))

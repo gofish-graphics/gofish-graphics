@@ -52,7 +52,8 @@ import type {
   Units,
   ValueExpr,
 } from "./groupExpr";
-import { distQuantities, sample, type Dist } from "./dist";
+import { distQuantities, sample, sampleIn, type Dist } from "./dist";
+import { cellOn } from "./groupCell";
 import { evalDistGroup, isDistExpr, type DistExprWire } from "./distExpr";
 
 /** The calendar levels that are a part of nothing, so a bin of one alone
@@ -780,7 +781,9 @@ type MapStep = {
  *  reduce, a sample) says the quantity of each leaf. */
 type FoldStep = {
   op: FieldOp & object;
-  fn: (xs: readonly unknown[]) => unknown;
+  /** `of` is given when `xs` are the values of the column `of.name` over
+   *  `of.rows`, as they are, with no map before the fold. */
+  fn: (xs: readonly unknown[], of?: ColumnValues) => unknown;
   /** Checks run on the values' quantity before the fold (`sum` adds). */
   check?: (quantity: Quantity | undefined) => void;
   /** A named fold's quantity, given the values' quantity; undefined keeps
@@ -793,6 +796,37 @@ type FoldStep = {
   /** What the lift's messages call the fold. */
   where?: string;
 };
+
+/** Where a fold's values come from: the column `name` over `rows`. */
+type ColumnValues = { name: string; rows: readonly unknown[] };
+
+/**
+ * The sample of a group's values of a column. In a cell of the column's
+ * line (groupCell.ts) it is the whole group's sample restricted to the cell
+ * (`sampleIn`): the cell's values with the whole sample's density over the
+ * cell, so the cells of one density meet. Anywhere else, and over values
+ * a map made, it is the values' own.
+ */
+function groupSample(
+  op: object,
+  xs: readonly unknown[],
+  of: ColumnValues | undefined
+): Dist {
+  const cell =
+    of === undefined
+      ? undefined
+      : cellOn(of.rows, { kind: "column", name: of.name });
+  if (cell === undefined) return sample(xs);
+  const name = of!.name;
+  const whole = cachedStep(op, cell.whole, `field("${name}")`, () =>
+    groupSample(
+      op,
+      cell.whole.map((r) => (r as Record<string, unknown> | null)?.[name]),
+      { name, rows: cell.whole }
+    )
+  ) as Dist;
+  return sampleIn(xs, whole, cell.cell);
+}
 
 /** The quantity of a lifted result's leaf at `path` (its members, in
  *  order), a value or a function; undefined keeps the column's. */
@@ -893,7 +927,7 @@ function stepOf(
       return {
         fold: {
           op,
-          fn: (xs) => sample(xs),
+          fn: (xs, of) => groupSample(op, xs, of),
           where: `field("${name}")`,
           lift: (base) => distLeafQuantity(base ?? { name }, COUNT_QUANTITY),
         },
@@ -1137,8 +1171,12 @@ export function evalGroup<T>(
     return { kind: "rows", values: xs, ...(mapped ? { quantity } : {}) };
   fold.check?.(quantity);
   const values = xs;
+  // The values are a column's, as they are, when no map ran and the
+  // accessor names a column.
+  const of =
+    mapped || typeof accessor === "function" ? undefined : { name, rows };
   const result = cachedStep(fold.op, rows, `field("${name}").reduce(...)`, () =>
-    fold.fn(values)
+    fold.fn(values, of)
   );
   if (fold.lift === undefined) {
     const q = fold.quantity?.(quantity) ?? (mapped ? quantity : undefined);

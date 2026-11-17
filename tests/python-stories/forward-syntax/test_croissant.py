@@ -2,13 +2,12 @@
 
 Croissant charts: a density curve cut at its quantiles into equal-probability
 slices, each drawn on its own with a small gap, with one dot per slice at the
-slice's median. The first layer draws the curve, unseen; the `.relate()`
-clause turns the grid into quantile rows of that curve, partitions them into
-`Bin.quantiles(n)` cells (five for the standard normal, ten for the penguins,
-five a month in the ridgeline), and in each
-cell draws the curve intersected with the cell's region, drawn in by a few
-pixels, plus a dot at the cell's median. The last story cuts an area into
-calendar months the same way.
+slice's median. A partition by the distribution's cells gives each cell the
+distribution restricted to it, and a ribbon of its support and density,
+drawn in by a few pixels, draws the cell's slice. The standard normal is cut
+at its quintiles, the penguins' body mass at the deciles of its values. The
+ridgeline still draws each month's curve hidden and intersects it with each
+cell's region. The last story cuts an area into calendar months.
 """
 
 import math
@@ -16,6 +15,7 @@ import math
 from gofish import (
     Bin,
     Calendar,
+    Dist,
     Unit,
     chart,
     circle,
@@ -69,60 +69,56 @@ def _kde(values):
     return f, bw
 
 
-def _croissant(grid, n=10, fill=FILL, stroke=STROKE):
-    return layer(
-        [
-            chart(grid)
-            .flow(scatter(x="x"))
-            .mark(ribbon(h="pdf").name("density").hidden()),
-        ]
-    ).relate(
-        lambda density: [
-            chart(grid)
-            .flow(
-                derive(
-                    lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)
-                ),
-                partition(by=field("x").bin(Bin.quantiles(n)), dir="x"),
-            )
-            .mark(
-                layer(
-                    [
-                        intersect(
-                            [density, region(inset=3)],
-                            fill=fill,
-                            stroke=stroke,
-                            stroke_width=2,
-                        ),
-                        circle(cx=field("x").median(), cy=6, r=3, fill=stroke),
-                    ]
-                )
-            ),
-        ]
-    )
-
-
-NORMAL_GRID = _grid_of(lambda x: _norm_pdf(x), -4, 4, 401)
+D = Dist.normal(mean="mean", sd="sd")
 
 
 def story_croissant():
-    return _croissant(NORMAL_GRID, n=5, fill=PAPER_FILL, stroke=PAPER_STROKE), {
-        "w": 480,
-        "h": 200,
-        "axes": {"x": True, "y": False},
-    }
+    return (
+        chart([{"mean": 0, "sd": 1}])
+        .flow(partition(by=D.bin(Bin.quantiles(5)), dir="x"))
+        .mark(
+            layer(
+                [
+                    ribbon(
+                        x=D.support(),
+                        h=D.density(),
+                        inset=3,
+                        fill=PAPER_FILL,
+                        stroke=PAPER_STROKE,
+                        stroke_width=2,
+                    ),
+                    circle(cx=D.median(), cy=6, r=3, fill=PAPER_STROKE),
+                ]
+            )
+        ),
+        {"w": 480, "h": 200, "axes": {"x": True, "y": False}},
+    )
 
 
-_MASSES = [p["Body Mass (g)"] for p in PENGUINS if p["Body Mass (g)"] is not None]
-MASS_GRID = _grid_of(_kde(_MASSES)[0], 2200, 6800, 461)
+MASS = field("Body Mass (g)")
 
 
 def story_penguin_body_mass():
-    return _croissant(MASS_GRID), {
-        "w": 520,
-        "h": 220,
-        "axes": {"x": {"title": "Body mass (g)"}, "y": False},
-    }
+    return (
+        chart([p for p in PENGUINS if p["Body Mass (g)"] is not None])
+        .flow(partition(by=MASS.bin(Bin.quantiles(10)), dir="x"))
+        .mark(
+            layer(
+                [
+                    ribbon(
+                        x=MASS.support(),
+                        h=MASS.density(),
+                        inset=3,
+                        fill=FILL,
+                        stroke=STROKE,
+                        stroke_width=2,
+                    ),
+                    circle(cx=MASS.median(), cy=6, r=3, fill=STROKE),
+                ]
+            )
+        ),
+        {"w": 520, "h": 220, "axes": {"x": {"title": "Body mass (g)"}, "y": False}},
+    )
 
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -233,41 +229,33 @@ SCHEMA_2012 = {"date": Unit.time()}
 
 def story_seattle_highs_by_month():
     return (
-        layer(
-            [
-                chart(HIGHS_2012, schema=SCHEMA_2012)
-                .flow(scatter(x="date"))
-                .mark(ribbon(h="temp_smooth").name("temps").hidden()),
-            ]
-        ).relate(
-            lambda temps: [
-                chart(HIGHS_2012, schema=SCHEMA_2012)
-                .flow(
-                    partition(
-                        by=field("date").bin([Calendar.year, Calendar.month]),
-                        dir="x",
-                    )
-                )
-                .mark(
-                    layer(
-                        [
-                            intersect(
-                                [temps, region(inset=2)],
-                                fill=FILL,
-                                stroke=STROKE,
-                                stroke_width=1.5,
-                            ),
-                            text(
-                                cx=field("date").median(),
-                                y=6,
-                                text="letter",
-                                font_size=11,
-                                fill="#333",
-                            ),
-                        ]
-                    )
-                ),
-            ]
+        chart(HIGHS_2012, schema=SCHEMA_2012)
+        .flow(
+            partition(
+                by=field("date").bin([Calendar.year, Calendar.month]),
+                dir="x",
+            )
+        )
+        .mark(
+            layer(
+                [
+                    ribbon(
+                        x="date",
+                        h="temp_smooth",
+                        inset=2,
+                        fill=FILL,
+                        stroke=STROKE,
+                        stroke_width=1.5,
+                    ),
+                    text(
+                        cx=field("date").median(),
+                        y=6,
+                        text="letter",
+                        font_size=11,
+                        fill="#333",
+                    ),
+                ]
+            )
         ),
         {
             "w": 560,

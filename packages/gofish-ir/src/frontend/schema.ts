@@ -562,7 +562,11 @@ export interface PartitionOperator
   label?: LabelIR;
   /** A key that has a region: a binned field accessor, one per axis, or a
    *  binned struct of two fields. */
-  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor } | StructAccessor;
+  by:
+    | FieldAccessor
+    | { x: FieldAccessor; y: FieldAccessor }
+    | StructAccessor
+    | DistAccessor;
   /** The axis to divide. Required with a single key; not allowed with a
    *  key per axis. */
   dir?: string;

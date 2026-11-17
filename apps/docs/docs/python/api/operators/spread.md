@@ -274,6 +274,9 @@ The density uses a normal kernel with Silverman's bandwidth (R's `bw.nrd0`),
 over the least to the greatest value, reflected at both ends. It is in the
 column's count per unit, so the densities of several groups add up and
 stack. `.support()` is in the column's unit, so its axis joins the column's.
+In a cell of a [`partition`](/python/api/operators/partition#a-distribution-s-cells)
+by the same field, each method reads the whole group's values restricted to
+the cell.
 They run in JS and cross the bridge as data.
 
 ```python

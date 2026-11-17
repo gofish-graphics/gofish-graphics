@@ -19,7 +19,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
+    from .ast import ChunkKey, DistAccessor, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -897,11 +897,11 @@ def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: 
             opts[_k] = _v
     return opts
 
-def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _partition_opts(*, by: FieldAccessor | StructAccessor | DistAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, d.bin(p) with d a Dist family and p Bin.step, Bin.thresholds or Bin.quantiles: the cells of p over the interval its density is drawn over, Bin.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell. In a cell of a field's or a distribution's line, a distribution of the same variable (field(x).density(), d.density()) is the whole group's restricted to the cell, and so is a ribbon or line through the rows over the field, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error.
         dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
         alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1158,7 +1158,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, inset: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """A filled band. Given `x` (with `h`) or `y` (with `w`), the shape form: the mark owns its rows and draws one band per group, from its baseline to `h` at each row's `x` (or to `w` at each row's `y`), sorted by it. Without them, the connector form: a band between the facing edges of consecutive marks another flow placed (sankey ribbons, bands between bars).
 
     Args:
@@ -1176,6 +1176,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         h: Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.
         x: Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`.
         y: Shape form: each row's y, for a band that runs up the y axis. Needs `w`.
+        inset: Shape form: pixels the band is drawn in by, from each end of its parameter and up from its baseline, so the bands in the cells of a partition are drawn apart. Where the band is thinner than `inset`, nothing is drawn. It changes only what is drawn: the band's box is the same. Its values must be 0 or more. Not allowed on the connector form.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
@@ -1196,6 +1197,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("h", _channel(h)),
         ("x", _channel(x)),
         ("y", _channel(y)),
+        ("inset", inset),
         ("debug", debug),
     ]:
         if _v is not None:

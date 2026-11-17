@@ -43,6 +43,14 @@ import {
 import { describe } from "./calendar";
 import { planeCells, type PolygonCells } from "./polygonCells";
 import { isStruct, structBin, type StructExprWire } from "./structExpr";
+import {
+  distKeyCells,
+  distVariable,
+  isDistKey,
+  type DistExpr,
+  type DistExprWire,
+} from "./distExpr";
+import { setGroupCell } from "./groupCell";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -174,7 +182,9 @@ export type SplitBy =
   | ((r: any, i: number) => unknown)
   | FieldAccessor
   | StructExprWire
-  | ChunkKey;
+  | ChunkKey
+  | DistExpr
+  | DistExprWire;
 
 /** The key of one group of a split: a value of the `by` field (text or a
  *  number), or a cell ({@link KeyCell}): a {@link Cell} or a
@@ -568,6 +578,29 @@ function binEntries<T extends Record<string, any>>(
   return entries;
 }
 
+/** The groups of the key `d.bin(p)` over `d`: one per cell of the group's
+ *  distribution, in order, each holding every row of `d` (the rows give
+ *  the distribution's parameters; they are not in one cell or another) and
+ *  the cell it is (groupCell.ts), so the distribution in it is the whole
+ *  one restricted to it. */
+function distEntries<T extends Record<string, any>>(
+  by: DistExpr | DistExprWire,
+  d: T[]
+): Map<SplitKey, T[]> {
+  const { cells } = distKeyCells(by, d);
+  const variable = distVariable(by);
+  return new Map(
+    cells.map((cell) => [
+      cell,
+      setGroupCell(copyColumnTypes([...d], d), {
+        variable,
+        cell: { min: cell.start, max: cell.end },
+        whole: d,
+      }),
+    ])
+  );
+}
+
 /** Reorder `entries`: with `values` (#735), by that explicit group-key
  *  order — groups not listed are appended after, in natural sort order; with
  *  `by`, by the SUM of that field over each entry's rows; with neither, by
@@ -661,6 +694,7 @@ export function splitEntries<T extends Record<string, any>>(
   byOpt: SplitBy | undefined,
   d: T[]
 ): SplitGroups<T> {
+  if (isDistKey(byOpt)) return distEntries(byOpt, d);
   const by = splitByOf(byOpt);
   const ops = getFieldOps(by);
   let rows = d;
@@ -686,8 +720,20 @@ export function splitEntries<T extends Record<string, any>>(
   const type = columnType(d, column);
   const ordered = binned !== undefined || type?.HasOrder !== undefined;
   let entries: Map<SplitKey, T[]>;
-  if (binned !== undefined) entries = binEntries(binned, rows);
-  else {
+  if (binned !== undefined) {
+    entries = binEntries(binned, rows);
+    // Each cell of a column's line is an interval of the column: its group
+    // knows it (groupCell.ts), so a distribution of the column in it is the
+    // whole group's restricted to it.
+    if (column !== undefined)
+      for (const [cell, group] of entries)
+        if (cell instanceof Cell)
+          setGroupCell(group, {
+            variable: { kind: "column", name: column },
+            cell: { min: cell.start, max: cell.end },
+            whole: d,
+          });
+  } else {
     entries = Map.groupBy(rows, splitKeyFn(by, d) as (r: T) => SplitKey);
     if (type?.HasLevels) {
       const keys = orderByLevels(column!, type.HasLevels, [...entries.keys()]);

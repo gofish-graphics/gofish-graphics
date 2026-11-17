@@ -13,6 +13,7 @@ import sys
 import uuid
 
 from . import _nonfinite
+from .dist import DistAccessor
 from ._nonfinite import KEEP, encode_number
 
 T = TypeVar("T")
@@ -2114,7 +2115,9 @@ def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
 
 def partition(
     *,
-    by: Union["FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor"],
+    by: Union[
+        "FieldAccessor", Dict[str, "FieldAccessor"], "StructAccessor", DistAccessor
+    ],
     dir: Optional[str] = None,
     **options: Any,
 ) -> Union[Operator, Composed]:
@@ -2178,7 +2181,19 @@ def partition(
                 f"value an equal slot instead, use spread(by=..., dir=...)."
             )
 
-    if isinstance(by, StructAccessor):
+    if isinstance(by, DistAccessor):
+        if [op.get("op") for op in by.get("ops", [])] != ["bin"]:
+            raise ValueError(
+                f"partition: `by` must be a key that has a region: bin the "
+                f"distribution, Dist.{by['family']}(...).bin(Bin.quantiles(5)), "
+                f"so each group is placed in its cell."
+            )
+        if dir is None:
+            raise ValueError(
+                'partition: `dir` names the axis to divide, e.g. '
+                'partition(by=d.bin(Bin.quantiles(5)), dir="x").'
+            )
+    elif isinstance(by, StructAccessor):
         if not by.get("ops"):
             fields = by["fields"]
             raise ValueError(

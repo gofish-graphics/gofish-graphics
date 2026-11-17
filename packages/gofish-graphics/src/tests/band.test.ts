@@ -4,7 +4,8 @@
  * it cannot draw.
  * Run: `tsx src/tests/band.test.ts` (wired into `pnpm test` as `test:band`).
  */
-import { bandOfRows, edgePath } from "../ast/shapes/band";
+import { Band, bandOfRows, edgePath } from "../ast/shapes/band";
+import { setGroupCell } from "../ast/groupCell";
 import { GoFishNode } from "../ast/_node";
 import { chart, group, line, ribbon, Unit, Domain, Trait } from "../lib";
 import { linear, monotone } from "../families/curve";
@@ -298,6 +299,62 @@ console.log("# ordinal: a column with levels is not a parameter");
     message.includes("has levels") && message.includes("connector form"),
     message
   );
+}
+
+console.log("# a cell of the parameter's line: the whole band, restricted");
+{
+  const rows = [
+    { x: 0, h: 0 },
+    { x: 1, h: 2 },
+    { x: 2, h: 4 },
+    { x: 3, h: 6 },
+  ];
+  const cell = setGroupCell([rows[1], rows[2]], {
+    variable: { kind: "column", name: "x" },
+    cell: { min: 0.5, max: 1.5 },
+    whole: rows,
+  });
+  const { edges } = bandOfRows("ribbon", cell, x, h, linear(), undefined);
+  ok(
+    "the band runs over the cell, through the whole's rows",
+    close(edges.upper.domain.min, 0.5) &&
+      close(edges.upper.domain.max, 1.5) &&
+      close(edges.upper.at(0.5), 1),
+    JSON.stringify(edges.upper.domain)
+  );
+  const outside = setGroupCell([rows[0]], {
+    variable: { kind: "column", name: "x" },
+    cell: { min: 5, max: 6 },
+    whole: rows,
+  });
+  ok(
+    "a cell outside the rows is an error",
+    throws(() => bandOfRows("ribbon", outside, x, h, linear(), undefined)) !== ""
+  );
+}
+
+console.log("# inset");
+{
+  const rows = [
+    { x: 0, h: 1 },
+    { x: 1, h: -1 },
+  ];
+  const { edges } = bandOfRows("ribbon", rows, x, h, linear(), undefined);
+  const band = (inset: number, closed = true, origin: "free" | "zero" = "free") =>
+    Band({ axis: 0, edges, origin, closed, inset } as any);
+  ok(
+    "a negative inset is an error",
+    /0 or more/.test(throws(() => band(-1)))
+  );
+  ok(
+    "an inset on a band with negative values is an error",
+    /negative/.test(throws(() => band(2)))
+  );
+  ok(
+    "an inset on a line is an error",
+    /only a band of amounts/.test(throws(() => band(2, false)))
+  );
+  ok("inset 0 is no inset", throws(() => band(0)) === "");
 }
 
 console.log("# dispatch: the form follows the options");

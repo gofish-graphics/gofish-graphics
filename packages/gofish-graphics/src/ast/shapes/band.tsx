@@ -83,6 +83,7 @@ import type { BlendMode } from "../blendMode";
 import { evalFieldValues, isMissing } from "../fieldExpr";
 import { resolveColumn } from "../channels";
 import { groupFun } from "../groupExpr";
+import { cellOn } from "../groupCell";
 
 /** A band's or a path's two edges: functions of the parameter, in data
  *  units, over one domain (the parameter's extent). */
@@ -100,6 +101,11 @@ export type BandProps = {
   /** A band is filled between its edges and closed; a path is the upper
    *  edge alone, open. */
   closed: boolean;
+  /** Pixels the band's ink is drawn in by: from each end of the parameter,
+   *  and up from the lower edge, which the upper edge is then kept above.
+   *  The box is the band's own (ink only, as `rect.inset`). A band of
+   *  amounts only, values at or above its lower edge. */
+  inset?: number;
   /** What the parameter's and the values' columns measure, read into
    *  units in the type walk. An amount's units are those of a difference of
    *  its values, as a rect's data size is (`magnitude`). */
@@ -258,6 +264,7 @@ export const Band = ({
   edges,
   origin,
   closed,
+  inset = 0,
   parameterQuantity,
   valueQuantity,
   fill = color6[0],
@@ -275,6 +282,24 @@ export const Band = ({
     strokeWidth,
   });
   const domain = edges.upper.domain;
+  if (!(Number.isFinite(inset) && inset >= 0))
+    throw new Error(
+      `[gofish] ribbon({ inset: ${inset} }): inset is a number of pixels, 0 ` +
+        `or more.`
+    );
+  if (inset > 0) {
+    if (!closed || origin !== "free")
+      throw new Error(
+        `[gofish] ${closed ? "ribbon" : "line"}({ inset }): only a band of ` +
+          `amounts, ribbon({ x, h }), is drawn in.`
+      );
+    if (minimum(add(edges.upper, scale(edges.lower, -1))) < 0)
+      throw new Error(
+        `[gofish] ribbon({ inset }): the band is drawn in up from its ` +
+          `baseline, so its values must be 0 or more, but some are ` +
+          `negative.`
+      );
+  }
   /** A point in the node's axis order: `u` along the parameter, `v` along
    *  the values. */
   const point = (u: number, v: number): Point => {
@@ -396,7 +421,11 @@ export const Band = ({
         ];
         translate[axis] = start;
         if (origin === "pinned") translate[across] = pxOf(values!.map!, lo);
-        const renderData: LaidOutBand = { edges: px, path: pathOf(px) };
+        const ink = inset > 0 ? insetEdges(px, inset) : px;
+        const renderData: LaidOutBand = {
+          edges: ink ?? px,
+          path: ink === undefined ? [] : pathOf(ink),
+        };
         return {
           intrinsicDims: dims,
           transform: { translate },
@@ -454,6 +483,21 @@ export const Band = ({
   );
   return node;
 };
+
+/** Edges in local pixels drawn in by `inset`: `inset` in from each end of
+ *  the parameter, the lower edge up by `inset`, and the upper edge kept at
+ *  or above it, so where the band is thinner than `inset` nothing is drawn.
+ *  Undefined when the band is no wider than twice `inset`. */
+function insetEdges(px: BandEdges, inset: number): BandEdges | undefined {
+  const { min, max } = px.upper.domain;
+  if (!(max - min > 2 * inset)) return undefined;
+  const over = { min: min + inset, max: max - inset };
+  const lower = add(restrict(px.lower, over), constant(inset, over));
+  return {
+    lower,
+    upper: upperEnvelope([restrict(px.upper, over), lower]),
+  };
+}
 
 /** One position channel of the shape form: the option's name and its
  *  accessor. */
@@ -582,6 +626,9 @@ export function bandOfFunctions(
  *   position (`"position"`, a line's `y`): an amount's edges are 0 and the
  *   curve, in the difference unit of its column, as a rect's size is; a
  *   position's are the curve twice, in its column's unit.
+ * - In a cell of the parameter's column (a partition by
+ *   `field(x).bin(p)`, groupCell.ts), it is the band through the whole
+ *   group's rows, restricted to the cell, so the cells of one band meet.
  */
 export function bandOfRows(
   mark: string,
@@ -591,6 +638,38 @@ export function bandOfRows(
   curve: ParameterCurve,
   group: string | number | undefined
 ): Pick<BandProps, "edges" | "parameterQuantity" | "valueQuantity"> {
+  const a = parameter.accessor as { type?: string; name?: string; ops?: [] };
+  const column =
+    typeof a === "string"
+      ? a
+      : a?.type === "field" && (a.ops ?? []).length === 0
+        ? a.name
+        : undefined;
+  const cell =
+    column === undefined
+      ? undefined
+      : cellOn(rows, { kind: "column", name: column });
+  if (cell !== undefined) {
+    const whole = bandOfRows(mark, cell.whole, parameter, value, curve, group);
+    const { domain } = whole.edges.upper;
+    const over = {
+      min: Math.max(domain.min, cell.cell.min),
+      max: Math.min(domain.max, cell.cell.max),
+    };
+    if (!(over.min < over.max))
+      throw new Error(
+        `[gofish] ${mark}({ ${parameter.name} }): the cell ` +
+          `[${cell.cell.min}, ${cell.cell.max}] of "${column}" holds none ` +
+          `of the band, which runs over ${showDomain(domain)}.`
+      );
+    return {
+      ...whole,
+      edges: {
+        lower: restrict(whole.edges.lower, over),
+        upper: restrict(whole.edges.upper, over),
+      },
+    };
+  }
   const read = (c: Channel) => {
     const column = resolveColumn(rows, c.accessor);
     const { values, folded, quantity } = evalFieldValues(
