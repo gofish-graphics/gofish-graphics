@@ -96,6 +96,23 @@ async function main() {
       unknownKind.includes("Spacing family"),
     unknownKind
   );
+  const notFinite = errorOf(() => spacingOf(Spacing.pitch(Infinity)));
+  check(
+    "a pitch of Infinity is a loud error naming its distance",
+    /distance/.test(notFinite),
+    notFinite
+  );
+  const wrongType = await rects("50").then(
+    () => "",
+    (e) => (e as Error).message
+  );
+  check(
+    "a string spread spacing names the option and what it takes",
+    wrongType ===
+      "[gofish] spacing: expected a number, a length (percent(n) or fr(k)) " +
+        "or a Spacing strategy, got string.",
+    wrongType
+  );
 
   console.log("\n# the points each kind relates");
   // A box relates the end of one child to the start of the next; a pitch at

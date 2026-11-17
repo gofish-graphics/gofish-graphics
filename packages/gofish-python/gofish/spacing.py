@@ -26,12 +26,12 @@ def box(gap: float | LengthValue, /) -> Dict[str, Any]:
         gap: The gap between facing edges, in pixels. A negative gap overlaps the children. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
     """
     if isinstance(gap, (int, float)) and not isinstance(gap, bool):
-        if math.isnan(gap):
-            raise ValueError(f"Spacing.box(gap) must not be NaN, got {gap!r}")
+        if not math.isfinite(gap):
+            raise ValueError(f"Spacing.box(gap) must be finite, got {gap!r}")
     elif isinstance(gap, LengthValue):
         pass
     else:
-        raise TypeError(f"Spacing.box(gap) must be a number or a LengthValue, got {type(gap).__name__}")
+        raise TypeError(f"Spacing.box(gap) must be a finite number or a LengthValue, got {type(gap).__name__}")
     out: Dict[str, Any] = {"kind": "box"}
     for _k, _v in [
         ("gap", gap),
@@ -49,12 +49,12 @@ def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None) -> Dict
         at: The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). "middle" is center to center. Default "baseline".
     """
     if isinstance(distance, (int, float)) and not isinstance(distance, bool):
-        if math.isnan(distance):
-            raise ValueError(f"Spacing.pitch(distance) must not be NaN, got {distance!r}")
+        if not math.isfinite(distance):
+            raise ValueError(f"Spacing.pitch(distance) must be finite, got {distance!r}")
     elif isinstance(distance, LengthValue):
         pass
     else:
-        raise TypeError(f"Spacing.pitch(distance) must be a number or a LengthValue, got {type(distance).__name__}")
+        raise TypeError(f"Spacing.pitch(distance) must be a finite number or a LengthValue, got {type(distance).__name__}")
     if at is not None:
         if not isinstance(at, str):
             raise TypeError(f"Spacing.pitch(at=...) must be one of \"start\", \"middle\", \"end\", \"baseline\", got {type(at).__name__}")

@@ -125,11 +125,17 @@ export const createDistributeConstraint = (
 /** A chain's spacing as a strategy: a bare amount is `Spacing.box(amount)`,
  *  and a strategy is checked against the `Spacing` family. This is the one
  *  place a bare amount becomes a strategy, so everything after it reads
- *  `kind`. */
+ *  `kind`, and the one place spread's and distribute's `spacing` is
+ *  checked. */
 export function spacingOf(spacing: Gap | Spacing): Spacing {
   if (typeof spacing === "number" || isLength(spacing))
     return { kind: "box", gap: spacing };
-  Frontend.checkStrategy("Spacing", spacing, "distribute({ spacing })");
+  if (typeof spacing !== "object" || spacing === null)
+    throw new Error(
+      `[gofish] spacing: expected a number, a length (percent(n) or fr(k)) ` +
+        `or a Spacing strategy, got ${spacing === null ? "null" : typeof spacing}.`
+    );
+  Frontend.checkStrategy("Spacing", spacing, "spacing");
   return spacing;
 }
 

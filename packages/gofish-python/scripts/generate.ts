@@ -80,9 +80,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = join(HERE, "..", "gofish", "_generated.py");
 
 /** The Python classes of the named types (`OPTION_TYPES`, `AUTHORED_REFS`):
- *  `percent(n)` builds a `LengthValue`, `field(x)` a `FieldAccessor`. An
- *  instance already carries the wire keys, so `_to_wire` passes it through by
- *  its class, as it does a channel value. */
+ *  `percent(n)` builds a `LengthValue`, `field(x)` a `FieldAccessor`. */
 const PY_CLASSES = [
   ...new Set(
     [
@@ -91,12 +89,6 @@ const PY_CLASSES = [
     ].filter((c): c is string => c !== undefined)
   ),
 ].sort();
-
-/** The classes `_to_wire` passes through: the channel values (`datum(...)`
- *  builds a `DatumValue`) and every named type's class. */
-const PASS_THROUGH_CLASSES = [
-  ...new Set(["FieldAccessor", "DatumValue", ...PY_CLASSES]),
-];
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -146,11 +138,9 @@ function pyStr(s: string): string {
 // ---------------------------------------------------------------------------
 
 /** Whether a value of this type may be a Python dict that `_to_wire` has to
- *  route. A channel value may be a dict too (field(...), datum(...)), and so
- *  may a value of a named type with a Python class (`percent(n)` builds a
- *  `LengthValue`), but `_to_wire` passes those through by their class
- *  (`PASS_THROUGH_CLASSES`), so such a branch never competes with a union's
- *  dict-shaped branch. */
+ *  route. A channel value may be a dict too (field(...), datum(...)), but
+ *  `_to_wire` passes those through by their class, so a channel branch never
+ *  competes with a union's dict-shaped branch. */
 function acceptsDict(type: FieldType): boolean {
   switch (type.kind) {
     case "object":
@@ -158,7 +148,6 @@ function acceptsDict(type: FieldType): boolean {
     case "any":
       return true;
     case "ref":
-      if (refPyClass(type.name) !== undefined) return false;
       return type.name in OPTION_TYPES
         ? acceptsDict(OPTION_TYPES[type.name].type)
         : true;
@@ -212,12 +201,12 @@ function taggedShape(branches: FieldType[], where: string): string | null {
  *  or null when a value of this type has no option keys to rename and passes
  *  through unchanged. Object fields use the same `pyKwarg` rule as top-level
  *  kwargs. A union contributes its one dict-shaped branch (a dict value can
- *  only mean that branch). A branch whose named type has a Python class
- *  (`Length`, which `percent(n)` builds) does not count when another branch
- *  takes dicts: `_to_wire` passes an instance of the class through by its
- *  class, so a plain dict means the other branch (spread's `spacing`, a
- *  length or a `Spacing`, routes a dict as a `Spacing`). With no other dict
- *  branch, a plain dict is routed as that type's wire form. Several
+ *  only mean that branch). When a union's dict branches mix named types
+ *  with a Python class and types without one, the generator emits a
+ *  `("class", ((py_class, shape), ...), rest)` shape: an instance of a class
+ *  takes its branch, and any other value takes `rest`, the shape of the
+ *  other dict branches (spread's `spacing` routes a `LengthValue` as a
+ *  `Length` and a plain dict as a `Spacing`). Several
  *  dict-shaped branches are allowed only as a
  *  tagged union: each branch an object whose `kind` field (a literal or enum)
  *  takes values no other branch takes, so `_to_wire` picks the branch by the
@@ -252,19 +241,26 @@ function wireShape(type: FieldType, where: string): string | null {
       );
     }
     case "union": {
-      // A branch with a Python class takes a plain dict (its wire form
-      // written by hand) only when no other branch takes dicts; a value of
-      // the class itself passes through by its class either way.
-      const routed = type.options.filter(acceptsDict);
-      const dictBranches =
-        routed.length > 0
-          ? routed
-          : type.options.filter(
-              (b) => b.kind === "ref" && refPyClass(b.name) !== undefined
-            );
+      const dictBranches = type.options.filter(acceptsDict);
       const shapes = dictBranches.map((b) => wireShape(b, where));
       if (shapes.every((sh) => sh === null)) return null;
       if (dictBranches.length === 1) return shapes[0];
+      // A branch whose named type has a Python class (`Length`: `percent(n)`
+      // builds a `LengthValue`) takes an instance of that class; a plain
+      // dict means one of the other branches.
+      const classed = dictBranches.filter(
+        (b) => b.kind === "ref" && refPyClass(b.name) !== undefined
+      );
+      const plain = dictBranches.filter((b) => !classed.includes(b));
+      if (classed.length > 0 && plain.length > 0) {
+        const byClass = classed.map(
+          (b) =>
+            `(${pyStr(refPyClass((b as { name: string }).name)!)}, ${wireShape(b, where) ?? "None"})`
+        );
+        const rest =
+          wireShape({ kind: "union", options: plain }, where) ?? "None";
+        return `("class", (${byClass.join(", ")},), ${rest})`;
+      }
       const tagged = taggedShape(dictBranches, where);
       if (tagged !== null) return tagged;
       throw new Error(
@@ -471,7 +467,8 @@ parts.push(
       `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
       `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
       `# ("tuple", (shape, ...)), ("record", value_shape),`,
-      `# ("tagged", tag_key, {tag_value: shape}); None passes a value through.`,
+      `# ("tagged", tag_key, {tag_value: shape}),`,
+      `# ("class", ((py_class, shape), ...), rest_shape); None passes a value through.`,
       `_OPTION_TYPES: Dict[str, Any] = {`,
       ...optionTypes,
       `}`,
@@ -490,15 +487,22 @@ parts.push(
       `    or unknown tag raises TypeError. A channel value built by field(...) or`,
       `    datum(...) is a dict already in wire form, so it passes through too:`,
       `    that is how a \`dims\` entry tells a channel value from an interval.`,
-      `    So does a value of a named type's class (a LengthValue from percent(n)).`,
+      `    A ("class", ...) shape routes an instance of a named type's class (a`,
+      `    LengthValue from percent(n)) to that type's shape, and any other value`,
+      `    to the rest.`,
       `    """`,
       `    if shape is None or value is None:`,
       `        return value`,
-      `    if isinstance(value, (${PASS_THROUGH_CLASSES.map((c) => `_ast.${c}`).join(", ")})):`,
+      `    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):`,
       `        return value`,
       `    kind = shape[0]`,
       `    if kind == "ref":`,
       `        return _to_wire(_OPTION_TYPES[shape[1]], value, path)`,
+      `    if kind == "class":`,
+      `        for cls, sub in shape[1]:`,
+      `            if isinstance(value, getattr(_ast, cls)):`,
+      `                return _to_wire(sub, value, path)`,
+      `        return _to_wire(shape[2], value, path)`,
       `    if kind == "object":`,
       `        if not isinstance(value, dict):`,
       `            return value`,

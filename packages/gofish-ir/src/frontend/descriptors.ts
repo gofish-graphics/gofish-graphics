@@ -1103,7 +1103,7 @@ export const STRATEGIES = {
         positional: "gap",
         params: {
           gap: {
-            type: t.union(t.number, t.ref("Length")),
+            type: t.union(t.num({ finite: true }), t.ref("Length")),
             required: true,
             doc:
               "The gap between facing edges, in pixels. A negative gap overlaps the children." +
@@ -1116,7 +1116,7 @@ export const STRATEGIES = {
         positional: "distance",
         params: {
           distance: {
-            type: t.union(t.number, t.ref("Length")),
+            type: t.union(t.num({ finite: true }), t.ref("Length")),
             required: true,
             doc: "The distance between the points, in pixels." + PERCENT_FR,
           },

@@ -418,11 +418,11 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   unchanged. A union with several dict branches is allowed only when it is
   tagged: each branch is an object with a `kind` literal or enum, the
   `kind` values do not overlap, and `_to_wire` picks the branch by the
-  dict's `kind` (treemap's `tile` strategies). A branch whose type has a
-  Python class (`Length`, built by `percent(n)`) does not compete when
-  another branch takes dicts, since `_to_wire` passes the class's
-  instances through; so spread's `spacing` routes a dict as a `Spacing`.
-  Any other such union fails
+  dict's `kind` (treemap's `tile` strategies). A union whose dict branches
+  mix a type with a Python class (`Length`, built by `percent(n)`) and
+  types without one is told apart by class: a `LengthValue` takes the
+  `Length` branch and a plain dict the other (spread's `spacing` routes a
+  dict as a `Spacing`). Any other such union fails
   generation. The JSON Schema and the validator read the same `OPTION_TYPES`
   entries, which replaced their hand-written axes shapes; those had fallen
   behind the JS type and lacked `side` and `labelAngle`. See

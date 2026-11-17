@@ -4793,7 +4793,7 @@ for the API.
             "gap": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "type": "number"
                 },
                 {
                   "$ref": "#/$defs/Length"
@@ -4813,7 +4813,7 @@ for the API.
             "distance": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "type": "number"
                 },
                 {
                   "$ref": "#/$defs/Length"

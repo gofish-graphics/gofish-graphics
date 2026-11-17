@@ -9,7 +9,7 @@ import pytest
 import gofish
 
 from ._ir import ir
-from gofish import Bin, Calendar, Constraint, Coord, Curve, Overlap, Place, Spacing, Tile, field, line, ribbon, scatter, chart, circle, percent, select_all
+from gofish import Bin, Calendar, Constraint, Coord, Curve, Overlap, Place, Spacing, Tile, chunk, field, fr, line, ribbon, scatter, chart, circle, percent, select_all
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -153,7 +153,8 @@ BAD_VALUES = [
     (lambda: Coord.polar(center=(1, 2, 3)), "Coord.polar(center=...) must have 2 items"),
     (lambda: Coord.geo("mercator", lat=(0, float("nan"))), "Coord.geo(lat=...)[1] must not be NaN"),
     (lambda: Spacing.pitch(20, at="center"), 'Spacing.pitch(at=...) must be one of "start", "middle"'),
-    (lambda: Spacing.box(float("nan")), "Spacing.box(gap) must not be NaN"),
+    (lambda: Spacing.box(float("nan")), "Spacing.box(gap) must be finite, got nan"),
+    (lambda: Spacing.pitch(float("inf")), "Spacing.pitch(distance) must be finite, got inf"),
 ]
 
 WRONG_TYPES = [
@@ -174,9 +175,9 @@ WRONG_TYPES = [
     (lambda: Coord.geo(None), "Coord.geo(projection) must be one of"),
     (lambda: Coord.polar(inner_radius="0.5"), "Coord.polar(inner_radius=...) must be a number, got str"),
     (lambda: Coord.geo("mercator", lon="-170"), "Coord.geo(lon=...) must be a list or tuple of 2 items"),
-    (lambda: Spacing.box("8"), "Spacing.box(gap) must be a number or a LengthValue, got str"),
-    (lambda: Spacing.pitch(None), "Spacing.pitch(distance) must be a number or a LengthValue"),
-    (lambda: Spacing.box({"type": "length", "percent": 5}), "Spacing.box(gap) must be a number or a LengthValue, got dict"),
+    (lambda: Spacing.box("8"), "Spacing.box(gap) must be a finite number or a LengthValue, got str"),
+    (lambda: Spacing.pitch(None), "Spacing.pitch(distance) must be a finite number or a LengthValue"),
+    (lambda: Spacing.box({"type": "length", "percent": 5}), "Spacing.box(gap) must be a finite number or a LengthValue, got dict"),
 ]
 
 UNKNOWN_KWARGS = [
@@ -375,6 +376,34 @@ def test_spacing_wire_form_at_spread():
     # percent(n) and fr(k) build.
     with pytest.raises(TypeError, match="missing the key 'kind'"):
         spacing_of({"type": "length", "percent": 5})
+    # A value of another named type's class is not a spacing.
+    with pytest.raises(TypeError, match="missing the key 'kind'"):
+        spacing_of(chunk(5))
+
+
+def test_lengths_take_their_branch_by_class():
+    """A LengthValue is a Length where the option takes one (spacing, a
+    Spacing gap or distance, w/h) and is rejected where it does not."""
+    from gofish import rect, spread
+
+    for length, wire in [
+        (percent(5), {"type": "length", "percent": 5}),
+        (fr(2), {"type": "length", "fr": 2}),
+        (percent(30) + 4, {"type": "length", "percent": 30, "px": 4}),
+    ]:
+        options = ir(
+            spread([rect(w=10, h=10)], dir="x", spacing=length, w=length, h=length)
+        )["options"]
+        assert options["spacing"] == wire
+        assert options["w"] == wire and options["h"] == wire
+        box = ir(spread([rect(w=10, h=10)], dir="x", spacing=Spacing.box(length)))
+        assert box["options"]["spacing"] == {"kind": "box", "gap": wire}
+        pitch = ir(
+            spread([rect(w=10, h=10)], dir="x", spacing=Spacing.pitch(length))
+        )
+        assert pitch["options"]["spacing"] == {"kind": "pitch", "distance": wire}
+    with pytest.raises(TypeError, match="axes got an unexpected key 'type'"):
+        spread([rect(w=10, h=10)], dir="x", axes=percent(10))
 
 
 def test_distribute_takes_a_spacing_strategy():

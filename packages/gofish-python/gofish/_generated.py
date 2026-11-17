@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 # The key structure of each named option type (descriptors.ts OPTION_TYPES):
 # ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
 # ("tuple", (shape, ...)), ("record", value_shape),
-# ("tagged", tag_key, {tag_value: shape}); None passes a value through.
+# ("tagged", tag_key, {tag_value: shape}),
+# ("class", ((py_class, shape), ...), rest_shape); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
@@ -64,15 +65,22 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     or unknown tag raises TypeError. A channel value built by field(...) or
     datum(...) is a dict already in wire form, so it passes through too:
     that is how a `dims` entry tells a channel value from an interval.
-    So does a value of a named type's class (a LengthValue from percent(n)).
+    A ("class", ...) shape routes an instance of a named type's class (a
+    LengthValue from percent(n)) to that type's shape, and any other value
+    to the rest.
     """
     if shape is None or value is None:
         return value
-    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue, _ast.ChunkKey, _ast.FieldPredicate, _ast.LengthValue, _ast.StructAccessor)):
+    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):
         return value
     kind = shape[0]
     if kind == "ref":
         return _to_wire(_OPTION_TYPES[shape[1]], value, path)
+    if kind == "class":
+        for cls, sub in shape[1]:
+            if isinstance(value, getattr(_ast, cls)):
+                return _to_wire(sub, value, path)
+        return _to_wire(shape[2], value, path)
     if kind == "object":
         if not isinstance(value, dict):
             return value
@@ -691,7 +699,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("ref", "Spacing"), spacing, "spacing")),
+        ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),
@@ -991,7 +999,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("ref", "Spacing"), spacing, "spacing")),
+        ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),

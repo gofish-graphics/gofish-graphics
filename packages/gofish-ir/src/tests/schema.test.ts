@@ -1422,6 +1422,8 @@ console.log("\n# Strategies");
       ["Spacing", { kind: "pitch", distance: 4, at: "edge" }, /at/],
       ["Spacing", { kind: "box", gap: 4, at: "middle" }, /unknown field "at"/],
       ["Spacing", { kind: "box", gap: "4" }, /gap/],
+      ["Spacing", { kind: "box", gap: NaN }, /gap/],
+      ["Spacing", { kind: "pitch", distance: Infinity }, /distance/],
     ];
   for (const [family, value, pattern] of rejects) {
     const why = thrown(family, value);

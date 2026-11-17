@@ -950,19 +950,19 @@ by column name, the axis names of `dims`) are never renamed, and a field
 typed `any` (`color=Color.palette({...})` keyed by category, `coord`) passes
 through whole. A channel value built by `field(...)` or `datum(...)` is a
 dict already in wire form, so `_to_wire` passes it through by its class
-wherever it appears, and so is a value of any named type with a Python class
-(the `pyClass` of an `OPTION_TYPES` or `AUTHORED_REFS` entry: a
-`LengthValue` from `percent(n)` or `fr(k)`, a `FieldPredicate`); the
-generator lists those classes in `_to_wire`'s `isinstance` test. That is how a `dims` entry works: `field("x")` passes
+wherever it appears. That is how a `dims` entry works: `field("x")` passes
 through, and any other dict is an interval whose keys are checked
 (`dims={"theta": {"width": 2}}` is a `TypeError`). Two rules keep this
 honest. A union may have only one branch that a dict could match (a channel
-branch does not count, for the reason just given, nor does a branch whose type
-has a Python class when another branch takes dicts), or generation fails,
-since `_to_wire` would have to guess. So spread's `spacing`, a number, a
-length or a `Spacing`, routes a plain dict as a `Spacing`, and a
-`LengthValue` passes through by its class; a length written by hand as a
-plain dict is a `TypeError` there. The one exception is a tagged union: when every dict branch is an
+branch does not count, for the reason just given), or generation fails,
+since `_to_wire` would have to guess. A union whose dict branches mix named
+types with a Python class and types without one is told apart by class: the
+generator emits `("class", ((py_class, shape), ...), rest)`, an instance of
+a class takes its type's shape, and any other value takes `rest`. So
+spread's `spacing`, a number, a length or a `Spacing`, walks a
+`LengthValue` (from `percent(n)` or `fr(k)`) as a `Length` and a plain dict
+as a `Spacing`; a length written by hand as a plain dict, or a `chunk(5)`,
+is a `TypeError` there. The other exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
 `kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
