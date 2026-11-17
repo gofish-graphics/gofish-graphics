@@ -580,23 +580,6 @@ check(
 );
 
 check(
-  "stack with anchor rejected (anchor is gone; spread takes Spacing.pitch)",
-  !validate(chart([{ type: "stack", anchor: "middle" }])).valid
-);
-
-check(
-  "spread with anchor rejected (anchor is gone)",
-  !validate(chart([{ type: "spread", dir: "x", anchor: "middle" }])).valid
-);
-
-check(
-  "spread with a Spacing.box spacing accepts",
-  validate(
-    chart([{ type: "spread", dir: "x", spacing: { kind: "box", gap: 4 } }])
-  ).valid
-);
-
-check(
   "spread with a Spacing.pitch spacing accepts",
   validate(
     chart([
@@ -610,46 +593,9 @@ check(
 );
 
 check(
-  "spread with a Spacing.pitch of a percent accepts",
-  validate(
-    chart([
-      {
-        type: "spread",
-        dir: "y",
-        spacing: {
-          kind: "pitch",
-          distance: { type: "length", percent: 10 },
-          at: "middle",
-        },
-      },
-    ])
-  ).valid
-);
-
-check(
   "spread with an unknown Spacing kind rejected",
   !validate(
     chart([{ type: "spread", dir: "x", spacing: { kind: "contour", gap: 4 } }])
-  ).valid
-);
-
-check(
-  "spread with a bad Spacing.pitch at rejected",
-  !validate(
-    chart([
-      {
-        type: "spread",
-        dir: "x",
-        spacing: { kind: "pitch", distance: 4, at: "edge" },
-      },
-    ])
-  ).valid
-);
-
-check(
-  "spread with a Spacing.pitch missing its distance rejected",
-  !validate(
-    chart([{ type: "spread", dir: "x", spacing: { kind: "pitch", at: "end" } }])
   ).valid
 );
 

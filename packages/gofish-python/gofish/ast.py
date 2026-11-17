@@ -3231,7 +3231,7 @@ class FieldAccessor(dict):
 
             calendar = _OPTION_TYPES["Calendar"]
             if len(partition) < 2 or not all(
-                isinstance(p, dict) and p.get("kind") in _kinds(calendar)
+                isinstance(p, dict) and p.get("kind") in calendar[2]
                 for p in partition
             ):
                 raise TypeError(
@@ -3394,13 +3394,6 @@ def chunk(size: int) -> ChunkKey:
     return ChunkKey({"type": "chunk", "size": size})
 
 
-def _kinds(shape: Any) -> Dict[str, Any]:
-    """The branches of a tagged option type (``("tagged", ((tag_key,
-    branches), ...))`` in ``_generated._OPTION_TYPES``) that its ``kind``
-    tag selects, by ``kind`` value."""
-    return dict(shape[1]).get("kind", {})
-
-
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     """The cells a key is binned into, in their wire form, on the key that
     takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
@@ -3418,7 +3411,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     kind = value.get("kind") if isinstance(value, dict) else None
     # A Calendar value bins one field only: on a struct it is no other
     # key's kind, just not one of the struct's.
-    if kind in _kinds(_OPTION_TYPES[other]) and kind not in _kinds(_OPTION_TYPES["Calendar"]):
+    if kind in _OPTION_TYPES[other][2] and kind not in _OPTION_TYPES["Calendar"][2]:
         if key == "field":
             raise TypeError(
                 f"{where}: Bin.{kind} bins two fields together into cells of "
@@ -3431,7 +3424,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
             f"field(x).bin(Bin.{kind}(...)); struct(x=..., y=...).bin takes "
             "Bin.hex(radius=...) or Bin.voronoi(seeds=...)."
         )
-    if kind not in _kinds(_OPTION_TYPES[own]):
+    if kind not in _OPTION_TYPES[own][2]:
         expected = (
             "a Calendar value (Calendar.month, ...), Bin.step(size), "
             "Bin.thresholds(count_or_edges), or "

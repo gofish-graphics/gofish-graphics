@@ -16,6 +16,7 @@ import { layer } from "./layer";
 import { Constraint } from "../constraints";
 import { axisName, childSlots } from "../constraints/shared";
 import type { Spacing } from "../../families/spacing";
+import type { Gap } from "../constraints/gap";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -54,7 +55,7 @@ export const Spread = createNodeOperator(
     {
       key,
       dir,
-      spacing = 8,
+      spacing,
       alignment = "baseline",
       reverse = false,
       glue = false,
@@ -71,7 +72,7 @@ export const Spread = createNodeOperator(
       dir: AxisName | Direction;
       /** How far apart neighbors are: a {@link Spacing} strategy, or a bare
        *  amount, which is `Spacing.box(amount)`. */
-      spacing?: number | LengthValue | Spacing;
+      spacing?: Gap | Spacing;
       alignment?: Alignment;
       reverse?: boolean;
       // When true, treat as a stack: glue children together, summing their
@@ -181,7 +182,7 @@ export const Spread = createNodeOperator(
         Constraint.distribute(
           {
             dir: stackAxis,
-            spacing: glue ? 0 : spacing,
+            spacing,
             glue,
             order: reverse ? "reverse" : "forward",
             origin: origin && { ...origin, part: refs[origin.part] },
@@ -215,7 +216,7 @@ export type SpreadOptions<T = any> = {
    *  point on each child. A bare amount is `Spacing.box(amount)`: pixels, a
    *  percent of the spread's room, or an `fr` weight, so the gaps are the
    *  flexible parts (#1176 step 6). */
-  spacing?: number | LengthValue | Spacing;
+  spacing?: Gap | Spacing;
   alignment?: "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   glue?: boolean;

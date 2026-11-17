@@ -189,7 +189,7 @@ function fixedParts(
       return;
     }
     const chain = chainOn(n, axis);
-    if (chain !== undefined && !chain.glue && chain.spacing.kind === "box") {
+    if (chain !== undefined && chain.spacing.kind === "box") {
       const gaps = chain.children.length - 1;
       // A length spacing's fixed pixels are its gap at σ = 0.
       const each = Pwl.at(n.gapOf(chain, axis), 0);

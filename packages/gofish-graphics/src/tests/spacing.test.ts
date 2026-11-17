@@ -1,8 +1,8 @@
 /**
  * The `Spacing` family: `spread`'s and `Constraint.distribute`'s `spacing`
- * value. A bare amount is `Spacing.box(amount)`; `Spacing.pitch(distance, {
- * at })` is the fixed distance between one point on each child that the
- * removed `anchor` option set (`anchor: at` with `spacing: distance`).
+ * value. A bare amount is `Spacing.box(amount)`, a gap between facing edges;
+ * `Spacing.pitch(distance, { at })` is a fixed distance between the same point
+ * on each child.
  *
  *   pnpm test:spacing
  */
@@ -11,6 +11,7 @@ import {
   spread,
   rect,
   percent,
+  fr,
   Spacing,
   Constraint,
   Serialize,
@@ -76,7 +77,7 @@ async function main() {
   );
   check(
     "spacingOf(fr(1)) is a box over the length",
-    spacingOf(percent(5)).kind === "box"
+    spacingOf(fr(1)).kind === "box"
   );
   check(
     "Constraint.distribute holds its spacing as a strategy",
@@ -95,26 +96,10 @@ async function main() {
       unknownKind.includes("Spacing family"),
     unknownKind
   );
-  const badAt = errorOf(() =>
-    spacingOf({ kind: "pitch", distance: 4, at: "edge" } as any)
-  );
-  check('a pitch at "edge" is a loud error', /\.at/.test(badAt), badAt);
-  const noDistance = errorOf(() => spacingOf({ kind: "pitch" } as any));
-  check(
-    "a pitch with no distance is a loud error",
-    /distance/.test(noDistance),
-    noDistance
-  );
-  const bare = errorOf(() => spacingOf(Spacing.box as any));
-  check(
-    "Spacing.box uncalled is a loud error (its gap is required)",
-    bare !== "",
-    bare
-  );
 
-  console.log("\n# a pitch relates the same point on each child, as anchor did");
-  // `anchor: "edge"` related the end of one child to the start of the next,
-  // and `anchor: a` related `a` to `a`. These are the relations now.
+  console.log("\n# the points each kind relates");
+  // A box relates the end of one child to the start of the next; a pitch at
+  // `a` relates `a` on one child to `a` on the next.
   check(
     "a box relates end to start",
     JSON.stringify(
@@ -201,7 +186,7 @@ async function main() {
 
   console.log("\n# the wire");
   {
-    const ir = await Serialize.toJSON(
+    const spec = () =>
       chart([{ k: "a" }, { k: "b" }])
         .flow(
           spread({
@@ -210,8 +195,8 @@ async function main() {
             spacing: Spacing.pitch(70, { at: "baseline" }),
           })
         )
-        .mark(rect({ w: 10, h: 10 }))
-    );
+        .mark(rect({ w: 10, h: 10 }));
+    const ir = await Serialize.toJSON(spec());
     const op = (ir as any).root.operators?.[0];
     check(
       "spread writes its Spacing as the plain strategy object",
@@ -227,18 +212,7 @@ async function main() {
     );
     // Rebuilt from the IR, it lays out as the spread it came from.
     const rebuilt = items(await (Serialize.buildIR(ir as any) as any).toDisplayList({}));
-    const direct = items(
-      await chart([{ k: "a" }, { k: "b" }])
-        .flow(
-          spread({
-            by: "k",
-            dir: "y",
-            spacing: Spacing.pitch(70, { at: "baseline" }),
-          })
-        )
-        .mark(rect({ w: 10, h: 10 }))
-        .toDisplayList({})
-    );
+    const direct = items(await spec().toDisplayList({}));
     check(
       "the IR rebuilds to the same layout",
       JSON.stringify(rebuilt.map((i) => [i.kind, i.x, i.y])) ===

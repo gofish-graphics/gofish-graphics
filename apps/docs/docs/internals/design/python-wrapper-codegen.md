@@ -416,10 +416,13 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   `schema` column names, `dims` axis names) and a field typed `any` (a
   `palette` dict keyed by category, a `coord` config) pass through
   unchanged. A union with several dict branches is allowed only when it is
-  tagged: each branch is an object with a `kind` (or `type`) literal or
-  enum, the values of that field do not overlap, and `_to_wire` picks the
-  branch by the dict's tag (treemap's `tile` strategies; spread's `spacing`,
-  a `type`-tagged length or a `kind`-tagged `Spacing`); any other such union fails
+  tagged: each branch is an object with a `kind` literal or enum, the
+  `kind` values do not overlap, and `_to_wire` picks the branch by the
+  dict's `kind` (treemap's `tile` strategies). A branch whose type has a
+  Python class (`Length`, built by `percent(n)`) does not compete when
+  another branch takes dicts, since `_to_wire` passes the class's
+  instances through; so spread's `spacing` routes a dict as a `Spacing`.
+  Any other such union fails
   generation. The JSON Schema and the validator read the same `OPTION_TYPES`
   entries, which replaced their hand-written axes shapes; those had fallen
   behind the JS type and lacked `side` and `labelAngle`. See

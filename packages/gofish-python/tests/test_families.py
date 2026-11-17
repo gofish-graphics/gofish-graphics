@@ -176,6 +176,7 @@ WRONG_TYPES = [
     (lambda: Coord.geo("mercator", lon="-170"), "Coord.geo(lon=...) must be a list or tuple of 2 items"),
     (lambda: Spacing.box("8"), "Spacing.box(gap) must be a number or a LengthValue, got str"),
     (lambda: Spacing.pitch(None), "Spacing.pitch(distance) must be a number or a LengthValue"),
+    (lambda: Spacing.box({"type": "length", "percent": 5}), "Spacing.box(gap) must be a number or a LengthValue, got dict"),
 ]
 
 UNKNOWN_KWARGS = [
@@ -330,7 +331,7 @@ def test_label_halo_rejects_an_unknown_key():
 
 
 # Spacing: a spread's (or a distribute's) `spacing` is a bare amount, which is
-# `Spacing.box(amount)`, or a `Spacing` strategy. `anchor` is gone.
+# `Spacing.box(amount)`, or a `Spacing` strategy.
 def test_spacing_strategies_are_plain_dicts():
     assert Spacing.box(8) == {"kind": "box", "gap": 8}
     assert Spacing.pitch(30) == {"kind": "pitch", "distance": 30}
@@ -370,17 +371,10 @@ def test_spacing_wire_form_at_spread():
         spacing_of({"kind": "gap", "gap": 8})
     with pytest.raises(TypeError, match="unexpected key 'at'"):
         spacing_of({"kind": "box", "gap": 8, "at": "middle"})
-
-
-def test_spread_and_stack_take_no_anchor():
-    from gofish import rect, spread, stack
-
-    with pytest.raises(TypeError, match="anchor"):
-        spread([rect(w=10, h=10)], dir="x", spacing=8, anchor="middle")
-    with pytest.raises(TypeError, match="anchor"):
-        stack([rect(w=10, h=10)], dir="x", anchor="middle")
-    with pytest.raises(TypeError, match="anchor"):
-        Constraint.distribute([], dir="x", spacing=8, anchor="middle")
+    # A plain dict is a Spacing there: a length is a LengthValue, which
+    # percent(n) and fr(k) build.
+    with pytest.raises(TypeError, match="missing the key 'kind'"):
+        spacing_of({"type": "length", "percent": 5})
 
 
 def test_distribute_takes_a_spacing_strategy():

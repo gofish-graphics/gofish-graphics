@@ -6,7 +6,6 @@ import {
   axisIndex,
   directSlot,
   type Axis,
-  type AlignAnchor,
   type ConstraintRef,
   type KeyOf,
 } from "./shared";
@@ -220,7 +219,7 @@ export function distributePlacementAnchors({
     case "box":
       return { from: "end", to: "start" };
     case "pitch": {
-      const at: AlignAnchor = spacing.at ?? "baseline";
+      const at = spacing.at ?? "baseline";
       return { from: at, to: at };
     }
   }

@@ -18,23 +18,24 @@
  * A bare amount (`spacing: 4`, `spacing: fr(1)`) is `Spacing.box(4)`: the
  * chain reads it as that strategy (`spacingOf` in distribute.ts).
  */
-import type { LengthValue } from "../ast/length";
+import type { Frontend } from "gofish-ir";
 import type { Gap } from "../ast/constraints/gap";
 import { given } from "../ast/strategyKind";
 
-/** The amount a spacing lays out: pixels, a percent of the room of the
- *  layer that holds the chain, or an `fr` weight in its scope. */
-export type Amount = number | LengthValue;
+type BoxIR = Extract<Frontend.SpacingIR, { kind: "box" }>;
+type PitchIR = Extract<Frontend.SpacingIR, { kind: "pitch" }>;
 
-/** `box()`: a gap between facing edges. See {@link box}. */
-export type BoxSpacing = { kind: "box"; gap: Gap };
+/** `box()`: a gap between facing edges. See {@link box}. Its gap is a
+ *  {@link Gap} as authored (a `LengthValue` from `percent(n)`), which
+ *  serializes to the IR's length. */
+export type BoxSpacing = Omit<BoxIR, "gap"> & { gap: Gap };
 
 /** The point on each child that `pitch()` measures from. */
-export type PitchAt = "start" | "middle" | "end" | "baseline";
+export type PitchAt = NonNullable<PitchIR["at"]>;
 
 /** `pitch()`: a fixed distance between the same point on each child. See
  *  {@link pitch}. */
-export type PitchSpacing = { kind: "pitch"; distance: Gap; at?: PitchAt };
+export type PitchSpacing = Omit<PitchIR, "distance"> & { distance: Gap };
 
 /** Every built-in spacing: the value of `spread`'s `spacing`. */
 export type Spacing = BoxSpacing | PitchSpacing;
@@ -47,7 +48,7 @@ export type Spacing = BoxSpacing | PitchSpacing;
  * @param gap Pixels, `percent(n)` of the spread's room, or `fr(k)` shares of
  *   its scope. A negative gap overlaps the children.
  */
-export function box(gap: Amount): BoxSpacing {
+export function box(gap: Gap): BoxSpacing {
   return { kind: "box", gap };
 }
 
@@ -63,7 +64,7 @@ export function box(gap: Amount): BoxSpacing {
  *   Default `"baseline"`.
  */
 export function pitch(
-  distance: Amount,
+  distance: Gap,
   opts: { at?: PitchAt } = {}
 ): PitchSpacing {
   return { kind: "pitch", distance, ...given(opts) };

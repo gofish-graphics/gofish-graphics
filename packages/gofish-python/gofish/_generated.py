@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 # The key structure of each named option type (descriptors.ts OPTION_TYPES):
 # ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
 # ("tuple", (shape, ...)), ("record", value_shape),
-# ("tagged", ((tag_key, {tag_value: shape}), ...)); None passes a value through.
+# ("tagged", tag_key, {tag_value: shape}); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
@@ -37,17 +37,17 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
     "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
-    "Partition": ("tagged", (("kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),)),
-    "StructBin": ("tagged", (("kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),)),
-    "Filter": ("tagged", (("kind", {"grayscale": ("object", {"kind": ("kind", None), "amount": ("amount", None)}), "luminanceToAlpha": ("object", {"kind": ("kind", None)})}),)),
-    "Tile": ("tagged", (("kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "voronoi": ("object", {"kind": ("kind", None), "seed": ("seed", None)})}),)),
-    "Overlap": ("tagged", (("kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),)),
-    "Curve": ("tagged", (("kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),)),
-    "Bin": ("tagged", (("kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),)),
-    "Calendar": ("tagged", (("kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),)),
-    "Shape": ("tagged", (("kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),)),
-    "Place": ("tagged", (("kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),)),
-    "Spacing": ("tagged", (("kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),)),
+    "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),
+    "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Filter": ("tagged", "kind", {"grayscale": ("object", {"kind": ("kind", None), "amount": ("amount", None)}), "luminanceToAlpha": ("object", {"kind": ("kind", None)})}),
+    "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "voronoi": ("object", {"kind": ("kind", None), "seed": ("seed", None)})}),
+    "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
+    "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
+    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
+    "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
+    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
+    "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
+    "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),
 }
 
 
@@ -60,14 +60,15 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     type does not declare raises TypeError, as an unknown kwarg does.
     Record keys (column names,
     axis names) and values of any other type pass through unchanged. A
-    tagged union picks its branch by the dict's tag key (`kind` or `type`); a missing
+    tagged union picks its branch by the dict's tag key (`kind`); a missing
     or unknown tag raises TypeError. A channel value built by field(...) or
     datum(...) is a dict already in wire form, so it passes through too:
     that is how a `dims` entry tells a channel value from an interval.
+    So does a value of a named type's class (a LengthValue from percent(n)).
     """
     if shape is None or value is None:
         return value
-    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):
+    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue, _ast.ChunkKey, _ast.FieldPredicate, _ast.LengthValue, _ast.StructAccessor)):
         return value
     kind = shape[0]
     if kind == "ref":
@@ -94,16 +95,14 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     if kind == "tagged":
         if not isinstance(value, dict):
             return value
-        for tag, branches in shape[1]:
-            if tag in value:
-                branch = value[tag]
-                if not isinstance(branch, str) or branch not in branches:
-                    expected = ", ".join(map(repr, branches))
-                    raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")
-                return _to_wire(branches[branch], value, path)
-        missing = " or ".join(repr(tag) for tag, _ in shape[1])
-        expected = "; ".join(f"{tag!r} to be one of {', '.join(map(repr, branches))}" for tag, branches in shape[1])
-        raise TypeError(f"{path} is missing the key {missing}; expected {expected}")
+        tag, branches = shape[1], shape[2]
+        expected = ", ".join(map(repr, branches))
+        if tag not in value:
+            raise TypeError(f"{path} is missing the key {tag!r}; expected {tag!r} to be one of {expected}")
+        branch = value[tag]
+        if not isinstance(branch, str) or branch not in branches:
+            raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")
+        return _to_wire(branches[branch], value, path)
     if kind == "record":
         if not isinstance(value, dict):
             return value
@@ -692,7 +691,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("tagged", (("type", {"length": ("ref", "Length")}), ("kind", {"box": ("ref", "Spacing"), "pitch": ("ref", "Spacing")}),)), spacing, "spacing")),
+        ("spacing", _to_wire(("ref", "Spacing"), spacing, "spacing")),
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),
@@ -992,7 +991,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("tagged", (("type", {"length": ("ref", "Length")}), ("kind", {"box": ("ref", "Spacing"), "pitch": ("ref", "Spacing")}),)), spacing, "spacing")),
+        ("spacing", _to_wire(("ref", "Spacing"), spacing, "spacing")),
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),

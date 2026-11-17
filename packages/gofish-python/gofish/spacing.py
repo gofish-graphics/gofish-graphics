@@ -11,13 +11,10 @@ camelCase wire keys.
 Mirrors JS ``gofish-graphics/spacing``.
 """
 
-from __future__ import annotations
-
 import math
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import Any, Dict, Optional
 
-if TYPE_CHECKING:
-    from .ast import LengthValue
+from .ast import LengthValue
 
 __all__ = ["box", "pitch"]
 
@@ -31,7 +28,7 @@ def box(gap: float | LengthValue, /) -> Dict[str, Any]:
     if isinstance(gap, (int, float)) and not isinstance(gap, bool):
         if math.isnan(gap):
             raise ValueError(f"Spacing.box(gap) must not be NaN, got {gap!r}")
-    elif isinstance(gap, dict):
+    elif isinstance(gap, LengthValue):
         pass
     else:
         raise TypeError(f"Spacing.box(gap) must be a number or a LengthValue, got {type(gap).__name__}")
@@ -54,7 +51,7 @@ def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None) -> Dict
     if isinstance(distance, (int, float)) and not isinstance(distance, bool):
         if math.isnan(distance):
             raise ValueError(f"Spacing.pitch(distance) must not be NaN, got {distance!r}")
-    elif isinstance(distance, dict):
+    elif isinstance(distance, LengthValue):
         pass
     else:
         raise TypeError(f"Spacing.pitch(distance) must be a number or a LengthValue, got {type(distance).__name__}")

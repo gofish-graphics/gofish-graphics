@@ -950,21 +950,25 @@ by column name, the axis names of `dims`) are never renamed, and a field
 typed `any` (`color=Color.palette({...})` keyed by category, `coord`) passes
 through whole. A channel value built by `field(...)` or `datum(...)` is a
 dict already in wire form, so `_to_wire` passes it through by its class
-wherever it appears. That is how a `dims` entry works: `field("x")` passes
+wherever it appears, and so is a value of any named type with a Python class
+(the `pyClass` of an `OPTION_TYPES` or `AUTHORED_REFS` entry: a
+`LengthValue` from `percent(n)` or `fr(k)`, a `FieldPredicate`); the
+generator lists those classes in `_to_wire`'s `isinstance` test. That is how a `dims` entry works: `field("x")` passes
 through, and any other dict is an interval whose keys are checked
 (`dims={"theta": {"width": 2}}` is a `TypeError`). Two rules keep this
 honest. A union may have only one branch that a dict could match (a channel
-branch does not count, for the reason just given), or generation fails,
-since `_to_wire` would have to guess. The one exception is a tagged union: when every dict branch is an
-object whose `kind` or `type` field is a literal or enum, and no two branches
-share a value of that field (a strategy family: treemap's `tile`, `{kind: "squarify",
+branch does not count, for the reason just given, nor does a branch whose type
+has a Python class when another branch takes dicts), or generation fails,
+since `_to_wire` would have to guess. So spread's `spacing`, a number, a
+length or a `Spacing`, routes a plain dict as a `Spacing`, and a
+`LengthValue` passes through by its class; a length written by hand as a
+plain dict is a `TypeError` there. The one exception is a tagged union: when every dict branch is an
+object whose `kind` field is a literal or enum, and no two branches share a
+`kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
-`("tagged", ((tag_key, {tag_value: branch_shape}), ...))` shape, one entry per
-tag field, and `_to_wire` picks the branch by the first tag key the dict has.
-Two tag fields meet in spread's `spacing`, which takes a length
-(`{type: "length", percent}`) or a `Spacing` strategy (`{kind: "pitch", ...}`).
-A dict with no tag key, an unknown tag value, or a key that branch does not
-declare (`ratio` on `slice`) is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
+`("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
+the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
+branch does not declare (`ratio` on `slice`), is a `TypeError`. And a `t.ref` must name either an `OPTION_TYPES` entry or one of the
 few refs the generator lists as already in wire form (today
 `FieldAccessor`, built by `field(...)`, and `ChunkKey`, built by `chunk(...)`), or generation fails, so a new nested
 type has to be declared before Python can take it.
