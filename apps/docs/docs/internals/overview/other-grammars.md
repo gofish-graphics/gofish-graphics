@@ -111,7 +111,6 @@ same stuff.
 | PICCL         | pictorial composition and snap-based constraints (aspirational; see the essay) |
 | Bluefish      | relations, named refs, local-propagation layout                                |
 | GHC / Lean    | a small typed core under a large surface                                       |
-| Mojo          | built-ins written as library code in the language itself (aspirational)        |
 | React/SwiftUI | components, composition, declarative layout                                    |
 | Solid         | reactive runtime (GoFish renders through SolidJS)                              |
 
