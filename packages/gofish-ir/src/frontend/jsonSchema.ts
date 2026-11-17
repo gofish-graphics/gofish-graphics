@@ -26,7 +26,7 @@
 import {
   CHART_OPTIONS,
   CONSTRAINTS,
-  constraintOptionsRequired,
+  optionsRequired,
   LABEL_OPTIONS,
   LEAF_MARKS,
   MARK_BASE_FIELDS,
@@ -34,6 +34,7 @@ import {
   OPTION_TYPES,
   resolveFields,
   t,
+  type ConstructDescriptor,
   type FieldGroup,
   type FieldType,
 } from "./descriptors.js";
@@ -132,6 +133,12 @@ function fieldsToProperties(fields: FieldGroup): {
   return { properties, required };
 }
 
+/** A construct's `requireOneOf`, as an `anyOf` of `required`. */
+const requireOneOfSchema = (d: ConstructDescriptor) =>
+  d.requireOneOf
+    ? { anyOf: d.requireOneOf.map((k) => ({ required: [k] })) }
+    : {};
+
 const pascalCase = (s: string): string =>
   s.replace(/(^|[-_])([a-z])/g, (_m, _sep, c: string) => c.toUpperCase());
 
@@ -157,6 +164,7 @@ function buildOperatorDefs(): Record<string, unknown> {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
       type: "object",
       required: ["type", ...required],
+      ...requireOneOfSchema(descriptor),
       additionalProperties: true,
       properties: {
         type: { const: descriptor.type },
@@ -204,6 +212,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
       type: "object",
       required: ["type"],
+      ...requireOneOfSchema(descriptor),
       additionalProperties: true,
       properties: {
         type: { const: descriptor.type },
@@ -241,10 +250,12 @@ function buildConstraintDefs(): Record<string, unknown> {
   const refs: Record<string, unknown>[] = [];
   for (const descriptor of Object.values(CONSTRAINTS)) {
     const defName = `${pascalCase(descriptor.type)}Constraint`;
-    const oneOf = descriptor.requireOneOf;
     const options = {
-      ...fieldTypeToSchema({ kind: "object", fields: descriptor.fields }),
-      ...(oneOf ? { anyOf: oneOf.map((k) => ({ required: [k] })) } : {}),
+      ...fieldTypeToSchema({
+        kind: "object",
+        fields: resolveFields(descriptor),
+      }),
+      ...requireOneOfSchema(descriptor),
     };
     defs[defName] = {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
@@ -252,7 +263,7 @@ function buildConstraintDefs(): Record<string, unknown> {
       required: [
         "type",
         "refs",
-        ...(constraintOptionsRequired(descriptor) ? ["options"] : []),
+        ...(optionsRequired(descriptor) ? ["options"] : []),
       ],
       properties: {
         type: { const: descriptor.type },

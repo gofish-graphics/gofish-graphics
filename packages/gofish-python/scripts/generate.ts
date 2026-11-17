@@ -74,7 +74,7 @@ import {
   pyType,
   refPyClass,
   AUTHORED_REFS,
-  CONSTRAINTS,
+  DESCRIPTOR_TABLES,
 } from "gofish-ir/frontend";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -707,17 +707,33 @@ for (const name of ["line", "ribbon", "enclose"]) {
   parts.push(renderOptsCore("_layer_opts", resolveFields(d), d.doc) + "\n");
 }
 
-// Constraint.align(refs, **options), ...: each constraint's options
-// (CONSTRAINTS). The hand-written Constraint methods in ast.py take the refs
-// first and pass their options through these cores.
-for (const d of Object.values(CONSTRAINTS)) {
-  if (Object.keys(d.fields).length === 0) continue;
+// Constraint.align(refs, **options), ...: each constraint's options (the
+// `constraint` descriptor table). The hand-written Constraint methods in
+// ast.py take the refs first and pass their options through these cores,
+// named `_<type>_constraint_opts` so a constraint never shares a name with
+// a combinator core (`position` is both).
+for (const d of Object.values(DESCRIPTOR_TABLES.constraint)) {
+  const fields = resolveFields(d);
+  if (Object.keys(fields).length === 0) continue;
   parts.push(
-    renderOptsCore(`_${d.type}_constraint_opts`, d.fields, d.doc, {
+    renderOptsCore(`_${d.type}_constraint_opts`, fields, d.doc, {
       construct: `Constraint.${pyKwarg(d.type)}`,
       requireOneOf: d.requireOneOf,
     }) + "\n"
   );
+}
+
+// Only the constraint cores above raise for `requireOneOf`; no other kind's
+// descriptor sets it yet, and one that does needs its renderer to read it.
+for (const [kind, table] of Object.entries(DESCRIPTOR_TABLES)) {
+  if (kind === "constraint") continue;
+  for (const d of Object.values(table)) {
+    if (d.requireOneOf !== undefined)
+      throw new Error(
+        `${kind} ${d.type}: requireOneOf is generated only for constraint ` +
+          `cores; teach its Python renderer to raise for it.`
+      );
+  }
 }
 
 // chart(data, **options): the chart-level options (CHART_OPTIONS).

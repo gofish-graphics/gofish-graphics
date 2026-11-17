@@ -1835,7 +1835,7 @@ for the API.
       ]
     },
     "AlignConstraint": {
-      "description": "Align the operands on one or both axes. At least one of `x`, `y` is required.",
+      "description": "Align the refs on one or both axes.",
       "type": "object",
       "required": ["type", "refs", "options"],
       "properties": {
@@ -1857,7 +1857,7 @@ for the API.
                   }
                 }
               ],
-              "description": "How the operands line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every operand, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per operand."
+              "description": "How the refs line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. Omitted, x is left as it is."
             },
             "y": {
               "anyOf": [
@@ -1871,7 +1871,7 @@ for the API.
                   }
                 }
               ],
-              "description": "How the operands line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every operand, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per operand."
+              "description": "How the refs line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. Omitted, y is left as it is."
             }
           },
           "anyOf": [
@@ -1892,7 +1892,7 @@ for the API.
       }
     },
     "DistributeConstraint": {
-      "description": "Lay the operands out one after another along `dir`.",
+      "description": "Lay the refs out one after another along `dir`.",
       "type": "object",
       "required": ["type", "refs", "options"],
       "properties": {
@@ -1904,7 +1904,7 @@ for the API.
           "properties": {
             "dir": {
               "enum": ["x", "y"],
-              "description": "The axis to lay the operands out along."
+              "description": "The axis to lay the refs out along."
             },
             "spacing": {
               "anyOf": [
@@ -1918,17 +1918,17 @@ for the API.
                   "$ref": "#/$defs/Spacing"
                 }
               ],
-              "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)` or `Spacing.pitch(distance, { at })`. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope.",
+              "description": "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
               "default": 8
             },
             "order": {
               "enum": ["forward", "reverse"],
-              "description": "The order the operands are laid out in.",
+              "description": "The order the refs are laid out in.",
               "default": "forward"
             },
             "glue": {
               "type": "boolean",
-              "description": "Stack semantics: the operands are glued together and their sizes sum; spacing is 0.",
+              "description": "Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis.",
               "default": false
             }
           },
@@ -1943,7 +1943,7 @@ for the API.
       }
     },
     "PositionConstraint": {
-      "description": "Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.",
+      "description": "Place the refs at an x and/or y coordinate.",
       "type": "object",
       "required": ["type", "refs", "options"],
       "properties": {
@@ -1993,7 +1993,7 @@ for the API.
                   ]
                 }
               ],
-              "description": "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them."
+              "description": "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers."
             },
             "y": {
               "anyOf": [
@@ -2035,11 +2035,11 @@ for the API.
                   ]
                 }
               ],
-              "description": "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them."
+              "description": "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers."
             },
             "anchor": {
               "enum": ["start", "middle", "end", "baseline"],
-              "description": "Which point of the operand lands on a point coordinate.",
+              "description": "Which point of the ref lands on a point coordinate. \"baseline\" is the ref's origin, its local 0.",
               "default": "middle"
             }
           },
@@ -2061,7 +2061,7 @@ for the API.
       }
     },
     "NestConstraint": {
-      "description": "Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.",
+      "description": "Nest the inner ref in the outer one (`refs: [outer, inner]`) with padding on each given axis.",
       "type": "object",
       "required": ["type", "refs", "options"],
       "properties": {
@@ -2073,11 +2073,11 @@ for the API.
           "properties": {
             "x": {
               "$ref": "#/$defs/Number",
-              "description": "Padding on x, in pixels."
+              "description": "Padding on x, in pixels. Omitted, x is not constrained."
             },
             "y": {
               "$ref": "#/$defs/Number",
-              "description": "Padding on y, in pixels."
+              "description": "Padding on y, in pixels. Omitted, y is not constrained."
             }
           },
           "anyOf": [
@@ -2098,7 +2098,7 @@ for the API.
       }
     },
     "ZAboveConstraint": {
-      "description": "The first operand paints in front of the second.",
+      "description": "The first ref paints in front of the second.",
       "type": "object",
       "required": ["type", "refs"],
       "properties": {
@@ -2118,7 +2118,7 @@ for the API.
       }
     },
     "ZBelowConstraint": {
-      "description": "The first operand paints behind the second.",
+      "description": "The first ref paints behind the second.",
       "type": "object",
       "required": ["type", "refs"],
       "properties": {

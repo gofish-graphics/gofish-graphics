@@ -1542,7 +1542,15 @@ async function main() {
     const kinds = Object.keys(
       Frontend.DESCRIPTOR_TABLES
     ) as Frontend.ConstructKind[];
-    const tables = kinds.map((kind) => Frontend.DESCRIPTOR_TABLES[kind]);
+    // A constraint is its own namespace (`position` is also a combinator),
+    // rebuilt from CONSTRAINT_FACTORIES, never from FACTORIES.
+    const factoryOf = (kind: Frontend.ConstructKind, type: string) =>
+      kind === "constraint"
+        ? (Serialize.CONSTRAINT_FACTORIES as Record<string, unknown>)[type]
+        : Serialize.FACTORIES[type];
+    const tables = kinds
+      .filter((kind) => kind !== "constraint")
+      .map((kind) => Frontend.DESCRIPTOR_TABLES[kind]);
     const missing: string[] = [];
     for (const kind of kinds) {
       for (const type of Object.keys(Frontend.DESCRIPTOR_TABLES[kind])) {
@@ -1550,7 +1558,7 @@ async function main() {
         const built =
           kind === "operator" &&
           Object.hasOwn(Serialize.OPERATOR_BUILDERS, type);
-        if (!built && typeof Serialize.FACTORIES[type] !== "function") {
+        if (!built && typeof factoryOf(kind, type) !== "function") {
           missing.push(`${kind} ${type}`);
         }
       }
@@ -1569,6 +1577,14 @@ async function main() {
       orphans.length === 0,
       orphans.join(", ")
     );
+    const orphanConstraints = Object.keys(
+      Serialize.CONSTRAINT_FACTORIES
+    ).filter((type) => !Object.hasOwn(Frontend.CONSTRAINTS, type));
+    check(
+      "every constraint factory has a constraint descriptor",
+      orphanConstraints.length === 0,
+      orphanConstraints.join(", ")
+    );
     const orphanBuilders = Object.keys(Serialize.OPERATOR_BUILDERS).filter(
       (type) => !Object.hasOwn(Frontend.OPERATORS, type)
     );
@@ -1576,6 +1592,87 @@ async function main() {
       "every hand-written operator builder has an operator descriptor",
       orphanBuilders.length === 0,
       orphanBuilders.join(", ")
+    );
+    // Each constraint kind round-trips through the registry: a document with
+    // one such clause validates, and rebuilds and lays out.
+    const withClause = (
+      clause: Record<string, unknown>,
+      // nest sizes its outer ref from its inner one.
+      outer: Record<string, unknown> = { w: 10, h: 20 }
+    ) => ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "layer",
+        __combinator: true,
+        options: {},
+        children: [
+          { type: "rect", ...outer, name: "a" },
+          { type: "rect", w: 30, h: 40, name: "b" },
+        ],
+        relate: {
+          scope: "r1",
+          clauses: [
+            {
+              ...clause,
+              refs: [
+                { type: "ref", selection: "a", scope: "r1" },
+                { type: "ref", selection: "b", scope: "r1" },
+              ],
+            },
+          ],
+        },
+      },
+    });
+    const CLAUSES: Record<string, Record<string, unknown>> = {
+      align: { type: "align", options: { y: "middle" } },
+      distribute: { type: "distribute", options: { dir: "x", spacing: 4 } },
+      position: { type: "position", options: { x: 5, y: 0 } },
+      nest: { type: "nest", options: { x: 2 } },
+      zAbove: { type: "zAbove" },
+      zBelow: { type: "zBelow" },
+    };
+    check(
+      "the round-trip clauses cover every constraint kind",
+      JSON.stringify(Object.keys(CLAUSES).sort()) ===
+        JSON.stringify(Object.keys(Frontend.CONSTRAINTS).sort())
+    );
+    for (const [type, clause] of Object.entries(CLAUSES)) {
+      const doc = withClause(clause, type === "nest" ? { h: 20 } : undefined);
+      const valid = Frontend.validate(doc as any);
+      let drawn = "";
+      try {
+        const dl = await (Serialize.buildIR(doc as any) as any).toDisplayList(
+          {}
+        );
+        drawn = JSON.stringify(dl).includes('"rect"') ? "ok" : "no rects";
+      } catch (e) {
+        drawn = (e as Error).message;
+      }
+      check(
+        `a ${type} constraint validates, rebuilds and lays out`,
+        valid.valid && drawn === "ok",
+        JSON.stringify({ errors: (valid as any).errors, drawn })
+      );
+      const spec = Serialize.rebuild(
+        "constraint",
+        type,
+        (clause.options ?? {}) as Record<string, any>,
+        { children: [{}, {}] }
+      );
+      check(
+        `rebuild("constraint", "${type}") is a ${type} constraint`,
+        spec?.type === type,
+        JSON.stringify(spec?.type)
+      );
+    }
+    check(
+      'rebuild("constraint", "position") is the constraint, not the combinator',
+      Serialize.rebuild("constraint", "position", { x: 5 }, { children: [{}] })
+        .type === "position" &&
+        Serialize.rebuild("combinator-mark", "position", { x: 5 }, {
+          children: [],
+        })?.type !== "position"
     );
     // geo takes its projection positionally and the rest as options.
     const geoWindow: { lon: [number, number]; lat: [number, number] } = {

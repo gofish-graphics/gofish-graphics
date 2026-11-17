@@ -19,7 +19,10 @@
  */
 
 import {
+  COMBINATOR_MARKS,
   CONSTRAINTS,
+  DESCRIPTOR_TABLES,
+  acceptedFields,
   LABEL_OPTIONS,
   OPERATORS,
   OPTION_TYPES,
@@ -431,12 +434,11 @@ check(
   JSON.stringify(Object.keys(CONSTRAINTS).sort()) ===
     JSON.stringify(Object.keys(SCHEMA_CONSTRAINT_KEYS).sort())
 );
-for (const [key, d] of Object.entries(CONSTRAINTS)) {
-  check(`CONSTRAINTS.${key}.type === "${key}"`, d.type === key, d.type);
-}
 for (const [type, keys] of Object.entries(SCHEMA_CONSTRAINT_KEYS)) {
   const schemaKeys = Object.keys(keys).sort();
-  const descriptorKeys = Object.keys(CONSTRAINTS[type]?.fields ?? {}).sort();
+  const descriptorKeys = Object.keys(
+    acceptedFields("constraint", type) ?? {}
+  ).sort();
   check(
     `${type}: CONSTRAINTS fields === ConstraintIR options keys`,
     JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
@@ -447,6 +449,32 @@ check(
   "distribute's spacing is spread's spacing type",
   CONSTRAINTS.distribute.fields.spacing.type ===
     OPERATORS.spread.fields.spacing.type
+);
+
+console.log("\n# Every descriptor table, by kind");
+for (const [kind, table] of Object.entries(DESCRIPTOR_TABLES)) {
+  for (const [key, d] of Object.entries(table)) {
+    check(
+      `${kind} ${key}: its key is its type and its kind is its table's`,
+      d.type === key && d.kind === kind,
+      JSON.stringify({ type: d.type, kind: d.kind })
+    );
+    for (const k of d.requireOneOf ?? [])
+      check(
+        `${kind} ${key}: requireOneOf names its field ${k}`,
+        Object.hasOwn(resolveFields(d), k)
+      );
+  }
+}
+check(
+  "the position constraint and the position combinator are two descriptors",
+  DESCRIPTOR_TABLES.constraint.position !== COMBINATOR_MARKS.position &&
+    DESCRIPTOR_TABLES.constraint.position.kind === "constraint" &&
+    COMBINATOR_MARKS.position.kind === "combinator-mark" &&
+    JSON.stringify(Object.keys(acceptedFields("constraint", "position")!)) !==
+      JSON.stringify(
+        Object.keys(acceptedFields("combinator-mark", "position")!)
+      )
 );
 
 console.log(`\n${passed} passed, ${failed} failed`);

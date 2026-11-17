@@ -39,12 +39,14 @@ import {
   AUTHORED_REFS,
   BIN_KINDS,
   CONSTRAINTS,
-  constraintOptionsRequired,
+  DESCRIPTOR_TABLES,
+  optionsRequired,
   taggedBranches,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
   isFlowStepMark,
+  type NodeKind,
   MARK_BASE_FIELDS,
   t,
   type FieldGroup,
@@ -726,6 +728,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     acceptedFields("operator", node.type) ?? {},
     ["type", "origin", "meta"]
   );
+  walkRequireOneOf("operator", node.type, node, path, ctx);
 }
 
 /** `SelectRefIR`: `{ type: "select", layer, mode? }`, the nodes of a named
@@ -1256,22 +1259,7 @@ function walkCombinatorMark(
       message: `combinator mark type must be one of ${COMBINATOR_MARK_TYPES.join(", ")}`,
     });
   }
-  optionalField(node, "options", path, ctx, (v, p) => {
-    if (!isObject(v)) {
-      ctx.errors.push({
-        path: p,
-        message: `expected object, got ${typeNameOf(v)}`,
-      });
-      return;
-    }
-    walkDescriptorFields(
-      v,
-      p,
-      ctx,
-      acceptedFields("combinator-mark", node.type as string) ?? {},
-      []
-    );
-  });
+  walkNestedOptions("combinator-mark", node, path, ctx);
   expectField(node, "children", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkMark)
   );
@@ -1300,6 +1288,7 @@ function walkLeafMark(
     acceptedFields("leaf-mark", node.type as string) ?? {},
     []
   );
+  walkRequireOneOf("leaf-mark", node.type, node, path, ctx);
 }
 
 /** One entry of a `LabelIR` array — the shape a single `.label(accessor,
@@ -1413,36 +1402,63 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
       });
     }
   });
-  walkDescriptorFields(node, path, ctx, CONSTRAINT_OPTIONS[t], [
-    "type",
-    "refs",
-  ]);
-  const oneOf = CONSTRAINTS[t].requireOneOf;
+  walkNestedOptions("constraint", node, path, ctx);
+  rejectUnknown(node, ["type", "refs", "options"], path, ctx);
+}
+
+/** The `options` of a construct that nests its options there (a combinator
+ *  mark, a constraint), checked against `acceptedFields(kind, type)`. They
+ *  may be left out unless a field is required (`optionsRequired`). */
+function walkNestedOptions(
+  kind: "combinator-mark" | "constraint",
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  const type = node.type as string;
+  const d = Object.hasOwn(DESCRIPTOR_TABLES[kind], type)
+    ? DESCRIPTOR_TABLES[kind][type]
+    : undefined;
+  if (node.options === undefined || node.options === null) {
+    if (d !== undefined && optionsRequired(d))
+      ctx.errors.push({
+        path: `${path}.options`,
+        message: 'required field "options" is missing',
+      });
+    return;
+  }
   const options = node.options;
-  if (
-    oneOf !== undefined &&
-    isObject(options) &&
-    oneOf.every((k) => options[k] === undefined)
-  ) {
+  const p = `${path}.options`;
+  if (!isObject(options)) {
     ctx.errors.push({
-      path: `${path}.options`,
-      message: `${t} options must specify at least one of ${oneOf.join(", ")}`,
+      path: p,
+      message: `expected object, got ${typeNameOf(options)}`,
+    });
+    return;
+  }
+  walkDescriptorFields(options, p, ctx, acceptedFields(kind, type) ?? {}, []);
+  walkRequireOneOf(kind, type, options, p, ctx);
+}
+
+/** A construct's `requireOneOf`: its options give at least one of those
+ *  fields. */
+function walkRequireOneOf(
+  kind: NodeKind,
+  type: unknown,
+  options: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  if (typeof type !== "string" || !Object.hasOwn(DESCRIPTOR_TABLES[kind], type))
+    return;
+  const oneOf = DESCRIPTOR_TABLES[kind][type].requireOneOf;
+  if (oneOf !== undefined && oneOf.every((k) => options[k] === undefined)) {
+    ctx.errors.push({
+      path,
+      message: `${type} options must specify at least one of ${oneOf.join(", ")}`,
     });
   }
 }
-
-/** Each constraint's `options`, as its CONSTRAINTS entry declares them. */
-const CONSTRAINT_OPTIONS: Record<string, FieldGroup> = Object.fromEntries(
-  Object.entries(CONSTRAINTS).map(([type, d]) => [
-    type,
-    {
-      options: {
-        type: { kind: "object", fields: d.fields },
-        required: constraintOptionsRequired(d),
-      },
-    },
-  ])
-);
 
 function walkBaseFields(
   node: Record<string, unknown>,

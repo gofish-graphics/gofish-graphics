@@ -125,11 +125,8 @@ one of `x` / `y` must be given.
 Constraint.align(refs, *, x=None, y=None)
 ```
 
-| Parameter | Type                 | Description                                                   |
-| --------- | -------------------- | ------------------------------------------------------------- |
-| `refs`    | `list[Ref]`          | The refs to align (the kwargs from the callback).             |
-| `x`       | `str` \| `list[str]` | Edge/center/origin to align on x (omit to leave x untouched). |
-| `y`       | `str` \| `list[str]` | Edge/center/origin to align on y.                             |
+::: gofish-ref Constraint.align
+:::
 
 The anchor is `"start" | "middle" | "end" | "baseline"`. The first three
 anchor a ref by its bounding-box edge or center. `"baseline"` anchors a ref by
@@ -207,12 +204,8 @@ Stacks a set of refs end-to-end along an axis, with optional spacing.
 Constraint.distribute(refs, *, dir, spacing=None, order=None, glue=None)
 ```
 
-| Parameter | Type                               | Default     | Description                                                                                                                                                                                                                                                                     |
-| --------- | ---------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`     | `"x"` \| `"y"`                     | —           | **Required.** Axis to distribute along.                                                                                                                                                                                                                                         |
-| `spacing` | `float` \| `LengthValue` \| `dict` | `8`         | How far apart successive elements are: a [`Spacing`](/python/api/spacing) value, `Spacing.box(gap)` between facing edges or `Spacing.pitch(distance, at=...)` between the same point on each element. A bare amount is `Spacing.box(amount)`. Forced to `0` when `glue` is set. |
-| `order`   | `"forward"` \| `"reverse"`         | `"forward"` | Order to place elements.                                                                                                                                                                                                                                                        |
-| `glue`    | `bool`                             | `False`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis.                                                                                                                                                                                   |
+::: gofish-ref Constraint.distribute
+:::
 
 The first already-placed ref acts as an anchor; unplaced refs after it are
 distributed forward, and those before it backward so they stack flush.
@@ -272,11 +265,8 @@ its value rather than assuming uniform spacing.
 Constraint.position(refs, *, x=None, y=None, anchor=None)
 ```
 
-| Parameter | Type             | Default    | Description                                                                                                             |
-| --------- | ---------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `x`       | `int` \| `datum` | —          | x coordinate — literal pixel or `datum(n)` (scaled).                                                                    |
-| `y`       | `int` \| `datum` | —          | y coordinate — literal pixel or `datum(n)` (scaled).                                                                    |
-| `anchor`  | `str`            | `"middle"` | Which anchor of the ref lands on the coordinate (`"start"`, `"middle"`, `"end"`, or `"baseline"` for the ref's origin). |
+::: gofish-ref Constraint.position
+:::
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.
@@ -327,11 +317,8 @@ centered inside `outer` there.
 Constraint.nest(refs, *, x=None, y=None)
 ```
 
-| Parameter | Type    | Description                                                 |
-| --------- | ------- | ----------------------------------------------------------- |
-| `refs`    | `list`  | Exactly `[outer, inner]` — outer nests inner.               |
-| `x`       | `float` | Per-axis padding (px) on x (omit to leave x unconstrained). |
-| `y`       | `float` | Per-axis padding (px) on y (omit to leave y unconstrained). |
+::: gofish-ref Constraint.nest
+:::
 
 At least one of `x` / `y` must be given; `refs` must be exactly two. Padding is
 always known — the unknown per axis is _which_ side is derived, resolved from

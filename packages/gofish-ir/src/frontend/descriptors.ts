@@ -284,7 +284,8 @@ export type ConstructKind =
   | "operator"
   | "leaf-mark"
   | "combinator-mark"
-  | "coord";
+  | "coord"
+  | "constraint";
 
 export interface ConstructDescriptor {
   /** The wire discriminator (the node's `type` tag). */
@@ -305,6 +306,10 @@ export interface ConstructDescriptor {
    *  `.flow(...)` step (`enclose`): there its IR is the mark's own, and the
    *  step applies the mark to each group's subtree. */
   flowStep?: boolean;
+  /** Fields of which a value must give at least one (`["x", "y"]` for
+   *  `Constraint.align`). The validator, the JSON Schema, the Python option
+   *  cores and the docs' options tables read it. */
+  requireOneOf?: readonly string[];
 }
 
 /** Merge a descriptor's included groups and own fields into one flat map.
@@ -327,6 +332,7 @@ const operator = makeDef("operator");
 const leafMark = makeDef("leaf-mark");
 const combinatorMark = makeDef("combinator-mark");
 const coordTransform = makeDef("coord");
+const constraint = makeDef("constraint");
 
 // ---------------------------------------------------------------------------
 // Structural base fields — every node of a given family carries these.
@@ -2636,27 +2642,6 @@ export const COORDS: Record<string, ConstructDescriptor> = {
 // Constraints: the clauses of a `.relate()` callback (`Constraint.align`, ...)
 // ---------------------------------------------------------------------------
 
-/** A constraint over the operands of a `.relate()` call. On the wire it is
- *  `{ type, options?, refs }` (`ConstraintIR` in schema.ts): `fields` are the
- *  keys of its `options`, which the validator checks and the Python
- *  generator builds `_<type>_constraint_opts` from. */
-export interface ConstraintDescriptor {
-  /** The wire discriminator (the constraint's `type` tag). */
-  type: string;
-  doc?: string;
-  /** The keys of the constraint's `options`. */
-  fields: FieldGroup;
-  /** Options that must hold at least one of these keys (`["x", "y"]` for
-   *  an axis-wise constraint). */
-  requireOneOf?: readonly string[];
-}
-
-/** Whether a constraint's `options` must be on the wire: when one of its
- *  fields is required, or at least one of some keys is. */
-export const constraintOptionsRequired = (d: ConstraintDescriptor): boolean =>
-  d.requireOneOf !== undefined ||
-  Object.values(d.fields).some((f) => f.required);
-
 /** An axis of `Constraint.align`: one anchor or interval statistic for every
  *  operand, or one anchor per operand. */
 const alignAxis = (axis: string): FieldSpec => ({
@@ -2664,7 +2649,7 @@ const alignAxis = (axis: string): FieldSpec => ({
     t.enum(...ALIGN_ANCHORS, "span", "size"),
     t.array(t.enum(...ALIGN_ANCHORS))
   ),
-  doc: `How the operands line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.`,
+  doc: `How the refs line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, ${axis} is left as it is.`,
 });
 
 /** A coordinate of `Constraint.position`: a pixel or a `datum(v)`. */
@@ -2674,80 +2659,83 @@ const POSITION_POINT: FieldType = t.union(t.number, t.ref("DatumValue"));
  *  of two points. */
 const positionAxis = (axis: string): FieldSpec => ({
   type: t.union(POSITION_POINT, t.tuple(POSITION_POINT, POSITION_POINT)),
-  doc: `A pixel or \`datum(v)\` coordinate on ${axis}, or an interval \`[lo, hi]\` of them.`,
+  doc: `A pixel or \`datum(v)\` coordinate on ${axis}, or an interval \`[lo, hi]\` of them. Only a datum feeds the scale the layer infers.`,
 });
 
-/** Every constraint that crosses the wire, by its `type` tag. JS-only
- *  options that no producer writes to the IR (distribute's `measure`,
- *  `hasOrder` and `origin`, which spread sets; position's `region`,
- *  `override` and `in`, which partition, scatter and chrome set) are not
- *  declared, so a document that holds one is rejected. */
-export const CONSTRAINTS: Record<string, ConstraintDescriptor> = {
-  align: {
-    type: "align",
-    doc: "Align the operands on one or both axes. At least one of `x`, `y` is required.",
+/** Every constraint that crosses the wire, by its `type` tag: the clauses
+ *  of a `.relate()` callback. On the wire a constraint is
+ *  `{ type, options?, refs }` (`ConstraintIR` in schema.ts), so, as a
+ *  combinator mark's, its fields sit under `options`. JS-only options that
+ *  no producer writes to the IR (distribute's `measure`, `hasOrder` and
+ *  `origin`, which spread sets; position's `region`, `override` and `in`,
+ *  which partition, scatter and chrome set) are not declared, so a document
+ *  that holds one is rejected. */
+export const CONSTRAINTS: Record<string, ConstructDescriptor> = {
+  align: constraint("align", {
+    doc: "Align the refs on one or both axes.",
     fields: { x: alignAxis("x"), y: alignAxis("y") },
     requireOneOf: ["x", "y"],
-  },
-  distribute: {
-    type: "distribute",
-    doc: "Lay the operands out one after another along `dir`.",
+  }),
+  distribute: constraint("distribute", {
+    doc: "Lay the refs out one after another along `dir`.",
     fields: {
       dir: {
         type: t.enum("x", "y"),
         required: true,
-        doc: "The axis to lay the operands out along.",
+        doc: "The axis to lay the refs out along.",
       },
       spacing: {
         type: SPACING_TYPE,
         default: 8,
-        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)` or `Spacing.pitch(distance, { at })`. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope.",
+        doc: "How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0.",
       },
       order: {
         type: t.enum("forward", "reverse"),
         default: "forward",
-        doc: "The order the operands are laid out in.",
+        doc: "The order the refs are laid out in.",
       },
       glue: {
         type: t.boolean,
         default: false,
-        doc: "Stack semantics: the operands are glued together and their sizes sum; spacing is 0.",
+        doc: "Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis.",
       },
     },
-  },
-  position: {
-    type: "position",
-    doc: "Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.",
+  }),
+  position: constraint("position", {
+    doc: "Place the refs at an x and/or y coordinate.",
     fields: {
       x: positionAxis("x"),
       y: positionAxis("y"),
       anchor: {
         type: t.enum(...ALIGN_ANCHORS),
         default: "middle",
-        doc: "Which point of the operand lands on a point coordinate.",
+        doc: 'Which point of the ref lands on a point coordinate. "baseline" is the ref\'s origin, its local 0.',
       },
     },
     requireOneOf: ["x", "y"],
-  },
-  nest: {
-    type: "nest",
-    doc: "Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.",
+  }),
+  nest: constraint("nest", {
+    doc: "Nest the inner ref in the outer one (`refs: [outer, inner]`) with padding on each given axis.",
     fields: {
-      x: { type: t.number, doc: "Padding on x, in pixels." },
-      y: { type: t.number, doc: "Padding on y, in pixels." },
+      x: {
+        type: t.number,
+        doc: "Padding on x, in pixels. Omitted, x is not constrained.",
+      },
+      y: {
+        type: t.number,
+        doc: "Padding on y, in pixels. Omitted, y is not constrained.",
+      },
     },
     requireOneOf: ["x", "y"],
-  },
-  zAbove: {
-    type: "zAbove",
-    doc: "The first operand paints in front of the second.",
+  }),
+  zAbove: constraint("zAbove", {
+    doc: "The first ref paints in front of the second.",
     fields: {},
-  },
-  zBelow: {
-    type: "zBelow",
-    doc: "The first operand paints behind the second.",
+  }),
+  zBelow: constraint("zBelow", {
+    doc: "The first ref paints behind the second.",
     fields: {},
-  },
+  }),
 };
 
 // ---------------------------------------------------------------------------
@@ -2756,7 +2744,11 @@ export const CONSTRAINTS: Record<string, ConstraintDescriptor> = {
 // overlap (spread/stack/scatter/group/table/line/ribbon appear as both an
 // operator and a combinator mark — the `__combinator` flag disambiguates on
 // the wire, exactly as schema.ts's `CombinatorMarkIR` doc explains). Coord
-// transforms are a separate namespace (chart `options.coord`), not merged in.
+// transforms are a separate namespace (chart `options.coord`), and so are
+// constraints (a `.relate()` clause): `position` is both a combinator mark
+// and a constraint, two constructs, so a constraint is only ever looked up
+// by its kind (`DESCRIPTOR_TABLES.constraint`, `acceptedFields("constraint",
+// type)`), never by its bare type.
 // ---------------------------------------------------------------------------
 
 export const ALL_OPERATOR_DESCRIPTORS: readonly ConstructDescriptor[] =
@@ -2767,6 +2759,8 @@ export const ALL_COMBINATOR_MARK_DESCRIPTORS: readonly ConstructDescriptor[] =
   Object.values(COMBINATOR_MARKS);
 export const ALL_COORD_DESCRIPTORS: readonly ConstructDescriptor[] =
   Object.values(COORDS);
+export const ALL_CONSTRAINT_DESCRIPTORS: readonly ConstructDescriptor[] =
+  Object.values(CONSTRAINTS);
 
 /** Every descriptor table, by the kind of construct it declares. */
 export const DESCRIPTOR_TABLES: Readonly<
@@ -2776,6 +2770,7 @@ export const DESCRIPTOR_TABLES: Readonly<
   "leaf-mark": LEAF_MARKS,
   "combinator-mark": COMBINATOR_MARKS,
   coord: COORDS,
+  constraint: CONSTRAINTS,
 };
 
 /** The kinds of construct whose options sit on a wire node of their own (a
@@ -2787,12 +2782,22 @@ export type NodeKind = Exclude<ConstructKind, "coord">;
  *  on the wire. An operator's and a leaf mark's options are spread onto the
  *  node itself, so every base field of its family sits beside them. A
  *  combinator mark nests its options under `options`, where only
- *  COMBINATOR_OPTIONS_BASE_FIELDS ride. */
+ *  COMBINATOR_OPTIONS_BASE_FIELDS ride. A constraint nests its options under
+ *  `options` too, and none ride with them. */
 const OPTIONS_BASE_FIELDS: Readonly<Record<NodeKind, FieldGroup>> = {
   operator: OPERATOR_BASE_FIELDS,
   "leaf-mark": MARK_BASE_FIELDS,
   "combinator-mark": COMBINATOR_OPTIONS_BASE_FIELDS,
+  constraint: {},
 };
+
+/** Whether a construct's options object must be on the wire: when one of
+ *  its fields is required, or at least one of some fields is
+ *  (`requireOneOf`). Only a construct that nests its options under
+ *  `options` (a combinator mark, a constraint) can leave them out. */
+export const optionsRequired = (d: ConstructDescriptor): boolean =>
+  d.requireOneOf !== undefined ||
+  Object.values(resolveFields(d)).some((f) => f.required);
 
 const acceptedFieldsCache = new Map<string, FieldGroup>();
 

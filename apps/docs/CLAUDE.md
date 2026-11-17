@@ -143,7 +143,9 @@ single source the generated Python factory layer
   (`::: gofish-ref intersect exclude subtract atop`). An unknown name
   throws and fails the build. A name may also be an object option type in
   `OPTION_TYPES` (`descriptors.ts`): `::: gofish-ref ChartOptions` renders the
-  chart-level options. `check-api-coverage` requires an option type used on
+  chart-level options. A constraint is named as it is called,
+  `Constraint.<type>` (`::: gofish-ref Constraint.align`), since `position`
+  is both a combinator mark and a constraint. `check-api-coverage` requires an option type used on
   one language's page to appear on the other's too.
 - JS pages get the JS field names and a TS-ish type; Python pages get the snake_case
   kwarg names (`pyKwarg` in `descriptors.ts`) and a Python type. The language comes from the page's path.
@@ -154,7 +156,8 @@ single source the generated Python factory layer
   descriptor construct has a `gofish-ref` block under both `docs/js/api/` and
   `docs/python/api/`, and that every name used is a real construct. It reads the
   built table, so `pnpm --filter gofish-ir build` runs first in CI. Constructs
-  with no user-facing factory (`mark-fn`, `over`) are allowlisted in the script.
+  with no user-facing factory (`mark-fn`, `over`), and `Constraint.zAbove` /
+  `Constraint.zBelow`, which take no options, are allowlisted in the script.
 - A descriptor field marked `wireOnly: true` (a Python bridge handle, such as
   `derive`'s `lambdaId`) is on the wire but is not an option a
   user passes, so the generated table leaves it out. A positional argument the

@@ -21,7 +21,7 @@ import {
 } from "../ast/marks/chart";
 import type { AxesOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
-import { Constraint, RelateOperand } from "../ast/constraints";
+import { RelateOperand } from "../ast/constraints";
 import type {
   RelateClause,
   RelateEnv,
@@ -128,25 +128,10 @@ export function constraintFromIR(
   const operands = c.refs.map((r) =>
     relateOperandFor(r.scope, r.selection, ctx)
   );
-  // Each case passes the wire options to the factory as they are, so an
-  // option the factory's type renames or retypes is a compile error here.
-  switch (c.type) {
-    case "align":
-      return Constraint.align(c.options, operands);
-    case "distribute":
-      return Constraint.distribute(c.options, operands);
-    case "position":
-      return Constraint.position(c.options, operands);
-    case "nest":
-      return Constraint.nest(
-        c.options,
-        operands as [RelateOperand, RelateOperand]
-      );
-    case "zAbove":
-      return Constraint.zAbove(operands[0], operands[1]);
-    case "zBelow":
-      return Constraint.zBelow(operands[0], operands[1]);
-  }
+  // CONSTRAINT_FACTORIES ties each constraint's wire options to its factory.
+  return rebuild("constraint", c.type, c.options as Record<string, any>, {
+    children: operands,
+  });
 }
 
 // ---------------------------------------------------------------------------

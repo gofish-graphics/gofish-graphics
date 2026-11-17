@@ -1277,11 +1277,11 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
     return opts
 
 def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | list] = None) -> Dict[str, Any]:
-    """Align the operands on one or both axes. At least one of `x`, `y` is required.
+    """Align the refs on one or both axes.
 
     Args:
-        x: How the operands line up on x: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.
-        y: How the operands line up on y: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.
+        x: How the refs line up on x: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, x is left as it is.
+        y: How the refs line up on y: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, y is left as it is.
     """
     if x is None and y is None:
         raise ValueError("Constraint.align requires at least one of x, y")
@@ -1295,13 +1295,13 @@ def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | 
     return opts
 
 def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
-    """Lay the operands out one after another along `dir`.
+    """Lay the refs out one after another along `dir`.
 
     Args:
-        dir: The axis to lay the operands out along.
-        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)` or `Spacing.pitch(distance, { at })`. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. Default 8.
-        order: The order the operands are laid out in. Default "forward".
-        glue: Stack semantics: the operands are glued together and their sizes sum; spacing is 0. Default false.
+        dir: The axis to lay the refs out along.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
+        order: The order the refs are laid out in. Default "forward".
+        glue: Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis. Default false.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -1315,12 +1315,12 @@ def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthVal
     return opts
 
 def _position_constraint_opts(*, x: Optional[float | DatumValue | tuple] = None, y: Optional[float | DatumValue | tuple] = None, anchor: Optional[str] = None) -> Dict[str, Any]:
-    """Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.
+    """Place the refs at an x and/or y coordinate.
 
     Args:
-        x: A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them.
-        y: A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them.
-        anchor: Which point of the operand lands on a point coordinate. Default "middle".
+        x: A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers.
+        y: A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers.
+        anchor: Which point of the ref lands on a point coordinate. "baseline" is the ref's origin, its local 0. Default "middle".
     """
     if x is None and y is None:
         raise ValueError("Constraint.position requires at least one of x, y")
@@ -1335,11 +1335,11 @@ def _position_constraint_opts(*, x: Optional[float | DatumValue | tuple] = None,
     return opts
 
 def _nest_constraint_opts(*, x: Optional[float] = None, y: Optional[float] = None) -> Dict[str, Any]:
-    """Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.
+    """Nest the inner ref in the outer one (`refs: [outer, inner]`) with padding on each given axis.
 
     Args:
-        x: Padding on x, in pixels.
-        y: Padding on y, in pixels.
+        x: Padding on x, in pixels. Omitted, x is not constrained.
+        y: Padding on y, in pixels. Omitted, y is not constrained.
     """
     if x is None and y is None:
         raise ValueError("Constraint.nest requires at least one of x, y")

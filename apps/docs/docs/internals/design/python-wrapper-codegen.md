@@ -402,8 +402,10 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   entries declare `key`. The `Constraint.*` methods (`align`,
   `distribute`, `position`, `nest`) keep their refs-first signatures and
   build their options with `_<type>_constraint_opts` cores generated from
-  `CONSTRAINTS`, the table of each constraint's options. A core raises when
-  none of its entry's `requireOneOf` keys is given.
+  the `constraint` descriptor table (`CONSTRAINTS`). A core raises when
+  none of its entry's `requireOneOf` keys is given; the generator throws if
+  a descriptor of another kind sets `requireOneOf`, since no other renderer
+  reads it yet.
 
 - **Snake case keys in nested option dicts.** The keys a user types inside
   a nested option dict are in snake case too:
