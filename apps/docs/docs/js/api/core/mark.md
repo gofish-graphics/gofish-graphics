@@ -22,6 +22,54 @@ chart(data)
   .mark(rect({ h: "value" }));
 ```
 
+## Channel values {#channel-values}
+
+A mark's channels (`h`, `fill`, `text`, `x`, and the slots of `dims`) each take
+one value:
+
+| Value          | Example              | Meaning                                                                                                                                |
+| -------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| A number       | `h: 40`              | Pixels.                                                                                                                                |
+| A string       | `fill: "lake"`       | The field it names, if the rows have one. Otherwise a constant in a color or text channel, and no value in a size or position channel. |
+| `v(...)`       | `h: v(12)`           | Data: mapped through the channel's scale.                                                                                              |
+| `literal(...)` | `fill: literal("x")` | A constant: never read as a field name or mapped through a scale.                                                                      |
+| `field(...)`   | `h: field("count")`  | The field, with its pipeline (`.sum()`, `.mean()`, ...).                                                                               |
+| A function     | `fill: (d) => ...`   | Called per row. See below.                                                                                                             |
+
+A function's result means exactly what that value would mean written directly
+as the channel's value. There are three cases:
+
+- A value is read as written: a number is pixels, a string follows the string
+  rule above, `v(...)` is data, and `literal(...)` is a constant.
+- `undefined` means no value was given, so the mark keeps its default.
+- `null` is a missing data value.
+
+```ts
+// Lake B in orange, the rest in steelblue. No legend.
+rect({
+  h: "count",
+  fill: (d) => (d.lake === "Lake B" ? "orange" : "steelblue"),
+});
+
+// The rows' counts as data, the same bars as h: "count".
+rect({ h: (d) => v(d.count) });
+```
+
+A string that names a field reads the field. To avoid that rule, wrap the value
+in `v(...)`, which is always data, or `literal(...)`, which is always a
+constant:
+
+```ts
+text({ text: (d) => v(d.name) }); // the name as data, even if a column is called that
+rect({ fill: (d) => literal(d.color) }); // the color as written, never a field
+```
+
+A mark that covers several rows takes the one value its rows agree on. When
+they differ, each must be data (`v(...)`, a field name, or `null`), and the
+channel combines them as it combines a field's values: a size sums them, a
+position averages them, a color or a text takes the first. Any other mix is an
+error.
+
 ## Nested chart as a mark
 
 A mark can be a whole nested `chart(...)` — one sub-chart drawn per group (a pie

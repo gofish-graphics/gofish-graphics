@@ -423,7 +423,7 @@ chart(data, { axes: true })
   )
   // The threshold rule is a component-level annotation tier (a bare rect).
   .layer(
-    rect({ y: () => cut(), h: 3, w: 500, fill: "#333" }) // full re-run per frame
+    rect({ y: () => v(cut()), h: 3, w: 500, fill: "#333" }) // full re-run per frame
   )
   .render(container, { w: 500, h: 360 });
 ```

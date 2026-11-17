@@ -41,6 +41,7 @@ const {
   rect,
   chunk,
   Curve,
+  v,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -522,11 +523,13 @@ async function main() {
     );
   }
 
-  console.log("\n# A function fill is a field-name fill (#1097)");
+  console.log("\n# A function fill means what its value means in the channel");
 
-  // -- 9d. A field name is shorthand for an accessor, so `fill: (d) => d.g`
-  //    draws exactly what `fill: "g"` draws: one color per connector,
-  //    through the same per-group collapse and color scale. ---------------
+  // -- 9d. An accessor's value means what it would mean written in the
+  //    channel itself, so `fill: (d) => v(d.g)` draws exactly what
+  //    `fill: "g"` draws: one color per connector, through the same
+  //    per-group collapse and color scale. A plain string it returns is a
+  //    literal color, as `fill: "red"` is. --------------------------------
   {
     const data = [
       { g: "a", x: 1, y: 1 },
@@ -548,11 +551,23 @@ async function main() {
           .map((it: any) => [it.d, it.style])
       );
     const byField = await lines("g");
-    const byFn = await lines((d: { g: string }) => d.g);
+    const byFn = await lines((d: { g: string }) => v(d.g));
     check(
-      "a function fill draws the same connectors as the field-name fill",
+      "a function fill of v(...) draws the same connectors as the field-name fill",
       paint(byFn) === paint(byField) && paint(byField) !== "[]",
       `${paint(byFn)} vs ${paint(byField)}`
+    );
+    const strokesOf = (doc: any) =>
+      doc.items
+        .filter((it: any) => it.kind === "path")
+        .map((it: any) => it.style?.stroke);
+    const byName = await lines((d: { g: string }) =>
+      d.g === "a" ? "red" : "blue"
+    );
+    check(
+      "a function fill that returns a color draws that color",
+      JSON.stringify(strokesOf(byName)) === JSON.stringify(["red", "blue"]),
+      JSON.stringify(strokesOf(byName))
     );
 
     // A Python lambda arrives as a batch accessor and is resolved in one
@@ -560,7 +575,7 @@ async function main() {
     const calls: string[] = [];
     const bridge = accessorBridge((id, rows) => {
       calls.push(id);
-      return rows.map((r) => r.g);
+      return rows.map((r) => (r.g === "a" ? "red" : "blue"));
     });
     const ir = {
       type: "chart",
@@ -576,8 +591,8 @@ async function main() {
       { w: 200, h: 200 }
     );
     check(
-      "a bridged (Python) fill draws the same connectors, one call per group",
-      paint(byPython) === paint(byField) && calls.length === 2,
+      "a bridged (Python) fill draws the colors it returns, one call per group",
+      paint(byPython) === paint(byName) && calls.length === 2,
       `${paint(byPython)} / calls ${calls.length}`
     );
 
@@ -606,13 +621,13 @@ async function main() {
         { w: 200, h: 200 }
       );
     const edgeField = await edgesWith("kind");
-    const edgeFn = await edgesWith((d: { kind: string }) => d.kind);
+    const edgeFn = await edgesWith((d: { kind: string }) => v(d.kind));
     const strokes = (doc: any) =>
       doc.items
         .filter((it: any) => it.kind === "path")
         .map((it: any) => it.style?.stroke);
     check(
-      "a pairwise function stroke draws the same edges as the field name",
+      "a pairwise function stroke of v(...) draws the same edges as the field name",
       paint(edgeFn) === paint(edgeField) &&
         new Set(strokes(edgeField)).size === 2 &&
         !strokes(edgeField).includes("kind"),
@@ -629,7 +644,7 @@ async function main() {
       rect({ x: 0, y: 0, w: 10, h: 10 }).name("a"),
       rect({ x: 50, y: 50, w: 10, h: 10 }).name("b"),
     ]).relate(({ a, b }: any) => [
-      line({ fill: (d: any) => d.g } as any, [a, b]),
+      line({ fill: (d: any) => v(d.g) }, [a, b]),
     ])(undefined);
     const doc = await node.toDisplayList({ w: 100, h: 100 });
     const pathsIn = (it: any): any[] => [
@@ -657,7 +672,7 @@ async function main() {
       renderDisplayList(
         chart(data, { w: 200, h: 200 })
           .flow(spread({ by: "lake", dir: "x", spacing: 50 }))
-          .mark(ribbon({ h: "count", fill: (d: any) => d.lake } as any)),
+          .mark(ribbon({ h: "count", fill: (d: any) => v(d.lake) })),
         { w: 200, h: 200 }
       )
     );

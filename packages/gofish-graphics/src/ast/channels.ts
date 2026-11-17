@@ -15,6 +15,7 @@ import {
   isValue,
   getQuantity,
   getValue,
+  hasField,
   type FieldAccessor,
   type LiteralValue,
 } from "./data";
@@ -42,6 +43,7 @@ import {
   type AxisDimsSlot,
 } from "./dims";
 import type { LiveValue } from "../interaction/live";
+import { eqKey } from "./datumProjection";
 
 /**
  * How a channel encodes data. `dims` is the axis-name-keyed bag of box
@@ -86,17 +88,46 @@ export type ChannelAnnotations<T, C extends ChannelType = ChannelType> = {
   [K in keyof T]?: ChannelSpec<C>;
 };
 
+/** What a size or area channel takes written as it is: pixels, a field
+ *  name, data (`v(...)`), a `field(...)` pipeline, or a constant. */
+export type SizeValue<T> =
+  | number
+  | (keyof T & string)
+  | Value<number>
+  | FieldExpr
+  | LiteralValue;
+/** What a color channel takes written as it is. */
+export type ColorValue<T> =
+  | string
+  | (keyof T & string)
+  | Value<string>
+  | FieldExpr
+  | LiteralValue;
+/** What a raw channel (a text, an identifier) takes written as it is. */
+export type RawValue<T> =
+  | string
+  | number
+  | (keyof T & string)
+  | Value<string | number>
+  | FieldExpr
+  | LiteralValue;
+
 /**
- * Derive mark prop types from shape prop types + channel annotations.
- *
- * - "size" channels: mark accepts `number | keyof T | Value<number> | FieldExpr`
- *   instead of `MaybeValue<number>` — a `field(...)` pipeline (e.g.
- *   `field("age").count()`) is evaluated the same way a bare field-name
- *   accessor is (see `evalFieldValues` in fieldExpr.ts).
- * - "color" channels: mark accepts `string | keyof T | Value<string> | FieldExpr`
- *   instead of `MaybeValue<string>`; "raw" channels likewise take a `FieldExpr`.
- *   One with an aggregate folds the group's rows first, as a size channel does.
- * - unannotated props: passed through with the same type
+ * A channel's input: a value written as it is (`D`), or a function that
+ * gives, for each row, a value that means what it would written in the
+ * channel ({@link directValue}). Its `undefined` is no value, so the mark
+ * keeps its default, and its `null` a missing data value.
+ */
+export type ChannelValue<D, T> = D | ((d: T) => D | null | undefined);
+
+/**
+ * Derive mark prop types from shape prop types + channel annotations. Each
+ * channel takes a {@link ChannelValue} of its own kind's value
+ * ({@link SizeValue}, {@link ColorValue}, {@link RawValue}); a position
+ * takes a size's. A `field(...)` pipeline (e.g. `field("age").count()`) is
+ * evaluated the same way a bare field-name accessor is (see
+ * `evalFieldValues` in fieldExpr.ts); one with an aggregate folds the
+ * group's rows first. Unannotated props pass through with the same type.
  */
 export type DeriveMarkProps<
   ShapeProps,
@@ -104,64 +135,40 @@ export type DeriveMarkProps<
   T extends Record<string, any>,
 > = {
   [K in keyof ShapeProps]: K extends keyof Channels
-    ? // Entry-flagged size: mark accepts a field name or an explicit
-      // per-row array (used by expand-kind marks like `cut`).
+    ? // Entry-flagged size: mark accepts a field name, an explicit
+      // per-row array (used by expand-kind marks like `cut`), or a function
+      // read per row.
       Channels[K] extends { type: "size"; entry: true }
-      ? (keyof T & string) | MaybeValue<number>[] | undefined
+      ?
+          | (keyof T & string)
+          | MaybeValue<number>[]
+          | ((d: T) => SizeValue<T> | null | undefined)
+          | undefined
       : Channels[K] extends
             | "size"
             | { type: "size" }
             | "area"
             | { type: "area" }
-        ?
-            | number
-            | (keyof T & string)
-            | ((d: T) => number)
-            | Value<number>
-            | FieldExpr
-            | undefined
-        : Channels[K] extends "pos" | { type: "pos" }
+            | "pos"
+            | { type: "pos" }
+        ? ChannelValue<SizeValue<T>, T> | undefined
+        : Channels[K] extends "color" | { type: "color" }
           ?
-              | number
-              | (keyof T & string)
-              | ((d: T) => number)
-              | Value<number>
-              | FieldExpr
+              | ChannelValue<ColorValue<T>, T>
+              // `live(...)` reactive color (paint patch; returns a literal
+              // color — see src/interaction/live.ts).
+              | LiveValue
               | undefined
-          : Channels[K] extends "color" | { type: "color" }
+          : Channels[K] extends "raw" | { type: "raw" }
             ?
-                | string
-                | (keyof T & string)
-                | ((d: T) => string)
-                | Value<string>
-                | FieldExpr
-                // `live(...)` reactive color (paint patch; returns a literal
-                // color — see src/interaction/live.ts).
+                | ChannelValue<RawValue<T>, T>
+                // `live(...)` reactive content (paint patch; the pipeline
+                // measures the resolve-time value).
                 | LiveValue
                 | undefined
-            : Channels[K] extends "raw" | { type: "raw" }
-              ?
-                  | string
-                  | number
-                  | (keyof T & string)
-                  | ((d: T) => string | number)
-                  | Value<string | number>
-                  | FieldExpr
-                  // `live(...)` reactive content (paint patch; the pipeline
-                  // measures the resolve-time value).
-                  | LiveValue
-                  | undefined
-              : Channels[K] extends "dims" | { type: "dims" }
-                ?
-                    | AxisDims<
-                        | number
-                        | (keyof T & string)
-                        | ((d: T) => number)
-                        | Value<number>
-                        | FieldExpr
-                      >
-                    | undefined
-                : ShapeProps[K]
+            : Channels[K] extends "dims" | { type: "dims" }
+              ? AxisDims<ChannelValue<SizeValue<T>, T>> | undefined
+              : ShapeProps[K]
     : ShapeProps[K];
 } & { debug?: boolean };
 
@@ -206,26 +213,43 @@ export const resolveColumn = (data: unknown, accessor: unknown): ColumnInfo => {
  *
  * - `number[]` / `MaybeValue<number>[]`: passed through.
  * - `string` (field name): mapped per-row to `Number(d[field]) || 0`.
- * - function: called per-row.
+ * - function: called per row, and each row's value read as an entry's
+ *   value written in the channel would be ({@link directValue}): a number
+ *   or `literal(...)` as it is, a `v(...)` as data, a field name as that
+ *   row's field.
  * - `undefined`: returns `undefined` (caller decides default — typically equal slices).
  *
  * Each row's value is a slice of a whole the mark divides by their total,
  * so a named column must add up, as for any sum (`checkSummable`, #1197).
  */
 export const inferEntrySize = <T>(
-  accessor: string | MaybeValue<number>[] | ((d: T) => number) | undefined,
+  accessor: string | MaybeValue<number>[] | ((d: T) => unknown) | undefined,
   data: T[]
 ): MaybeValue<number>[] | undefined => {
   if (accessor === undefined) return undefined;
   if (Array.isArray(accessor)) return accessor;
-  if (typeof accessor === "function") {
-    return data.map((d) => value(accessor(d)));
-  }
-  if (typeof accessor === "string") {
+  const summable = (field: string) =>
     checkSummable(
-      resolveColumn(data, accessor).quantity,
+      resolveColumn(data, field).quantity,
       "A per-row size channel"
     );
+  if (typeof accessor === "function") {
+    const named = new Set<string>();
+    return data.map((d) => {
+      const r: unknown = accessor(d);
+      if (isLiteral(r)) return r.value as number;
+      if (typeof r === "string") {
+        if (!named.has(r)) summable(r);
+        named.add(r);
+        return value(hasField(d, r) ? Number((d as any)[r]) || 0 : 0);
+      }
+      // No value or a missing one is a missing data value, as before.
+      if (r === undefined || r === null) return value(r as any);
+      return r as MaybeValue<number>;
+    });
+  }
+  if (typeof accessor === "string") {
+    summable(accessor);
     return data.map((d) => value(Number((d as any)[accessor]) || 0));
   }
   return undefined;
@@ -348,6 +372,82 @@ const sqrtArea = (
 };
 
 /**
+ * The one step every channel takes with a function accessor: call it on
+ * each of the mark's `rows`, and read what it returns as the value the
+ * channel would have if that value were written in it. So
+ * `fill: (d) => d.lake === "Lake B" ? "orange" : "steelblue"` is
+ * `fill: "orange"` for a mark of lake B, and `h: (d) => 40` is `h: 40`:
+ *
+ * - a value is what it is in the channel: a field name reads the field, a
+ *   number in a size or position channel is pixels, a `v(...)` is data, a
+ *   `literal(...)` is a constant;
+ * - `undefined` is no value given, so the channel is absent and the mark
+ *   keeps its default;
+ * - `null` is a missing data value.
+ *
+ * A mark of several rows takes the one value they agree on. When they do
+ * not agree, each must be data (a `v(...)`, a field name, or `null`), and
+ * the channel reads the rows' values as it reads a field's: it returns a
+ * function over the rows that gives each row's value, which the channel
+ * then folds as it folds a field (a size sums them, a position averages
+ * them, a color reads the first). Any other mix is an error, since one mark
+ * has one value. No rows: no value is given (`undefined`).
+ *
+ * A value that is not a function is returned as it is.
+ */
+export function directValue(
+  accessor: unknown,
+  rows: readonly unknown[]
+): unknown {
+  if (typeof accessor !== "function") return accessor;
+  if (rows.length === 0) return undefined;
+  const results = rows.map((row) => (accessor as (r: unknown) => unknown)(row));
+  if (results.every((r) => sameValue(r, results[0])))
+    // `null` is a missing data value, which the channel folds as it folds
+    // a missing value of a field.
+    return results[0] === null ? () => null : results[0];
+  const byRow = new Map<unknown, unknown>();
+  results.forEach((r, i) => {
+    const data = dataOf(r, rows[i]);
+    if (data === NOT_DATA) {
+      const shown = [...new Set(results.map(eqKey))].slice(0, 4).join(", ");
+      throw new Error(
+        `[gofish] a channel function's value is not constant across the ` +
+          `rows of one mark (${shown}). One mark has one value, so the rows ` +
+          `may differ only when each value is data, a v(...) or a field name, ` +
+          `which the channel folds as it folds a field.`
+      );
+    }
+    byRow.set(rows[i], data);
+  });
+  return (row: unknown) => byRow.get(row);
+}
+
+/** Whether two results of a channel function are one value: the same
+ *  primitive (`3` and `"3"` are not), or objects equal by {@link eqKey}. */
+export const sameValue = (a: unknown, b: unknown): boolean =>
+  a === b ||
+  Object.is(a, b) ||
+  (typeof a === "object" &&
+    a !== null &&
+    typeof b === "object" &&
+    b !== null &&
+    eqKey(a) === eqKey(b));
+
+const NOT_DATA = Symbol("not data");
+
+/** One row's result of a channel function read as data ({@link directValue}):
+ *  `null`, a `v(...)`'s value, or the field a string names; anything else is
+ *  {@link NOT_DATA}. */
+function dataOf(r: unknown, row: unknown): unknown {
+  if (r === null) return null;
+  if (isValue(r as MaybeValue<unknown>)) return getValue(r as Value<unknown>);
+  if (typeof r === "string" && hasField(row, r))
+    return (row as Record<string, unknown>)[r];
+  return NOT_DATA;
+}
+
+/**
  * Shared core of the non-aggregating channels ({@link inferColor} /
  * {@link inferRaw}): resolve an accessor against the FIRST row of `data`,
  * or, for a field expression with an aggregate (`field(x).count()`), against
@@ -355,8 +455,9 @@ const sqrtArea = (
  * - "literal": pass the accessor's value through unchanged — a `literal(...)`
  *   wrapper, or a string that names no field on the row (e.g. a CSS color).
  * - "row": the value read off the row, with the `field` it was read from when
- *   the accessor named one (not for a function accessor). The caller wraps it
- *   in `value(...)`.
+ *   the accessor named one. A function here is a reader of data that
+ *   {@link directValue} made from a user's function, so its value is data
+ *   (it records no field). The caller wraps it in `value(...)`.
  * - "none": there is no usable row to read.
  */
 function firstRowValue<T extends Record<string, any>>(
@@ -396,8 +497,8 @@ function firstRowValue<T extends Record<string, any>>(
       ? { kind: "none" }
       : { kind: "row", value: accessor(row) };
   }
-  if (row !== undefined && accessor in row) {
-    return { kind: "row", value: row[accessor], field: accessor };
+  if (hasField(row, accessor)) {
+    return { kind: "row", value: row![accessor], field: accessor };
   }
   return { kind: "literal", value: accessor };
 }
@@ -595,10 +696,33 @@ export const CHANNEL_INFER: Record<
           "({ x: datum(5) }, { r: { size: 'value' } }), not one value " +
           "(datum(...))."
       );
-    return mapAxisDims(val, (v, slot) =>
+    // A slot's function is read as the slot's value would be
+    // ({@link directValue}); one that gives no value leaves the slot out.
+    const given = mapAxisDims(val, (v) => directValue(v, data));
+    return mapAxisDims(withoutAbsent(given), (v, slot) =>
       CHANNEL_INFER[axisSlotKind(slot)](v, data)
     );
   },
+};
+
+/** A `dims` bag without its slots that have no value given. An interval
+ *  whose every slot was left out goes too; one that was given only
+ *  `embedded` stays as it was given. */
+const withoutAbsent = <A>(dims: AxisDims<A>): AxisDims<A> => {
+  const out: AxisDims<A> = {};
+  for (const [name, entry] of Object.entries(dims)) {
+    if (entry === undefined) continue;
+    if (!isAxisInterval(entry)) {
+      out[name] = entry;
+      continue;
+    }
+    const slots = Object.entries(entry);
+    const kept = slots.filter(([, v]) => v !== undefined);
+    const emptied =
+      kept.length < slots.length && kept.every(([k]) => k === "embedded");
+    if (!emptied) out[name] = Object.fromEntries(kept) as any;
+  }
+  return out;
 };
 
 /**

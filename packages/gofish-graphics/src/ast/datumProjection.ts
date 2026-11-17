@@ -51,7 +51,7 @@ import { isStruct, structBin, type StructExprWire } from "./structExpr";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
-function eqKey(v: unknown): string {
+export function eqKey(v: unknown): string {
   return typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
 }
 

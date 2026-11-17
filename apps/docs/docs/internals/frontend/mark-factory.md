@@ -140,6 +140,34 @@ they are, without awaiting. The operator factory uses the same helper before
 its own channel inference. A JS `async (d) => ...` accessor is not
 supported.
 
+A function in a channel takes one step before inference, the same for every
+channel kind and every call site: `directValue` (`channels.ts`) calls it on
+each of the mark's rows, and the result means exactly what that value would
+mean written directly as the channel's value. A number is pixels, a string is
+a field name if the rows have that field (`hasField`: their own, or one their
+class gives them, but not a name every object has from `Object.prototype`,
+such as `"constructor"`) and otherwise a constant, a `v(...)` is data, and a
+`literal(...)` is a constant. `undefined` is no value, so the channel is
+absent and the mark keeps its default; `null` is a missing data value. When
+the rows agree on one value (the same primitive, so `3` and `"3"` differ, or
+objects equal as `projectValues` compares them), that value goes to inference
+as if written. When they differ, each must be data (a `v(...)`, a field
+name, or `null`), and `directValue` hands inference a reader of each row's
+data, which the channel folds as it folds a field (a size sums, a position
+averages, a color or a text takes the first row). Any other mix throws, since
+one mark has one value. The mark factory runs it in `buildCreatedMark`, the
+operator factory in `applyChannel`, a `dims` bag per slot, and a connector's
+paint in `resolveGroupPaint`; an entry channel (`inferEntrySize`) reads each
+row's result by the same rule, and checks that a field name it returns names
+a column that adds up, as the name written does. In `applyChannel`, a
+function that gives the same value on every entry is that value written, so
+it takes the written value's path (a category field on a discrete position,
+a `normalize()`); otherwise each entry's value is inferred on its own. A Python lambda, once
+`resolveChannelAccessors` has made it a per-row reader, takes the same step.
+Known limitation: a `v(...)` carries no field, so a value a function returns
+has no field provenance or column type, the same as a `v(...)` written
+directly. A field name returned by a function keeps both.
+
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
 
@@ -221,7 +249,7 @@ Walking `withGoFish.ts:431-477`:
      picks it up; otherwise treat the string as a literal color. A value
      read from a named field (a field-name string or `field(...)`) records
      that field as its provenance, `DatumValueImpl.field`, so the color
-     scale knows which field it maps; a function accessor records none. A
+     scale knows which field it maps; a `v(...)` records none. A
      `field(...)` with an aggregate (`field("a").count()`) is the
      exception: it folds all of `data` (`evalFieldValues`), as a size
      channel does, with the column's quantity, so a `.sum()` checks that
@@ -639,16 +667,23 @@ there as one over refs is checked in `.mark()`. That is why
 `chart().flow(scatter({ x })).mark(ribbon({ h: "pdf" }))` draws one ribbon per
 partition inside a `spread`, while the same chart as a `.layer(...)` tier
 throws on its `h`. A connector's paint (`fill`, `stroke`: the color channels of
-its generated channel map) may be a field name, or an accessor (a field name
-is shorthand for one), rather than a literal color, and so may a raw channel
-(enclose's `padding`), whose value is used as it is. Every call form (split
+its generated channel map) may be a field name, a `literal(...)`, a
+`field(...)`, or an accessor, rather than a literal color, and so may a raw
+channel (enclose's `padding`), whose value is used as it is. An accessor's
+result means what it would written directly (`directValue`): the group's rows
+must agree on one value, which is then read as below; rows that are all
+missing give no color, as `undefined` does. A `field(...)` reads its field as
+the name does, and one with an aggregate folds the group's rows into its one
+value, as on a mark. A string that no row
+of the group has as a field, the empty string included, is a literal. Every call form (split
 bag, plain bag, pairwise edge row, low-level children) runs the same step,
 `resolveGroupPaint` in chart.ts, once per connector: Python accessors are
 resolved over exactly the rows the group's walk reaches (`rowsReached`,
 `resolveChannelAccessors`), then `projectByValues` (the projection `by`
 uses) reads the value. One value is the connector's color (`colorValue`, the
-helper `inferColor` uses), or a raw channel's value; several throw; none passes a literal color string
-through and drops an accessor, so a raw function never reaches `Connect`.
+helper `inferColor` uses), or a raw channel's value; several throw. An
+accessor over no rows gives no value, so a raw function never reaches
+`Connect`.
 
 The types follow the same split. A relational factory returns a
 `RelationalMark` (chart.ts): a `NameableMark` with a type-only brand that

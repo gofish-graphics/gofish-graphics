@@ -25,6 +25,7 @@ import {
 import { withRegistrar } from "../interaction/resolveContext";
 import {
   CHANNEL_INFER,
+  directValue,
   hasNoValue,
   resolveChannelAccessors,
   ChannelAnnotations,
@@ -549,13 +550,18 @@ function buildCreatedMark(
       for (const propName of Object.keys(resolvedOpts)) {
         if (propName === "debug") continue;
         const channelSpec = channels[propName];
-        const markValue = resolvedOpts[propName];
+        const given = resolvedOpts[propName];
 
         const channelType: ChannelType | undefined =
           typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
         const isEntry =
           typeof channelSpec === "object" && channelSpec?.entry === true;
 
+        // A channel's function is read as the value it returns would be,
+        // written in the channel (`directValue`); an entry channel reads
+        // it per row (`inferEntrySize`).
+        const markValue =
+          channelType === undefined || isEntry ? given : directValue(given, d);
         if (isEntry && channelType === "size") {
           // An already-wrapped value (`v(...)`) is the size as it is.
           shapeProps[propName] = isValue(markValue)

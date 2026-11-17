@@ -339,7 +339,7 @@ console.log("# intersect paint from data");
   // With no rows, an accessor has nothing to read, and the composite keeps
   // its default, as a connector does: no function reaches the node.
   const noRows = items(
-    await intersect({ fill: (d: any) => d.k }, shapes()).toDisplayList({
+    await intersect({ fill: (d: any) => v(d.k) }, shapes()).toDisplayList({
       w: 100,
       h: 100,
     })

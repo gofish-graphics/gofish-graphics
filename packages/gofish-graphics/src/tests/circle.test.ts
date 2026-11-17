@@ -17,7 +17,7 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, spread, circle, field, datum } = GoFish as any;
+const { chart, spread, circle, field, datum, v } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -68,7 +68,7 @@ console.log("# circle: the diameter is 2r for every channel kind");
   const cases: [string, unknown][] = [
     ["a field name", "v"],
     ["a field(...) expression", field("v")],
-    ["an accessor", (d: { v: number }) => d.v],
+    ["an accessor", (d: { v: number }) => v(d.v)],
   ];
   for (const [label, r] of cases) {
     const sizes = await sizesOf(circle({ r }), rows);
@@ -172,7 +172,7 @@ console.log("# circle: rendered");
     JSON.stringify(byR)
   );
   const byFn = ellipsesOf(
-    await render(circle({ r: (d: { v: number }) => d.v }))
+    await render(circle({ r: (d: { v: number }) => v(d.v) }))
   );
   check(
     "an accessor r draws the same circles as a field r",
@@ -245,7 +245,7 @@ console.log("# area: the circle's area is proportional to the value (#972)");
   const cases: [string, unknown][] = [
     ["a field name", "v"],
     ["a field(...) expression", field("v")],
-    ["an accessor", (d: { v: number }) => d.v],
+    ["an accessor", (d: { v: number }) => v(d.v)],
   ];
   for (const [label, area] of cases) {
     const sizes = await sizesOf(circle({ area }), rows);

@@ -27,7 +27,7 @@
 //
 // Only type-only imports from `data.ts` (no runtime import) so `data.ts` can
 // import THIS module's class at runtime without a cycle.
-import type { MaybeValue } from "./data";
+import { hasField, type MaybeValue } from "./data";
 import { median } from "d3-array";
 import { checkSummable, COUNT, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
@@ -490,11 +490,11 @@ export function evalFieldValues<T>(
   rows: T[],
   column: Quantity | undefined
 ): { values: unknown[]; folded: boolean; quantity?: Quantity } {
+  const name = typeof accessor === "string" ? accessor : accessor.name;
   const key: (r: T) => unknown =
     typeof accessor === "function"
       ? accessor
-      : (r: any) =>
-          r?.[typeof accessor === "string" ? accessor : accessor.name];
+      : (r: any) => (hasField(r, name) ? r[name] : undefined);
   let agg: FieldOp | undefined;
   for (const op of getFieldOps(accessor)) {
     if (isDomainOp(op)) {

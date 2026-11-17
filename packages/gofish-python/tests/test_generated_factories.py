@@ -28,6 +28,7 @@ from gofish import (
     chart,
     circle,
     datum,
+    literal,
     ellipse,
     enclose,
     field,
@@ -454,25 +455,42 @@ def test_a_callable_outside_a_channel_is_a_type_error():
         with pytest.raises(TypeError, match="only channel options take a function"):
             make()
     # Channel options still take one, including circle's raw opacity channel.
-    assert "__gofish_lambda" in ir(rect(h=lambda d: d["v"]))["h"]
+    assert "__gofish_lambda" in ir(rect(h=lambda d: datum(d["v"])))["h"]
     assert "__gofish_lambda" in ir(circle(r=3, opacity=lambda d: 0.5))["opacity"]
     assert "__gofish_lambda" in ir(ellipse(w=4, h=4, stroke=lambda d: "red"))["stroke"]
     assert "__gofish_lambda" in ir(spread(by="a", dir="x", w=lambda d: 1))["w"]
 
 
 def test_line_and_ribbon_fill_take_a_function():
-    # A field name is shorthand for an accessor, so the connector paint takes
-    # a lambda wherever it takes a field name (#1097). It crosses as a
-    # sentinel whose callback the payload records.
-    for m in (line(fill=lambda d: d["g"]), ribbon(fill=lambda d: d["g"])):
+    # The connector paint takes a lambda wherever it takes a field name
+    # (#1097). It crosses as a sentinel whose callback the payload records.
+    # Its value means what it would written in the channel, so data is
+    # `datum(...)` and a constant is `literal(...)` or a plain color.
+    for m in (line(fill=lambda d: datum(d["g"])), ribbon(fill=lambda d: datum(d["g"]))):
         lambda_id = ir(m)["fill"]["__gofish_lambda"]
         assert list(ir_payload(m)[1]) == [lambda_id]
-        assert call(m, lambda_id, [{"g": "a"}]) == ["a"]
+        assert call(m, lambda_id, [{"g": "a"}]) == [{"type": "datum", "datum": "a"}]
+    m = line(fill=lambda d: literal("red"))
+    assert call(m, ir(m)["fill"]["__gofish_lambda"], [{"g": "a"}]) == [
+        {"type": "literal", "value": "red"}
+    ]
+    # A lambda's values cross as one column of one type, so a mix of plain
+    # and wrapped values fails with how to wrap them.
+    m = line(fill=lambda d: "red" if d["g"] == "a" else datum(d["g"]))
+    with pytest.raises(TypeError, match="wrap the plain ones too"):
+        call(m, ir(m)["fill"]["__gofish_lambda"], [{"g": "a"}, {"g": "b"}])
     # stroke is a color channel too, as in JS.
-    assert "__gofish_lambda" in ir(line(stroke=lambda d: d["g"]))["stroke"]
+    assert "__gofish_lambda" in ir(line(stroke=lambda d: datum(d["g"])))["stroke"]
     # A non-channel option still rejects a function.
     with pytest.raises(TypeError, match="only channel options take a function"):
         line(stroke_width=lambda d: 2)
+
+
+def test_literal_is_a_leaf_in_dims():
+    # A literal(...) is one value, as a datum(...) is, not an interval.
+    assert ir(rect(dims={"x": literal(5)}))["dims"] == {
+        "x": {"type": "literal", "value": 5}
+    }
 
 
 def test_wire_does_not_copy_options_without_accessors():

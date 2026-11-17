@@ -60,13 +60,14 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     Record keys (column names,
     axis names) and values of any other type pass through unchanged. A
     tagged union picks its branch by the dict's tag key (`kind`); a missing
-    or unknown tag raises TypeError. A channel value built by field(...) or
-    datum(...) is a dict already in wire form, so it passes through too:
-    that is how a `dims` entry tells a channel value from an interval.
+    or unknown tag raises TypeError. A channel value built by field(...),
+    datum(...) or literal(...) is a dict already in wire form, so it passes
+    through too: that is how a `dims` entry tells a channel value from an
+    interval.
     """
     if shape is None or value is None:
         return value
-    if isinstance(value, (_ast.FieldAccessor, _ast.DatumValue)):
+    if _ast._is_tagged(value):
         return value
     kind = shape[0]
     if kind == "ref":

@@ -8,15 +8,24 @@ import {
   type AnchorSpec,
 } from "../graphicalOperators/connect";
 import { GoFishNode } from "../_node";
+import toPath from "lodash/toPath";
 import {
   getValue,
+  hasField,
+  isField,
+  isLiteral,
   isValue,
   scaleValue,
   value,
   type MaybeValue,
   type Value,
 } from "../data";
-import { predicateWire, sumIn, type FieldExpr } from "../fieldExpr";
+import {
+  getFieldOps,
+  predicateWire,
+  sumIn,
+  type FieldExpr,
+} from "../fieldExpr";
 import { columnQuantity } from "../measure";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
@@ -24,7 +33,12 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { colorValue, resolveChannelAccessors } from "../channels";
+import {
+  CHANNEL_INFER,
+  colorValue,
+  directValue,
+  resolveChannelAccessors,
+} from "../channels";
 import { isThenable } from "../../util";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import {
@@ -100,7 +114,12 @@ import {
 } from "./chartBuilder";
 import { resolveRefData } from "./resolveRefData";
 import type { ChartOptions, RelationalFusable } from "./chartBuilder";
-import { projectByValues, projectPath, rowsReached } from "../datumProjection";
+import {
+  eqKey,
+  projectByValues,
+  projectPath,
+  rowsReached,
+} from "../datumProjection";
 import {
   applySchema,
   columnType,
@@ -637,17 +656,22 @@ const groupChannelsOf = (type: string): Record<string, "color" | "raw"> =>
  * step's rows): one color per connector, the way a mark's color channel
  * gives one color per mark.
  *
- * A field name is shorthand for an accessor (`"species"` is
- * `(d) => d.species`), so both read a value off each row of the group with
+ * A field name reads a value off each row of the group with
  * `projectByValues`, the projection `by` uses. One distinct value is the
  * connector's: a color channel's goes through the shared color scale
  * (`colorValue`), a raw channel's (`enclose`'s `padding`) is used as it is.
  * Several is a loud error, never a silent first-row pick (mirrors the
  * homogeneity-collapse error `resolveLabelText` throws for `.label(field)`).
- * None passes a string through unchanged (it names no field, so it is a
- * literal color, as for a mark's color channel) and drops an accessor (a
- * group with no rows has nothing for it to read), so a raw function never
- * reaches the node. A `Value` or undefined is left as is.
+ * A string that names no field of the group's rows (the empty string
+ * included) is a literal, as for a mark's color channel. A `literal(...)` is
+ * its value, a `field(...)` reads its field as the name does, and a `Value`
+ * is left as is.
+ *
+ * An accessor is read as the value it returns would be, written in the
+ * channel (`directValue` in channels.ts, the step every channel takes): its
+ * rows must agree on one value, which is then resolved as above. With no
+ * rows it gives no value, so the mark keeps its default and a raw function
+ * never reaches the node.
  *
  * The same resolution serves every mark whose paint is one color: the
  * connectors, `enclose`, and `intersect` (over the rows of its input).
@@ -661,39 +685,54 @@ async function resolveGroupPaint<O extends Record<string, unknown>>(
   group: unknown
 ): Promise<O> {
   const paint = groupChannelsOf(type);
-  const pending = resolveChannelAccessors(opts, paint, () =>
-    rowsReached(group)
-  );
+  let rows: unknown[] | undefined;
+  const rowsOf = () => (rows ??= rowsReached(group));
+  const pending = resolveChannelAccessors(opts, paint, rowsOf);
   let resolved = isThenable(pending) ? await pending : pending;
+  const notConstant = (key: string, what: string) =>
+    new Error(
+      `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
+        `connected group; make sure the flow this ${type} fuses over ` +
+        `groups by that value (or one it agrees with) — or, over a refs ` +
+        `bag, add \`flow(group({ by }))\` — or pass an explicit ` +
+        `${paint[key] === "raw" ? "value" : "color"}.`
+    );
   for (const key of Object.keys(paint)) {
-    const raw = (resolved as any)[key];
-    if (typeof raw !== "string" && typeof raw !== "function") continue;
-    const values = projectByValues(group, raw);
-    if (values.length === 0) {
-      // No row has a value: a string is then a literal color, and an
-      // accessor has nothing to read, so the mark keeps its default.
-      if (typeof raw === "function")
-        resolved = { ...resolved, [key]: undefined };
-      continue;
+    let raw = (resolved as any)[key];
+    if (typeof raw === "function") {
+      const read = directValue(raw, rowsOf());
+      if (typeof read === "function") {
+        // The rows' values are data, which must still be one value. A
+        // missing one gives no color, so the mark keeps its default.
+        const data = rowsOf().map(read as (row: unknown) => unknown);
+        if (new Set(data.map(eqKey)).size > 1)
+          throw notConstant(key, "the accessor's value");
+        raw =
+          data[0] === null
+            ? undefined
+            : paint[key] === "raw"
+              ? data[0]
+              : colorValue(data[0]);
+      } else raw = read;
     }
-    if (values.length > 1) {
-      const what =
-        typeof raw === "string" ? `"${raw}"` : "the accessor's value";
-      throw new Error(
-        `[gofish] ${type}({ ${key} }): ${what} is not constant across the ` +
-          `connected group; make sure the flow this ${type} fuses over ` +
-          `groups by that value (or one it agrees with) — or, over a refs ` +
-          `bag, add \`flow(group({ by }))\` — or pass an explicit ` +
-          `${paint[key] === "raw" ? "value" : "color"}.`
-      );
+    // A pipeline with an aggregate folds the group's rows into its one
+    // value, as on a mark; a bare field reads as its name does.
+    if (isField(raw))
+      raw =
+        getFieldOps(raw).length > 0
+          ? CHANNEL_INFER[paint[key]](raw, rowsOf())
+          : raw.name;
+    if (isLiteral(raw)) raw = raw.value;
+    else if (typeof raw === "string") {
+      const name = toPath(raw)[0];
+      // A string no row has as a field is a literal.
+      if (name !== undefined && rowsOf().some((row) => hasField(row, name))) {
+        const values = projectByValues(group, raw);
+        if (values.length > 1) throw notConstant(key, `"${raw}"`);
+        raw = paint[key] === "raw" ? values[0] : colorValue(values[0], raw);
+      }
     }
-    resolved = {
-      ...resolved,
-      [key]:
-        paint[key] === "raw"
-          ? values[0]
-          : colorValue(values[0], typeof raw === "string" ? raw : undefined),
-    } as O;
+    resolved = { ...resolved, [key]: raw } as O;
   }
   return resolved;
 }

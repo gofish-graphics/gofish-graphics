@@ -49,6 +49,50 @@ rect(h="count", fill="species")  # height and color from data fields
 rect(h="count", fill="#4e79a7")  # height from data, constant color
 ```
 
+Each channel takes one value:
+
+| Value          | Example              | Meaning                                                                                                                                |
+| -------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| A number       | `h=40`               | Pixels.                                                                                                                                |
+| A string       | `fill="lake"`        | The field it names, if the rows have one. Otherwise a constant in a color or text channel, and no value in a size or position channel. |
+| `datum(...)`   | `h=datum(12)`        | Data: mapped through the channel's scale.                                                                                              |
+| `literal(...)` | `fill=literal("x")`  | A constant: never read as a field name or mapped through a scale.                                                                      |
+| `field(...)`   | `h=field("count")`   | The field, with its pipeline (`.sum()`, `.mean()`, ...).                                                                               |
+| A function     | `fill=lambda d: ...` | Called per row. See below.                                                                                                             |
+
+A function's result means exactly what that value would mean written directly
+as the channel's value. A value is read as written: a number is pixels, a
+string follows the string rule above, `datum(...)` is data, and `literal(...)`
+is a constant. `None` is a missing data value. (JavaScript also has
+`undefined`, for no value; Python has no counterpart.)
+
+```python
+# Lake B in orange, the rest in steelblue. No legend.
+rect(h="count", fill=lambda d: "orange" if d["lake"] == "Lake B" else "steelblue")
+
+# The rows' counts as data, the same bars as h="count".
+rect(h=lambda d: datum(d["count"]))
+```
+
+A string that names a field reads the field. To avoid that rule, wrap the value
+in `datum(...)`, which is always data, or `literal(...)`, which is always a
+constant:
+
+```python
+text(text=lambda d: datum(d["name"]))  # the name as data, even if a column is called that
+rect(fill=lambda d: literal(d["color"]))  # the color as written, never a field
+```
+
+A mark that covers several rows takes the one value its rows agree on. When
+they differ, each must be data (`datum(...)`, a field name, or `None`), and the
+channel combines them as it combines a field's values: a size sums them, a
+position averages them, a color or a text takes the first. Any other mix is an
+error.
+
+A function's values cross to JavaScript as one table, so its rows must share a
+type: return a plain value from every row, or a wrapped one (`datum(...)` or
+`literal(...)`) from every row.
+
 ## Naming marks
 
 Call `.name("layerName")` on a mark so another chart can reference it with

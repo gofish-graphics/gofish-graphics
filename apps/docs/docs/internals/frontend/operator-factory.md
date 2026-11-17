@@ -195,7 +195,12 @@ Walking `createOperator.ts:391-415`:
    `resolveChannelAccessors` (#1080), one call per accessor over every row
    inference reads: the rows of `d` plus each split entry's rows, with
    `d`'s column types, so the bridge sends each column with its type. That
-   row set is built only when some channel holds a Python accessor.
+   row set is built only when some channel holds a Python accessor. A
+   function in a channel first takes the step every channel takes
+   (`directValue`, see [The Mark Factory](/internals/frontend/mark-factory)):
+   called on the entry's rows (or all of `d`), its result means what that
+   value would mean written directly, and its column is the returned field
+   name's, read off `d`.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
