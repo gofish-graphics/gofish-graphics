@@ -34,7 +34,6 @@ import {
   OPTION_TYPES,
   resolveFields,
   t,
-  type ConstructDescriptor,
   type FieldGroup,
   type FieldType,
 } from "./descriptors.js";
@@ -133,12 +132,6 @@ function fieldsToProperties(fields: FieldGroup): {
   return { properties, required };
 }
 
-/** A construct's `requireOneOf`, as an `anyOf` of `required`. */
-const requireOneOfSchema = (d: ConstructDescriptor) =>
-  d.requireOneOf
-    ? { anyOf: d.requireOneOf.map((k) => ({ required: [k] })) }
-    : {};
-
 const pascalCase = (s: string): string =>
   s.replace(/(^|[-_])([a-z])/g, (_m, _sep, c: string) => c.toUpperCase());
 
@@ -164,7 +157,6 @@ function buildOperatorDefs(): Record<string, unknown> {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
       type: "object",
       required: ["type", ...required],
-      ...requireOneOfSchema(descriptor),
       additionalProperties: true,
       properties: {
         type: { const: descriptor.type },
@@ -212,7 +204,6 @@ function buildLeafMarkDefs(): Record<string, unknown> {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
       type: "object",
       required: ["type"],
-      ...requireOneOfSchema(descriptor),
       additionalProperties: true,
       properties: {
         type: { const: descriptor.type },
@@ -255,7 +246,10 @@ function buildConstraintDefs(): Record<string, unknown> {
         kind: "object",
         fields: resolveFields(descriptor),
       }),
-      ...requireOneOfSchema(descriptor),
+      // `requireOneOf`, as an `anyOf` of `required`.
+      ...(descriptor.requireOneOf
+        ? { anyOf: descriptor.requireOneOf.map((k) => ({ required: [k] })) }
+        : {}),
     };
     defs[defName] = {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
@@ -263,7 +257,7 @@ function buildConstraintDefs(): Record<string, unknown> {
       required: [
         "type",
         "refs",
-        ...(optionsRequired(descriptor) ? ["options"] : []),
+        ...(optionsRequired("constraint", descriptor.type) ? ["options"] : []),
       ],
       properties: {
         type: { const: descriptor.type },

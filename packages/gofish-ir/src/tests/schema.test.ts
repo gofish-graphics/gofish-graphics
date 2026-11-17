@@ -16,6 +16,8 @@ import {
   encodeIR,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
+  COMBINATOR_MARKS,
+  acceptedFields,
   type FrontendIRDocument,
 } from "../frontend/index.js";
 import { encodeNonFinite } from "../frontend/nonFinite.js";
@@ -181,6 +183,26 @@ const doc = (root: unknown) =>
     root,
     tables: { t0: [] },
   }) as FrontendIRDocument;
+
+// A combinator's options may be left out unless it needs one of them:
+// today none of them does.
+for (const type of Object.keys(COMBINATOR_MARKS)) {
+  const required = Object.entries(acceptedFields("combinator-mark", type)!)
+    .filter(([, f]) => f.required)
+    .map(([k]) => k);
+  check(
+    `a combinator ${type} requires no option`,
+    required.length === 0,
+    required.join(", ")
+  );
+}
+for (const type of ["group", "table"]) {
+  check(
+    `a combinator ${type} with no options validates (only the operator form splits by its by)`,
+    validate(doc({ type, __combinator: true, children: [{ type: "rect" }] }))
+      .valid
+  );
+}
 
 check(
   "a leaf mark, a combinator mark and a chain each accept as the root",
@@ -1648,6 +1670,10 @@ console.log("# a constraint's options, as CONSTRAINTS declares them");
     check(
       `${type} with no options is rejected`,
       !validate(withClause({ type })).valid
+    );
+    check(
+      `${type} with x: null and no y is rejected`,
+      !validate(withClause({ type, options: { x: null } })).valid
     );
   }
   const datum = (v: unknown) => ({ type: "datum", datum: v });

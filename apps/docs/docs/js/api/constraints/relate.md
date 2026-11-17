@@ -352,6 +352,9 @@ Constraint.zAbove(a, b); // a paints in front of b (on top in z)
 Constraint.zBelow(a, b); // a paints behind b (under in z)
 ```
 
+::: gofish-ref Constraint.zAbove Constraint.zBelow
+:::
+
 `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the spec
 reads naturally either way.
 

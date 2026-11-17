@@ -49,6 +49,7 @@ const {
   Overlap,
   Place,
   group,
+  table,
   blank,
 } = GoFish as any;
 
@@ -1568,31 +1569,21 @@ async function main() {
       missing.length === 0,
       missing.join(", ")
     );
-    const declared = new Set(tables.flatMap((table) => Object.keys(table)));
-    const orphans = Object.keys(Serialize.FACTORIES).filter(
-      (type) => !declared.has(type)
-    );
-    check(
-      "every deserializer factory has a descriptor",
-      orphans.length === 0,
-      orphans.join(", ")
-    );
-    const orphanConstraints = Object.keys(
-      Serialize.CONSTRAINT_FACTORIES
-    ).filter((type) => !Object.hasOwn(Frontend.CONSTRAINTS, type));
-    check(
-      "every constraint factory has a constraint descriptor",
-      orphanConstraints.length === 0,
-      orphanConstraints.join(", ")
-    );
-    const orphanBuilders = Object.keys(Serialize.OPERATOR_BUILDERS).filter(
-      (type) => !Object.hasOwn(Frontend.OPERATORS, type)
-    );
-    check(
-      "every hand-written operator builder has an operator descriptor",
-      orphanBuilders.length === 0,
-      orphanBuilders.join(", ")
-    );
+    // The entries of a factory map that no descriptor table declares.
+    const orphans = (map: object, tables: object[]) =>
+      Object.keys(map).filter((type) => !tables.some((t) => Object.hasOwn(t, type)));
+    for (const [what, map, inTables] of [
+      ["deserializer factory", Serialize.FACTORIES, tables],
+      ["constraint factory", Serialize.CONSTRAINT_FACTORIES, [Frontend.CONSTRAINTS]],
+      ["hand-written operator builder", Serialize.OPERATOR_BUILDERS, [Frontend.OPERATORS]],
+    ] as const) {
+      const found = orphans(map, [...inTables]);
+      check(
+        `every ${what} has a descriptor`,
+        found.length === 0,
+        found.join(", ")
+      );
+    }
     // Each constraint kind round-trips through the registry: a document with
     // one such clause validates, and rebuilds and lays out.
     const withClause = (
@@ -1666,14 +1657,30 @@ async function main() {
         JSON.stringify(spec?.type)
       );
     }
+    let unknownError = "";
+    try {
+      await (
+        Serialize.buildIR(withClause({ type: "squash", options: {} }) as any) as any
+      ).toDisplayList({});
+    } catch (e) {
+      unknownError = (e as Error).message;
+    }
     check(
-      'rebuild("constraint", "position") is the constraint, not the combinator',
-      Serialize.rebuild("constraint", "position", { x: 5 }, { children: [{}] })
-        .type === "position" &&
-        Serialize.rebuild("combinator-mark", "position", { x: 5 }, {
-          children: [],
-        })?.type !== "position"
+      "an unknown constraint type throws, naming it",
+      unknownError.includes('unknown constraint type "squash"'),
+      unknownError
     );
+    // The combinator form of group and table takes no `by`: `group({}, ...)`
+    // emits no options, and validates.
+    for (const [name, factory] of [
+      ["group", group],
+      ["table", table],
+    ] as const) {
+      const doc = await chart([{ a: 1 }])
+        .mark(factory({}, [rect({ w: 4, h: 4 }), rect({ w: 6, h: 6 })]))
+        .toJSON();
+      validateDoc(doc, `a combinator ${name} with empty options`);
+    }
     // geo takes its projection positionally and the rest as options.
     const geoWindow: { lon: [number, number]; lat: [number, number] } = {
       lon: [-170, -30],

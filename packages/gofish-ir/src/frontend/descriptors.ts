@@ -307,8 +307,10 @@ export interface ConstructDescriptor {
    *  step applies the mark to each group's subtree. */
   flowStep?: boolean;
   /** Fields of which a value must give at least one (`["x", "y"]` for
-   *  `Constraint.align`). The validator, the JSON Schema, the Python option
-   *  cores and the docs' options tables read it. */
+   *  `Constraint.align`). Only a constraint sets it (descriptors.test
+   *  checks): the validator reads it in its walk of a nested `options`
+   *  object, and the JSON Schema and the generated Python cores read it
+   *  for constraints only. */
   requireOneOf?: readonly string[];
 }
 
@@ -2364,6 +2366,9 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 // field lists describe (nested, unlike operator fields which spread flat).
 // ---------------------------------------------------------------------------
 
+/** An operator's fields without its data split, for its combinator form. */
+const withoutBy = ({ by: _by, ...fields }: FieldGroup): FieldGroup => fields;
+
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
     doc: "Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.",
@@ -2389,8 +2394,14 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   scatter: combinatorMark("scatter", {
     fields: resolveFields(OPERATORS.scatter),
   }),
-  group: combinatorMark("group", { fields: resolveFields(OPERATORS.group) }),
-  table: combinatorMark("table", { fields: resolveFields(OPERATORS.table) }),
+  // `by` splits the data in the operator form only: a combinator's children
+  // are already given, and its layout never reads `by`.
+  group: combinatorMark("group", {
+    fields: withoutBy(resolveFields(OPERATORS.group)),
+  }),
+  table: combinatorMark("table", {
+    fields: withoutBy(resolveFields(OPERATORS.table)),
+  }),
 
   layer: combinatorMark("layer", {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
@@ -2739,16 +2750,11 @@ export const CONSTRAINTS: Record<string, ConstructDescriptor> = {
 };
 
 // ---------------------------------------------------------------------------
-// Combined lookup — operators + leaf marks + combinator marks share the same
-// wire-type namespace collision-free EXCEPT for the intentional dual-form
-// overlap (spread/stack/scatter/group/table/line/ribbon appear as both an
-// operator and a combinator mark — the `__combinator` flag disambiguates on
-// the wire, exactly as schema.ts's `CombinatorMarkIR` doc explains). Coord
-// transforms are a separate namespace (chart `options.coord`), and so are
-// constraints (a `.relate()` clause): `position` is both a combinator mark
-// and a constraint, two constructs, so a constraint is only ever looked up
-// by its kind (`DESCRIPTOR_TABLES.constraint`, `acceptedFields("constraint",
-// type)`), never by its bare type.
+// Lookups are by (kind, type): a wire type names a construct only within its
+// kind. The dual-form constructs (spread/stack/scatter/group/table/line/
+// ribbon) are both an operator and a combinator mark — the `__combinator`
+// flag tells them apart on the wire, as schema.ts's `CombinatorMarkIR` doc
+// explains — and `position` is both a combinator mark and a constraint.
 // ---------------------------------------------------------------------------
 
 export const ALL_OPERATOR_DESCRIPTORS: readonly ConstructDescriptor[] =
@@ -2759,8 +2765,6 @@ export const ALL_COMBINATOR_MARK_DESCRIPTORS: readonly ConstructDescriptor[] =
   Object.values(COMBINATOR_MARKS);
 export const ALL_COORD_DESCRIPTORS: readonly ConstructDescriptor[] =
   Object.values(COORDS);
-export const ALL_CONSTRAINT_DESCRIPTORS: readonly ConstructDescriptor[] =
-  Object.values(CONSTRAINTS);
 
 /** Every descriptor table, by the kind of construct it declares. */
 export const DESCRIPTOR_TABLES: Readonly<
@@ -2772,6 +2776,24 @@ export const DESCRIPTOR_TABLES: Readonly<
   coord: COORDS,
   constraint: CONSTRAINTS,
 };
+
+/** The descriptor tables whose constructs the docs name as a user calls
+ *  them, `<Namespace>.<type>` (`Constraint.align`): their types are a
+ *  namespace of their own (`position` is also a combinator mark). */
+export const DESCRIPTOR_NAMESPACES: Readonly<
+  Record<string, Record<string, ConstructDescriptor>>
+> = { Constraint: CONSTRAINTS };
+
+/** A dotted name's namespace and member (`"Constraint.align"`,
+ *  `"Shape.blob"`); undefined unless it has exactly one dot. */
+export function splitDottedName(
+  name: string
+): { namespace: string; member: string } | undefined {
+  const parts = name.split(".");
+  return parts.length === 2
+    ? { namespace: parts[0], member: parts[1] }
+    : undefined;
+}
 
 /** The kinds of construct whose options sit on a wire node of their own (a
  *  coord transform is itself an option, of a chart or a combinator, so its
@@ -2791,15 +2813,28 @@ const OPTIONS_BASE_FIELDS: Readonly<Record<NodeKind, FieldGroup>> = {
   constraint: {},
 };
 
-/** Whether a construct's options object must be on the wire: when one of
- *  its fields is required, or at least one of some fields is
- *  (`requireOneOf`). Only a construct that nests its options under
- *  `options` (a combinator mark, a constraint) can leave them out. */
-export const optionsRequired = (d: ConstructDescriptor): boolean =>
-  d.requireOneOf !== undefined ||
-  Object.values(resolveFields(d)).some((f) => f.required);
-
 const acceptedFieldsCache = new Map<string, FieldGroup>();
+const optionsRequiredCache = new Map<string, boolean>();
+
+/** Whether the options object of a construct that nests its options under
+ *  `options` (a combinator mark, a constraint) must be on the wire: when
+ *  one of its fields is required, or at least one of some fields is
+ *  (`requireOneOf`). Computed once per (kind, type). */
+export function optionsRequired(
+  kind: "combinator-mark" | "constraint",
+  type: string
+): boolean {
+  const cacheKey = `${kind}:${type}`;
+  const cached = optionsRequiredCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+  const fields = acceptedFields(kind, type);
+  const required =
+    fields !== undefined &&
+    (DESCRIPTOR_TABLES[kind][type].requireOneOf !== undefined ||
+      Object.values(fields).some((f) => f.required));
+  optionsRequiredCache.set(cacheKey, required);
+  return required;
+}
 
 /** Whether `type` is a leaf mark that may stand in a chart's `operators`
  *  as a `.flow(...)` step (its descriptor's `flowStep`). */

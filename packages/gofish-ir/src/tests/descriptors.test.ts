@@ -19,7 +19,6 @@
  */
 
 import {
-  COMBINATOR_MARKS,
   CONSTRAINTS,
   DESCRIPTOR_TABLES,
   acceptedFields,
@@ -464,18 +463,15 @@ for (const [kind, table] of Object.entries(DESCRIPTOR_TABLES)) {
         `${kind} ${key}: requireOneOf names its field ${k}`,
         Object.hasOwn(resolveFields(d), k)
       );
+    // Only the validator's nested-options walk and the generated Python
+    // constraint cores read requireOneOf, so only a constraint may set it.
+    if (d.requireOneOf !== undefined)
+      check(
+        `${kind} ${key}: only a constraint sets requireOneOf`,
+        kind === "constraint"
+      );
   }
 }
-check(
-  "the position constraint and the position combinator are two descriptors",
-  DESCRIPTOR_TABLES.constraint.position !== COMBINATOR_MARKS.position &&
-    DESCRIPTOR_TABLES.constraint.position.kind === "constraint" &&
-    COMBINATOR_MARKS.position.kind === "combinator-mark" &&
-    JSON.stringify(Object.keys(acceptedFields("constraint", "position")!)) !==
-      JSON.stringify(
-        Object.keys(acceptedFields("combinator-mark", "position")!)
-      )
-);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) {

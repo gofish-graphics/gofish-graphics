@@ -503,10 +503,9 @@ the set of its option keys and the validator walks a clause's `options`
 with the same code that walks a combinator mark's. A key the entry does
 not declare is an error, and the JSON Schema's `ConstraintIR` is generated
 from the same table. The wire type `position` is both a combinator mark
-and a constraint, two constructs, so a constraint is always looked up by
-its kind and never by a bare type: the combined lookup leaves the
-constraint table out, the docs name it `Constraint.position`, and the
-Python core is `_position_constraint_opts`. `distribute`'s `spacing` has spread's `spacing` type,
+and a constraint, two constructs, so every lookup is by (kind, type): the
+docs name the constraint `Constraint.position` (`DESCRIPTOR_NAMESPACES`),
+and its Python core is `_position_constraint_opts`. `distribute`'s `spacing` has spread's `spacing` type,
 one `FieldType` both entries name, so a `Spacing` strategy in a constraint
 is checked as it is in a spread. The Python `Constraint.*` methods keep
 their refs-first signatures and build their options with the generated
@@ -516,12 +515,14 @@ their refs-first signatures and build their options with the generated
 scatter's `override` on a position) are not declared. A position's `x`/`y`
 is a pixel or a `DatumValue` (the `datum(v)` wire shape, an `AUTHORED_REFS`
 entry), or a two-item tuple of them. A descriptor's `requireOneOf` (`["x", "y"]`
-for `align`, `position` and `nest`) asks for at least one of those keys:
-the validator checks it for every kind, the JSON Schema writes it as an
-`anyOf` of `required`, and the generated Python core raises
+for `align`, `position` and `nest`) asks for at least one of those keys,
+and only a constraint sets it: the validator checks it in its walk of a
+nested `options` object (a null key is not given), the JSON Schema writes
+it as an `anyOf` of `required`, and the generated Python core raises
 `Constraint.<type> requires at least one of x, y`. `nest`'s two refs stay a
 hand-written check. `constraintFromIR` resolves the operands and calls
-`rebuild("constraint", ...)` (see "The way back" below).
+`rebuild("constraint", ...)` (see "The way back" below), and throws on a
+type it does not know.
 
 ## A worked example
 
@@ -1134,15 +1135,16 @@ wire type is its factory's name (`intersect` to `intersect`, and so on).
 The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
 table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
-A constraint is `factory(opts, refs)`, with its refs as the children, from
-`CONSTRAINT_FACTORIES` rather than `FACTORIES`, since constraint types are a
-namespace of their own (`position` is also a combinator). That table is
-typed by `ConstraintIR`: each entry passes the wire options to its
-`Constraint` factory as they are, so an option the factory retypes is a
-compile error, and a type-level check beside it fails when a wire option
-key is not a key of the factory's options, which catches a rename.
-`zAbove` and `zBelow` take their two refs as `(a, b)`, so their entries
-adapt.
+A constraint is called as a combinator mark is, `factory(opts, refs)` with
+its refs as the children, but from `CONSTRAINT_FACTORIES` rather than
+`FACTORIES`, since its types are a namespace of their own (`position` is
+also a combinator). That table is typed by `ConstraintIR`: each entry
+passes the wire options to its `Constraint` factory as they are, so an
+option the factory retypes is a compile error. A rename is one too:
+beside the table, `Record<UnknownWireOption, never>` must accept `{}`,
+and fails naming the key (`Property '"distribute.order"' is missing`)
+when a wire option is not a key of its factory's options. `zAbove` and
+`zBelow` take their two refs as `(a, b)`, so their entries adapt.
 
 Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python

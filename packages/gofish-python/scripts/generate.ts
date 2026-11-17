@@ -723,19 +723,6 @@ for (const d of Object.values(DESCRIPTOR_TABLES.constraint)) {
   );
 }
 
-// Only the constraint cores above raise for `requireOneOf`; no other kind's
-// descriptor sets it yet, and one that does needs its renderer to read it.
-for (const [kind, table] of Object.entries(DESCRIPTOR_TABLES)) {
-  if (kind === "constraint") continue;
-  for (const d of Object.values(table)) {
-    if (d.requireOneOf !== undefined)
-      throw new Error(
-        `${kind} ${d.type}: requireOneOf is generated only for constraint ` +
-          `cores; teach its Python renderer to raise for it.`
-      );
-  }
-}
-
 // chart(data, **options): the chart-level options (CHART_OPTIONS).
 parts.push(
   renderOptsCore(

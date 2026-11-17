@@ -337,24 +337,25 @@ export const CONSTRAINT_FACTORIES: {
   zBelow: (_options, [a, b]) => Constraint.zBelow(a, b),
 };
 
-/** The wire option keys of constraint `T` that its factory's options lack:
- *  none, unless a JS option was renamed. (A call above checks the types,
- *  but an optional key the target does not name passes it.) */
-type UnknownToFactory<T extends "align" | "distribute" | "position" | "nest"> =
-  Exclude<
-    keyof NonNullable<ConstraintOptionsIR<T>>,
-    keyof Parameters<(typeof Constraint)[T]>[0]
-  >;
-// A compile error here names a wire option a factory no longer takes.
-const everyWireOptionIsAFactoryOption: [
-  UnknownToFactory<"align">,
-  UnknownToFactory<"distribute">,
-  UnknownToFactory<"position">,
-  UnknownToFactory<"nest">,
-] extends [never, never, never, never]
-  ? true
-  : false = true;
-void everyWireOptionIsAFactoryOption;
+/** The constraints whose wire node has options (not `zAbove`/`zBelow`). */
+type OptionedConstraint = Extract<
+  Frontend.ConstraintIR,
+  { options: object }
+>["type"];
+/** Each wire option key, as `"<type>.<key>"`, that its constraint's factory
+ *  options lack: none, unless a JS option was renamed. (A call above checks
+ *  the types, but an optional key the factory does not name passes it.) */
+type UnknownWireOption = {
+  [T in OptionedConstraint]: `${T}.${Exclude<
+    keyof ConstraintOptionsIR<T>,
+    keyof NonNullable<Parameters<(typeof Constraint)[T]>[0]>
+  > &
+    string}`;
+}[OptionedConstraint];
+// A renamed option fails to compile here, naming it: Property
+// '"distribute.order"' is missing in type '{}'.
+const noUnknownWireOption: Record<UnknownWireOption, never> = {};
+void noUnknownWireOption;
 
 /**
  * Operators whose IR is not their factory's options object, so rebuilding
@@ -425,9 +426,9 @@ export const OPERATOR_BUILDERS: Record<
  * The kind decides the call. An operator, a leaf mark or a coord is
  * `factory(opts)`, and a combinator mark is `factory(opts, children)`: a
  * dual-form factory reads a second argument as the combinator form's
- * children, so an operator must not get one. A constraint is
- * `factory(opts, refs)` from {@link CONSTRAINT_FACTORIES}, with its refs as
- * the children. A descriptor's `positional`
+ * children, so an operator must not get one. A constraint is called as a
+ * combinator mark is, with its refs as the children, from
+ * {@link CONSTRAINT_FACTORIES}. A descriptor's `positional`
  * field goes first, before the rest of the options
  * (`geo(projection, { lon, lat })`); a required one that is missing
  * throws, naming it. Only an {@link OPERATOR_BUILDERS} entry
@@ -444,14 +445,9 @@ export function rebuild(
   if (kind === "operator" && Object.hasOwn(OPERATOR_BUILDERS, type)) {
     return OPERATOR_BUILDERS[type](opts, bridge);
   }
-  if (kind === "constraint") {
-    const factory = CONSTRAINT_FACTORIES[type as Frontend.ConstraintIR["type"]];
-    return (factory as (o: unknown, r: unknown) => ConstraintSpec)(
-      opts,
-      children
-    );
-  }
-  const factory = FACTORIES[type];
+  const factories: Record<string, (...args: any[]) => any> =
+    kind === "constraint" ? CONSTRAINT_FACTORIES : FACTORIES;
+  const factory = factories[type];
   if (factory === undefined) return undefined;
   const { positional } = table[type];
   let args: unknown[] = [opts];
@@ -467,7 +463,7 @@ export function rebuild(
     }
     args = [first, rest];
   }
-  return kind === "combinator-mark"
+  return kind === "combinator-mark" || kind === "constraint"
     ? factory(...args, children)
     : factory(...args);
 }

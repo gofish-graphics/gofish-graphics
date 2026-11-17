@@ -129,9 +129,12 @@ export function constraintFromIR(
     relateOperandFor(r.scope, r.selection, ctx)
   );
   // CONSTRAINT_FACTORIES ties each constraint's wire options to its factory.
-  return rebuild("constraint", c.type, c.options as Record<string, any>, {
+  const spec = rebuild("constraint", c.type, c.options as Record<string, any>, {
     children: operands,
   });
+  if (spec === undefined)
+    throw new Error(`unknown constraint type ${JSON.stringify(c.type)}`);
+  return spec;
 }
 
 // ---------------------------------------------------------------------------

@@ -357,6 +357,9 @@ Constraint.z_above(a, b)  # a paints in front of b (on top in z)
 Constraint.z_below(a, b)  # a paints behind b (under in z)
 ```
 
+::: gofish-ref Constraint.zAbove Constraint.zBelow
+:::
+
 `z_below(a, b)` is equivalent to `z_above(b, a)`; both are provided so the spec
 reads naturally either way. A layer paints only its own children, and the
 render **topologically sorts** them against the z-order constraints. Within the

@@ -105,6 +105,9 @@ export interface DistributeConstraint {
   origin?: StackOrigin<ConstraintRef>;
 }
 
+/** Glued children touch: the spacing of every glued distribute. */
+const GLUED: Spacing = { kind: "box", gap: 0 };
+
 export const createDistributeConstraint = (
   options: DistributeOptions,
   children: ConstraintRef[]
@@ -115,7 +118,7 @@ export const createDistributeConstraint = (
   return {
     type: "distribute",
     dir: options.dir,
-    spacing: options.glue ? spacingOf(0) : spacing,
+    spacing: options.glue ? GLUED : spacing,
     order: options.order ?? "forward",
     glue: options.glue ?? false,
     children,

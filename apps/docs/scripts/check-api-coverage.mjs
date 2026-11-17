@@ -28,15 +28,8 @@ const IR_DIST = resolve(REPO_ROOT, "packages/gofish-ir/dist/frontend/index.js");
  * Constructs deliberately without a `gofish-ref` block:
  *  - `mark-fn`: the Python bridge's "a lambda returning a chart" mark. It has no
  *    user-facing factory in either language.
- *  - `Constraint.zAbove`, `Constraint.zBelow`: they take two refs and no
- *    options, so they have no options table; the constraints page describes
- *    them in prose.
  */
-const ALLOWLIST = new Set([
-  "mark-fn",
-  "Constraint.zAbove",
-  "Constraint.zBelow",
-]);
+const ALLOWLIST = new Set(["mark-fn"]);
 
 const LANGS = ["js", "python"];
 
@@ -53,25 +46,24 @@ const TABLES = [
   ["leaf mark", ir.LEAF_MARKS],
   ["combinator mark", ir.COMBINATOR_MARKS],
   ["coord", ir.COORDS],
+  ["constraint", ir.CONSTRAINTS],
 ];
+// A table's namespace, when the docs name its constructs `<Namespace>.<type>`
+// (`::: gofish-ref Constraint.align`).
+const namespaceOf = new Map(
+  Object.entries(ir.DESCRIPTOR_NAMESPACES).map(([ns, table]) => [table, ns])
+);
 
 /** name (the user-facing one: pyName when present) -> kinds it appears as */
 const constructs = new Map();
 for (const [kind, table] of TABLES) {
+  const namespace = namespaceOf.get(table);
   for (const d of Object.values(table)) {
-    const name = d.pyName ?? d.type;
+    const name = namespace ? `${namespace}.${d.type}` : (d.pyName ?? d.type);
     if (!constructs.has(name))
       constructs.set(name, { kinds: [], wire: d.type });
     constructs.get(name).kinds.push(kind);
   }
-}
-// A constraint is named as it is called, `Constraint.<type>`
-// (`::: gofish-ref Constraint.align`): `position` is also a combinator mark.
-for (const d of Object.values(ir.CONSTRAINTS)) {
-  constructs.set(`Constraint.${d.type}`, {
-    kinds: ["constraint"],
-    wire: d.type,
-  });
 }
 // Named option types (`OPTION_TYPES`) may have a table too
 // (`::: gofish-ref ChartOptions`). They are not required, but one documented

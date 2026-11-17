@@ -46,7 +46,7 @@ import {
   OPTION_TYPES,
   acceptedFields,
   isFlowStepMark,
-  type NodeKind,
+  type ConstructDescriptor,
   MARK_BASE_FIELDS,
   t,
   type FieldGroup,
@@ -728,7 +728,6 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     acceptedFields("operator", node.type) ?? {},
     ["type", "origin", "meta"]
   );
-  walkRequireOneOf("operator", node.type, node, path, ctx);
 }
 
 /** `SelectRefIR`: `{ type: "select", layer, mode? }`, the nodes of a named
@@ -1288,7 +1287,6 @@ function walkLeafMark(
     acceptedFields("leaf-mark", node.type as string) ?? {},
     []
   );
-  walkRequireOneOf("leaf-mark", node.type, node, path, ctx);
 }
 
 /** One entry of a `LabelIR` array — the shape a single `.label(accessor,
@@ -1416,11 +1414,8 @@ function walkNestedOptions(
   ctx: Context
 ): void {
   const type = node.type as string;
-  const d = Object.hasOwn(DESCRIPTOR_TABLES[kind], type)
-    ? DESCRIPTOR_TABLES[kind][type]
-    : undefined;
   if (node.options === undefined || node.options === null) {
-    if (d !== undefined && optionsRequired(d))
+    if (optionsRequired(kind, type))
       ctx.errors.push({
         path: `${path}.options`,
         message: 'required field "options" is missing',
@@ -1437,22 +1432,21 @@ function walkNestedOptions(
     return;
   }
   walkDescriptorFields(options, p, ctx, acceptedFields(kind, type) ?? {}, []);
-  walkRequireOneOf(kind, type, options, p, ctx);
+  if (Object.hasOwn(DESCRIPTOR_TABLES[kind], type))
+    walkRequireOneOf(DESCRIPTOR_TABLES[kind][type], options, p, ctx);
 }
 
 /** A construct's `requireOneOf`: its options give at least one of those
- *  fields. */
+ *  fields. A null field is not given, as the field walk treats it. */
 function walkRequireOneOf(
-  kind: NodeKind,
-  type: unknown,
+  d: ConstructDescriptor,
   options: Record<string, unknown>,
   path: string,
   ctx: Context
 ): void {
-  if (typeof type !== "string" || !Object.hasOwn(DESCRIPTOR_TABLES[kind], type))
-    return;
-  const oneOf = DESCRIPTOR_TABLES[kind][type].requireOneOf;
-  if (oneOf !== undefined && oneOf.every((k) => options[k] === undefined)) {
+  const oneOf = d.requireOneOf;
+  const type = d.type;
+  if (oneOf !== undefined && oneOf.every((k) => options[k] == null)) {
     ctx.errors.push({
       path,
       message: `${type} options must specify at least one of ${oneOf.join(", ")}`,
