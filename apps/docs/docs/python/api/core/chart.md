@@ -216,18 +216,26 @@ The legend sits beside the plot and holds one entry for each such scale:
   plot's scale and labeled once with the amount and the measure's name, for
   example "2000 count". It sits at the top of the legend, above the swatches.
 
-`legend` turns entries off. The marks keep their colors and sizes; only the
-legend goes away.
+A length entry stands in for the axis the dimension would have if its space
+had an origin, so by default it is drawn where that axis would be: along a
+dimension whose axes the chart draws. A chart draws its axes unless `axes`
+turns them off, so with `axes={"y": False}` the length entry along y is not
+drawn either. A figure rendered without `chart()` draws no axes by default,
+and no length entries. The color entry is drawn either way.
 
-| Value                     | Draws                                                   |
-| ------------------------- | ------------------------------------------------------- |
-| `True` (default)          | every entry                                             |
-| `False`                   | no entries                                              |
-| `{"color": False}`        | the length entries, no color entry                      |
-| `{"y": False}`            | no length entry for the scales along y                  |
-| `{"y": {"title": "..."}}` | the length entry along y, its amount named by the title |
+`legend` turns entries on or off. The marks keep their colors and sizes; only
+the legend goes away.
 
-A key left out of the dict is drawn.
+| Value                     | Draws                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| omitted (default)         | the color entry, and the length entries where axes are drawn |
+| `True`                    | every entry                                                  |
+| `False`                   | no entries                                                   |
+| `{"color": False}`        | the length entries, no color entry                           |
+| `{"y": False}`            | no length entry for the scales along y                       |
+| `{"y": {"title": "..."}}` | the length entry along y, its amount named by the title      |
+
+A key left out of the dict keeps its default.
 
 ```python
 chart(data, legend=False)

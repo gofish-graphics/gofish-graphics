@@ -357,8 +357,9 @@ Question 5 in section 8 records the decision.
 
 A domain of widths (a space with no origin) has no positions, so it draws no
 axis. The legend reads it instead: `KeyedDomains.lengthScales` lists the
-root's width domains, and each gets a length entry, a bracket whose length is
-a datum in the same domain, so it is mapped at the root's σ (see
+root's width domains, and each gets a length entry along a dim whose axes
+the root draws, a bracket whose length is a datum in the same domain, so it
+is mapped at the root's σ (see
 [Legends](/internals/frontend/legends#length-entries)).
 
 ### The scope dump

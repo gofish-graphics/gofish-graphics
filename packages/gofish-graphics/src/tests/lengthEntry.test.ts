@@ -6,7 +6,16 @@
  * `test:length-entry`).
  */
 // The library first, so its modules initialize in their usual order.
-import { chart, spread, stack, rect, Baseline, Coord, Serialize } from "../lib";
+import {
+  chart,
+  spread,
+  stack,
+  rect,
+  v,
+  Baseline,
+  Coord,
+  Serialize,
+} from "../lib";
 import { check, items, report } from "./testHelpers";
 
 const close = (a: number | undefined, b: number, eps = 1e-6) =>
@@ -198,6 +207,71 @@ async function main() {
       "the render's legend option applies too",
       byRender.line !== undefined && !byRender.texts.includes("p"),
       byRender.texts
+    );
+  }
+
+  console.log("\n# the entry is drawn where an axis would be by default");
+  {
+    // A length entry stands in for the axis the dim would have, so it
+    // follows the render's `axes`: a chart's are on unless it turns them
+    // off, and a bare node's are off.
+    const chartNoAxes = await draw({ chart: { w: 300, h: 200, axes: false } });
+    check(
+      "a chart with axes: false draws no entry",
+      chartNoAxes.line === undefined,
+      chartNoAxes.texts
+    );
+    const chartNoY = await draw({
+      chart: { w: 300, h: 200, axes: { y: false } },
+    });
+    check(
+      "a chart with axes: { y: false } draws no entry along y",
+      chartNoY.line === undefined,
+      chartNoY.texts
+    );
+    const chartForced = await draw({
+      chart: { w: 300, h: 200, axes: false, legend: { y: true } },
+    });
+    check(
+      "legend: { y: true } draws it anyway",
+      chartForced.line !== undefined &&
+        close(chartForced.line, 20 * chartForced.sigma),
+      chartForced.texts
+    );
+    // The same kind of silhouette stack as a bare combinator figure, with
+    // no chart().
+    const bare = () =>
+      stack(
+        { dir: "y", baseline: Baseline.middle() },
+        [30, 70].map((h) => rect({ w: 20, h: v(h) }))
+      );
+    const bareDefault = measure(
+      await bare().toDisplayList({ w: 300, h: 200 } as any)
+    );
+    check(
+      "a bare figure draws no entry by default",
+      bareDefault.line === undefined && bareDefault.texts.length === 0,
+      bareDefault.texts
+    );
+    const bareAxes = measure(
+      await bare().toDisplayList({ w: 300, h: 200, axes: true } as any)
+    );
+    check(
+      "a bare figure with axes: true draws its entry",
+      bareAxes.line !== undefined,
+      bareAxes.texts
+    );
+    const bareLegend = measure(
+      await bare().toDisplayList({
+        w: 300,
+        h: 200,
+        legend: { y: true },
+      } as any)
+    );
+    check(
+      "a bare figure with legend: { y: true } draws its entry",
+      bareLegend.line !== undefined,
+      bareLegend.texts
     );
   }
 

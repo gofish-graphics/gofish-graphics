@@ -153,10 +153,15 @@ export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
  * scale (the widths of a space with no origin, a streamgraph's thickness).
  * Scales that have positions get axes instead (`axes`).
  *
- * - `true` (the default) draws every entry, and `false` draws none.
+ * A length entry stands in for the axis its dimension would have if its
+ * space had an origin, so by default it is drawn where that axis would be:
+ * on a dim the render's `axes` turns on (a chart's are on unless it says
+ * otherwise; a bare node's are off). The color entry is drawn by default.
+ *
+ * - `true` draws every entry, and `false` draws none.
  * - `{ color?, x?, y? }` sets each entry on its own: `color` is the color
  *   scale's swatches or colorbar, and `x` and `y` are the length entries of
- *   the scales along that axis. An entry left out is drawn.
+ *   the scales along that axis. An entry left out keeps its default.
  */
 export type LegendOptions =
   | boolean
@@ -168,21 +173,24 @@ export type LegendOptions =
 export type LengthEntryOptions = boolean | { title?: string | false };
 
 /** A chart's `legend` option, read: whether the color entry is drawn, and
- *  each axis's length entry options, `false` where it is not drawn. Checked
- *  against the IR's declared `LegendOptions` (`Frontend.checkOption`), as
- *  `axes` is. */
-export function readLegendOptions(legend: LegendOptions | undefined): {
+ *  each axis's length entry options, `false` where it is not drawn. A
+ *  length entry the option leaves out follows `axesOn`, whether the render
+ *  draws that dim's axes ({@link LegendOptions}). Checked against the IR's
+ *  declared `LegendOptions` (`Frontend.checkOption`), as `axes` is. */
+export function readLegendOptions(
+  legend: LegendOptions | undefined,
+  axesOn: readonly [boolean, boolean]
+): {
   color: boolean;
   lengths: [LengthEntryOptions, LengthEntryOptions];
 } {
-  if (legend === undefined || typeof legend === "boolean") {
-    const on = legend !== false;
-    return { color: on, lengths: [on, on] };
-  }
+  if (legend === undefined) return { color: true, lengths: [...axesOn] };
+  if (typeof legend === "boolean")
+    return { color: legend, lengths: [legend, legend] };
   Frontend.checkOption("LegendOptions", legend, "legend");
   return {
     color: legend.color !== false,
-    lengths: [legend.x ?? true, legend.y ?? true],
+    lengths: [legend.x ?? axesOn[0], legend.y ?? axesOn[1]],
   };
 }
 /** `side` (issue #143/#16): which frame edge the axis seats on — `"start"` (the
@@ -401,7 +409,7 @@ export async function layout(
     transform,
     debug = false,
     axes,
-    legend = true,
+    legend,
     labelRowSettings,
   }: {
     w?: number;
@@ -498,7 +506,8 @@ export async function layout(
     read[0].perLevel,
     read[1].perLevel,
   ];
-  child.resolveAxes(new Map(), axesEnabled(axes));
+  const enabled = axesEnabled(axes);
+  child.resolveAxes(new Map(), enabled);
   keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
@@ -518,7 +527,10 @@ export async function layout(
   // (`resolveAxes` above), and a scale that maps data to anything with no
   // place in the plot is drawn aside, as a legend entry: the color scale,
   // and each length scale the root maps (`KeyedDomains.lengthScales`).
-  // `legend` turns entries off; the scales still paint the marks.
+  // A length entry stands in for the axis its dim would have, so it is
+  // drawn by default where the root's axes are (`enabled`, the one decision
+  // both read), and `legend` turns entries on or off; the scales still paint
+  // the marks.
   // The entries are drawn at the root's σ, which is the plot's: the root
   // maps a domain its sized nodes map at their σ (`rootSizes` below).
   // TODO(#1322): a length scale that a coordinate transform maps (a polar
@@ -527,7 +539,10 @@ export async function layout(
   // one domain at different σs: the root then fits its own. Each wants
   // its entry owned by the node at the root of its scale.
   const root0 = child;
-  const legendRead = readLegendOptions(legend);
+  const legendRead = readLegendOptions(legend, [
+    Boolean(enabled.get(0)),
+    Boolean(enabled.get(1)),
+  ]);
   const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
     legendRead.color &&
@@ -1208,7 +1223,7 @@ async function layoutOnce(
     transform,
     debug = false,
     axes,
-    legend = true,
+    legend,
     colorConfig,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous

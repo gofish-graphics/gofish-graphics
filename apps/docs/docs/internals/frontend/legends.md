@@ -42,8 +42,9 @@ something to show (a non-empty categorical color map, or a continuous color
 scale) and stamps it on the root's chrome request, before chrome elaboration
 wraps any node of the tree; `elaborateChrome` seats it as the root's outermost
 ring. The
-`axes` option plays no part, so a legend appears whenever a color encoding
-resolved.
+`axes` option plays no part in the color entry, so a color legend appears
+whenever a color encoding resolved. A length entry does follow `axes`
+([below](#length-entries)).
 
 The chart option `legend` sets which entries the ring holds: `false` drops
 all of them, and `{ color: false }` or `{ y: false }` drops one. With no
@@ -136,6 +137,18 @@ so its data has lengths but no places. It gets no axis. Its guide goes in the
 legend, as a color scale's does. The keyed domains are keyed by the same read
 (`domainId`), so `KeyedDomains.lengthScales(root, axis)` lists the root's
 length scales directly.
+
+A length entry stands in for the axis its dimension would have if its space
+had an origin, so it is drawn exactly where that axis would be drawn by
+default, and nowhere else. `layout()` reads one decision for both: the
+render's `axes`, read by `axesEnabled`, is what `resolveAxes` starts the axis
+walk from, and `readLegendOptions` takes the same map, so a length entry that
+`legend` leaves out is drawn along a dim the root's axes are on. A chart's
+axes are on unless it turns them off, so its entries are drawn. A bare node
+rendered with no `chart()` (`gofish(container, {}, node)`, or a combinator's
+`.render`) decides no dim, so it draws no axes and no length entries, though
+its color entry is still drawn. `legend: true`, or `legend: { y: true }`,
+draws an entry anyway, and `false` drops it.
 
 Each length scale gets one entry (`lengthEntryNode`): a thin bracket, a line
 with a short tick at each end, and one label beside it. Its length is a round

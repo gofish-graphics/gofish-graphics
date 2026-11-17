@@ -1257,8 +1257,7 @@ export const CHART_OPTIONS: FieldGroup = group({
   },
   legend: {
     type: t.ref("LegendOptions"),
-    default: true,
-    doc: "Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Turned off, the marks keep their colors and sizes and only the entry is dropped.",
+    doc: "Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Omitted, the color entry is drawn, and a length entry is drawn along a dimension whose axes the chart draws (`axes`): it stands in for that dimension's axis. Turned off, the marks keep their colors and sizes and only the entry is dropped.",
   },
   padding: {
     type: t.number,
@@ -1295,7 +1294,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     ),
   },
   LegendOptions: {
-    doc: "Which legend entries to draw: a boolean for every entry; an object sets each on its own, and an entry left out is drawn.",
+    doc: "Which legend entries to draw: a boolean for every entry; an object sets each on its own, and an entry left out keeps its default (the color entry is drawn, and a length entry is drawn along a dimension whose axes are drawn).",
     type: t.union(
       t.boolean,
       t.object({

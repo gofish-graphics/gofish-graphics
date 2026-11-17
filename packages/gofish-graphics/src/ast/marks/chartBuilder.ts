@@ -74,17 +74,19 @@ export type ChartOptions = {
    */
   axes?: AxesOptions;
   /**
-   * Which legend entries to draw for this chart. Default `true`. A legend
-   * holds the guides of the scales that have no place in the plot: a color
-   * scale (a swatch column, or a colorbar for a gradient), and a length
-   * scale (the widths of a space with no origin, such as a streamgraph's
-   * thickness), drawn as a bracket of a round amount. Scales that have
-   * positions get axes instead (`axes`).
+   * Which legend entries to draw for this chart. A legend holds the guides
+   * of the scales that have no place in the plot: a color scale (a swatch
+   * column, or a colorbar for a gradient), and a length scale (the widths
+   * of a space with no origin, such as a streamgraph's thickness), drawn as
+   * a bracket of a round amount. Scales that have positions get axes
+   * instead (`axes`). By default the color entry is drawn, and a length
+   * entry is drawn on a dim whose axes the chart draws (`axes`), since it
+   * stands in for that dim's axis.
    * - `true` draws every entry; `false` draws none. The scales still paint
    *   the marks: only the chrome is dropped (e.g. a 72-species basemap
    *   where a swatch column would eat the canvas).
-   * - `{ color?, x?, y? }` sets each entry on its own, and one left out is
-   *   drawn: `color: false` drops the color entry, `y: false` drops the
+   * - `{ color?, x?, y? }` sets each entry on its own, and one left out
+   *   keeps its default: `color: false` drops the color entry, `y: false` drops the
    *   length entry of the scales along y, and `y: { title }` names its
    *   amount ("2000 unemployed (thousands)"; without a title, the measure's
    *   name, as an axis title is).
