@@ -70,6 +70,10 @@ for (const [name, spec] of Object.entries(DRAGS)) {
       continue;
     }
     const initial = await page.evaluate((n) => window.handles[n].rows(), name);
+    const initialOrder = await page.evaluate(
+      (n) => window.handles[n].order(),
+      name
+    );
     if (!variant.noShots) await shot(1);
     const at = ([x, y]) => [box.x + x, box.y + y];
     await page.mouse.move(...at(spec.grab));
@@ -91,7 +95,7 @@ for (const [name, spec] of Object.entries(DRAGS)) {
     if (!variant.noShots) await shot(k);
     const stats = await page.evaluate((n) => {
       const h = window.handles[n];
-      return { ...h.stats, rows: h.rows() };
+      return { ...h.stats, rows: h.rows(), order: h.order() };
     }, name);
     const avg = (xs) =>
       xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
@@ -107,6 +111,8 @@ for (const [name, spec] of Object.entries(DRAGS)) {
       frames: stats.frameMs.length,
       frameMsAvg: +avg(stats.frameMs).toFixed(2),
       frameMsMax: +Math.max(...stats.frameMs).toFixed(2),
+      orderBefore: initialOrder,
+      orderAfter: stats.order,
       changedRows: stats.rows.filter(
         (r) => !initial.some((s) => JSON.stringify(s) === JSON.stringify(r))
       ),

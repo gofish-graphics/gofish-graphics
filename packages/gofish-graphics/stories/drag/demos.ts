@@ -20,13 +20,18 @@ import { mountDraggable, type DragHandle } from "./engine";
 export type DemoOptions = { debug?: boolean; precompute?: "lazy" | "eager" };
 type Demo = (el: HTMLElement, o?: DemoOptions) => DragHandle;
 
+// Both reorder demos edit the order of a domain, not the rows: the state's
+// `order[field]` goes into the spec as that field's declared levels.
+const levels = (f: string) => [...new Set(seafood.map((r) => r[f]))];
+
 // --- 1. Reorder Bars --------------------------------------------------------
 const reorderBars: Demo = (el, o = {}) =>
   mountDraggable(el, {
     data: seafood,
+    order: { lake: levels("lake") },
     key: (r) => `${r.lake}-${r.species}`,
-    spec: (rows) =>
-      chart(rows)
+    spec: (rows, order) =>
+      chart(rows, { schema: { lake: Unit({ domain: Domain.discrete(order.lake) }) } })
         .flow(spread({ by: "lake", dir: "x" }))
         .mark(rect({ h: "count" })),
     w: 420,
@@ -35,23 +40,11 @@ const reorderBars: Demo = (el, o = {}) =>
     debug: o.debug,
   });
 
-// --- 2. Move Segment --------------------------------------------------------
-// Each catch is its own segment (stacked by id), so a segment moved into a
-// lake that already has its species stays one segment instead of merging.
-// The lake order and the species colors are pinned in the spec. Unpinned,
-// GoFish orders categories by first appearance in the data, so moving the
-// first row (Lake A's Bass) would reorder the lakes and recolor the species
-// in every candidate state. The species colors need a palette as well as the
-// species levels: with a lake Unit declared, the color scale ignores the
-// species Unit's levels (a GoFish bug, see the findings file).
-const catchSchema = {
-  lake: Unit({
-    domain: Domain.discrete([...new Set(seafood.map((r) => r.lake))]),
-  }),
-  species: Unit({
-    domain: Domain.discrete([...new Set(seafood.map((r) => r.species))]),
-  }),
-};
+// --- 2. Reorder Stack -------------------------------------------------------
+// Dragging a segment up or down moves its species in the species domain, so
+// every stack (and the legend) reorders together. The stack follows the
+// declared levels. The palette keeps each species' color: without it the
+// color scale also follows the levels, so reordering would recolor species.
 const speciesColors = Color.palette({
   Bass: "#4190c5",
   Trout: "#f2cf57",
@@ -59,19 +52,25 @@ const speciesColors = Color.palette({
   Perch: "#ff9466",
   Salmon: "#40b77d",
 });
-const catchRows = seafood.map((r, i) => ({ id: `c${i}`, ...r }));
 
-const moveSegment: Demo = (el, o = {}) =>
+const reorderStack: Demo = (el, o = {}) =>
   mountDraggable(el, {
-    data: catchRows,
-    key: (r) => r.id,
-    spec: (rows) =>
-      chart(rows, { schema: catchSchema, color: speciesColors })
-        .flow(spread({ by: "lake", dir: "x" }), stack({ by: "id", dir: "y" }))
+    data: seafood,
+    order: { species: levels("species") },
+    key: (r) => `${r.lake}-${r.species}`,
+    spec: (rows, order) =>
+      chart(rows, {
+        schema: { species: Unit({ domain: Domain.discrete(order.species) }) },
+        color: speciesColors,
+      })
+        .flow(
+          spread({ by: "lake", dir: "x" }),
+          stack({ by: "species", dir: "y" })
+        )
         .mark(rect({ h: "count", fill: "species" })),
     w: 420,
     h: 300,
-    drag: { edit: ["lake"], feel: "floating", precompute: o.precompute },
+    drag: { reorder: "species", feel: "between", precompute: o.precompute },
     debug: o.debug,
   });
 
@@ -196,7 +195,9 @@ const treemapReparent: Demo = (el, o = {}) =>
           : GROUPS.map((g) =>
               rows.map((r) => (r.id === leaf.id ? { ...r, group: g } : r))
             ),
-      feel: "between",
+      // A treemap has no axis to blend along: the tile follows the pointer
+      // and the rest snaps to the state of the nearest target.
+      feel: "floating",
       precompute: o.precompute,
     },
     debug: o.debug,
@@ -204,7 +205,7 @@ const treemapReparent: Demo = (el, o = {}) =>
 
 export const demos: Record<string, Demo> = {
   "reorder-bars": reorderBars,
-  "move-segment": moveSegment,
+  "reorder-stack": reorderStack,
   scheduler,
   "treemap-reparent": treemapReparent,
 };

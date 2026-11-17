@@ -4,14 +4,14 @@
 
 **Recommendation.** A `.drag(...)` method on marks that takes a strategy from a new `Drag` family: `Drag.edit(...fields)`, `Drag.reorder()`, and `Drag.states(fn)` as the escape hatch that lists states by hand, which is what Dragology asks of every author. The data is a `signal`, and a drop writes the edited rows back to it.
 
-**Status.** Four prototypes run on a small native engine (916 lines of story-level code, no change to library source, no `dragology` or React dependency). Syntax is not signed off. Nothing here is implemented in the library.
+**Status.** Four prototypes run on a small native engine (942 lines of story-level code, no change to library source, no `dragology` or React dependency). Syntax is not signed off. Nothing here is implemented in the library.
 
-Prototype code: `packages/gofish-graphics/stories/drag/` (stories "Drag/Reorder Bars", "Drag/Move Segment", "Drag/Scheduler", "Drag/Treemap Reparent"). Measurements and walls: `research/prototype-findings.md`.
+Prototype code: `packages/gofish-graphics/stories/drag/` (stories "Drag/Reorder Bars", "Drag/Reorder Stack", "Drag/Scheduler", "Drag/Treemap Reparent"). Measurements and walls: `research/prototype-findings.md`.
 
 ## Terms
 
-- **State.** In Dragology, the app's model object. In GoFish, the data rows.
-- **Reachable state.** The rows after one edit that a drag could make.
+- **State.** In Dragology, the app's model object. In GoFish, the data rows and the order of the domains the spec declares.
+- **Reachable state.** The rows, or a domain order, after one edit that a drag could make.
 - **Target.** The place where the dragged mark sits in the layout of a reachable state.
 - **Key.** What makes a row the same row in two states. GoFish matches marks across states by key (the key join from the animation grammar work).
 - **Feel.** How the picture follows the pointer between targets. Dragology's two main feels are `closest` (snap to the nearest target) and `between` (blend the pictures of the nearby targets).
@@ -29,14 +29,14 @@ The paper itself says Dragology "is not concerned with the layout of graphical e
 
 ## How the ideas map
 
-| Dragology                                                                                                                   | GoFish                                                                                                                                             |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The author lists reachable states by hand. The study found this the hardest part ("a sharp cliff at the reorderable list"). | Derived from the spec. An edited field's values come from its domain. A reorder is every index of the list.                                        |
-| Render every reachable state, find the dragged element in each.                                                             | Lay out every reachable state. Layout does not touch the DOM. Measured 9 to 15 ms per layout, 4 to 8 states per drag, 15 to 48 ms at pointer down. |
-| Match elements across states by global id.                                                                                  | Key join over rows.                                                                                                                                |
-| `between`: blend the renders by pointer position.                                                                           | A `transition` between laid-out states with the pointer in place of the clock. Blend and paint measured about 1 ms per frame.                      |
-| `vary`: optimizer over continuous parameters.                                                                               | Invert the scale. The prototype blends two cached layouts and matches a real layout of the dropped rows to 0 px.                                   |
-| Drop: ease from the preview to the new state.                                                                               | The same key join tweens to the new layout.                                                                                                        |
+| Dragology                                                                                                                   | GoFish                                                                                                                                              |
+| --------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The author lists reachable states by hand. The study found this the hardest part ("a sharp cliff at the reorderable list"). | Derived from the spec. An edited field's values come from its domain. A reorder is every index of the split's domain.                               |
+| Render every reachable state, find the dragged element in each.                                                             | Lay out every reachable state. Layout does not touch the DOM. Measured 10 to 20 ms per layout, 4 to 8 states per drag, 17 to 52 ms at pointer down. |
+| Match elements across states by global id.                                                                                  | Key join over rows.                                                                                                                                 |
+| `between`: blend the renders by pointer position.                                                                           | A `transition` between laid-out states with the pointer in place of the clock. Blend and paint measured 0.5 to 1.5 ms per frame.                    |
+| `vary`: optimizer over continuous parameters.                                                                               | Invert the scale. The prototype blends two cached layouts and matches a real layout of the dropped rows to 0 px.                                    |
+| Drop: ease from the preview to the new state.                                                                               | The same key join tweens to the new layout.                                                                                                         |
 
 ## Examples
 
@@ -55,22 +55,22 @@ chart(catches)
   .render(container, { w: 420, h: 300 });
 ```
 
-`Drag.reorder()` moves the mark's group to another index of the split that holds it. The axis labels travel with the bars because they are part of each layout.
+`Drag.reorder()` reorders the split that holds the mark. Here that split is `spread({ by: "lake" })`, so the drag edits the order of the lake domain. The rows do not change. The axis labels travel with the bars because they are part of each layout.
 
-### 2. Move a segment to another stack
+### 2. Reorder a stack
 
-![move](img/move-segment-1.png) ![move](img/move-segment-2.png) ![move](img/move-segment-4.png)
+![reorder stack](img/reorder-stack-1.png) ![reorder stack](img/reorder-stack-debug-2.png) ![reorder stack](img/reorder-stack-4.png)
 
 ```js
 chart(catches)
   .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
-  .mark(rect({ h: "count", fill: "species" }).drag(Drag.edit("lake")))
+  .mark(rect({ h: "count", fill: "species" }).drag(Drag.reorder()))
   .render(container, { w: 420, h: 300 });
 ```
 
-`Drag.edit("lake")` says a drag may change the row's `lake`. The reachable values are the domain of `lake`. Both stacks reflow, and the y axis blends if its domain changes.
+`Drag.reorder()` reorders the split that holds the mark. Here that split is `stack({ by: "species" })`, so the drag edits the order of the species domain, not the rows. Every stack and the legend reorder together. In the first example the same call reorders the lake domain.
 
-A real fork shows up here. When Bass moves from Lake B to Lake C, Lake C already has a Bass row. `stack({ by: "species" })` then draws one mark for both rows. That is the right picture after the drop, but during the drag two marks become one. The prototype avoids the question by stacking by row id, which keeps them apart. My choice is to keep the spec as written and let the two marks merge at the drop, since the data says so. The other option is for a drag to force one mark per row.
+The targets are one place per index in the stack, and they lie on one vertical line, so the segment blends along that line (middle frame, with targets shown). The prototype keeps each species' color with a palette. Without it, colors follow the domain order too, and a reorder would recolor the species.
 
 ### 3. Scheduler (the paper's example)
 
@@ -97,7 +97,7 @@ The time axis must not rescale while a bar is dragged along it. The proposal pin
 
 ### 4. Reparent a treemap leaf
 
-![treemap](img/treemap-reparent-1.png) ![treemap](img/treemap-reparent-2.png) ![treemap](img/treemap-reparent-4.png)
+![treemap](img/treemap-reparent-1.png) ![treemap](img/treemap-reparent-3.png) ![treemap](img/treemap-reparent-4.png)
 
 ```js
 chart(leaves)
@@ -111,7 +111,9 @@ chart(leaves)
 
 This is the case for layout. A Dragology author would have to write squarify. Here the tiles re-tile because each reachable state goes through the same layout.
 
-It is also where blending is weakest. Halfway between two tilings the tiles overlap (middle frame). For layouts that jump, the better feel is to snap the rest of the picture to the nearest state and let the dragged tile float under the pointer. That is the second fork: which feel is the default. My choice is that the default follows the space, the same way the snap rule does. Positions on an axis blend. Layouts with no axis (treemap, pack, tree) snap with the dragged mark floating.
+The dragged tile follows the pointer anywhere and is drawn on top. The rest of the picture snaps to the state whose target is nearest the tile, with a 150 ms tween, and the tile's size eases to its size in that state (middle frame). On release the tile tweens into its slot. The tile's label stays in the slot, because a label has no row to tie it to its tile (see What GoFish needs first).
+
+The rule for the default feel: positions on an axis blend along their track. Layouts with no axis (treemap, pack, tree) use free dragging, with the rest snapping to the nearest state.
 
 ### 5. Escape hatch: list the states
 
@@ -127,7 +129,7 @@ rect(...).drag(
 )
 ```
 
-`Drag.edit` and `Drag.reorder` are defined by rewriting into `Drag.states`. Anything the derived strategies cannot say (a tree drop that must not create a cycle) is written this way.
+`Drag.edit` is defined by rewriting into `Drag.states`. Anything the derived strategies cannot say (a tree drop that must not create a cycle) is written this way.
 
 ### Python
 
@@ -146,7 +148,7 @@ Three independent questions.
 ### Where the reachable states come from
 
 - **Listed by hand** (Dragology). Fully general. The paper's study shows authors struggle with it, and it repeats what the spec already says.
-- **Derived from the spec** (recommended). The mark names the field. The operator that reads that field knows its values and where each one lands. Three rules cover the prototypes: an ordinal field gives one state per value in its domain, a continuous field gives the scale inverse, and a reorder gives one state per index. The hand-written list stays as `Drag.states`.
+- **Derived from the spec** (recommended). The mark names the field. The operator that reads that field knows its values and where each one lands. Three rules cover the prototypes: an ordinal field gives one state per value in its domain, a continuous field gives the scale inverse, and a reorder gives one state per index. A drag edits either rows (`Drag.edit`) or the order of a domain (`Drag.reorder`). A drag that would produce a wrong chart, such as moving a stacked segment to another lake, is not offered. The hand-written list stays as `Drag.states`.
 
 ### Where the declaration sits
 
@@ -156,7 +158,7 @@ Three independent questions.
 
 ### Where the edit goes
 
-The data is a `signal`. A drop calls `set` with the edited rows, and the chart rerenders. A `.drag` on a chart whose data is a plain array is a loud error that names the fix. The alternative is a hidden copy of the data inside the chart, which no other code could read.
+The data is a `signal`. A drop calls `set` with the edited rows, and the chart rerenders. A drag edits either rows (`Drag.edit`) or the order of a domain (`Drag.reorder`). A reorder writes the new order to the domain the split reads, and the chart rerenders the same way. A `.drag` on a chart whose data is a plain array is a loud error that names the fix. The alternative is a hidden copy of the data inside the chart, which no other code could read.
 
 ## What GoFish needs first
 
@@ -164,13 +166,13 @@ From the prototype's walls. None of these is drag-specific.
 
 1. **A keyed join between one render and the next** (#914, noted as a declared shortcut in the build-in animation code). The drag blend and the drop tween both need it, and so does every animated update. The row key join on the animation grammar branch works on nodes and gives chrome no identity. The prototype keys ticks and legend swatches by their nearest label, which is a guess.
 2. **Stable keys on display items**, including labels. Today a tile's label has no datum, so it does not travel with its tile.
-3. **Pinned ordinal order during a drag.** Categories are ordered by first appearance, so editing the first row of a lake moved that lake in every reachable state. The prototype declares the domains by hand.
+3. **Pinned ordinal order during a drag.** Categories are ordered by first appearance, so editing a row's field can move its category in every reachable state. The prototype declares the domains by hand.
 4. **A public way to paint a display list and to read item boxes and pixel maps from it.** The prototype imports the painter by path.
-5. **A bug found on the way.** Declaring a `Unit` domain for `lake` makes the color scale ignore the declared levels of `species` (`src/ast/_node.ts` near lines 1234 to 1258). Not filed yet.
+5. **A bug found on the way.** The color scale follows the declared levels of a `Unit` only when the same field also splits the marks. Stacked by row id, `fill: "species"` ignores the declared species levels and falls back to first appearance (`src/ast/_node.ts` near lines 1234 to 1258). Not filed yet.
 
 ## What the prototype leaves out
 
-Dragology features not reproduced: natural neighbor blending, `whenFar`, snap radius, chained drags, constraints on continuous drags, drop targets by bounds, and control of z order. Blending over targets that lie almost on a line mixes in the wrong states, which is why Move Segment uses the floating feel. Each of these is a possible later member or option of the `Drag` family and none changes the call shape.
+Dragology features not reproduced: natural neighbor blending, `whenFar`, snap radius, chained drags, constraints on continuous drags, drop targets by bounds, and control of z order. Each of these is a possible later member or option of the `Drag` family and none changes the call shape.
 
 ## Precedent
 

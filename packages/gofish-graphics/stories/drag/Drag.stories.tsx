@@ -26,7 +26,10 @@ const story = (name: string): StoryObj<Args> => ({
 });
 
 export const ReorderBars = { ...story("reorder-bars"), name: "Reorder Bars" };
-export const MoveSegment = { ...story("move-segment"), name: "Move Segment" };
+export const ReorderStack = {
+  ...story("reorder-stack"),
+  name: "Reorder Stack",
+};
 export const Scheduler = { ...story("scheduler"), name: "Scheduler" };
 export const TreemapReparent = {
   ...story("treemap-reparent"),

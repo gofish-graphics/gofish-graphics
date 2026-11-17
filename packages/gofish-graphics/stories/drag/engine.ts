@@ -46,7 +46,8 @@ export type DragOptions = {
   marks?: (row: Row) => boolean;
   /** Fields the drag edits on the dragged rows. */
   edit?: EditField[];
-  /** Reorder the groups of this field. */
+  /** Reorder the levels of this field's domain (`order[field]`): the drag
+   *  edits the domain order, never the rows. */
   reorder?: string;
   /** Escape hatch: the reachable row lists, given the dragged rows. */
   states?: (dragged: Row[], rows: Row[]) => Row[][];
@@ -58,10 +59,18 @@ export type DragOptions = {
   precompute?: "lazy" | "eager";
 };
 
+/** What a drag edits: the rows, and the level order of declared domains. */
+export type State = { rows: Row[]; order: Record<string, unknown[]> };
+
 export type MountOptions = {
   data: Row[];
+  /** Initial level order of the domains the spec declares (for `reorder`). */
+  order?: Record<string, unknown[]>;
   key: (row: Row) => string;
-  spec: (rows: Row[]) => {
+  spec: (
+    rows: Row[],
+    order: Record<string, unknown[]>
+  ) => {
     toDisplayList(o: any): Promise<DisplayList.DisplayListDocument>;
   };
   w: number;
@@ -87,6 +96,7 @@ export type DragStats = {
 export type DragHandle = {
   stats: DragStats;
   rows: () => Row[];
+  order: () => Record<string, unknown[]>;
   /** Resolves once the initial render (and eager precompute) is done. */
   ready: Promise<void>;
   /** Resolves when the in-flight drop tween ends. */
@@ -440,13 +450,14 @@ function betweenWeights(pts: Vec[], p: Vec): number[] {
 type Cont = { field: string; lo: number; hi: number };
 /** One discrete state ("combo") with 2^k corner row lists for k continuous
  *  fields (corner bit j = field j at its max). */
-type Combo = { corners: Row[][] };
+type Combo = { corners: State[] };
 
 function candidates(
   dragged: Row[],
-  rows: Row[],
+  state: State,
   opts: MountOptions
 ): { combos: Combo[]; conts: Cont[] } {
+  const { rows, order } = state;
   const { drag, key } = opts;
   const ids = new Set(dragged.map(key));
   const isDragged = (r: Row) => ids.has(key(r));
@@ -469,20 +480,24 @@ function candidates(
       };
     });
 
-  let lists: Row[][];
-  if (drag.states) lists = drag.states(dragged, rows);
+  let states: State[];
+  if (drag.states)
+    states = drag.states(dragged, rows).map((rs) => ({ rows: rs, order }));
   else if (drag.reorder) {
+    // Reorder edits the order of the split's domain: the dragged mark's
+    // level moved to each index. The rows never change.
     const F = drag.reorder;
-    const order = [...new Set(rows.map((r) => r[F]))];
+    const levels = order[F];
+    if (!levels)
+      throw new Error(`reorder: "${F}" needs its level order in \`order\`.`);
     const v = dragged[0][F];
-    lists = order.map((_, j) => {
-      const o = order.filter((x) => x !== v);
+    states = levels.map((_, j) => {
+      const o = levels.filter((x) => x !== v);
       o.splice(j, 0, v);
-      const rank = new Map(o.map((x, i) => [x, i]));
-      return [...rows].sort((a, b) => rank.get(a[F])! - rank.get(b[F])!);
+      return { rows, order: { ...order, [F]: o } };
     });
   } else {
-    lists = [rows];
+    let lists = [rows];
     for (const f of ord) {
       const domain = [...new Set(rows.map((r) => r[f.field]))];
       lists = lists.flatMap((l) =>
@@ -491,17 +506,23 @@ function candidates(
         )
       );
     }
+    states = lists.map((rs) => ({ rows: rs, order }));
   }
-  const combos = lists.map((l) => ({
+  const combos = states.map((s) => ({
     corners: Array.from({ length: 1 << conts.length }, (_, c) =>
       conts.length === 0
-        ? l
-        : l.map((r) => {
-            if (!isDragged(r)) return r;
-            const o = { ...r };
-            conts.forEach((f, j) => (o[f.field] = c & (1 << j) ? f.hi : f.lo));
-            return o;
-          })
+        ? s
+        : {
+            order: s.order,
+            rows: s.rows.map((r) => {
+              if (!isDragged(r)) return r;
+              const o = { ...r };
+              conts.forEach(
+                (f, j) => (o[f.field] = c & (1 << j) ? f.hi : f.lo)
+              );
+              return o;
+            }),
+          }
     ),
   }));
   return { combos, conts };
@@ -526,7 +547,7 @@ export function mountDraggable(
     blendErrPx: [],
   };
   let debug = !!opts.debug;
-  let rows = opts.data;
+  let state: State = { rows: opts.data, order: opts.order ?? {} };
 
   const panel = document.createElement("div");
   // A light panel with padding: GoFish draws a little past {w, h} (legend
@@ -550,13 +571,13 @@ export function mountDraggable(
   // module-level contexts, so interleaving two async layouts is unsafe.
   const cache = new Map<string, Promise<Layout>>();
   let queue: Promise<unknown> = Promise.resolve();
-  const layout = (rs: Row[]): Promise<Layout> => {
-    const k = JSON.stringify(rs);
+  const layout = (s: State): Promise<Layout> => {
+    const k = JSON.stringify(s);
     let p = cache.get(k);
     if (!p) {
       p = queue.then(async () => {
         const t0 = performance.now();
-        const dl = await opts.spec(rs).toDisplayList({ w, h });
+        const dl = await opts.spec(s.rows, s.order).toDisplayList({ w, h });
         stats.layoutMs.push(performance.now() - t0);
         stats.layouts++;
         return keyEntries(dl.items, key);
@@ -588,8 +609,8 @@ export function mountDraggable(
   const eager = async () => {
     const t0 = performance.now();
     for (const e of draggableMarks(current)) {
-      const { combos } = candidates(e.rows!, rows, opts);
-      combos.forEach((c) => c.corners.forEach((rs) => layout(rs)));
+      const { combos } = candidates(e.rows!, state, opts);
+      combos.forEach((c) => c.corners.forEach((s) => layout(s)));
     }
     await queue;
     stats.eagerMs.push(performance.now() - t0);
@@ -601,7 +622,7 @@ export function mountDraggable(
   };
 
   const ready = (async () => {
-    current = await layout(rows);
+    current = await layout(state);
     paint(current.entries);
     if (opts.drag.precompute === "eager") await eager();
   })();
@@ -616,7 +637,7 @@ export function mountDraggable(
     layouts: Layout[][]; // [combo][corner]
     pos: Vec[][]; // dragged mark center per [combo][corner]
     pointer: Vec;
-    drop?: Row[];
+    drop?: State;
     dropLayout?: Layout;
     choice?: number;
     shownW?: number[];
@@ -654,7 +675,7 @@ export function mountDraggable(
     loading = true;
     pendingPointer = p;
     const t0 = performance.now();
-    const { combos, conts } = candidates(e.rows!, rows, opts);
+    const { combos, conts } = candidates(e.rows!, state, opts);
     const layouts = await Promise.all(
       combos.map((c) => Promise.all(c.corners.map(layout)))
     );
@@ -782,14 +803,18 @@ export function mountDraggable(
     // Drop state: the heaviest combo, with continuous fields at the
     // inverted values.
     const ids = new Set(D.rowKeys.split("|"));
-    D.drop = D.combos[best].corners[0].map((r) => {
-      if (!ids.has(key(r)) || k === 0) return r;
-      const o = { ...r };
-      D.conts.forEach(
-        (f, j) => (o[f.field] = f.lo + ts[best][j] * (f.hi - f.lo))
-      );
-      return o;
-    });
+    const s0 = D.combos[best].corners[0];
+    D.drop = {
+      order: s0.order,
+      rows: s0.rows.map((r) => {
+        if (!ids.has(key(r)) || k === 0) return r;
+        const o = { ...r };
+        D.conts.forEach(
+          (f, j) => (o[f.field] = f.lo + ts[best][j] * (f.hi - f.lo))
+        );
+        return o;
+      }),
+    };
     D.dropLayout = k === 0 ? D.layouts[best][0] : undefined;
     D.best = best;
     D.bestCornerW = cws[best];
@@ -857,7 +882,7 @@ export function mountDraggable(
     const D = drag;
     drag = undefined;
     over.replaceChildren();
-    const next = D.drop ?? rows;
+    const next = D.drop ?? state;
     const target = D.dropLayout ?? (await layout(next));
     if (!D.dropLayout && D.best !== undefined && D.bestCornerW) {
       // Check the affine claim: the blend of the two cached layouts at the
@@ -898,7 +923,7 @@ export function mountDraggable(
       requestAnimationFrame(step);
     });
     await tweening;
-    rows = next;
+    state = next;
     current = target;
     if (opts.drag.precompute === "eager") await eager();
   };
@@ -907,7 +932,8 @@ export function mountDraggable(
 
   return {
     stats,
-    rows: () => rows,
+    rows: () => state.rows,
+    order: () => state.order,
     ready,
     settled: () => tweening,
     setDebug: (on) => (debug = on),

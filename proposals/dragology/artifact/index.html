@@ -497,6 +497,11 @@
         <code>Drag.states(fn)</code> lists them by hand when that is not enough.
       </li>
       <li>
+        A drag edits either rows (<code>Drag.edit</code>) or the order of a
+        domain (<code>Drag.reorder</code>). A drag that would produce a wrong
+        chart, such as moving a stacked segment to another lake, is not offered.
+      </li>
+      <li>
         A drag is a <code>transition</code> between laid-out states, with the
         pointer in place of the clock.
       </li>
@@ -507,7 +512,7 @@
     </ul>
     <p class="status">
       The syntax is proposed and not signed off. The demos below run on a small
-      prototype engine in story code (916 lines, no change to library source, no
+      prototype engine in story code (942 lines, no change to library source, no
       <code>dragology</code> or React dependency). Nothing here is implemented
       in the library.
     </p>
@@ -576,9 +581,10 @@ chart(catches)
         <div class="inner">
           <pre><code class="language-javascript">mountDraggable(el, {
   data: seafood,
+  order: { lake: levels("lake") },
   key: (r) =&gt; `${r.lake}-${r.species}`,
-  spec: (rows) =&gt;
-    chart(rows)
+  spec: (rows, order) =&gt;
+    chart(rows, { schema: { lake: Unit({ domain: Domain.discrete(order.lake) }) } })
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" })),
   w: 420,
@@ -590,23 +596,25 @@ chart(catches)
       </details>
       <div class="notes">
         <p>
-          <code>Drag.reorder()</code> moves the mark's group to another index of
-          the split that holds it. The axis labels travel with the bars because
-          they are part of each layout.
+          <code>Drag.reorder()</code> reorders the split that holds the mark.
+          Here that split is <code>spread({ by: "lake" })</code>, so the drag
+          edits the order of the lake domain. The rows do not change. The axis
+          labels travel with the bars because they are part of each layout.
         </p>
       </div>
     </article>
 
-    <!-- Move a segment -->
-    <article class="card" id="move-segment">
-      <h2>Move a segment to another stack</h2>
-      <div class="live" data-demo="move-segment">
+    <!-- Reorder a stack -->
+    <article class="card" id="reorder-stack">
+      <h2>Reorder a stack</h2>
+      <div class="live" data-demo="reorder-stack">
         <div class="live-bar">
           <span class="caption"
-            >Drag a colored segment onto another lake's stack.</span
+            >Drag a colored segment up or down to reorder every stack.</span
           >
           <label class="toggle"
-            ><input type="checkbox" id="dbg-move-segment" /> Show targets</label
+            ><input type="checkbox" id="dbg-reorder-stack" /> Show
+            targets</label
           >
         </div>
         <div class="stage"><div class="mount"></div></div>
@@ -614,7 +622,7 @@ chart(catches)
       <div class="strip">
         <figure>
           <img
-            src="img/move-segment-1.png"
+            src="img/reorder-stack-1.png"
             alt="Stacked bars of catch by lake and species, at rest"
             loading="lazy"
           />
@@ -622,24 +630,24 @@ chart(catches)
         </figure>
         <figure>
           <img
-            src="img/move-segment-2.png"
-            alt="A segment lifted out of its stack"
+            src="img/reorder-stack-debug-2.png"
+            alt="Bass dragged up past Trout, with one target per place in the stack"
+            loading="lazy"
+          />
+          <figcaption>mid-drag, targets shown</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/reorder-stack-3.png"
+            alt="Bass dragged further up, every stack and the legend reordering"
             loading="lazy"
           />
           <figcaption>mid-drag</figcaption>
         </figure>
         <figure>
           <img
-            src="img/move-segment-3.png"
-            alt="The segment over another stack, which reflows"
-            loading="lazy"
-          />
-          <figcaption>mid-drag</figcaption>
-        </figure>
-        <figure>
-          <img
-            src="img/move-segment-4.png"
-            alt="The segment in its new stack after the drop"
+            src="img/reorder-stack-4.png"
+            alt="Bass on top of every stack after the drop"
             loading="lazy"
           />
           <figcaption>after drop</figcaption>
@@ -649,55 +657,47 @@ chart(catches)
         <div class="label">Proposed</div>
         <pre><code class="language-javascript">chart(catches)
   .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
-  .mark(rect({ h: "count", fill: "species" }).drag(Drag.edit("lake")))
+  .mark(rect({ h: "count", fill: "species" }).drag(Drag.reorder()))
   .render(container, { w: 420, h: 300 });</code></pre>
       </div>
       <details>
         <summary>Prototype today</summary>
         <div class="inner">
           <pre><code class="language-javascript">mountDraggable(el, {
-  data: catchRows,
-  key: (r) =&gt; r.id,
-  spec: (rows) =&gt;
-    chart(rows, { schema: catchSchema, color: speciesColors })
-      .flow(spread({ by: "lake", dir: "x" }), stack({ by: "id", dir: "y" }))
+  data: seafood,
+  order: { species: levels("species") },
+  key: (r) =&gt; `${r.lake}-${r.species}`,
+  spec: (rows, order) =&gt;
+    chart(rows, {
+      schema: { species: Unit({ domain: Domain.discrete(order.species) }) },
+      color: speciesColors,
+    })
+      .flow(
+        spread({ by: "lake", dir: "x" }),
+        stack({ by: "species", dir: "y" })
+      )
       .mark(rect({ h: "count", fill: "species" })),
   w: 420,
   h: 300,
-  drag: { edit: ["lake"], feel: "floating", precompute: o.precompute },
+  drag: { reorder: "species", feel: "between", precompute: o.precompute },
   debug: o.debug,
 });</code></pre>
         </div>
       </details>
       <div class="notes">
         <p>
-          <code>Drag.edit("lake")</code> says a drag may change the row's
-          <code>lake</code>. The reachable values are the domain of
-          <code>lake</code>. Both stacks reflow, and the y axis blends if its
-          domain changes.
+          <code>Drag.reorder()</code> reorders the split that holds the mark.
+          Here that split is <code>stack({ by: "species" })</code>, so the drag
+          edits the order of the species domain, not the rows. Every stack and
+          the legend reorder together. In the first example the same call
+          reorders the lake domain.
         </p>
-      </div>
-      <div class="fork">
         <p>
-          When Bass moves from Lake B to Lake C, Lake C already has a Bass row.
-          <code>stack({ by: "species" })</code> then draws one mark for both
-          rows. That is the right picture after the drop, but during the drag
-          two marks become one. The prototype avoids the question by stacking by
-          row id, which keeps them apart.
+          The targets are one place per index in the stack, and they lie on one
+          vertical line, so the segment blends along that line. The prototype
+          keeps each species' color with a palette. Without it, colors follow
+          the domain order too, and a reorder would recolor the species.
         </p>
-        <div class="fork-options">
-          <div class="option chosen">
-            <span class="pill">My choice</span>
-            <span
-              >Keep the spec as written and let the two marks merge at the drop,
-              since the data says so.</span
-            >
-          </div>
-          <div class="option">
-            <span class="pill plain">Other option</span>
-            <span>A drag forces one mark per row.</span>
-          </div>
-        </div>
       </div>
     </article>
 
@@ -825,7 +825,9 @@ chart(catches)
       <h2>Reparent a treemap leaf</h2>
       <div class="live" data-demo="treemap-reparent">
         <div class="live-bar">
-          <span class="caption">Drag a tile into another group.</span>
+          <span class="caption"
+            >Drag a tile anywhere. The rest snaps to the nearest group.</span
+          >
           <label class="toggle"
             ><input type="checkbox" id="dbg-treemap-reparent" /> Show
             targets</label
@@ -845,7 +847,7 @@ chart(catches)
         <figure>
           <img
             src="img/treemap-reparent-2.png"
-            alt="A tile dragged, tilings blending with overlap"
+            alt="The apple tile floating over Grains, which has re-tiled to make room"
             loading="lazy"
           />
           <figcaption>mid-drag</figcaption>
@@ -853,7 +855,7 @@ chart(catches)
         <figure>
           <img
             src="img/treemap-reparent-3.png"
-            alt="The tile dragged further, tilings still blending"
+            alt="The apple tile floating over Pulses, which has re-tiled to make room"
             loading="lazy"
           />
           <figcaption>mid-drag</figcaption>
@@ -861,7 +863,7 @@ chart(catches)
         <figure>
           <img
             src="img/treemap-reparent-4.png"
-            alt="The treemap re-tiled after the drop"
+            alt="The apple tile in its slot in Pulses after the drop"
             loading="lazy"
           />
           <figcaption>after drop</figcaption>
@@ -921,7 +923,9 @@ chart(catches)
         : GROUPS.map((g) =&gt;
             rows.map((r) =&gt; (r.id === leaf.id ? { ...r, group: g } : r))
           ),
-    feel: "between",
+    // A treemap has no axis to blend along: the tile follows the pointer
+    // and the rest snaps to the state of the nearest target.
+    feel: "floating",
     precompute: o.precompute,
   },
   debug: o.debug,
@@ -935,31 +939,18 @@ chart(catches)
           through the same layout.
         </p>
         <p>
-          It is also where blending is weakest. Halfway between two tilings the
-          tiles overlap (middle frames). For layouts that jump, the better feel
-          is to snap the rest of the picture to the nearest state and let the
-          dragged tile float under the pointer.
+          The dragged tile follows the pointer anywhere and is drawn on top. The
+          rest of the picture snaps to the state whose target is nearest the
+          tile, with a 150 ms tween, and the tile's size eases to its size in
+          that state. On release the tile tweens into its slot. The tile's label
+          stays in the slot, because a label has no row to tie it to its tile
+          (see What GoFish needs first).
         </p>
-      </div>
-      <div class="fork">
-        <p>Which feel is the default?</p>
-        <div class="fork-options">
-          <div class="option chosen">
-            <span class="pill">My choice</span>
-            <span
-              >The default follows the space, the same way the snap rule does.
-              Positions on an axis blend. Layouts with no axis (treemap, pack,
-              tree) snap with the dragged mark floating.</span
-            >
-          </div>
-          <div class="option">
-            <span class="pill plain">Other option</span>
-            <span
-              >One default feel for every chart: blend the pictures of the
-              nearby targets, as the prototype's treemap does now.</span
-            >
-          </div>
-        </div>
+        <p>
+          The rule for the default feel: positions on an axis blend along their
+          track. Layouts with no axis (treemap, pack, tree) use free dragging,
+          with the rest snapping to the nearest state.
+        </p>
       </div>
     </article>
 
@@ -973,10 +964,9 @@ chart(catches)
           </h3>
           <p class="small">
             Not prototyped as a separate story. The prototype's treemap uses
-            this path. <code>Drag.edit</code> and <code>Drag.reorder</code> are
-            defined by rewriting into <code>Drag.states</code>. Anything the
-            derived strategies cannot say (a tree drop that must not create a
-            cycle) is written this way.
+            this path. <code>Drag.edit</code> is defined by rewriting into
+            <code>Drag.states</code>. Anything the derived strategies cannot say
+            (a tree drop that must not create a cycle) is written this way.
           </p>
         </div>
         <div class="notes">
@@ -1020,7 +1010,7 @@ chart(catches)
             </td>
             <td>
               Derived from the spec. An edited field's values come from its
-              domain. A reorder is every index of the list.
+              domain. A reorder is every index of the split's domain.
             </td>
           </tr>
           <tr>
@@ -1029,7 +1019,7 @@ chart(catches)
             </td>
             <td>
               Lay out every reachable state. Layout does not touch the DOM.
-              Measured 9 to 15 ms per layout, 4 to 8 states per drag, 15 to 48
+              Measured 10 to 20 ms per layout, 4 to 8 states per drag, 17 to 52
               ms at pointer down.
             </td>
           </tr>
@@ -1043,7 +1033,7 @@ chart(catches)
             </td>
             <td>
               A <code>transition</code> between laid-out states with the pointer
-              in place of the clock. Blend and paint measured about 1 ms per
+              in place of the clock. Blend and paint measured 0.5 to 1.5 ms per
               frame.
             </td>
           </tr>
@@ -1085,30 +1075,30 @@ chart(catches)
               <tr>
                 <td>Reorder Bars</td>
                 <td class="num">6</td>
-                <td class="num">12.5</td>
-                <td class="num">37 ms</td>
-                <td class="num">0.7 / 1.4 ms</td>
+                <td class="num">14.5</td>
+                <td class="num">44 ms</td>
+                <td class="num">0.7 / 1.9 ms</td>
               </tr>
               <tr>
-                <td>Move Segment</td>
-                <td class="num">6</td>
-                <td class="num">15.1</td>
-                <td class="num">48 ms</td>
-                <td class="num">1.1 / 1.8 ms</td>
+                <td>Reorder Stack</td>
+                <td class="num">5</td>
+                <td class="num">20.3</td>
+                <td class="num">51 ms</td>
+                <td class="num">1.5 / 2.3 ms</td>
               </tr>
               <tr>
                 <td>Scheduler</td>
                 <td class="num">8 (4 rooms x 2 corners)</td>
-                <td class="num">9.0</td>
-                <td class="num">46 ms</td>
-                <td class="num">1.1 / 1.6 ms</td>
+                <td class="num">9.8</td>
+                <td class="num">52 ms</td>
+                <td class="num">0.9 / 1.8 ms</td>
               </tr>
               <tr>
                 <td>Treemap Reparent</td>
                 <td class="num">4</td>
-                <td class="num">11.9</td>
-                <td class="num">15 ms</td>
-                <td class="num">1.0 / 1.5 ms</td>
+                <td class="num">13.6</td>
+                <td class="num">17 ms</td>
+                <td class="num">0.6 / 1.1 ms</td>
               </tr>
             </tbody>
           </table>
@@ -1171,7 +1161,10 @@ chart(catches)
           field. The operator that reads that field knows its values and where
           each one lands. Three rules cover the prototypes: an ordinal field
           gives one state per value in its domain, a continuous field gives the
-          scale inverse, and a reorder gives one state per index. The
+          scale inverse, and a reorder gives one state per index. A drag edits
+          either rows (<code>Drag.edit</code>) or the order of a domain
+          (<code>Drag.reorder</code>). A drag that would produce a wrong chart,
+          such as moving a stacked segment to another lake, is not offered. The
           hand-written list stays as <code>Drag.states</code>.
         </li>
       </ul>
@@ -1209,7 +1202,10 @@ chart(catches)
         <li class="rec">
           <strong>The data is a <code>signal</code></strong
           ><span class="rec-mark">Recommended</span><br />A drop calls
-          <code>set</code> with the edited rows, and the chart rerenders. A
+          <code>set</code> with the edited rows, and the chart rerenders. A drag
+          edits either rows (<code>Drag.edit</code>) or the order of a domain
+          (<code>Drag.reorder</code>). A reorder writes the new order to the
+          domain the split reads, and the chart rerenders the same way. A
           <code>.drag</code> on a chart whose data is a plain array is a loud
           error that names the fix.
         </li>
@@ -1239,21 +1235,21 @@ chart(catches)
       </li>
       <li>
         <strong>Pinned ordinal order during a drag.</strong> Categories are
-        ordered by first appearance, so editing the first row of a lake moved
-        that lake in every reachable state. The prototype declares the domains
-        by hand.
+        ordered by first appearance, so editing a row's field can move its
+        category in every reachable state. The prototype declares the domains by
+        hand.
       </li>
       <li>
         <strong>A public way to paint a display list</strong> and to read item
         boxes and pixel maps from it. The prototype imports the painter by path.
       </li>
       <li>
-        <strong>A bug found on the way.</strong> Declaring a
-        <code>Unit</code> domain for <code>lake</code> makes the color scale
-        ignore the declared levels of <code>species</code> (<code
-          >src/ast/_node.ts</code
-        >
-        near lines 1234 to 1258). Not filed yet.
+        <strong>A bug found on the way.</strong> The color scale follows the
+        declared levels of a <code>Unit</code> only when the same field also
+        splits the marks. Stacked by row id,
+        <code>fill: "species"</code> ignores the declared species levels and
+        falls back to first appearance (<code>src/ast/_node.ts</code> near lines
+        1234 to 1258). Not filed yet.
       </li>
     </ul>
   </section>
@@ -1263,11 +1259,9 @@ chart(catches)
     <p>
       Dragology features not reproduced: natural neighbor blending,
       <code>whenFar</code>, snap radius, chained drags, constraints on
-      continuous drags, drop targets by bounds, and control of z order. Blending
-      over targets that lie almost on a line mixes in the wrong states, which is
-      why Move Segment uses the floating feel. Each of these is a possible later
-      member or option of the <code>Drag</code> family and none changes the call
-      shape.
+      continuous drags, drop targets by bounds, and control of z order. Each of
+      these is a possible later member or option of the <code>Drag</code> family
+      and none changes the call shape.
     </p>
   </section>
 

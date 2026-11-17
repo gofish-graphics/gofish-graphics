@@ -12,16 +12,17 @@
       { "precompute": "eager", "suffix": "-eager", "noShots": true }
     ]
   },
-  "move-segment": {
+  "reorder-stack": {
     "grab": [73, 240],
     "path": [
-      [150, 220],
-      [230, 200],
-      [275, 180]
+      [75, 180],
+      [75, 120],
+      [75, 60]
     ],
     "frames": [0, 1],
     "variants": [
       {},
+      { "debug": true, "suffix": "-debug" },
       { "precompute": "eager", "suffix": "-eager", "noShots": true }
     ]
   },

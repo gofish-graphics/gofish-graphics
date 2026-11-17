@@ -6,11 +6,11 @@ engine does not use the `dragology` package, React, or react-dom. It is built
 from GoFish's own pieces: `toDisplayList` lays out each state, and GoFish's
 display-list painter draws the result.
 
-- Engine: `packages/gofish-graphics/stories/drag/engine.ts` (916 lines with
+- Engine: `packages/gofish-graphics/stories/drag/engine.ts` (942 lines with
   comments).
 - Demos: `packages/gofish-graphics/stories/drag/demos.ts`, shared by the
   stories (`stories/drag/Drag.stories.tsx`, titles "Drag/Reorder Bars",
-  "Drag/Move Segment", "Drag/Scheduler", "Drag/Treemap Reparent") and by the
+  "Drag/Reorder Stack", "Drag/Scheduler", "Drag/Treemap Reparent") and by the
   standalone bundle (`proposals/dragology/demo/demos.js`).
 - Measurements: `proposals/dragology/demo/results.json`, written by
   `proposals/dragology/demo/drive.mjs`. That script drives real pointer drags
@@ -20,11 +20,11 @@ display-list painter draws the result.
 
 | Dragology idea                                                                                         | Engine part                                                                                                                           | Lines                       |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| A view is a function of state; a drag moves between states                                             | `spec(rows)` plus `toDisplayList` per state, with a cache keyed by the rows                                                           | in mount, about 25          |
+| A view is a function of state; a drag moves between states                                             | `spec(rows, order)` plus `toDisplayList` per state, with a cache keyed by the state                                                   | in mount, about 25          |
 | Elements are matched across states by `id`                                                             | Key join over display items: `key(row)` on an item's `datum`; chrome keyed by its text, or by the nearest text for ticks and swatches | 80                          |
 | `lerp` of rendered SVG, fading elements that exist in one state only, never blending different strings | `blendValue` and `blendLayouts`: numbers, colors (through culori), path data with the same commands; text content is part of the key  | 153                         |
 | `d.closest`, `.withFloating()`, `d.between` (Delaunay weights, projection onto the hull)               | `closestWeights`, floating offset, `betweenWeights`                                                                                   | 102                         |
-| The author lists the reachable states                                                                  | `candidates`: derived from the data by `edit`, `reorder`, or a `states` function                                                      | 74                          |
+| The author lists the reachable states                                                                  | `candidates`: derived by `edit` (rows), `reorder` (a domain order), or a `states` function                                            | 84                          |
 | `d.vary` for continuous parameters                                                                     | Two layouts per discrete state and an inverse of the affine pixel map (see below)                                                     | in the frame loop, about 30 |
 | `.withBranchTransition`                                                                                | Weights ease over 150 ms when `closest` switches state                                                                                | 20                          |
 | Drop animation                                                                                         | 200 ms ease-out tween from the preview to the dropped layout                                                                          | 20                          |
@@ -32,6 +32,46 @@ display-list painter draws the result.
 
 The pointer loop, panel, hit test, and the rest of mount make up the remaining
 lines.
+
+### What a state is
+
+A state is `{ rows, order }`. `rows` is the data. `order` holds the level order
+of each domain the spec declares, and the spec reads it as
+`Unit({ domain: Domain.discrete(order.species) })`. `edit` changes fields of
+the dragged rows. `reorder: "species"` moves the dragged mark's species to each
+index of `order.species` and never touches the rows. Both reorder demos use it:
+Reorder Bars reorders the lake domain, and Reorder Stack reorders the species
+domain, so every stack and the legend reorder together.
+
+I checked that the picture follows the declared order with a `tsx` script
+against `src/lib.ts` (deleted afterwards). With the species levels declared as
+Bass to Salmon and then as Salmon first, the stack order bottom to top and the
+legend order top to bottom both followed the declared levels, with or without a
+lake `Unit`. The colors followed the levels too: the first level always got the
+first palette color. So a reorder would recolor every species. Reorder Stack
+keeps colors with `color: Color.palette({ Bass: ..., ... })`. The filmstrip
+confirms all three: after the drop Bass is on top of every stack, first in the
+legend, and still blue.
+
+### Feels per demo
+
+- Reorder Bars: `floating`. The bar follows the pointer, and the other bars
+  snap to the nearest index with a 150 ms tween.
+- Reorder Stack: `between`. The targets (one per index) lie on one vertical
+  line, so the engine uses its one-dimensional weights and the segment blends
+  along the stack. Mid-blend, segments of different heights overlap or leave
+  thin gaps, because each segment's position is blended on its own. Dragology's
+  `between` does the same.
+- Scheduler: `between`, with the continuous `start` field.
+- Treemap Reparent: `floating` (free dragging). The tile follows the pointer
+  anywhere and is drawn on top. Its size is the blended size, which eases to
+  the size in the nearest state over the 150 ms branch tween. The rest of the
+  picture snaps to the state whose target (the tile's center in that state) is
+  nearest the pointer. I chose nearest target over "pointer inside a group's
+  box": the group boxes change from state to state, so the box test needs its
+  own rule for which state's boxes to use, and nearest target already picked
+  the group under the pointer in every drag I tried. On release the tile tweens
+  into its slot.
 
 ### Continuous fields (the scheduler's `start`)
 
@@ -53,7 +93,7 @@ axis to the whole day. While dragging, `start` is clamped to
 `[9, 17 - length]`, so the domain never changes during or after a drag. If a
 drag could widen the domain, layout would no longer be affine in the field, and
 the two-layout blend would be wrong. In that case the engine would need a real
-layout per frame. That costs about 9 to 15 ms each (see below), which is close to
+layout per frame. That costs about 10 to 20 ms each (see below), which is close to
 a 16 ms frame and has to run asynchronously. I did not build that path.
 
 I did not use `src/interaction/frameScales.ts` either. Its `posScales` and
@@ -110,14 +150,14 @@ every candidate of every draggable mark after mount and after each drop.
 
 | Demo             | Candidates per drag     | Lazy: ms per layout | Lazy: pointer-down latency | Eager: layouts | Eager: precompute per drop | Blend + paint per frame (avg / max) |
 | ---------------- | ----------------------- | ------------------- | -------------------------- | -------------- | -------------------------- | ----------------------------------- |
-| Reorder Bars     | 6                       | 12.5                | 37 ms                      | 46             | 124 ms, then 78 ms         | 0.7 / 1.4 ms                        |
-| Move Segment     | 6                       | 15.1                | 48 ms                      | 296            | 904 ms, then 807 ms        | 1.1 / 1.8 ms                        |
-| Scheduler        | 8 (4 rooms x 2 corners) | 9.0                 | 46 ms                      | 106            | 217 ms, then 158 ms        | 1.1 / 1.6 ms                        |
-| Treemap Reparent | 4                       | 11.9                | 15 ms                      | 70             | 110 ms, then 90 ms         | 1.0 / 1.5 ms                        |
+| Reorder Bars     | 6                       | 14.5                | 44 ms                      | 46             | 150 ms, then 90 ms         | 0.7 / 1.9 ms                        |
+| Reorder Stack    | 5                       | 20.3                | 51 ms                      | 29             | 156 ms, then 105 ms        | 1.5 / 2.3 ms                        |
+| Scheduler        | 8 (4 rooms x 2 corners) | 9.8                 | 52 ms                      | 106            | 239 ms, then 179 ms        | 0.9 / 1.8 ms                        |
+| Treemap Reparent | 4                       | 13.6                | 17 ms                      | 70             | 136 ms, then 90 ms         | 0.6 / 1.1 ms                        |
 
-The eager runs report 3.2 to 5.9 ms per layout, because the JIT warms up over
+The eager runs report 3.9 to 10.6 ms per layout, because the JIT warms up over
 many layouts. The prototypes use **lazy** mode. Pointer-down latency stays
-under 55 ms, and eager mode spends up to 0.9 s after every drop laying out
+under 55 ms, and eager mode spends up to 0.24 s after every drop laying out
 states the user never visits. Eager mode remains an option
 (`precompute: "eager"`).
 
@@ -126,7 +166,7 @@ states the user never visits. Eager mode remains an option
 own style, layout, and raster work.
 
 The standalone bundle (`proposals/dragology/demo/demos.js`, one IIFE with
-GoFish, solid-js, d3-delaunay, culori, the engine, and the data) is **832,648
+GoFish, solid-js, d3-delaunay, culori, the engine, and the data) is **832,907
 bytes** (296 KB gzipped). It contains no React and no dragology code. It ran
 from `test.html` through a plain `<script>`, with every non-`file:` request
 aborted, and logged no errors. The bundle keeps one dead `import("node:fs/promises")`
@@ -156,39 +196,44 @@ which I left out. This version has no resize and no conflict graph.
 
 1. **Category order comes from the data, so editing data reorders scales.**
    GoFish orders categories by first appearance. When a drag edits the first
-   row of a lake (Move Segment) or of a group (Treemap), that category moves in
-   every candidate layout, and the dragged mark lands in slot 0 in every state.
-   The fix is in the spec, not the engine: Move Segment declares a lake `Unit`
-   with `Domain.discrete`, and Treemap declares a group `Unit`. A drag engine
-   needs every categorical domain pinned. A proposal could make
-   `edit: [field]` require (or infer) a pinned domain.
-2. **GoFish bug: declaring a `Unit` for one column makes the color scale
-   ignore another column's levels.** With
-   `schema: { lake: Unit(...), species: Unit({ domain: Domain.discrete(SP) }) }`,
-   the species colors and the legend follow first appearance, not `SP`. The
-   same happens with `spread({ by: field("lake").sort(LAKES) })` and no lake
-   unit. Without either, the species levels are honored. I reproduced this in
-   a `tsx` script against `src/lib.ts`; the check is in `resolveColorScale`
-   (`src/ast/_node.ts:1234-1258`, the `oneOrder` test over the collected
-   `orders`). Workaround in the demo: an explicit
-   `color: Color.palette({...})` as well as the species unit. This should be
+   row of a group (Treemap), that category moves in every candidate layout,
+   and the dragged mark lands in slot 0 in every state. The fix is in the
+   spec, not the engine: Treemap declares a group `Unit` with
+   `Domain.discrete`. A drag engine needs every categorical domain pinned. A
+   proposal could make `edit: [field]` require (or infer) a pinned domain.
+   The reorder demos pin their domain by construction, since the domain order
+   is the state.
+2. **GoFish bug: the color scale ignores a `Unit`'s declared levels unless
+   the same field splits the marks.** With
+   `schema: { species: Unit({ domain: Domain.discrete(SP) }) }` and
+   `stack({ by: "species" })`, the colors follow `SP`. With
+   `stack({ by: "id" })` and the same schema, `fill: "species"` follows first
+   appearance instead. My earlier note blamed declaring a lake `Unit`; a
+   recheck with a `tsx` script against `src/lib.ts` showed that the lake unit
+   makes no difference and the split field does. The check is in
+   `resolveColorScale` (`src/ast/_node.ts:1234-1258`, the `oneOrder` test over
+   the collected `orders`). It no longer affects any demo. This should be
    filed as a GoFish issue.
-3. **Stacking groups merge.** `stack({ by: "species" })` merges two rows of the
-   same species in one lake into one segment. A moved segment then loses its
-   identity, and its key no longer matches. Move Segment therefore stacks by
-   `id`. That is a spec choice, and it is honest: a moved catch is still its own
-   catch.
+3. **Moving a stacked segment to another lake was the wrong drag, so it is
+   gone.** The earlier Move Segment demo edited a row's `lake`. Under
+   `stack({ by: "species" })` that merges the moved row with the target lake's
+   own segment of that species, so it had to stack by row id, which draws a
+   stacked bar with two segments of one species. Reorder Stack replaces it:
+   the drag edits the species domain order, and the chart stays correct in
+   every state.
 4. **Treemap tiling sorts by weight.** With the default sort, a moved leaf
    always lands in the top-left of the largest group. The targets nearly
-   coincide, so `between` has nothing to blend. The demo uses
-   `sort: "none"` on both treemap levels. Even so, the mid-drag picture blends
-   three tilings, and the tiles overlap and leave gaps (frames 2 and 3). That
-   is what Dragology's `between` does too; it is not a bug.
-5. **Labels carry no datum.** `.label("id")` text has no `datum`, so it is
-   keyed as chrome by its text. It does not travel with its tile as part of the
-   dragged mark, and it is hidden under the lifted tile during a treemap drag.
-   GoFish should put the subject's datum (or a reference to the subject) on its
-   label.
+   coincide. The demo uses `sort: "none"` on both treemap levels. Blending
+   between tilings made tiles overlap and leave gaps, so the treemap now uses
+   free dragging (`floating`) instead of `between`.
+5. **Labels carry no datum, so a tile's label cannot travel with it.**
+   `.label("id")` text has no `datum`, so it is keyed as chrome by its text.
+   It moves to the label's place in the nearest state, which is the dragged
+   tile's destination slot, and is hidden under the lifted tile. Making it
+   travel with the tile would need the engine to guess which tile a text item
+   belongs to (for example, the box that contains it). That is a geometric
+   heuristic, so I did not add it. GoFish should put the subject's datum (or a
+   reference to the subject) on its label.
 6. **Chrome has no stable identity.** Tick labels and legend labels are keyed
    by their text. Ticks, swatches, and axis lines are keyed by the nearest
    text item. That is a heuristic. It is fine here, but a tick whose label
@@ -199,9 +244,9 @@ which I left out. This version has no resize and no conflict graph.
    line. In the scheduler the pointer sat on Room 3 while the weights went to
    Rooms 1 and 4. The engine now treats targets within 0.5 px of one line as a
    line, with piecewise-linear weights. This is a numeric tolerance, not a
-   special case. Near-collinear targets (Move Segment, where stack heights
-   differ) still give sliver triangles that mix three states. That is why Move
-   Segment uses `floating` with branch transitions instead of `between`.
+   special case. Reorder Stack depends on it: its targets share one x. Targets
+   that are only near a line would still give sliver triangles that mix three
+   states.
 8. **Overlapping meetings.** A meeting dropped on top of another is painted in
    data order, so it can be hidden. The scheduler has no conflict handling.
 9. **Treemap panel.** At `h: 300` the treemap fills about 220 px and leaves
@@ -227,6 +272,6 @@ which I left out. This version has no resize and no conflict graph.
   when a drag would change the domain.
 - **Pinned categorical domains by default for interactive charts,** and the
   color-scale bug above fixed.
-- **Faster or synchronous layout.** At 9 to 15 ms per layout, lazy precompute
+- **Faster or synchronous layout.** At 10 to 20 ms per layout, lazy precompute
   is fine for up to about 10 candidates. A synchronous layout path would let the
   engine lay out per frame when a domain must change.

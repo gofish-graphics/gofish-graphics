@@ -2,110 +2,124 @@
   "reorder-bars": {
     "errors": [],
     "layouts": 6,
-    "msPerLayout": 12.5,
+    "msPerLayout": 14.5,
     "candidatesPerDrag": [6],
-    "pointerDownMs": [37],
+    "pointerDownMs": [44],
     "eagerMs": [],
     "blendErrPx": [],
-    "layoutMsAll": [38.5, 8.7, 7.6, 7.5, 6.5, 6.1],
-    "frames": 173,
-    "frameMsAvg": 0.7,
-    "frameMsMax": 1.4,
+    "layoutMsAll": [44, 10.6, 7.9, 8.6, 8, 7.6],
+    "frames": 177,
+    "frameMsAvg": 0.71,
+    "frameMsMax": 1.9,
+    "orderBefore": {
+      "lake": ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"]
+    },
+    "orderAfter": {
+      "lake": ["Lake B", "Lake C", "Lake D", "Lake E", "Lake A", "Lake F"]
+    },
     "changedRows": []
   },
   "reorder-bars-eager": {
     "errors": [],
     "layouts": 46,
-    "msPerLayout": 5.1,
+    "msPerLayout": 6.1,
     "candidatesPerDrag": [6],
     "pointerDownMs": [0],
-    "eagerMs": [124, 78],
+    "eagerMs": [150, 90],
     "blendErrPx": [],
     "layoutMsAll": [
-      37.6, 9.2, 7, 6.5, 6, 6, 5.9, 5.2, 4.1, 4.4, 5.8, 4.1, 4.2, 5.4, 3.4, 3.7,
-      4.7, 3.4, 3.2, 4.9, 3.3, 3.4, 4.2, 4.1, 4, 6, 6.8, 4.6, 4.4, 3.5, 3.6,
-      5.4, 3.3, 3.1, 3.8, 3.3, 3, 5.4, 3.1, 2.8, 3.4, 3.2, 3, 5, 2.9, 2.8
+      42.4, 10.2, 7.6, 8.4, 9.5, 6, 7.6, 6.5, 5.5, 5.5, 6.3, 4.9, 5.4, 5.9, 3.9,
+      6.1, 4.4, 4.2, 6, 3.8, 3.7, 4.4, 4.7, 4.7, 4.9, 7.8, 6.9, 4.7, 4.6, 3.9,
+      4, 6.7, 4, 3.8, 4, 3.8, 3.8, 6.5, 3.7, 3.7, 3.7, 3.5, 3.7, 6, 4, 3.8
     ],
-    "frames": 394,
-    "frameMsAvg": 0.64,
-    "frameMsMax": 1.7,
+    "frames": 266,
+    "frameMsAvg": 0.68,
+    "frameMsMax": 1.4,
+    "orderBefore": {
+      "lake": ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"]
+    },
+    "orderAfter": {
+      "lake": ["Lake B", "Lake C", "Lake D", "Lake E", "Lake A", "Lake F"]
+    },
     "changedRows": []
   },
-  "move-segment": {
+  "reorder-stack": {
     "errors": [],
-    "layouts": 6,
-    "msPerLayout": 15.1,
-    "candidatesPerDrag": [6],
-    "pointerDownMs": [48],
+    "layouts": 5,
+    "msPerLayout": 20.3,
+    "candidatesPerDrag": [5],
+    "pointerDownMs": [51],
     "eagerMs": [],
     "blendErrPx": [],
-    "layoutMsAll": [43, 10.9, 9.8, 10.5, 8.7, 7.7],
-    "frames": 170,
-    "frameMsAvg": 1.13,
-    "frameMsMax": 1.8,
-    "changedRows": [
-      {
-        "id": "c0",
-        "lake": "Lake E",
-        "species": "Bass",
-        "count": 23
-      }
-    ]
+    "layoutMsAll": [50.9, 14, 14, 11.2, 11.2],
+    "frames": 25,
+    "frameMsAvg": 1.5,
+    "frameMsMax": 2.3,
+    "orderBefore": {
+      "species": ["Bass", "Trout", "Catfish", "Perch", "Salmon"]
+    },
+    "orderAfter": {
+      "species": ["Trout", "Catfish", "Perch", "Salmon", "Bass"]
+    },
+    "changedRows": []
   },
-  "move-segment-eager": {
+  "reorder-stack-debug": {
     "errors": [],
-    "layouts": 296,
-    "msPerLayout": 5.9,
-    "candidatesPerDrag": [6],
+    "layouts": 5,
+    "msPerLayout": 19.8,
+    "candidatesPerDrag": [5],
+    "pointerDownMs": [50],
+    "eagerMs": [],
+    "blendErrPx": [],
+    "layoutMsAll": [51.4, 13.5, 12.6, 10.5, 10.9],
+    "frames": 25,
+    "frameMsAvg": 1.46,
+    "frameMsMax": 2.3,
+    "orderBefore": {
+      "species": ["Bass", "Trout", "Catfish", "Perch", "Salmon"]
+    },
+    "orderAfter": {
+      "species": ["Trout", "Catfish", "Perch", "Salmon", "Bass"]
+    },
+    "changedRows": []
+  },
+  "reorder-stack-eager": {
+    "errors": [],
+    "layouts": 29,
+    "msPerLayout": 10.6,
+    "candidatesPerDrag": [5],
     "pointerDownMs": [0],
-    "eagerMs": [904, 807],
+    "eagerMs": [156, 105],
     "blendErrPx": [],
     "layoutMsAll": [
-      43.2, 10.9, 9.6, 9.8, 10.8, 8, 8, 6.2, 7.3, 5.9, 7.8, 6.9, 4.8, 5.1, 7,
-      8.6, 5.6, 6.7, 7, 8.6, 5.8, 4.6, 7, 5.9, 5.5, 5, 7.4, 5.5, 5, 5, 7.6, 5.8,
-      5.5, 4.6, 8.2, 5.7, 4.7, 7.8, 10.9, 6.3, 5.7, 5.2, 6.6, 5.2, 5.4, 4.8, 7,
-      4.7, 5.7, 7.4, 5.1, 5.2, 4.3, 7.2, 5.1, 4.9, 6.8, 4.2, 4.5, 5.1, 7.2, 5.1,
-      4.9, 4.6, 7, 4.9, 5.1, 4.6, 7.5, 4.8, 5, 7.6, 4.9, 4.4, 5.1, 7.2, 5.8,
-      4.8, 4.9, 7.4, 5.3, 5.1, 6.5, 4.5, 4.8, 5.1, 7.1, 4.2, 4.3, 5.6, 7.8, 5.1,
-      4.4, 4.3, 7.3, 5.6, 4.8, 5.1, 7.6, 5.7, 5.3, 7.5, 4.8, 4.8, 5, 10.3, 12.3,
-      5.6, 6.2, 6.3, 9.1, 6.6, 5.1, 6.2, 7.9, 5.1, 5.6, 4.4, 7.5, 5.1, 4.9, 4.6,
-      6.6, 4.2, 4.8, 4.9, 7, 4, 5.1, 7, 5.3, 4.9, 4.2, 6.8, 4.8, 4.7, 5.3, 6.6,
-      4.8, 4.8, 4.7, 7.1, 4.2, 4.4, 5, 7.2, 4.4, 4.2, 4.4, 6.5, 4.8, 10.6, 8, 8,
-      5.8, 5.9, 4.9, 6.9, 4.6, 4.4, 5, 7, 4.2, 5.2, 4.7, 7.2, 4.8, 3.9, 4.3,
-      6.8, 4.7, 4.5, 4.4, 6.3, 4.4, 4.5, 4, 6.9, 4.3, 4.1, 4.5, 5.9, 4.4, 4,
-      3.8, 6.6, 4.7, 4.4, 3.8, 8.6, 11.7, 5.4, 4.9, 5, 6.9, 5, 5.4, 5.1, 6.6,
-      4.8, 4.9, 5, 7, 4.4, 4, 5.5, 7, 5.2, 4.4, 4.2, 7.1, 5.6, 4.8, 4.8, 7.5,
-      4.5, 4.5, 5.1, 6.6, 4.7, 4.7, 5.2, 7.1, 4.3, 4.6, 4.5, 7.5, 5.3, 4.6, 4,
-      6.8, 5.1, 5.1, 4.6, 6.3, 4.5, 4.7, 5.5, 6.8, 4.4, 4.9, 4.6, 7.3, 4.1, 4.5,
-      4.5, 10.3, 12.4, 6.6, 5, 5.5, 5.3, 5.9, 4.8, 5.5, 8.4, 5, 4.5, 5.1, 6.9,
-      5.3, 4.9, 4.3, 4.4, 5.3, 5, 5, 6.5, 4.6, 4.1, 5.4, 5.6, 7.8, 4.5, 4.7,
-      4.6, 7.8, 5.4, 4.6, 4.9, 7.7, 6, 5.1, 4.4, 7.3, 4.5, 4.9, 6.8, 4.7, 4.2,
-      5, 4.1, 7.7, 4.7, 5, 4.2
+      51.9, 15, 14.3, 10.9, 10.5, 10.4, 8.4, 10.5, 7.7, 9.2, 9, 6.6, 7.5, 7.8,
+      10.6, 6.7, 7.4, 14.8, 9, 11.8, 8.8, 7.2, 9.8, 6.7, 7.1, 6.4, 9.5, 6.5, 6.1
     ],
-    "frames": 258,
-    "frameMsAvg": 1.11,
-    "frameMsMax": 6.2,
-    "changedRows": [
-      {
-        "id": "c0",
-        "lake": "Lake E",
-        "species": "Bass",
-        "count": 23
-      }
-    ]
+    "frames": 25,
+    "frameMsAvg": 1.43,
+    "frameMsMax": 2.2,
+    "orderBefore": {
+      "species": ["Bass", "Trout", "Catfish", "Perch", "Salmon"]
+    },
+    "orderAfter": {
+      "species": ["Trout", "Catfish", "Perch", "Salmon", "Bass"]
+    },
+    "changedRows": []
   },
   "scheduler": {
     "errors": [],
     "layouts": 10,
-    "msPerLayout": 9,
+    "msPerLayout": 9.8,
     "candidatesPerDrag": [8],
-    "pointerDownMs": [46],
+    "pointerDownMs": [52],
     "eagerMs": [],
     "blendErrPx": [0],
-    "layoutMsAll": [36.8, 8.2, 6.2, 5.5, 5.9, 5.5, 4.2, 5.2, 4.7, 7.6],
+    "layoutMsAll": [41.7, 8.4, 7.2, 7.5, 6.3, 5.1, 5.9, 4.6, 5.9, 5.5],
     "frames": 25,
-    "frameMsAvg": 1.09,
-    "frameMsMax": 1.6,
+    "frameMsAvg": 0.94,
+    "frameMsMax": 1.8,
+    "orderBefore": {},
+    "orderAfter": {},
     "changedRows": [
       {
         "id": "standup",
@@ -120,15 +134,17 @@
   "scheduler-debug": {
     "errors": [],
     "layouts": 10,
-    "msPerLayout": 9.7,
+    "msPerLayout": 10,
     "candidatesPerDrag": [8],
-    "pointerDownMs": [53],
+    "pointerDownMs": [56],
     "eagerMs": [],
     "blendErrPx": [0],
-    "layoutMsAll": [38.6, 9, 6.4, 6, 6.1, 6.8, 4.5, 6.7, 5.6, 7.5],
+    "layoutMsAll": [40.8, 10.2, 6.5, 6.1, 7.1, 7.7, 5, 6.2, 6, 4.7],
     "frames": 25,
-    "frameMsAvg": 1.08,
+    "frameMsAvg": 0.93,
     "frameMsMax": 1.8,
+    "orderBefore": {},
+    "orderAfter": {},
     "changedRows": [
       {
         "id": "standup",
@@ -143,24 +159,25 @@
   "scheduler-eager": {
     "errors": [],
     "layouts": 106,
-    "msPerLayout": 3.9,
+    "msPerLayout": 4.3,
     "candidatesPerDrag": [8],
     "pointerDownMs": [0],
-    "eagerMs": [217, 158],
+    "eagerMs": [239, 179],
     "blendErrPx": [0],
     "layoutMsAll": [
-      40.7, 8.4, 5.7, 5.8, 6.9, 5.3, 5.6, 5.2, 4.7, 5.2, 3.6, 4.3, 4.9, 3.6,
-      4.3, 4.3, 5.4, 3.7, 3.5, 4.3, 3.1, 3.1, 5.6, 3.7, 3.3, 3.7, 3.9, 3.4, 3.2,
-      3.2, 4.9, 2.8, 2.8, 2.9, 3.2, 2.9, 5.2, 3, 2.5, 2.4, 2.7, 2.6, 2.7, 4.6,
-      2.8, 2.9, 2.8, 2.5, 2.5, 2.5, 5, 3.6, 2.7, 2.7, 2.5, 2.4, 2.8, 6.2, 6.5,
-      4.5, 3.8, 3.8, 3.3, 3.7, 4, 6.3, 3.7, 3.3, 3.6, 3.3, 2.8, 2.9, 5.5, 2.9,
-      2.7, 2.6, 2.5, 2.6, 2.7, 4.4, 2.8, 2.6, 2.5, 2.6, 2.4, 2.8, 5.3, 2.5, 2.6,
-      3, 2.6, 2.7, 2.8, 4.6, 2.4, 2.6, 2.2, 2.6, 2.7, 2.5, 4.8, 2.4, 2.7, 2.4,
-      2.4, 2.3
+      41.7, 8.6, 6.5, 7.5, 8.1, 5.5, 6.1, 5.7, 5.5, 5.3, 4, 4.7, 5.4, 3.9, 4.1,
+      4.3, 6.4, 3.3, 3.7, 4.6, 3.4, 3.3, 4.5, 3.5, 3.3, 3.3, 3.8, 3.8, 3.8, 3.5,
+      7.1, 3.2, 3, 3.5, 3.5, 3.4, 7.5, 3.6, 3, 2.9, 3, 3.1, 3, 5.5, 3.2, 3.1,
+      3.2, 2.8, 2.9, 3.1, 5.8, 3.8, 2.9, 2.8, 2.8, 2.9, 3, 3.8, 6.1, 4.8, 4.1,
+      4.8, 3.4, 3.4, 3.4, 7, 3.1, 2.9, 3.2, 3.1, 3.2, 3.1, 5.8, 3.5, 3.1, 2.8,
+      3, 3.2, 3, 6.2, 2.9, 2.8, 3.3, 3.2, 3.1, 3.4, 6.4, 2.9, 2.8, 3.4, 3.1,
+      2.7, 2.9, 6.6, 3.2, 3, 4, 3, 2.8, 3.1, 6.8, 3.4, 3.1, 2.8, 2.7, 2.8
     ],
     "frames": 25,
-    "frameMsAvg": 1.08,
-    "frameMsMax": 1.6,
+    "frameMsAvg": 0.92,
+    "frameMsMax": 1.7,
+    "orderBefore": {},
+    "orderAfter": {},
     "changedRows": [
       {
         "id": "standup",
@@ -175,15 +192,17 @@
   "treemap-reparent": {
     "errors": [],
     "layouts": 4,
-    "msPerLayout": 11.9,
+    "msPerLayout": 13.6,
     "candidatesPerDrag": [4],
-    "pointerDownMs": [15],
+    "pointerDownMs": [17],
     "eagerMs": [],
     "blendErrPx": [],
-    "layoutMsAll": [32.9, 5.8, 4.7, 4.4],
-    "frames": 25,
-    "frameMsAvg": 0.98,
-    "frameMsMax": 1.5,
+    "layoutMsAll": [37.3, 6.5, 5.8, 4.7],
+    "frames": 122,
+    "frameMsAvg": 0.55,
+    "frameMsMax": 1.1,
+    "orderBefore": {},
+    "orderAfter": {},
     "changedRows": [
       {
         "id": "apple",
@@ -195,21 +214,23 @@
   "treemap-reparent-eager": {
     "errors": [],
     "layouts": 70,
-    "msPerLayout": 3.2,
+    "msPerLayout": 3.9,
     "candidatesPerDrag": [4],
     "pointerDownMs": [0],
-    "eagerMs": [110, 90],
+    "eagerMs": [136, 90],
     "blendErrPx": [],
     "layoutMsAll": [
-      30.5, 5.8, 4.7, 4.3, 4.2, 4.3, 4, 4.3, 3.3, 4.2, 2.8, 3.2, 3.4, 2.3, 3.1,
-      2.2, 2.2, 2.5, 2.8, 2.6, 3.5, 2, 2.4, 2.7, 2.4, 3.7, 2.2, 2.3, 2.2, 2.1,
-      3.2, 2.2, 1.9, 1.7, 2.2, 3.3, 2, 7.1, 5.2, 3.8, 3.2, 3.9, 3.4, 3.1, 2.8,
-      2.7, 2.5, 2.6, 4.7, 2.2, 2, 2.2, 2.3, 2.6, 2.1, 2.1, 2.2, 2, 2.1, 4.2,
-      1.8, 1.7, 1.6, 1.6, 2.1, 1.9, 1.8, 1.7, 1.8, 1.7
+      50, 6.7, 5.6, 5.1, 5.2, 5.9, 4.1, 5.5, 4.1, 5.2, 3.4, 2.9, 4.3, 3.4, 4.3,
+      2.9, 2.5, 3.8, 4, 3, 3.8, 2.6, 3.2, 2.9, 2.8, 5, 2.4, 2.3, 2.5, 2.8, 5,
+      2.4, 2.4, 2.3, 2.4, 4.5, 2.7, 4.7, 3.5, 2.7, 2.4, 2.9, 2.8, 2.4, 2.4, 3.1,
+      2.9, 2.6, 5, 2.2, 2.2, 2.2, 2.2, 2.1, 2, 2.7, 2.4, 2.3, 2.6, 6, 2.2, 2.1,
+      2, 2.4, 2.3, 2, 2, 2.1, 2.2, 4.1
     ],
-    "frames": 25,
-    "frameMsAvg": 0.92,
-    "frameMsMax": 1.7,
+    "frames": 132,
+    "frameMsAvg": 0.56,
+    "frameMsMax": 1.1,
+    "orderBefore": {},
+    "orderAfter": {},
     "changedRows": [
       {
         "id": "apple",
