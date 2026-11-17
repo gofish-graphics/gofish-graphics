@@ -1,0 +1,1846 @@
+<title>Tile Strategy Option</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --ink: #1f2328;
+    --muted: #5d636b;
+    --line: #e1e0dc;
+    --accent: #2d6a4f;
+    --accent-soft: #e5f1ea;
+    --tint: #dcefe3;
+    --tint-old: #f6e3df;
+    --code-bg: #f3f3f0;
+    --chart-surface: #ffffff;
+    --tok-key: #7a3e9d;
+    --tok-str: #2f6f3e;
+    --tok-num: #a3511a;
+    --tok-com: #7a8088;
+    --tok-fn: #255f99;
+    --tok-attr: #8a5a00;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141615;
+      --surface: #1c1f1e;
+      --ink: #e6e7e4;
+      --muted: #a0a5a2;
+      --line: #2e3331;
+      --accent: #7cc49b;
+      --accent-soft: #1d3127;
+      --tint: #1f3a2b;
+      --tint-old: #3b2423;
+      --code-bg: #181b1a;
+      --chart-surface: #f7f7f5;
+      --tok-key: #cfa0ea;
+      --tok-str: #93d3a2;
+      --tok-num: #f0a46e;
+      --tok-com: #858c88;
+      --tok-fn: #8ab8ec;
+      --tok-attr: #e6c27a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141615;
+    --surface: #1c1f1e;
+    --ink: #e6e7e4;
+    --muted: #a0a5a2;
+    --line: #2e3331;
+    --accent: #7cc49b;
+    --accent-soft: #1d3127;
+    --tint: #1f3a2b;
+    --tint-old: #3b2423;
+    --code-bg: #181b1a;
+    --chart-surface: #f7f7f5;
+    --tok-key: #cfa0ea;
+    --tok-str: #93d3a2;
+    --tok-num: #f0a46e;
+    --tok-com: #858c88;
+    --tok-fn: #8ab8ec;
+    --tok-attr: #e6c27a;
+    color-scheme: dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding-block: 32px 64px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  h1 {
+    font-size: 28px;
+    line-height: 1.2;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 20px;
+    margin: 44px 0 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line);
+  }
+  h3 {
+    font-size: 17px;
+    margin: 0 0 10px;
+  }
+  h4 {
+    font-size: 15px;
+    margin: 0 0 6px;
+  }
+  p {
+    margin: 0 0 10px;
+  }
+  a {
+    color: var(--accent);
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+  .lede {
+    color: var(--muted);
+    max-width: 70ch;
+  }
+  .terms {
+    color: var(--muted);
+    font-size: 14px;
+    margin: 12px 0 20px;
+  }
+  .terms b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  ul.rules {
+    padding-left: 20px;
+    margin: 0 0 16px;
+  }
+  ul.rules li {
+    margin-bottom: 6px;
+  }
+  .rec {
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    background: var(--accent-soft);
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+  }
+  .rec p {
+    margin-bottom: 8px;
+  }
+  .code {
+    margin: 10px 0;
+    min-width: 0;
+  }
+  .code-label {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .code.proposed .code-label {
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .scroll {
+    overflow-x: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+  pre {
+    margin: 0;
+    padding: 10px 0;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.6;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    display: block;
+    min-width: max-content;
+  }
+  pre .ln {
+    display: block;
+    padding: 0 12px;
+  }
+  .proposed pre .ln.mark {
+    background: var(--tint);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .current pre .ln.mark {
+    background: var(--tint-old);
+  }
+  .hljs-keyword,
+  .hljs-built_in,
+  .hljs-literal {
+    color: var(--tok-key);
+  }
+  .hljs-string {
+    color: var(--tok-str);
+  }
+  .hljs-number {
+    color: var(--tok-num);
+  }
+  .hljs-comment {
+    color: var(--tok-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_ {
+    color: var(--tok-fn);
+  }
+  .hljs-attr,
+  .hljs-property,
+  .hljs-params {
+    color: var(--tok-attr);
+  }
+  table.cands,
+  table.grid {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 13.5px;
+  }
+  .table-wrap {
+    overflow-x: auto;
+    margin: 10px 0 16px;
+  }
+  table th,
+  table td {
+    text-align: left;
+    vertical-align: top;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  table th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  tr.rec-row td {
+    background: var(--accent-soft);
+  }
+  td code {
+    white-space: nowrap;
+  }
+  .cards {
+    display: grid;
+    gap: 20px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    min-width: 0;
+  }
+  .shot {
+    margin: 0 0 12px;
+    background: var(--chart-surface);
+    border-radius: 6px;
+    padding: 8px;
+    text-align: center;
+  }
+  .shot img {
+    max-width: 100%;
+    height: auto;
+    display: inline-block;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 14px;
+  }
+  details.others {
+    margin-top: 8px;
+  }
+  details summary {
+    cursor: pointer;
+    color: var(--muted);
+    font-size: 13.5px;
+  }
+  .fork {
+    margin-top: 14px;
+    border: 1px dashed var(--accent);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .fork p {
+    font-size: 14px;
+  }
+  .fork-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .fork-pair > * {
+    min-width: 0;
+  }
+  .strategies {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .strategy {
+    min-width: 0;
+  }
+  .strategy .shot {
+    margin-bottom: 6px;
+  }
+  .strategy h4 code {
+    font-size: 14px;
+  }
+  .strategy p {
+    font-size: 13.5px;
+    color: var(--muted);
+  }
+  ul.issues {
+    padding-left: 20px;
+  }
+  details.why {
+    margin-top: 32px;
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+  details.why > summary {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  details.why ol {
+    padding-left: 20px;
+  }
+  details.why li {
+    margin-bottom: 10px;
+  }
+  details.why ul {
+    padding-left: 18px;
+    margin-top: 4px;
+  }
+  @media (max-width: 640px) {
+    .fork-pair {
+      grid-template-columns: 1fr;
+    }
+    h1 {
+      font-size: 24px;
+    }
+    .card {
+      padding: 14px;
+    }
+  }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+<main class="page">
+  <h1>Naming the strategy option of <code>tile</code></h1>
+  <p class="lede">
+    After #1355 renamed <code>treemap</code> to <code>tile</code>, a non-default
+    tiling reads <code>tile({ size: "pop", tile: Tile.voronoi })</code>, with
+    one word as the operator, the option key and the strategy family. The key
+    and the family are two separate choices: the key can be <code>tile</code>,
+    <code>method</code> or <code>tiling</code>, and the family can be
+    <code>Tile</code> or <code>Tiling</code>.
+  </p>
+  <p class="terms">
+    <b>Strategy family</b>: a capitalized namespace whose members are the
+    choices for one option, such as <code>Curve.monotone</code> or
+    <code>Overlap.separate</code>. <b>Key</b>: the option name that takes a
+    member of a strategy family. <b>Tiling</b>: a division of a region into
+    cells that cover it, each cell's area proportional to a weight.
+  </p>
+  <div class="rec">
+    <p>
+      <b
+        >Use <code>method</code> for the key and <code>Tiling</code> for the
+        family, so the call reads
+        <code>tile({ method: Tiling.voronoi })</code>.</b
+      >
+    </p>
+    <div class="code proposed">
+      <div class="scroll">
+        <pre
+          data-lang="javascript"
+          data-mark="0"
+        ><code>tile({ by: "region", size: "pop", method: Tiling.voronoi });</code></pre>
+      </div>
+    </div>
+  </div>
+  <ul class="rules">
+    <li>
+      The key is <code>method</code>, as in <code>interpolate</code>'s
+      <code>method: Curve.monotone</code>. The operator's own name is the role,
+      so the key does not repeat it.
+    </li>
+    <li>
+      The family is <code>Tiling</code>, the operator's gerund.
+      <code>pack</code> follows the same rule when it gets a second strategy:
+      <code>pack({ method: Packing.circles })</code>.
+    </li>
+    <li>
+      Rule for <code>api-design.md</code>: a strategy option is named for its
+      role; when the operator's own name is that role, the key is
+      <code>method</code> and the family is the operator's gerund
+      (<code>Tiling</code>, <code>Packing</code>).
+    </li>
+    <li>
+      The wire field <code>tile</code> becomes <code>method</code>. Renaming the
+      family touches the namespace, the JS subpath
+      <code>gofish-graphics/tiling</code> and the Python module
+      <code>gofish.tiling</code>, not the wire.
+    </li>
+  </ul>
+  <h2>Candidates</h2>
+  <p>
+    The key and the family vary independently. The key can be
+    <code>tile</code> (today), <code>method</code> or <code>tiling</code>. The
+    family can be <code>Tile</code> (today) or <code>Tiling</code>.
+  </p>
+  <p>
+    The smallest possible change is <code>method: Tile.voronoi</code>: a new key
+    and the old family. It removes the repeated key but keeps the
+    <code>gofish.tile_</code> module in Python (see example 5).
+  </p>
+  <div class="table-wrap">
+    <table class="cands">
+      <thead>
+        <tr>
+          <th></th>
+          <th>Candidate</th>
+          <th>JS</th>
+          <th>Python</th>
+          <th>Python member import</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>A</b></td>
+          <td>Today, after the rename</td>
+          <td>
+            <code
+              >tile({ by: &quot;region&quot;, size: &quot;pop&quot;, tile:
+              Tile.voronoi })</code
+            >
+          </td>
+          <td>
+            <code
+              >tile(by=&quot;region&quot;, size=&quot;pop&quot;,
+              tile=Tile.voronoi)</code
+            >
+          </td>
+          <td><code>from gofish.tile_ import voronoi</code></td>
+        </tr>
+        <tr class="rec-row">
+          <td><b>B</b></td>
+          <td>Recommended</td>
+          <td>
+            <code
+              >tile({ by: &quot;region&quot;, size: &quot;pop&quot;, method:
+              Tiling.voronoi })</code
+            >
+          </td>
+          <td>
+            <code
+              >tile(by=&quot;region&quot;, size=&quot;pop&quot;,
+              method=Tiling.voronoi)</code
+            >
+          </td>
+          <td><code>from gofish.tiling import voronoi</code></td>
+        </tr>
+        <tr>
+          <td><b>C</b></td>
+          <td>Runner-up on the key</td>
+          <td>
+            <code
+              >tile({ by: &quot;region&quot;, size: &quot;pop&quot;, tiling:
+              Tiling.voronoi })</code
+            >
+          </td>
+          <td>
+            <code
+              >tile(by=&quot;region&quot;, size=&quot;pop&quot;,
+              tiling=Tiling.voronoi)</code
+            >
+          </td>
+          <td><code>from gofish.tiling import voronoi</code></td>
+        </tr>
+        <tr>
+          <td><b>D</b></td>
+          <td>Strategy as the operator, not recommended</td>
+          <td>
+            <code
+              >tile.voronoi({ by: &quot;region&quot;, size: &quot;pop&quot;
+              })</code
+            >
+          </td>
+          <td>
+            <code
+              >tile.voronoi(by=&quot;region&quot;, size=&quot;pop&quot;)</code
+            >
+          </td>
+          <td>none: the strategy is not a value</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>Examples</h2>
+  <p class="note">
+    Each card shows B, the proposal, over A, today's spelling. Changed lines are
+    tinted in both. C and D are under each card.
+  </p>
+  <div class="cards">
+    <article class="card" id="ex1">
+      <h3>1. Nested levels with mixed strategies</h3>
+      <figure class="shot">
+        <img
+          src="img/squarify-then-voronoi.png"
+          alt="Continents as squarified rectangles, with Voronoi cells for regions and countries inside each"
+        />
+      </figure>
+      <p class="note">
+        Continents are squarified rectangles. Regions and countries inside each
+        are Voronoi cells. From
+        <code>Forward Syntax/Voronoi Treemap/SquarifyThenVoronoi</code>.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="0,5,6"
+          ><code>import { chart, region, tile, Tiling } from "gofish-graphics";
+
+chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 8 }),
+    tile({ by: "region", size: "pop", spacing: 2.5, method: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">
+          A, today: <code>tile</code> and <code>Tile</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="0,5,6"
+          ><code>import { chart, region, tile, Tile } from "gofish-graphics";
+
+chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 8 }),
+    tile({ by: "region", size: "pop", spacing: 2.5, tile: Tile.voronoi }),
+    tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex1-others">
+        <summary>Candidates C and D</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,5,6"
+            ><code>import { chart, region, tile, Tiling } from "gofish-graphics";
+
+chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 8 }),
+    tile({ by: "region", size: "pop", spacing: 2.5, tiling: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, tiling: Tiling.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">D: strategy as the operator</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,5,6"
+            ><code>import { chart, region, tile } from "gofish-graphics";
+
+chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 8 }),
+    tile.voronoi({ by: "region", size: "pop", spacing: 2.5 }),
+    tile.voronoi({ size: "pop", spacing: 1 })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+      </details>
+      <div class="fork">
+        <h4>Fork: the key is <code>method</code> or <code>tiling</code></h4>
+        <p>
+          <code>method</code> is the recommendation. It is the key
+          <code>interpolate</code> already uses for a <code>Curve</code>, the
+          key Vega uses for this exact choice, and one of the two keys #1013
+          left open for <code>pack</code>.
+        </p>
+        <p>
+          <code>tiling</code> keeps a role noun and keeps the key matching its
+          family exactly, at the cost of saying the stem three times. A generic
+          key was rejected once before: <code>spread</code>'s
+          <code>mode</code> became <code>anchor</code> (#762), because Auto
+          Layout, TikZ and CSS all had a specific word. Here the specific word
+          is the operator's own name, which is why the generic one is left.
+        </p>
+        <div class="fork-pair">
+          <div class="code proposed">
+            <div class="code-label"><code>method</code> (recommended)</div>
+            <div class="scroll">
+              <pre
+                data-lang="javascript"
+                data-mark=""
+              ><code>tile({ by: "region", size: "pop", method: Tiling.voronoi });</code></pre>
+            </div>
+          </div>
+          <div class="code">
+            <div class="code-label"><code>tiling</code></div>
+            <div class="scroll">
+              <pre
+                data-lang="javascript"
+                data-mark=""
+              ><code>tile({ by: "region", size: "pop", tiling: Tiling.voronoi });</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+    <article class="card" id="ex2">
+      <h3>2. Slice, then dice</h3>
+      <figure class="shot">
+        <img
+          src="img/slice-then-dice.png"
+          alt="Continents sliced into horizontal strips, regions diced into vertical cells inside each"
+        />
+      </figure>
+      <p class="note">
+        One level slices, the next dices. From
+        <code>Forward Syntax/Voronoi Treemap/SliceThenDice</code>.
+      </p>
+      <p class="note">
+        Issue #1276 proposes deleting <code>Tile.slice</code> and
+        <code>Tile.dice</code>, because a one-axis tiling is a normalized stack.
+        The naming here does not depend on that.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="2,3"
+          ><code>chart(countryPopulations, { axes: false, w: 320, h: 320 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 4, method: Tiling.slice }),
+    tile({ by: "region", size: "pop", spacing: 2, method: Tiling.dice })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">
+          A, today: <code>tile</code> and <code>Tile</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="2,3"
+          ><code>chart(countryPopulations, { axes: false, w: 320, h: 320 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 4, tile: Tile.slice }),
+    tile({ by: "region", size: "pop", spacing: 2, tile: Tile.dice })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex2-others">
+        <summary>Candidates C and D</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="2,3"
+            ><code>chart(countryPopulations, { axes: false, w: 320, h: 320 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 4, tiling: Tiling.slice }),
+    tile({ by: "region", size: "pop", spacing: 2, tiling: Tiling.dice })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">D: strategy as the operator</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="2,3"
+            ><code>chart(countryPopulations, { axes: false, w: 320, h: 320 })
+  .flow(
+    tile.slice({ by: "continent", size: "pop", spacing: 4 }),
+    tile.dice({ by: "region", size: "pop", spacing: 2 })
+  )
+  .mark(rect({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+      </details>
+    </article>
+    <article class="card" id="ex3">
+      <h3>3. A strategy with a parameter</h3>
+      <figure class="shot">
+        <img
+          src="img/titanic-unit-dots.png"
+          alt="Titanic passengers as circles sized by fare, squarified into one block per passenger class"
+        />
+      </figure>
+      <p class="note">
+        <code>Tile.squarify({ ratio: 1 })</code> asks for square cells, one
+        circle per passenger. From
+        <code>atom/TitanicUnitDots/Default</code> (its
+        <code>spacing</code> argument is written as its default, 0).
+      </p>
+      <p class="note">
+        In D, the strategy's <code>ratio</code> has to merge into the operator's
+        options, next to <code>h</code>, <code>size</code> and
+        <code>sort</code>.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="11"
+          ><code>chart(titanicPassengers, {
+  color: Color.palette(["#2b8cbe", "#ff8408"]),
+  w: 1000,
+  h: 320,
+})
+  .facet({ by: "pclass", dir: "x" })
+  .flow(
+    tile({
+      h: "fare",
+      size: "fare",
+      spacing: 0,
+      method: Tiling.squarify({ ratio: 1 }),
+      sort: "desc",
+    })
+  )
+  .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }));</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">
+          A, today: <code>tile</code> and <code>Tile</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="11"
+          ><code>chart(titanicPassengers, {
+  color: Color.palette(["#2b8cbe", "#ff8408"]),
+  w: 1000,
+  h: 320,
+})
+  .facet({ by: "pclass", dir: "x" })
+  .flow(
+    tile({
+      h: "fare",
+      size: "fare",
+      spacing: 0,
+      tile: Tile.squarify({ ratio: 1 }),
+      sort: "desc",
+    })
+  )
+  .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }));</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex3-others">
+        <summary>Candidates C and D</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="11"
+            ><code>chart(titanicPassengers, {
+  color: Color.palette(["#2b8cbe", "#ff8408"]),
+  w: 1000,
+  h: 320,
+})
+  .facet({ by: "pclass", dir: "x" })
+  .flow(
+    tile({
+      h: "fare",
+      size: "fare",
+      spacing: 0,
+      tiling: Tiling.squarify({ ratio: 1 }),
+      sort: "desc",
+    })
+  )
+  .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }));</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">D: strategy as the operator</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="7,11"
+            ><code>chart(titanicPassengers, {
+  color: Color.palette(["#2b8cbe", "#ff8408"]),
+  w: 1000,
+  h: 320,
+})
+  .facet({ by: "pclass", dir: "x" })
+  .flow(
+    tile.squarify({
+      h: "fare",
+      size: "fare",
+      spacing: 0,
+      ratio: 1,
+      sort: "desc",
+    })
+  )
+  .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }));</code></pre>
+          </div>
+        </div>
+      </details>
+    </article>
+    <article class="card" id="ex4">
+      <h3>4. Three Voronoi levels</h3>
+      <figure class="shot">
+        <img
+          src="img/voronoi-default.png"
+          alt="Countries as Voronoi cells nested in regions and continents"
+        />
+      </figure>
+      <p class="note">
+        The worst case for repetition: today the stem appears nine times in
+        three lines. From <code>Forward Syntax/Voronoi Treemap/Default</code>.
+      </p>
+      <p class="note">
+        A, keeping <code>tile: Tile.voronoi</code>, costs nothing, matches d3's
+        key and keeps the key-matches-family pattern. It is the pick if this
+        repetition reads as fine in practice.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="2,3,4"
+          ><code>chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 5, method: Tiling.voronoi }),
+    tile({ by: "region", size: "pop", spacing: 2.5, method: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, method: Tiling.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">
+          A, today: <code>tile</code> and <code>Tile</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="2,3,4"
+          ><code>chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 5, tile: Tile.voronoi }),
+    tile({ by: "region", size: "pop", spacing: 2.5, tile: Tile.voronoi }),
+    tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex4-others">
+        <summary>Candidates C and D</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="2,3,4"
+            ><code>chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile({ by: "continent", size: "pop", spacing: 5, tiling: Tiling.voronoi }),
+    tile({ by: "region", size: "pop", spacing: 2.5, tiling: Tiling.voronoi }),
+    tile({ size: "pop", spacing: 1, tiling: Tiling.voronoi })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">D: strategy as the operator</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="2,3,4"
+            ><code>chart(countryPopulations, { axes: false, w: 480, h: 480 })
+  .flow(
+    tile.voronoi({ by: "continent", size: "pop", spacing: 5 }),
+    tile.voronoi({ by: "region", size: "pop", spacing: 2.5 }),
+    tile.voronoi({ size: "pop", spacing: 1 })
+  )
+  .mark(region({ fill: "continent" }));</code></pre>
+          </div>
+        </div>
+      </details>
+    </article>
+    <article class="card" id="ex5">
+      <h3>5. Python</h3>
+      <figure class="shot">
+        <img
+          src="img/squarify-then-voronoi.png"
+          alt="The same render as example 1"
+        />
+      </figure>
+      <p class="note">
+        The Python port of example 1, from
+        <code>tests/python-stories/forward-syntax/test_voronoi_treemap.py</code
+        >, then the member-import form.
+      </p>
+      <p class="note">
+        With the family called <code>Tile</code>, the family module cannot be
+        <code>gofish/tile.py</code>, because <code>tile</code> is the operator.
+        The generator's rule for such a clash names it
+        <code>gofish/tile_.py</code>, as it already does for
+        <code>gofish/filter_.py</code>. PEP 8 says of such clashes: "Perhaps
+        better is to avoid such clashes by using a synonym."
+        <code>Tiling</code> gives <code>gofish.tiling</code> with no underscore.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="python"
+            data-mark="0,6,7"
+          ><code>from gofish import Tiling, chart, region, tile
+
+viz = (
+    chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
+    .flow(
+        tile(by="continent", size="pop", spacing=8),
+        tile(by="region", size="pop", spacing=2.5, method=Tiling.voronoi),
+        tile(size="pop", spacing=1, method=Tiling.voronoi),
+    )
+    .mark(region(fill="continent"))
+)</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">
+          A, today: <code>tile</code> and <code>Tile</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="python"
+            data-mark="0,6,7"
+          ><code>from gofish import Tile, chart, region, tile
+
+viz = (
+    chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
+    .flow(
+        tile(by="continent", size="pop", spacing=8),
+        tile(by="region", size="pop", spacing=2.5, tile=Tile.voronoi),
+        tile(size="pop", spacing=1, tile=Tile.voronoi),
+    )
+    .mark(region(fill="continent"))
+)</code></pre>
+        </div>
+      </div>
+      <div class="code proposed">
+        <div class="code-label">B, member import</div>
+        <div class="scroll">
+          <pre data-lang="python" data-mark="1,3"><code>from gofish import tile
+from gofish.tiling import voronoi
+
+tile(by="region", size="pop", spacing=2.5, method=voronoi)</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">A, member import</div>
+        <div class="scroll">
+          <pre data-lang="python" data-mark="1,3"><code>from gofish import tile
+from gofish.tile_ import voronoi
+
+tile(by="region", size="pop", spacing=2.5, tile=voronoi)</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex5-others">
+        <summary>Candidates C and D</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="python"
+              data-mark="0,6,7"
+            ><code>from gofish import Tiling, chart, region, tile
+
+viz = (
+    chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
+    .flow(
+        tile(by="continent", size="pop", spacing=8),
+        tile(by="region", size="pop", spacing=2.5, tiling=Tiling.voronoi),
+        tile(size="pop", spacing=1, tiling=Tiling.voronoi),
+    )
+    .mark(region(fill="continent"))
+)</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">C, member import</div>
+          <div class="scroll">
+            <pre
+              data-lang="python"
+              data-mark="1,3"
+            ><code>from gofish import tile
+from gofish.tiling import voronoi
+
+tile(by="region", size="pop", spacing=2.5, tiling=voronoi)</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">D: strategy as the operator</div>
+          <div class="scroll">
+            <pre
+              data-lang="python"
+              data-mark="0,6,7"
+            ><code>from gofish import chart, region, tile
+
+viz = (
+    chart(COUNTRY_POPULATIONS, axes=False, w=480, h=480)
+    .flow(
+        tile(by="continent", size="pop", spacing=8),
+        tile.voronoi(by="region", size="pop", spacing=2.5),
+        tile.voronoi(size="pop", spacing=1),
+    )
+    .mark(region(fill="continent"))
+)</code></pre>
+          </div>
+        </div>
+      </details>
+      <div class="fork">
+        <h4>
+          Fork: the family is <code>Tiling</code> or stays <code>Tile</code>
+        </h4>
+        <p>
+          Both use the <code>method</code> key. <code>Tiling</code> is the
+          recommendation: its module has a plain name. Keeping
+          <code>Tile</code> changes less, and leaves the trailing underscore in
+          every member import.
+        </p>
+        <div class="fork-pair">
+          <div class="code proposed">
+            <div class="code-label"><code>Tiling</code> (recommended)</div>
+            <div class="scroll">
+              <pre
+                data-lang="python"
+                data-mark=""
+              ><code>from gofish import Tiling, tile
+from gofish.tiling import voronoi
+
+tile(by="region", size="pop", method=Tiling.voronoi)</code></pre>
+            </div>
+          </div>
+          <div class="code">
+            <div class="code-label"><code>Tile</code></div>
+            <div class="scroll">
+              <pre
+                data-lang="python"
+                data-mark=""
+              ><code>from gofish import Tile, tile
+from gofish.tile_ import voronoi
+
+tile(by="region", size="pop", method=Tile.voronoi)</code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+    <article class="card" id="ex6">
+      <h3>6. A strategy held in a variable</h3>
+      <p class="note">
+        From <code>src/tests/voronoiTreemap.test.ts</code>, which runs one check
+        under two strategies. The loop body also reads
+        <code>strategy.kind</code> for its message.
+      </p>
+      <p class="note">
+        In D there is no strategy value, only a function, so the loop holds the
+        operator itself and a parameterized strategy such as
+        <code>squarify({ ratio: 1 })</code> cannot be held apart from the other
+        options.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="0,4,5,6,7,8,9,10,11"
+          ><code>for (const strategy of [Tiling.squarify, Tiling.voronoi]) {
+  const dl = await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "g", dir: "x", spacing: 0 }),
+      tile({
+        by: "k",
+        size: "v",
+        padding: 10,
+        w: 200,
+        h: 100,
+        method: strategy,
+      })
+    )
+    .mark(region({ fill: "#888" }))
+    .toDisplayList({ w: 400, h: 100 });
+}</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">
+          A, today: <code>tile</code> and <code>Tile</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="0,4"
+          ><code>for (const strategy of [Tile.squarify, Tile.voronoi]) {
+  const dl = await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "g", dir: "x", spacing: 0 }),
+      tile({ by: "k", size: "v", padding: 10, w: 200, h: 100, tile: strategy })
+    )
+    .mark(region({ fill: "#888" }))
+    .toDisplayList({ w: 400, h: 100 });
+}</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex6-others">
+        <summary>Candidates C and D</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,4,5,6,7,8,9,10,11"
+            ><code>for (const strategy of [Tiling.squarify, Tiling.voronoi]) {
+  const dl = await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "g", dir: "x", spacing: 0 }),
+      tile({
+        by: "k",
+        size: "v",
+        padding: 10,
+        w: 200,
+        h: 100,
+        tiling: strategy,
+      })
+    )
+    .mark(region({ fill: "#888" }))
+    .toDisplayList({ w: 400, h: 100 });
+}</code></pre>
+          </div>
+        </div>
+        <div class="code proposed">
+          <div class="code-label">D: strategy as the operator</div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,4"
+            ><code>for (const tileBy of [tile.squarify, tile.voronoi]) {
+  const dl = await chart(rows, { axes: false })
+    .flow(
+      spread({ by: "g", dir: "x", spacing: 0 }),
+      tileBy({ by: "k", size: "v", padding: 10, w: 200, h: 100 })
+    )
+    .mark(region({ fill: "#888" }))
+    .toDisplayList({ w: 400, h: 100 });
+}</code></pre>
+          </div>
+        </div>
+      </details>
+    </article>
+    <article class="card" id="ex7">
+      <h3>7. The sibling operator, <code>pack</code></h3>
+      <p class="note">
+        <code>pack</code> has one strategy today, so it has no option (#1013).
+        #1013 names its future family <code>Packing</code> and leaves the key
+        open between <code>method</code> and <code>strategy</code>. B settles
+        that key the same way for both operators. A shows the same-word spelling
+        for comparison.
+      </p>
+      <div class="code proposed">
+        <div class="code-label">
+          B, proposed: <code>method</code> and <code>Tiling</code>
+        </div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="0,1"
+          ><code>pack({ by: "region", method: Packing.circles });
+tile({ by: "region", size: "pop", method: Tiling.voronoi });</code></pre>
+        </div>
+      </div>
+      <div class="code current">
+        <div class="code-label">A: the same word for key and family</div>
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark="0,1"
+          ><code>pack({ by: "region", pack: Pack.circles });
+tile({ by: "region", size: "pop", tile: Tile.voronoi });</code></pre>
+        </div>
+      </div>
+      <details class="others" id="ex7-others">
+        <summary>Candidate C</summary>
+        <div class="code proposed">
+          <div class="code-label">
+            C: <code>tiling</code> and <code>Tiling</code>
+          </div>
+          <div class="scroll">
+            <pre
+              data-lang="javascript"
+              data-mark="0,1"
+            ><code>pack({ by: "region", packing: Packing.circles });
+tile({ by: "region", size: "pop", tiling: Tiling.voronoi });</code></pre>
+          </div>
+        </div>
+      </details>
+    </article>
+    <article class="card" id="ex8">
+      <h3>8. The two precedents already in the repo</h3>
+      <p class="note">
+        <code>coord</code> is the one existing operator named after its family,
+        and it takes the strategy under another key,
+        <code>transform</code>
+        (<code>src/ast/coordinateTransforms/coord.tsx</code>).
+        <code>interpolate</code> already holds a family value under
+        <code>method</code> (<code>src/interpolate.ts</code>).
+      </p>
+      <div class="code">
+        <div class="scroll">
+          <pre
+            data-lang="javascript"
+            data-mark=""
+          ><code>coord({ transform: Coord.polar() }, children);
+interpolate(rows, {
+  along: "year",
+  key: "country",
+  at: 1990.5,
+  method: Curve.monotone,
+});</code></pre>
+        </div>
+      </div>
+    </article>
+  </div>
+  <h2>The five tiling strategies</h2>
+  <p class="note">
+    Each render is the same one-level spec with
+    <code>.mark(region({ fill: "continent" }))</code>, 13 regions, 240 by 240
+    pixels. Only the strategy changes.
+  </p>
+  <div class="strategies">
+    <div class="strategy">
+      <figure class="shot">
+        <img
+          src="img/strategy-squarify.png"
+          alt="squarify tiling of 13 regions"
+        />
+      </figure>
+      <h4><code>Tiling.squarify</code></h4>
+      <p>Rows of cells close to square, largest first. The default.</p>
+      <div class="code">
+        <div class="scroll">
+          <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  method: Tiling.squarify,
+});</code></pre>
+        </div>
+      </div>
+    </div>
+    <div class="strategy">
+      <figure class="shot">
+        <img src="img/strategy-slice.png" alt="slice tiling of 13 regions" />
+      </figure>
+      <h4><code>Tiling.slice</code></h4>
+      <p>Horizontal strips, top to bottom, in data order.</p>
+      <div class="code">
+        <div class="scroll">
+          <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  method: Tiling.slice,
+});</code></pre>
+        </div>
+      </div>
+    </div>
+    <div class="strategy">
+      <figure class="shot">
+        <img src="img/strategy-dice.png" alt="dice tiling of 13 regions" />
+      </figure>
+      <h4><code>Tiling.dice</code></h4>
+      <p>Vertical strips, left to right, in data order.</p>
+      <div class="code">
+        <div class="scroll">
+          <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  method: Tiling.dice,
+});</code></pre>
+        </div>
+      </div>
+    </div>
+    <div class="strategy">
+      <figure class="shot">
+        <img src="img/strategy-binary.png" alt="binary tiling of 13 regions" />
+      </figure>
+      <h4><code>Tiling.binary</code></h4>
+      <p>
+        Splits the cells into two halves of about equal total and recurses,
+        cutting across the longer side.
+      </p>
+      <div class="code">
+        <div class="scroll">
+          <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  method: Tiling.binary,
+});</code></pre>
+        </div>
+      </div>
+    </div>
+    <div class="strategy">
+      <figure class="shot">
+        <img
+          src="img/strategy-voronoi.png"
+          alt="voronoi tiling of 13 regions"
+        />
+      </figure>
+      <h4><code>Tiling.voronoi</code></h4>
+      <p>
+        Convex polygon cells from a weighted Voronoi diagram. Fills any convex
+        region, not only a rectangle.
+      </p>
+      <div class="code">
+        <div class="scroll">
+          <pre data-lang="javascript" data-mark=""><code>tile({
+  by: "region",
+  size: "pop",
+  spacing: 2,
+  method: Tiling.voronoi,
+});</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+  <h2>Precedent</h2>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>System</th>
+          <th>Spelling</th>
+          <th>Key word</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <a href="https://d3js.org/d3-hierarchy/treemap">d3-hierarchy</a>
+          </td>
+          <td><code>d3.treemap().tile(d3.treemapSquarify)</code></td>
+          <td><code>tile</code> ("the tiling method")</td>
+          <td>squarify</td>
+        </tr>
+        <tr>
+          <td>visx</td>
+          <td><code>&lt;Treemap tile={treemapSquarify} /&gt;</code></td>
+          <td><code>tile</code></td>
+          <td>squarify</td>
+        </tr>
+        <tr>
+          <td>nivo</td>
+          <td>
+            <code>&lt;ResponsiveTreeMap tile=&quot;squarify&quot; /&gt;</code>
+          </td>
+          <td><code>tile</code></td>
+          <td>squarify</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://vega.github.io/vega/docs/transforms/treemap"
+              >Vega</a
+            >
+          </td>
+          <td>
+            <code
+              >{&quot;type&quot;: &quot;treemap&quot;, &quot;method&quot;:
+              &quot;squarify&quot;}</code
+            >
+          </td>
+          <td><code>method</code> ("The layout method to use")</td>
+          <td>squarify</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://github.com/vega/vega-lite/pull/9784"
+              >Vega-Lite, open PR #9784</a
+            >
+          </td>
+          <td><code>method on the treemap mark</code></td>
+          <td><code>method</code></td>
+          <td>follows Vega</td>
+        </tr>
+        <tr>
+          <td>Highcharts</td>
+          <td><code>layoutAlgorithm: &quot;squarified&quot;</code></td>
+          <td><code>layoutAlgorithm</code></td>
+          <td>sliceAndDice</td>
+        </tr>
+        <tr>
+          <td>amCharts 5</td>
+          <td><code>layoutAlgorithm: &quot;squarify&quot;</code></td>
+          <td><code>layoutAlgorithm</code></td>
+          <td>squarify</td>
+        </tr>
+        <tr>
+          <td>DevExpress</td>
+          <td><code>layoutAlgorithm: &quot;squarified&quot;</code></td>
+          <td><code>layoutAlgorithm</code></td>
+          <td>squarified</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://wilkox.org/treemapify/reference/geom_treemap.html"
+              >treemapify (ggplot2)</a
+            >
+          </td>
+          <td><code>geom_treemap(layout = &quot;squarified&quot;)</code></td>
+          <td><code>layout</code></td>
+          <td>squarified</td>
+        </tr>
+        <tr>
+          <td>R treemap</td>
+          <td><code>treemap(..., algorithm = &quot;pivotSize&quot;)</code></td>
+          <td><code>algorithm</code></td>
+          <td>pivotSize</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://plotly.com/python/reference/treemap">Plotly</a>
+          </td>
+          <td><code>tiling: { packing: &quot;squarify&quot; }</code></td>
+          <td><code>packing</code>, under <code>tiling</code></td>
+          <td>squarify</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://vita.had.co.nz/papers/prodplots.pdf"
+              >productplots</a
+            >
+          </td>
+          <td><code>prodplot(data, formula, divider = mosaic())</code></td>
+          <td><code>divider</code></td>
+          <td>mosaic()</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="https://docs.yworks.com/yfiles-html/api/TreeMapLayout.html"
+              >yFiles</a
+            >
+          </td>
+          <td><code>tilingStrategy: TilingStrategy.SQUARIFIED</code></td>
+          <td><code>tilingStrategy</code></td>
+          <td>SQUARIFIED</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="note">
+    Count: <code>tile</code> 3, <code>layoutAlgorithm</code> 3,
+    <code>method</code> 2 (one of them in an unmerged PR), and one each of
+    <code>layout</code>, <code>algorithm</code>, <code>packing</code>,
+    <code>divider</code> and <code>tilingStrategy</code>. ECharts, Recharts and
+    Python's squarify offer no choice.
+  </p>
+  <p class="note">
+    d3, visx and nivo use <code>tile</code> under an operator called
+    <code>treemap</code>, so the word is said once there, not three times. d3's
+    own documentation calls the option "the tiling method".
+  </p>
+  <p class="note">
+    The research papers say "layout algorithm" (Shneiderman and Wattenberg;
+    Bederson et al.; Balzer and Deussen) and "subdivision" (Bruls et al.).
+  </p>
+  <h3>A function and its strategy option, elsewhere</h3>
+  <div class="table-wrap">
+    <table class="grid">
+      <thead>
+        <tr>
+          <th>Pattern</th>
+          <th>Examples</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Same word for key and family</td>
+          <td>
+            <code>d3.stack().order(d3.stackOrderNone)</code>, ggplot2
+            <code>position = position_dodge()</code>, Effect
+            <code>{ schedule: Schedule.recurs(5) }</code>
+          </td>
+        </tr>
+        <tr>
+          <td>Generic key</td>
+          <td>
+            polars <code>rank(method=)</code>,
+            <code>interpolate(method=)</code> and <code>join(how=)</code>, numpy
+            <code>sort(kind=)</code> and
+            <a
+              href="https://numpy.org/doc/stable/reference/generated/numpy.percentile.html"
+              ><code>percentile(method=)</code></a
+            >
+            (renamed from <code>interpolation</code> in 1.22), scipy
+            <code>minimize(method=)</code>, ELK <code>algorithm</code>
+          </td>
+        </tr>
+        <tr>
+          <td>Unlabeled argument</td>
+          <td>
+            SwiftUI <code>.buttonStyle(.bordered)</code>: the role word is in
+            the method name, and the argument has no label
+          </td>
+        </tr>
+        <tr>
+          <td>Strategy as operator</td>
+          <td>
+            d3's separate <code>tree</code> and <code>cluster</code>, networkx's
+            <code>*_layout</code> functions, pandas <code>ffill()</code> and
+            <code>bfill()</code> replacing <code>fillna(method=)</code>,
+            productplots' divider functions (where <code>tile</code> is itself
+            one divider), and the tidyverse design guide's
+            <a href="https://design.tidyverse.org/strategy-functions.html"
+              >"three functions in a trench coat"</a
+            >
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <h2>Related issues</h2>
+  <ul class="issues">
+    <li>
+      <b>#1355</b>: Rename <code>treemap</code> to <code>tile</code>. This
+      question is its first open item.
+    </li>
+    <li>
+      <b>#1013</b>: Strategy families as capitalized namespaces. Says the key
+      and the family need not match, and names <code>Packing</code>.
+    </li>
+    <li>
+      <b>#1276</b>: Delete <code>Tile.slice</code> and <code>Tile.dice</code>,
+      since a one-axis tiling is a normalized stack.
+    </li>
+    <li>
+      <b>#762</b>: Renamed <code>spread</code>'s <code>mode</code> to
+      <code>anchor</code>, a specific word over a generic one.
+    </li>
+    <li>
+      <b>#1279</b>: Extensibility audit of marks, operators and strategies.
+      Mentions the internal <code>Tiling</code> function type.
+    </li>
+    <li>
+      <b>#1005</b>: Made <code>tile</code> a strategy object. It kept the key
+      without discussing it.
+    </li>
+    <li><b>#1273</b>: Curved Voronoi treemap cells.</li>
+    <li><b>#1295</b>: Revisit the Voronoi treemap.</li>
+  </ul>
+  <details class="why" id="rationale">
+    <summary>Why B, the case against it, and why not D</summary>
+    <h3>Why <code>method</code> and <code>Tiling</code></h3>
+    <ol>
+      <li>
+        <b
+          >The repo already answers this case twice, and both times the key is
+          not the operator's word.</b
+        >
+        <ul>
+          <li>
+            <code>coord</code> is the one existing operator named after its
+            family, and it takes the strategy under another key:
+            <code>coord({ transform: Coord.polar() }, children)</code>
+            (<code>packages/gofish-graphics/src/ast/coordinateTransforms/coord.tsx</code>).
+          </li>
+          <li>
+            <code>interpolate(rows, { method: Curve.monotone })</code> already
+            holds a family value under
+            <code>method</code>
+            (<code>packages/gofish-graphics/src/interpolate.ts</code>; listed in
+            <code
+              >apps/docs/docs/internals/design-evolution/three-surfaces.md</code
+            >).
+          </li>
+          <li>
+            No construct today has an option key that is both its own name and a
+            family name. <code>text({ text })</code> repeats its own name, but
+            that is the mark's content, not a strategy.
+          </li>
+        </ul>
+      </li>
+      <li>
+        <b
+          ><code>pack</code> has the same shape and was already steered this
+          way.</b
+        >
+        <ul>
+          <li>
+            #1013 removed <code>pack</code>'s strategy option until a second
+            packing exists, named the later family <code>Packing</code>, and
+            left the key open between <code>method</code> and
+            <code>strategy</code>: "Both are generic, which suits a family whose
+            future members we cannot predict." So a verb operator with a gerund
+            family is already the plan, and this proposal settles the open key
+            the same way for both:
+            <code>pack({ method: Packing.circles })</code> and
+            <code>tile({ method: Tiling.voronoi })</code>.
+          </li>
+        </ul>
+      </li>
+      <li>
+        <b
+          >"The family is named after its option key" is a pattern, not a
+          written rule.</b
+        >
+        <ul>
+          <li>
+            #1013 says: "The name usually matches the option key, but does not
+            have to. Because the namespace is capitalized, it is no longer the
+            key itself, so a family can serve keys with other names."
+          </li>
+          <li>
+            The pattern holds for <code>overlap</code>/<code>Overlap</code>,
+            <code>curve</code>/<code>Curve</code>,
+            <code>shape</code>/<code>Shape</code>,
+            <code>filter</code>/<code>Filter</code>, and the chart-level
+            <code>coord</code>/<code>Coord</code> and
+            <code>color</code>/<code>Color</code>. It already does not hold for
+            <code>interpolate</code>'s <code>method</code>,
+            <code>.label()</code>'s <code>position: Place.x</code>,
+            <code>.transition({ enter: Animation.x })</code>,
+            <code>.bin(Bin.x)</code>, or the <code>coord</code> combinator's
+            <code>transform</code>.
+          </li>
+        </ul>
+      </li>
+      <li>
+        <b>Outside precedent.</b>
+        <ul>
+          <li>
+            Vega's treemap transform spells this exact choice
+            <code>method</code> ("The layout method to use"), and the open
+            Vega-Lite treemap PR (#9784) follows it.
+          </li>
+          <li>
+            d3 calls the option <code>tile</code> but describes it as "the
+            tiling method". d3, visx and nivo use <code>tile</code> under an
+            operator called <code>treemap</code>, so the word is said once
+            there.
+          </li>
+          <li>
+            numpy renamed <code>percentile</code>'s
+            <code>interpolation</code> argument to <code>method</code> in 1.22.
+            polars uses <code>rank(method=)</code> and
+            <code>interpolate(method=)</code>.
+          </li>
+        </ul>
+      </li>
+      <li>
+        <b>Naming guidance.</b>
+        <ul>
+          <li>
+            <a href="https://swift.org/documentation/api-design-guidelines"
+              >Swift API Design Guidelines</a
+            >: "Omit needless words. Every word in a name should convey salient
+            information at the use site," and "omit words that merely repeat
+            type information."
+          </li>
+          <li>
+            <a href="https://google.aip.dev/140">Google AIP-140</a>: "Messages
+            should not include a field with the same name as the enclosing
+            message."
+          </li>
+          <li>
+            Rust RFC 356: items exported from a module should not be prefixed
+            with the module name (<code>io::Error</code>, not
+            <code>io::IoError</code>).
+          </li>
+        </ul>
+      </li>
+      <li>
+        <b>Python.</b>
+        <ul>
+          <li>
+            With the family called <code>Tile</code>, the rename forces the
+            family module to <code>gofish/tile_.py</code>, so member imports
+            read <code>from gofish.tile_ import voronoi</code>.
+            <a href="https://peps.python.org/pep-0008">PEP 8</a> on such
+            clashes: "Perhaps better is to avoid such clashes by using a
+            synonym." <code>Tiling</code> gives <code>gofish.tiling</code> and
+            <code>gofish-graphics/tiling</code> with no underscore.
+          </li>
+        </ul>
+      </li>
+      <li>
+        <b>Cost.</b>
+        <ul>
+          <li>
+            The wire field <code>tile</code> becomes <code>method</code>. The
+            family rename touches the namespace, the JS subpath and the Python
+            module, not the wire, which carries plain
+            <code>{ kind, ...params }</code> objects.
+          </li>
+          <li>
+            The code already uses <code>Tiling</code> internally, as the type of
+            a tiling function in
+            <code
+              >packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx</code
+            >. That type needs another name, or it becomes the family's type.
+          </li>
+        </ul>
+      </li>
+    </ol>
+    <h3>The case against B</h3>
+    <p>
+      A generic key was rejected before: <code>spread</code>'s
+      <code>mode</code> became <code>anchor</code> (#762) because Auto Layout,
+      TikZ and CSS all had a specific word. Here the specific word is the
+      operator's own name, which is why the generic one is left. If a role noun
+      is preferred, C (<code>tiling: Tiling.voronoi</code>) is the spelling: it
+      keeps the key matching the family exactly, at the cost of saying the stem
+      three times.
+    </p>
+    <p>
+      A (keep <code>tile: Tile.voronoi</code>) costs nothing, matches d3's key,
+      and keeps the family pattern. It is the pick if the triple repetition
+      reads as fine in practice.
+    </p>
+    <h3>Why not D</h3>
+    <p>
+      D has real precedent and says the word once: d3's separate
+      <code>tree</code> and <code>cluster</code>, networkx's
+      <code>*_layout</code> functions, the tidyverse design guide's "three
+      functions in a trench coat", pandas replacing
+      <code>fillna(method=)</code> with <code>ffill()</code> and
+      <code>bfill()</code>, and productplots' divider functions, where
+      <code>tile</code> is itself one divider.
+    </p>
+    <p>
+      It goes against the project's own rules. One concept is one operator with
+      a strategy option (<code>principles.md</code>, "Prefer a polymorphic
+      operator to a family of near-duplicates"). Capitalized namespaces hold
+      option values, while lowercase names are operators
+      (<code>three-surfaces.md</code>). A strategy could no longer be held as a
+      plain value apart from the operator's options (examples 3 and 6). And
+      <code>tile</code> would have to be both a function and a namespace.
+    </p>
+  </details>
+</main>
+<script>
+  (function () {
+    function render() {
+      document.querySelectorAll("pre[data-lang]").forEach(function (pre) {
+        var code = pre.querySelector("code");
+        var text = code.textContent;
+        var lang = pre.getAttribute("data-lang");
+        var marks = (pre.getAttribute("data-mark") || "")
+          .split(",")
+          .filter(Boolean)
+          .map(Number);
+        var html = text
+          .split("\n")
+          .map(function (line, i) {
+            var body =
+              line.length && window.hljs
+                ? hljs.highlight(line, { language: lang, ignoreIllegals: true })
+                    .value
+                : line.replace(/[&<>]/g, function (c) {
+                    return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c];
+                  }) || " ";
+            return (
+              '<span class="ln' +
+              (marks.indexOf(i) >= 0 ? " mark" : "") +
+              '">' +
+              (body || " ") +
+              "</span>"
+            );
+          })
+          .join("");
+        code.innerHTML = html;
+      });
+    }
+    if (document.readyState === "loading")
+      document.addEventListener("DOMContentLoaded", render);
+    else render();
+  })();
+</script>
