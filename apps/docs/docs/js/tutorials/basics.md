@@ -23,8 +23,7 @@ To render it, you can call the `render` method with a root HTML container and th
 
 ```js
 gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }).render(
-  root,
-  { w: 30, h: 30 }
+  root
 );
 ```
 
@@ -55,7 +54,7 @@ gf.layer([
   gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
   gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
   gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
-]).render(root, { w: 80, h: 80 });
+]).render(root);
 ```
 
 :::
@@ -74,7 +73,7 @@ gf.spread({ dir: "x", spacing: 50 }, [
   gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
   gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
   gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
-]).render(root, { w: 370, h: 76 });
+]).render(root);
 ```
 
 :::
@@ -93,7 +92,7 @@ gf.spread({ dir: "x", spacing: 50, alignment: "middle" }, [
   gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
   gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
   gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
-]).render(root, { w: 370, h: 76 });
+]).render(root);
 ```
 
 :::
@@ -119,7 +118,7 @@ gf.spread(
   data.map((d) =>
     gf.circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
   )
-).render(root, { w: 370, h: 76 });
+).render(root);
 ```
 
 :::
@@ -157,7 +156,7 @@ gf.enclose(
       )
     ),
   ]
-).render(root, { w: 410, h: 116 });
+).render(root);
 ```
 
 :::

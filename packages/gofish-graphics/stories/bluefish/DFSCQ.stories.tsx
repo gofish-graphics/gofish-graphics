@@ -582,7 +582,7 @@ export const DFSCQ: StoryObj<Args> = {
       arrow({ stretch: 0, bow: 0 }, [ref(fanoutAnchorName), ref(diskdata4)]),
       arrow({ stretch: 0, bow: 0 }, [ref(fanoutAnchorName), ref(diskdata5)]),
       arrow({ stretch: 0, bow: 0 }, [ref(blocks1ArrowAnchorName), ref(blocks1)]),
-    ]).render(container, { w: 900, h: 900 });
+    ]).render(container);
 
     return container;
   },

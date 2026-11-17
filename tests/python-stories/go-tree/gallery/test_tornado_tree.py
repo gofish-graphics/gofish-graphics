@@ -46,5 +46,5 @@ def story_tornado_tree():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 480, "h": 480},
+        {},
     )

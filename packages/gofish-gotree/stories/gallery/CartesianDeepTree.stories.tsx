@@ -71,7 +71,7 @@ export const CartesianDeepTree: StoryObj = {
         }),
       },
       deepTree
-    ).render(container, { w: 900, h: 520 });
+    ).render(container);
     return container;
   },
 };

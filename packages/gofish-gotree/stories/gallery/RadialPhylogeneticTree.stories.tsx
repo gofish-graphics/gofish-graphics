@@ -166,7 +166,7 @@ export const RadialPhylogeneticTree: StoryObj = {
   render: () => {
     const container = initializeContainer();
     // Node=hidden: the layer holds only links.
-    layer({}, [layer([...links])]).render(container, { w: CANVAS, h: CANVAS });
+    layer({}, [layer([...links])]).render(container);
     return container;
   },
 };

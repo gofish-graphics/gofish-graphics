@@ -67,5 +67,5 @@ def story_hierarchical_sector_chart():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 560, "h": 560},
+        {},
     )

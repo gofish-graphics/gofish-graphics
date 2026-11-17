@@ -323,7 +323,7 @@ each lake in the dataset:
 gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ w: 32, h: 300, fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300 });
+  .render(root);
 ```
 
 :::
@@ -348,7 +348,7 @@ quantity.
 gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ w: 32, h: "count", fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300 });
+  .render(root, { h: 300 });
 ```
 
 :::

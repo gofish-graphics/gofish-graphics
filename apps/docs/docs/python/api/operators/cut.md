@@ -27,7 +27,7 @@ spread(
     ],
     dir="x",
     spacing=8,
-).render(w=620, h=100)
+).render()
 ```
 
 The `rect` is cut into three windows weighted `1 : 1 : 2`; the `datum()`

@@ -57,4 +57,4 @@ gf.spreadY(
   ]
     .slice()
     .reverse()
-).render(root, { w: 320, h: 282 });
+).render(root);

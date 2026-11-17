@@ -71,7 +71,7 @@ export const NestedOperand: StoryObj = {
         Constraint.distribute({ dir: "y", spacing: 20 }, [planets, label]),
         arrow({ stroke: "#E94560" }, [label, mercury]),
       ])
-      .render(container, { w: 400, h: 200 });
+      .render(container);
     return container;
   },
 };

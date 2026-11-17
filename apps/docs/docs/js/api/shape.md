@@ -31,7 +31,7 @@ gf.layer([
       [a, c]
     ),
   ])
-  .render(root, { w: 380, h: 150 });
+  .render(root);
 ```
 
 :::
@@ -112,7 +112,7 @@ gf.enclose(
       gf.position({ x: 170, y: 90 }, [gf.circle({ r: 12, fill: "#4c78a8" })]),
     ]),
   ]
-).render(root, { w: 260, h: 160 });
+).render(root);
 ```
 
 :::
@@ -154,7 +154,7 @@ gf.enclose(
       gf.circle({ r: 8, fill: "#f2c14e" }),
     ]),
   ]
-).render(root, { w: 220, h: 220 });
+).render(root);
 ```
 
 :::

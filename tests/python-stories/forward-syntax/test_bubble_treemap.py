@@ -34,7 +34,7 @@ def story_default():
             pack(),
         )
         .mark(country),
-        {"w": 720, "h": 600},
+        {},
     )
 
 
@@ -62,7 +62,7 @@ def story_uncertainty():
             pack(),
         )
         .mark(country),
-        {"w": 760, "h": 640},
+        {},
     )
 
 
@@ -83,5 +83,5 @@ def story_composed():
         chart(COUNTRY_POPULATIONS)
         .flow(bubble_treemap(by=["continent", "region"]))
         .mark(country),
-        {"w": 720, "h": 600},
+        {},
     )

@@ -54,28 +54,25 @@ export default meta;
 
 export const TornadoTree2: StoryObj = {
   render: () =>
-    mount(
-      {
-        node,
-        link: "none",
-        parentChild: combine({
-          // θ: twist the child group off its parent (Subtree flatten on X) — a
-          // large per-level twist is what makes successive rings spiral around.
-          x: { kind: "distribute", spacing: 0.5, anchor: "middle" },
-          // r: child group nested radially inside the parent (Root include / Y
-          // nest). Small pad keeps parent arcs from spiking too far out.
-          y: { kind: "nest", pad: 38 },
-        }),
-        sibling: combine({
-          // θ: fan siblings out angularly.
-          x: { kind: "distribute", spacing: 0.32, anchor: "middle" },
-          // r: step each sibling outward radially → the spiral.
-          y: { kind: "distribute", spacing: 76, anchor: "middle" },
-        }),
-        coord: Coord.clock(),
-      },
-      { w: 560, h: 560 }
-    ),
+    mount({
+      node,
+      link: "none",
+      parentChild: combine({
+        // θ: twist the child group off its parent (Subtree flatten on X) — a
+        // large per-level twist is what makes successive rings spiral around.
+        x: { kind: "distribute", spacing: 0.5, anchor: "middle" },
+        // r: child group nested radially inside the parent (Root include / Y
+        // nest). Small pad keeps parent arcs from spiking too far out.
+        y: { kind: "nest", pad: 38 },
+      }),
+      sibling: combine({
+        // θ: fan siblings out angularly.
+        x: { kind: "distribute", spacing: 0.32, anchor: "middle" },
+        // r: step each sibling outward radially → the spiral.
+        y: { kind: "distribute", spacing: 76, anchor: "middle" },
+      }),
+      coord: Coord.clock(),
+    }),
 };
 
 // NOTES (polar gaps — no hacks, only combine + coord + node factory):

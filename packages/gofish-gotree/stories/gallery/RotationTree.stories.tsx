@@ -207,7 +207,7 @@ export const RotationTree: StoryObj = {
     // `nodes` so its dark disc caps the center.
     layer({ coord: Coord.clock() as any }, [
       layer([...links, ...nodes]),
-    ]).render(container, { w: 520, h: 520 });
+    ]).render(container);
     return container;
   },
 };

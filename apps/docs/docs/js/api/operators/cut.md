@@ -24,7 +24,7 @@ gf.spread(
     dir: "x",
     size: [gf.datum(1), gf.datum(1), gf.datum(2)],
   })
-).render(root, { w: 620, h: 100 });
+).render(root);
 ```
 
 :::

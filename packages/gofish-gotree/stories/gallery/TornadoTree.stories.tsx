@@ -73,24 +73,21 @@ const node = (d: any) =>
 
 export const TornadoTree: StoryObj = {
   render: () =>
-    mount(
-      {
-        node,
-        link: "none",
-        parentChild: combine({
-          // θ: offset parent from its subtree → the spiral twist (winds the arm).
-          x: { kind: "distribute", spacing: 0.55, anchor: "middle" },
-          // r: parent's band ENCLOSES the subtree (dsl Root "include").
-          y: { kind: "nest", pad: 44 },
-        }),
-        sibling: combine({
-          // θ: step siblings angularly (tight → packs the curl).
-          x: { kind: "distribute", spacing: 0.42, anchor: "middle" },
-          // r: step siblings radially too → fans the level outward (tornado).
-          y: { kind: "distribute", spacing: 44, anchor: "middle" },
-        }),
-        coord: Coord.clock(),
-      },
-      { w: 480, h: 480 }
-    ),
+    mount({
+      node,
+      link: "none",
+      parentChild: combine({
+        // θ: offset parent from its subtree → the spiral twist (winds the arm).
+        x: { kind: "distribute", spacing: 0.55, anchor: "middle" },
+        // r: parent's band ENCLOSES the subtree (dsl Root "include").
+        y: { kind: "nest", pad: 44 },
+      }),
+      sibling: combine({
+        // θ: step siblings angularly (tight → packs the curl).
+        x: { kind: "distribute", spacing: 0.42, anchor: "middle" },
+        // r: step siblings radially too → fans the level outward (tornado).
+        y: { kind: "distribute", spacing: 44, anchor: "middle" },
+      }),
+      coord: Coord.clock(),
+    }),
 };

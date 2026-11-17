@@ -49,5 +49,5 @@ def story_violin_tree():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 520, "h": 520},
+        {},
     )

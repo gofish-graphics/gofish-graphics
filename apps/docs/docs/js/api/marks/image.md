@@ -18,7 +18,7 @@ gf.chart([{ label: "badge" }])
       h: 64,
     })
   )
-  .render(root, { w: 150, h: 120 });
+  .render(root);
 ```
 
 :::

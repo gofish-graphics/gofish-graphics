@@ -22,7 +22,7 @@ gf.layer([
     .flow(gf.spread({ by: "lake", dir: "x", spacing: 64 }))
     .mark(gf.blank({ h: "count" }).name("points")),
   gf.chart(gf.selectAll("points")).mark(gf.ribbon({ opacity: 0.6 })),
-]).render(root, { w: 400, h: 250, axes: true });
+]).render(root, { h: 250, axes: true });
 ```
 
 :::

@@ -64,7 +64,7 @@ def story_nested_operand():
             Constraint.distribute([planets, label], dir="y", spacing=20),
             arrow([label, mercury], stroke="#E94560"),
         ]),
-        {"w": 400, "h": 200},
+        {},
     )
 
 

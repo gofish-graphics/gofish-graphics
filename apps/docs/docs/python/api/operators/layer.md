@@ -12,7 +12,7 @@ from gofish import layer, rect, ellipse
 layer([
     rect(w=100, h=80, fill="#9ecae1"),
     ellipse(w=60, h=60, fill="#fcae91"),
-]).render(w=200, h=150)
+]).render()
 ```
 
 Both shapes occupy the same space. The ellipse is drawn on top of the rectangle

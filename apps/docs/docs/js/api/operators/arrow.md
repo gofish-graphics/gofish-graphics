@@ -24,7 +24,7 @@ gf.layer([
     gf.Constraint.align({ y: "middle" }, [a, b]),
     gf.arrow({ stroke: "#333", strokeWidth: 3 }, [a, b]),
   ])
-  .render(root, { w: 320, h: 100 });
+  .render(root);
 ```
 
 :::

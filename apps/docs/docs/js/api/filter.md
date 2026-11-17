@@ -22,7 +22,7 @@ gf.layer([
     fill: gf.color.red[3],
     filter: gf.Filter.grayscale,
   }),
-]).render(root, { w: 180, h: 80 });
+]).render(root);
 ```
 
 :::

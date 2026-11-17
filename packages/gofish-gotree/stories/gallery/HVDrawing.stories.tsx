@@ -50,7 +50,7 @@ export const HVDrawing: StoryObj = {
         sibling: alternate([H, V]),
       },
       sampleTree
-    ).render(container, { w: 640, h: 420 });
+    ).render(container);
     return container;
   },
 };

@@ -11,7 +11,7 @@ Draws a rectangle for each data item.
 ```js
 gf.chart([{ value: 80 }])
   .mark(gf.rect({ w: 120, h: "value", fill: "steelblue", rx: 4 }))
-  .render(root, { w: 200, h: 150 });
+  .render(root, { h: 150 });
 ```
 
 :::
