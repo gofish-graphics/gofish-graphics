@@ -680,6 +680,39 @@ Place.along({ at: "x-max" });</code></pre>
     </div>
 
     <div class="card">
+      <h2>6. Ribbons and lines from the stack profiles PR (#1375)</h2>
+      <p>
+        #1375 adds <code>ribbon({ x, h })</code> and
+        <code>line({ x, y })</code>, where <code>x</code> is the position of
+        each row's vertex or cross-section. A vertex has no width, so its start,
+        center and end are the same place and a bare <code>x</code> is right.
+        Nothing in that PR changes.
+      </p>
+      <p>
+        The rule also says what the thickness axis means, as for a rect of zero
+        width. <code>h</code> alone runs from the baseline. A band between two
+        columns would be <code>y</code> and <code>y2</code>, and a band centered
+        on a column would be <code>cy</code> and <code>h</code>. #1375 has only
+        the first of these today.
+      </p>
+      <pre><code class="language-js">ribbon({ x: "date", h: "count" }); // in #1375
+ribbon({ x: "date", y: "low", y2: "high" }); // what the rule implies
+ribbon({ x: "date", cy: "mean", h: "spread" }); // what the rule implies</code></pre>
+      <p>
+        One seam shows: a line with dots on it is
+        <code>line({ x, y })</code> under <code>scatter({ cx, cy })</code>, two
+        keys for the same data position. The same seam exists today between
+        <code>line({ x, y })</code> and a mark-level
+        <code>circle({ cx, cy })</code>. It separates things with a size from
+        points.
+      </p>
+      <p>
+        One word changes: <code>Baseline.middle()</code> becomes
+        <code>Baseline.center()</code>. <code>Baseline.start()</code> and
+        <code>Baseline.end()</code> already fit.
+      </p>
+    </div>
+    <div class="card">
       <h2>What this means for #1378</h2>
       <p>
         #1378's <code>x</code>/<code>x2</code> span is the rule's spelling, so
