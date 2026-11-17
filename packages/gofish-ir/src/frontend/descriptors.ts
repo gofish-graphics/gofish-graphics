@@ -2379,7 +2379,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       ),
       inset: {
         type: t.number,
-        doc: "Shape form: pixels the band is drawn in by, from each end of its parameter and up from its baseline, so the bands in the cells of a partition are drawn apart. Where the band is thinner than `inset`, nothing is drawn. It changes only what is drawn: the band's box is the same. Its values must be 0 or more. Not allowed on the connector form.",
+        doc: "Shape form: pixels the band is drawn in by from each end of its parameter, so the bands in the cells of a partition are drawn apart. Its values are not drawn in: the band stays on the baseline its data gives it, as a bar's data height is never inset. It changes only what is drawn: the band's box is the same. Not allowed on the connector form.",
       },
     },
   }),

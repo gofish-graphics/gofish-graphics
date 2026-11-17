@@ -101,10 +101,10 @@ export type BandProps = {
   /** A band is filled between its edges and closed; a path is the upper
    *  edge alone, open. */
   closed: boolean;
-  /** Pixels the band's ink is drawn in by: from each end of the parameter,
-   *  and up from the lower edge, which the upper edge is then kept above.
-   *  The box is the band's own (ink only, as `rect.inset`). A band of
-   *  amounts only, values at or above its lower edge. */
+  /** Pixels the band's ink is drawn in by from each end of the parameter.
+   *  The values are not drawn in, as a bar's data height is never inset
+   *  (`rect.inset`). The box is the band's own (ink only). A closed band
+   *  only. */
   inset?: number;
   /** What the parameter's and the values' columns measure, read into
    *  units in the type walk. An amount's units are those of a difference of
@@ -293,19 +293,10 @@ export const Band = ({
       `[gofish] ribbon({ inset: ${inset} }): inset is a number of pixels, 0 ` +
         `or more.`
     );
-  if (inset > 0) {
-    if (!closed || origin !== "free")
-      throw new Error(
-        `[gofish] ${closed ? "ribbon" : "line"}({ inset }): only a band of ` +
-          `amounts, ribbon({ x, h }), is drawn in.`
-      );
-    if (minimum(add(edges.upper, scale(edges.lower, -1))) < 0)
-      throw new Error(
-        `[gofish] ribbon({ inset }): the band is drawn in up from its ` +
-          `baseline, so its values must be 0 or more, but some are ` +
-          `negative.`
-      );
-  }
+  if (inset > 0 && !closed)
+    throw new Error(
+      "[gofish] line({ inset }): only a ribbon, a closed band, is drawn in."
+    );
   /** A point in the node's axis order: `u` along the parameter, `v` along
    *  the values. */
   const point = (u: number, v: number): Point => {
@@ -491,18 +482,14 @@ export const Band = ({
 };
 
 /** Edges in local pixels drawn in by `inset`: `inset` in from each end of
- *  the parameter, the lower edge up by `inset`, and the upper edge kept at
- *  or above it, so where the band is thinner than `inset` nothing is drawn.
- *  Undefined when the band is no wider than twice `inset`. */
+ *  the parameter. The values are not drawn in: the lower edge stays on the
+ *  baseline the data puts it on, as a bar's data height is never inset
+ *  (`rect.inset`). Undefined when the band is no wider than twice `inset`. */
 function insetEdges(px: BandEdges, inset: number): BandEdges | undefined {
   const { min, max } = px.upper.domain;
   if (!(max - min > 2 * inset)) return undefined;
   const over = { min: min + inset, max: max - inset };
-  const lower = add(restrict(px.lower, over), constant(inset, over));
-  return {
-    lower,
-    upper: upperEnvelope([restrict(px.upper, over), lower]),
-  };
+  return { lower: restrict(px.lower, over), upper: restrict(px.upper, over) };
 }
 
 /** The edges of the curve `f` of values of `kind`: a position's are `f`

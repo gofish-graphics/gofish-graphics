@@ -1166,7 +1166,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         h: Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.
         x: Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`.
         y: Shape form: each row's y, for a band that runs up the y axis. Needs `w`.
-        inset: Shape form: pixels the band is drawn in by, from each end of its parameter and up from its baseline, so the bands in the cells of a partition are drawn apart. Where the band is thinner than `inset`, nothing is drawn. It changes only what is drawn: the band's box is the same. Its values must be 0 or more. Not allowed on the connector form.
+        inset: Shape form: pixels the band is drawn in by from each end of its parameter, so the bands in the cells of a partition are drawn apart. Its values are not drawn in: the band stays on the baseline its data gives it, as a bar's data height is never inset. It changes only what is drawn: the band's box is the same. Not allowed on the connector form.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}

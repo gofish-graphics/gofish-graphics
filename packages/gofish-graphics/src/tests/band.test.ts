@@ -376,14 +376,49 @@ console.log("# inset");
     /0 or more/.test(throws(() => band(-1)))
   );
   ok(
-    "an inset on a band with negative values is an error",
-    /negative/.test(throws(() => band(2)))
+    "an inset on a band with negative values is allowed",
+    throws(() => band(2)) === ""
   );
   ok(
     "an inset on a line is an error",
-    /only a band of amounts/.test(throws(() => band(2, false)))
+    /only a ribbon/.test(throws(() => band(2, false)))
   );
   ok("inset 0 is no inset", throws(() => band(0)) === "");
+}
+
+console.log("# inset: the ends are drawn in, the baseline stays");
+{
+  const rows = [
+    { x: 0, h: 1 },
+    { x: 1, h: 2 },
+    { x: 2, h: 1 },
+  ];
+  /** The x and y extents of the points of the band's drawn path. */
+  const drawn = async (inset?: number) => {
+    const dl: any = await chart(rows)
+      .mark(ribbon({ x: "x", h: "h", curve: linear(), inset }))
+      .toDisplayList({ w: 200, h: 100, axes: false });
+    const path = dl.items.find((i: any) => i.kind === "path");
+    const nums = (path.d.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
+    const xs = nums.filter((_: number, i: number) => i % 2 === 0);
+    const ys = nums.filter((_: number, i: number) => i % 2 === 1);
+    return {
+      x: [Math.min(...xs), Math.max(...xs)],
+      y: [Math.min(...ys), Math.max(...ys)],
+    };
+  };
+  const plain = await drawn();
+  const inset = await drawn(5);
+  ok(
+    "each end is drawn in by the inset",
+    close(inset.x[0], plain.x[0] + 5) && close(inset.x[1], plain.x[1] - 5),
+    JSON.stringify({ plain, inset })
+  );
+  ok(
+    "the baseline is where the data puts it",
+    close(inset.y[1], plain.y[1]),
+    JSON.stringify({ plain, inset })
+  );
 }
 
 console.log("# dispatch: the form follows the options");
