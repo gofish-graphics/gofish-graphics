@@ -140,7 +140,7 @@ class DeriveOperator(Operator):
             "derive(fn) does not support .label() — it's a data transform, "
             "not a layout operator with per-group leaves to label. Chain "
             ".label() on the layout operator (stack/spread/group/scatter/"
-            "table/treemap) instead."
+            "table/tile) instead."
         )
 
     def to_dict(self, payload: "_Payload") -> dict:
@@ -928,8 +928,8 @@ from ._generated import (  # noqa: E402
     _scatter_opts,
     _group_opts,
     _table_opts,
-    _treemap_opts,
-    _treemap_combinator_opts,
+    _tile_opts,
+    _tile_combinator_opts,
     _spread_combinator_opts,
     _stack_combinator_opts,
     _pack_opts,
@@ -2274,26 +2274,26 @@ def scatter(
     return Operator("scatter", **_scatter_opts(**options))
 
 
-def treemap(
+def tile(
     children: Optional[List["Mark"]] = None,
     *,
     by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
 ) -> Union[Operator, "Mark"]:
     """
-    Treemap — polymorphic. Lays out children in weight-proportional rectangles.
+    Tile — polymorphic. Lays out children in weight-proportional rectangles.
 
     Operator form (no positional arg): partitions data by `by` (or iterates
     per-item when omitted). Used inside `.flow(...)`.
 
-        treemap(by="genre", size="gross")
+        tile(by="genre", size="gross")
 
     Combinator form (positional list of marks): returns a low-level Mark that
     lays out the given pre-data-bound child marks (typically
     `rect(...)(d, key)`) by the per-leaf weight given as `size`, one
     value per child, in child order.
 
-        treemap(
+        tile(
             [rect(fill=datum(genre))({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             size=[gross for genre, gross in groups],
@@ -2307,8 +2307,8 @@ def treemap(
             ``spread``/``group``), or a ``field(...)`` accessor carrying domain
             ops (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
             Without ``by``, one leaf is emitted per row.
-        **options: The generated ``_treemap_opts`` core's options (the
-            combinator form's: ``_treemap_combinator_opts``); see the docs
+        **options: The generated ``_tile_opts`` core's options (the
+            combinator form's: ``_tile_combinator_opts``); see the docs
             options table. ``size`` sizes each leaf's tile area, one value
             per split entry. ``tile`` takes a strategy from the ``Tile``
             family: ``Tile.squarify()`` (the default), ``Tile.slice()``,
@@ -2316,8 +2316,8 @@ def treemap(
 
     The largest tile (under the default sort) lands at the top left.
 
-    Mirrors JS ``treemap({ by, size, tile, sort, spacing, ... })`` in
-    ``.flow()`` and ``treemap({ size, ... }, marks)`` as a combinator.
+    Mirrors JS ``tile({ by, size, tile, sort, spacing, ... })`` in
+    ``.flow()`` and ``tile({ size, ... }, marks)`` as a combinator.
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -2325,17 +2325,17 @@ def treemap(
     if children is not None:
         if by is not None:
             raise ValueError(
-                "treemap() combinator form (with children) does not accept "
+                "tile() combinator form (with children) does not accept "
                 "`by` — the layout is over the explicit child list, not data."
             )
         return Mark(
-            "treemap",
+            "tile",
             _children=list(children),
-            **_treemap_combinator_opts(**options),
+            **_tile_combinator_opts(**options),
         )
     if by is not None:
         options["by"] = by
-    return Operator("treemap", **_treemap_opts(**options))
+    return Operator("tile", **_tile_opts(**options))
 
 
 def pack(

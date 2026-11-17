@@ -32,7 +32,7 @@ FAMILIES = {
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Place": ("place", ["around", "along", "start", "end", "interior"]),
-    "Tile": ("tile", ["squarify", "slice", "dice", "binary", "voronoi"]),
+    "Tile": ("tile_", ["squarify", "slice", "dice", "binary", "voronoi"]),
     "Bin": ("bin", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
     "Calendar": (
         "calendar",
@@ -114,7 +114,7 @@ def test_curves_are_calls_on_the_wire():
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families and Coord is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
-    for module_name in ("tile", "overlap", "curve", "bin", "calendar", "place", "coord"):
+    for module_name in ("tile_", "overlap", "curve", "bin", "calendar", "place", "coord"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")

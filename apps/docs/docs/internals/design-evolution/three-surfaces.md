@@ -49,7 +49,7 @@ terminal, and so on). Those aliases were removed (#416), so that surface has
 collapsed into the lowercase low-level combinator form. The fluent builder was
 already lowercase-only: its entry point is `chart`, with no capitalized `Chart`
 alias. The node-level operators that the lowercase ones are built from
-(`Spread`, `Layer`, `Treemap`, the region-compositing node operators, and so
+(`Spread`, `Layer`, `TileNode`, the region-compositing node operators, and so
 on) take already-built nodes and return a node. They used to be exported as a
 capitalized second spelling, but they are now internal (#146): each lowercase
 operator works both inside `.flow(...)` and as a combinator over marks, and a
@@ -63,7 +63,7 @@ families described below, and `Unit`, which makes a unit definition, a
 class instance. The fluent
 surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
-`treemap`, `pack`, `derive`, `resolve`, and `join` (`treemap` takes a tiling
+`tile`, `pack`, `derive`, `resolve`, and `join` (`tile` takes a tiling
 strategy object such as `Tile.squarify()` as its `tile`, never a string, and
 `scatter` takes an overlap strategy such as `Overlap.separate()` or
 `Overlap.jitter()` the same way; `resolve` dereferences reference columns into
@@ -132,7 +132,7 @@ it a strategy family.
 
 An option whose value is one choice from a set of named strategies, at least
 one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
-(`scatter`'s `overlap`), `Tile` (`treemap`'s `tile`), `Curve` (the `curve` of
+(`scatter`'s `overlap`), `Tile` (`tile`'s `tile`), `Curve` (the `curve` of
 `line`, `ribbon`, `time.transition` and `Animation.tween`, and
 `interpolate`'s `method`), `Bin` (the cells of `field(x).bin(...)` and
 `struct({ x, y }).bin(...)`), `Calendar` (the cells of a time column's

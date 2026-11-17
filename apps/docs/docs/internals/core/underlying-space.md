@@ -302,7 +302,7 @@ sides, like a font's ascent and descent. In the type the two sides are the two
 ends of the interval: the ascent is `max` and the descent is `−min`. In the
 claim they are two values in σ. A rect of value 30 has data ascent 30 and
 claims ascent `30σ`; a rect of value −20 has data descent 20 and claims
-descent `20σ` (a rect length is signed, while a text, image, or treemap size
+descent `20σ` (a rect length is signed, while a text, image, or `tile` size
 is a nonnegative magnitude). Most extents sit wholly above their data 0 and
 never spell the descent. Every claim is measured from data 0, whatever its
 origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
@@ -967,7 +967,7 @@ sharing rule. Like the type hook, each node type has its own rule
 (`resolveSharing`, read through `GoFishNode.sharing()`, which memoizes the plan
 and clears it with the types), and a node without one lets every child share
 (`shareAll`). Three rows of the table are node-level rules: a layer with a
-data-valued `w`/`h` nests its content on that axis, a `treemap` detaches each
+data-valued `w`/`h` nests its content on that axis, a `tile` detaches each
 child and nests it in its tile on both axes (`nestEach`), and the `position`
 operator detaches its child on an axis with a pixel offset and keeps it shared
 on an axis with a datum offset.
@@ -1651,10 +1651,10 @@ an axis when its size there is given to it rather than computed from σ:
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
   content it maps into that box;
-- a node whose room its parent gives it (a region's cell, a treemap tile),
+- a node whose room its parent gives it (a region's cell, a `tile` cell),
   with content that σ sizes, sized by that room;
 - a node with pinned data in a slot its parent nests it in (a spread, grid
-  or treemap slot: a facet panel), sized by its slot;
+  or `tile` slot: a facet panel), sized by its slot;
 - a node handed no σ at all because nothing above it could solve one, sized
   by the box it is given.
 
@@ -2032,8 +2032,8 @@ checks it with `checkSummable`: a size channel's sum over its rows
 takes the op's value and sums nothing), `.sum()` in any channel or label
 (every caller of `evalFieldValues` passes the column's quantity), the
 total of `.normalize()`, and the total of the `normalize(rows, field)` data
-helper. A treemap's layout adds its tiles' weights on every pass, so the
-treemap checks its `size` channel with `checkSummable` once, where it is
+helper. A `tile`'s layout adds its tiles' weights on every pass, so the
+`tile` checks its `size` channel with `checkSummable` once, where it is
 built. A cut's sizes are slices of a whole it adds up, so its per-row size
 channel (`inferEntrySize`) checks its column with `checkSummable` too. These sums read the unit as their
 chart knows it. A stack adds spaces, not values, in the type walk, so a
@@ -2058,7 +2058,7 @@ a group holds. A bar of one date or one temperature is the missing zero
 (`HasZero`, #1051), not this check.
 
 One gap remains. A sum taken while a chart is built (a size channel,
-`.sum()`, a treemap, a cut, `.normalize()`) runs before the type walk, so
+`.sum()`, a `tile`, a cut, `.normalize()`) runs before the type walk, so
 it cannot see a definition of its unit in another chart: a bar chart of
 `"USD"` beside another chart's `Unit("USD")` sums its bars. Only the
 stack's sum, which the walk takes, sees the whole figure. Closing it needs
@@ -2587,7 +2587,7 @@ error rather than silently doing the wrong thing:
 - **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin(partition?)`,
   `.dropNulls()`) apply to a `by` grouping key. `splitEntries`
   (`datumProjection.ts`) is the shared split-plus-ops helper behind
-  `spread`/`stack`/`group`/`scatter`/`treemap`'s `by` (and `time.sequence`'s,
+  `spread`/`stack`/`group`/`scatter`/`tile`'s `by` (and `time.sequence`'s,
   which splits keyframes the same way — its groups are laid out in one shared
   frame, so the space they occupy is the space of the whole dataset, which is
   what keeps a playing chart's axes still; the `TimeTier` it hands a
@@ -2919,7 +2919,7 @@ child: a `PositionRegion` holds the cell's outline in datums (`outline`,
 The layer of the partition maps it through both of the child's scales into
 the child's frame, in the same walk that gives the child its span
 (`buildChildSpans`, `constraints/proposalPlan.ts`), and hands it to the
-child as its shape, the same channel a `treemap` hands its
+child as its shape, the same channel a `tile` hands its
 tiles down and an `enclose` its outline (see
 [The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)).
 A layer passes its shape on to a child it proposes its own box

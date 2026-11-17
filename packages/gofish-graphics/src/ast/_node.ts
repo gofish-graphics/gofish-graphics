@@ -408,7 +408,7 @@ export function placeUnplacedChild(child: Placeable): void {
 // `shape` is the shape of the space proposed (#1222, `geometry/ring.ts`): a
 // convex ring inside the box `[0, w] × [0, h]` of `size`, in the node's axis
 // order, or undefined for the box itself. A node that fills its space (a
-// `treemap`, a `region`) fills it, and hands its children the shapes it cuts
+// `tile`, a `region`) fills it, and hands its children the shapes it cuts
 // it into; any other node reads only `size`.
 export type Layout = (
   size: Size,
@@ -543,7 +543,7 @@ export const shareAll: ResolveSharing = (childNodes) => ({
 });
 
 /** Every child in a set of its own on both axes, nested in a frame of its
- *  own, its tile, which is its room (a treemap). */
+ *  own, its tile, which is its room (a `tile`). */
 export const nestEach: ResolveSharing = (childNodes) => {
   const sets = childNodes.map((_, i) => i + 1);
   const all = () => new Set(childNodes.map((_, i) => i));
@@ -1361,7 +1361,7 @@ export class GoFishNode {
   }
 
   /** Whether this node's parent nests it in a slot of its own on `dim` (a
-   *  spread, grid or treemap slot): a set of its own that sits in a frame of
+   *  spread, grid or `tile` slot): a set of its own that sits in a frame of
    *  its own. A child nested at a datum is in its parent's set, so it is not
    *  in a slot. Read by a layer's σ solve (`solveLayerScales`). */
   public inSlot(dim: 0 | 1): boolean {
@@ -1724,7 +1724,7 @@ export class GoFishNode {
    *  slot (a spread or grid slot), or inside a node that is, short of a
    *  scope ({@link isScope}). A node in no slot (a rule laid over a bar
    *  chart) is given the whole room of what holds it, and a node its parent
-   *  gives a room ({@link givenRoom}: a region's cell, a treemap tile) is
+   *  gives a room ({@link givenRoom}: a region's cell, a `tile` cell) is
    *  given that room. */
   private inShare(axis: 0 | 1): boolean {
     for (let n: GoFishNode | undefined = this; n !== undefined; ) {
@@ -1737,7 +1737,7 @@ export class GoFishNode {
   }
 
   /** Whether this node's parent gives it its room on `axis`, from outside
-   *  its content: a region's cell (a `partition` cell) or a treemap tile
+   *  its content: a region's cell (a `partition` cell) or a `tile` cell
    *  (`SharingPlan.rooms`). A child its own data places in its parent's
    *  frame ({@link placedByOwnData}: a layer of marks in a cell, or a
    *  partition inside another's cell) is in its cell already and reads the
@@ -1756,7 +1756,7 @@ export class GoFishNode {
    * solves σ for its content in that room. That is a node with a size of
    * its own, a literal or a data value; a coordinate space; a node whose
    * room its parent gives
-   * it ({@link givenRoom}: a region's cell, a treemap tile), with content
+   * it ({@link givenRoom}: a region's cell, a `tile` cell), with content
    * that σ sizes (of any type but UNDEFINED: data, or a chain of keyed
    * parts); and a node of pinned data in a slot (a facet panel). Content
    * that σ does not size (a text, a shape that fills) has nothing to solve,
@@ -1935,7 +1935,7 @@ export class GoFishNode {
    *
    * A room that is given only at layout, from outside a scope whose content
    * is in a σ of its own (a share-sized node, a facet panel, a region cell,
-   * a treemap tile, a coordinate space), is neither a constant nor a σ term
+   * a `tile` cell, a coordinate space), is neither a constant nor a σ term
    * of the content's scope, so a percent there is an error.
    * TODO(#1176): a percent inside such a scope needs its room, a term of the
    * outer σ, inside the inner scope's claim.
@@ -1963,7 +1963,7 @@ export class GoFishNode {
             ? "a coordinate space, whose room is in its own units (#1238)"
             : n.parent !== undefined && n.isScope(axis)
               ? `the room ${n.type} is given at layout (a facet panel, a ` +
-                `region cell or a treemap tile)`
+                `region cell or a tile cell)`
               : undefined;
       if (given !== undefined)
         throw new Error(

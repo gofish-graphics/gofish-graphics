@@ -263,7 +263,7 @@ rect(h="count").label(
 ### `.label()` on operators {#operator-label}
 
 Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
-`treemap`) also accepts `.label(accessor, ...)`, with the same kwargs as
+`tile`) also accepts `.label(accessor, ...)`, with the same kwargs as
 `Mark.label`. Chaining it on the operator instead of the mark labels the
 **group**, not each individual mark instance — every node a split leaf (one
 group's rows) produces gets stamped with that leaf's own subdata, and

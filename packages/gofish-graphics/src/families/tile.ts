@@ -1,5 +1,5 @@
 /**
- * The `Tile` family: the tiling strategies of `treemap`'s `tile` option.
+ * The `Tile` family: the tiling strategies of `tile`'s `tile` option.
  *
  * `lib.ts` binds this module as `Tile` (`Tile.squarify({ ratio: 1 })`), and
  * `gofish-graphics/tile` exports the same module. No kind has a required
@@ -11,13 +11,13 @@
  * tiling methods and need a rectangular region; `voronoi` tiles any convex
  * region (`ast/geometry/voronoiTiling.ts`). The kinds and their params are
  * declared once, in gofish-ir's `STRATEGIES` table, which checks a strategy
- * where `treemap` reads it.
+ * where `tile` reads it.
  */
 import type { Frontend } from "gofish-ir";
 import { bareKind } from "../ast/strategyKind";
 
 /**
- * How `treemap` tiles its region: the value of its `tile` option.
+ * How `tile` tiles its region: the value of its `tile` option.
  */
 export type Tile = Frontend.TileIR;
 
@@ -63,7 +63,7 @@ export const binary = bareKind(
  * irregular shapes, each with an area proportional to its weight, by a
  * weighted Voronoi diagram (a power diagram) whose sites and weights are
  * adjusted until the areas match (Nocaj and Brandes 2012). It tiles any
- * convex region: the treemap's box, a Voronoi cell of a treemap around it,
+ * convex region: the `tile`'s box, a Voronoi cell of a `tile` around it,
  * or the oval of an `enclose` around it, so its cells can hold another
  * Voronoi level. The sites start at random positions drawn from `seed`, so
  * the same seed draws the same cells. Default seed 0.

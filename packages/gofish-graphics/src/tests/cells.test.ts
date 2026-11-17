@@ -48,7 +48,7 @@ const {
   group,
   table,
   pack,
-  treemap,
+  tile,
   partition,
   rect,
   region,
@@ -2291,8 +2291,8 @@ async function main() {
       ["table", () => table({ by: { x: "y", y: "y" } })],
       ["pack", () => pack()],
       ["pack by a field", () => pack({ by: "y" })],
-      ["treemap", () => treemap({ size: "y" })],
-      ["treemap by a field", () => treemap({ by: "y", size: "y" })],
+      ["tile", () => tile({ size: "y" })],
+      ["tile by a field", () => tile({ by: "y", size: "y" })],
     ] as const) {
       const got = await chart(pts, noAxes)
         .flow(spread({ by: byCell(), dir: "x" }), inner())

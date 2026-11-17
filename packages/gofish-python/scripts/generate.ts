@@ -18,7 +18,7 @@
  *  - The five compositing operators + enclose/arrow **combinator-only**
  *    marks — pure kwargs-collection, named by their wire `type`.
  *  - `_opts(...) -> dict` **cores** for the dual-form constructs (spread,
- *    stack, scatter, group, table, treemap, line, ribbon, layer) — the
+ *    stack, scatter, group, table, tile, line, ribbon, layer) — the
  *    mechanical kwargs→dict half. The polymorphic
  *    operator-vs-combinator (or bag-vs-pairwise-vs-combinator) DISPATCH stays
  *    hand-written in `ast.py`, calling these cores (every generated
@@ -30,7 +30,7 @@
  *    type (OPTION_TYPES) and the one interpreter that renames the keys of a
  *    nested option dict (`axes={"x": {"label": {"angle": 45}}}`) to wire keys by
  *    the field's declared type, raising TypeError on an undeclared key.
- *  - The strategy family modules, `gofish/<family>.py` (`tile.py`,
+ *  - The strategy family modules, `gofish/<family>.py` (`tile_.py`,
  *    `overlap.py`, `curve.py`, `bin.py`, `calendar.py`), one factory per kind
  *    and per preset of the STRATEGIES table. Each builds
  *    `{"kind": ..., **params}` with snake_case keys, which `_to_wire` renames
@@ -149,7 +149,7 @@ function acceptsDict(type: FieldType): boolean {
 
 /** The field that tells the branches of a tagged union apart: a dict value's
  *  `kind` names the branch it means. It is the convention the strategy
- *  objects (treemap `tile`, scatter `overlap`) already follow. */
+ *  objects (`tile`'s `tile`, scatter `overlap`) already follow. */
 const DISCRIMINATOR = "kind";
 
 /** The `kind` values that select an object branch of a tagged union, or null
@@ -609,7 +609,7 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
   ["scatter", "_scatter_opts"],
   ["group", "_group_opts"],
   ["table", "_table_opts"],
-  ["treemap", "_treemap_opts"],
+  ["tile", "_tile_opts"],
   ["pack", "_pack_opts"],
   // Operator-only, like group: the wrapper in ast.py takes `by` and `dir`.
   ["partition", "_partition_opts"],
@@ -625,7 +625,7 @@ for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
 // The combinator form of a dual-form wrapper gets its own core from its
 // COMBINATOR_MARKS entry, which adds combinator-only fields (`key`) to the
 // operator's. Both kinds of core take the operator base kwargs (`debug`).
-for (const name of ["treemap", "spread", "stack"]) {
+for (const name of ["tile", "spread", "stack"]) {
   const d = COMBINATOR_MARKS[name];
   parts.push(
     renderOptsCore(

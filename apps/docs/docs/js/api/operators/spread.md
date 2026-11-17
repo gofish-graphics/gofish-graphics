@@ -290,7 +290,7 @@ on a continuous axis, use [`partition`](/js/api/operators/partition) with the sa
 ```ts
 // Rows with a null/undefined "genre" are excluded entirely, instead of
 // forming their own "null" group
-.flow(treemap({ by: field("genre").dropNulls(), size: "worldwideGross" }))
+.flow(tile({ by: field("genre").dropNulls(), size: "worldwideGross" }))
 ```
 
 **Override a channel's default aggregation:**

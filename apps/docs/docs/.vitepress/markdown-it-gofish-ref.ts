@@ -297,7 +297,7 @@ function strategyParams(name: string): FieldGroup | undefined {
 }
 
 /** Distinct by resolved field set: the dual-form constructs (spread, stack,
- *  line, ...) carry the same fields in both tables and render once; `treemap`,
+ *  line, ...) carry the same fields in both tables and render once; `tile`,
  *  whose combinator form adds `key`, renders one labeled table per form. */
 function renderName(
   name: string,

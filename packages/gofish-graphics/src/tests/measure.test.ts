@@ -75,7 +75,7 @@ const {
   Unit,
   Trait,
   stack,
-  treemap,
+  tile,
   normalize,
 } = GoFish as any;
 
@@ -1317,13 +1317,13 @@ console.log("# measure: CanSum");
 
   const tree = await errorOf(() =>
     chart(sales, { schema: { temp: Unit("°C") } })
-      .flow(treemap({ by: "region", size: field("temp").mean() }))
+      .flow(tile({ by: "region", size: field("temp").mean() }))
       .mark(rect({}))
       .toDisplayList(SIZE)
   );
   ok(
-    "a treemap of mean °C throws",
-    tree !== undefined && /treemap/.test(tree),
+    "a tile of mean °C throws",
+    tree !== undefined && /tile/.test(tree),
     tree
   );
 

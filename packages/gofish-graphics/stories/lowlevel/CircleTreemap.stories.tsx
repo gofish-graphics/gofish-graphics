@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, treemap, circle, field } from "../../src/lib";
+import { chart, tile, circle, field } from "../../src/lib";
 import { gray } from "../../src/color";
 import data from "vega-datasets";
 
@@ -39,7 +39,7 @@ export const Default: StoryObj<Args> = {
 
     chart(moviesRaw, { axes: false, w: args.w, h: args.h })
       .flow(
-        treemap({
+        tile({
           by: field("Major Genre").dropNulls(),
           size: "Worldwide Gross",
           spacing: args.spacing,

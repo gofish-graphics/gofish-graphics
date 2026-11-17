@@ -592,7 +592,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             "arrow",
             "line",
             "ribbon",
-            "treemap",
+            "tile",
             "union",
             "intersect",
             "subtract",

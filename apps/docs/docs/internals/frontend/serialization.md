@@ -168,8 +168,8 @@ A chart's `data` is one of three:
 There is no inline form: a chart with rows has a table, by one rule
 wherever it sits, so a nested chart's rows cross as Arrow too, with their
 column types (#1088). Operators are a flat list (`derive`, `resolve`,
-`join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
-`pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
+`join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `tile`,
+`pack`). `tile`'s `tile` is a strategy object made by a call in the `Tile`
 family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
 `Tile.binary()`, `Tile.voronoi({ seed })` in both languages). Every strategy has
 one shape, `{ kind, ...params }`, which is both the JS value and the wire
@@ -251,11 +251,11 @@ with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks 
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `position`, `line`, `ribbon`, `enclose`, `treemap`, `pack`, and the
+`arrow`, `position`, `line`, `ribbon`, `enclose`, `tile`, `pack`, and the
 Porter-Duff family),
 refs, the two self-discriminating wrapper marks `offset` and `cut` (below), a
 whole `ChartIR`, or a `LayerChainIR`. The `__combinator` flag stays: `line`,
-`ribbon`, `enclose`, `spread`, `stack`, `treemap` and `pack` are both leaf marks or
+`ribbon`, `enclose`, `spread`, `stack`, `tile` and `pack` are both leaf marks or
 operators and combinators, so their `type` alone does not say which.
 `enclose` is a leaf mark (the bag form) and a combinator, and its leaf mark
 may also stand in `operators` as a flow step (`flowStep: true` on
@@ -365,7 +365,7 @@ writes it as the mark's `__datum` (and `__key`) bridge fields, which
 them once, after it builds the mark of any kind: the position holds a mark that
 ignores the rows it is offered and calls the built mark with `__datum` and
 `__key`, which is what the JS expression `mark(d, key)` puts there. The same
-fields carry a treemap combinator's children, each applied to its own row.
+fields carry a `tile` combinator's children, each applied to its own row.
 The input is data that JSON holds; Python raises when it holds a mark or a
 ref, and a ref, a `cut` and an `offset` (nodes, not mark functions) raise
 when called.
@@ -569,7 +569,7 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, Porter-Duff) rather than the
+`arrow`, `position`, `line`, `ribbon`, `tile`, `pack`, Porter-Duff) rather than the
 leaf-mark registry — same `type` discriminator namespace, different code path.
 
 ## The descriptor table — one authored source for construct field lists
@@ -861,7 +861,7 @@ The high-level structure:
     "ChartIR":    { /* type, data, operators, mark, options, zOrder, ... */ },
     "LayerChainIR": { /* type, tiers (first a ChartIR, then MarkIRs) */ },
     "DataIR":     { "oneOf": [/* table, select, previous-tier */] },
-    "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TreemapOperator */ },
+    "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TileOperator */ },
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR, LayerChainIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
@@ -900,7 +900,7 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
 first) and emits `gofish/_generated.py` and the family modules
-`gofish/tile.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
+`gofish/tile_.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
 and `gofish/calendar.py` (from `STRATEGIES`) and `gofish/coord.py` (from
 `COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
@@ -957,7 +957,7 @@ honest. A union may have only one branch that a dict could match (a channel
 branch does not count, for the reason just given), or generation fails,
 since `_to_wire` would have to guess. The one exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
-`kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
+`kind` value (a strategy family: `tile`'s `tile`, `{kind: "squarify",
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
@@ -976,9 +976,9 @@ It emits:
   each named by its wire `type`, which is its public name (`union`,
   `intersect`, `subtract`, `exclude`, `atop`).
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
-  `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
+  `stack`, `scatter`, `group`, `table`, `tile`, `line`, `ribbon`,
   `layer`, `pack`), with separate combinator-form
-  cores for `spread`, `stack`, and `treemap` (their combinator entries add
+  cores for `spread`, `stack`, and `tile` (their combinator entries add
   `key`; `spread` and `stack` also include the whole `boxDims` group, since
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
@@ -990,14 +990,15 @@ It emits:
   `enclose(clearance=-1)` raises `ValueError`, as JS's
   `enclose({ clearance: -1 })` throws at render. Every generated function
   does this, the cores and the leaf and combinator-only factories.
-- One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
+- One module per **strategy family** in `STRATEGIES` (`gofish/tile_.py`,
   `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
   `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`
   under the family name (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
   `Filter`): one factory per kind and per preset, named by `pyKwarg`
   (`Curve.catmull_rom`, `Overlap.separate`). A module whose name is an
   operator's gets a trailing underscore, as a keyword kwarg does: `gofish.filter`
-  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`.
+  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`, and
+  `gofish.tile` is the `tile` operator, so the `Tile` family is `gofish/tile_.py`.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the

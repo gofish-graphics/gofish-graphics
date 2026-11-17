@@ -166,7 +166,7 @@ export const bake = (root: GoFishAST): DisplayObject[] => {
  * them, in paint order ({@link orderChildrenForPaint}). The caller lowers each
  * entry at its baked absolute transform (`INTERNAL_lower(coord,
  * d.transform)`), the mechanism the root bake uses, so a node that only
- * places its children (a `pack`, a `treemap`) needs no lowering of its own. A
+ * places its children (a `pack`, a `tile`) needs no lowering of its own. A
  * compositor bakes each operand this way (`porterDuff.tsx`).
  */
 export const bakeSubtree = (

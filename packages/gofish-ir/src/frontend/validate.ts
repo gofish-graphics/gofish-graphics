@@ -498,7 +498,7 @@ function walkOrThrow(
  * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
- * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
+ * (`"tile({ tile })"`). This is the one check a strategy gets on the JS
  * side, wherever it came from (a family member, a hand-written object, or
  * Python IR; a kind used bare is read as its value where the option
  * entered); the validator runs the same walk over a whole document.

@@ -90,7 +90,7 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * hexagon gives its children the hexagon's box, cut down to their cells,
  * and not the hexagon clipped to them. The fix is to clip the shape the
  * inner layer is handed (the hexagon) to each cell's box with
- * `intersectRings`, the way `enclose` cuts its oval to a treemap cell.
+ * `intersectRings`, the way `enclose` cuts its oval to a `tile` cell.
  */
 export class PositionRegion {
   readonly spans: readonly [

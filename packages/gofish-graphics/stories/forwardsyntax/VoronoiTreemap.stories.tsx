@@ -8,11 +8,11 @@ import {
   region,
   Shape,
   Tile,
-  treemap,
+  tile,
 } from "../../src/lib";
 
 // Voronoi treemaps (Balzer and Deussen 2005): each level cuts its region
-// into convex cells with an area proportional to population. Each `treemap`
+// into convex cells with an area proportional to population. Each `tile`
 // in the flow is one level and hands each child its cell, and `region()`
 // draws the cell it is in. Gaps between siblings come from `spacing`.
 const meta: Meta = {
@@ -28,19 +28,19 @@ export const Default: StoryObj = {
 
     chart(countryPopulations, { axes: false, w: 480, h: 480 })
       .flow(
-        treemap({
+        tile({
           by: "continent",
           size: "pop",
           spacing: 5,
           tile: Tile.voronoi,
         }),
-        treemap({
+        tile({
           by: "region",
           size: "pop",
           spacing: 2.5,
           tile: Tile.voronoi,
         }),
-        treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);
@@ -49,8 +49,8 @@ export const Default: StoryObj = {
   },
 };
 
-// The same levels in a circle: the `enclose` above the treemap hands its
-// oval down as the region the treemap fills.
+// The same levels in a circle: the `enclose` above the `tile` hands its
+// oval down as the region the `tile` fills.
 export const Circle: StoryObj = {
   tags: ["gallery"],
   parameters: {
@@ -66,19 +66,19 @@ export const Circle: StoryObj = {
     chart(countryPopulations, { axes: false, w: 480, h: 480 })
       .flow(
         enclose({ shape: Shape.oval, fill: "none" }),
-        treemap({
+        tile({
           by: "continent",
           size: "pop",
           spacing: 5,
           tile: Tile.voronoi,
         }),
-        treemap({
+        tile({
           by: "region",
           size: "pop",
           spacing: 2.5,
           tile: Tile.voronoi,
         }),
-        treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);
@@ -95,14 +95,14 @@ export const SquarifyThenVoronoi: StoryObj = {
 
     chart(countryPopulations, { axes: false, w: 480, h: 480 })
       .flow(
-        treemap({ by: "continent", size: "pop", spacing: 8 }),
-        treemap({
+        tile({ by: "continent", size: "pop", spacing: 8 }),
+        tile({
           by: "region",
           size: "pop",
           spacing: 2.5,
           tile: Tile.voronoi,
         }),
-        treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);
@@ -119,8 +119,8 @@ export const SliceThenDice: StoryObj = {
 
     chart(countryPopulations, { axes: false, w: 320, h: 320 })
       .flow(
-        treemap({ by: "continent", size: "pop", spacing: 4, tile: Tile.slice }),
-        treemap({ by: "region", size: "pop", spacing: 2, tile: Tile.dice })
+        tile({ by: "continent", size: "pop", spacing: 4, tile: Tile.slice }),
+        tile({ by: "region", size: "pop", spacing: 2, tile: Tile.dice })
       )
       .mark(rect({ fill: "continent" }))
       .render(container);
@@ -138,7 +138,7 @@ export const ContinentOutlines: StoryObj = {
 
     chart(countryPopulations, { axes: false, w: 480, h: 480 })
       .flow(
-        treemap({
+        tile({
           by: "continent",
           size: "pop",
           spacing: 6,
@@ -150,8 +150,8 @@ export const ContinentOutlines: StoryObj = {
           stroke: "#333",
           strokeWidth: 1.5,
         }),
-        treemap({ by: "region", size: "pop", spacing: 3, tile: Tile.voronoi }),
-        treemap({ size: "pop", spacing: 1, tile: Tile.voronoi })
+        tile({ by: "region", size: "pop", spacing: 3, tile: Tile.voronoi }),
+        tile({ size: "pop", spacing: 1, tile: Tile.voronoi })
       )
       .mark(region({ fill: "continent" }))
       .render(container);

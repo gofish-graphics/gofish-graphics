@@ -1,12 +1,12 @@
 """Equivalent of lowlevel/Treemap.stories.tsx — Low Level Syntax/Treemap.
 
 Movie counts by major genre laid out as a treemap of nested rectangles
-whose areas encode each genre's worldwide-gross total. `treemap(by=...)`
+whose areas encode each genre's worldwide-gross total. `tile(by=...)`
 partitions the raw rows itself (like `spread`/`group`); `size="Worldwide
 Gross"` sums that field per genre to weight each tile's area.
 """
 
-from gofish import chart, field, rect, treemap, Tile
+from gofish import chart, field, rect, tile, Tile
 from python_stories.vega_data_urls import read_json
 
 GRAY = "#D1D9E2"  # mirrors packages/gofish-graphics/src/color.ts:492
@@ -19,7 +19,7 @@ def story_default():
     return (
         chart(movies_raw, axes=False, w=700, h=420)
         .flow(
-            treemap(
+            tile(
                 by=field("Major Genre").drop_nulls(),
                 size="Worldwide Gross",
                 spacing=2,

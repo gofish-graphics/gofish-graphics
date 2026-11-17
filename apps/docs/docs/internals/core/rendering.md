@@ -150,7 +150,7 @@ ordinary sibling shape with its own `_lower` fragment.
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches
 `INTERNAL_lower` only when it has none: then it draws nothing (an operator over a
-group with no rows, such as an empty cell's `pack` or `treemap`). A node with
+group with no rows, such as an empty cell's `pack` or `tile`). A node with
 children and no `_lower` throws: the migration is complete, so every shipping shape
 and every bake boundary supplies one.
 
@@ -202,7 +202,7 @@ Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
 rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
 A compositor lowers each of its operands as a subtree (`lowerSubtree`, over
 `bakeSubtree` in `bake.ts`, the one-child walk `bakeChildren` runs per child), so an
-operand that only places its children, a `pack` or a `treemap`, lowers its leaves.
+operand that only places its children, a `pack` or a `tile`, lowers its leaves.
 It paints one result from its operands, so it has no
 order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
 it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).

@@ -2,14 +2,14 @@
 
 import pandas as pd
 
-from gofish import chart, circle, treemap, Color, Tile
+from gofish import chart, circle, tile, Color, Tile
 
 
 def story_default():
     titanic_passengers = pd.read_json(
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
-    # Match JS titanicPassengers.ts: fare must be numeric for treemap's
+    # Match JS titanicPassengers.ts: fare must be numeric for `tile`'s
     # data-driven `h: "fare"` sizing — string fares produce NaN layouts.
 
     tier_fare = {1: 85, 2: 40, 3: 14}
@@ -28,7 +28,7 @@ def story_default():
         )
         .facet(by="pclass", dir="x")
         .flow(
-            treemap(
+            tile(
                 h="fare",
                 size="fare",
                 spacing=0,

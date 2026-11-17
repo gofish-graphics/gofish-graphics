@@ -28,7 +28,7 @@ type PackProps = {
  * pack: place children so their enclosing circles touch and do not overlap,
  * then report the smallest circle around them as this node's box.
  *
- * A foreign layout, like `treemap`: it lays out each child, reads the child's
+ * A foreign layout, like `tile`: it lays out each child, reads the child's
  * geometry, runs d3, and `place()`s each child. The children keep the pixel
  * size they lay out at, and the pack's size follows from them. It packs each
  * child's enclosing circle with d3's front-chain algorithm (`packSiblings`,

@@ -172,7 +172,7 @@ chart(data)
 ### `.label()` on operators {#operator-label}
 
 Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
-`treemap` — anything with an operator (traversal) form inside `.flow(...)`)
+`tile` — anything with an operator (traversal) form inside `.flow(...)`)
 also accepts `.label(accessor, options?)`, with the same signature as a
 mark's `.label()` (see the [labels guide](/js/guides/labels)). Chaining it on
 the operator instead of the mark labels the **group**, not each individual

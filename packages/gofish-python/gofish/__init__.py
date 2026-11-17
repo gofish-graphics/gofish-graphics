@@ -32,7 +32,7 @@ from .ast import (
     filter,
     group,
     scatter,
-    treemap,
+    tile,
     pack,
     partition,
     table,
@@ -77,7 +77,7 @@ from . import filter_ as Filter
 from . import overlap as Overlap
 from . import place as Place
 from . import shape as Shape
-from . import tile as Tile
+from . import tile_ as Tile
 from . import trait as Trait
 
 __all__ = [
@@ -113,7 +113,7 @@ __all__ = [
     "filter",
     "group",
     "scatter",
-    "treemap",
+    "tile",
     "pack",
     "partition",
     "table",

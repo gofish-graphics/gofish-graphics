@@ -264,7 +264,7 @@ slot, `applyChannels` looks up that option's own channel spec and applies it,
 so a slot infers exactly as its counterpart: scatter's bare value and
 `center` as `x` (per entry, discrete for a nonnumeric field), its `min` as
 `xMin` (per entry, never discrete). A counterpart with no channel leaves the
-slot as given (treemap's `min` stands for its unannotated `x`), and the
+slot as given (`tile`'s `min` stands for its unannotated `x`), and the
 counterparts on the two axes must share one spec.
 
 A `size` or `pos` channel resolves its column (`resolveColumn`: its quantity

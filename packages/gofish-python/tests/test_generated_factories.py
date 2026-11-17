@@ -2,7 +2,7 @@
 
 Each case pins a behavior from the descriptor-table codegen review: the
 `debug` base kwarg on every leaf mark, the universal operator debug flag,
-combinator-only fields on the treemap combinator, required wire fields, and
+combinator-only fields on the `tile` combinator, required wire fields, and
 callable accessors on undeclared channels.
 
 Labeling a leaf mark is done exclusively via the `.label(accessor, options?)`
@@ -48,7 +48,7 @@ from gofish import (
     struct,
     table,
     text,
-    treemap,
+    tile,
     Bin,
     Color,
     Overlap,
@@ -98,7 +98,7 @@ def test_operators_accept_universal_debug_flag():
     assert ir(spread(by="a", dir="x", debug=True))["debug"] is True
     assert ir(group(by="a", debug=True))["debug"] is True
     assert ir(table(by={"x": "a", "y": "b"}, debug=True))["debug"] is True
-    assert ir(treemap(size="v", debug=True))["debug"] is True
+    assert ir(tile(size="v", debug=True))["debug"] is True
 
 
 def test_stack_operator_accepts_spread_parity_options():
@@ -325,8 +325,8 @@ def test_bounded_pixel_options_pass_when_in_range():
     assert ir(pack(spacing=2))["spacing"] == 2
 
 
-def test_treemap_serializes_tile_strategy_and_gaps():
-    d = ir(treemap(by="g", tile=Tile.squarify(ratio=1), spacing=2, padding=3))
+def test_tile_serializes_tile_strategy_and_gaps():
+    d = ir(tile(by="g", tile=Tile.squarify(ratio=1), spacing=2, padding=3))
     assert d["tile"] == {"kind": "squarify", "ratio": 1}
     assert d["spacing"] == 2
     assert d["padding"] == 3
@@ -337,31 +337,31 @@ def test_treemap_serializes_tile_strategy_and_gaps():
         "binary",
         "voronoi",
     ]
-    assert "tile" not in ir(treemap())
+    assert "tile" not in ir(tile())
 
 
-def test_treemap_tile_is_a_tagged_union():
+def test_tile_tile_is_a_tagged_union():
     # `tile` is a union of dict shapes told apart by `kind`; `_to_wire` picks
     # the branch by the dict's `kind` and checks its keys against that branch.
-    assert ir(treemap(by="g", tile=Tile.squarify(ratio=1)))["tile"] == {
+    assert ir(tile(by="g", tile=Tile.squarify(ratio=1)))["tile"] == {
         "kind": "squarify",
         "ratio": 1,
     }
-    assert ir(treemap(by="g", tile=Tile.voronoi(seed=7)))["tile"] == {
+    assert ir(tile(by="g", tile=Tile.voronoi(seed=7)))["tile"] == {
         "kind": "voronoi",
         "seed": 7,
     }
-    assert ir(treemap(by="g", tile=Tile.voronoi))["tile"] == {"kind": "voronoi"}
+    assert ir(tile(by="g", tile=Tile.voronoi))["tile"] == {"kind": "voronoi"}
     with pytest.raises(TypeError, match="ratio"):
-        treemap(by="g", tile={"kind": "slice", "ratio": 2})
+        tile(by="g", tile={"kind": "slice", "ratio": 2})
     with pytest.raises(TypeError, match="'nope'"):
-        treemap(by="g", tile={"kind": "nope"})
+        tile(by="g", tile={"kind": "nope"})
     with pytest.raises(TypeError, match="missing"):
-        treemap(by="g", tile={"ratio": 2})
+        tile(by="g", tile={"ratio": 2})
 
 
-def test_treemap_combinator_accepts_key():
-    node = treemap([], size="gross", key="genre")
+def test_tile_combinator_accepts_key():
+    node = tile([], size="gross", key="genre")
     d = ir(node)
     assert d["options"]["key"] == "genre"
     assert d["options"]["size"] == "gross"
@@ -448,7 +448,7 @@ def test_a_callable_outside_a_channel_is_a_type_error():
         lambda: spread(by=lambda d: d["a"], dir="x"),
         lambda: stack(by=lambda d: d["a"], dir="y"),
         lambda: group(by=lambda d: d["a"]),
-        lambda: treemap(by=lambda d: d["a"]),
+        lambda: tile(by=lambda d: d["a"]),
         lambda: rect(h="v", rx=lambda d: 2),
     ):
         with pytest.raises(TypeError, match="only channel options take a function"):

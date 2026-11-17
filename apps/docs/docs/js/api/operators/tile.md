@@ -1,9 +1,9 @@
 ---
-title: treemap
+title: tile
 order: 60
 ---
 
-# treemap
+# tile
 
 Lays out children into a treemap: a 2D tiling of rectangles, or of convex polygons with `Tile.voronoi`, whose **areas are proportional to a weight**.
 
@@ -18,10 +18,10 @@ const items = [
   { name: "Horror", value: 40 },
 ];
 
-// Each child gets its own rectangle; treemap assigns its (x,y,w,h).
+// Each child gets its own rectangle; tile assigns its (x,y,w,h).
 // `size` is an explicit per-child weight array (one value per child, in
 // child order) that drives each leaf's tile area.
-gf.treemap(
+gf.tile(
   {
     size: items.map((d) => d.value),
     spacing: 2,
@@ -47,7 +47,7 @@ gf.treemap(
 
 ::::
 
-Inside `.flow(...)` (the fluent chart API), `treemap({ by, size, ... })` partitions the
+Inside `.flow(...)` (the fluent chart API), `tile({ by, size, ... })` partitions the
 rows itself, mirroring `spread`/`group`: `by` groups the flow's rows (a field
 name or a `field(...)` accessor carrying domain ops, e.g.
 `field("genre").dropNulls()`), and `size` — an entry-flagged channel — sums a
@@ -58,18 +58,18 @@ this mirrors.
 ## Signature
 
 ```ts
-treemap(options); // .flow() operator form
-treemap(options, children); // combinator form
+tile(options); // .flow() operator form
+tile(options, children); // combinator form
 ```
 
 ## Parameters
 
-::: gofish-ref treemap
+::: gofish-ref tile
 :::
 
 ## Strategies
 
-`tile` holds the tiling strategy, a member of the `Tile` family. You make a
+The `tile` option holds the tiling strategy, a member of the `Tile` family. You make a
 strategy with a function call. A strategy with no required option is also a
 value as it is: `Tile.voronoi` is `Tile.voronoi()`. The family is also the
 module `gofish-graphics/tile`, so
@@ -99,17 +99,17 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
   between them.
 
 ```js
-gf.treemap({
+gf.tile({
   by: "genre",
   size: "gross",
   tile: gf.Tile.squarify({ ratio: 1 }),
 });
 ```
 
-Each `treemap` in a flow is one level, and each level can use its own
+Each `tile` in a flow is one level, and each level can use its own
 tiling. A level hands each child its cell, and [`region()`](../marks/region.md)
 draws the cell it is in. `spacing` is the gap between sibling cells, and
-`padding` the inset at the treemap's own edge, under every tiling.
+`padding` the inset at the `tile`'s own edge, under every tiling.
 
 ::: gofish example:voronoi-treemap
 :::
@@ -120,8 +120,8 @@ level, one flow step each:
 ```js
 chart(countryPopulations)
   .flow(
-    treemap({ by: "continent", size: "pop", tile: Tile.slice }),
-    treemap({ by: "region", size: "pop", tile: Tile.dice })
+    tile({ by: "continent", size: "pop", tile: Tile.slice }),
+    tile({ by: "region", size: "pop", tile: Tile.dice })
   )
   .mark(rect({ fill: "continent" }));
 ```
@@ -130,6 +130,6 @@ chart(countryPopulations)
 
 - The tile d3 places first sits at the top left. With the default
   `sort: "desc"`, that is the largest tile.
-- A treemap accepts a **flat list of children**; for multi-level treemaps, chain one `treemap(...)` per level in `.flow(...)`, or nest `treemap(...)` calls.
-- A treemap with no size of its own fills the shape its parent hands it: a cell of the treemap around it, or the shape of an `enclose` around it.
+- A `tile` accepts a **flat list of children**; for multi-level treemaps, chain one `tile(...)` per level in `.flow(...)`, or nest `tile(...)` calls.
+- A `tile` with no size of its own fills the shape its parent hands it: a cell of the `tile` around it, or the shape of an `enclose` around it.
 - In the combinator form, `size` is an **explicit array**, one weight per child in child order — it does not read back off each child's bound datum.

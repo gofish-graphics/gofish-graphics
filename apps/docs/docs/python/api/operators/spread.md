@@ -265,7 +265,7 @@ on a continuous axis, use [`partition`](/python/api/operators/partition) with th
 # Rows with a null/missing "genre" are excluded entirely, instead of
 # forming their own "null" group
 chart(data).flow(
-    treemap(by=field("genre").drop_nulls(), size="worldwideGross")
+    tile(by=field("genre").drop_nulls(), size="worldwideGross")
 )
 ```
 

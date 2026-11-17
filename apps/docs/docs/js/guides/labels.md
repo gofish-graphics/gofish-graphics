@@ -162,7 +162,7 @@ gf.chart(seafood, { axes: true })
 ## Labeling a group instead of a mark instance
 
 `.label()` also chains on an operator returned by `.flow(...)` (`spread`,
-`stack`, `group`, `scatter`, `table`, `treemap`), not just on a mark. This
+`stack`, `group`, `scatter`, `table`, `tile`), not just on a mark. This
 labels each **group** the operator produces — one label per split leaf —
 instead of one label per mark instance:
 

@@ -2,7 +2,7 @@
 but with circles instead of rects.
 """
 
-from gofish import chart, circle, field, treemap
+from gofish import chart, circle, field, tile
 from python_stories.vega_data_urls import read_json
 
 GRAY = "#D1D9E2"
@@ -15,7 +15,7 @@ def story_default():
     return (
         chart(movies_raw, axes=False, w=700, h=420)
         .flow(
-            treemap(
+            tile(
                 by=field("Major Genre").drop_nulls(),
                 size="Worldwide Gross",
                 spacing=2,

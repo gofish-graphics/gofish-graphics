@@ -123,7 +123,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   ],
   table: ["by", "spacing", "numCols"],
   log: ["prefix"],
-  treemap: [
+  tile: [
     "x",
     "y",
     "w",

@@ -186,7 +186,7 @@ export type OperatorIR =
   | ScatterOperator
   | TableOperator
   | LogOperator
-  | TreemapOperator
+  | TileOperator
   | PackOperator
   | PartitionOperator
   | FlowStepMarkIR;
@@ -286,7 +286,7 @@ export interface FieldPredicateIR {
  *  descriptors.ts). */
 interface OperatorBoxIR {
   /** Position of this operator's box in the parent's space (pixels): the JS
-   *  `Spread` spreads its `FancyDims` into the box, as treemap's does. */
+   *  `Spread` spreads its `FancyDims` into the box, as `tile`'s does. */
   x?: ChannelValue;
   y?: ChannelValue;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
@@ -469,18 +469,18 @@ export interface LogOperator
 }
 
 /**
- * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
+ * `tile({...})` — d3-hierarchy treemap layout over the flow's rows,
  * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
  * `group`/`table`: also usable as a low-level combinator mark
- * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
- * Mirrors JS's `TreemapProps`/`TreemapOptions` (`graphicalOperators/treemap.tsx`)
+ * (`CombinatorMarkType`'s `"tile"`, disambiguated by `__combinator`).
+ * Mirrors JS's `TileProps`/`TileOptions` (`graphicalOperators/tile.tsx`)
  * minus `key`.
  */
-export interface TreemapOperator
+export interface TileOperator
   extends BaseIRNode,
     TranslatableIR,
     OperatorFlagsIR {
-  type: "treemap";
+  type: "tile";
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   /** Field to partition rows by; also accepts a field(...) accessor carrying
@@ -489,7 +489,7 @@ export interface TreemapOperator
   by?: string | FieldAccessor | ChunkKeyIR;
   /** Gap between sibling tiles, in pixels. Default 0. */
   spacing?: number;
-  /** Inset around the outer edge of the treemap, in pixels. Default 0. */
+  /** Inset around the outer edge of the tiled box, in pixels. Default 0. */
   padding?: number;
   round?: boolean;
   /** The tiling strategy. Default `{ kind: "squarify" }`. */
@@ -497,7 +497,7 @@ export interface TreemapOperator
   sort?: "asc" | "desc" | "none";
   /** Per-leaf weight driving tile area (entry-flagged per split entry). */
   size?: ChannelValue;
-  /** Position of the box the treemap tiles into, in the parent's space. Both
+  /** Position of the box the operator tiles into, in the parent's space. Both
    *  forms spread `FancyDims` into `elaborateDims`, so the box's position is as
    *  real an option as its size — unlike `w`/`h` these carry no channel
    *  annotation, so they are pixel literals. */
@@ -512,7 +512,7 @@ export interface TreemapOperator
 
 /**
  * `pack({...})` — circle packing: children are placed so their enclosing
- * circles touch without overlapping. Dual-form like `treemap`: also a
+ * circles touch without overlapping. Dual-form like `tile`: also a
  * low-level combinator mark (`CombinatorMarkType`'s `"pack"`). Mirrors JS's
  * `PackOptions` (`graphicalOperators/pack.tsx`).
  */
@@ -575,7 +575,7 @@ export interface PartitionOperator
 // type, e.g. `Curve.Curve`) and on the wire. descriptors.test.ts checks that
 // these kinds and params agree with the table.
 
-/** How `treemap` tiles its region, made by a call in the `Tile` family
+/** How `tile` tiles its region, made by a call in the `Tile` family
  *  (`Tile.squarify()`, `Tile.slice()`, `Tile.dice()`, `Tile.binary()`,
  *  `Tile.voronoi()`). */
 export type TileIR =
@@ -798,7 +798,7 @@ export type CombinatorMarkType =
   // `__combinator` flag disambiguates.
   | "line"
   | "ribbon"
-  | "treemap"
+  | "tile"
   | "pack"
   | "union"
   | "intersect"
@@ -1190,16 +1190,16 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
 }
 
 /**
- * The set of operator type discriminators recognized in v0. `treemap` is
- * dual-form (also a combinator mark, `COMBINATOR_MARK_TYPES`'s `"treemap"`)
+ * The set of operator type discriminators recognized in v0. `tile` is
+ * dual-form (also a combinator mark, `COMBINATOR_MARK_TYPES`'s `"tile"`)
  * exactly like `spread`/`stack`/`scatter`/`group`/`table` — confirmed by a
- * real Python story (`atom/titanic-unit-dots`) that uses `treemap(...)` as a
- * `.flow()` operator, producing `{ type: "treemap", ... }` at the top level
- * of `operators`. Originally this list's inclusion of `treemap` looked like
+ * real Python story (`atom/titanic-unit-dots`) that uses `tile(...)` as a
+ * `.flow()` operator, producing `{ type: "tile", ... }` at the top level
+ * of `operators`. Originally this list's inclusion of `tile` looked like
  * drift against `OperatorIR`/the JSON Schema enum (both omitted it) — but
  * the story corpus proved the OTHER two were the ones missing it, not this
  * list; `OperatorIR` and the generated JSON Schema now include
- * `TreemapOperator` too (see `descriptors.ts`'s `OPERATORS.treemap`).
+ * `TileOperator` too (see `descriptors.ts`'s `OPERATORS.tile`).
  */
 export const OPERATOR_TYPES = [
   "derive",
@@ -1212,7 +1212,7 @@ export const OPERATOR_TYPES = [
   "scatter",
   "table",
   "log",
-  "treemap",
+  "tile",
   "pack",
   "partition",
 ] as const;
@@ -1247,7 +1247,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "arrow",
   "line",
   "ribbon",
-  "treemap",
+  "tile",
   "pack",
   "union",
   "intersect",

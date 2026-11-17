@@ -151,7 +151,7 @@ whole document inline if you just want to read it.
 `toJSON → validate → fromJSON → render` works for the standard library:
 spread, stack, scatter, group, table, log; rect, circle, line, area,
 blank, ellipse, petal, text, image, polygon; layer, arrow, connect,
-treemap, Porter-Duff; refs, named layers via `.name("...")`, chained
+`tile`, Porter-Duff; refs, named layers via `.name("...")`, chained
 `.label(accessor, options)`, chart options, constraints. The round-trip
 is verified end-to-end against every storybook chart in CI.
 
@@ -166,7 +166,7 @@ The current gaps:
   the IR by `toJSON` yet (string names are). Tokens need a stable
   per-document id scheme; deferred. The deserializer does resolve the
   Python-side `{__gofish_token}` sentinels via the token resolver.
-- **`arrow` / `connect` / `treemap` combinator-form marks** are built
+- **`arrow` / `connect` / `tile` combinator-form marks** are built
   via a different factory (`createNodeOperator`) and aren't tagged in
   v0. The widget still deserializes them — only emit-from-JS misses
   them. The emitter throws "encountered an untagged mark" if you try

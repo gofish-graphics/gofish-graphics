@@ -383,7 +383,7 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
  *
  *  `label` is the `.label(accessor, options?)` chain (createOperator.ts's
  *  `attachLabelOption`) available on every dual-mode operator (spread/stack/
- *  group/scatter/table/treemap). `log` doesn't carry this field at all — it
+ *  group/scatter/table/tile). `log` doesn't carry this field at all — it
  *  isn't built via `createOperator` and never gets `.label()`; its own
  *  console-prefix option is the unrelated `prefix` field on `LogOperator`.
  *  The `accessor` a `LabelIR` object carries may be a bare string (must be
@@ -665,7 +665,7 @@ export const STRATEGIES = {
     },
   },
   Tile: {
-    doc: "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
+    doc: "How `tile` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
     kinds: {
       squarify: {
         doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
@@ -689,7 +689,7 @@ export const STRATEGIES = {
         params: {},
       },
       voronoi: {
-        doc: "Voronoi tiling: cut the region into convex cells with rounded, irregular shapes, each with an area proportional to its weight, by a weighted Voronoi diagram whose sites and weights are adjusted until the areas match (Nocaj and Brandes 2012). It tiles any convex region, such as a Voronoi cell of the treemap around it or the oval of an `enclose` around it, so its cells can hold another Voronoi level.",
+        doc: "Voronoi tiling: cut the region into convex cells with rounded, irregular shapes, each with an area proportional to its weight, by a weighted Voronoi diagram whose sites and weights are adjusted until the areas match (Nocaj and Brandes 2012). It tiles any convex region, such as a Voronoi cell of the `tile` around it or the oval of an `enclose` around it, so its cells can hold another Voronoi level.",
         params: {
           seed: {
             type: t.num({ finite: true }),
@@ -1402,7 +1402,7 @@ const axisDims = (doc: string): FieldSpec => ({
  *  which mean axis 0/1 in every coordinate space, plus the open `dims` bag
  *  keyed by axis name. Included wholesale by marks whose factory spreads a
  *  bare `...fancyDims: FancyDims<MaybeValue<number>>` (rect, ellipse, petal,
- *  text, image, treemap, layer's `Layer(dims, children)` form), and by
+ *  text, image, tile, layer's `Layer(dims, children)` form), and by
  *  circle, which hands them to its ellipse. Marks that destructure a fixed
  *  subset (blank) declare their own fields instead of including this group. */
 export const boxDims: FieldGroup = group({
@@ -1468,7 +1468,7 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
 
 /** The box fields `spread`, `stack` (a re-tagged `spread({glue: true})`) and
  *  `group` share. `x`/`y` place the operator's box in the parent's space:
- *  `Spread` spreads its `FancyDims` into the box, like treemap's. `w`/`h` are
+ *  `Spread` spreads its `FancyDims` into the box, like `tile`'s. `w`/`h` are
  *  the data-driven operator extent (#4/#20, field/datum-driven cross-axis
  *  sizing). */
 const operatorBoxFields: FieldGroup = group({
@@ -1510,7 +1510,7 @@ const ENCLOSE_FIELDS: FieldGroup = group({
   },
   shape: {
     type: t.ref("Shape"),
-    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a `tile`, a region), the outline is the space it is given: Shape.box() is that space (a `tile`'s Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
   },
   avoiding: {
     type: t.ref("NodeSelectionIR"),
@@ -1789,16 +1789,16 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   // Dual-form like spread/stack/scatter/group/table — also usable as a
-  // low-level combinator mark (see COMBINATOR_MARKS.treemap, which reuses
+  // low-level combinator mark (see COMBINATOR_MARKS.tile, which reuses
   // this field list). Confirmed as a genuine `.flow()` operator by a real
   // Python story (atom/titanic-unit-dots), which is why it's here despite
   // the design doc's audit assuming it was combinator-only — see the note
   // on `OPERATOR_TYPES` in schema.ts.
-  treemap: operator("treemap", {
+  tile: operator("tile", {
     doc: "d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.",
     fields: {
-      // Both forms take the same `TreemapProps`, which spreads `FancyDims` —
-      // `Treemap` runs the whole bag through `elaborateDims`, so the box's
+      // Both forms take the same `TileProps`, which spreads `FancyDims` —
+      // `TileNode` runs the whole bag through `elaborateDims`, so the box's
       // position (`x`/`y`) and size (`w`/`h`) are both real options. Only
       // `w`/`h` carry channel annotations (`createOperator`'s `channels`), so
       // those two resolve data-driven values; `x`/`y` pass through as literals.
@@ -1806,21 +1806,21 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // resolveAliases pass (`deferAxisDims`); each slot infers as its
       // top-level counterpart.
       x: ch.pos(
-        "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        "Left edge of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it."
       ),
       y: ch.pos(
-        "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it."
       ),
       w: lengthSize(
-        "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots." +
+        "Width of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots." +
           PERCENT_FR
       ),
       h: lengthSize(
-        "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots." +
+        "Height of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots." +
           PERCENT_FR
       ),
       dims: axisDims(
-        "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        "The box the operator tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
       ),
       by: splitBy(
         "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
@@ -1833,7 +1833,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       padding: {
         type: t.number,
         default: 0,
-        doc: "Inset around the outer edge of the treemap, in pixels.",
+        doc: "Inset around the outer edge of the tiled box, in pixels.",
       },
       round: {
         type: t.boolean,
@@ -2470,10 +2470,10 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     fields: resolveFields(LEAF_MARKS.ribbon),
   }),
 
-  treemap: combinatorMark("treemap", {
-    doc: "Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.",
+  tile: combinatorMark("tile", {
+    doc: "Low-level combinator form of `tile` (single level). Same fields as the operator form (OPERATORS.tile) plus `key`.",
     fields: {
-      ...resolveFields(OPERATORS.treemap),
+      ...resolveFields(OPERATORS.tile),
       key: { type: t.string, doc: "Internal per-node key override." },
     },
   }),

@@ -1467,7 +1467,7 @@ console.log("\n# Strategies");
       root: {
         type: "chart",
         data: { type: "table", id: "t0" },
-        operators: [{ type: "treemap", tile }],
+        operators: [{ type: "tile", tile }],
         mark: { type: "rect" },
       },
     }) as unknown as FrontendIRDocument;

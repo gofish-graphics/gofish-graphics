@@ -1,18 +1,18 @@
 ---
-title: treemap
+title: tile
 order: 60
 ---
 
-# treemap
+# tile
 
 Lays children out into a treemap: a 2D tiling of rectangles, or of convex
 polygons with `Tile.voronoi`, whose **areas are proportional to a weight**.
 
-`treemap` has two forms:
+`tile` has two forms:
 
-- **`treemap(...)`** — an operator for use inside
+- **`tile(...)`** — an operator for use inside
   [`.flow()`](/python/api/core/flow); it tiles the partitioned data of a chart.
-- **`treemap(children, ...)`** — the low-level **combinator** form: it takes an
+- **`tile(children, ...)`** — the low-level **combinator** form: it takes an
   explicit list of pre-data-bound marks and assigns each one its `(x, y, w, h)`.
 
 The two share the same options below.
@@ -21,13 +21,13 @@ The two share the same options below.
 :::
 
 ```python
-from gofish import chart, circle, field, treemap
+from gofish import chart, circle, field, tile
 
-# treemap(by=..., size=...) partitions the flow's rows itself, mirroring
+# tile(by=..., size=...) partitions the flow's rows itself, mirroring
 # spread/group: `by` groups (dropping null genres first), `size` sums
 # worldwide gross per group to weight each tile's area.
 chart(movies_raw).flow(
-    treemap(
+    tile(
         by=field("Major Genre").drop_nulls(),
         size="Worldwide Gross",
         spacing=2,
@@ -45,25 +45,26 @@ chart(movies_raw).flow(
 
 ```python
 # Operator form (inside .flow())
-treemap(**options) -> Operator
+tile(**options) -> Operator
 
 # Combinator form (explicit children)
-treemap(children, **options) -> Mark
+tile(children, **options) -> Mark
 ```
 
 ## Parameters
 
-::: gofish-ref treemap
+::: gofish-ref tile
 :::
 
 ## Strategies
 
-`tile` holds the tiling strategy, a member of the `Tile` family. You make a
+The `tile` option holds the tiling strategy, a member of the `Tile` family. You make a
 strategy with a function call. A strategy with no required option is also a
 value as it is: `Tile.voronoi` is `Tile.voronoi()`. On the wire a strategy is
 a plain object, such as `{"kind": "squarify", "ratio": 1}`. The family is also
-the module `gofish.tile`, so `from gofish.tile import squarify` gives the same
-function as `Tile.squarify`.
+the module `gofish.tile_`, so `from gofish.tile_ import squarify` gives the same
+function as `Tile.squarify`. The module name ends in an underscore because
+`gofish.tile` is the `tile` operator.
 
 The first four are tiling methods from d3-hierarchy. They tile a rectangle,
 so they need a rectangular region: inside a Voronoi cell or the oval of an
@@ -88,28 +89,28 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
   between them.
 
 ```python
-from gofish import treemap, Tile
+from gofish import tile, Tile
 
-treemap(by="genre", size="gross", tile=Tile.squarify(ratio=1))
+tile(by="genre", size="gross", tile=Tile.squarify(ratio=1))
 ```
 
-Each `treemap` in a flow is one level, and each level can use its own
+Each `tile` in a flow is one level, and each level can use its own
 tiling. A level hands each child its cell, and
 [`region()`](/python/api/marks/region) draws the cell it is in. `spacing` is
-the gap between sibling cells, and `padding` the inset at the treemap's own
+the gap between sibling cells, and `padding` the inset at the `tile`'s own
 edge, under every tiling.
 
 ::: gofish example:voronoi-treemap hidden
 :::
 
 ```python
-from gofish import Shape, Tile, chart, enclose, region, treemap
+from gofish import Shape, Tile, chart, enclose, region, tile
 
 chart(country_populations, axes=False, w=480, h=480).flow(
     enclose(shape=Shape.oval, fill="none"),
-    treemap(by="continent", size="pop", spacing=5, tile=Tile.voronoi),
-    treemap(by="region", size="pop", spacing=2.5, tile=Tile.voronoi),
-    treemap(size="pop", spacing=1, tile=Tile.voronoi),
+    tile(by="continent", size="pop", spacing=5, tile=Tile.voronoi),
+    tile(by="region", size="pop", spacing=2.5, tile=Tile.voronoi),
+    tile(size="pop", spacing=1, tile=Tile.voronoi),
 ).mark(region(fill="continent"))
 ```
 
@@ -118,8 +119,8 @@ level, one flow step each:
 
 ```python
 chart(country_populations).flow(
-    treemap(by="continent", size="pop", tile=Tile.slice),
-    treemap(by="region", size="pop", tile=Tile.dice),
+    tile(by="continent", size="pop", tile=Tile.slice),
+    tile(by="region", size="pop", tile=Tile.dice),
 ).mark(rect(fill="continent"))
 ```
 
@@ -127,11 +128,11 @@ chart(country_populations).flow(
 
 - The tile d3 places first sits at the top left. With the default
   `sort="desc"`, that is the largest tile.
-- A treemap accepts a **flat list of children**; for multi-level treemaps,
-  chain one `treemap(...)` per level in `.flow(...)`, or nest `treemap(...)`
+- A `tile` accepts a **flat list of children**; for multi-level treemaps,
+  chain one `tile(...)` per level in `.flow(...)`, or nest `tile(...)`
   calls.
-- A treemap with no size of its own fills the shape its parent hands it: a
-  cell of the treemap around it, or the shape of an `enclose` around it.
+- A `tile` with no size of its own fills the shape its parent hands it: a
+  cell of the `tile` around it, or the shape of an `enclose` around it.
 - In the combinator form, each child is applied to its row with
   `mark(d, key)` (see [Applying a mark to rows](/python/api/core/mark#applying-a-mark-to-rows)); chain `.label(accessor, ...)` on the mark to show
   a field's value on each tile. `size` in combinator form is an **explicit

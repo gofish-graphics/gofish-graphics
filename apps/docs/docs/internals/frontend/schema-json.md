@@ -553,7 +553,7 @@ for the API.
             "arrow",
             "line",
             "ribbon",
-            "treemap",
+            "tile",
             "union",
             "intersect",
             "subtract",
@@ -1621,22 +1621,22 @@ for the API.
         }
       }
     },
-    "TreemapOperator": {
+    "TileOperator": {
       "description": "d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
       "properties": {
         "type": {
-          "const": "treemap"
+          "const": "tile"
         },
         "x": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+          "description": "Left edge of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it."
         },
         "y": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+          "description": "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it."
         },
         "w": {
           "anyOf": [
@@ -1647,7 +1647,7 @@ for the API.
               "$ref": "#/$defs/Length"
             }
           ],
-          "description": "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+          "description": "Width of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "h": {
           "anyOf": [
@@ -1658,14 +1658,14 @@ for the API.
               "$ref": "#/$defs/Length"
             }
           ],
-          "description": "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
+          "description": "Height of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides."
         },
         "dims": {
           "type": "object",
           "additionalProperties": {
             "$ref": "#/$defs/AxisDimsValue"
           },
-          "description": "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+          "description": "The box the operator tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
         },
         "by": {
           "anyOf": [
@@ -1688,7 +1688,7 @@ for the API.
         },
         "padding": {
           "$ref": "#/$defs/Number",
-          "description": "Inset around the outer edge of the treemap, in pixels.",
+          "description": "Inset around the outer edge of the tiled box, in pixels.",
           "default": 0
         },
         "round": {
@@ -1858,7 +1858,7 @@ for the API.
           "$ref": "#/$defs/LogOperator"
         },
         {
-          "$ref": "#/$defs/TreemapOperator"
+          "$ref": "#/$defs/TileOperator"
         },
         {
           "$ref": "#/$defs/PackOperator"
@@ -3272,7 +3272,7 @@ for the API.
         },
         "shape": {
           "$ref": "#/$defs/Shape",
-          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there."
+          "description": "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a `tile`, a region), the outline is the space it is given: Shape.box() is that space (a `tile`'s Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there."
         },
         "avoiding": {
           "$ref": "#/$defs/NodeSelectionIR",
@@ -4063,7 +4063,7 @@ for the API.
           "required": ["kind"]
         }
       ],
-      "description": "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
+      "description": "How `tile` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region."
     },
     "Overlap": {
       "anyOf": [
