@@ -45,11 +45,11 @@ def story_clock_tree_with_link():
             node=node,
             link={"curve": Curve.linear(), "stroke": "#90a4ae", "stroke_width": 1},
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "middle"},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "middle"},
             ),
             coord=Coord.clock(inner_radius=0.79),

@@ -9,7 +9,7 @@ import pytest
 import gofish
 
 from ._ir import ir
-from gofish import Bin, Calendar, Coord, Curve, Overlap, Place, Tile, field, line, ribbon, scatter, chart, circle, select_all
+from gofish import Bin, Calendar, Constraint, Coord, Curve, Overlap, Place, Spacing, Tile, field, line, ribbon, scatter, chart, circle, percent, select_all
 
 FAMILIES = {
     "Color": ("color", ["palette", "gradient"]),
@@ -32,6 +32,7 @@ FAMILIES = {
     ),
     "Overlap": ("overlap", ["separate", "noise", "sina", "jitter"]),
     "Place": ("place", ["around", "along", "start", "end", "interior"]),
+    "Spacing": ("spacing", ["box", "pitch"]),
     "Tile": ("tile", ["squarify", "slice", "dice", "binary", "voronoi"]),
     "Bin": ("bin", ["step", "thresholds", "quantiles", "hex", "voronoi"]),
     "Calendar": (
@@ -114,7 +115,7 @@ def test_curves_are_calls_on_the_wire():
 def test_strategy_modules_are_generated():
     # gofish/<family>.py for the strategy families and Coord is written by
     # scripts/generate.ts from the gofish-ir STRATEGIES and COORDS tables.
-    for module_name in ("tile", "overlap", "curve", "bin", "calendar", "place", "coord"):
+    for module_name in ("tile", "overlap", "curve", "bin", "calendar", "place", "spacing", "coord"):
         module = importlib.import_module(f"gofish.{module_name}")
         with open(module.__file__) as f:
             assert f.readline().startswith("# GENERATED")
@@ -151,6 +152,8 @@ BAD_VALUES = [
     (lambda: Coord.geo("robinson"), 'Coord.geo(projection) must be one of "equalEarth", "mercator"'),
     (lambda: Coord.polar(center=(1, 2, 3)), "Coord.polar(center=...) must have 2 items"),
     (lambda: Coord.geo("mercator", lat=(0, float("nan"))), "Coord.geo(lat=...)[1] must not be NaN"),
+    (lambda: Spacing.pitch(20, at="center"), 'Spacing.pitch(at=...) must be one of "start", "middle"'),
+    (lambda: Spacing.box(float("nan")), "Spacing.box(gap) must not be NaN"),
 ]
 
 WRONG_TYPES = [
@@ -171,6 +174,8 @@ WRONG_TYPES = [
     (lambda: Coord.geo(None), "Coord.geo(projection) must be one of"),
     (lambda: Coord.polar(inner_radius="0.5"), "Coord.polar(inner_radius=...) must be a number, got str"),
     (lambda: Coord.geo("mercator", lon="-170"), "Coord.geo(lon=...) must be a list or tuple of 2 items"),
+    (lambda: Spacing.box("8"), "Spacing.box(gap) must be a number or a LengthValue, got str"),
+    (lambda: Spacing.pitch(None), "Spacing.pitch(distance) must be a number or a LengthValue"),
 ]
 
 UNKNOWN_KWARGS = [
@@ -178,6 +183,7 @@ UNKNOWN_KWARGS = [
     lambda: Overlap.separate(randomness="blue"),
     lambda: Overlap.sina(bandwidth=1),
     lambda: Curve.perfect_arrows(padEnd=4),
+    lambda: Spacing.box(8, at="middle"),
 ]
 
 
@@ -321,3 +327,65 @@ def test_label_avoiding_is_a_node_selection():
 def test_label_halo_rejects_an_unknown_key():
     with pytest.raises(TypeError, match="halo"):
         circle(r=3).label("c", halo={"radius": 2})
+
+
+# Spacing: a spread's (or a distribute's) `spacing` is a bare amount, which is
+# `Spacing.box(amount)`, or a `Spacing` strategy. `anchor` is gone.
+def test_spacing_strategies_are_plain_dicts():
+    assert Spacing.box(8) == {"kind": "box", "gap": 8}
+    assert Spacing.pitch(30) == {"kind": "pitch", "distance": 30}
+    assert Spacing.pitch(30, at="middle") == {
+        "kind": "pitch",
+        "distance": 30,
+        "at": "middle",
+    }
+    assert Spacing.pitch(percent(10), at="end")["distance"] == {
+        "type": "length",
+        "percent": 10,
+    }
+
+
+def test_spacing_wire_form_at_spread():
+    from gofish import rect, spread
+
+    def spacing_of(spacing):
+        return ir(spread([rect(w=10, h=10)], dir="x", spacing=spacing))["options"][
+            "spacing"
+        ]
+
+    assert spacing_of(8) == 8
+    assert spacing_of(percent(5)) == {"type": "length", "percent": 5}
+    assert spacing_of(Spacing.box(8)) == {"kind": "box", "gap": 8}
+    assert spacing_of(Spacing.pitch(36, at="baseline")) == {
+        "kind": "pitch",
+        "distance": 36,
+        "at": "baseline",
+    }
+    assert spacing_of(Spacing.pitch(percent(20), at="middle")) == {
+        "kind": "pitch",
+        "distance": {"type": "length", "percent": 20},
+        "at": "middle",
+    }
+    with pytest.raises(TypeError, match="unexpected value 'gap'"):
+        spacing_of({"kind": "gap", "gap": 8})
+    with pytest.raises(TypeError, match="unexpected key 'at'"):
+        spacing_of({"kind": "box", "gap": 8, "at": "middle"})
+
+
+def test_spread_and_stack_take_no_anchor():
+    from gofish import rect, spread, stack
+
+    with pytest.raises(TypeError, match="anchor"):
+        spread([rect(w=10, h=10)], dir="x", spacing=8, anchor="middle")
+    with pytest.raises(TypeError, match="anchor"):
+        stack([rect(w=10, h=10)], dir="x", anchor="middle")
+    with pytest.raises(TypeError, match="anchor"):
+        Constraint.distribute([], dir="x", spacing=8, anchor="middle")
+
+
+def test_distribute_takes_a_spacing_strategy():
+    c = Constraint.distribute([], dir="y", spacing=Spacing.pitch(60, at="middle"))
+    assert c.options == {
+        "dir": "y",
+        "spacing": {"kind": "pitch", "distance": 60, "at": "middle"},
+    }

@@ -147,43 +147,65 @@ function acceptsDict(type: FieldType): boolean {
   }
 }
 
-/** The field that tells the branches of a tagged union apart: a dict value's
- *  `kind` names the branch it means. It is the convention the strategy
- *  objects (treemap `tile`, scatter `overlap`) already follow. */
-const DISCRIMINATOR = "kind";
+/** The fields that tell the branches of a tagged union apart: a dict
+ *  value's `kind` or `type` names the branch it means. `kind` is the
+ *  convention the strategy objects follow (treemap `tile`, scatter `overlap`,
+ *  spread `spacing`); `type` is the one the IR's tagged values follow (a
+ *  length, `{ type: "length", percent }`). A union may mix the two: spread's
+ *  `spacing` takes a length or a `Spacing` strategy. */
+const DISCRIMINATORS = ["kind", "type"] as const;
 
-/** The `kind` values that select an object branch of a tagged union, or null
- *  when the branch is not an object whose `kind` field is a string literal or
- *  an enum (named option types are looked through). */
-function branchTags(type: FieldType): readonly string[] | null {
+/** The tag field and the values of it that select an object branch of a
+ *  tagged union, or null when the branch is not an object whose `kind` or
+ *  `type` field is a string literal or an enum. Named option types are
+ *  looked through, and a union of such objects with one tag field is one
+ *  branch that every one of its values selects. */
+function branchTags(
+  type: FieldType
+): { key: string; values: readonly string[] } | null {
   if (type.kind === "ref" && type.name in OPTION_TYPES) {
     return branchTags(OPTION_TYPES[type.name].type);
   }
+  if (type.kind === "union") {
+    const each = type.options.map(branchTags);
+    if (each.some((t) => t === null)) return null;
+    const keys = new Set(each.map((t) => t!.key));
+    if (keys.size !== 1) return null;
+    return { key: each[0]!.key, values: each.flatMap((t) => t!.values) };
+  }
   if (type.kind !== "object") return null;
-  const tag = type.fields[DISCRIMINATOR]?.type;
-  if (tag?.kind === "enum") return tag.values;
-  if (tag?.kind === "literal" && typeof tag.value === "string") {
-    return [tag.value];
+  for (const key of DISCRIMINATORS) {
+    const tag = type.fields[key]?.type;
+    if (tag?.kind === "enum") return { key, values: tag.values };
+    if (tag?.kind === "literal" && typeof tag.value === "string") {
+      return { key, values: [tag.value] };
+    }
   }
   return null;
 }
 
 /** The tagged shape of a union's dict-shaped branches,
- *  `("tagged", "kind", {kind_value: branch_shape})`, or null when some branch
- *  has no `kind` tag or two branches share a `kind` value. */
+ *  `("tagged", ((tag_key, {tag_value: branch_shape}), ...))`, one entry per
+ *  tag field, or null when some branch has no tag or two branches share a
+ *  tag value. */
 function taggedShape(branches: FieldType[], where: string): string | null {
-  const byTag = new Map<string, string>();
+  const byKey = new Map<string, Map<string, string>>();
   for (const branch of branches) {
     const tags = branchTags(branch);
     if (tags === null) return null;
     const shape = wireShape(branch, where) ?? "None";
-    for (const tag of tags) {
+    const byTag = byKey.get(tags.key) ?? new Map<string, string>();
+    byKey.set(tags.key, byTag);
+    for (const tag of tags.values) {
       if (byTag.has(tag)) return null;
       byTag.set(tag, shape);
     }
   }
-  const entries = [...byTag].map(([tag, shape]) => `${pyStr(tag)}: ${shape}`);
-  return `("tagged", ${pyStr(DISCRIMINATOR)}, {${entries.join(", ")}})`;
+  const keys = [...byKey].map(([key, byTag]) => {
+    const entries = [...byTag].map(([tag, shape]) => `${pyStr(tag)}: ${shape}`);
+    return `(${pyStr(key)}, {${entries.join(", ")}})`;
+  });
+  return `("tagged", (${keys.join(", ")},))`;
 }
 
 /** The key structure of a field type, as the Python literal `_to_wire` reads,
@@ -233,7 +255,7 @@ function wireShape(type: FieldType, where: string): string | null {
       throw new Error(
         `${where}: a union with more than one dict-shaped branch, one of ` +
           `them with option keys, and the branches are not told apart by ` +
-          `distinct \`${DISCRIMINATOR}\` values; a Python dict value could ` +
+          `distinct \`kind\` or \`type\` values; a Python dict value could ` +
           `mean either.`
       );
     }
@@ -443,7 +465,7 @@ parts.push(
       `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
       `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
       `# ("tuple", (shape, ...)), ("record", value_shape),`,
-      `# ("tagged", tag_key, {tag_value: shape}); None passes a value through.`,
+      `# ("tagged", ((tag_key, {tag_value: shape}), ...)); None passes a value through.`,
       `_OPTION_TYPES: Dict[str, Any] = {`,
       ...optionTypes,
       `}`,
@@ -458,7 +480,7 @@ parts.push(
       `    type does not declare raises TypeError, as an unknown kwarg does.`,
       `    Record keys (column names,`,
       `    axis names) and values of any other type pass through unchanged. A`,
-      `    tagged union picks its branch by the dict's tag key (\`kind\`); a missing`,
+      `    tagged union picks its branch by the dict's tag key (\`kind\` or \`type\`); a missing`,
       `    or unknown tag raises TypeError. A channel value built by field(...) or`,
       `    datum(...) is a dict already in wire form, so it passes through too:`,
       `    that is how a \`dims\` entry tells a channel value from an interval.`,
@@ -492,14 +514,16 @@ parts.push(
       `    if kind == "tagged":`,
       `        if not isinstance(value, dict):`,
       `            return value`,
-      `        tag, branches = shape[1], shape[2]`,
-      `        expected = ", ".join(map(repr, branches))`,
-      `        if tag not in value:`,
-      `            raise TypeError(f"{path} is missing the key {tag!r}; expected {tag!r} to be one of {expected}")`,
-      `        branch = value[tag]`,
-      `        if not isinstance(branch, str) or branch not in branches:`,
-      `            raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")`,
-      `        return _to_wire(branches[branch], value, path)`,
+      `        for tag, branches in shape[1]:`,
+      `            if tag in value:`,
+      `                branch = value[tag]`,
+      `                if not isinstance(branch, str) or branch not in branches:`,
+      `                    expected = ", ".join(map(repr, branches))`,
+      `                    raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")`,
+      `                return _to_wire(branches[branch], value, path)`,
+      `        missing = " or ".join(repr(tag) for tag, _ in shape[1])`,
+      `        expected = "; ".join(f"{tag!r} to be one of {', '.join(map(repr, branches))}" for tag, branches in shape[1])`,
+      `        raise TypeError(f"{path} is missing the key {missing}; expected {expected}")`,
       `    if kind == "record":`,
       `        if not isinstance(value, dict):`,
       `            return value`,
@@ -726,6 +750,14 @@ function describeType(type: FieldType): string {
         : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
     case "union":
       return type.options.map(describeType).join(" or ");
+    case "ref": {
+      // A value of a named type with a Python class (a `LengthValue`, which
+      // `percent(n)` and `fr(k)` build) is checked as that class's dict; its
+      // fields are checked where JS reads it.
+      const cls = refPyClass(type.name);
+      if (cls !== undefined) return `a ${cls}`;
+      throw new Error(`no Python check for a ref to ${type.name}`);
+    }
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -750,6 +782,10 @@ function pyTypeTest(type: FieldType, v: string): string {
       return `isinstance(${v}, list)`;
     case "tuple":
       return `isinstance(${v}, (list, tuple))`;
+    case "ref":
+      // A class with a dict wire form (`LengthValue`); see describeType.
+      if (refPyClass(type.name) !== undefined) return `isinstance(${v}, dict)`;
+      throw new Error(`no Python check for a ref to ${type.name}`);
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -928,6 +964,17 @@ interface FamilyWire {
   bare: boolean;
 }
 
+/** The Python classes a param type names: each ref with a Python class, at
+ *  any depth of a union. */
+function refClasses(type: FieldType): string[] {
+  if (type.kind === "union") return type.options.flatMap(refClasses);
+  if (type.kind === "ref") {
+    const cls = refPyClass(type.name);
+    return cls === undefined ? [] : [cls];
+  }
+  return [];
+}
+
 /** One member of a family: a function that builds the family's dict. */
 interface FamilyFactory {
   family: string;
@@ -1073,9 +1120,21 @@ function writeFamilyModule(opts: {
     : undefined;
   const functions = factories.map((f) => renderFamilyFactory(wire, f));
   const code = functions.join("\n\n\n");
-  const typing = ["Any", "Dict", "Literal", "Optional"].filter(
-    (n) => n === "Any" || n === "Dict" || code.includes(`${n}[`)
-  );
+  // The Python classes the signatures name (a `LengthValue` param), each
+  // imported for type checking only, as in `_generated.py`.
+  const classes = [
+    ...new Set(
+      factories.flatMap((f) =>
+        Object.values(f.params).flatMap((spec) => refClasses(spec.type))
+      )
+    ),
+  ].sort();
+  const typing = [
+    ...(classes.length > 0 ? ["TYPE_CHECKING"] : []),
+    ...["Any", "Dict", "Literal", "Optional"].filter(
+      (n) => n === "Any" || n === "Dict" || code.includes(`${n}[`)
+    ),
+  ];
   const keys =
     wire.keys === "snake"
       ? [
@@ -1103,10 +1162,14 @@ function writeFamilyModule(opts: {
       : []),
     `"""`,
     ``,
+    ...(classes.length > 0 ? [`from __future__ import annotations`, ``] : []),
     ...(code.includes("math.") ? [`import math`] : []),
     `from typing import ${typing.join(", ")}`,
     ...(bareExample !== undefined
       ? [``, `from ._strategy import bare_kind`]
+      : []),
+    ...(classes.length > 0
+      ? [``, `if TYPE_CHECKING:`, `    from .ast import ${classes.join(", ")}`]
       : []),
     ``,
     `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,

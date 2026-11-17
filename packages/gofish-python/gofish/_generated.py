@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 # The key structure of each named option type (descriptors.ts OPTION_TYPES):
 # ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
 # ("tuple", (shape, ...)), ("record", value_shape),
-# ("tagged", tag_key, {tag_value: shape}); None passes a value through.
+# ("tagged", ((tag_key, {tag_value: shape}), ...)); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
@@ -37,16 +37,17 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
     "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
-    "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),
-    "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
-    "Filter": ("tagged", "kind", {"grayscale": ("object", {"kind": ("kind", None), "amount": ("amount", None)}), "luminanceToAlpha": ("object", {"kind": ("kind", None)})}),
-    "Tile": ("tagged", "kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "voronoi": ("object", {"kind": ("kind", None), "seed": ("seed", None)})}),
-    "Overlap": ("tagged", "kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),
-    "Curve": ("tagged", "kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),
-    "Bin": ("tagged", "kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
-    "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
-    "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
-    "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
+    "Partition": ("tagged", (("kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),)),
+    "StructBin": ("tagged", (("kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),)),
+    "Filter": ("tagged", (("kind", {"grayscale": ("object", {"kind": ("kind", None), "amount": ("amount", None)}), "luminanceToAlpha": ("object", {"kind": ("kind", None)})}),)),
+    "Tile": ("tagged", (("kind", {"squarify": ("object", {"kind": ("kind", None), "ratio": ("ratio", None)}), "slice": ("object", {"kind": ("kind", None)}), "dice": ("object", {"kind": ("kind", None)}), "binary": ("object", {"kind": ("kind", None)}), "voronoi": ("object", {"kind": ("kind", None), "seed": ("seed", None)})}),)),
+    "Overlap": ("tagged", (("kind", {"separate": ("object", {"kind": ("kind", None), "padding": ("padding", None)}), "noise": ("object", {"kind": ("kind", None), "randomness": ("randomness", None), "smoothing": ("smoothing", None), "padding": ("padding", None), "seed": ("seed", None)})}),)),
+    "Curve": ("tagged", (("kind", {"linear": ("object", {"kind": ("kind", None)}), "step": ("object", {"kind": ("kind", None)}), "monotone": ("object", {"kind": ("kind", None)}), "smooth": ("object", {"kind": ("kind", None)}), "catmullRom": ("object", {"kind": ("kind", None)}), "bezier": ("object", {"kind": ("kind", None)}), "orthogonal": ("object", {"kind": ("kind", None), "bend": ("bend", None)}), "arc": ("object", {"kind": ("kind", None), "direction": ("direction", None)}), "perfectArrows": ("object", {"kind": ("kind", None), "bow": ("bow", None), "stretch": ("stretch", None), "stretch_min": ("stretchMin", None), "stretch_max": ("stretchMax", None), "pad_start": ("padStart", None), "pad_end": ("padEnd", None), "flip": ("flip", None), "straights": ("straights", None)})}),)),
+    "Bin": ("tagged", (("kind", {"step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)}), "hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),)),
+    "Calendar": ("tagged", (("kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),)),
+    "Shape": ("tagged", (("kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),)),
+    "Place": ("tagged", (("kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),)),
+    "Spacing": ("tagged", (("kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),)),
 }
 
 
@@ -59,7 +60,7 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     type does not declare raises TypeError, as an unknown kwarg does.
     Record keys (column names,
     axis names) and values of any other type pass through unchanged. A
-    tagged union picks its branch by the dict's tag key (`kind`); a missing
+    tagged union picks its branch by the dict's tag key (`kind` or `type`); a missing
     or unknown tag raises TypeError. A channel value built by field(...) or
     datum(...) is a dict already in wire form, so it passes through too:
     that is how a `dims` entry tells a channel value from an interval.
@@ -93,14 +94,16 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     if kind == "tagged":
         if not isinstance(value, dict):
             return value
-        tag, branches = shape[1], shape[2]
-        expected = ", ".join(map(repr, branches))
-        if tag not in value:
-            raise TypeError(f"{path} is missing the key {tag!r}; expected {tag!r} to be one of {expected}")
-        branch = value[tag]
-        if not isinstance(branch, str) or branch not in branches:
-            raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")
-        return _to_wire(branches[branch], value, path)
+        for tag, branches in shape[1]:
+            if tag in value:
+                branch = value[tag]
+                if not isinstance(branch, str) or branch not in branches:
+                    expected = ", ".join(map(repr, branches))
+                    raise TypeError(f"{path}[{tag!r}] got an unexpected value {branch!r}; expected one of {expected}")
+                return _to_wire(branches[branch], value, path)
+        missing = " or ".join(repr(tag) for tag, _ in shape[1])
+        expected = "; ".join(f"{tag!r} to be one of {', '.join(map(repr, branches))}" for tag, branches in shape[1])
+        raise TypeError(f"{path} is missing the key {missing}; expected {expected}")
     if kind == "record":
         if not isinstance(value, dict):
             return value
@@ -668,15 +671,14 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
@@ -690,9 +692,8 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
+        ("spacing", _to_wire(("tagged", (("type", {"length": ("ref", "Length")}), ("kind", {"box": ("ref", "Spacing"), "pitch": ("ref", "Spacing")}),)), spacing, "spacing")),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
@@ -707,7 +708,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
@@ -716,7 +717,6 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
@@ -732,7 +732,6 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
         ("spacing", spacing),
         ("glue", glue),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
@@ -953,7 +952,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -970,9 +969,8 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
@@ -994,9 +992,8 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
+        ("spacing", _to_wire(("tagged", (("type", {"length": ("ref", "Length")}), ("kind", {"box": ("ref", "Spacing"), "pitch": ("ref", "Spacing")}),)), spacing, "spacing")),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
@@ -1008,7 +1005,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
@@ -1028,7 +1025,6 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
@@ -1052,7 +1048,6 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         ("spacing", spacing),
         ("glue", glue),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("size", _channel(size)),

@@ -1188,8 +1188,7 @@ class Constraint:
         refs: List[RefSentinel],
         *,
         dir: str,
-        spacing: Optional[float] = None,
-        anchor: Optional[str] = None,
+        spacing: Optional[Union[float, Dict[str, Any]]] = None,
         order: Optional[str] = None,
         glue: Optional[bool] = None,
     ) -> DistributeConstraint:
@@ -1198,11 +1197,12 @@ class Constraint:
         Args:
             refs: List of RefSentinels.
             dir: "x" or "y" — required.
-            spacing: Number of pixels between successive refs (default 8).
-            anchor: "edge" (default) — edge-to-edge spacing between facing
-                edges — or a fixed-pitch anchor point (`"start"`, `"middle"`,
-                `"end"`, `"baseline"`) placed at
-                `anchor[i+1] = anchor[i] + spacing`.
+            spacing: How far apart successive refs are, a `Spacing` strategy:
+                `Spacing.box(gap)`, a gap between facing edges, or
+                `Spacing.pitch(distance, at=...)`, a fixed distance between
+                the same point on each ref (`at[i+1] = at[i] + distance`).
+                A bare amount (pixels, `percent(n)`, `fr(k)`) is
+                `Spacing.box(amount)`. Default 8.
             order: "forward" (default) or "reverse" — distribute in reverse order.
             glue: Stack semantics — glue the refs together (their sizes sum
                 into a position at the layer) instead of slicing a budget.
@@ -1211,8 +1211,6 @@ class Constraint:
         options: Dict[str, Any] = {"dir": dir}
         if spacing is not None:
             options["spacing"] = spacing
-        if anchor is not None:
-            options["anchor"] = anchor
         if order is not None:
             options["order"] = order
         if glue is not None:
@@ -3233,7 +3231,7 @@ class FieldAccessor(dict):
 
             calendar = _OPTION_TYPES["Calendar"]
             if len(partition) < 2 or not all(
-                isinstance(p, dict) and p.get("kind") in calendar[2]
+                isinstance(p, dict) and p.get("kind") in _kinds(calendar)
                 for p in partition
             ):
                 raise TypeError(
@@ -3396,6 +3394,13 @@ def chunk(size: int) -> ChunkKey:
     return ChunkKey({"type": "chunk", "size": size})
 
 
+def _kinds(shape: Any) -> Dict[str, Any]:
+    """The branches of a tagged option type (``("tagged", ((tag_key,
+    branches), ...))`` in ``_generated._OPTION_TYPES``) that its ``kind``
+    tag selects, by ``kind`` value."""
+    return dict(shape[1]).get("kind", {})
+
+
 def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     """The cells a key is binned into, in their wire form, on the key that
     takes them: ``"field"`` for ``field(x).bin(...)``, which takes a Calendar
@@ -3413,7 +3418,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     kind = value.get("kind") if isinstance(value, dict) else None
     # A Calendar value bins one field only: on a struct it is no other
     # key's kind, just not one of the struct's.
-    if kind in _OPTION_TYPES[other][2] and kind not in _OPTION_TYPES["Calendar"][2]:
+    if kind in _kinds(_OPTION_TYPES[other]) and kind not in _kinds(_OPTION_TYPES["Calendar"]):
         if key == "field":
             raise TypeError(
                 f"{where}: Bin.{kind} bins two fields together into cells of "
@@ -3426,7 +3431,7 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
             f"field(x).bin(Bin.{kind}(...)); struct(x=..., y=...).bin takes "
             "Bin.hex(radius=...) or Bin.voronoi(seeds=...)."
         )
-    if kind not in _OPTION_TYPES[own][2]:
+    if kind not in _kinds(_OPTION_TYPES[own]):
         expected = (
             "a Calendar value (Calendar.month, ...), Bin.step(size), "
             "Bin.thresholds(count_or_edges), or "

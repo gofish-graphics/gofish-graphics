@@ -117,13 +117,13 @@ def story_pulley():
                         # Bluefish's ttb order (ceiling on top, pulleys below,
                         # weights at the bottom) — #143/#16.
                         Constraint.distribute(
-                            [ceiling, B], dir="y", spacing=40, anchor="edge"
+                            [ceiling, B], dir="y", spacing=40
                         ),
                         Constraint.distribute(
-                            [B, A], dir="y", spacing=30, anchor="edge"
+                            [B, A], dir="y", spacing=30
                         ),
                         Constraint.distribute(
-                            [B, C], dir="y", spacing=50, anchor="edge"
+                            [B, C], dir="y", spacing=50
                         ),
                         # Ceiling centered over the cluster.
                         Constraint.align([B, ceiling], x="middle"),
@@ -131,27 +131,27 @@ def story_pulley():
                         # its inset trapezoid top sits under the rope source
                         # points.
                         Constraint.distribute(
-                            [C, w2], dir="y", spacing=50, anchor="edge"
+                            [C, w2], dir="y", spacing=50
                         ),
                         Constraint.distribute(
-                            [A, w2], dir="x", spacing=-20, anchor="edge"
+                            [A, w2], dir="x", spacing=-20
                         ),
                         Constraint.distribute(
-                            [w1, A], dir="x", spacing=-15, anchor="edge"
+                            [w1, A], dir="x", spacing=-15
                         ),
                         Constraint.align([w2, w1], y="middle"),
                         # Pulley letter labels — 1px gap from the wheel; the
                         # label sits on one side and y-anchors to one corner.
                         Constraint.distribute(
-                            [Alabel, A], dir="x", spacing=1, anchor="edge"
+                            [Alabel, A], dir="x", spacing=1
                         ),
                         Constraint.align([A, Alabel], y="start"),
                         Constraint.distribute(
-                            [B, Blabel], dir="x", spacing=1, anchor="edge"
+                            [B, Blabel], dir="x", spacing=1
                         ),
                         Constraint.align([B, Blabel], y="start"),
                         Constraint.distribute(
-                            [C, Clabel], dir="x", spacing=1, anchor="edge"
+                            [C, Clabel], dir="x", spacing=1
                         ),
                         Constraint.align([C, Clabel], y="end"),
                         # Rope segments — drawing clauses, drawn between the
@@ -234,7 +234,7 @@ def story_pulley():
                     ]
                     for c in [
                         Constraint.distribute(
-                            [rope, label], dir="x", spacing=5, anchor="edge"
+                            [rope, label], dir="x", spacing=5
                         ),
                         Constraint.align([y_anchor, label], y="middle"),
                     ]
