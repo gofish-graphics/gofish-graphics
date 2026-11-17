@@ -515,7 +515,7 @@ text(text="Label", x=120)</code></pre>
 
       <div class="fork">
         <h3>
-          The one real fork: what <code>scatter({ x: "a", y: "b" })</code> draws
+          Decided: what <code>scatter({ x: "a", y: "b" })</code> draws
           afterwards
         </h3>
         <div class="plate">
@@ -527,11 +527,13 @@ text(text="Label", x=120)</code></pre>
           />
         </div>
         <p>
-          <strong>My pick: it draws this.</strong> The start edges sit on the
-          data points, because <code>x</code> is the start edge everywhere.
-          Today this picture can only be made with a mark's own
-          <code>x</code> inside <code>group</code>. In <code>scatter</code>, a
-          lone <code>dims: { x: { min: "a" } }</code> throws "a span needs both
+          <strong>It draws this.</strong> Josh chose the one rule on 2026-11-17,
+          and chart templates keep the familiar <code>x</code> and
+          <code>y</code>. The start edges sit on the data points, because
+          <code>x</code> is the start edge everywhere. Today this picture can
+          only be made with a mark's own <code>x</code> inside
+          <code>group</code>. In <code>scatter</code>, a lone
+          <code>dims: { x: { min: "a" } }</code> throws "a span needs both
           ends", so <code>scatter</code> cannot place a child by its edge at
           all.
         </p>
@@ -765,11 +767,9 @@ ribbon({ x: "date", cy: "mean", h: "spread" }); // what the rule implies</code><
         the three keys are one kind of channel.
       </p>
       <p>
-        I would add the <code>cx</code>/<code>cy</code> change to #1378 before
-        it merges, so the switching rule and its docs never ship. The vocabulary
-        rename is larger and independent, and I would do it as its own PR.
-        Nothing is implemented yet. I am waiting for your word on the fork in
-        example 2.
+        The <code>cx</code>/<code>cy</code> change is now in #1378, so the
+        switching rule and its docs never ship. The vocabulary rename is larger
+        and independent, and it is not started. It would be its own PR.
       </p>
     </div>
 
