@@ -16,6 +16,8 @@ import {
   encodeIR,
   decodeNonFinite,
   FRONTEND_IR_JSON_SCHEMA,
+  COMBINATOR_MARKS,
+  acceptedFields,
   type FrontendIRDocument,
 } from "../frontend/index.js";
 import { encodeNonFinite } from "../frontend/nonFinite.js";
@@ -181,6 +183,26 @@ const doc = (root: unknown) =>
     root,
     tables: { t0: [] },
   }) as FrontendIRDocument;
+
+// A combinator's options may be left out unless it needs one of them:
+// today none of them does.
+for (const type of Object.keys(COMBINATOR_MARKS)) {
+  const required = Object.entries(acceptedFields("combinator-mark", type)!)
+    .filter(([, f]) => f.required)
+    .map(([k]) => k);
+  check(
+    `a combinator ${type} requires no option`,
+    required.length === 0,
+    required.join(", ")
+  );
+}
+for (const type of ["group", "table"]) {
+  check(
+    `a combinator ${type} with no options validates (only the operator form splits by its by)`,
+    validate(doc({ type, __combinator: true, children: [{ type: "rect" }] }))
+      .valid
+  );
+}
 
 check(
   "a leaf mark, a combinator mark and a chain each accept as the root",
@@ -580,8 +602,23 @@ check(
 );
 
 check(
-  "stack with bad anchor rejected",
-  !validate(chart([{ type: "stack", anchor: "elsewhere" }])).valid
+  "spread with a Spacing.pitch spacing accepts",
+  validate(
+    chart([
+      {
+        type: "spread",
+        dir: "y",
+        spacing: { kind: "pitch", distance: 70, at: "baseline" },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "spread with an unknown Spacing kind rejected",
+  !validate(
+    chart([{ type: "spread", dir: "x", spacing: { kind: "contour", gap: 4 } }])
+  ).valid
 );
 
 check(
@@ -1340,6 +1377,16 @@ console.log("\n# Strategies");
     ["Calendar", { kind: "month" }],
     ["Calendar", { kind: "month", every: 3 }],
     ["Calendar", { kind: "week", every: 2, start: "sunday" }],
+    ["Spacing", { kind: "box", gap: 4 }],
+    ["Spacing", { kind: "box", gap: -20 }],
+    ["Spacing", { kind: "box", gap: { type: "length", fr: 1 } }],
+    ["Spacing", { kind: "pitch", distance: 70 }],
+    ["Spacing", { kind: "pitch", distance: 70, at: "baseline" }],
+    ["Spacing", { kind: "pitch", distance: 0.42, at: "middle" }],
+    [
+      "Spacing",
+      { kind: "pitch", distance: { type: "length", percent: 10 }, at: "end" },
+    ],
   ];
   for (const [family, value] of accepts) {
     const why = thrown(family, value);
@@ -1390,6 +1437,15 @@ console.log("\n# Strategies");
       ],
       ["Calendar", { kind: "weekday", every: 2 }, /unknown field "every"/],
       ["Curve", () => ({ kind: "monotone" }), /expected object, got function/],
+      ["Spacing", { kind: "contour", gap: 4 }, /unknown kind "contour"/],
+      ["Spacing", { kind: "edge", gap: 4 }, /unknown kind "edge"/],
+      ["Spacing", { kind: "box" }, /gap/],
+      ["Spacing", { kind: "pitch", at: "middle" }, /distance/],
+      ["Spacing", { kind: "pitch", distance: 4, at: "edge" }, /at/],
+      ["Spacing", { kind: "box", gap: 4, at: "middle" }, /unknown field "at"/],
+      ["Spacing", { kind: "box", gap: "4" }, /gap/],
+      ["Spacing", { kind: "box", gap: NaN }, /gap/],
+      ["Spacing", { kind: "pitch", distance: Infinity }, /distance/],
     ];
   for (const [family, value, pattern] of rejects) {
     const why = thrown(family, value);
@@ -1522,6 +1578,132 @@ console.log("# a .relate() operand's scope");
     !missing.valid &&
       missing.errors.filter((e) => e.path.endsWith(".scope")).length === 1,
     JSON.stringify(missing.errors)
+  );
+}
+
+console.log("# a constraint's options, as CONSTRAINTS declares them");
+{
+  const withClause = (clause: Record<string, unknown>) =>
+    ({
+      irVersion: 0,
+      ir: "gofish-frontend",
+      root: {
+        type: "layer",
+        __combinator: true,
+        children: [
+          { type: "rect", name: "a" },
+          { type: "rect", name: "b" },
+        ],
+        relate: {
+          scope: "r1",
+          clauses: [
+            {
+              ...clause,
+              refs: [
+                { type: "ref", selection: "a", scope: "r1" },
+                { type: "ref", selection: "b", scope: "r1" },
+              ],
+            },
+          ],
+        },
+      },
+    }) as unknown as FrontendIRDocument;
+  const distribute = (options: Record<string, unknown>) =>
+    validate(withClause({ type: "distribute", options }));
+  check(
+    "a distribute spacing of Spacing.pitch validates",
+    distribute({
+      dir: "y",
+      spacing: { kind: "pitch", distance: 70, at: "middle" },
+    }).valid
+  );
+  const unknownKind = distribute({
+    dir: "y",
+    spacing: { kind: "contour", gap: 4 },
+  });
+  check(
+    "a distribute spacing of an unknown Spacing kind is rejected",
+    !unknownKind.valid &&
+      unknownKind.errors.some((e) => /kind/.test(`${e.path} ${e.message}`)),
+    JSON.stringify(unknownKind.errors)
+  );
+  const unknownKey = distribute({ dir: "y", anchor: "middle" });
+  check(
+    "a distribute option the table does not declare is rejected",
+    !unknownKey.valid &&
+      unknownKey.errors.some((e) => e.path.endsWith(".options.anchor")),
+    JSON.stringify(unknownKey.errors)
+  );
+  check(
+    "a distribute without its dir is rejected",
+    !validate(withClause({ type: "distribute", options: {} })).valid
+  );
+  check(
+    "an align of a list of anchors validates",
+    validate(withClause({ type: "align", options: { x: ["middle", "start"] } }))
+      .valid
+  );
+  check(
+    "an align of an unknown anchor is rejected",
+    !validate(withClause({ type: "align", options: { x: "center" } })).valid
+  );
+  check(
+    "a nest with padding validates",
+    validate(withClause({ type: "nest", options: { x: 4 } })).valid
+  );
+  check(
+    "a nest with no padding is rejected",
+    !validate(withClause({ type: "nest", options: {} })).valid
+  );
+  for (const type of ["align", "position"]) {
+    const neither = validate(withClause({ type, options: {} }));
+    check(
+      `${type} with neither x nor y is rejected`,
+      !neither.valid &&
+        neither.errors.some((e) =>
+          e.message.includes(
+            `${type} options must specify at least one of x, y`
+          )
+        ),
+      JSON.stringify(neither.errors)
+    );
+    check(
+      `${type} with no options is rejected`,
+      !validate(withClause({ type })).valid
+    );
+    check(
+      `${type} with x: null and no y is rejected`,
+      !validate(withClause({ type, options: { x: null } })).valid
+    );
+  }
+  const datum = (v: unknown) => ({ type: "datum", datum: v });
+  check(
+    "a position at a pixel, a datum, or an interval of them validates",
+    [
+      { x: 0, y: 0, anchor: "baseline" },
+      { y: datum(50) },
+      { x: [datum(1), 40] },
+    ].every(
+      (options) => validate(withClause({ type: "position", options })).valid
+    )
+  );
+  for (const [what, x] of [
+    ["a string", "50"],
+    ["an interval of three", [0, 1, 2]],
+    ["a field", { type: "field", field: "a" }],
+  ] as const) {
+    check(
+      `a position at ${what} is rejected`,
+      !validate(withClause({ type: "position", options: { x } })).valid
+    );
+  }
+  check(
+    "a zAbove with no options validates",
+    validate(withClause({ type: "zAbove" })).valid
+  );
+  check(
+    "an unknown constraint type is rejected",
+    !validate(withClause({ type: "grid", options: {} })).valid
   );
 }
 

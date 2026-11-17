@@ -27,6 +27,8 @@ import {
 } from "../ast/underlyingSpace";
 import * as Interval from "../util/interval";
 import { check, report } from "./testHelpers";
+import { spacingAmount } from "../ast/constraints/distribute";
+import { pitch } from "../families/spacing";
 
 /** A child of a problem on one axis: its reach above and below its origin,
  *  each a value in σ, and its type. */
@@ -111,7 +113,11 @@ const solveIn = <T>(
     [NaN, NaN],
     // Pixel spacings, as a layer reads them (`GoFishNode.gapOf`).
     (c, axis) =>
-      Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number),
+      Pwl.constant(
+        (c.type === "grid"
+          ? c.spacing[axis]
+          : spacingAmount(c.spacing)) as number
+      ),
     (_, a) => (a === axis ? map : undefined),
     undefined,
     [new Set(), new Set()],
@@ -215,14 +221,14 @@ async function main() {
     ];
     agree("r: a child nested in its parent, siblings at a pitch", 1, rings, [
       Constraint.nest({ y: 44 }, [ref("parent"), ref("child")]),
-      Constraint.distribute({ dir: "y", spacing: 44, anchor: "middle" }, [
+      Constraint.distribute({ dir: "y", spacing: pitch(44, { at: "middle" }) }, [
         ref("left"),
         ref("child"),
         ref("right"),
       ]),
     ]);
     agree("θ: siblings at a middle pitch", 0, rings.slice(1), [
-      Constraint.distribute({ dir: "x", spacing: 0.42, anchor: "middle" }, [
+      Constraint.distribute({ dir: "x", spacing: pitch(0.42, { at: "middle" }) }, [
         ref("child"),
         ref("left"),
         ref("right"),

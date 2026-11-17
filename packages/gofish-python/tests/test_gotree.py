@@ -220,7 +220,7 @@ class TestCombiners:
         assert clauses(out) == [
             {
                 "type": "distribute",
-                "options": {"dir": "x", "spacing": 0, "anchor": "edge", "order": "forward"},
+                "options": {"dir": "x", "spacing": 0, "order": "forward"},
                 "refs": ["__distribute-0", "__distribute-1"],
             },
             {"type": "align", "options": {"y": "start"}, "refs": ["__distribute-0", "__distribute-1"]},
@@ -249,7 +249,7 @@ class TestCombiners:
             combine(y={"kind": "stack"})
 
     def test_combine_unknown_axis_option(self):
-        with pytest.raises(ValueError, match=r"\['spacng'\].*\['kind', 'spacing', 'order', 'anchor'\]"):
+        with pytest.raises(ValueError, match=r"\['spacng'\].*\['kind', 'spacing', 'order'\]"):
             combine(x={"kind": "distribute", "spacng": 40})
         with pytest.raises(ValueError, match="'spacing'"):
             combine(y={"kind": "align", "spacing": 4})

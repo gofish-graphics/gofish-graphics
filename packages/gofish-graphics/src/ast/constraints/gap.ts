@@ -12,7 +12,7 @@
 import type * as Pwl from "../solver/pwl";
 import type { Length, LengthValue } from "../length";
 import type { ConstraintSpec } from ".";
-import type { DistributeConstraint } from "./distribute";
+import { spacingAmount, type DistributeConstraint } from "./distribute";
 import type { GridConstraint } from "./grid";
 import { axisIndex } from "./shared";
 
@@ -25,13 +25,14 @@ export type Gap = number | Length | LengthValue;
 export type GapConstraint = DistributeConstraint | GridConstraint;
 
 /** The gap `c` lays out between the parts it places along `axis`, as
- *  authored: a table's gap between tracks there, and a chain's spacing when
- *  the chain runs along `axis`. Undefined when `c` lays no gap out there. */
+ *  authored: a table's gap between tracks there, and a chain's spacing's
+ *  amount (a box's gap, a pitch's distance) when the chain runs along
+ *  `axis`. Undefined when `c` lays no gap out there. */
 export const spacingOn = (c: ConstraintSpec, axis: 0 | 1): Gap | undefined =>
   c.type === "grid"
     ? c.spacing[axis]
     : c.type === "distribute" && axisIndex(c.dir) === axis
-      ? c.spacing
+      ? spacingAmount(c.spacing)
       : undefined;
 
 /** Reads the gap a chain or table lays out between its parts along an

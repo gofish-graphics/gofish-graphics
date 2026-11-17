@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import { autoLabelColorForStyle, type LabelBackdrop } from "./autoLabelColor";
+import { pitch } from "../../families/spacing";
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { GoFishRef } from "../_ref";
@@ -281,15 +282,14 @@ function buildLabelConstraints(
     const anchor = crossAlignAnchor(edge, align, yDirection);
     cs.push(Constraint.align({ [crossDim]: anchor } as any, [textRef, refRef]));
   } else {
-    // inset: fixed-pitch distribute (PR #762) relates the SAME anchor on both
+    // inset: a pitch distribute (PR #762) relates the SAME point on both
     // nodes with `spacing` as a constant inward pitch — the label sits just
     // inside the target's edge by `offset` px (flush would be spacing 0).
     cs.push(
       Constraint.distribute(
         {
           dir,
-          anchor: mainAnchor,
-          spacing: inwardSpacing(mainAnchor, offset),
+          spacing: pitch(inwardSpacing(mainAnchor, offset), { at: mainAnchor }),
         },
         [refRef, textRef]
       )
@@ -304,8 +304,9 @@ function buildLabelConstraints(
         Constraint.distribute(
           {
             dir: crossDim,
-            anchor: crossAnchor,
-            spacing: inwardSpacing(crossAnchor, offset),
+            spacing: pitch(inwardSpacing(crossAnchor, offset), {
+              at: crossAnchor,
+            }),
           },
           [refRef, textRef]
         )

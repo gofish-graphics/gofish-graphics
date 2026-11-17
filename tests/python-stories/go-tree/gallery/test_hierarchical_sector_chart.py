@@ -59,10 +59,10 @@ def story_hierarchical_sector_chart():
             link="none",
             parent_child=combine(
                 x={"kind": "nest", "pad": 0},
-                y={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                y={"kind": "distribute", "spacing": 0},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "middle"},
             ),
             coord=Coord.clock(),

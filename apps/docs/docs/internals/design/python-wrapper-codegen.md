@@ -399,7 +399,12 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   combinator through generated cores (before, they passed their kwargs to
   the wire unchecked), `OPERATORS.spread` and `OPERATORS.stack` now declare
   the box position `x`/`y` (as `treemap` does), and their combinator
-  entries declare `key`.
+  entries declare `key`. The `Constraint.*` methods (`align`,
+  `distribute`, `position`, `nest`) keep their refs-first signatures and
+  build their options with `_<type>_constraint_opts` cores generated from
+  the `constraint` descriptor table (`CONSTRAINTS`). A core raises when
+  none of its entry's `requireOneOf` keys is given. Only a constraint sets
+  `requireOneOf` (descriptors.test checks), since no other core reads it.
 
 - **Snake case keys in nested option dicts.** The keys a user types inside
   a nested option dict are in snake case too:
@@ -418,7 +423,11 @@ gofish-python gen`, CI-checked for freshness). Net about -450 lines in
   unchanged. A union with several dict branches is allowed only when it is
   tagged: each branch is an object with a `kind` literal or enum, the
   `kind` values do not overlap, and `_to_wire` picks the branch by the
-  dict's `kind` (treemap's `tile` strategies); any other such union fails
+  dict's `kind` (treemap's `tile` strategies). A union whose dict branches
+  mix a type with a Python class (`Length`, built by `percent(n)`) and
+  types without one is told apart by class: a `LengthValue` takes the
+  `Length` branch and a plain dict the other (spread's `spacing` routes a
+  dict as a `Spacing`). Any other such union fails
   generation. The JSON Schema and the validator read the same `OPTION_TYPES`
   entries, which replaced their hand-written axes shapes; those had fallen
   behind the JS type and lacked `side` and `labelAngle`. See

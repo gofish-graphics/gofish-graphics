@@ -18,7 +18,6 @@ export const stack = (
     {
       ...props,
       glue: true,
-      anchor: "edge",
     },
     children
   );

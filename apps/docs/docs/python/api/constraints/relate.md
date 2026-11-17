@@ -125,11 +125,8 @@ one of `x` / `y` must be given.
 Constraint.align(refs, *, x=None, y=None)
 ```
 
-| Parameter | Type                 | Description                                                   |
-| --------- | -------------------- | ------------------------------------------------------------- |
-| `refs`    | `list[Ref]`          | The refs to align (the kwargs from the callback).             |
-| `x`       | `str` \| `list[str]` | Edge/center/origin to align on x (omit to leave x untouched). |
-| `y`       | `str` \| `list[str]` | Edge/center/origin to align on y.                             |
+::: gofish-ref Constraint.align
+:::
 
 The anchor is `"start" | "middle" | "end" | "baseline"`. The first three
 anchor a ref by its bounding-box edge or center. `"baseline"` anchors a ref by
@@ -204,17 +201,11 @@ Constraint.align([b, c], x=["end", "start"])
 Stacks a set of refs end-to-end along an axis, with optional spacing.
 
 ```python
-Constraint.distribute(refs, *, dir, spacing=None, anchor=None, order=None, glue=None, weights=None)
+Constraint.distribute(refs, *, dir, spacing=None, order=None, glue=None)
 ```
 
-| Parameter | Type                                                           | Default     | Description                                                                                                                                        |
-| --------- | -------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`     | `"x"` \| `"y"`                                                 | —           | **Required.** Axis to distribute along.                                                                                                            |
-| `spacing` | `int`                                                          | `8`         | Gap between each element (forced to `0` when `glue` is set).                                                                                       |
-| `anchor`  | `"edge"` \| `"start"` \| `"middle"` \| `"end"` \| `"baseline"` | `"edge"`    | Spacing measured between facing edges (`"edge"`), or as a fixed pitch between a chosen point on each element: `anchor[i+1] = anchor[i] + spacing`. |
-| `order`   | `"forward"` \| `"reverse"`                                     | `"forward"` | Order to place elements.                                                                                                                           |
-| `glue`    | `bool`                                                         | `False`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis.                                                      |
-| `weights` | `list[float]`                                                  | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space.                                            |
+::: gofish-ref Constraint.distribute
+:::
 
 The first already-placed ref acts as an anchor; unplaced refs after it are
 distributed forward, and those before it backward so they stack flush.
@@ -240,7 +231,7 @@ built on them. A `distribute` over data-sized children composes their size
 claims (sum + spacing) into the layer's claim on that axis; when the layer is
 then given a size (an explicit `w`/`h`, or an allotted budget from its parent
 or a coordinate transform), it solves for the scale factor that makes the
-children fit, and proposes budget slices (equal, or per `weights`) to children
+children fit, and proposes equal budget slices to children
 with no size claim of their own. With `glue=True` the composed extents commit
 to an anchored positional axis instead — that's a stacked bar chart. In other
 words: a constraint-assembled layer auto-fits the same way a `spread`/`stack`
@@ -274,11 +265,8 @@ its value rather than assuming uniform spacing.
 Constraint.position(refs, *, x=None, y=None, anchor=None)
 ```
 
-| Parameter | Type             | Default    | Description                                                                                                             |
-| --------- | ---------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `x`       | `int` \| `datum` | —          | x coordinate — literal pixel or `datum(n)` (scaled).                                                                    |
-| `y`       | `int` \| `datum` | —          | y coordinate — literal pixel or `datum(n)` (scaled).                                                                    |
-| `anchor`  | `str`            | `"middle"` | Which anchor of the ref lands on the coordinate (`"start"`, `"middle"`, `"end"`, or `"baseline"` for the ref's origin). |
+::: gofish-ref Constraint.position
+:::
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.
@@ -329,11 +317,8 @@ centered inside `outer` there.
 Constraint.nest(refs, *, x=None, y=None)
 ```
 
-| Parameter | Type    | Description                                                 |
-| --------- | ------- | ----------------------------------------------------------- |
-| `refs`    | `list`  | Exactly `[outer, inner]` — outer nests inner.               |
-| `x`       | `float` | Per-axis padding (px) on x (omit to leave x unconstrained). |
-| `y`       | `float` | Per-axis padding (px) on y (omit to leave y unconstrained). |
+::: gofish-ref Constraint.nest
+:::
 
 At least one of `x` / `y` must be given; `refs` must be exactly two. Padding is
 always known — the unknown per axis is _which_ side is derived, resolved from
@@ -371,6 +356,9 @@ Declare a partial-order relation between two named children for **paint order**
 Constraint.z_above(a, b)  # a paints in front of b (on top in z)
 Constraint.z_below(a, b)  # a paints behind b (under in z)
 ```
+
+::: gofish-ref Constraint.zAbove Constraint.zBelow
+:::
 
 `z_below(a, b)` is equivalent to `z_above(b, a)`; both are provided so the spec
 reads naturally either way. A layer paints only its own children, and the
@@ -426,14 +414,13 @@ the operators delegate their space resolution, budget slicing, and placement
 walks to the same machinery the constraint path uses. These pairs are
 equivalent, **including** scale solving and auto-fit, not just placement:
 
-| spread                                                | Constraint equivalent                                |
-| ----------------------------------------------------- | ---------------------------------------------------- |
-| `spread(items, dir="y", alignment="start")`           | `align(x="start")` + `distribute(dir="y")`           |
-| `spread(items, dir="x", alignment="end", spacing=10)` | `align(y="end")` + `distribute(dir="x", spacing=10)` |
-| `spread(items, dir="x", spacing=60, anchor="middle")` | `distribute(dir="x", spacing=60, anchor="middle")`   |
-| `spread(items, dir="y", reverse=True)`                | `distribute(dir="y", order="reverse")`               |
-| `stack(items, dir="y")`                               | `distribute(dir="y", glue=True)`                     |
-| `spread(items, dir="x", stackWeights=[2, 1])`         | `distribute(dir="x", weights=[2, 1])`                |
+| spread                                                           | Constraint equivalent                                         |
+| ---------------------------------------------------------------- | ------------------------------------------------------------- |
+| `spread(items, dir="y", alignment="start")`                      | `align(x="start")` + `distribute(dir="y")`                    |
+| `spread(items, dir="x", alignment="end", spacing=10)`            | `align(y="end")` + `distribute(dir="x", spacing=10)`          |
+| `spread(items, dir="x", spacing=Spacing.pitch(60, at="middle"))` | `distribute(dir="x", spacing=Spacing.pitch(60, at="middle"))` |
+| `spread(items, dir="y", reverse=True)`                           | `distribute(dir="y", order="reverse")`                        |
+| `stack(items, dir="y")`                                          | `distribute(dir="y", glue=True)`                              |
 
 When **no ref is pre-placed**, the cross-axis alignment fallback depends on the
 **axis**, not the API — `spread` and the `align` constraint resolve the same

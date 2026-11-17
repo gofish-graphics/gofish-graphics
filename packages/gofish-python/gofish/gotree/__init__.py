@@ -14,7 +14,7 @@ from collections import deque
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 from .. import curve as Curve
-from ..ast import Constraint, Mark, RefSentinel, layer, line, rect, ref
+from ..ast import Constraint, LengthValue, Mark, RefSentinel, layer, line, rect, ref
 from ..ast import spread as _gofish_spread
 
 __all__ = [
@@ -93,22 +93,22 @@ def _or(value: Any, default: Any) -> Any:
 def spread(
     *,
     dir: str,
-    spacing: Optional[float] = None,
+    spacing: Optional[Union[float, LengthValue, Dict[str, Any]]] = None,
     alignment: Optional[str] = None,
-    anchor: Optional[str] = None,
 ) -> Combiner:
     """Lay the children out along ``dir`` with the GoFish ``spread``
     combinator. As a ``parent_child`` combiner the parent comes first: on the
     left for ``dir="x"``, at the top for ``dir="y"``.
 
-    ``anchor`` is ``"edge"`` (the default; spacing between facing edges) or a
-    fixed pitch between one anchor point on each child. Use ``"middle"``
-    under a coordinate transform where nodes render as points. Mirrors JS
-    ``spread``.
+    ``spacing`` is a bare amount, pixels or ``percent(n)`` (a gap between
+    facing edges, which is ``Spacing.box(amount)``), or
+    ``Spacing.pitch(n, at=...)``, a fixed distance between one point on each
+    child. Use ``at="middle"`` under a coordinate
+    transform where nodes render as points. Mirrors JS ``spread``.
     """
     return Combiner(
         lambda children: _gofish_spread(
-            children, dir=dir, spacing=spacing, alignment=alignment, anchor=anchor
+            children, dir=dir, spacing=spacing, alignment=alignment
         ),
         dir,
     )
@@ -132,8 +132,7 @@ def _refs(
 def distribute(
     *,
     dir: str,
-    spacing: Optional[float] = None,
-    anchor: Optional[str] = None,
+    spacing: Optional[Union[float, LengthValue, Dict[str, Any]]] = None,
     order: Optional[str] = None,
     alignment: Optional[str] = None,
 ) -> Combiner:
@@ -155,7 +154,6 @@ def distribute(
                     _refs(operand, prefix, n),
                     dir=dir,
                     spacing=_or(spacing, 0),
-                    anchor=_or(anchor, "edge"),
                     order=_or(order, "forward"),
                 )
             ]
@@ -171,7 +169,7 @@ def distribute(
 # Each axis kind and the options its dict takes besides "kind".
 _AXIS_OPTIONS = {
     "align": ("alignment",),
-    "distribute": ("spacing", "order", "anchor"),
+    "distribute": ("spacing", "order"),
     "nest": ("pad",),
 }
 
@@ -206,7 +204,7 @@ def combine(
 
     Each axis is the kind's name, or a dict with ``kind`` and its options:
     ``{"kind": "align", "alignment": ...}``, ``{"kind": "distribute",
-    "spacing": ..., "order": ..., "anchor": ...}`` or ``{"kind": "nest",
+    "spacing": ..., "order": ...}`` or ``{"kind": "nest",
     "pad": ...}``. ``nest`` takes exactly two children, ``[outer, inner]``.
     Mirrors JS ``combine``.
     """
@@ -236,7 +234,6 @@ def combine(
                             dir=axis,
                             spacing=_or(spec.get("spacing"), 0),
                             order=_or(spec.get("order"), "forward"),
-                            anchor=_or(spec.get("anchor"), "edge"),
                         )
                     )
                 else:
