@@ -60,7 +60,7 @@ export const testVLStackedBar = () =>
         .fromPairs()
         .map((d, month) =>
           stackY(
-            { spacing: 0 },
+            {},
             _(d)
               .groupBy("weather")
               .toPairs()

@@ -712,16 +712,13 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
-        glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         baseline: Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error. Default {"kind":"start"}.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
@@ -735,10 +732,7 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
-        ("glue", glue),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
@@ -1017,7 +1011,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
@@ -1034,10 +1028,7 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
-        glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         baseline: Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error. Default {"kind":"start"}.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
@@ -1059,10 +1050,7 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
-        ("glue", glue),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),

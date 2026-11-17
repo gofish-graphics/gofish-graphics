@@ -331,10 +331,14 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   serialize: "spread",
 });
 
-/** Stack glues children together, summing sizes into a POSITION at the spread
- * level. Neither `spacing` nor `glue` is configurable — stacked children always
- * touch (use `spread({ spacing: N })` instead if you want gaps). */
-export type StackOptions<T = any> = Omit<SpreadOptions<T>, "spacing" | "glue">;
+/** A stack adds its children's data amounts: each part starts where the one
+ * before it ends, in one data space, so there is no spacing or anchor to
+ * set. Every part needs a data size along `dir` (`distributeSpaceFold`);
+ * parts that only touch are a `spread({ spacing: 0 })`. */
+export type StackOptions<T = any> = Omit<
+  SpreadOptions<T>,
+  "spacing" | "glue" | "anchor"
+>;
 
 export function stack(
   opts: StackOptions,
@@ -345,8 +349,8 @@ export function stack(
   opts: StackOptions,
   marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
-  // A stack glues its parts, so its spacing takes no length: checked
-  // against its own descriptor, not the spread's it forwards to.
+  // A stack has no spacing, so it takes no length there: checked against
+  // its own descriptor, not the spread's it forwards to.
   checkLengths(
     Frontend.acceptedFields("operator", "stack"),
     "stack",

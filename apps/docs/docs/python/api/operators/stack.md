@@ -4,8 +4,9 @@ order: 20
 
 # stack
 
-Stacks groups edge-to-edge along an axis with no gap between them — `spread`
-without the spacing. The basis for stacked bar charts and pie charts.
+Adds its children's data amounts along `dir`. Each part starts where the one
+before it ends, and the parts share one data axis. The basis for stacked bar
+charts and pie charts.
 
 ::: gofish example:stacked-bar-chart hidden
 :::
@@ -18,6 +19,14 @@ chart(seafood, axes=True).flow(
     stack(by="species", dir="y"),
 ).mark(rect(h="count", fill="species")).render(w=500, h=300)
 ```
+
+## Parts are data amounts
+
+Every part needs a data size along `dir`: a `rect(h="count")`, a ribbon with a
+data `h`, or another stack. A part sized in pixels or by its content (a
+`rect(h=20)`, a `text`, an `image`, a `spread`) has no amount to add, so it
+is an error that names the part. Parts like these only touch. Lay them out
+with [`spread`](/python/api/operators/spread)`(dir=..., spacing=0)`.
 
 ## Signature
 

@@ -420,14 +420,14 @@ export type DistributeFoldOptions = {
  *  - glue (a stack) GLUES its parts into one continuous space: pinned over
  *    the parts laid end to end from the stack's origin (each part's baseline
  *    on the previous part's head; `[0, Σ widths]` when no part has a descent
- *    and the origin is the first part's tail). It needs every part to have an
- *    origin (pinned or free).
+ *    and the origin is the first part's tail). Every part must be
+ *    continuous on the stack axis: a stack adds data amounts, so a part
+ *    with no data size there is an error ({@link requireAmount}).
  *  - non-glue (a spread) SEPARATES: the result is a sequence of separate
  *    spaces, ORDINAL(keys) when any target is keyed (anonymous for positional
  *    keys), else UNDEFINED, whatever its spacing or pitch. Each target keeps
  *    its own continuous space inside; the room the chain takes is its
  *    layer's claim (its plan, `solver/plan.ts`), not a data extent.
- *  - A stack whose parts are not all continuous with an origin is a spread.
  *
  * Measures unify as types (a clash is an error). `keys` are the targets'
  * ordinal keys (node.key, or the node's cell for a binned key) in the same
@@ -443,6 +443,8 @@ export function distributeSpaceFold(
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
+  if (opts.glue)
+    targetSpaces.forEach((s, i) => requireAmount(s, keys[i], i, opts));
   // The targets' units meet as types. A stack adds its parts on one axis,
   // so they share it and unify; a spread gives each part a slot of its own,
   // so its parts do not share the axis (#1114: `planSharing`) and unify
@@ -469,7 +471,6 @@ export function distributeSpaceFold(
     namedKeys.length > 0
       ? ordinalOver(namedKeys, opts.measure, opts.anonymous, opts.hasOrder)
       : UNDEFINED;
-  if (!targetSpaces.every(hasOrigin)) return keyed();
   const targets = targetSpaces as CONTINUOUS_TYPE[];
 
   if (opts.glue) {
@@ -544,6 +545,34 @@ export function distributeSpaceFold(
   // inside. So it is ORDINAL (keyed by `by`, or anonymous for positional
   // keys), or UNDEFINED with no keys, whatever the spacing or pitch.
   return keyed();
+}
+
+/** A stack adds data amounts, so each of its parts must have a continuous
+ *  data space on the stack axis: a part whose size is in pixels, set by its
+ *  content, or a sequence of separate slots has no amount to add. Such parts
+ *  only touch, which is a spread with no spacing; the error says so. A part
+ *  with only a data width (origin `"none"`) is an amount: it lies from its
+ *  start, as a pinned part does ({@link tailSides}). */
+function requireAmount(
+  space: UnderlyingSpace,
+  key: OrdinalKey | undefined,
+  i: number,
+  opts: DistributeFoldOptions
+): void {
+  if (isCONTINUOUS(space)) return;
+  const axis = opts.axis === 0 ? "x" : "y";
+  const by = opts.measure === undefined ? "" : `{ by: "${opts.measure}" }`;
+  const part = key !== undefined ? `"${String(key)}"` : `child ${i + 1}`;
+  const what =
+    space.kind === "ordinal"
+      ? `is a row of separate slots on ${axis}`
+      : `has no data size on ${axis} (its size is in pixels or comes from its content)`;
+  throw new Error(
+    `stack(${by}): a stack adds data amounts, but the part for ${part} ` +
+      `${what}, so there is no amount to add. To lay the parts one after ` +
+      `another with no gap, use spread({ ${by ? `by: "${opts.measure}", ` : ""}` +
+      `dir: "${axis}", spacing: 0 }).`
+  );
 }
 
 /** A part's reach on each side of its tail, the point the previous part's

@@ -533,12 +533,11 @@ export const TopologyOverdraw: StoryObj<Args> = {
 //    value) and there's no direct way to add symmetric margin around a
 //    free-floating (non-data-scaled) composition today.
 //
-// 6. `stack()` silently ignores `spacing` (its type comment says so — "the
-//    same as `spread` but never a gap") which is easy to reach for by
-//    analogy with `spread` and get flush-touching panels with no error.
-//    Switching to `spread({ anchor: "edge" })` fixed it, but a runtime
-//    warning (or accepting the option as a no-op-with-warning) would have
-//    caught this immediately instead of via a visual diff.
+// 6. `stack()` used to accept `spacing` and ignore it, which is easy to
+//    reach for by analogy with `spread` and get flush-touching panels with
+//    no error. Switching to `spread({ anchor: "edge" })` fixed it. A stack
+//    now has no `spacing` option, and its parts must be data amounts, so
+//    panels in a stack are an error that points at `spread`.
 //
 // 7. Spread gutters between panels were uneven because of the position()
 //    double count; fixed in #755, so the panels now use nested spreads.

@@ -472,10 +472,7 @@ max_u(offset + ascent)]` about the stack's 0 (`StackPlace.reach`).
   with a different step: an edge chain lays each part's box after the
   previous one's end plus the spacing, and a fixed-pitch chain lays each
   part's anchor one pitch from the previous one's. A baseline-pitched part
-  keeps its signed sides about its baseline; any other part is a box. A
-  stack of parts with no data in common (bands, text) folds no data
-  interval, but it still claims its parts by the stack's step, whatever its
-  `anchor`, since its layout lays them head to tail.
+  keeps its signed sides about its baseline; any other part is a box.
 
 With every descent 0, all of this reduces to a single width.
 
@@ -649,7 +646,13 @@ each inherent to what the origin states are:
   scope's σ, so it claims the chain of their claims plus spacing, on an
   ordinal or undefined type; a spread of pinned frames (facet panels) claims
   nothing, and each panel roots its own scope in its slice. A marimekko is a
-  stack, so its widths still add up to one axis.
+  stack, so its widths still add up to one axis. Since a stack adds data
+  amounts, every part must be continuous on the stack's direction: it does
+  not make sense to stack pixels. A part with no data space there (a pixel
+  box, a text, a spread) is an error at the fold (`requireAmount`) that
+  points at `spread({ spacing: 0 })`, since parts that only touch are a
+  spread with no spacing. A part with only a data width (origin `"none"`)
+  is an amount, and lies from its start as a pinned part does.
 - **A share is a claim** (#493 piece 3): on an axis where nothing in a scope
   is sized or placed by data (`GoFishNode.carriesData`), σ has no data unit,
   and it is the room a node with no size of its own takes
@@ -923,8 +926,7 @@ composes its targets' spaces into the layer's claim on that axis:
   pinned over the range of their running sums (`[0, Σ]` when no part has a
   descent), by the chain fold (`chainFold`) in data for the type, and by
   the plan's solve for the claim.
-  A target with no origin (a difference or a non-continuous axis) leaves only
-  the ORDINAL of the keys, if any.
+  A glued target that is not continuous is an error (`requireAmount`).
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
   on its axis — but only for a point-anchor value;
   `"span"`/`"size"` (#726, below) contribute nothing to the space fold, since

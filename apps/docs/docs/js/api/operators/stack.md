@@ -4,9 +4,8 @@ order: 20
 
 # stack
 
-Shorthand for [`spread`](/js/api/operators/spread)`({ glue: true })`. Children
-are glued together and their data-driven sizes sum into a continuous
-positional axis at this level. Used for stacked bar charts.
+Adds its children's data amounts along `dir`. Each part starts where the one
+before it ends, and the parts share one data axis. Used for stacked bar charts.
 
 ::: gofish
 
@@ -21,6 +20,14 @@ gf.chart(seafood, { axes: true })
 ```
 
 :::
+
+## Parts are data amounts
+
+Every part needs a data size along `dir`: a `rect({ h: "count" })`, a ribbon
+with a data `h`, or another stack. A part sized in pixels or by its content (a
+`rect({ h: 20 })`, a `text`, an `image`, a `spread`) has no amount to add, so
+it is an error that names the part. Parts like these only touch. Lay them out
+with [`spread`](/js/api/operators/spread)`({ dir, spacing: 0 })`.
 
 ## Signature
 
@@ -41,14 +48,13 @@ stack({ dir, ... }, [m1, m2, ...])
 declares, such as `"theta"` under polar; see
 [`spread` → naming the axis](/js/api/operators/spread#naming-the-axis-with-dir).
 
-Same as [`spread`](/js/api/operators/spread) without `spacing` or `glue` —
-`stack` always glues, so neither is configurable. Its `by` is the same
+Same as [`spread`](/js/api/operators/spread) without `spacing` and `anchor`:
+the parts touch, so there is no gap to set. Its `by` is the same
 path-aware option (`"field"`, which also works on refs after a
 [selection](/js/api/selection/ref), a function, or a
 [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor); see
-[`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by). If you want gaps between
-children plus a continuous data axis, use `spread({ spacing: N })` —
-`spread`'s "data-driven SIZE composition" mode is the natural fit there.
+[`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by). For gaps
+between the parts, use `spread({ spacing: N })`.
 
 `size` sets each entry's stack-axis extent (a field name, a `field(...)`
 accessor, or an explicit array). Set it to `field(<name>).normalize()` to make

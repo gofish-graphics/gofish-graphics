@@ -2021,7 +2021,10 @@ def stack(
     **options: Any,
 ) -> Union[Operator, "Mark"]:
     """
-    Stack — polymorphic. Like spread with no spacing between children.
+    Stack — polymorphic. Adds the children's data amounts along an axis:
+    each part starts where the one before it ends. Every part needs a data
+    size along ``dir``; parts that only touch are
+    ``spread(..., spacing=0)``.
 
     Operator form (no positional arg): partitions data by `by` (or iterates
     per-item when omitted) and stacks children along an axis. Used inside

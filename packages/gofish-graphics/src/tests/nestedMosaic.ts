@@ -57,7 +57,6 @@ export const testNestedMosaic = () =>
                     w:
                       (_(sItems).sumBy("count") / _(items).sumBy("count")) *
                       100,
-                    spacing: 0,
                     alignment: "middle",
                   },
                   _(sItems)

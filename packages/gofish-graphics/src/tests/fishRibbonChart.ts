@@ -28,7 +28,7 @@ export const testFishRibbonChart = () =>
         .groupBy("lake")
         .map((d) =>
           stackY(
-            { spacing: 0 },
+            {},
             _(d)
               .orderBy("count", "asc")
               .map((d) =>

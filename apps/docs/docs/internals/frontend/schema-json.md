@@ -1331,7 +1331,7 @@ for the API.
       }
     },
     "StackOperator": {
-      "description": "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
+      "description": "Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1357,23 +1357,10 @@ for the API.
           "type": "string",
           "description": "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
-        "spacing": {
-          "$ref": "#/$defs/Number",
-          "description": "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity."
-        },
-        "glue": {
-          "type": "boolean",
-          "description": "Spread-parity passthrough; stack always glues regardless."
-        },
         "alignment": {
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
           "default": "baseline"
-        },
-        "anchor": {
-          "enum": ["edge", "start", "middle", "end", "baseline"],
-          "description": "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
-          "default": "edge"
         },
         "reverse": {
           "type": "boolean",

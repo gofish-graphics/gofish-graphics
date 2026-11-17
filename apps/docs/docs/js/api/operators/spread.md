@@ -150,22 +150,15 @@ chart(selectAll("bars")) // stream of refs
   .mark(ribbon({ opacity: 0.8 }));
 ```
 
-## `spacing` vs `glue`
+## `spread` or `stack`
 
-`spacing` controls the visual gap between children. `glue` controls whether
-children's data-driven sizes get summed into a positional axis at this level:
-
-- `glue: false` (default): real spread. Each child keeps its data-driven
-  size; the underlying-space kind on `dir` is SIZE (or ORDINAL when children
-  are categorical).
-- `glue: true`: stack semantics. Children are pushed together (regardless
-  of `spacing`), and their cumulative size becomes a continuous POSITION
-  domain on `dir`. This is what [`stack`](./stack) does.
-
-Use `spread({ spacing: 0 })` if you want children touching but with each
-child still treated as its own thing (e.g. discrete-theta polar charts).
-Use `stack(...)` if you want a stacked-bar feel (continuous position axis
-running through the stack).
+A `spread` keeps each child in a space of its own and puts `spacing` between
+them. A [`stack`](./stack) adds its children's data amounts, so they share
+one data axis on `dir`. A stack is for data: every part needs a data size on
+`dir`, and a part sized in pixels or by its content is an error. Pixel boxes,
+text, images and nested layouts only touch, so lay them out with
+`spread({ spacing: 0 })`. `glue: true` makes a spread a stack, with the same
+rule.
 
 ## Baselines
 

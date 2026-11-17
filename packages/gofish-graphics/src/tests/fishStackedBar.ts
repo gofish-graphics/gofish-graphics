@@ -24,7 +24,7 @@ export const testFishStackedBar = () =>
     { spacing: 0},
     map(_(seafood).groupBy("lake"), (d, key) =>
       stackY(
-        { key: key as string, spacing: 0 },
+        { key: key as string},
         map(d, (d) =>
           rect({ w: 32, h: value(d.count), fill: value(d.species) })
         )

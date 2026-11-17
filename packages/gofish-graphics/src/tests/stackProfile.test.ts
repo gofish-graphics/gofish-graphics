@@ -21,12 +21,14 @@ import {
   type CONTINUOUS_TYPE,
 } from "../ast/underlyingSpace";
 import {
+  distributeSpaceFold,
   stackPlaces,
   type StackBaseline,
 } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
 
-const { chart, stack, ribbon, rect, Baseline, Curve } = GoFish as any;
+const { chart, stack, ribbon, rect, text, circle, Baseline, Curve } =
+  GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -75,13 +77,11 @@ async function main() {
   {
     check(
       "boxes take the chain of translates (no places)",
-      stackPlaces([boxSpace(2), boxSpace(3)], { kind: "start" }) ===
-        undefined
+      stackPlaces([boxSpace(2), boxSpace(3)], { kind: "start" }) === undefined
     );
     check(
       "boxes under wiggle take the chain of translates too",
-      stackPlaces([boxSpace(2), boxSpace(3)], { kind: "wiggle" }) ===
-        undefined
+      stackPlaces([boxSpace(2), boxSpace(3)], { kind: "wiggle" }) === undefined
     );
     const start = places({ kind: "start" });
     // Each band's offset is the sum of the bands before it.
@@ -114,8 +114,7 @@ async function main() {
   {
     const middle = places({ kind: "middle" });
     // d3 silhouette: the bottom at sample j is −(sum of the values) / 2.
-    const silhouette = (j: number) =>
-      -SERIES.reduce((s, v) => s + v[j], 0) / 2;
+    const silhouette = (j: number) => -SERIES.reduce((s, v) => s + v[j], 0) / 2;
     check(
       "middle: the first band's offset is minus half the total",
       KNOTS.every((u, j) => near(middle[0].offset.at(u), silhouette(j)))
@@ -123,7 +122,10 @@ async function main() {
     check(
       "middle: each later band sits on the one before",
       KNOTS.every((u, j) =>
-        near(middle[2].offset.at(u), silhouette(j) + SERIES[0][j] + SERIES[1][j])
+        near(
+          middle[2].offset.at(u),
+          silhouette(j) + SERIES[0][j] + SERIES[1][j]
+        )
       )
     );
   }
@@ -261,8 +263,7 @@ async function main() {
       const xs = bands[0].upper.map((p) => p[0]);
       const x0 = Math.min(...xs);
       const x1 = Math.max(...xs);
-      const knotX = (j: number) =>
-        x0 + ((x1 - x0) * j) / (KNOTS.length - 1);
+      const knotX = (j: number) => x0 + ((x1 - x0) * j) / (KNOTS.length - 1);
       const thickness = (i: number, j: number) =>
         yAt(bands[i].lower, knotX(j)) - yAt(bands[i].upper, knotX(j));
       // Pixels per unit, from the first band at its first knot.
@@ -273,7 +274,9 @@ async function main() {
           bands.every((_, i) =>
             KNOTS.every((_, j) => near(thickness(i, j), k * SERIES[i][j], 1e-6))
           ),
-        JSON.stringify(bands.map((_, i) => KNOTS.map((_, j) => thickness(i, j))))
+        JSON.stringify(
+          bands.map((_, i) => KNOTS.map((_, j) => thickness(i, j)))
+        )
       );
       check(
         `${baseline}: each band lies on the one before it`,
@@ -337,9 +340,9 @@ async function main() {
           return Number.isNaN(onB)
             ? near(p[1], yAt(a.upper, p[0]), 1e-6)
             : near(p[1], onB, 1e-6) ||
-                (near(p[0], b.upper[0][0], 1e-6) ||
+                ((near(p[0], b.upper[0][0], 1e-6) ||
                   near(p[0], b.upper[b.upper.length - 1][0], 1e-6)) &&
-                  near(p[1], yAt(a.upper, p[0]), 1e-6);
+                  near(p[1], yAt(a.upper, p[0]), 1e-6));
         }) && c.lower.some((p) => near(p[1], a.upper[0][1] - k / 2, 1e-6)),
         JSON.stringify({ c: c.lower, b: b.upper, a: a.upper, k })
       );
@@ -382,8 +385,66 @@ async function main() {
       "a rect of pixel size among bands is an error that names it",
       pixels !== undefined &&
         pixels.includes('"b"') &&
-        pixels.includes("no data baseline"),
+        pixels.includes("spacing: 0"),
       pixels
+    );
+  }
+
+  console.log("\n# a stack's parts are data amounts");
+  {
+    // A stack adds data amounts, so a part with no data size on the stack
+    // axis is an error at the fold, which names the part and points at a
+    // spread with no spacing.
+    const rows = [
+      { s: "a", v: 2 },
+      { s: "b", v: 3 },
+    ];
+    const errorWith = async (other: any): Promise<string | undefined> => {
+      try {
+        await chart(rows)
+          .flow(stack({ by: "s", dir: "y" }))
+          .mark((d: any[]) =>
+            d[0].s === "a" ? rect({ h: "v", w: 10 })(d) : other(d)
+          )
+          .toDisplayList({ w: 300, h: 200 });
+        return undefined;
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const parts: [string, any][] = [
+      ["a rect of pixel size", rect({ h: 20, w: 10 })],
+      ["a text", text({ text: "b" })],
+      ["a rect that fills its slot", rect({ w: 10 })],
+      ["a circle of pixel size", circle({ r: 5 })],
+    ];
+    for (const [name, part] of parts) {
+      const message = await errorWith(part);
+      check(
+        `${name} in a stack is an error that names it and suggests a spread`,
+        message !== undefined &&
+          message.includes('the part for "b"') &&
+          message.includes('spread({ by: "s", dir: "y", spacing: 0 })'),
+        message
+      );
+    }
+    check(
+      "a part of data size is no error",
+      (await errorWith(rect({ h: "v", w: 10 }))) === undefined
+    );
+    // A part with only a data width (a rect at a pixel position, origin
+    // "none") is an amount: it lies from its start, as a pinned part does.
+    const widths = distributeSpaceFold(
+      [CONTINUOUS(interval(0, 2), "none"), CONTINUOUS(interval(0, 3), "none")],
+      ["a", "b"],
+      { axis: 1, glue: true, baseline: { kind: "start" } }
+    );
+    check(
+      "parts with only a data width stack end to end",
+      widths.kind === "continuous" &&
+        (widths as CONTINUOUS_TYPE).dataInterval.min === 0 &&
+        (widths as CONTINUOUS_TYPE).dataInterval.max === 5,
+      JSON.stringify(widths)
     );
   }
 

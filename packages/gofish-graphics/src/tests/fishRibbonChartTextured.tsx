@@ -34,7 +34,7 @@ export const testFishRibbonChartTextured = () =>
         .groupBy("lake")
         .map((d) =>
           stackY(
-            { spacing: 2 },
+            {},
             _(d)
               .orderBy("count", "desc")
               .map((d) =>

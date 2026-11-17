@@ -34,21 +34,21 @@ pipe(
 );
 
 /* export const testIcicleWithFor = () =>
-  stackX({ spacing: 0, alignment: "middle" }, [
+  stackX({ alignment: "middle" }, [
     rect({
       w: 40,
       h: _(titanic).sumBy("count") / 10,
       fill: "gray",
     }),
     stackY(
-      { spacing: 0, alignment: "middle" },
+      { alignment: "middle" },
       map(groupBy(titanic, "class"), (items, cls) =>
-        stackX({ h: _(items).sumBy("count") / 10, spacing: 0, alignment: "start" }, [
+        stackX({ h: _(items).sumBy("count") / 10, alignment: "start" }, [
           rect({ w: 40, fill: classColor[cls as keyof typeof classColor] }),
           stackY(
-            { spacing: 0, alignment: "middle" },
+            { alignment: "middle" },
             map(groupBy(items, "sex"), (items, sex) =>
-              stackX({ spacing: 0, alignment: "middle" }, [
+              stackX({ alignment: "middle" }, [
                 rect({
                   w: 40,
                   h: _(items).sumBy("count") / 10,
@@ -57,7 +57,6 @@ pipe(
                 stackY(
                   {
                     w: 40,
-                    spacing: 0,
                     alignment: "middle",
                   },
                   map(groupBy(items, "survived"), (survivedItems, survived) => {
@@ -104,26 +103,26 @@ export const chartBar = () => {
 /* 
 Chart
   .rect({ w: 32, h: "count", fill: "species" })
-  .stackX("lake", { spacing: 2 })
+  .stackX("lake", {})
   .data(catchData);
 */
 
 /* 
 Chart
   .data(catchData)
-  .stackX("lake", { spacing: 2 })
+  .stackX("lake", {})
   .rect({ w: 32, h: "count", fill: "species" });
 */
 
 /* 
 chart(catchData)
-  .stackX("lake", { spacing: 2 })
+  .stackX("lake", {})
   .rect({ w: 32, h: "count", fill: "species" });
 */
 
 /* 
 Mark.rect(catchData, { w: 32, h: "count", fill: "species" })
-  .stackX("lake", { spacing: 2 })
+  .stackX("lake", {})
 */
 
 export const chartStackedBar = () => {

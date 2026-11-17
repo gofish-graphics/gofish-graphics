@@ -1735,7 +1735,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   stack: operator("stack", {
-    doc: "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
+    doc: "Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.",
     fields: {
       by: splitBy(
         "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
@@ -1744,28 +1744,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         doc: "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
       },
-      // Real producers pass spread's options through (the JS `stack` is a
-      // literal `Spread({...props, glue: true})` forward, and stories emit
-      // `stack(spacing=2)`), so the wire accepts them and the validator
-      // type-checks them when present — restoring the shared
-      // spread/stack switch-case behavior the descriptor split dropped.
-      spacing: {
-        type: t.number,
-        doc: "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.",
-      },
-      glue: {
-        type: t.boolean,
-        doc: "Spread-parity passthrough; stack always glues regardless.",
-      },
       alignment: {
         type: t.string,
         default: "baseline",
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
-      },
-      anchor: {
-        type: t.enum("edge", "start", "middle", "end", "baseline"),
-        default: "edge",
-        doc: "Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child.",
       },
       reverse: {
         type: t.boolean,

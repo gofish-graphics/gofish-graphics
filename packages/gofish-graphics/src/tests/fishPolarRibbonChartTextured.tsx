@@ -202,7 +202,7 @@ export const testFishPolarRibbonChartTextured = (
         },
         Object.entries(_.groupBy(seafood, "lake")).map(([lake, items]) =>
           stackY(
-            { spacing: 8, reverse: true },
+            { reverse: true },
             _(items)
               /* TODO: changing this to asc gives the correct order but the wrong colors */
               .orderBy("count", "desc")

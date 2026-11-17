@@ -37,6 +37,16 @@ two operators cover much of the same ground by different routes. When a
 degenerate overlap exists, build it through one shared mechanism so the
 operators cannot drift apart.
 
+**Stacks are in data space.** A `stack` glues its children's spaces into one
+space, and a `spread` keeps them separate. So a stack adds data amounts, and
+every part needs a continuous data space on the stack axis. It does not make
+sense to stack pixels, nor to count a boundary's stroke width, since neither
+is data. A part sized in pixels or by its content (a `rect({ h: 20 })`, a
+`text`, an `image`, a nested `spread`) is an error at the stack that points
+to `spread({ spacing: 0 })`: parts that only touch are a spread with no
+spacing. A stack has no `spacing` either, since its parts touch by
+construction.
+
 **Prefer the simple general rule to a case split.** If a fix special-cases a
 shape or a count (`length === 1`, the first element, a fallback value), ask
 what the general operation is. Usually it has a known name in math or

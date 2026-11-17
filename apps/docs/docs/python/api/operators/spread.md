@@ -141,6 +141,16 @@ chart(select_all("bars")) \
     .mark(ribbon(opacity=0.8))
 ```
 
+## `spread` or `stack`
+
+A `spread` keeps each child in a space of its own and puts `spacing` between
+them. A [`stack`](./stack) adds its children's data amounts, so they share
+one data axis on `dir`. A stack is for data: every part needs a data size on
+`dir`, and a part sized in pixels or by its content is an error. Pixel boxes,
+text, images and nested layouts only touch, so lay them out with
+`spread(..., spacing=0)`. `glue=True` makes a spread a stack, with the same
+rule.
+
 ## Baselines
 
 `baseline` sets where the spread puts its own 0, the point its parent lines

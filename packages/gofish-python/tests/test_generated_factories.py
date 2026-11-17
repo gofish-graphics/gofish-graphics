@@ -101,9 +101,10 @@ def test_operators_accept_universal_debug_flag():
     assert ir(treemap(size="v", debug=True))["debug"] is True
 
 
-def test_stack_operator_accepts_spread_parity_options():
-    d = ir(stack(by="a", dir="x", spacing=2))
-    assert d["spacing"] == 2
+def test_stack_operator_has_no_spacing():
+    # A stack adds data amounts, so its parts have no gap to set.
+    with pytest.raises(TypeError):
+        stack(by="a", dir="x", spacing=2)
 
 
 def test_pack_serializes_by():
