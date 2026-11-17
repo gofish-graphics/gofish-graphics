@@ -81,7 +81,9 @@ function entryFiles() {
   return entries;
 }
 
-/** The compiler options of gofish-graphics' tsconfig. A config that does
+/** The compiler options of gofish-graphics' tsconfig. They keep the
+ *  config's path, so its `types` (`vite/client`) resolve from the package
+ *  that installs them, not from the working directory. A config that does
  *  not read or parse cleanly is an error, never a silent default. */
 function compilerOptions() {
   const path = join(REPO_ROOT, "packages/gofish-graphics/tsconfig.json");
@@ -90,7 +92,9 @@ function compilerOptions() {
   const parsed = ts.parseJsonConfigFileContent(
     read.config,
     ts.sys,
-    dirname(path)
+    dirname(path),
+    undefined,
+    path
   );
   if (parsed.errors.length)
     throw new Error(parsed.errors.map(diagnosticText).join("\n"));
@@ -116,14 +120,18 @@ let cached;
  *   public: `{ specifier }` when `file` is an entry, `{ specifier, name }`
  *   when an entry exports it as a namespace (`export * as Coord`), under
  *   `local` when that is one of its names, else undefined.
- * - `options`: the program's compiler options, for a caller that type
- *   checks code against the packages.
+ * - `options`: the packages' compiler options, for a caller that type
+ *   checks code against the packages. The program itself leaves out their
+ *   ambient types, which what a module exports does not depend on.
  */
 export function publicSurface() {
   if (cached) return cached;
   const entries = entryFiles();
   const options = compilerOptions();
-  const program = ts.createProgram([...entries.values()], options);
+  const program = ts.createProgram([...entries.values()], {
+    ...options,
+    types: [],
+  });
   const problems = program.getOptionsDiagnostics();
   if (problems.length) throw new Error(problems.map(diagnosticText).join("\n"));
   const checker = program.getTypeChecker();
