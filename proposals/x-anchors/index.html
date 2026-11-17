@@ -553,6 +553,36 @@ text(text="Label", x=120)</code></pre>
           <code>scatter(x=, y=)</code> matters more to you for the Python
           audience than one rule does.
         </p>
+        <p>
+          <strong>Where the familiar spelling can live.</strong> The core
+          already splits what a grammar of graphics calls <code>y</code>: a
+          bar's length is <code>h</code>, not <code>y</code>. Splitting
+          <code>x</code> into an edge and a center is the same kind of step. The
+          familiar <code>x</code> and <code>y</code> can sit one level up, in a
+          chart template, where <code>x</code> already names an axis and not an
+          edge: in <code>barChart(seafood, { x: "lake", h: "count" })</code> it
+          fills <code>spread({ by: "lake", dir: "x" })</code>. A scatter
+          template's <code>x</code> would fill <code>scatter({ cx })</code> the
+          same way.
+        </p>
+        <pre><code class="language-js">// template level (unsigned, from the chart templates proposal)
+scatterChart(cars, { x: "wt", y: "mpg" });
+
+// core level, mixing the operator with a template
+chart(cities)
+  .flow(scatter({ by: "city", cx: "lon", cy: "lat" }))
+  .mark(pieChart({ value: "share" })); // pie centered on its city
+
+chart(cities)
+  .flow(scatter({ by: "city", cx: "lon", y: "lat" }))
+  .mark(barChart({ x: "year", h: "sales" })); // bars standing on the point</code></pre>
+        <p>
+          The last call is not possible today. It centers each small bar chart
+          across and puts its start edge on the point along y, so the bars stand
+          on their city. A bare value in <code>scatter</code> can only center
+          both ways. These three listings are sketches of syntax and were not
+          run.
+        </p>
       </div>
     </div>
 
