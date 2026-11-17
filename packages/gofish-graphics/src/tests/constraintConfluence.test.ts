@@ -20,11 +20,14 @@ import {
 } from "../ast/constraints/placementSolver";
 import type { KeyOf, ResolvedOperands } from "../ast/constraints/shared";
 import { numbers } from "../ast/solver/arith";
+import { spacingAmount } from "../ast/constraints/distribute";
 
 /** The gaps of constraints with pixel spacings, as a layer reads them
  *  (`GoFishNode.gapOf`). */
 const pixelGaps: GapOf = (c, axis) =>
-  Pwl.constant((c.type === "grid" ? c.spacing[axis] : c.spacing) as number);
+  Pwl.constant(
+    (c.type === "grid" ? c.spacing[axis] : spacingAmount(c.spacing)) as number
+  );
 import {
   anchorExpr,
   participantFact,
@@ -296,8 +299,7 @@ const positionedAnchor = (
 const distribute = (names: string[]): DistributeConstraint => ({
   type: "distribute",
   dir: "x",
-  spacing: 5,
-  anchor: "edge",
+  spacing: { kind: "box", gap: 5 },
   order: "forward",
   glue: false,
   children: names.map(child),
@@ -308,7 +310,7 @@ const distributeWithSpacing = (
   spacing: number
 ): DistributeConstraint => ({
   ...distribute(names),
-  spacing,
+  spacing: { kind: "box", gap: spacing },
 });
 
 // The interval form of `position`, replacing the retired `Constraint.span`.

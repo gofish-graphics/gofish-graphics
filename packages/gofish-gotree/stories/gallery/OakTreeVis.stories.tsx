@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve } from "gofish-graphics";
+import { circle, Coord, Curve, Spacing } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — OakTreeVis (polar node-link, depth-colored circles).
@@ -56,7 +56,7 @@ import { combine, byDepth, mount } from "./_shared";
 //     The reference's right-angle "step" corners therefore render as straight
 //     segments, which bow into arcs under the polar transform (a straight
 //     cartesian edge maps to a polar arc).
-//  5. anchor: "middle" on every distribute treats circles as points (no bbox
+//  5. a middle pitch on every distribute treats circles as points (no bbox
 //     accumulation) so spacing reads in domain units — radians for θ, r-units
 //     for r.
 const meta: Meta = { title: "GoTree / Gallery / OakTreeVis" };
@@ -79,19 +79,20 @@ export const OakTreeVis: StoryObj = {
         //    (parent inner, children outward) — see GAP 1. mode center → r-units.
         y: {
           kind: "distribute",
-          spacing: 121,
-          anchor: "middle",
+          spacing: Spacing.pitch(121, { at: "middle" }),
         },
       }),
       sibling: combine({
         // θ: fan siblings angularly (radians between centers, center mode).
         x: {
           kind: "distribute",
-          spacing: (2 * Math.PI) / 6,
-          anchor: "middle",
+          spacing: Spacing.pitch((2 * Math.PI) / 6, { at: "middle" }),
         },
         // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
-        y: { kind: "distribute", spacing: 61, anchor: "middle" },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(61, { at: "middle" }),
+        },
       }),
       coord: Coord.clock(),
     }),

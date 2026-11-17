@@ -19,7 +19,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, DistAccessor, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
+    from .ast import ChunkKey, DatumValue, DistAccessor, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -27,7 +27,8 @@ if TYPE_CHECKING:
 # The key structure of each named option type (descriptors.ts OPTION_TYPES):
 # ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),
 # ("tuple", (shape, ...)), ("record", value_shape),
-# ("tagged", tag_key, {tag_value: shape}); None passes a value through.
+# ("tagged", tag_key, {tag_value: shape}),
+# ("class", ((py_class, shape), ...), rest_shape); None passes a value through.
 _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
@@ -50,6 +51,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
     "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
     "Baseline": ("tagged", "kind", {"start": ("object", {"kind": ("kind", None)}), "end": ("object", {"kind": ("kind", None)}), "middle": ("object", {"kind": ("kind", None)}), "wiggle": ("object", {"kind": ("kind", None)}), "at": ("object", {"kind": ("kind", None), "part": ("part", None), "point": ("point", None)})}),
+    "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),
 }
 
 
@@ -66,6 +68,9 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     or unknown tag raises TypeError. A channel value built by field(...) or
     datum(...) is a dict already in wire form, so it passes through too:
     that is how a `dims` entry tells a channel value from an interval.
+    A ("class", ...) shape routes an instance of a named type's class (a
+    LengthValue from percent(n)) to that type's shape, and any other value
+    to the rest.
     """
     if shape is None or value is None:
         return value
@@ -74,6 +79,11 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
     kind = shape[0]
     if kind == "ref":
         return _to_wire(_OPTION_TYPES[shape[1]], value, path)
+    if kind == "class":
+        for cls, sub in shape[1]:
+            if isinstance(value, getattr(_ast, cls)):
+                return _to_wire(sub, value, path)
+        return _to_wire(shape[2], value, path)
     if kind == "object":
         if not isinstance(value, dict):
             return value
@@ -671,15 +681,14 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
@@ -694,9 +703,8 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
+        ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
         ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
@@ -954,7 +962,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue] = None, alignment: Optional[str] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -971,9 +979,8 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to spread along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Gap between children, px. Also `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each child. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)`, n percent of the spread's room, or `fr(k)`, k shares of its scope, so the gaps are flexible. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
-        anchor: Whether spacing is measured between facing edges (edge), or as a fixed pitch between the named anchor point on each child. Default "edge".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
@@ -996,9 +1003,8 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", _to_wire(("ref", "Length"), spacing, "spacing")),
+        ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
         ("alignment", alignment),
-        ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
         ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
@@ -1278,6 +1284,82 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
         ("padding", padding),
         ("transform", _to_wire(("object", {"scale": ("scale", ("object", {"x": ("x", None), "y": ("y", None)}))}), transform, "transform")),
         ("box", box),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | list] = None) -> Dict[str, Any]:
+    """Align the refs on one or both axes.
+
+    Args:
+        x: How the refs line up on x: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, x is left as it is.
+        y: How the refs line up on y: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, y is left as it is.
+    """
+    if x is None and y is None:
+        raise ValueError("Constraint.align requires at least one of x, y")
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", x),
+        ("y", y),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthValue | dict] = None, order: Optional[str] = None, glue: Optional[bool] = None) -> Dict[str, Any]:
+    """Lay the refs out one after another along `dir`.
+
+    Args:
+        dir: The axis to lay the refs out along.
+        spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
+        order: The order the refs are laid out in. Default "forward".
+        glue: Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`. Default false.
+    """
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("dir", dir),
+        ("spacing", _to_wire(("class", (("LengthValue", ("ref", "Length")),), ("ref", "Spacing")), spacing, "spacing")),
+        ("order", order),
+        ("glue", glue),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _position_constraint_opts(*, x: Optional[float | DatumValue | tuple] = None, y: Optional[float | DatumValue | tuple] = None, anchor: Optional[str] = None) -> Dict[str, Any]:
+    """Place the refs at an x and/or y coordinate.
+
+    Args:
+        x: A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers.
+        y: A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them. Only a datum feeds the scale the layer infers.
+        anchor: Which point of the ref lands on a point coordinate. "baseline" is the ref's origin, its local 0. Default "middle".
+    """
+    if x is None and y is None:
+        raise ValueError("Constraint.position requires at least one of x, y")
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", x),
+        ("y", y),
+        ("anchor", anchor),
+    ]:
+        if _v is not None:
+            opts[_k] = _v
+    return opts
+
+def _nest_constraint_opts(*, x: Optional[float] = None, y: Optional[float] = None) -> Dict[str, Any]:
+    """Nest the inner ref in the outer one (`refs: [outer, inner]`) with padding on each given axis.
+
+    Args:
+        x: Padding on x, in pixels. Omitted, x is not constrained.
+        y: Padding on y, in pixels. Omitted, y is not constrained.
+    """
+    if x is None and y is None:
+        raise ValueError("Constraint.nest requires at least one of x, y")
+    opts: Dict[str, Any] = {}
+    for _k, _v in [
+        ("x", x),
+        ("y", y),
     ]:
         if _v is not None:
             opts[_k] = _v

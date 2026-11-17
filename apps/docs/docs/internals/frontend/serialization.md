@@ -493,6 +493,37 @@ layer schedules the clauses exactly as it would for a JS author. The field was
 called `constraints`, and held constraints only, before the `.constrain()` →
 `.relate()` rename.
 
+A constraint is a descriptor kind of its own, `"constraint"`, and
+`CONSTRAINTS` (descriptors.ts) is its table in `DESCRIPTOR_TABLES`, one
+entry per `type`: `align`'s `x`/`y`, `distribute`'s `dir`, `spacing`,
+`order` and `glue`, `position`'s `x`/`y`/`anchor`, `nest`'s padding, and no
+options for `zAbove`/`zBelow`. As a combinator mark's do, its fields sit
+under `options` on the wire, so `acceptedFields("constraint", type)` is
+the set of its option keys and the validator walks a clause's `options`
+with the same code that walks a combinator mark's. A key the entry does
+not declare is an error, and the JSON Schema's `ConstraintIR` is generated
+from the same table. The wire type `position` is both a combinator mark
+and a constraint, two constructs, so every lookup is by (kind, type): the
+docs name the constraint `Constraint.position` (`DESCRIPTOR_NAMESPACES`),
+and its Python core is `_position_constraint_opts`. `distribute`'s `spacing` has spread's `spacing` type,
+one `FieldType` both entries name, so a `Spacing` strategy in a constraint
+is checked as it is in a spread. The Python `Constraint.*` methods keep
+their refs-first signatures and build their options with the generated
+`_<type>_constraint_opts` cores, so a nested value is routed through
+`_to_wire` there too. Options that only JS sets (spread's `origin`,
+`measure` and `hasOrder` on its distribute; partition's `region` and
+scatter's `override` on a position) are not declared. A position's `x`/`y`
+is a pixel or a `DatumValue` (the `datum(v)` wire shape, an `AUTHORED_REFS`
+entry), or a two-item tuple of them. A descriptor's `requireOneOf` (`["x", "y"]`
+for `align`, `position` and `nest`) asks for at least one of those keys,
+and only a constraint sets it: the validator checks it in its walk of a
+nested `options` object (a null key is not given), the JSON Schema writes
+it as an `anyOf` of `required`, and the generated Python core raises
+`Constraint.<type> requires at least one of x, y`. `nest`'s two refs stay a
+hand-written check. `constraintFromIR` resolves the operands and calls
+`rebuild("constraint", ...)` (see "The way back" below), and throws on a
+type it does not know.
+
 ## A worked example
 
 ```ts
@@ -748,7 +779,9 @@ since a namespace is not a type.
 `ref` — these are structural or recursive shapes rather than flat field
 bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
 of those files the doc comment marks as "stays hand-written below").
-Constraints likewise stay authored.
+`ConstraintIR` stays authored in `schema.ts` as a union by `type`, which
+descriptors.test.ts checks against `CONSTRAINTS`; its JSON Schema is
+generated.
 
 A `dims` option is `t.record(t.ref("AxisDimsValue"))`: each value is a bare
 `ChannelValue` or an interval object with only
@@ -841,8 +874,8 @@ Six consumers read the table:
 ## The JSON Schema
 
 The schema is Draft 2020-12. Its envelope (`Root`, `ChartIR`, `LayerChainIR`,
-`DataIR`, `ChannelValue`, `ConstraintIR`, `LabelIR`, and friends) is
-hand-written; the per-operator and per-leaf-mark `$defs` are generated
+`DataIR`, `ChannelValue`, `LabelIR`, and friends) is
+hand-written; the per-operator, per-leaf-mark and per-constraint `$defs` are generated
 from `descriptors.ts` at call time (see the previous section) and merged
 in. It lives in source at
 [`packages/gofish-ir/src/frontend/jsonSchema.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/jsonSchema.ts)
@@ -876,7 +909,7 @@ The high-level structure:
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR, LayerChainIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
-    "ConstraintIR": { /* type, options, refs */ },
+    "ConstraintIR": { /* GENERATED oneOf: AlignConstraint | DistributeConstraint | ... */ },
     "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] },
     "ChartOptions": { /* GENERATED from CHART_OPTIONS: w, h, coord, color, axes, ... */ },
     "AxesOptions":  { /* GENERATED from OPTION_TYPES, as are AxisOptions, AxisInterval, AxisDimsValue, FieldPredicate */ }
@@ -966,7 +999,14 @@ through, and any other dict is an interval whose keys are checked
 (`dims={"theta": {"width": 2}}` is a `TypeError`). Two rules keep this
 honest. A union may have only one branch that a dict could match (a channel
 branch does not count, for the reason just given), or generation fails,
-since `_to_wire` would have to guess. The one exception is a tagged union: when every dict branch is an
+since `_to_wire` would have to guess. A union whose dict branches mix named
+types with a Python class and types without one is told apart by class: the
+generator emits `("class", ((py_class, shape), ...), rest)`, an instance of
+a class takes its type's shape, and any other value takes `rest`. So
+spread's `spacing`, a number, a length or a `Spacing`, walks a
+`LengthValue` (from `percent(n)` or `fr(k)`) as a `Length` and a plain dict
+as a `Spacing`; a length written by hand as a plain dict, or a `chunk(5)`,
+is a `TypeError` there. The other exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
 `kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
@@ -1106,6 +1146,17 @@ wire type is its factory's name (`intersect` to `intersect`, and so on).
 The coord transforms (`polar`, `clock`, `wavy`, `geo`) are entries of the same
 table. Only an `OPERATOR_BUILDERS` entry sees the bridge.
 
+A constraint is called as a combinator mark is, `factory(opts, refs)` with
+its refs as the children, but from `CONSTRAINT_FACTORIES` rather than
+`FACTORIES`, since its types are a namespace of their own (`position` is
+also a combinator). That table is typed by `ConstraintIR`: each entry
+passes the wire options to its `Constraint` factory as they are, so an
+option the factory retypes is a compile error. A rename is one too:
+beside the table, `Record<UnknownWireOption, never>` must accept `{}`,
+and fails naming the key (`Property '"distribute.order"' is missing`)
+when a wire option is not a key of its factory's options. `zAbove` and
+`zBelow` take their two refs as `(a, b)`, so their entries adapt.
+
 Five operators keep a hand-written builder in `OPERATOR_BUILDERS`, because
 their IR is not their factory's options object: `derive` (it calls a Python
 lambda through the bridge and types the returned rows with its `schema`),
@@ -1115,7 +1166,7 @@ describes a field predicate, the factory takes the predicate function, which
 `fieldPredicate` builds from that description). `mark-fn`, `cut`,
 `offset` and `ref` are rebuilt structurally in `fromJSON.ts`'s `mapMark`.
 The serialize test fails when a descriptor has no factory or a factory has no
-descriptor.
+descriptor, looking a constraint up in `CONSTRAINT_FACTORIES`.
 
 User-defined custom marks via the no-channels `createMark((data, props) => …)`
 overload are an open question (deferred to v0.1+ — Olli treats them as

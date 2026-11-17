@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve } from "gofish-graphics";
+import { circle, Coord, Curve, Spacing } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -16,7 +16,7 @@ import { initializeContainer } from "../helper";
 //   - parentChild: child sits one θ-step around and one r-step out from parent.
 //   - sibling: each next sibling is one θ-step around and one r-step out from
 //     the prior sibling, so a fan of children itself spirals.
-// Point-like circle nodes ⇒ anchor: "middle" so spacing is read in domain units
+// Point-like circle nodes ⇒ a middle pitch so spacing is read in domain units
 // (radians for θ, r-units for r) and bboxes don't accumulate. Color = depth.
 // Links straight ⇒ {curve: "linear"}. See the polar Sunburst /
 // RadialNodes / RadialTree siblings for the same θ/r decomposition.
@@ -63,26 +63,22 @@ export const SpiralLayout: StoryObj = {
         parentChild: combine({
           x: {
             kind: "distribute",
-            spacing: (2 * Math.PI) / 9,
-            anchor: "middle",
+            spacing: Spacing.pitch((2 * Math.PI) / 9, { at: "middle" }),
           },
           y: {
             kind: "distribute",
-            spacing: 118,
-            anchor: "middle",
+            spacing: Spacing.pitch(118, { at: "middle" }),
           },
         }),
         // sibling: each next sibling spirals one θ-step around and one r-step out.
         sibling: combine({
           x: {
             kind: "distribute",
-            spacing: (2 * Math.PI) / 9,
-            anchor: "middle",
+            spacing: Spacing.pitch((2 * Math.PI) / 9, { at: "middle" }),
           },
           y: {
             kind: "distribute",
-            spacing: 62,
-            anchor: "middle",
+            spacing: Spacing.pitch(62, { at: "middle" }),
           },
         }),
         coord: Coord.clock(),

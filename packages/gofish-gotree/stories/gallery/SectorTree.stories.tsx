@@ -126,12 +126,12 @@ export const SectorTree: StoryObj = {
         // child group one ring out, gap = RING_GAP).
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: RING_GAP, anchor: "edge" },
+          y: { kind: "distribute", spacing: RING_GAP },
         }),
         // sibling: distribute θ (pack angularly into the parent's arc) +
         // align r middle (siblings share one ring).
         sibling: combine({
-          x: { kind: "distribute", spacing: 0, anchor: "edge" },
+          x: { kind: "distribute", spacing: 0 },
           y: { kind: "align", alignment: "middle" },
         }),
         coord: Coord.clock(),

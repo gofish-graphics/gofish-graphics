@@ -16,6 +16,7 @@ from gofish import (
     Bin,
     Calendar,
     Dist,
+    Spacing,
     Unit,
     chart,
     circle,
@@ -153,8 +154,7 @@ def story_ridgeline():
             spread(
                 by=field("month").sort(MONTHS),
                 dir="y",
-                anchor="baseline",
-                spacing=36,
+                spacing=Spacing.pitch(36, at="baseline"),
             )
         )
         .mark(

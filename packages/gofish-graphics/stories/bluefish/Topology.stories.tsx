@@ -535,7 +535,7 @@ export const TopologyOverdraw: StoryObj<Args> = {
 //
 // 6. `stack()` used to accept `spacing` and ignore it, which is easy to
 //    reach for by analogy with `spread` and get flush-touching panels with
-//    no error. Switching to `spread({ anchor: "edge" })` fixed it. A stack
+//    no error. Switching to `spread` fixed it. A stack
 //    now has no `spacing` option, and its parts must be data amounts, so
 //    panels in a stack are an error that points at `spread`.
 //

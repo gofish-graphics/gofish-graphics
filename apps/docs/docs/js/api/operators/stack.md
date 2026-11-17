@@ -48,7 +48,7 @@ stack({ dir, ... }, [m1, m2, ...])
 declares, such as `"theta"` under polar; see
 [`spread` → naming the axis](/js/api/operators/spread#naming-the-axis-with-dir).
 
-Same as [`spread`](/js/api/operators/spread) without `spacing` and `anchor`:
+Same as [`spread`](/js/api/operators/spread) without `spacing`:
 the parts touch, so there is no gap to set. Its `by` is the same
 path-aware option (`"field"`, which also works on refs after a
 [selection](/js/api/selection/ref), a function, or a

@@ -29,6 +29,7 @@ covers:
   - packages/gofish-graphics/src/families/bin.ts
   - packages/gofish-graphics/src/families/calendar.ts
   - packages/gofish-graphics/src/families/domain.ts
+  - packages/gofish-graphics/src/families/spacing.ts
   - packages/gofish-graphics/src/families/trait.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/partition.tsx
   - packages/gofish-graphics/src/ast/shapes/region.tsx
@@ -1092,13 +1093,17 @@ child and nests it in its tile on both axes (`nestEach`), and the `position`
 operator detaches its child on an axis with a pixel offset and keeps it shared
 on an axis with a datum offset.
 
-`distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
-"baseline"`, default `"edge"`) picks which pair of anchors the chain relates
-between adjacent children: `"edge"` relates the facing edges
+`distribute`'s `spacing` (a `Spacing` value, `families/spacing.ts`) picks
+which pair of anchors the chain relates between adjacent children.
+`createDistributeConstraint` normalizes it once (`spacingOf`: a bare amount is
+`Spacing.box(amount)`, and the strategy is checked against the `Spacing`
+family, even under `glue`, which then uses a zero box), and `distributePlacementAnchors` dispatches on its
+`kind`. `Spacing.box(gap)` relates the facing edges
 (`prev.end → cur.start`, spacing = the gap between them, content-dependent);
-the fixed-pitch anchors relate the _same_ anchor on both sides
-(`prev.anchor → cur.anchor`, spacing = anchor-to-anchor pitch,
-content-independent) — `anchor[i+1] = anchor[i] + spacing`. A glued
+`Spacing.pitch(distance, { at })` relates the _same_ anchor on both sides
+(`prev.at → cur.at`, spacing = anchor-to-anchor pitch,
+content-independent) — `at[i+1] = at[i] + distance`, with `at` one of
+`"start" | "middle" | "end" | "baseline"`, default `"baseline"`. A glued
 `distribute` (`glue: true`, i.e. `stack`) relates no anchors: each part is
 placed by its data offset (below). A part's **tail** is where its baseline
 sits, or its start when it is not a baseline magnitude; its **head** is the
@@ -1106,9 +1111,9 @@ point as far in from its end as the tail is from its start, which is the
 baseline moved by `ascent − descent`. A positive bar's tail is its start and
 its head its end; a negative bar's tail is its end and its head its start, so
 the next part starts where it ends.
-`"middle"` is the
-old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
-fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
+A middle pitch is the
+old `mode: "center"` (later `anchor: "middle"`); the other pitches reuse the
+same anchor vocabulary `align` already uses
 (`constraints/shared.ts`'s `AlignAnchor`). The claim is the layer's plan
 (`solver/plan.ts`), which lays the chain by the placement solve layout
 runs: each part sits about its chain point by its anchor, the next chain

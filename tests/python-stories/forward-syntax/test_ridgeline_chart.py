@@ -1,6 +1,6 @@
 """Equivalent of RidgelineChart.stories.tsx — Forward Syntax/Ridgeline Chart."""
 
-from gofish import chart, spread, field, layer, rect, datum, ribbon, Unit
+from gofish import chart, spread, field, layer, rect, datum, ribbon, Spacing, Unit
 from python_stories.data import SEATTLE_WEATHER
 
 MONTH_NAMES = [
@@ -25,8 +25,8 @@ RULE_TO = 40
 
 # Fixed row-to-row pitch shared by the ridge spread and the label spread
 # below, so a month's rule+label always sit at the same baseline as its
-# silhouette. Both tiers chain their rows with `anchor="baseline"` at this
-# pitch, and both rows put their semantic baseline at local 0 (the ribbon's
+# silhouette. Both tiers chain their rows with
+# `Spacing.pitch(ROW_PITCH, at="baseline")`, and both rows put their semantic baseline at local 0 (the ribbon's
 # zero-count line; the rule), so the two chains solve to identical lines.
 ROW_PITCH = 24
 
@@ -50,8 +50,7 @@ def story_default():
             spread(
                 by=field("month").sort(MONTH_NAMES),
                 dir="y",
-                anchor="baseline",
-                spacing=ROW_PITCH,
+                spacing=Spacing.pitch(ROW_PITCH, at="baseline"),
             ),
         )
         .mark(
@@ -85,8 +84,7 @@ def story_default():
                 spread(
                     by=field("month").sort(MONTH_NAMES),
                     dir="y",
-                    anchor="baseline",
-                    spacing=ROW_PITCH,
+                    spacing=Spacing.pitch(ROW_PITCH, at="baseline"),
                 )
             )
             .mark(

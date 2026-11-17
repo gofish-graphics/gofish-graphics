@@ -10,7 +10,6 @@ export const spreadXTemplate = (
     name?: string;
     spacing?: number;
     alignment?: "start" | "middle" | "end";
-    anchor?: "edge" | "start" | "middle" | "end" | "baseline";
     reverse?: boolean;
   } & FancyDims & { groupBy?: { field: string; sort?: string[] } },
   children: (d: any, i?: string | number) => any

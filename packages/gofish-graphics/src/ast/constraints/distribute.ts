@@ -6,7 +6,6 @@ import {
   axisIndex,
   directSlot,
   type Axis,
-  type AlignAnchor,
   type ConstraintRef,
   type KeyOf,
 } from "./shared";
@@ -63,21 +62,23 @@ import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
 import type { Gap, GapOf } from "./gap";
+import { isLength } from "../length";
+import { Frontend } from "gofish-ir";
+import type { Spacing } from "../../families/spacing";
 
 export interface DistributeOptions {
   dir: Axis;
-  /** The gap between neighbors (or the pitch, for a fixed anchor): pixels,
-   *  a percent of the room of the layer that holds the chain, or an `fr`
-   *  weight in its scope (#1176 step 6). Default 8. */
-  spacing?: Gap;
-  /** How adjacent children in the chain relate:
-   *  - `"edge"` (default): `start[i+1] = end[i] + spacing` — spacing is the gap
-   *    between facing edges (content-dependent).
-   *  - `"start" | "middle" | "end" | "baseline"`: fixed-pitch anchor chaining —
-   *    `anchor[i+1] = anchor[i] + spacing` — spacing is a fixed,
-   *    content-independent anchor-to-anchor pitch (`"middle"` is
-   *    center-to-center). */
-  anchor?: AlignAnchor | "edge";
+  /** How far apart neighbors are, a {@link Spacing} strategy:
+   *  - `Spacing.box(gap)`: `start[i+1] = end[i] + gap`, a gap between facing
+   *    edges, which depends on the children's sizes.
+   *  - `Spacing.pitch(distance, { at })`: `at[i+1] = at[i] + distance`, a
+   *    fixed distance between the same point on each child, which does not
+   *    (`"middle"` is center to center).
+   *
+   *  A bare amount is `Spacing.box(amount)`: pixels, a percent of the room
+   *  of the layer that holds the chain, or an `fr` weight in its scope
+   *  (#1176 step 6). Default 8. */
+  spacing?: Gap | Spacing;
   order?: "forward" | "reverse";
   /** Stack semantics: glue children together (sizes sum into a POSITION at the
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
@@ -141,10 +142,11 @@ const keepsZero = (baseline: StackBaseline<unknown>): boolean =>
 export interface DistributeConstraint {
   type: "distribute";
   dir: Axis;
-  /** The gap between neighbors: pixels, or a length the layer that holds
-   *  the chain lays out in its room (`GoFishNode.gapOf`). */
-  spacing: Gap;
-  anchor: AlignAnchor | "edge";
+  /** How far apart neighbors are, as a strategy: a bare amount is read as
+   *  `Spacing.box` here ({@link spacingOf}). Its amount is pixels, or a
+   *  length the layer that holds the chain lays out in its room
+   *  (`GoFishNode.gapOf`). */
+  spacing: Spacing;
   order: "forward" | "reverse";
   glue: boolean;
   children: ConstraintRef[];
@@ -154,24 +156,55 @@ export interface DistributeConstraint {
   hasMidpoint?: boolean;
 }
 
+/** A stack's spacing. A stack lays no gap out: its parts are placed by
+ *  their data offsets ({@link stackPlaces}), so what reads a chain's gap
+ *  (the room plan, the fixed-pixel warning) reads 0 for it. */
+const GLUED: Spacing = { kind: "box", gap: 0 };
+
 export const createDistributeConstraint = (
   options: DistributeOptions,
   children: ConstraintRef[]
-): DistributeConstraint => ({
-  type: "distribute",
-  dir: options.dir,
-  // Glue pins spacing ≡ 0 for both the space fold and placement-solver
-  // relations, so glued children touch.
-  spacing: options.glue ? 0 : (options.spacing ?? 8),
-  anchor: options.anchor ?? "edge",
-  order: options.order ?? "forward",
-  glue: options.glue ?? false,
-  children,
-  measure: options.measure,
-  hasOrder: options.hasOrder,
-  baseline: checkedBaseline(options),
-  hasMidpoint: options.glue ? options.hasMidpoint : undefined,
-});
+): DistributeConstraint => {
+  // Checked even under glue, whose parts lie by their data offsets with no
+  // gap between them.
+  const spacing = spacingOf(options.spacing ?? 8);
+  return {
+    type: "distribute",
+    dir: options.dir,
+    spacing: options.glue ? GLUED : spacing,
+    order: options.order ?? "forward",
+    glue: options.glue ?? false,
+    children,
+    measure: options.measure,
+    hasOrder: options.hasOrder,
+    baseline: checkedBaseline(options),
+    hasMidpoint: options.glue ? options.hasMidpoint : undefined,
+  };
+};
+
+/** A chain's spacing as a strategy: a bare amount is `Spacing.box(amount)`,
+ *  and a strategy is checked against the `Spacing` family. This is the one
+ *  place a bare amount becomes a strategy, so everything after it reads
+ *  `kind`, and the one place spread's and distribute's `spacing` is
+ *  checked. */
+export function spacingOf(spacing: Gap | Spacing): Spacing {
+  const strategy: unknown =
+    typeof spacing === "number" || isLength(spacing)
+      ? { kind: "box", gap: spacing }
+      : spacing;
+  if (typeof strategy !== "object" || strategy === null)
+    throw new Error(
+      `[gofish] spacing: expected a number, a length (percent(n) or fr(k)) ` +
+        `or a Spacing strategy, got ${strategy === null ? "null" : typeof strategy}.`
+    );
+  Frontend.checkStrategy("Spacing", strategy, "spacing");
+  return strategy as Spacing;
+}
+
+/** The amount a spacing lays out between neighbors: a box's gap, or a
+ *  pitch's distance. */
+export const spacingAmount = (spacing: Spacing): Gap =>
+  spacing.kind === "box" ? spacing.gap : spacing.distance;
 
 /** A chain's baseline: a spread takes every one but `wiggle`, whose 0
  *  moves with the cross-sections a stack glues. */
@@ -252,17 +285,22 @@ export function keysDownTheScreen(node: GoFishNode): string[] | undefined {
 }
 
 export function distributePlacementAnchors({
-  anchor,
-}: Pick<DistributeConstraint, "anchor">): {
+  spacing,
+}: Pick<DistributeConstraint, "spacing">): {
   from: RelationAnchor;
   to: RelationAnchor;
 } {
-  // Fixed-pitch anchors (start/middle/end/baseline) relate the SAME anchor on
-  // both sides of the chain edge (anchor[i+1] = anchor[i] + spacing); "edge"
-  // relates the facing edges (end of prev → start of cur).
-  return anchor === "edge"
-    ? { from: "end", to: "start" }
-    : { from: anchor, to: anchor };
+  // A pitch (start/middle/end/baseline) relates the SAME point on both sides
+  // of the chain edge (at[i+1] = at[i] + distance); a box relates the facing
+  // edges (end of prev → start of cur).
+  switch (spacing.kind) {
+    case "box":
+      return { from: "end", to: "start" };
+    case "pitch": {
+      const at = spacing.at ?? "baseline";
+      return { from: at, to: at };
+    }
+  }
 }
 
 export function lowerDistributePlacement<T>(

@@ -23,7 +23,10 @@
  * options as one table. Or it may name one member of a strategy family
  * (`STRATEGIES`), as `Family.member`: `::: gofish-ref Shape.blob` renders that
  * kind's params, and a preset (`Shape.hull`) renders its kind's params with
- * the preset's values as their defaults.
+ * the preset's values as their defaults. A construct of a table in
+ * `DESCRIPTOR_NAMESPACES` is named as it is called, `<Namespace>.<type>`:
+ * `::: gofish-ref Constraint.position` renders the constraint's options,
+ * never the `position` combinator's.
  * A field marked `wireOnly` (a Python bridge handle such as `derive`'s
  * `lambdaId`) is left out: it is on the wire, not an option a user passes.
  * The descriptor's `positional` field (`Coord.geo("mercator", { lon })`) is
@@ -47,6 +50,8 @@
 import container from "markdown-it-container";
 import {
   COMBINATOR_MARKS,
+  DESCRIPTOR_NAMESPACES,
+  splitDottedName,
   COORDS,
   LEAF_MARKS,
   OPERATORS,
@@ -64,6 +69,9 @@ import {
 
 type Lang = "js" | "python";
 
+/** The tables a bare `gofish-ref` name is looked up in. A construct of a
+ *  table in `DESCRIPTOR_NAMESPACES` is named `<Namespace>.<type>` instead
+ *  (`::: gofish-ref Constraint.align`). */
 const TABLES: Record<string, ConstructDescriptor>[] = [
   OPERATORS,
   LEAF_MARKS,
@@ -71,10 +79,26 @@ const TABLES: Record<string, ConstructDescriptor>[] = [
   COORDS,
 ];
 
-/** Every descriptor entry a `gofish-ref` name may refer to — a name can match
- *  more than one table (the dual-form constructs are both an operator and a
- *  combinator mark). */
+/** The namespace of a `<Namespace>.<type>` name, when it names one of
+ *  `DESCRIPTOR_NAMESPACES`, and that type. */
+function namespaced(
+  name: string
+): { namespace: string; member: string } | undefined {
+  const parts = splitDottedName(name);
+  return parts && Object.hasOwn(DESCRIPTOR_NAMESPACES, parts.namespace)
+    ? parts
+    : undefined;
+}
+
+/** Every descriptor entry a `gofish-ref` name may refer to — a bare name can
+ *  match more than one table (the dual-form constructs are both an operator
+ *  and a combinator mark); `Constraint.<type>` matches that constraint. */
 export function lookupConstructs(name: string): ConstructDescriptor[] {
+  const ns = namespaced(name);
+  if (ns !== undefined) {
+    const table = DESCRIPTOR_NAMESPACES[ns.namespace];
+    return Object.hasOwn(table, ns.member) ? [table[ns.member]] : [];
+  }
   const found: ConstructDescriptor[] = [];
   for (const table of TABLES) {
     for (const d of Object.values(table)) {
@@ -89,6 +113,7 @@ const KIND_LABEL: Record<ConstructDescriptor["kind"], string> = {
   "leaf-mark": "Mark form",
   "combinator-mark": "Combinator form",
   coord: "Coordinate transform",
+  constraint: "Constraint",
 };
 
 // ---------------------------------------------------------------------------
@@ -279,8 +304,9 @@ function renderDescriptor(
  *  a preset with its values as the defaults), or undefined for any other
  *  name. */
 function strategyParams(name: string): FieldGroup | undefined {
-  const [family, member, ...rest] = name.split(".");
-  if (member === undefined || rest.length > 0) return undefined;
+  const parts = splitDottedName(name);
+  if (parts === undefined) return undefined;
+  const { namespace: family, member } = parts;
   const spec = (STRATEGIES as Record<string, any>)[family];
   if (spec === undefined) return undefined;
   const kind = spec.kinds[member];
@@ -327,7 +353,9 @@ function renderName(
     throw new Error(
       `Unknown gofish-ref construct "${name}". It must be a construct in ` +
         `packages/gofish-ir/src/frontend/descriptors.ts (OPERATORS, LEAF_MARKS, ` +
-        `COMBINATOR_MARKS or COORDS), named by its wire type, ` +
+        `COMBINATOR_MARKS or COORDS), named by its wire type, a construct ` +
+        `of a DESCRIPTOR_NAMESPACES table as <Namespace>.<type> ` +
+        `(e.g. Constraint.align), ` +
         `or an object option type in OPTION_TYPES (e.g. ChartOptions).`
     );
   }
@@ -338,7 +366,12 @@ function renderName(
     byFields.get(key)!.push(d);
   }
   const variants = [...byFields.values()];
-  const title = found[0].type;
+  // A namespaced construct is titled as it is called: `Constraint.align`,
+  // `Constraint.z_above` in Python.
+  const ns = namespaced(name);
+  const title = ns
+    ? `${ns.namespace}.${fieldName(found[0].type, opts.lang)}`
+    : found[0].type;
 
   return variants
     .map((group) => {

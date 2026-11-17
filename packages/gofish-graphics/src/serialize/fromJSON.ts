@@ -21,7 +21,7 @@ import {
 } from "../ast/marks/chart";
 import type { AxesOptions, LegendOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
-import { Constraint, RelateOperand } from "../ast/constraints";
+import { RelateOperand } from "../ast/constraints";
 import type {
   RelateClause,
   RelateEnv,
@@ -128,10 +128,13 @@ export function constraintFromIR(
   const operands = c.refs.map((r) =>
     relateOperandFor(r.scope, r.selection, ctx)
   );
-  if (c.type === "zAbove" || c.type === "zBelow") {
-    return (Constraint as any)[c.type](...operands);
-  }
-  return (Constraint as any)[c.type](c.options, operands);
+  // CONSTRAINT_FACTORIES ties each constraint's wire options to its factory.
+  const spec = rebuild("constraint", c.type, c.options as Record<string, any>, {
+    children: operands,
+  });
+  if (spec === undefined)
+    throw new Error(`unknown constraint type ${JSON.stringify(c.type)}`);
+  return spec;
 }
 
 // ---------------------------------------------------------------------------

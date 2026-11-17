@@ -143,7 +143,9 @@ single source the generated Python factory layer
   (`::: gofish-ref intersect exclude subtract atop`). An unknown name
   throws and fails the build. A name may also be an object option type in
   `OPTION_TYPES` (`descriptors.ts`): `::: gofish-ref ChartOptions` renders the
-  chart-level options. `check-api-coverage` requires an option type used on
+  chart-level options. A constraint is named as it is called,
+  `Constraint.<type>` (`::: gofish-ref Constraint.align`), since `position`
+  is both a combinator mark and a constraint. `check-api-coverage` requires an option type used on
   one language's page to appear on the other's too.
 - JS pages get the JS field names and a TS-ish type; Python pages get the snake_case
   kwarg names (`pyKwarg` in `descriptors.ts`) and a Python type. The language comes from the page's path.

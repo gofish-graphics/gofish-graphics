@@ -54,11 +54,11 @@ def story_clock_tree():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "middle"},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "middle"},
             ),
             coord=Coord.clock(inner_radius=0.72),

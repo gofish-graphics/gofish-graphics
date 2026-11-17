@@ -98,13 +98,13 @@ export const ClockTreeWithLink: StoryObj = {
         link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 1 },
         parentChild: combine({
           // θ: parent at the start of its subtree's slot, group after it.
-          x: { kind: "distribute", spacing: 0, anchor: "edge" },
+          x: { kind: "distribute", spacing: 0 },
           // r: parent and subtree share the ring.
           y: { kind: "align", alignment: "middle" },
         }),
         sibling: combine({
           // θ: siblings tile angularly (edge mode sums θ-widths).
-          x: { kind: "distribute", spacing: 0, anchor: "edge" },
+          x: { kind: "distribute", spacing: 0 },
           // r: siblings share the ring.
           y: { kind: "align", alignment: "middle" },
         }),

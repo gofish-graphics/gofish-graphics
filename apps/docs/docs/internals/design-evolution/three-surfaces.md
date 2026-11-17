@@ -147,6 +147,8 @@ one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
 `field(x).bin(...)`, and a time axis's `levels`, #1057),
 `Coord` (a chart's or a layer's `coord`), `Color`
 (a chart's `color`), `Filter` (the `filter` of a mark or a layer, #1267),
+`Spacing` (`spread`'s and `Constraint.distribute`'s `spacing`, which also
+takes a bare amount for `Spacing.box(amount)`),
 and `Animation` (`.transition()`'s `enter`, `exit` and `update`). Each family is one module with a lowercase file name,
 `src/families/<name>.ts`, which `lib.ts` binds under the capitalized name with
 `export * as Curve from "./families/curve"`, the same mechanism as

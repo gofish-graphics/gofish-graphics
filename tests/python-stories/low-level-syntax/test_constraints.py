@@ -7,7 +7,7 @@ the eight equivalence cases, each one graphic showing that `spread(...)`
 places its children the way `align` + `distribute` does.
 """
 
-from gofish import Constraint, datum, layer, rect, spread, text, Coord
+from gofish import Constraint, Spacing, datum, layer, rect, spread, text, Coord
 
 
 # ─── partial placement ───────────────────────────────────────────────────────
@@ -252,10 +252,12 @@ def story_spread_x_spacing_align_end():
 def story_spread_x_center_to_center():
     return _equivalence(
         _center_to_center_rects,
-        {"dir": "x", "alignment": "start", "spacing": 60, "anchor": "middle"},
+        {"dir": "x", "alignment": "start", "spacing": Spacing.pitch(60, at="middle")},
         lambda a, b, c: [
             Constraint.align([a, b, c], y="start"),
-            Constraint.distribute([a, b, c], dir="x", spacing=60, anchor="middle"),
+            Constraint.distribute(
+                [a, b, c], dir="x", spacing=Spacing.pitch(60, at="middle")
+            ),
         ],
         {"w": 460, "h": 160},
     )

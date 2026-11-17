@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, Coord } from "gofish-graphics";
+import { rect, Coord, Spacing } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — TornadoTree (polar, nested-radial spiral).
@@ -78,15 +78,24 @@ export const TornadoTree: StoryObj = {
       link: "none",
       parentChild: combine({
         // θ: offset parent from its subtree → the spiral twist (winds the arm).
-        x: { kind: "distribute", spacing: 0.55, anchor: "middle" },
+        x: {
+          kind: "distribute",
+          spacing: Spacing.pitch(0.55, { at: "middle" }),
+        },
         // r: parent's band ENCLOSES the subtree (dsl Root "include").
         y: { kind: "nest", pad: 44 },
       }),
       sibling: combine({
         // θ: step siblings angularly (tight → packs the curl).
-        x: { kind: "distribute", spacing: 0.42, anchor: "middle" },
+        x: {
+          kind: "distribute",
+          spacing: Spacing.pitch(0.42, { at: "middle" }),
+        },
         // r: step siblings radially too → fans the level outward (tornado).
-        y: { kind: "distribute", spacing: 44, anchor: "middle" },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(44, { at: "middle" }),
+        },
       }),
       coord: Coord.clock(),
     }),

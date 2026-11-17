@@ -183,7 +183,11 @@ that survey with the proposal.
 - For layout and placement, look at Typst, SwiftUI, CSS, Apple Auto Layout,
   TikZ and design tools such as Figma. `spread`'s `mode` became `anchor` because
   Auto Layout anchors, TikZ anchors and CSS anchor positioning all use that word
-  for a named point on a box (#762).
+  for a named point on a box (#762). That option then moved into the value of
+  `spacing`, since it changes what the spacing measures: `Spacing.box(gap)`
+  between facing edges, and `Spacing.pitch(distance, { at })` between the same
+  point on each child, the typographic word for a fixed distance between
+  repeated items.
 - For data types, typed precedent wins: Lean mathlib, the JS Temporal API,
   java.time, polars dtypes, and [Flint](/internals/design/flint-chart-notes).
   When a visualization library solves the same problem with a workaround, such
@@ -258,7 +262,9 @@ several named strategies, the family is a capitalized namespace such as
 `Overlap.separate` or `Curve.monotone` (#1013). A kind with no required option
 is a value as it is, and calling it sets options: `Curve.monotone` is
 `Curve.monotone()`, and `Calendar.month({ every: 3 })` sets the step. A kind
-with a required option is a call only, as in `Bin.step(0.5)` (#1133). The
+with a required option is a call only, as in `Bin.step(0.5)` (#1133). An
+option may also take a bare value as shorthand for one member: a bare
+`spacing` amount is `Spacing.box(amount)`. The
 details, and why an option with one strategy has no option at all, are in
 [Three Surfaces](/internals/design-evolution/three-surfaces).
 

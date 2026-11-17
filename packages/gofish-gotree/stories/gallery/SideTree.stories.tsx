@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { circle, Coord, Curve } from "gofish-graphics";
+import { circle, Coord, Curve, Spacing } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — SideTree (polar node-link, "side-leaning" tree).
@@ -20,7 +20,7 @@ import { combine, byDepth, mount } from "./_shared";
 //   - siblings ALIGN in θ (share one angle / lie on a common spoke) and
 //     DISTRIBUTE in r → a sibling group stacks radially along a single ray,
 //     reading as the long straight spines in the reference image.
-// Point-like circle nodes ⇒ anchor: "middle" on every distribute axis so spacing
+// Point-like circle nodes ⇒ a middle pitch on every distribute axis so spacing
 // is read in domain units (radians for θ, r-units for r) and bboxes don't
 // accumulate. Same convention as RadialTree / RadialNodes / Sunburst.
 //
@@ -55,16 +55,21 @@ export const SideTree: StoryObj = {
       parentChild: combine({
         x: {
           kind: "distribute",
-          spacing: 0.5,
-          anchor: "middle",
+          spacing: Spacing.pitch(0.5, { at: "middle" }),
         },
-        y: { kind: "distribute", spacing: 84, anchor: "middle" },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(84, { at: "middle" }),
+        },
       }),
       // sibling = (align θ, distribute r): siblings share a spoke (one angle)
       // and stack out along the radius.
       sibling: combine({
         x: { kind: "align", alignment: "middle" },
-        y: { kind: "distribute", spacing: 109, anchor: "middle" },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(109, { at: "middle" }),
+        },
       }),
       coord: Coord.clock(),
     }),

@@ -121,10 +121,8 @@ Aligns a set of children to a shared edge or center on one or both axes. At leas
 Constraint.align({ x?, y? }, [ref1, ref2, ...])
 ```
 
-| Option | Type                          | Default | Description                                                                 |
-| ------ | ----------------------------- | ------- | --------------------------------------------------------------------------- |
-| `x`    | `AlignValue \| AlignAnchor[]` | —       | Value/edge/center/origin to align on the x axis (omit to leave x untouched) |
-| `y`    | `AlignValue \| AlignAnchor[]` | —       | Value/edge/center/origin to align on the y axis (omit to leave y untouched) |
+::: gofish-ref Constraint.align
+:::
 
 `AlignValue` is `AlignAnchor | "span" | "size"`, where `AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box. With no placed sibling the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis, `align({ y: "baseline" })` thus means "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). For an unconditional origin pin regardless of axis, use `Constraint.position({ x: 0, y: 0, anchor: "baseline" })`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children (`"span"`/`"size"` are whole-constraint values and cannot appear inside a per-child array).
 
@@ -187,16 +185,11 @@ gf.layer([
 Stacks a set of children end-to-end along an axis, with optional spacing.
 
 ```ts
-Constraint.distribute({ dir, spacing, anchor, order }, [ref1, ref2, ...])
+Constraint.distribute({ dir, spacing, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                                                   | Default     | Description                                                                                                                                                    |
-| --------- | ------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`     | `"x" \| "y"`                                           | —           | Axis to distribute along                                                                                                                                       |
-| `spacing` | `number`                                               | `8`         | Gap between each element (forced to `0` when `glue` is set)                                                                                                    |
-| `anchor`  | `"edge" \| "start" \| "middle" \| "end" \| "baseline"` | `"edge"`    | Whether `spacing` is measured between facing edges (`"edge"`), or as a fixed pitch between a chosen point on each element: `anchor[i+1] = anchor[i] + spacing` |
-| `order`   | `"forward" \| "reverse"`                               | `"forward"` | Order to place elements                                                                                                                                        |
-| `glue`    | `boolean`                                              | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis                                                                   |
+::: gofish-ref Constraint.distribute
+:::
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
 
@@ -246,11 +239,8 @@ at its value rather than assuming uniform spacing.
 Constraint.position({ x?, y?, anchor? }, [ref]);
 ```
 
-| Option   | Type                        | Default    | Description                                                    |
-| -------- | --------------------------- | ---------- | -------------------------------------------------------------- |
-| `x`      | `number \| Value \| [a, b]` | —          | x coordinate — point (literal/`datum(n)`) or interval `[a, b]` |
-| `y`      | `number \| Value \| [a, b]` | —          | y coordinate — point (literal/`datum(n)`) or interval `[a, b]` |
-| `anchor` | `Alignment`                 | `"middle"` | Which anchor of the ref lands on a **point** coordinate        |
+::: gofish-ref Constraint.position
+:::
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.
@@ -311,10 +301,8 @@ centered inside `outer` there.
 Constraint.nest({ x?, y? }, [outer, inner]);
 ```
 
-| Option | Type     | Default | Description                                                         |
-| ------ | -------- | ------- | ------------------------------------------------------------------- |
-| `x`    | `number` | —       | Per-axis padding (px) on the x axis (omit to leave x unconstrained) |
-| `y`    | `number` | —       | Per-axis padding (px) on the y axis (omit to leave y unconstrained) |
+::: gofish-ref Constraint.nest
+:::
 
 At least one of `x` / `y` must be specified; `[outer, inner]` must be exactly two
 refs. Padding is always known — the unknown per axis is _which_ side is derived,
@@ -363,6 +351,9 @@ Declare a partial-order relation between two named children for **paint order**
 Constraint.zAbove(a, b); // a paints in front of b (on top in z)
 Constraint.zBelow(a, b); // a paints behind b (under in z)
 ```
+
+::: gofish-ref Constraint.zAbove Constraint.zBelow
+:::
 
 `zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the spec
 reads naturally either way.
@@ -433,13 +424,13 @@ the operators delegate their space resolution, budget slicing, and placement
 walks to the same machinery the constraint path uses. These pairs are
 equivalent, **including** scale solving and auto-fit, not just placement:
 
-| Operator                                                     | Constraint equivalent                                           |
-| ------------------------------------------------------------ | --------------------------------------------------------------- |
-| `spread({ dir: "y", alignment: "start" }, items)`            | `align({ x: "start" })` + `distribute({ dir: "y" })`            |
-| `spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
-| `spread({ dir: "x", spacing: 60, anchor: "middle" }, items)` | `distribute({ dir: "x", spacing: 60, anchor: "middle" })`       |
-| `spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
-| `stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
+| Operator                                                                    | Constraint equivalent                                                    |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `spread({ dir: "y", alignment: "start" }, items)`                           | `align({ x: "start" })` + `distribute({ dir: "y" })`                     |
+| `spread({ dir: "x", alignment: "end", spacing: 10 }, items)`                | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })`          |
+| `spread({ dir: "x", spacing: Spacing.pitch(60, { at: "middle" }) }, items)` | `distribute({ dir: "x", spacing: Spacing.pitch(60, { at: "middle" }) })` |
+| `spread({ dir: "y", reverse: true }, items)`                                | `distribute({ dir: "y", order: "reverse" })`                             |
+| `stack({ dir: "y" }, items)`                                                | `distribute({ dir: "y", glue: true })`                                   |
 
 When **no child is pre-placed**, the cross-axis alignment fallback depends on
 the **axis**, not the API — `spread` and the `align` constraint resolve the

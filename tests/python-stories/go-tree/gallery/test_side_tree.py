@@ -1,6 +1,6 @@
 """Equivalent of gofish-gotree/stories/gallery/SideTree.stories.tsx."""
 
-from gofish import Coord, Curve, circle
+from gofish import Coord, Curve, Spacing, circle
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
@@ -16,12 +16,12 @@ def story_side_tree():
             node=node,
             link={"curve": Curve.linear(), "stroke": "#607d8b", "stroke_width": 1.5},
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0.5, "anchor": "middle"},
-                y={"kind": "distribute", "spacing": 84, "anchor": "middle"},
+                x={"kind": "distribute", "spacing": Spacing.pitch(0.5, at="middle")},
+                y={"kind": "distribute", "spacing": Spacing.pitch(84, at="middle")},
             ),
             sibling=combine(
                 x={"kind": "align", "alignment": "middle"},
-                y={"kind": "distribute", "spacing": 109, "anchor": "middle"},
+                y={"kind": "distribute", "spacing": Spacing.pitch(109, at="middle")},
             ),
             coord=Coord.clock(),
         ),

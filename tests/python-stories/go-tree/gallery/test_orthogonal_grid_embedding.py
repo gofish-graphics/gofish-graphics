@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Coord, Curve, circle
+from gofish import Coord, Curve, Spacing, circle
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
@@ -21,15 +21,13 @@ def story_orthogonal_grid_embedding():
                 x={"kind": "align", "alignment": "middle"},
                 y={
                     "kind": "distribute",
-                    "spacing": 138,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch(138, at="middle"),
                 },
             ),
             sibling=combine(
                 x={
                     "kind": "distribute",
-                    "spacing": (2 * math.pi) / 6,
-                    "anchor": "middle",
+                    "spacing": Spacing.pitch((2 * math.pi) / 6, at="middle"),
                 },
                 y={"kind": "align", "alignment": "middle"},
             ),

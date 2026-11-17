@@ -39,11 +39,15 @@ import {
 import {
   AUTHORED_REFS,
   BIN_KINDS,
+  CONSTRAINTS,
+  DESCRIPTOR_TABLES,
+  optionsRequired,
   taggedBranches,
   LABEL_OPTIONS,
   OPTION_TYPES,
   acceptedFields,
   isFlowStepMark,
+  type ConstructDescriptor,
   MARK_BASE_FIELDS,
   t,
   type FieldGroup,
@@ -667,6 +671,16 @@ function walkRefType(
       }
       walkDistAccessor(value, path, ctx);
       return;
+    case "DatumValue":
+      if (!isObject(value) || value.type !== "datum") {
+        ctx.errors.push({
+          path,
+          message: `expected a datum(v) value, got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      walkDatumValue(value, path, ctx);
+      return;
     case "ChunkKey":
       if (!isObject(value) || value.type !== "chunk") {
         ctx.errors.push({
@@ -790,6 +804,45 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
   rejectUnknown(node, ["x", "y"], path, ctx);
 }
 
+/** A `datum(v)` value's `offset` and `colorOps`: a channel value's datum
+ *  branch, and a `t.ref("DatumValue")`. */
+function walkDatumValue(
+  obj: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
+    ctx.errors.push({
+      path: `${path}.offset`,
+      message: 'datum "offset" must be a number (post-scale pixel offset)',
+    });
+  }
+  if (obj.colorOps !== undefined) {
+    if (!Array.isArray(obj.colorOps)) {
+      ctx.errors.push({
+        path: `${path}.colorOps`,
+        message: 'datum "colorOps" must be an array of color transforms',
+      });
+    } else {
+      obj.colorOps.forEach((c, i) => {
+        const cop = c as Record<string, unknown>;
+        if (cop?.op !== "lighten" && cop?.op !== "darken") {
+          ctx.errors.push({
+            path: `${path}.colorOps[${i}].op`,
+            message: 'colorOp "op" must be "lighten" or "darken"',
+          });
+        }
+        if (!isIRNumber(cop?.amount)) {
+          ctx.errors.push({
+            path: `${path}.colorOps[${i}].amount`,
+            message: 'colorOp "amount" must be a number',
+          });
+        }
+      });
+    }
+  }
+}
+
 /**
  * A channel value: bare primitive, the existing `{type:"datum"}` wrapper,
  * the new `{type:"field"|"literal"}` constructors, or a Python-bridge
@@ -824,36 +877,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") {
-    if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
-      ctx.errors.push({
-        path: `${path}.offset`,
-        message: 'datum "offset" must be a number (post-scale pixel offset)',
-      });
-    }
-    if (obj.colorOps !== undefined) {
-      if (!Array.isArray(obj.colorOps)) {
-        ctx.errors.push({
-          path: `${path}.colorOps`,
-          message: 'datum "colorOps" must be an array of color transforms',
-        });
-      } else {
-        obj.colorOps.forEach((c, i) => {
-          const cop = c as Record<string, unknown>;
-          if (cop?.op !== "lighten" && cop?.op !== "darken") {
-            ctx.errors.push({
-              path: `${path}.colorOps[${i}].op`,
-              message: 'colorOp "op" must be "lighten" or "darken"',
-            });
-          }
-          if (!isIRNumber(cop?.amount)) {
-            ctx.errors.push({
-              path: `${path}.colorOps[${i}].amount`,
-              message: 'colorOp "amount" must be a number',
-            });
-          }
-        });
-      }
-    }
+    walkDatumValue(obj, path, ctx);
     return;
   }
   if (obj.type === "field") {
@@ -1348,22 +1372,7 @@ function walkCombinatorMark(
       message: `combinator mark type must be one of ${COMBINATOR_MARK_TYPES.join(", ")}`,
     });
   }
-  optionalField(node, "options", path, ctx, (v, p) => {
-    if (!isObject(v)) {
-      ctx.errors.push({
-        path: p,
-        message: `expected object, got ${typeNameOf(v)}`,
-      });
-      return;
-    }
-    walkDescriptorFields(
-      v,
-      p,
-      ctx,
-      acceptedFields("combinator-mark", node.type as string) ?? {},
-      []
-    );
-  });
+  walkNestedOptions("combinator-mark", node, path, ctx);
   expectField(node, "children", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkMark)
   );
@@ -1486,17 +1495,12 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     return;
   }
   const t = node.type;
-  if (
-    t !== "align" &&
-    t !== "distribute" &&
-    t !== "position" &&
-    t !== "nest" &&
-    t !== "zAbove" &&
-    t !== "zBelow"
-  ) {
+  if (typeof t !== "string" || !Object.hasOwn(CONSTRAINTS, t)) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `constraint type must be "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow"`,
+      message: `constraint type must be ${Object.keys(CONSTRAINTS)
+        .map((k) => JSON.stringify(k))
+        .join(" | ")}`,
     });
     return;
   }
@@ -1510,27 +1514,58 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
       });
     }
   });
-  if (t === "nest") {
-    // nest options: per-axis padding `{ x?: number, y?: number }`, at least
-    // one axis present. (The space-fold / centering direction is resolved
-    // engine-side; the IR carries only the padding.)
-    expectField(node, "options", path, ctx, (v, p) => {
-      expectObject(v, p, ctx);
-      if (!isObject(v)) return;
-      optionalField(v, "x", p, ctx, expectNumber);
-      optionalField(v, "y", p, ctx, expectNumber);
-      if (v.x === undefined && v.y === undefined) {
-        ctx.errors.push({
-          path: p,
-          message: "nest options must specify at least one of x, y",
-        });
-      }
-      rejectUnknown(v, ["x", "y"], p, ctx);
-    });
-  } else {
-    optionalField(node, "options", path, ctx, expectObject);
-  }
+  walkNestedOptions("constraint", node, path, ctx);
   rejectUnknown(node, ["type", "refs", "options"], path, ctx);
+}
+
+/** The `options` of a construct that nests its options there (a combinator
+ *  mark, a constraint), checked against `acceptedFields(kind, type)`. They
+ *  may be left out unless a field is required (`optionsRequired`). */
+function walkNestedOptions(
+  kind: "combinator-mark" | "constraint",
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  const type = node.type as string;
+  if (node.options === undefined || node.options === null) {
+    if (optionsRequired(kind, type))
+      ctx.errors.push({
+        path: `${path}.options`,
+        message: 'required field "options" is missing',
+      });
+    return;
+  }
+  const options = node.options;
+  const p = `${path}.options`;
+  if (!isObject(options)) {
+    ctx.errors.push({
+      path: p,
+      message: `expected object, got ${typeNameOf(options)}`,
+    });
+    return;
+  }
+  walkDescriptorFields(options, p, ctx, acceptedFields(kind, type) ?? {}, []);
+  if (Object.hasOwn(DESCRIPTOR_TABLES[kind], type))
+    walkRequireOneOf(DESCRIPTOR_TABLES[kind][type], options, p, ctx);
+}
+
+/** A construct's `requireOneOf`: its options give at least one of those
+ *  fields. A null field is not given, as the field walk treats it. */
+function walkRequireOneOf(
+  d: ConstructDescriptor,
+  options: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  const oneOf = d.requireOneOf;
+  const type = d.type;
+  if (oneOf !== undefined && oneOf.every((k) => options[k] == null)) {
+    ctx.errors.push({
+      path,
+      message: `${type} options must specify at least one of ${oneOf.join(", ")}`,
+    });
+  }
 }
 
 function walkBaseFields(

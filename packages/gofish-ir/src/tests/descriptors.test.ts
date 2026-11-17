@@ -19,6 +19,9 @@
  */
 
 import {
+  CONSTRAINTS,
+  DESCRIPTOR_TABLES,
+  acceptedFields,
   LABEL_OPTIONS,
   OPERATORS,
   OPTION_TYPES,
@@ -37,6 +40,8 @@ import type {
   CurveIR,
   ShapeIR,
   PlaceIR,
+  SpacingIR,
+  ConstraintIR,
   LabelSpecIR,
   OverlapIR,
   TileIR,
@@ -81,7 +86,6 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "dir",
     "spacing",
     "alignment",
-    "anchor",
     "reverse",
     "glue",
     "baseline",
@@ -349,10 +353,14 @@ const SCHEMA_STRATEGY_KEYS: Record<
     wiggle: {},
     at: { part: true, point: true },
   } satisfies StrategyKeys<BaselineIR>,
+  Spacing: {
+    box: { gap: true },
+    pitch: { distance: true, at: true },
+  } satisfies StrategyKeys<SpacingIR>,
 };
 
 console.log(
-  "\n# STRATEGIES agree with schema.ts FilterIR / TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR / BaselineIR"
+  "\n# STRATEGIES agree with schema.ts FilterIR / TileIR / OverlapIR / CurveIR / BinIR / CalendarPartitionIR / ShapeIR / PlaceIR / BaselineIR / SpacingIR"
 );
 for (const [family, kinds] of Object.entries(SCHEMA_STRATEGY_KEYS)) {
   const table = STRATEGIES[family as keyof typeof STRATEGIES].kinds as Record<
@@ -394,6 +402,82 @@ for (const [family, spec] of Object.entries(STRATEGIES)) {
         !(name in kinds) &&
         Object.keys(preset.values).every((k) => k in kinds[preset.kind].params)
     );
+  }
+}
+
+/** The options keys of `ConstraintIR`, per constraint type. Typed so that a
+ *  type checker flags a type or an option added to or removed from the
+ *  schema.ts union; the runtime check below compares them with
+ *  `CONSTRAINTS`. */
+type ConstraintOptions<T extends ConstraintIR["type"]> = NonNullable<
+  Extract<ConstraintIR, { type: T }>["options"]
+>;
+const SCHEMA_CONSTRAINT_KEYS = {
+  align: { x: true, y: true } satisfies Record<
+    keyof ConstraintOptions<"align">,
+    true
+  >,
+  distribute: {
+    dir: true,
+    spacing: true,
+    order: true,
+    glue: true,
+  } satisfies Record<keyof ConstraintOptions<"distribute">, true>,
+  position: { x: true, y: true, anchor: true } satisfies Record<
+    keyof ConstraintOptions<"position">,
+    true
+  >,
+  nest: { x: true, y: true } satisfies Record<
+    keyof ConstraintOptions<"nest">,
+    true
+  >,
+  zAbove: {},
+  zBelow: {},
+} satisfies Record<ConstraintIR["type"], Record<string, true>>;
+
+console.log("\n# CONSTRAINTS agree with schema.ts ConstraintIR");
+check(
+  "CONSTRAINTS types === ConstraintIR types",
+  JSON.stringify(Object.keys(CONSTRAINTS).sort()) ===
+    JSON.stringify(Object.keys(SCHEMA_CONSTRAINT_KEYS).sort())
+);
+for (const [type, keys] of Object.entries(SCHEMA_CONSTRAINT_KEYS)) {
+  const schemaKeys = Object.keys(keys).sort();
+  const descriptorKeys = Object.keys(
+    acceptedFields("constraint", type) ?? {}
+  ).sort();
+  check(
+    `${type}: CONSTRAINTS fields === ConstraintIR options keys`,
+    JSON.stringify(schemaKeys) === JSON.stringify(descriptorKeys),
+    JSON.stringify({ schemaKeys, descriptorKeys })
+  );
+}
+check(
+  "distribute's spacing is spread's spacing type",
+  CONSTRAINTS.distribute.fields.spacing.type ===
+    OPERATORS.spread.fields.spacing.type
+);
+
+console.log("\n# Every descriptor table, by kind");
+for (const [kind, table] of Object.entries(DESCRIPTOR_TABLES)) {
+  for (const [key, d] of Object.entries(table)) {
+    check(
+      `${kind} ${key}: its key is its type and its kind is its table's`,
+      d.type === key && d.kind === kind,
+      JSON.stringify({ type: d.type, kind: d.kind })
+    );
+    for (const k of d.requireOneOf ?? [])
+      check(
+        `${kind} ${key}: requireOneOf names its field ${k}`,
+        Object.hasOwn(resolveFields(d), k)
+      );
+    // Only the validator's nested-options walk and the generated Python
+    // constraint cores read requireOneOf, so only a constraint may set it.
+    if (d.requireOneOf !== undefined)
+      check(
+        `${kind} ${key}: only a constraint sets requireOneOf`,
+        kind === "constraint"
+      );
   }
 }
 

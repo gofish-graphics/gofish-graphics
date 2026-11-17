@@ -17,6 +17,7 @@ import {
   layer as layerOf,
   value,
   percent,
+  Spacing,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -227,7 +228,13 @@ async function main() {
       [2, 100, 2].map((h, i) => ({ k: `${i}`, h })),
       { axes: false }
     )
-      .flow(spread({ by: "k", dir: "y", spacing: 30, anchor: "middle" }))
+      .flow(
+        spread({
+          by: "k",
+          dir: "y",
+          spacing: Spacing.pitch(30, { at: "middle" }),
+        })
+      )
       .mark(rect({ w: 10, h: "h" }))
       .resolve();
     const data = await runLayout({}, node);

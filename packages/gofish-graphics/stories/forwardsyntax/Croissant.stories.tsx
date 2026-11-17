@@ -18,6 +18,7 @@ import {
   spread,
   text,
   Unit,
+  Spacing,
 } from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
 import { seattleWeather } from "../../src/data/seatle-weather";
@@ -211,8 +212,7 @@ export const Ridgeline: StoryObj<Args> = {
         spread({
           by: field("month").sort(months),
           dir: "y",
-          anchor: "baseline",
-          spacing: 36,
+          spacing: Spacing.pitch(36, { at: "baseline" }),
         })
       )
       .mark(

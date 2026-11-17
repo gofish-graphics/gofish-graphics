@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Coord, rect
+from gofish import Coord, Spacing, rect
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
@@ -40,12 +40,12 @@ def story_violin_tree():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "middle"},
+                x={"kind": "distribute", "spacing": Spacing.pitch(0, at="middle")},
                 y={"kind": "nest", "pad": 18},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": LEAF_THETA, "anchor": "middle"},
-                y={"kind": "distribute", "spacing": 0, "anchor": "middle"},
+                x={"kind": "distribute", "spacing": Spacing.pitch(LEAF_THETA, at="middle")},
+                y={"kind": "distribute", "spacing": Spacing.pitch(0, at="middle")},
             ),
             coord=Coord.clock(),
         ),

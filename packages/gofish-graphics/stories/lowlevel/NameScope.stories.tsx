@@ -16,6 +16,7 @@ import {
   spread,
   text,
   Shape,
+  Spacing,
 } from "../../src/lib";
 
 // String-name resolution checks. NOT gallery-tagged: these are test-like.
@@ -220,8 +221,7 @@ export const MedianTrend: StoryObj = {
           spread({
             by: "g",
             dir: "y",
-            anchor: "baseline",
-            spacing: 30,
+            spacing: Spacing.pitch(30, { at: "baseline" }),
           })
         )
         .mark(
