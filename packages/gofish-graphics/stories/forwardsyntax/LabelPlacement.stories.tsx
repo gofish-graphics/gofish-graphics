@@ -184,7 +184,7 @@ export const StreamgraphInteriorLabels: StoryObj = {
     chart(rows, { w: 560, h: 360, schema: { date: Unit.time() } })
       .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }).label("series"))
-      .render(container, { legend: false });
+      .render(container, { legend: { color: false } });
     return container;
   },
 };

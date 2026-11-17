@@ -830,7 +830,7 @@ class Mark(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """
@@ -853,7 +853,7 @@ class Mark(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
@@ -1705,7 +1705,7 @@ class ChartBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """
@@ -1718,7 +1718,9 @@ class ChartBuilder(_Root):
             h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the chart's own ``axes`` option.
-            legend: Draw the color legend (the JS render option ``legend``).
+            legend: Which legend entries to draw (the JS render option
+                ``legend``): ``True``, ``False``, or a dict such as
+                ``{"color": False, "y": {"title": "fish"}}``.
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
             debug: Whether to enable debug mode
@@ -1747,7 +1749,7 @@ class ChartBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """Save the rendered chart to ``path`` (format inferred from the
@@ -4362,7 +4364,7 @@ def _render_widget(
     w: int,
     h: int,
     axes: Optional[Any],
-    legend: Optional[bool],
+    legend: Optional[Any],
     debug: bool,
 ):
     """Render ``root`` as a notebook widget: its document and the callbacks
@@ -4420,7 +4422,7 @@ class LayerBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """
@@ -4433,7 +4435,9 @@ class LayerBuilder(_Root):
             h: Height of the whole graphic in pixels, axes and legend included
             axes: Draw axes (the JS render option ``axes``). Leave unset to
                 use the root tier's own ``axes`` option.
-            legend: Draw the color legend (the JS render option ``legend``).
+            legend: Which legend entries to draw (the JS render option
+                ``legend``): ``True``, ``False``, or a dict such as
+                ``{"color": False, "y": {"title": "fish"}}``.
                 Leave unset for the default; a ``chart()`` ``legend`` option
                 wins over this one.
             debug: Whether to enable debug mode
@@ -4451,7 +4455,7 @@ class LayerBuilder(_Root):
         w: int = 800,
         h: int = 600,
         axes: Optional[Any] = None,
-        legend: Optional[bool] = None,
+        legend: Optional[Any] = None,
         debug: bool = False,
     ):
         """Save the chain's render to ``path`` (see ``ChartBuilder.save``)."""

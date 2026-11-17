@@ -355,6 +355,12 @@ One keyed domain can be mapped at several sizes, but a chart draws one axis
 with its own σ. The axis is correct only for content mapped at the same σ.
 Question 5 in section 8 records the decision.
 
+A domain of widths (a space with no origin) has no positions, so it draws no
+axis. The legend reads it instead: `KeyedDomains.lengthScales` lists the
+root's width domains, and each gets a length entry, a bracket whose length is
+a datum in the same domain, so it is mapped at the root's σ (see
+[Legends](/internals/frontend/legends#length-entries)).
+
 ### The scope dump
 
 `GOFISH_DUMP_SCOPES` keeps its one line per solve. The scope kinds shrink to

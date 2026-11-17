@@ -19,7 +19,7 @@ import {
   LayerBuilder,
   PREVIOUS_LAYER_MARKS,
 } from "../ast/marks/chart";
-import type { AxesOptions, View } from "../ast/gofish";
+import type { AxesOptions, LegendOptions, View } from "../ast/gofish";
 import { createName, type Token } from "../ast/createName";
 import { Constraint, RelateOperand } from "../ast/constraints";
 import type {
@@ -867,7 +867,7 @@ export interface RenderIROptions {
   w?: number;
   h?: number;
   axes?: AxesOptions;
-  legend?: boolean;
+  legend?: LegendOptions;
   debug?: boolean;
 }
 

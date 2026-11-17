@@ -1209,9 +1209,9 @@ export const CHART_OPTIONS: FieldGroup = group({
     doc: "Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead.",
   },
   legend: {
-    type: t.boolean,
+    type: t.ref("LegendOptions"),
     default: true,
-    doc: "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+    doc: "Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Turned off, the marks keep their colors and sizes and only the entry is dropped.",
   },
   padding: {
     type: t.number,
@@ -1244,6 +1244,38 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
       t.object({
         x: { type: t.ref("AxisOptions"), doc: "Options for the x axis." },
         y: { type: t.ref("AxisOptions"), doc: "Options for the y axis." },
+      })
+    ),
+  },
+  LegendOptions: {
+    doc: "Which legend entries to draw: a boolean for every entry; an object sets each on its own, and an entry left out is drawn.",
+    type: t.union(
+      t.boolean,
+      t.object({
+        color: {
+          type: t.boolean,
+          doc: "The color scale's entry: its swatches, or its colorbar for a gradient.",
+        },
+        x: {
+          type: t.ref("LengthEntryOptions"),
+          doc: "The length entry of the scales along x that have no origin.",
+        },
+        y: {
+          type: t.ref("LengthEntryOptions"),
+          doc: "The length entry of the scales along y that have no origin.",
+        },
+      })
+    ),
+  },
+  LengthEntryOptions: {
+    doc: "One length entry's options: a boolean draws it or not; an object sets its title.",
+    type: t.union(
+      t.boolean,
+      t.object({
+        title: {
+          type: t.union(t.string, t.literal(false)),
+          doc: "The name after the amount, as in 5000 thousand unemployed. A string sets it; false drops it. Omitted, the measure's name, as an axis title is.",
+        },
       })
     ),
   },

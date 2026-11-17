@@ -281,9 +281,9 @@ measure?)`:
   overlay is one. An overlay of an origin-less child and a free one seated
   on its baseline keeps the free child's interval, so it can start below 0
   (`none [−20, 7]` for a bar of −20 beside an origin-less bar of 7). Only
-  its width means anything, so what reads one reads its width: a
-  difference axis spans its niced width from the content's start
-  (`differenceSpan`).
+  its width means anything, so what reads one reads its width from the
+  content's start (`differenceSpan`). It is a length scale: it draws no
+  axis, and its guide is a length entry in the legend.
 
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
@@ -428,7 +428,8 @@ the two sides:
   the trait already puts the 0.
 - Under `Baseline.middle()` and `Baseline.wiggle()` the stack's 0 is no data
   value, so the stack's space has **no origin** (`"none"`): a position on it
-  is no amount, and its axis is the difference axis. Two things are apart
+  is no amount, so it draws no axis: its scale gets a length entry in the
+  legend. Two things are apart
   here. The space's data origin says whether a position is an amount from 0.
   The node's own 0 is where a parent lines it up, and that is a placement
   fact: the point its baseline names. The placement solve seats a stack's
@@ -784,8 +785,11 @@ each inherent to what the origin states are:
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
   no origin, and none for `middle`). The bars of a bar chart are one free
   magnitude until the scope root places its baseline.
-- **Which axis renders** (`axisOver`): pinned renders an absolute axis, none
-  a delta axis, free none, until placed. The render root places a free
+- **Which guide renders** (`domainOver`, `axisOver`): pinned maps
+  `"positions"` and renders an absolute axis. None maps `"widths"`: it is a
+  length scale, so it renders no axis and its scale gets a length entry in
+  the legend ([Legends](/internals/frontend/legends#length-entries)). Free
+  renders none, until placed. The render root places a free
   space's baseline at its `originPx` (`placeBaseline`; `GoFishNode.
 placedSpace`), so a free root renders an absolute axis, niced about its 0;
   the axis's frame seats the free content's baseline at its data 0 (the
@@ -1736,9 +1740,9 @@ axis's claim is measured from data 0 and is the hull of what the content
 draws, so each side reaches the farther of the claim and the domain's niced
 end: pixels drawn past the data (a mark's size at its datum, a tick label
 past the last tick) take room only where the domain does not already reach
-past them. A delta axis centers its content in the niced width, so each
-side reaches at least `σ·nicedWidth/2` from the middle of its claim. Widening
-twice to one width changes nothing.
+past them. Widths (a space with no origin) widen to a keyed domain's width
+centered on the claim, so each side reaches at least `σ·width/2` from the
+middle of its claim. Widening twice to one width changes nothing.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1891,7 +1895,8 @@ reads the same rounded domain (#659). `niceContinuous` (`underlyingSpace.ts`)
 is the one nicing function, and `niceScope` (`extent.ts`) widens the claim to
 match. It nices exactly the spaces that render an axis over their interval
 (`axisOver`), or will once placed: a pinned domain's two ends, a free one's two
-ends about its 0, and a delta axis's width from 0. A **coord scope never
+ends about its 0. A space with no origin draws no axis, so it is not niced:
+its widths fill the scope that maps them. A **coord scope never
 nices** (its domains map into a fixed coordinate range).
 
 A domain nices **to the ticks of the axis drawn over it** (`AxisTicks`): a tick

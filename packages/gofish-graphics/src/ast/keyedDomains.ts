@@ -20,8 +20,9 @@ import { childRole, type SharingPlan } from "./constraints/compose";
 import { unionChildSpaces } from "./graphicalOperators/alignment";
 import { isTiedUnit } from "./measure";
 import {
+  domainOver,
   isCONTINUOUS,
-  originIs,
+  placeBaseline,
   spaceUnit,
   unitKeyOf,
   type AxisTicks,
@@ -59,9 +60,14 @@ type Seat = { spaceRoot: KeyedNode; top: KeyedNode; topType?: UnderlyingSpace };
  *  one, and whether it holds data positions or only widths. */
 type DomainId = { unit?: string; kind: "position" | "width" };
 
-/** A keyed domain: its interval, what it is ({@link DomainId}), and
- *  whether some mark ties its unit (`tieUnit`, #1087). */
-type KeyedDomain = DomainId & { interval: Interval.Interval; tied: boolean };
+/** A keyed domain: its interval, what it is ({@link DomainId}), whether
+ *  some mark ties its unit (`tieUnit`, #1087), and the type of the first
+ *  top that added to it (what titles it: its measure). */
+type KeyedDomain = DomainId & {
+  interval: Interval.Interval;
+  tied: boolean;
+  space: UnderlyingSpace;
+};
 
 /** What the domain of a space is ({@link DomainId}), and its key: its
  *  unit's representative, or, for values with no unit (literals), the top
@@ -74,8 +80,8 @@ const domainId = (
   const key = unit ?? `set:${top.uid}`;
   // An origin-less space (a middle alignment) has only widths, no data
   // positions, so its domain is the unit's domain of widths, kept apart
-  // from the domain of positions.
-  return originIs(space, "none")
+  // from the domain of positions (`domainOver`).
+  return domainOver(placeBaseline(space)) === "widths"
     ? { unit, kind: "width", key: `${key}/width` }
     : { unit, kind: "position", key };
 };
@@ -138,6 +144,7 @@ export class KeyedDomains {
     domains[axis].set(key, {
       ...id,
       tied,
+      space: prior?.space ?? space,
       interval: prior === undefined ? iv : Interval.union(prior.interval, iv),
     });
   }
@@ -241,6 +248,26 @@ export class KeyedDomains {
     const key = this.keyOf(node, axis, space, viaSet);
     if (key === undefined) return undefined;
     return this.domains.get(key.spaceRoot)?.[axis].get(key.key)?.interval;
+  }
+
+  /** The length scales `spaceRoot` maps on `axis`: its keyed domains of
+   *  widths, each with the type of the space that first added to it (what
+   *  titles it). A length scale has a scale factor and no place in the
+   *  plot, so its guide is an entry in the legend, not an axis
+   *  (`domainOver`). */
+  lengthScales(
+    spaceRoot: KeyedNode,
+    axis: 0 | 1
+  ): { interval: Interval.Interval; space: UnderlyingSpace }[] {
+    // TODO(#1322): a coordinate transform maps its domains into its own
+    // coordinates (a polar stream's thickness runs along the radius), not
+    // into pixels of the page, so a bracket in the legend cannot show one.
+    // Until an entry can be drawn in a coord's units, a coord has none.
+    if (spaceRoot._space !== undefined) return [];
+    const domains = this.domains.get(spaceRoot)?.[axis];
+    return [...(domains?.values() ?? [])]
+      .filter((d) => d.kind === "width")
+      .map(({ interval, space }) => ({ interval, space }));
   }
 
   /** Whether some keyed domain's unit is tied (`tieUnit`). */

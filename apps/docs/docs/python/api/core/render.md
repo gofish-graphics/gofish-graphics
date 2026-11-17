@@ -26,13 +26,13 @@ case.
 
 ## Parameters
 
-| Parameter | Type                   | Default | Description                                                                                                                                                          |
-| --------- | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `w`       | `int`                  | `800`   | Width of the whole graphic in pixels, axes, titles and legend included                                                                                               |
-| `h`       | `int`                  | `600`   | Height of the whole graphic in pixels, axes, titles and legend included                                                                                              |
-| `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Overrides the outermost chart's `axes` only. Unset, the chart's own `axes` option decides. |
-| `legend`  | `bool \| None`         | `None`  | Whether to draw the color-scale legend. Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one.                                 |
-| `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                                                    |
+| Parameter | Type                   | Default | Description                                                                                                                                                                                                                            |
+| --------- | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `w`       | `int`                  | `800`   | Width of the whole graphic in pixels, axes, titles and legend included                                                                                                                                                                 |
+| `h`       | `int`                  | `600`   | Height of the whole graphic in pixels, axes, titles and legend included                                                                                                                                                                |
+| `axes`    | `bool \| dict \| None` | `None`  | Auto-generate axes, labels, and legends; same shape as `chart(axes=...)`. Overrides the outermost chart's `axes` only. Unset, the chart's own `axes` option decides.                                                                   |
+| `legend`  | `bool \| dict \| None` | `None`  | Which legend entries to draw: `True`, `False`, or a dict such as `{"color": False}`; see [chart › Legend](/python/api/core/chart#legend). Unset, the default (`True`) applies. A `chart()` option of the same name wins over this one. |
+| `debug`   | `bool`                 | `False` | Whether to enable debug rendering                                                                                                                                                                                                      |
 
 Returns a `GoFishChartWidget`.
 

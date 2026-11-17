@@ -42,7 +42,7 @@ content. Each ring holds the rings inside it plus its own shapes, and seats its
 shapes past everything inside it:
 
 ```
-inner  = Layer([ content, ...continuous/difference shapes ])
+inner  = Layer([ content, ...continuous shapes ])
 axes   = Layer([ inner, ...ordinal labels ])
 titles = Layer([ axes, ...title anchors, ...titles ])
 root   = Layer([ titles, legend ])
@@ -100,7 +100,7 @@ on (`axisSpan`, `runStartBox`) read their place along the axis from refs
 depth across the axis and is not seated there, so it is ink across it as well.
 A divider is `cross` pixels deep across the axis and claims that.
 
-The **inner tier** holds the constraint-pinned axes (continuous/difference); the
+The **inner tier** holds the constraint-pinned axes (continuous and time); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid
 out so they can seat past its bounding box. In each tier the wrapped child is
 pinned with `position({ x: 0, y: 0, anchor: "baseline" })` — a literal-pixel pin
@@ -137,10 +137,10 @@ A plot covers its whole niced domain, not only the hull of its marks: on each
 axis with an origin, the content its axes are seated beside (`_axesBeside`)
 widens its claim and its plot to the domain, rounded as the axis over it is
 (`KeyedDomains.scope`, the same widen-then-nice the marks are placed by). On
-a difference axis the domain is a width, and the plot covers it centered on
-its content, where the difference axis draws its line: both read it from
-one formula (`differenceSpan`), in the content's frame, which measures
-widths from the content's start wherever its interval starts. The
+a dimension with no origin the domain is a width: it draws no axis (it is a
+length scale, and its guide is a length entry in the legend), and the plot
+covers the width from the content's start (`differenceSpan`), in the
+content's frame. The
 claim walk widens its plan (`domainPlan` in `layer`) and layout widens its box
 (`GoFishNode.domainSpan`), so the two agree. Every axis line then distributes
 just past the content's box without its dressing, like any other chrome
@@ -163,7 +163,7 @@ Each axis seats in a gutter on one cross-edge, chosen in the owner's **axis orde
 The default is `defaultAxisSide` (`axes/elaborate.tsx`), read off the owner's
 `axisDirection` on the cross axis:
 
-- a continuous/difference **x-axis renders at the visual bottom**: the `start` of a
+- a continuous **x-axis renders at the visual bottom**: the `start` of a
   y that grows upward (a scatter, a vertical bar chart), the `end` of a y that reads
   top-down (a horizontal bar's category y, a faceted stack's facet y);
 - every other axis takes `start` in its frame: a y-axis on the left, and a category
@@ -349,9 +349,7 @@ thunk path. A node built by hand has no `rebuild`, and `"auto"` on it throws.
 **Tagging and reading labels.** Axis elaboration tags every tick and category
 label `Text` with `axisLabel = { dim, kind, depth }` (`kind` is `"ordinal"` or
 `"continuous"`; `depth` is the label's level depth on its dim, see
-[Levels](#levels);
-difference-axis delta labels are not tagged, since the angle does not apply to
-them). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
+[Levels](#levels)). After a run, `collectLabelBoxes` walks the laid-out tree, and for each
 tagged label reads its unrotated text box and rotation from the `Text` node and
 its pivot: its origin, found by summing its own and every ancestor's
 `projectedTranslate`, plus the glyph offset the text keeps (`glyphDy`, the
@@ -436,10 +434,12 @@ one branch per axis flavor — the seam a future public API would override. Sinc
 the #586 collapse POSITION and DIFFERENCE are no longer distinct space _kinds_
 but two `origin` states of the single `continuous` kind, so the branches
 dispatch on one read of the origin state, `axisOver(space)` (`"absolute"`
-for a pinned space, `"delta"` for an origin-less one, none for a free
-magnitude), and `isORDINAL` rather than a `kind` tag, and the data interval is read off the type alone
-(`continuousInterval(space)` for a pinned axis, `dataWidth(space)` for a
-difference axis), never off the size claim:
+for a pinned space, none for an origin-less one or a free magnitude), and
+`isORDINAL` rather than a `kind` tag, and the data interval is read off the
+type alone (`continuousInterval(space)`), never off the size claim. An
+origin-less space draws no axis: `domainOver(space)` reads it as `"widths"`,
+a length scale, whose guide is a length entry in the
+[legend](/internals/frontend/legends#length-entries):
 
 - **POSITION (continuous, numeric origin)** — `d3.nice` + `d3.ticks` over the
   interval; an axis line
@@ -465,7 +465,7 @@ difference axis), never off the size claim:
   the same `positionAxis` as a numeric axis, its row labels passed as
   `extraLabels` (each with its row's offset past the line). `label.angle`
   does not rotate them yet (a rotated row would need its depth from the
-  rotated label boxes), so, like a difference axis's delta labels, they
+  rotated label boxes), so they
   carry no `axisLabel` tag and `label.angle: "auto"` does not score them. Its
   ticks and
   labels come from calendar partitions (`CalendarPartition` in
@@ -519,17 +519,6 @@ difference axis), never off the size claim:
   `KeyedDomains.recordDemand`), and the axis is
   drawn from the same stamp, so nicing and drawing read one source (see
   [Underlying Space](/internals/core/underlying-space#nicing-is-a-keyed-domain-operation-applied-on-demand)).
-- **DIFFERENCE (continuous, `origin: "none"`)** — bare tick marks at the
-  tick values over `[0, w]`, where `w` is the space's width niced from 0
-  (`niceContinuous`, the same nicing the scope that sizes the content
-  applies), so the steps are even. A delta axis has no data 0, so its frame
-  is its own: it centers the content in that niced width, because a delta axis
-  comes from centering (`middle` alignment) and its slack splits evenly. Plus
-  plain-text labels
-  showing the _delta_ between adjacent ticks, pinned at their midpoints
-  (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
-  their own to provide an offset, so they `distribute` off the line (at the
-  tick + gap distance) instead of aligning flush against it.
 - **ORDINAL** — per key, a `text(key)` plus a `ref(keyNode)` stand-in bound
   directly to the laid-out key node. The label `align`s `middle` with its ref
   along the axis (tracking its mark), and `distribute`s against the wrapped
@@ -644,10 +633,7 @@ plot's σ to sit on its scale: each tick, the axis line's span and the line's
 seat at the other axis's floor are `position` constraints that read their
 datums in the plot's frame (`in`, internal for now, #1289), so an axis
 outside a chart with a size of its own still maps with the σ that size
-solved. A difference axis has no data 0 to read: on such an axis a layer's
-frame measures lengths of its σ from its own 0 (`GoFishNode.layoutFrames`,
-as the claim walk reads its plan), where the plot's data starts, so the
-axis's 0 sits the axis's slack before it. A chart is placed whole, its
+solved. A chart is placed whole, its
 baseline with it, so a chart's own free baseline is placed
 (`placedSpace`): a bar chart beside a caption in a `spread` draws the
 value axis it draws on its own (#1170). On an axis
@@ -751,7 +737,7 @@ The title ring (`axisTitles`) centers each title on the axis shape it
 describes, not on the plot:
 
 - The anchor is the axis's own span, which `AxisElaboration` carries as
-  `anchor`: the axis line of a continuous or difference axis, and for an
+  `anchor`: the axis line of a continuous axis, and for an
   ordinal axis an `axisSpan` from its first slot's start to its last slot's
   end, which draws nothing. So a category axis's title centers on the plot,
   not on the owner's content box, which holds the other axis's gutter when

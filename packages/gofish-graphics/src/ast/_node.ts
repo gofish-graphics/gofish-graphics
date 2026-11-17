@@ -84,6 +84,7 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
   axisOver,
+  domainOver,
   differenceSpan,
   originIs,
   placeBaseline,
@@ -905,7 +906,7 @@ export class GoFishNode {
    *  out: data `v` is at `σ·v + originPx` in its own axis order, from its
    *  local origin. On an axis with no data 0 it measures lengths of its σ
    *  from that origin (`originPx` 0), as the claim walk reads its plan (a
-   *  difference axis). Undefined where it has no σ, and on a node that is
+   *  centered stack). Undefined where it has no σ, and on a node that is
    *  no layer. A `position` with `in` reads a datum through it
    *  (`PositionOptions.in`). */
   public layoutFrames?: [AxisMap | undefined, AxisMap | undefined];
@@ -2479,8 +2480,10 @@ export class GoFishNode {
         if (show) this.axisDemand[dim] = ticksOf(dim);
         claim(dim, sig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
       } else if (space && !isUNDEFINED(space[dim]) && enabled.has(dim)) {
-        // A baseline magnitude ("free") owns no guide yet — only an anchored
-        // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
+        // A baseline magnitude ("free") owns no guide yet, and an
+        // origin-less space ("none") has no positions to name, so it owns
+        // none at all (its scale gets a length entry in the legend). Only an
+        // anchored (POSITION) or ORDINAL axis does.
         const s = space[dim];
         const prior = claimed.get(dim);
         let sig: string | undefined;
@@ -2861,18 +2864,17 @@ export class GoFishNode {
    * type on `axis` is `space`, the type its whole niced domain is read in
    * there: `space` placed ({@link placedSpace}). A plot covers that domain,
    * in its claim (`domainPlan` in `layer`) and in its layout
-   * ({@link domainSpan}). On a difference axis (no data 0, an axis over
-   * widths) the domain is a width, which its content sits centered in, as
-   * the axis draws it (`elaborateDifferenceAxis`) and as the claim widens
-   * (`widenTo`). Undefined on any other node, on an axis with no axis over
-   * it, and outside a render.
+   * ({@link domainSpan}). On a space with no data 0 the domain is a width,
+   * which its content sits centered in, as the claim widens (`widenTo`).
+   * Undefined on any other node, on a space that maps no domain, and
+   * outside a render.
    */
   public coveredDomain(
     axis: 0 | 1,
     space: UnderlyingSpace | undefined
   ): UnderlyingSpace | undefined {
     return this._axesBeside === true &&
-      (hasOrigin(space) || axisOver(space) === "delta") &&
+      (hasOrigin(space) || domainOver(space) === "widths") &&
       this.tryGetRenderSession()?.keyedDomains !== undefined
       ? this.placedSpace(space!, axis)
       : undefined;
@@ -2886,9 +2888,9 @@ export class GoFishNode {
    * is (`KeyedDomains.scope`). That box is a plot, and a plot covers its
    * niced domain, not only the hull of its marks, so an axis seated beside
    * it sits at the domain's floor, on both axes (a facet panel that draws
-   * only its y axis still covers the shared x domain). On a difference
-   * axis the niced width is centered on the content's. Undefined on any
-   * other node, and on an axis with no axis over it.
+   * only its y axis still covers the shared x domain). On a space with no
+   * data 0 the domain's width is centered on the content's. Undefined on
+   * any other node, and on a space that maps no domain.
    */
   public domainSpan(axis: 0 | 1): [number, number] | undefined {
     const frame = this.layoutFrames?.[axis];
@@ -2901,10 +2903,10 @@ export class GoFishNode {
       undefined
     )[0];
     if (!isCONTINUOUS(niced) || !isCONTINUOUS(space)) return undefined;
-    // A difference axis's niced width, centered on the content's, in the
-    // content's frame (`differenceSpan`), as the axis draws it.
+    // A width domain, centered on the content's, in the content's frame
+    // (`differenceSpan`).
     const [min, max] =
-      axisOver(space) === "delta"
+      domainOver(space) === "widths"
         ? differenceSpan(space, niced)
         : [niced.dataInterval.min, niced.dataInterval.max];
     if (!Number.isFinite(min) || !Number.isFinite(max)) return undefined;

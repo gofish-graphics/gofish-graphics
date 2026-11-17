@@ -3643,6 +3643,55 @@ for the API.
       ],
       "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
     },
+    "LegendOptions": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "boolean",
+              "description": "The color scale's entry: its swatches, or its colorbar for a gradient."
+            },
+            "x": {
+              "$ref": "#/$defs/LengthEntryOptions",
+              "description": "The length entry of the scales along x that have no origin."
+            },
+            "y": {
+              "$ref": "#/$defs/LengthEntryOptions",
+              "description": "The length entry of the scales along y that have no origin."
+            }
+          }
+        }
+      ],
+      "description": "Which legend entries to draw: a boolean for every entry; an object sets each on its own, and an entry left out is drawn."
+    },
+    "LengthEntryOptions": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": false
+                }
+              ],
+              "description": "The name after the amount, as in 5000 thousand unemployed. A string sets it; false drops it. Omitted, the measure's name, as an axis title is."
+            }
+          }
+        }
+      ],
+      "description": "One length entry's options: a boolean draws it or not; an object sets its title."
+    },
     "AxisInterval": {
       "type": "object",
       "properties": {
@@ -3760,8 +3809,8 @@ for the API.
           "default": true
         },
         "legend": {
-          "type": "boolean",
-          "description": "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+          "$ref": "#/$defs/LegendOptions",
+          "description": "Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Turned off, the marks keep their colors and sizes and only the entry is dropped.",
           "default": true
         },
         "padding": {

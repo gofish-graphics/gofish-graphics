@@ -853,16 +853,17 @@ console.log("# space: one fold for every origin");
 
 console.log("# space: nicing is gated on an axis over the interval");
 {
+  // A space with no origin is a length scale: it draws no axis, so it is
+  // not niced, and its widths fill the scope that maps them.
   const [delta, deltaClaim] = niceScope(
     CONTINUOUS(interval(0, 137), "none"),
     Extent(Pwl.affine(137, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
-    "a delta axis nices its width, its claim widening by half on each side",
-    JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 140)) &&
-      Pwl.at(deltaClaim!.width, 1) === 140 &&
-      Pwl.at(deltaClaim!.descent, 1) === 1.5
+    "a length scale is not niced, and its claim is left as it is",
+    JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 137)) &&
+      Pwl.at(deltaClaim!.width, 1) === 137
   );
   // A free magnitude renders the absolute axis of the scope that places its
   // baseline, so it nices as that axis does, about its own 0, and each side
