@@ -735,6 +735,14 @@ constraint with a `region` (`PositionRegion`,
   `x2` do (`placedByOwnData`), so the align moves the text to the region
   and never the region to the text. A layer around the region is placed
   by its data the same way.
+- Either way, the child's room is its whole cell. What a child draws may
+  end before its cell does: a band through the rows over a cell of time
+  ends at the last row, a day before the last month's cell ends. The
+  claim walk takes the cell as the room of a child placed by its data
+  (`rooms` in `placeByClaims`), as it does for a child centered in it,
+  and the layer's box covers every cell its regions give (`cellSpans`),
+  so the claim and the box agree, and the canvas holds the last cell
+  whole.
 - A partition inside another partition's cell divides that cell: on each
   axis its key does not place, it gives each child the cell it is in, so
   the child is placed there as a child of the outer partition is. That cell

@@ -7,7 +7,18 @@
 import { Band, bandOfRows, edgePath } from "../ast/shapes/band";
 import { setGroupCell } from "../ast/groupCell";
 import { GoFishNode } from "../ast/_node";
-import { chart, group, line, ribbon, Unit, Domain, Trait } from "../lib";
+import {
+  chart,
+  group,
+  line,
+  ribbon,
+  partition,
+  field,
+  Calendar,
+  Unit,
+  Domain,
+  Trait,
+} from "../lib";
 import { linear, monotone } from "../families/curve";
 import { add, constant, reparameterize, scale } from "../ast/fun";
 
@@ -419,6 +430,58 @@ console.log("# inset: the ends are drawn in, the baseline stays");
     close(inset.y[1], plain.y[1]),
     JSON.stringify({ plain, inset })
   );
+}
+
+console.log("# cells: a partition's last cell is held whole past the last row");
+{
+  // Three months of days: the last row is Mar 31, the last cell ends Apr 1.
+  const days: { date: string; v: number }[] = [];
+  for (let t = Date.UTC(2012, 0, 1); t <= Date.UTC(2012, 2, 31); t += 864e5)
+    days.push({ date: new Date(t).toISOString().slice(0, 10), v: 5 });
+  const w = 300;
+  const drawn = async (axes: any) => {
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (...a: unknown[]) => void warnings.push(a.join(" "));
+    let dl: any;
+    try {
+      dl = await chart(days, { schema: { date: Unit.time() } })
+        .flow(
+          partition({
+            by: field("date").bin([Calendar.year, Calendar.month]),
+            dir: "x",
+          })
+        )
+        .mark(ribbon({ x: "date", h: "v" }))
+        .toDisplayList({ w, h: 100, axes });
+    } finally {
+      console.warn = warn;
+    }
+    const xs = dl.items
+      .filter((i: any) => i.kind === "path" && i.role !== "axis")
+      .flatMap((p: any) =>
+        [...String(p.d).matchAll(/[ML]\s*(-?[0-9.]+)[ ,]/g)].map((m) => +m[1])
+      );
+    return { lo: Math.min(...xs), hi: Math.max(...xs), warnings };
+  };
+  for (const [name, axes] of [
+    ["no axes", false],
+    ["a y axis", { x: false, y: true }],
+  ] as const) {
+    const { lo, hi, warnings } = await drawn(axes);
+    // The bands run Jan 1 to Mar 31; the cells, one day more, to the edge.
+    const day = (hi - lo) / (days.length - 1);
+    ok(
+      `with ${name}, the last cell ends at the canvas's edge`,
+      close(w - hi, day, 1e-6),
+      JSON.stringify({ lo, hi, day })
+    );
+    ok(
+      `with ${name}, nothing draws past the canvas`,
+      !warnings.some((m) => m.includes("[gofish:layout]")),
+      warnings.join("\n")
+    );
+  }
 }
 
 console.log("# dispatch: the form follows the options");

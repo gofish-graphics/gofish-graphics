@@ -13,7 +13,11 @@ import {
 import { values, type Arith } from "../solver/arith";
 import { Tape, type F } from "../solver/formula";
 import type { LocalSpan, SolvePlaceable } from "./placementProgramLowerer";
-import type { PlacementConstraint, ScaleOf } from "./placementLowering";
+import {
+  compilePlacementCoordinate,
+  type PlacementConstraint,
+  type ScaleOf,
+} from "./placementLowering";
 import {
   axisIndex,
   axisName,
@@ -165,7 +169,8 @@ export type ClaimPlacement = {
    *  or on a node only layout places, has none). Built when first read. */
   boxes: () => Map<number, BoxForm>;
   /** The cell of each child a region's cell places with a size of its
-   *  own: the room it takes, which it sits in the middle of. */
+   *  own, which it sits in the middle of, or that its own data places in
+   *  the cell, which it may not fill: the room it takes. */
   rooms: Map<number, BoxForm>;
   /** Where the solve places each target, as formulas layout evaluates. */
   seats: PlanSeats;
@@ -790,6 +795,30 @@ export function placeByClaims(
         lo: tape.claim[cell.min],
         hi: Pwl.add(tape.claim[cell.min], tape.claim[cell.size!]),
       });
+  }
+  // A child its own data places in a region's cell is in its cell already
+  // (`constraintsOn`), and may draw less than the cell (a band through the
+  // rows over the cell's line, which end before the cell does). Its room is
+  // still its cell, as the cells of a partition make the axis's domain: so
+  // the claim holds every cell whole, as layout lays them out.
+  for (const c of constraints) {
+    if (
+      c.type !== "position" ||
+      c[own] !== undefined ||
+      c.region?.spans[axis] === undefined
+    )
+      continue;
+    const frame = scaleOf(c, axis);
+    if (frame === undefined) continue;
+    const [a, b] = c.region.spans[axis]!.map((v) =>
+      compilePlacementCoordinate(T, v, frame)
+    );
+    if (a === undefined || b === undefined) continue;
+    for (const r of c.children) {
+      const op = operands.get(keyOf(r));
+      if (op?.direct && !inCell(op.child) && !out(op.child))
+        rooms.set(op.child, { lo: tape.claim[a], hi: tape.claim[b] });
+    }
   }
   // A child the solve leaves unplaced sits at the layer's origin.
   for (const i of childIndices) if (!at.has(i)) at.set(i, boxOf(i));

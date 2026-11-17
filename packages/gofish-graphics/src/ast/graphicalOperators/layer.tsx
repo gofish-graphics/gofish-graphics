@@ -83,6 +83,7 @@ import {
 import {
   buildLayerConstraintLayoutPlan,
   buildChildSpans,
+  cellSpans,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -1646,6 +1647,21 @@ export const layer = createNodeOperatorSequential(
               maxs[axis].push(d[axis].max);
             }
           });
+          // A layer's box covers the cells its regions give its children
+          // (`cellSpans`), whatever the children draw in them.
+          const cells = cellSpans(
+            node.constraints,
+            effectivePosScales,
+            (r, axis) => {
+              const op = operands.get(keyOf(r));
+              return !(op?.direct && inkChildren[axis].has(op.child));
+            }
+          );
+          for (const axis of [0, 1] as const)
+            for (const [lo, hi] of cells[axis]) {
+              mins[axis].push(lo);
+              maxs[axis].push(hi);
+            }
           // A chart's frame covers its niced domain (`domainSpan`).
           for (const axis of [0, 1] as const) {
             const domain = node.domainSpan(axis);
