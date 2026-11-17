@@ -1,0 +1,55 @@
+{
+  "reorder-bars": {
+    "grab": [78, 180],
+    "path": [
+      [150, 170],
+      [260, 160],
+      [330, 160]
+    ],
+    "frames": [0, 1],
+    "variants": [
+      {},
+      { "precompute": "eager", "suffix": "-eager", "noShots": true }
+    ]
+  },
+  "move-segment": {
+    "grab": [73, 240],
+    "path": [
+      [150, 220],
+      [230, 200],
+      [275, 180]
+    ],
+    "frames": [0, 1],
+    "variants": [
+      {},
+      { "precompute": "eager", "suffix": "-eager", "noShots": true }
+    ]
+  },
+  "scheduler": {
+    "grab": [120, 15],
+    "path": [
+      [180, 50],
+      [220, 95],
+      [160, 130]
+    ],
+    "frames": [0, 1],
+    "variants": [
+      {},
+      { "debug": true, "suffix": "-debug" },
+      { "precompute": "eager", "suffix": "-eager", "noShots": true }
+    ]
+  },
+  "treemap-reparent": {
+    "grab": [55, 60],
+    "path": [
+      [150, 90],
+      [260, 120],
+      [300, 130]
+    ],
+    "frames": [0, 1],
+    "variants": [
+      {},
+      { "precompute": "eager", "suffix": "-eager", "noShots": true }
+    ]
+  }
+}

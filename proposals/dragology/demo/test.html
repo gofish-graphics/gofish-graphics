@@ -1,0 +1,43 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Drag demos test</title>
+    <style>
+      body {
+        background: #1e1f24;
+        margin: 0;
+        padding: 16px;
+        font: 13px system-ui;
+        color: #ddd;
+      }
+      .demo {
+        display: inline-block;
+        margin: 0 16px 16px 0;
+        vertical-align: top;
+      }
+    </style>
+    <script src="demos.js"></script>
+  </head>
+  <body>
+    <div id="out"></div>
+    <script>
+      const out = document.getElementById("out");
+      const params = new URLSearchParams(location.search);
+      const only = params.get("demo");
+      const debug = params.has("debug");
+      window.handles = {};
+      for (const name of GofishDragDemos.names) {
+        if (only && name !== only) continue;
+        const el = document.createElement("div");
+        el.className = "demo";
+        el.id = "demo-" + name;
+        out.appendChild(el);
+        window.handles[name] = GofishDragDemos.mount(name, el, {
+          debug,
+          precompute: params.get("precompute") || "lazy",
+        });
+      }
+    </script>
+  </body>
+</html>

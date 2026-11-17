@@ -17,6 +17,7 @@ export default tseslint.config(
       "packages/gofish-graphics/src/tests/**",
       "packages/gofish-graphics/stories/**",
       "pnpm-lock.yaml",
+      "proposals/dragology/demo/demos.js",
     ],
   },
   js.configs.recommended,
