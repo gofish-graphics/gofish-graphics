@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, stack, rect, derive, assignGradientColor, field, Color } from "../../src/lib";
+import { chart, spread, stack, rect, derive, assignGradientColor, field, Color, Coord } from "../../src/lib";
 import { ribbon } from "../../src/lib";
-import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
   title: "Forward Syntax/Color Scales",
@@ -306,7 +305,7 @@ export const RoseGradient: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(roseData, {
-      color: Color.gradient("blues"), coord: clock(), axes: true,
+      color: Color.gradient("blues"), coord: Coord.clock(), axes: true,
       // A wider polar inset, so the rotated radial title fits until the
       // coord reserves what its axes draw (#1165).
       padding: 40,

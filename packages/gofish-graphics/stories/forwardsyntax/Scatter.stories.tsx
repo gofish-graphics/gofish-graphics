@@ -8,8 +8,7 @@ import {
 import { drivingShifts } from "../../src/data/drivingShifts";
 import { penguins } from "../../src/data/penguins";
 import { chart, derive, line, rect, stack, join, Curve } from "../../src/lib";
-import { circle, scatter } from "../../src/lib";
-import { clock } from "../../src/ast/coordinateTransforms/clock";
+import { circle, scatter, Coord } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Scatter",
@@ -138,7 +137,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
       // parent partition (the lake's row), joins in that lake's catch rows, and
       // draws them as a polar pie — no `(data) => chart(data, ...)` callback.
       .mark(
-        chart({ coord: clock() })
+        chart({ coord: Coord.clock() })
           .flow(
             join(seafood, { on: "lake" }),
             stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 })
@@ -162,7 +161,7 @@ export const WithPieGlyphsDenormalized: StoryObj<Args> = {
     chart(catchDataWithLocations, { w: args.w, h: args.h })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
       .mark(
-        chart({ coord: clock() })
+        chart({ coord: Coord.clock() })
           .flow(stack({ by: "species", dir: "x", h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
       )

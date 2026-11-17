@@ -9,6 +9,13 @@
  *   - every snippet imports only from "gofish-graphics", "./dataset", bare npm
  *     packages, or local asset files (no leftover `../src/...`, `../helper`,
  *     or `@storybook/html` imports)
+ *   - every name a snippet imports from "gofish-graphics" is a public export
+ *     of the package (src/lib.ts, following `export *`), and every member it
+ *     reads off an imported namespace (`Coord.clock`) is exported by that
+ *     namespace. The loader re-points every import from the library source at
+ *     the package, so a story that imports an internal module (for example
+ *     `clock` from src/ast/coordinateTransforms/clock) would otherwise publish
+ *     an import line that does not load.
  *   - datasetCode and datasetPreview (when present) transpile
  *
  * Prints a table of id → ok / fallback and exits non-zero on any failure.
@@ -199,8 +206,87 @@ function checkImports(code) {
   return problems;
 }
 
+// The package's public surface, read from its entry with the TypeScript
+// checker so that `export *` and `export * as Ns` are followed. Maps each
+// exported name to the names it exports when it is a namespace (else null).
+function publicExports() {
+  const pkgDir = resolve(__dirname, "../../../packages/gofish-graphics");
+  const entry = resolve(pkgDir, "src/lib.ts");
+  const config = ts.getParsedCommandLineOfConfigFile(
+    resolve(pkgDir, "tsconfig.json"),
+    {},
+    { ...ts.sys, onUnRecoverableConfigFileDiagnostic: () => {} }
+  );
+  const program = ts.createProgram([entry], {
+    ...(config?.options ?? {}),
+    noEmit: true,
+  });
+  const checker = program.getTypeChecker();
+  const moduleSymbol = checker.getSymbolAtLocation(
+    program.getSourceFile(entry)
+  );
+  const exports = new Map();
+  for (const sym of checker.getExportsOfModule(moduleSymbol)) {
+    const target =
+      sym.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(sym) : sym;
+    const isNamespace =
+      target.flags & ts.SymbolFlags.ValueModule &&
+      target.declarations?.some((d) => ts.isSourceFile(d));
+    exports.set(
+      sym.name,
+      isNamespace
+        ? new Set(checker.getExportsOfModule(target).map((s) => s.name))
+        : null
+    );
+  }
+  return exports;
+}
+
+// Names a snippet imports from "gofish-graphics" that the package does not
+// export, and `Ns.member` reads of an imported namespace that it lacks.
+function checkGofishNames(code, fileName, exports) {
+  const problems = [];
+  const sf = ts.createSourceFile(
+    fileName,
+    code,
+    ts.ScriptTarget.ESNext,
+    true,
+    ts.ScriptKind.TSX
+  );
+  const namespaces = new Map(); // local name -> exported member names
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt)) continue;
+    if (stmt.moduleSpecifier.text !== "gofish-graphics") continue;
+    const clause = stmt.importClause;
+    if (!clause) continue;
+    if (clause.name) problems.push(`default import ${clause.name.text}`);
+    const bindings = clause.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) continue;
+    for (const el of bindings.elements) {
+      const name = (el.propertyName ?? el.name).text;
+      if (!exports.has(name)) problems.push(name);
+      else if (exports.get(name))
+        namespaces.set(el.name.text, exports.get(name));
+    }
+  }
+  const visit = (node) => {
+    if (
+      ts.isPropertyAccessExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      namespaces.has(node.expression.text) &&
+      !namespaces.get(node.expression.text).has(node.name.text)
+    ) {
+      problems.push(`${node.expression.text}.${node.name.text}`);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return [...new Set(problems)];
+}
+
 async function main() {
   const mod = await loadModule();
+  const exports = publicExports();
   const examples = mod.loadStoryExamples();
 
   let failures = 0;
@@ -234,6 +320,10 @@ async function main() {
 
     const badImports = checkImports(ex.code);
     if (badImports.length) issues.push(`bad imports: ${badImports.join(", ")}`);
+
+    const missing = checkGofishNames(ex.code, `${ex.id}.tsx`, exports);
+    if (missing.length)
+      issues.push(`not exported by gofish-graphics: ${missing.join(", ")}`);
 
     if (ex.datasetCode) {
       const dsErrs = transpiles(ex.datasetCode, `${ex.id}.dataset.ts`);
