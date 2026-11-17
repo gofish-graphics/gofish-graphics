@@ -74,7 +74,7 @@ export type NumberCellFormat = (cell: Cell) => string;
  * cannot be serialized, so a partition with one has no wire form, as a
  * Calendar value with a `.format(fn)` has none.
  */
-abstract class NumberBin {
+abstract class NumberBinning {
   readonly #format: NumberCellFormat | undefined;
 
   constructor(format: NumberCellFormat | undefined) {
@@ -109,7 +109,7 @@ abstract class NumberBin {
 }
 
 /** `Binning.step(size)`: cells `size` wide, aligned to multiples of `size`. */
-export class StepBinning extends NumberBin {
+export class StepBinning extends NumberBinning {
   readonly kind = "step" as const;
   readonly size: number;
 
@@ -135,7 +135,7 @@ export class StepBinning extends NumberBin {
 
 /** `Binning.thresholds(countOrEdges)`: about `count` cells with round edges, or
  *  the cells between the given edges. */
-export class ThresholdsBinning extends NumberBin {
+export class ThresholdsBinning extends NumberBinning {
   readonly kind = "thresholds" as const;
   readonly thresholds: number | number[];
 
@@ -165,7 +165,7 @@ export class ThresholdsBinning extends NumberBin {
 /** `Binning.quantiles(countOrProbabilities)`: `count` cells holding about the
  *  same number of values, or the cells between the quantiles at the given
  *  probabilities. */
-export class QuantilesBinning extends NumberBin {
+export class QuantilesBinning extends NumberBinning {
   readonly kind = "quantiles" as const;
   readonly quantiles: number | number[];
 
@@ -358,7 +358,7 @@ export function checkPartition(given: unknown, where: string): Partition {
   const p = kindValue(given);
   if (p instanceof CalendarPartition) return p;
   Frontend.checkPartition(p, where);
-  if (p instanceof NumberBin) return p as NumberPartition;
+  if (p instanceof NumberBinning) return p as NumberPartition;
   const wire = p as PartitionJSON;
   switch (wire.kind) {
     case "step":

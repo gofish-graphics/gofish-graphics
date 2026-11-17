@@ -18,11 +18,11 @@
  * Python bridge sends are read the same way ({@link structBin}).
  */
 import { Frontend } from "gofish-ir";
-import type { StructBin } from "../families/binning";
+import type { StructBinning } from "../families/binning";
 import type { PlaneFields } from "./polygonCells";
 
 /** One op of a struct's pipeline: the cells it is binned into. */
-export type StructOp = { op: "bin"; partition: StructBin };
+export type StructOp = { op: "bin"; partition: StructBinning };
 
 /** The wire form of a struct key. */
 export type StructExprWire = Frontend.StructAccessor;
@@ -43,7 +43,7 @@ export class StructExpr<HasRegion extends boolean = boolean> {
    *  family: `Binning.hex({ radius })` or `Binning.voronoi({ seeds })`. The groups
    *  are the cells over the two columns' domain in the chart's data, so
    *  every group of a split sees the same cells, and empty cells are kept. */
-  bin(bin: StructBin): StructExpr<true> {
+  bin(bin: StructBinning): StructExpr<true> {
     if (this.ops.length > 0)
       throw new Error(
         "struct(...).bin(...) is already binned: a struct takes one bin."
@@ -87,5 +87,5 @@ export const isStruct = (v: unknown): v is StructExprWire =>
   (v as { type?: unknown }).type === "struct";
 
 /** A struct key's bin, or undefined when it is not binned. */
-export const structBin = (by: StructExprWire): StructBin | undefined =>
+export const structBin = (by: StructExprWire): StructBinning | undefined =>
   by.ops?.find((op) => op.op === "bin")?.partition;

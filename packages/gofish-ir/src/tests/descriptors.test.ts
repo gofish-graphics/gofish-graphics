@@ -26,11 +26,12 @@ import {
   LABEL_OPTIONS,
   LEAF_MARKS,
   MARK_BASE_FIELDS,
+  OPERATOR_BASE_FIELDS,
+  COMBINATOR_OPTIONS_BASE_FIELDS,
   OPERATORS,
   OPTION_TYPES,
   STRATEGIES,
   resolveFields,
-  withEffect,
   type FieldGroup,
   type FieldType,
 } from "../frontend/descriptors.js";
@@ -403,11 +404,11 @@ for (const [family, spec] of Object.entries(STRATEGIES)) {
 }
 
 /**
- * The naming rule for strategy families (`apps/docs/docs/internals/design/
- * api-design.md`, "Strategy families are uppercase namespaces", #1355): a
- * family's lowercase name is never a construct's name, and an option that
- * takes one family's value is named by that family in lowercase (`tiling:
- * Tiling.squarify()`).
+ * The naming rule for strategy families, as `apps/docs/docs/internals/
+ * design/api-design.md` states it ("Strategy families are uppercase
+ * namespaces", #1355). The test walks every construct's fields, the field
+ * groups no construct includes, and the objects of `OPTION_TYPES`, into
+ * nested objects, and allows the role-named slots in `ROLE_NAMED_SLOTS`.
  */
 console.log("\n# Strategy families follow the naming rule");
 const CONSTRUCT_TABLES = { OPERATORS, LEAF_MARKS, COMBINATOR_MARKS };
@@ -430,7 +431,7 @@ const ROLE_NAMED_SLOTS: Readonly<Record<string, string>> = {
 };
 
 /** The strategy families a field's type takes directly: its refs to a
- *  family, through unions, arrays and records. */
+ *  family, through unions, arrays, records and tuples. */
 function familiesOf(type: FieldType): string[] {
   switch (type.kind) {
     case "ref":
@@ -441,6 +442,8 @@ function familiesOf(type: FieldType): string[] {
       return familiesOf(type.items);
     case "record":
       return familiesOf(type.valueType);
+    case "tuple":
+      return type.items.flatMap(familiesOf);
     default:
       return [];
   }
@@ -487,9 +490,16 @@ for (const [kind, entries] of Object.entries(DESCRIPTOR_TABLES)) {
     checkFamilyKeys(`${kind} ${name}`, resolveFields(descriptor));
   }
 }
+// The groups `resolveFields` does not merge: the base groups `acceptedFields`
+// adds per node kind, and `LABEL_OPTIONS`, which only the opaque `LabelIR`
+// ref reaches. Included groups (`withEffect`, ...) are covered above.
 checkFamilyKeys("LABEL_OPTIONS", LABEL_OPTIONS);
-checkFamilyKeys("withEffect", withEffect);
 checkFamilyKeys("MARK_BASE_FIELDS", MARK_BASE_FIELDS);
+checkFamilyKeys("OPERATOR_BASE_FIELDS", OPERATOR_BASE_FIELDS);
+checkFamilyKeys(
+  "COMBINATOR_OPTIONS_BASE_FIELDS",
+  COMBINATOR_OPTIONS_BASE_FIELDS
+);
 for (const [name, spec] of Object.entries(OPTION_TYPES)) {
   for (const fields of objectsIn(spec.type)) {
     checkFamilyKeys(`OPTION_TYPES.${name}`, fields);

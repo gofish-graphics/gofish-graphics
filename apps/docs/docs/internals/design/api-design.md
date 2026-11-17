@@ -247,7 +247,8 @@ own name. The option key is always the same word in lowercase:
 `curve: Curve.monotone`, `tiling: Tiling.voronoi`,
 `placement: Placement.around`, `effect: Effect.grayscale`. The rule does not
 apply where there is no single keyed slot. Several slots are named by their
-roles, as in `.transition({ enter, exit })`, and a method whose only argument
+roles, as in `.transition({ enter, exit })` and an axis's `levels`, a list of
+`Calendar` units with one per level. A method whose only argument
 is the strategy takes it bare, as in `.bin(Binning.step(0.5))`. `pack` will
 follow the rule with `pack({ packing: Packing.circles })` when it gets a
 second strategy (#1355). An option may also take a bare value as shorthand

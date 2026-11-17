@@ -22,6 +22,7 @@ import type {
 } from "./schema.js";
 import {
   compositePlan,
+  filterAttribute,
   LUMINANCE_TO_ALPHA_FILTER,
   usesLuminanceToAlpha,
 } from "./composite.js";
@@ -112,13 +113,8 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
         parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
-      const f = item.filter;
-      const fa =
-        f?.kind === "css"
-          ? ` filter="${esc(f.value)}"`
-          : f?.kind === "luminanceToAlpha"
-            ? ` filter="url(#${filterId})"`
-            : "";
+      const f = filterAttribute(item.filter, filterId);
+      const fa = f !== undefined ? ` filter="${esc(f)}"` : "";
       return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
     }
     case "composite":

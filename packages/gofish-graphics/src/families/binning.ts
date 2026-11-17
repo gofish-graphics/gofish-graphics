@@ -40,14 +40,14 @@ export type VoronoiBinning = Extract<Frontend.StructBinIR, { kind: "voronoi" }>;
 
 /** The kinds that cut the line of one field: the `Binning` value of
  *  `field(x).bin(...)`. */
-export type FieldBin = StepBinning | ThresholdsBinning | QuantilesBinning;
+export type FieldBinning = StepBinning | ThresholdsBinning | QuantilesBinning;
 
 /** The kinds that divide the plane of two fields: the value of
  *  `struct({ x, y }).bin(...)`. */
-export type StructBin = HexBinning | VoronoiBinning;
+export type StructBinning = HexBinning | VoronoiBinning;
 
 /** Every built-in way to bin a key. */
-export type Binning = FieldBin | StructBin;
+export type Binning = FieldBinning | StructBinning;
 
 /**
  * Cells of one width, aligned to multiples of it: a value is in the cell

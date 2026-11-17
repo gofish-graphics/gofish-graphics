@@ -6,8 +6,8 @@
  * DOM backend (`.render`, under happy-dom) draw the filter as an SVG `filter`
  * attribute.
  *
- * Run: `pnpm test:effect` (`pnpm build`, then the test under
- * `node --conditions browser --import tsx`, as `pnpm test:interaction` runs).
+ * Run: `pnpm build && node --conditions browser --import tsx
+ * src/tests/effect.test.ts` (wired as `pnpm test:effect`).
  */
 // The headless DOM goes first, so its globals exist before the built library
 // and solid-js/web evaluate.

@@ -52,7 +52,10 @@ on its own. Read the ones that bear on the feature before step 3.
   charts, diagrams and other visualizations on one substrate, so test approaches
   on all of them).
 - Naming and strategy families: the "One lowercase surface" bullet in
-  `CLAUDE.md`; `internals/design-evolution/three-surfaces.md` (when an option
+  `CLAUDE.md`; `internals/design/api-design.md` "Strategy families are uppercase
+  namespaces" (the naming rule: a family is a noun for what one member is, and
+  its option key is the family in lowercase);
+  `internals/design-evolution/three-surfaces.md` (when an option
   becomes an uppercase strategy namespace such as `Overlap.separate()`, and why a
   one-strategy option gets no option at all); `internals/frontend/serialization.md`
   (the `STRATEGIES` table in `packages/gofish-ir/src/frontend/descriptors.ts` and

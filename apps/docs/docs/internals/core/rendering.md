@@ -239,7 +239,8 @@ flat-absolute fold cannot express on its own:
   (`composite.ts`), which both backends write from. Its id is the render's own,
   drawn from the counter the composite ids come from (`paintDocument` in
   `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
-  share it. A
+  share it. Both backends take the group's `filter` attribute from
+  `filterAttribute` (`composite.ts`): the CSS value, or `url(#id)` of that def. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its

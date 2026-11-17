@@ -199,7 +199,7 @@ relational mark's combinator form carries its IR tag (`tagCombinator`), and
 a ref child is written as a `RefMarkIR`, so an `enclose(opts, [ref("a")])`
 inside a chart serializes. JS does not serialize a `.relate()` callback (it
 is a closure), so a relate clause's IR comes from Python. A label's
-`position` takes a position string or a strategy of the `Placement` family
+`placement` takes a position string or a strategy of the `Placement` family
 (`{ "kind": "along", "at": 0.6, "orient": "sloped" }`), and its `avoiding`
 is a `NodeSelectionIR` like `enclose`'s. A `.label()` chain is not a construct
 with a descriptor, so the emitter writes it with `wireLabels` in `toJSON.ts`:
@@ -647,13 +647,14 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tiling`, `Overlap`, `Curve`, `Binning`, `Calendar`, `Shape` and `Placement`. For each it lists the kinds, each with its
+`Effect`, `Tiling`, `Overlap`, `Curve`, `Binning`, `Calendar`, `Shape`,
+`Placement` and `Spacing`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
-so the strategy options are `t.ref("Tiling")`, `t.ref("Overlap")`,
-`t.ref("Curve")`, `t.ref("Shape")` and `t.ref("Placement")`. A kind may take a param by position
+so an option that takes a family is `t.ref` of its name, as in
+`t.ref("Tiling")`. A kind may take a param by position
 (`positional: "size"`): `Binning.step(0.5)` in JS, `Binning.step(0.5)` with a
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
 the wire either way. A construct descriptor has the same field: `COORDS.geo`
@@ -932,11 +933,9 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 [`packages/gofish-python/scripts/generate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-python/scripts/generate.ts)
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
-first) and emits `gofish/_generated.py` and the family modules
-`gofish/effect.py`, `gofish/tiling.py`, `gofish/overlap.py`, `gofish/curve.py`,
-`gofish/binning.py`, `gofish/calendar.py`, `gofish/shape.py` and
-`gofish/placement.py` (from `STRATEGIES`) and `gofish/coord.py` (from
-`COORDS`) — checked into the repo, with a
+first) and emits `gofish/_generated.py`, one module per family in
+`STRATEGIES` (`gofish/tiling.py` for `Tiling`, and so on) and `gofish/coord.py`
+(from `COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
 generated Python" norm Altair and Plotly.py both follow.
@@ -1031,16 +1030,16 @@ It emits:
   `enclose(clearance=-1)` raises `ValueError`, as JS's
   `enclose({ clearance: -1 })` throws at render. Every generated function
   does this, the cores and the leaf and combinator-only factories.
-- One module per **strategy family** in `STRATEGIES` (`gofish/effect.py`,
-  `gofish/tiling.py`, `gofish/overlap.py`, `gofish/curve.py`,
-  `gofish/binning.py`, `gofish/calendar.py`, `gofish/shape.py`,
-  `gofish/placement.py`), bound in `__init__.py` under the family name
-  (`Effect`, `Tiling`, `Overlap`, `Curve`, `Binning`, `Calendar`, `Shape`,
-  `Placement`): one factory per kind and per preset, named by `pyKwarg`
+- One module per **strategy family** in `STRATEGIES`
+  (`packages/gofish-ir/src/frontend/descriptors.ts`; the families are listed
+  above, under the descriptor table), bound in `__init__.py` under the family name (`gofish/tiling.py` as
+  `Tiling`): one factory per kind and per preset, named by `pyKwarg`
   (`Curve.catmull_rom`, `Overlap.separate`). The module is the family's
-  name in lowercase. A family never shares its name with an operator, since
-  the module would replace the operator on import, so the generator stops
-  with an error naming both when one does.
+  name in lowercase. A Python package's submodule and its attribute share
+  one name, so a family named like an operator or a mark would replace that
+  construct on import. The
+  [naming rule](/internals/design/api-design#naming) forbids the clash, and
+  the generator stops with an error naming both when one occurs.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the

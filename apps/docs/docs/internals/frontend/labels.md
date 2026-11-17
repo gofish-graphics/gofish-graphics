@@ -247,7 +247,7 @@ warns when it draws past a canvas it does (see `drawnOverflow` in
 
 ## Placement strategies
 
-`position` takes a position string, or a value of the `Placement` family
+`placement` takes a position string, or a value of the `Placement` family
 (`families/placement.ts`): `Placement.around()`, `Placement.along({ at, side, orient })`,
 `Placement.start()`, `Placement.end()` and `Placement.interior()`. A strategy reads the
 target's `outline` geometry (see
@@ -328,7 +328,7 @@ box is its turned box. The render prints one `console.info` naming how many
 labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).
 
 A position string never goes through the chooser, so it places exactly as
-before. With no `position`, the default comes from the target's node
+before. With no `placement`, the default comes from the target's node
 definition (`labelPlacement`): `ellipse` gives `Placement.around()` and `arrow`
 `Placement.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
 give `"outline"`, which the chooser reads from the outline the mark draws
@@ -413,7 +413,7 @@ pushes onto an array (`(this._labels ??= []).push({ accessor, ...options, group:
 so `_labels` is genuinely a list of independent specs, each with its own
 accessor, position, and styling — not a single mutable slot. `LabelOptions`
 carries `fontFamily`/`fontWeight`/`fontStyle` alongside the older
-`position`/`fontSize`/`color`/`offset`/`rotate`; all three pass straight
+`placement`/`fontSize`/`color`/`offset`/`rotate`; all three pass straight
 through to the elaborated label node, which measures font family/weight/
 style for its own bbox, so they affect layout correctly. `halo` (a white
 text outline, SVG `paint-order: stroke`) and `background` (a filled box) are
