@@ -1030,9 +1030,14 @@
       <div class="pc">
         <h4>Baudel and Broeksema (2012)</h4>
         <p>
-          Order, size, score, recurse, phrase. Squarify, strip, slice and dice,
-          and mosaic plots are points in one five-dimension space of layouts
-          that tile a rectangle one item after another.
+          Five small functions: order, size, chunk (by a <code>score</code>:
+          close the row when the score drops), recurse, and phrase (which side
+          the next row goes on, and which way its items run). Squarify, strip,
+          pivot, spiral, slice and dice, grids and mosaic plots are settings of
+          one algorithm. Each row is cut from a full side of the room that is
+          left, which is a two-child <code>stack</code> of the row and the rest.
+          So their five functions are a plan, and their fixed loop is the
+          drawing. Voronoi treemaps are out of its scope.
         </p>
       </div>
       <div class="pc">
