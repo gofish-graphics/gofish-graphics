@@ -123,8 +123,9 @@ sources. Pick the groups that fit the feature:
 - **Types and math:** Lean mathlib, Haskell, Kindlmann and Scheidegger's
   algebraic vis, java.time and the JS Temporal API, polars dtypes, Effect and
   fp-ts (namespace-with-type idioms).
-- **PL and compilers:** GHC and Lean (small core, desugaring), Racket/Rhombus
-  pict for picture composition.
+- **PL and compilers:** GHC and Lean (small core, desugaring), Mojo and MLIR
+  (built-ins written as library code, lowering in steps), Racket/Rhombus pict
+  for picture composition.
 - **Research literature:** the paper behind each system above, plus a search for
   the feature's own topic.
 
