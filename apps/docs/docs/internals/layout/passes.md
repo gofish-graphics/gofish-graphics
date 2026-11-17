@@ -1051,13 +1051,18 @@ fixed-size nodes report their size).
   far as its stand-ins. A child that reads y the other
   way has its plot read reflected with its box, at the one place a
   child's claim meets its parent (`formsOf` in `solver/plan.ts`), which a
-  `nest`'s padding reads too (`plotIn`). A band in a stacked area is moved
-  by an offset that changes along u (`stackPlaces`), so the box its own
-  claim describes is not where it draws. Its parent claims it at the box it
+  `nest`'s padding reads too (`plotIn`). A stack places every part by its
+  data offset from the stack's 0 (`stackPlaces`). A part whose offset is a
+  constant is placed by the solve at that offset times σ, so its claim is
+  its own claim moved there, its stroke included, and the stack adds no
+  overhang between parts or to its data extent. A band in a stacked area
+  is moved by an offset that changes along u, so the box its own claim
+  describes is not where it draws. Its parent claims it at the box it
   draws there, the interval it covers about the stack's 0 over every u times
   σ, all of it plot, and its outline past it (`ClaimChild.stackPlace`,
   `placedForms`). In layout the parent hands the band its offset as the
-  `shear` of its `AxisScale`, and the band adds it to both edges. This
+  `shear` of its `AxisScale`, and the band adds it to both edges; only a
+  part whose offset changes gets one. This
   claim is exact only while the band's cross-section is all data; a pixel
   term in it (a ribbon's `inset`) is a TODO. A chart with a size of its own
   maps the plot of its content into its size, and its labels, like its

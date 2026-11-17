@@ -105,6 +105,7 @@ import {
 } from "../solver/plan";
 import { evaluate } from "../solver/formula";
 import { stackPlaces, type StackPlace } from "../constraints/distribute";
+import { isConstant } from "../fun";
 import { plotForms, reachPast } from "../solver/plotForms";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -597,7 +598,19 @@ export const layer = createNodeOperatorSequential(
       );
       const composed =
         plan !== undefined
-          ? composePlanSpaces(plan, effectiveChildren)
+          ? composePlanSpaces(plan, effectiveChildren, (i, axis) => {
+              // A node of content with a size of its own in pixels (a
+              // literal or a length, not a data value): it solves σ for its
+              // content in that size. A leaf's pixel size is in its type.
+              const child = childNodes[i];
+              if (!(child instanceof GoFishNode)) return false;
+              const size = child.ownDims?.[axis]?.size;
+              return (
+                child.children.length > 0 &&
+                size !== undefined &&
+                !isValue(size)
+              );
+            })
           : undefined;
       if (composed !== undefined) {
         for (const axis of [0, 1] as const) {
@@ -666,8 +679,9 @@ export const layer = createNodeOperatorSequential(
     // Per axis, where each stack on that axis lays a part whose offset
     // changes along u (`stackPlaces`), by child index: the part draws its
     // offset (`AxisScale.shear`), and the layer claims the part where it
-    // lies. A part that cannot draw one (a rect, a circle, text) is an
-    // error that names it.
+    // lies. A part whose offset is one number is placed by the solve
+    // instead (`lowerDistributePlacement`). A part that cannot draw a
+    // changing offset (a rect, a circle) is an error that names it.
     const stackPlacesOf = (
       plan: ReturnType<typeof planConstraintComposition>,
       children: Size<UnderlyingSpace>[],
@@ -686,24 +700,22 @@ export const layer = createNodeOperatorSequential(
             : `part ${k + 1}`;
         const places = stackPlaces(
           seg.idx.map((i) => children[i][axis]),
-          seg.baseline,
-          nameOf
+          seg.baseline
         );
-        if (places === undefined) continue;
         seg.idx.forEach((i, k) => {
+          if (isConstant(places[k].offset)) return;
           const child = childNodes[i];
           if (!(child instanceof GoFishNode) || child.shearAxis !== axis) {
-            const name = nameOf(k);
-            const what =
-              child instanceof GoFishNode ? `a ${child.type}` : "a reference";
+            const what = child instanceof GoFishNode ? child.type : "reference";
+            const across = axisName(axis === 0 ? 1 : 0);
             throw new Error(
-              `[gofish] stack: ${name} is ${what}, which has one size along ` +
-                `${axisName(axis)}, but this stack moves each part by an ` +
-                `offset that changes along ${axisName(axis === 0 ? 1 : 0)}, ` +
-                `because some of its parts are bands whose thickness ` +
-                `changes there. Only a band can be moved that way. Stack ` +
-                `parts that are all bands (ribbon({ x, h })), or all boxes ` +
-                `(rect, a ribbon of one thickness).`
+              `[gofish] stack: ${nameOf(k)} is a ${what}, which has one ` +
+                `size along ${axisName(axis)}, but the stack moves it by an ` +
+                `offset that changes along ${across}, since some parts are ` +
+                `bands whose thickness changes there, so its boundary ` +
+                `changes too. A ${what} can't be split along a ` +
+                `changing boundary; only a band can. Stack parts that are ` +
+                `all bands (ribbon({ x, h })).`
             );
           }
           out[axis].set(i, places[k]);

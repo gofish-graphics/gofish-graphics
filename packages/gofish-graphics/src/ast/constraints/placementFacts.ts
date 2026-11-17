@@ -13,13 +13,13 @@ export type NodeId = string;
 // against an already-known size. Consumed by the rank-2 solve in
 // `placementSolver.ts`.
 
-/** An anchor a relation can tie: a box anchor ({@link AlignAnchor}), or one
- *  end of a part laid end to end along a stack (#773). A part's `tail` is
- *  where its baseline sits, or its `start` when it has no data baseline. Its
- *  `head` is the tail moved by `ascent − descent`, which is the point as far
- *  from its `end` as the tail is from its `start`. A positive bar's tail is
- *  its start and its head its end; a negative bar's are the other way round.
- *  The offsets are `anchorOffset` (placementProgramLowerer.ts). */
+/** An anchor on a part: a box anchor ({@link AlignAnchor}), or one end of a
+ *  part as a stack lays it (#773). A part's `tail` is where its baseline
+ *  sits, or its `start` when it has no data baseline. Its `head` is the tail
+ *  moved by `ascent − descent`, which is the point as far from its `end` as
+ *  the tail is from its `start`. A positive bar's tail is its start and its
+ *  head its end; a negative bar's are the other way round. The offsets are
+ *  `anchorOffset` (placementProgramLowerer.ts). */
 export type RelationAnchor = AlignAnchor | "tail" | "head";
 
 export type AnchorRef = { node: NodeId; anchor: RelationAnchor };
@@ -33,9 +33,6 @@ export type AnchorPinFact<T = number> = {
   owner: string;
 };
 
-/** Which kind of distribute chain an edge belongs to. */
-export type ChainKind = "stack" | "spread";
-
 export type AnchorRelationFact<T = number> = {
   type: "anchor-relation";
   axis: Axis;
@@ -43,13 +40,14 @@ export type AnchorRelationFact<T = number> = {
   to: AnchorRef;
   gap: T;
   owner: string;
-  /** Set on an edge of a distribute chain: a stack's (`glue`) or a
-   *  spread's. The chain places its members' baselines along the axis, so the
-   *  free origin seats none of them but a stack's origin, and a chain with no
-   *  pin starts at its first member (the sequence origin). A spread packs
-   *  boxes and has no baseline, so a component holding one is never seated
-   *  by the free origin. */
-  chain?: ChainKind;
+  /** Set on an edge of a spread's chain. The chain places its members
+   *  along the axis, so the free origin seats none of their baselines, and
+   *  a chain with no pin starts at its first member (the sequence origin).
+   *  A spread packs boxes and has no baseline, so a component holding one
+   *  is never seated by the free origin unless the spread states its 0. (A
+   *  stack has no chain: it places each part by its data offset, a
+   *  {@link StackPoint} `tail`.) */
+  chain?: boolean;
 };
 
 export type AnchorParticipantFact<T = number> = {
@@ -57,31 +55,34 @@ export type AnchorParticipantFact<T = number> = {
   node: NodeId;
   axis: Axis;
   owner: string;
-  /** Set when this participant carries the 0 of a chain (#773, #984): a
-   *  stack's, or a spread's that states one, from its `StackBaseline`
-   *  (distribute.ts). The solver's free-origin fallback seats that point. */
+  /** Set when this participant carries the 0 of a chain (#773, #984): each
+   *  part of a stack, or the part of a spread that states one, from its
+   *  `StackBaseline` (distribute.ts). The solver's free-origin fallback
+   *  seats that point. */
   origin?: StackPoint<T>;
 };
 
 /**
  * Where a chain's 0 is, on the participant that carries it: a point on the
  * participant (a fraction of the way from its `tail` to its `head`, or one
- * of its anchors, `"baseline"` being its tail), or a place `along` the whole
+ * of its anchors, `"baseline"` being its tail), a place `along` the whole
  * chain, a fraction of the way along its {@link ChainPath}, whose first part
- * is the participant.
+ * is the participant, or `tail` before the participant's tail. The last is
+ * a stack's part: its tail lies its data offset from the stack's 0, times σ
+ * (`stackPlaces` in distribute.ts), so the 0 is that far before it.
  */
 export type StackPoint<T = number> =
   | { point: number | "start" | "middle" | "end" | "baseline" }
-  | { along: number; chain: ChainPath<T> };
+  | { along: number; chain: ChainPath<T> }
+  | { tail: T };
 
 /**
  * A chain from its start to its end: its `parts` in placement order, from
  * the `start` anchor of the first part to the `end` anchor of the last. On
  * the way each part is entered at `to` and left at `from`, the anchors the
- * chain's edges tie, and `gap` lies between neighbors. A stack runs from its
- * first part's tail to its last part's head, entering each part at its tail
- * and leaving it at its head, with no gap. A spread runs from its first
- * part's start to its last part's end, and its gaps are part of the way.
+ * chain's edges tie, and `gap` lies between neighbors. A spread runs from
+ * its first part's start to its last part's end, and its gaps are part of
+ * the way. One part on its own runs from its tail to its head.
  */
 export type ChainPath<T = number> = {
   parts: readonly NodeId[];
@@ -144,7 +145,7 @@ export type PlacementRelationRequest<T = number> = {
   gap: T;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
-  chain?: ChainKind;
+  chain?: boolean;
 };
 
 export type PlacementParticipantRequest<T = number> = {
@@ -188,7 +189,7 @@ export type PlacementRelation<T = number> = {
   offset: T;
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
-  chain?: ChainKind;
+  chain?: boolean;
 };
 
 /** The lowering interface: constraints emit anchor pins, relations, and
@@ -211,7 +212,7 @@ export const relationFact = <T>(
   to: AnchorExpr,
   offset: T,
   owner: string,
-  chain?: ChainKind
+  chain?: boolean
 ): PlacementRelation<T> => ({
   type: "relation",
   from,

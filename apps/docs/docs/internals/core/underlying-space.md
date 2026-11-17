@@ -402,16 +402,16 @@ the two sides:
   it would be, by the column's declared order (`baselineAlongOrder`); with no
   declared order that is an error. On the way down the part is a child
   index, an operand of the constraint, and then an index into the parts in
-  placement order (`resolveBaseline`). Placement carries the same point to
-  the free-origin seat (`StackPoint` in `placementFacts.ts`): a point on one
-  part, or a place `along` the whole chain for `end` and `middle`. The way
-  along the chain is a `ChainPath`: a stack's runs from its first part's
-  tail through each part's tail and head to its last part's head.
+  placement order (`resolveBaseline`). Placement reads the same 0 from the
+  parts' data offsets (`stackPlaces`, below): each part states its own 0 to
+  the free-origin seat (`StackPoint` in `placementFacts.ts`) as its offset
+  times σ before its tail.
 - A **spread** takes `baseline` too, every value but `wiggle` (an error: its
   0 moves with the cross-sections a stack glues). It is placement only: the
   spread's fold ignores it, and its space stays a sequence of separate
-  spaces. Its `ChainPath` runs from its first part's start to its last
-  part's end, through the anchors its edges tie (`end` to `start`, or a
+  spaces. It states its 0 to the free-origin seat as a point on one part,
+  or a place `along` the whole chain for `end` and `middle`. The way along
+  is a `ChainPath`, from its first part's start to its last part's end, through the anchors its edges tie (`end` to `start`, or a
   pitch's anchor), and its gaps, `fr` included, are part of the way. The
   split resolves an `at` part as for a stack, and a `HasMidpoint` column
   sets it the same way. A spread with no `baseline` states no 0, and keeps
@@ -446,17 +446,15 @@ the two sides:
   d3's `stackOffsetWiggle` in the limit of fine data. It is defined on the
   functions, so more knots on the same curves do not move it. Over boxes
   every slope is 0 and it is the start.
-- A stack of **bands** (a stacked area: `stack` over `ribbon({ x, h })`)
-  moves each part by an **offset function**: the part's tail measured from
-  the stack's 0 at every u, in data units (`stackPlaces` in `distribute.ts`,
-  from the same chain as `chainFold`). Part k's offset is the sum of the
+- A stack moves each part by an **offset function**: the part's tail
+  measured from the stack's 0 at every u, in data units (`stackPlaces` in
+  `distribute.ts`, from the same chain as `chainFold`). Over boxes, and
+  over bands of one thickness under a baseline that does not move with u,
+  every offset is a constant. Part k's offset is the sum of the
   thicknesses before it, moved by the baseline. Each band keeps its
   thickness at every u; only its cross-section moves. Outside its own domain
   a band's thickness is 0 (`add` in `fun.ts` reads 0 there), so series
-  sampled at different u stack. When every offset is constant (boxes, or
-  bands of one thickness under a baseline that does not move with u) there
-  are no offset functions and the stack is the chain of translates above.
-  `wiggle` here reads the function-level `wiggleZero`, never the box
+  sampled at different u stack. `wiggle` here reads the function-level `wiggleZero`, never the box
   shortcut. Each part reaches over `[min_u(offset − descent),
 max_u(offset + ascent)]` about the stack's 0 (`StackPlace.reach`).
 - A stack whose parts are all nonnegative amounts (no part reaches below its
@@ -925,8 +923,12 @@ composes its targets' spaces into the layer's claim on that axis:
   With `glue: true` (stack semantics) the extents are laid end to end and
   pinned over the range of their running sums (`[0, Σ]` when no part has a
   descent), by the chain fold (`chainFold`) in data for the type, and by
-  the plan's solve for the claim.
-  A glued target that is not continuous is an error (`requireAmount`).
+  the plan's solve for the claim, which places each part by its data offset
+  (below).
+  A glued target that is not continuous is an error (`requireAmount`), and
+  so is a target of content with a size of its own in pixels (a layer
+  `w: 100` around data): it solves its own σ in that size, so it is a box of
+  pixels to the stack (`composePlanSpaces`).
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
   on its axis — but only for a point-anchor value;
   `"span"`/`"size"` (#726, below) contribute nothing to the space fold, since
@@ -1096,15 +1098,14 @@ between adjacent children: `"edge"` relates the facing edges
 (`prev.end → cur.start`, spacing = the gap between them, content-dependent);
 the fixed-pitch anchors relate the _same_ anchor on both sides
 (`prev.anchor → cur.anchor`, spacing = anchor-to-anchor pitch,
-content-independent) — `anchor[i+1] = anchor[i] + spacing`. A glued chain
-(`glue: true`, i.e. `stack`) relates `prev.head → cur.tail` instead
-(`distributePlacementAnchors`). A part's **tail** is where its baseline sits,
-or its start when it is not a baseline magnitude; its **head** is the point as
-far in from its end as the tail is from its start, which is the baseline moved
-by `ascent − descent`. A positive bar's tail is its start and its head its
-end, so with positive parts (or parts with no data baseline, such as text or
-a nested stack) this is exactly the `"edge"` chain; a negative bar's tail is
-its end and its head its start, so the next part starts where it ends.
+content-independent) — `anchor[i+1] = anchor[i] + spacing`. A glued
+`distribute` (`glue: true`, i.e. `stack`) relates no anchors: each part is
+placed by its data offset (below). A part's **tail** is where its baseline
+sits, or its start when it is not a baseline magnitude; its **head** is the
+point as far in from its end as the tail is from its start, which is the
+baseline moved by `ascent − descent`. A positive bar's tail is its start and
+its head its end; a negative bar's tail is its end and its head its start, so
+the next part starts where it ends.
 `"middle"` is the
 old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
 fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
@@ -1370,33 +1371,36 @@ baseline sits at the origin. Free nodes whose baselines differ (an `end` or
 to the sequence or normalized origin as before. A `distribute` chain along the
 axis places its members' baselines itself (its lowering marks those relations
 `chain`), so the solver (`solveRank2Axis`)
-does not list them as free. A stack puts each part's tail on the previous
-head, so its one baseline is its origin, the 0 its running sums are measured
-from. The stack's lowering names it: it includes the part that carries the
-origin with how far from that part's tail to its head the origin lies
-(`AnchorParticipantFact.origin`), and the solver lists that point whether or
-not the part is a baseline magnitude, and whether or not it is size-strong (a
-size-strong part's tail is its start). By default it is the first part's tail.
+does not list them as free. A stack has no chain: its 0 is the 0 its running
+sums are measured from, and every part states it. The stack's lowering
+includes each part with its data offset times σ before its tail
+(`AnchorParticipantFact.origin`, `{ tail }`), and the solver lists that point
+whether or not the part is a baseline magnitude, and whether or not it is
+size-strong (a size-strong part's tail is its start). Each part is then a
+component of its own, seated at the origin by its stated 0.
 A stack in a layer with no data 0 (a middle or wiggle stack, whose space has
 no origin) still has its own 0: the solver seats the stack's origin at the
 layer's pixel 0, where the free origin would be. Only a free node's baseline
 needs the layer's data 0. So a node's 0 is where its baseline says, and a
 node that says nothing has it at its data 0, else at its start.
 
-A stack of bands (offset functions, `stackPlaces`) has no chain of
-translates. Its lowering puts every part's tail at the stack's 0 (one
-`include` per part with `origin: { point: 0 }`, and no chain relations), and
-the solver seats each by the rule above. The layer hands each part its
-offset as the `shear` of its `AxisScale` on the stack's axis
-(`composeLayerTypes` → `places` in `layer.tsx`), and the band adds it to
-both edges before it maps them (`band.tsx`), so its box, outline and
-cross-section are where it is drawn, and labels, `ref` and `selectAll` read
-them there. Only a node with a `shearAxis` (a band, on its value axis) draws
-a shear. Any other part in such a stack is an error that names it: a rect
-or text has one size along the axis, and a part with a pixel size has no
-offset in data units. A box stack keeps the chain of translates: one path for
-both is a TODO (`stackPlaces`), because a pixel-sized, origin-less or
-size-strong part has no data offset.
+Every stack is placed one way (`stackPlaces`). A part whose offset is a
+constant states its tail that offset times σ from the stack's 0, and the
+solve places it there, as it places any box: its claim is its own claim
+moved by σ·offset, its pixel dressing (a stroke) included, and nothing is
+added between parts. A part whose offset changes along u states its tail at
+the stack's 0, and the layer hands it the offset as the `shear` of its
+`AxisScale` on the stack's axis (`composeLayerTypes` → `stackPlacesOf` in
+`layer.tsx`). The band adds it to both edges before it maps them
+(`band.tsx`), so its box, outline and cross-section are where it is drawn,
+and labels, `ref` and `selectAll` read them there. Only a node with a
+`shearAxis` (a band, on its value axis) draws a shear. Any other part with a
+changing offset is an error that names it: a rect or text has one size along
+the axis, and it can't be split along a changing boundary. Every part of a
+stack is an amount (`requireAmount`), so every part has a data offset.
+Overhang still enters a stack's claim in two places: each part's claim, its
+box widened by its stroke, at the stack's two ends and on the cross axis;
+and a sheared band's outline (`placeExtent`, `TODO(#1368)`).
 So a stack seats at the origin like a single bar, a negative first part hangs
 below it, and two stacks of one sign each (grouped by sign) meet on the 0
 tick. A stack over a `HasMidpoint` column carries its origin at the midpoint
@@ -1406,8 +1410,7 @@ midpoint on the 0 tick
 with no other code. A spread with no `baseline` packs boxes from its first
 member's start, which is not a baseline, so it lists none and keeps its
 sequence origin, even when its members' baselines happen to coincide. Its
-lowering marks its relations `chain: "spread"` (a stack's are `"stack"`), and
-the difference graph gives a component that holds one no baseline at all, so
+lowering marks its relations `chain`, and the difference graph gives a component that holds one no baseline at all, so
 a free node aligned to one of its members does not seat it either. A spread
 given a `baseline` states its 0 as a stack does: it carries an origin, the
 solve lists the part that carries it as `stated` (`FreeOriginInput`), and a

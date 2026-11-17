@@ -26,9 +26,21 @@ import {
   type StackBaseline,
 } from "../ast/constraints/distribute";
 import { interval } from "../util/interval";
+import { items } from "./testHelpers";
 
-const { chart, stack, ribbon, rect, text, circle, Baseline, Curve } =
-  GoFish as any;
+const {
+  chart,
+  stack,
+  spread,
+  layer,
+  ribbon,
+  rect,
+  text,
+  circle,
+  v,
+  Baseline,
+  Curve,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -70,18 +82,26 @@ const places = (baseline: StackBaseline<number>, series = SERIES) =>
   stackPlaces(
     series.map((v) => bandSpace(KNOTS, v)),
     baseline
-  )!;
+  );
 
 async function main() {
   console.log("\n# stackPlaces: where each band lies");
   {
+    // Boxes are placed the same way as bands: each by its data offset, a
+    // constant.
+    const boxes = stackPlaces([boxSpace(2), boxSpace(3)], { kind: "start" });
     check(
-      "boxes take the chain of translates (no places)",
-      stackPlaces([boxSpace(2), boxSpace(3)], { kind: "start" }) === undefined
+      "boxes take constant offsets, the sum of the boxes before them",
+      boxes.length === 2 &&
+        boxes.every((p) => F.isConstant(p.offset)) &&
+        F.maximum(boxes[0].offset) === 0 &&
+        F.maximum(boxes[1].offset) === 2
     );
+    const wiggled = stackPlaces([boxSpace(2), boxSpace(3)], { kind: "wiggle" });
     check(
-      "boxes under wiggle take the chain of translates too",
-      stackPlaces([boxSpace(2), boxSpace(3)], { kind: "wiggle" }) === undefined
+      "boxes under wiggle take constant offsets too",
+      wiggled.every((p) => F.isConstant(p.offset)) &&
+        near(F.maximum(wiggled[1].offset) - F.maximum(wiggled[0].offset), 2)
     );
     const start = places({ kind: "start" });
     // Each band's offset is the sum of the bands before it.
@@ -168,7 +188,7 @@ async function main() {
     const wiggle = stackPlaces(
       values.map((v) => bandSpace(us, v)),
       { kind: "wiggle" }
-    )!;
+    );
     // d3 measures from the first sample; ours from the wiggle 0. The two
     // differ by a constant, so compare differences from u = 0.
     const bottoms = d3Wiggle(values);
@@ -193,8 +213,8 @@ async function main() {
           ks.map((u) => poly.at(u))
         );
       });
-    const a = stackPlaces(onKnots(coarse), { kind: "wiggle" })!;
-    const b = stackPlaces(onKnots(refined), { kind: "wiggle" })!;
+    const a = stackPlaces(onKnots(coarse), { kind: "wiggle" });
+    const b = stackPlaces(onKnots(refined), { kind: "wiggle" });
     const grid = Array.from({ length: 41 }, (_, j) => j / 20);
     check(
       "wiggle: refining the samples of the same curves does not move a band",
@@ -377,7 +397,10 @@ async function main() {
     const sized = await errorWith(rect({ h: "v", w: 10 }));
     check(
       "a rect of data size among bands is an error that names it",
-      sized !== undefined && sized.includes('"b"') && sized.includes("rect"),
+      sized !== undefined &&
+        sized.includes('"b"') &&
+        sized.includes("rect") &&
+        sized.includes("can't be split along a changing boundary"),
       sized
     );
     const pixels = await errorWith(rect({ h: 2, w: 10 }));
@@ -445,6 +468,145 @@ async function main() {
         (widths as CONTINUOUS_TYPE).dataInterval.min === 0 &&
         (widths as CONTINUOUS_TYPE).dataInterval.max === 5,
       JSON.stringify(widths)
+    );
+  }
+
+  console.log("\n# every part is placed by its data offset");
+  {
+    // Each part's tail lies its data offset from the stack's 0, times σ.
+    // `fill` names the part, so a check reads its box.
+    const FILL: Record<string, string> = { a: "red", b: "green", c: "blue" };
+    const boxes = async (builder: any) => {
+      const dl = await builder.toDisplayList({ w: 300, h: 200 });
+      const out: Record<string, { lo: number; hi: number; x: number }> = {};
+      for (const it of items(dl) as any[]) {
+        if (it.kind !== "rect") continue;
+        const name = Object.keys(FILL).find((k) => FILL[k] === it.style?.fill);
+        // y up: a box's data interval reads bottom to top.
+        if (name) out[name] = { lo: -(it.y + it.h), hi: -it.y, x: it.x };
+      }
+      return out;
+    };
+    const bar = (extra: object = {}) =>
+      (d: any[]) => rect({ h: "v", w: 10, fill: FILL[d[0].s], ...extra })(d);
+
+    // Signed parts add as signed amounts: 3, then -2 down to 1, then 5 up
+    // from 1, so a covers [0, 3], b [1, 3] and c [1, 6].
+    const signed = await boxes(
+      chart(
+        [
+          { s: "a", v: 3 },
+          { s: "b", v: -2 },
+          { s: "c", v: 5 },
+        ],
+        { axes: false }
+      )
+        .flow(stack({ by: "s", dir: "y" }))
+        .mark(bar())
+    );
+    const sig = (signed.a.hi - signed.a.lo) / 3;
+    const at = (d: number) => signed.a.lo + d * sig;
+    check(
+      "signed parts: a covers [0, 3], b [1, 3], c [1, 6]",
+      [
+        ["b", 1, 3],
+        ["c", 1, 6],
+      ].every(
+        ([k, lo, hi]) =>
+          near(signed[k as string].lo, at(lo as number), 1e-6) &&
+          near(signed[k as string].hi, at(hi as number), 1e-6)
+      ),
+      JSON.stringify(signed)
+    );
+
+    // Stacks in a spread: each column is glued, and every column's 0 is
+    // the layer's one data 0.
+    const columns = await (async () => {
+      const dl = await chart(
+        [
+          { g: "p", s: "a", v: 2 },
+          { g: "p", s: "b", v: 3 },
+          { g: "q", s: "a", v: 4 },
+          { g: "q", s: "b", v: 1 },
+        ],
+        { axes: false }
+      )
+        .flow(spread({ by: "g", dir: "x" }), stack({ by: "s", dir: "y" }))
+        .mark((d: any[]) =>
+          rect({ h: "v", w: 10, fill: `${d[0].g}${d[0].s}` })(d)
+        )
+        .toDisplayList({ w: 300, h: 200 });
+      const out: Record<string, { lo: number; hi: number }> = {};
+      for (const it of items(dl) as any[])
+        if (it.kind === "rect")
+          out[it.style?.fill] = { lo: -(it.y + it.h), hi: -it.y };
+      return out;
+    })();
+    check(
+      "stacks in a spread: each column glued, all on one 0",
+      near(columns.pa.hi, columns.pb.lo, 1e-6) &&
+        near(columns.qa.hi, columns.qb.lo, 1e-6) &&
+        near(columns.pa.lo, columns.qa.lo, 1e-6) &&
+        near(
+          (columns.pb.hi - columns.pa.lo) / 5,
+          (columns.qb.hi - columns.qa.lo) / 5,
+          1e-6
+        ),
+      JSON.stringify(columns)
+    );
+
+    // A stack of stacks on one axis is one glued column.
+    const nested = await boxes(
+      stack({ dir: "y" }, [
+        stack({ dir: "y" }, [
+          rect({ h: v(2), w: 10, fill: FILL.a }),
+          rect({ h: v(3), w: 10, fill: FILL.b }),
+        ]),
+        rect({ h: v(4), w: 10, fill: FILL.c }),
+      ])
+    );
+    const nsig = (nested.a.hi - nested.a.lo) / 2;
+    check(
+      "nested stacks on one axis: one glued column",
+      near(nested.a.hi, nested.b.lo, 1e-6) &&
+        near(nested.b.hi, nested.c.lo, 1e-6) &&
+        near(nested.b.hi - nested.b.lo, 3 * nsig, 1e-6) &&
+        near(nested.c.hi - nested.c.lo, 4 * nsig, 1e-6),
+      JSON.stringify(nested)
+    );
+
+    // A part of content sized in data shares the stack's σ; one sized in
+    // pixels solves its own σ, so it is a box of pixels and no amount.
+    const holder = async (w: unknown) => {
+      try {
+        const dl = await stack({ dir: "x", alignment: "start" }, [
+          layer({ w, h: 20 }, [rect({ w: v(10), h: 20, fill: "red" })]),
+          rect({ w: v(50), h: 20, fill: "blue" }),
+        ]).toDisplayList({ w: 200, h: 50 });
+        const rects = items(dl) as any[];
+        return {
+          red: rects.find((r) => r.style?.fill === "red"),
+          blue: rects.find((r) => r.style?.fill === "blue"),
+        };
+      } catch (e) {
+        return (e as Error).message;
+      }
+    };
+    const dataSized = await holder(v(7));
+    check(
+      "a layer of data width 7 beside 50 takes 7 of 57 parts",
+      typeof dataSized !== "string" &&
+        near(dataSized.blue.x, (7 * 200) / 57, 1e-6) &&
+        near(dataSized.blue.w, (50 * 200) / 57, 1e-6),
+      JSON.stringify(dataSized)
+    );
+    const pixelSized = await holder(100);
+    check(
+      "a layer of pixel width in a stack is an error that suggests a spread",
+      typeof pixelSized === "string" &&
+        pixelSized.includes("no data size on x") &&
+        pixelSized.includes("spacing: 0"),
+      String(pixelSized)
     );
   }
 

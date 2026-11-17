@@ -230,7 +230,7 @@ async function main() {
           anchorExpr("b", "x", "start"),
           10,
           "distribute[0]",
-          "spread"
+          true
         ),
         relationFact(
           anchorExpr("b", "x", "start"),

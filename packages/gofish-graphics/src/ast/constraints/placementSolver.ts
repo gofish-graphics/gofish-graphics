@@ -174,14 +174,19 @@ function nodeAnchorOffset<T>(
  *  `origin` ({@link StackPoint}), when the part carries it (`offsetOf`
  *  gives each anchor's offset on a node from that node's `min`): a point on
  *  the part, which is a place on the path of that one part from its tail to
- *  its head, or a place along the chain's path ({@link ChainPath}), which
- *  adds each part's way through and the gaps between them. */
+ *  its head, a place along the chain's path ({@link ChainPath}), which
+ *  adds each part's way through and the gaps between them, or a stack's
+ *  part's data offset before its tail. */
 function stackOriginOffset<T>(
   A: Arith<T>,
   offsetOf: (node: NodeId, anchor: RelationAnchor) => T | undefined,
   node: NodeId,
   origin: StackPoint<T>
 ): T | undefined {
+  if ("tail" in origin) {
+    const tail = offsetOf(node, "tail");
+    return tail === undefined ? undefined : A.sub(tail, origin.tail);
+  }
   // A word names a point of the part as `alignment` does: a point of its
   // box, or its own 0 (`"baseline"`), which for a part with a data baseline
   // is its tail, and for a nested spread or stack is where its baseline is.
@@ -276,7 +281,7 @@ function reduceToAxisProblem<T>(
       // first member's origin; any other chain starts at its first member's
       // start edge.
       if (
-        fact.chain === "spread" &&
+        fact.chain === true &&
         fact.from.anchor === "baseline" &&
         fact.to.anchor === "baseline"
       ) {
@@ -324,9 +329,10 @@ function solveRank2Axis<T>(
   // baseline magnitude) carries its own. A chain along the axis places its
   // members' baselines instead, so it carries one only where it states its
   // 0: its origin (`AnchorParticipantFact.origin`), on whichever part
-  // carries it, a size-strong part included. A stack always states one. A
-  // spread states one only when it is given a `baseline`; one that is not
-  // keeps its sequence origin, its start.
+  // carries it, a size-strong part included. A spread states one only when
+  // it is given a `baseline`; one that is not keeps its sequence origin, its
+  // start. A stack has no chain: every part carries the stack's 0, as its
+  // data offset before its tail.
   //
   // A node's 0 is where its baseline says. A chain that says where (its
   // origin) has its origin seated at the layer's data 0, or at the layer's

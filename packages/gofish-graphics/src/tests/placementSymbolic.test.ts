@@ -137,8 +137,16 @@ function agree(
     (v) => v
   );
   for (const sigma of [0, 1, 10]) {
-    const numeric = solveIn(numbers, axis, children, constraints, sigma, (v) =>
-      Pwl.at(v, sigma)
+    // Numbers at this σ: every value in σ the solve reads (a size, a stack
+    // part's offset) is read at it.
+    const at = (v: Pwl.Value) => Pwl.at(v, sigma);
+    const numeric = solveIn(
+      { ...numbers, fromValue: at },
+      axis,
+      children,
+      constraints,
+      sigma,
+      at
     );
     const misses: string[] = [];
     for (const [name, cell] of numeric.cells) {

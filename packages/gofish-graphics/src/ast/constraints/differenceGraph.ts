@@ -66,7 +66,7 @@ export const TOLERANCE = 1e-6;
  *  which a free node's baseline sits, and the baseline offset from `min` of
  *  each participant whose baseline nothing else places (a free participant,
  *  or the part of a chain that carries its origin). `stated` lists the
- *  parts that carry a chain's stated 0: a stack's, or a spread's given a
+ *  parts that carry a chain's stated 0: every part of a stack, or a spread's given a
  *  `baseline`. */
 export type FreeOriginInput<T = number> = {
   value: T;
@@ -225,7 +225,7 @@ export function solveAxisProblem<T>(
     if (freeOrigin === undefined) return undefined;
     const holdsSpread = problem.relations.some(
       (relation) =>
-        relation.chain === "spread" &&
+        relation.chain === true &&
         componentOf.get(relation.from.node) === component
     );
     const states = components[component].some(
