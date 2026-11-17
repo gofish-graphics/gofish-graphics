@@ -2,9 +2,12 @@
  * A small GoFish-native drag engine built on Dragology's ideas
  * ("Declarative Dragging", UIST 2026), PROTOTYPE quality, story-level code.
  *
- *   1. Speculative layout: the states a drag can reach are derived from the
- *      spec's data (`edit`, `reorder`, `states`), and each is laid out with
- *      GoFish's own `toDisplayList`, cached by state.
+ *   1. Speculative layout: the state is any plain object the spec is a
+ *      function of (`spec(state)`). The states a drag can reach come from
+ *      the spec's rows (`edit`, `reorder`, `states`) or from a source the
+ *      demo writes (`grab`, `regions`, `chips`: candidates, plus an `away`
+ *      state outside the plot). Each is laid out with GoFish's own
+ *      `toDisplayList`, cached by state.
  *   2. Key join: display items are matched across states by a stable key
  *      (the user's `key(row)` on an item's datum; chrome by role + content).
  *   3. Drop targets from layout: the dragged mark's box in each candidate
@@ -48,6 +51,55 @@ export type EditField =
       max?: number | ((row: Row) => number);
     };
 
+/** What a drag edits: any plain (JSON) object the spec is a function of. */
+export type State = Record<string, any>;
+/** The state the row options (`edit`, `reorder`, `states`) edit: the rows,
+ *  and the level order of declared domains. */
+export type RowState = { rows: Row[]; order?: Record<string, unknown[]> };
+
+/** One reachable state. With `dims` continuous parameters it is a family of
+ *  states: `at(t)` for t in `range` (default [0, 1] per dimension). The
+ *  layouts at the corners (each t at 0 or 1) give the pixel map; t past the
+ *  corners extrapolates it. */
+export type Candidate = {
+  at: (t: number[]) => State;
+  dims?: number;
+  range?: [number, number][];
+  /** Key of the dragged thing in this state's layout (default: the
+   *  source's `track`). */
+  track?: string;
+};
+
+export type Feel = "between" | "closest" | "floating";
+
+/** What one drag can do. */
+export type Source = {
+  candidates: Candidate[];
+  /** Key of the dragged thing in the candidate layouts (default: the
+   *  grabbed item's key). */
+  track?: string;
+  /** Rows whose marks travel with the drag: they paint on top. */
+  moving?: Row[];
+  /** The state while the pointer is outside the plot (a removal, or no
+   *  change for a drag from the palette). Without it the plot has no edge. */
+  away?: State;
+  feel?: Feel;
+  /** A chip under the pointer: always (`inside`), or only outside the plot. */
+  ghost?: { text: string; inside?: boolean };
+};
+
+/** A grabbed display item. */
+export type Grabbed = {
+  key: string;
+  kind: string;
+  rows?: Row[];
+  /** A label tied to its mark; `rows` are the mark's rows. */
+  label?: boolean;
+};
+
+/** The plot: the box of the data marks, from the canvas top down. */
+export type Plot = { x: number; y: number; w: number; h: number };
+
 export type DragOptions = {
   /** Which rows' marks can be dragged (all rows of a mark must pass). */
   marks?: (row: Row) => boolean;
@@ -58,26 +110,27 @@ export type DragOptions = {
   reorder?: string;
   /** Escape hatch: the reachable row lists, given the dragged rows. */
   states?: (dragged: Row[], rows: Row[]) => Row[][];
+  /** In place of the row options: what grabbing a display item does. */
+  grab?: (g: Grabbed, state: State) => Source | undefined;
+  /** Drags that start on a region of the canvas (an axis). */
+  regions?: { hit: (p: Vec, plot: Plot) => boolean; source: (s: State) => Source }[];
+  /** Chips in a palette above the chart; a drag starts on a chip. */
+  chips?: { text: string; source: (s: State) => Source }[];
+  /** A discrete state whose target box is within this many px of the
+   *  pointer wins over the others. */
+  snap?: number;
   /** `between` blends layouts; `closest` snaps; `floating` snaps the rest
    *  while the dragged mark follows the pointer. */
-  feel?: "between" | "closest" | "floating";
+  feel?: Feel;
   /** `lazy`: lay candidates out at pointer-down. `eager`: after mount and
    *  each drop, for every draggable mark. */
   precompute?: "lazy" | "eager";
 };
 
-/** What a drag edits: the rows, and the level order of declared domains. */
-export type State = { rows: Row[]; order: Record<string, unknown[]> };
-
 export type MountOptions = {
-  data: Row[];
-  /** Initial level order of the domains the spec declares (for `reorder`). */
-  order?: Record<string, unknown[]>;
+  state: State;
   key: (row: Row) => string;
-  spec: (
-    rows: Row[],
-    order: Record<string, unknown[]>
-  ) => {
+  spec: (state: any) => {
     toDisplayList(o: any): Promise<DisplayList.DisplayListDocument>;
   };
   w: number;
@@ -86,6 +139,9 @@ export type MountOptions = {
   debug?: boolean;
   /** Panel background painted behind the chart. */
   background?: string;
+  /** Called with the state a drop would write (`preview`) and the state
+   *  after each drop. */
+  onState?: (state: State, preview: boolean) => void;
 };
 
 export type DragStats = {
@@ -102,14 +158,15 @@ export type DragStats = {
 
 export type DragHandle = {
   stats: DragStats;
-  rows: () => Row[];
-  order: () => Record<string, unknown[]>;
+  state: () => State;
   /** Resolves once the initial render (and eager precompute) is done. */
   ready: Promise<void>;
   /** Resolves when the in-flight drop tween ends. */
   settled: () => Promise<void>;
   setDebug: (on: boolean) => void;
   svg: SVGSVGElement;
+  /** The chip elements of the palette, by text. */
+  chips: Record<string, HTMLElement>;
 };
 
 const ID: Affine = { tx: 0, ty: 0, sx: 1, sy: 1 };
@@ -202,6 +259,14 @@ function boxOf(e: Entry) {
   else if (it.kind === "ellipse")
     b = { x: it.cx - it.rx, y: it.cy - it.ry, w: 2 * it.rx, h: 2 * it.ry };
   else if (it.kind === "composite") b = it.bbox;
+  else if (it.kind === "text" && !it.rotate) {
+    // An estimate from the font size: the display list has no text metrics.
+    const fs = it.fontSize ?? 12;
+    const w = String(it.text).length * fs * 0.6;
+    const x0 =
+      it.textAnchor === "middle" ? it.x - w / 2 : it.textAnchor === "end" ? it.x - w : it.x;
+    b = { x: x0, y: it.y - fs * 0.8, w, h: fs };
+  }
   if (!b) return undefined;
   return { x: tx + sx * b.x, y: ty + sy * b.y, w: sx * b.w, h: sy * b.h };
 }
@@ -300,11 +365,12 @@ function blendValue(vals: any[], ws: number[], h: number): any {
 
 /** Weighted blend of keyed layouts. Items in only some states fade by the
  *  weight of the states that have them. Text never blends between strings:
- *  its content is part of its key. */
+ *  its content is part of its key. A negative weight extrapolates (a
+ *  continuous field past its corners). */
 function blendLayouts(layouts: Layout[], weights: number[]): Entry[] {
   const live = layouts
     .map((l, i) => ({ l, w: weights[i] }))
-    .filter((x) => x.w > 1e-6);
+    .filter((x) => Math.abs(x.w) > 1e-6);
   live.sort((a, b) => b.w - a.w);
   // Merge key orders: the heaviest layout's order, others spliced in.
   const order: string[] = live[0].l.entries.map((e) => e.key);
@@ -328,7 +394,7 @@ function blendLayouts(layouts: Layout[], weights: number[]): Entry[] {
     const W = same.reduce((s, x) => s + x.w, 0);
     const ws = same.map((x) => x.w / W);
     const es = same.map((x) => x.l.byKey.get(key)!);
-    const item = blendValue(
+    let item = blendValue(
       es.map((e) => e.item),
       ws,
       0
@@ -339,10 +405,11 @@ function blendLayouts(layouts: Layout[], weights: number[]): Entry[] {
       0
     ) as Affine;
     if (W < 0.999) {
+      // A copy: with one layout, `blendValue` returns the cached item.
       const op = (item.style?.opacity ?? 1) * W;
-      (item as any).style = { ...(item.style ?? {}), opacity: op };
+      item = { ...item, style: { ...(item.style ?? {}), opacity: op } } as Item;
     }
-    out.push({ key, item, at, rows: es[0].rows });
+    out.push({ key, item, at, rows: es[0].rows, label: es[0].label });
   }
   return out;
 }
@@ -470,17 +537,11 @@ function betweenWeights(pts: Vec[], p: Vec): number[] {
 // Candidate states, derived from the data
 // ---------------------------------------------------------------------------
 
-type Cont = { field: string; lo: number; hi: number };
-/** One discrete state ("combo") with 2^k corner row lists for k continuous
- *  fields (corner bit j = field j at its max). */
-type Combo = { corners: State[] };
-
-function candidates(
-  dragged: Row[],
-  state: State,
-  opts: MountOptions
-): { combos: Combo[]; conts: Cont[] } {
-  const { rows, order } = state;
+/** The row options as a source: the dragged rows' fields (`edit`), the
+ *  order of a domain (`reorder`), or the `states` callback. */
+function rowSource(dragged: Row[], state: RowState, opts: MountOptions): Source {
+  const { rows } = state;
+  const order = state.order ?? {};
   const { drag, key } = opts;
   const ids = new Set(dragged.map(key));
   const isDragged = (r: Row) => ids.has(key(r));
@@ -488,7 +549,7 @@ function candidates(
     typeof f === "string" ? { field: f } : f
   );
   const ord = fields.filter((f) => typeof dragged[0][f.field] !== "number");
-  const conts: Cont[] = fields
+  const conts = fields
     .filter((f) => typeof dragged[0][f.field] === "number")
     .map((f) => {
       const vs = rows
@@ -503,9 +564,9 @@ function candidates(
       };
     });
 
-  let states: State[];
+  let states: RowState[];
   if (drag.states)
-    states = drag.states(dragged, rows).map((rs) => ({ rows: rs, order }));
+    states = drag.states(dragged, rows).map((rs) => ({ ...state, rows: rs }));
   else if (drag.reorder) {
     // Reorder edits the order of the split's domain: the dragged mark's
     // level moved to each index. The rows never change.
@@ -517,7 +578,7 @@ function candidates(
     states = levels.map((_, j) => {
       const o = levels.filter((x) => x !== v);
       o.splice(j, 0, v);
-      return { rows, order: { ...order, [F]: o } };
+      return { ...state, order: { ...order, [F]: o } };
     });
   } else {
     let lists = [rows];
@@ -529,27 +590,59 @@ function candidates(
         )
       );
     }
-    states = lists.map((rs) => ({ rows: rs, order }));
+    states = lists.map((rs) => ({ ...state, rows: rs }));
   }
-  const combos = states.map((s) => ({
-    corners: Array.from({ length: 1 << conts.length }, (_, c) =>
+  const candidates: Candidate[] = states.map((s) => ({
+    dims: conts.length,
+    at: (t) =>
       conts.length === 0
         ? s
         : {
-            order: s.order,
+            ...s,
             rows: s.rows.map((r) => {
               if (!isDragged(r)) return r;
               const o = { ...r };
-              conts.forEach(
-                (f, j) => (o[f.field] = c & (1 << j) ? f.hi : f.lo)
-              );
+              conts.forEach((f, j) => (o[f.field] = f.lo + t[j] * (f.hi - f.lo)));
               return o;
             }),
-          }
-    ),
+          },
   }));
-  return { combos, conts };
+  const F = drag.reorder;
+  const moving = F ? rows.filter((r) => r[F] === dragged[0][F]) : dragged;
+  return { candidates, moving };
 }
+
+/** The plot: the box of the data marks (items with rows, labels aside),
+ *  from the canvas top down to their lowest edge. GoFish's display list
+ *  does not name the plot area, so this is read off the marks. */
+function plotOf(l: Layout): Plot {
+  let x0 = Infinity,
+    x1 = -Infinity,
+    y1 = -Infinity;
+  for (const e of l.entries) {
+    if (!e.rows || e.label) continue;
+    const b = boxOf(e);
+    if (!b) continue;
+    x0 = Math.min(x0, b.x);
+    x1 = Math.max(x1, b.x + b.w);
+    y1 = Math.max(y1, b.y + b.h);
+  }
+  return { x: x0, y: 0, w: x1 - x0, h: y1 };
+}
+
+type Box = { x: number; y: number; w: number; h: number };
+const inBox = (b: Box, p: Vec, pad = 0) =>
+  p.x >= b.x - pad && p.x <= b.x + b.w + pad && p.y >= b.y - pad && p.y <= b.y + b.h + pad;
+const boxDist = (b: Box, p: Vec) =>
+  Math.hypot(
+    Math.max(b.x - p.x, 0, p.x - b.x - b.w),
+    Math.max(b.y - p.y, 0, p.y - b.y - b.h)
+  );
+
+const CHIP =
+  "font:12px/1.2 system-ui,sans-serif;padding:5px 12px;border-radius:14px;" +
+  "background:#fff4c2;border:1px solid #c9a227;color:#3d3200;" +
+  "user-select:none;touch-action:none;white-space:nowrap;";
 
 // ---------------------------------------------------------------------------
 // Mount
@@ -570,7 +663,26 @@ export function mountDraggable(
     blendErrPx: [],
   };
   let debug = !!opts.debug;
-  let state: State = { rows: opts.data, order: opts.order ?? {} };
+  let state: State = opts.state;
+
+  // The palette: chips a drag can start on.
+  const chips: Record<string, HTMLElement> = {};
+  if (opts.drag.chips?.length) {
+    const pal = document.createElement("div");
+    pal.style.cssText = "display:flex;gap:8px;margin:0 0 8px;";
+    for (const c of opts.drag.chips) {
+      const el = document.createElement("div");
+      el.textContent = c.text;
+      el.style.cssText = CHIP + "cursor:grab;";
+      el.addEventListener("pointerdown", (ev) => {
+        ev.preventDefault();
+        begin(c.source(state), undefined, pt(ev));
+      });
+      pal.append(el);
+      chips[c.text] = el;
+    }
+    container.appendChild(pal);
+  }
 
   const panel = document.createElement("div");
   // A light panel with padding: GoFish draws a little past {w, h} (legend
@@ -587,26 +699,29 @@ export function mountDraggable(
     s.style.cssText = `position:absolute;left:${PAD}px;top:${PAD}px;overflow:visible`;
   }
   over.style.pointerEvents = "none";
-  panel.append(svg, over);
+  const ghost = document.createElement("div");
+  ghost.style.cssText =
+    CHIP + "position:absolute;pointer-events:none;display:none;opacity:0.9;";
+  panel.append(svg, over, ghost);
   container.appendChild(panel);
 
   // Layout cache. Layouts run one at a time: the layout pass uses
   // module-level contexts, so interleaving two async layouts is unsafe.
   const cache = new Map<string, Promise<Layout>>();
   let queue: Promise<unknown> = Promise.resolve();
-  const layout = (s: State): Promise<Layout> => {
+  const layout = (s: State, keep = true): Promise<Layout> => {
     const k = JSON.stringify(s);
     let p = cache.get(k);
     if (!p) {
       p = queue.then(async () => {
         const t0 = performance.now();
-        const dl = await opts.spec(s.rows, s.order).toDisplayList({ w, h });
+        const dl = await opts.spec(s).toDisplayList({ w, h });
         stats.layoutMs.push(performance.now() - t0);
         stats.layouts++;
         return keyEntries(dl.items, key);
       });
       queue = p.catch(() => undefined);
-      cache.set(k, p);
+      if (keep) cache.set(k, p);
     }
     return p;
   };
@@ -621,21 +736,30 @@ export function mountDraggable(
   };
 
   let current: Layout;
-  const draggableMarks = (l: Layout) =>
-    l.entries.filter(
-      (e) =>
-        e.rows &&
-        !e.label &&
-        e.item.kind !== "text" &&
-        e.rows.every((r) => opts.drag.marks?.(r) ?? true)
-    );
+  /** What grabbing an entry does: the `grab` option, or the row options on
+   *  a mark (not a label or a text) whose rows pass `marks`. */
+  const sourceOf = (e: Entry): Source | undefined => {
+    const g: Grabbed = { key: e.key, kind: e.item.kind, rows: e.rows, label: e.label };
+    if (opts.drag.grab) return opts.drag.grab(g, state);
+    if (
+      !e.rows ||
+      e.label ||
+      e.item.kind === "text" ||
+      !e.rows.every((r) => opts.drag.marks?.(r) ?? true)
+    )
+      return undefined;
+    return rowSource(e.rows, state as RowState, opts);
+  };
 
   const eager = async () => {
     const t0 = performance.now();
-    for (const e of draggableMarks(current)) {
-      const { combos } = candidates(e.rows!, state, opts);
-      combos.forEach((c) => c.corners.forEach((s) => layout(s)));
-    }
+    const sources = [
+      ...current.entries.map(sourceOf),
+      ...(opts.drag.chips ?? []).map((c) => c.source(state)),
+      ...(opts.drag.regions ?? []).map((r) => r.source(state)),
+    ];
+    for (const s of sources)
+      s?.candidates.forEach((c) => cornersOf(c).forEach((x) => layout(x)));
     await queue;
     stats.eagerMs.push(performance.now() - t0);
     console.log(
@@ -648,30 +772,46 @@ export function mountDraggable(
   const ready = (async () => {
     current = await layout(state);
     paint(current.entries);
+    opts.onState?.(state, false);
     if (opts.drag.precompute === "eager") await eager();
   })();
 
   // --- Drag state -----------------------------------------------------------
+  type Cand = {
+    c: Candidate;
+    k: number;
+    track: string;
+    layouts: Layout[]; // per corner
+    pos: Vec[]; // tracked item center per corner
+    box: Box; // tracked item box at corner 0
+  };
   type Drag = {
-    markKey: string;
+    feel: Feel;
+    src: Source;
+    markKey?: string;
     rowKeys: string;
-    /** Keys of the rows whose marks travel with the drag: the dragged rows,
-     *  or for a reorder every row of the dragged level. */
+    /** Keys of the rows whose marks travel with the drag. */
     moving: Set<string>;
     grab: Vec;
-    combos: Combo[];
-    conts: Cont[];
-    layouts: Layout[][]; // [combo][corner]
-    pos: Vec[][]; // dragged mark center per [combo][corner]
+    cands: Cand[];
+    away?: { state: State; layout: Layout };
+    plot: Plot;
     pointer: Vec;
-    drop?: State;
-    dropLayout?: Layout;
+    mode?: string;
     choice?: number;
     shownW?: number[];
     switchFrom?: number[];
     switchT0?: number;
+    drop?: State;
+    dropKey?: string;
+    dropLayout?: Layout;
     best?: number;
     bestCornerW?: number[];
+    /** A real layout of the drop state, for the text of labels during a
+     *  continuous drag (text does not blend). */
+    textLayout?: Layout;
+    textKey?: string;
+    textBusy?: boolean;
   };
   let drag: Drag | undefined;
   // Paint order during a drag and its drop tween: the marks that travel with
@@ -680,7 +820,7 @@ export function mountDraggable(
   // its place; the debug overlay is a separate SVG above the chart.
   const raise = (entries: Entry[], D: Drag): Entry[] => {
     const rank = (e: Entry) =>
-      e.key.startsWith(`m:${D.rowKeys}:`)
+      D.rowKeys && e.key.startsWith(`m:${D.rowKeys}:`)
         ? 2
         : e.rows?.length && e.rows.every((r) => D.moving.has(key(r)))
           ? 1
@@ -697,67 +837,108 @@ export function mountDraggable(
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
 
-  const hit = (p: Vec) => {
-    const marks = draggableMarks(current);
-    for (let i = marks.length - 1; i >= 0; i--) {
-      const b = boxOf(marks[i]);
-      if (b && p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h)
-        return marks[i];
+  /** The topmost grabbable entry under the pointer, with its source. Thin
+   *  marks (a 2 px rule) get a few px of slack. */
+  const hit = (p: Vec): [Entry, Source] | undefined => {
+    const es = current.entries;
+    for (let i = es.length - 1; i >= 0; i--) {
+      const b = boxOf(es[i]);
+      if (!b) continue;
+      const pad = Math.max(0, 5 - Math.min(b.w, b.h) / 2);
+      if (!inBox(b, p, pad)) continue;
+      const s = sourceOf(es[i]);
+      if (s) return [es[i], s];
     }
     return undefined;
   };
+  const regionAt = (p: Vec) =>
+    opts.drag.regions?.find((r) => r.hit(p, plotOf(current)));
 
-  svg.addEventListener("pointerdown", async (ev) => {
+  const cornersOf = (c: Candidate): State[] => {
+    const k = c.dims ?? 0;
+    return Array.from({ length: 1 << k }, (_, b) =>
+      c.at(Array.from({ length: k }, (_, j) => (b >> j) & 1))
+    );
+  };
+
+  const begin = async (src: Source, e: Entry | undefined, p: Vec) => {
     if (drag || loading) return;
-    const p = pt(ev);
-    const e = hit(p);
-    if (!e) return;
-    svg.setPointerCapture(ev.pointerId);
     loading = true;
     pendingPointer = p;
     const t0 = performance.now();
-    const { combos, conts } = candidates(e.rows!, state, opts);
+    const track0 = src.track ?? e?.key;
+    const raw = src.candidates.map((c) => ({
+      c,
+      k: c.dims ?? 0,
+      track: c.track ?? track0 ?? "",
+      corners: cornersOf(c),
+    }));
     const layouts = await Promise.all(
-      combos.map((c) => Promise.all(c.corners.map(layout)))
+      raw.map((c) => Promise.all(c.corners.map((s) => layout(s))))
     );
-    // A candidate whose layout lost the dragged mark has no target: drop it.
-    const keep = layouts.map((ls) => ls.every((l) => l.byKey.has(e.key)));
-    const c0 = centerOf(e)!;
+    const awayLayout = src.away ? await layout(src.away) : undefined;
+    // A candidate whose layout lost the dragged thing has no target: drop it.
+    const cands: Cand[] = [];
+    raw.forEach((r, i) => {
+      const ls = layouts[i];
+      if (!ls.every((l) => l.byKey.has(r.track))) return;
+      const es = ls.map((l) => l.byKey.get(r.track)!);
+      cands.push({
+        c: r.c,
+        k: r.k,
+        track: r.track,
+        layouts: ls,
+        pos: es.map((x) => centerOf(x)!),
+        box: boxOf(es[0])!,
+      });
+    });
+    if (!loading) return; // released while laying out
+    const c0 = (e && centerOf(e)) ?? p;
+    const moving = src.moving ?? e?.rows ?? [];
     drag = {
-      markKey: e.key,
-      rowKeys: rowsKey(e.rows!, key),
-      moving: new Set(
-        (opts.drag.reorder
-          ? state.rows.filter(
-              (r) => r[opts.drag.reorder!] === e.rows![0][opts.drag.reorder!]
-            )
-          : e.rows!
-        ).map(key)
-      ),
+      feel: src.feel ?? opts.drag.feel ?? "between",
+      src,
+      markKey: e?.key,
+      rowKeys: e?.rows ? rowsKey(e.rows, key) : "",
+      moving: new Set(moving.map(key)),
       grab: { x: p.x - c0.x, y: p.y - c0.y },
-      combos: combos.filter((_, i) => keep[i]),
-      conts,
-      layouts: layouts.filter((_, i) => keep[i]),
-      pos: layouts
-        .filter((_, i) => keep[i])
-        .map((ls) => ls.map((l) => centerOf(l.byKey.get(e.key)!)!)),
+      cands,
+      away: src.away && awayLayout && { state: src.away, layout: awayLayout },
+      plot: plotOf(current),
       pointer: pendingPointer!,
     };
     loading = false;
     stats.pointerDownMs.push(performance.now() - t0);
-    stats.candidatesPerDrag.push(
-      combos.reduce((s, c) => s + c.corners.length, 0)
-    );
+    stats.candidatesPerDrag.push(raw.reduce((s, c) => s + c.corners.length, 0));
     frame();
+  };
+
+  svg.addEventListener("pointerdown", (ev) => {
+    if (drag || loading) return;
+    const p = pt(ev);
+    const hs = hit(p);
+    if (hs) {
+      ev.preventDefault();
+      begin(hs[1], hs[0], p);
+      return;
+    }
+    const r = regionAt(p);
+    if (r) {
+      ev.preventDefault();
+      begin(r.source(state), undefined, p);
+    }
   });
 
   svg.addEventListener("pointermove", (ev) => {
+    if (drag || loading) return;
+    const p = pt(ev);
+    svg.style.cursor = hit(p) || regionAt(p) ? "grab" : "default";
+  });
+  window.addEventListener("pointermove", (ev) => {
+    if (!drag && !loading) return;
     const p = pt(ev);
     if (loading) pendingPointer = p;
-    if (!drag) {
-      svg.style.cursor = hit(p) ? "grab" : "default";
-      return;
-    }
+    if (!drag) return;
     drag.pointer = p;
     frame();
   });
@@ -767,102 +948,154 @@ export function mountDraggable(
     const t0 = performance.now();
     const D = drag;
     const want = { x: D.pointer.x - D.grab.x, y: D.pointer.y - D.grab.y };
-    const k = D.conts.length;
-    // Continuous fields: invert each field's pixel map (two layouts per
-    // field) by projecting the pointer onto the line between them.
-    const ts = D.pos.map((P) =>
-      D.conts.map((_, j) => {
-        const a = P[0],
-          b = P[1 << j];
+    // Continuous parameters: invert each one's pixel map (its two corner
+    // layouts) by projecting the pointer onto the line between them.
+    const ts = D.cands.map((C) =>
+      Array.from({ length: C.k }, (_, j) => {
+        const a = C.pos[0],
+          b = C.pos[1 << j];
         const dx = b.x - a.x,
           dy = b.y - a.y;
         const L = dx * dx + dy * dy;
         if (L < 1e-9) return 0;
         const t = ((want.x - a.x) * dx + (want.y - a.y) * dy) / L;
-        return Math.max(0, Math.min(1, t));
+        const [lo, hi] = C.c.range?.[j] ?? [0, 1];
+        return Math.max(lo, Math.min(hi, t));
       })
     );
-    const cornerW = (t: number[]) =>
-      Array.from({ length: 1 << k }, (_, c) =>
+    const cws = ts.map((t, i) =>
+      Array.from({ length: 1 << D.cands[i].k }, (_, c) =>
         t.reduce((s, tj, j) => s * (c & (1 << j) ? tj : 1 - tj), 1)
-      );
-    const cws = ts.map(cornerW);
-    const targets = D.pos.map((P, i) =>
-      P.reduce(
+      )
+    );
+    const targets = D.cands.map((C, i) =>
+      C.pos.reduce(
         (s, q, c) => ({ x: s.x + cws[i][c] * q.x, y: s.y + cws[i][c] * q.y }),
         { x: 0, y: 0 }
       )
     );
-    const feel = opts.drag.feel ?? "between";
-    const comboW =
-      feel === "between"
-        ? betweenWeights(targets, want)
-        : closestWeights(targets, want);
+    // Which state: away (outside the plot), a snapped discrete state, or
+    // the feel's weights over the targets.
+    let comboW = D.cands.map(() => 0);
+    let mode = "free";
+    const outside = !!D.away && !inBox(D.plot, D.pointer);
+    if (outside || D.cands.length === 0) mode = "away";
+    else {
+      let snapped = -1;
+      let bd = opts.drag.snap ?? -1;
+      D.cands.forEach((C, i) => {
+        if (C.k) return;
+        const d = boxDist(C.box, want);
+        if (d <= bd) {
+          bd = d;
+          snapped = i;
+        }
+      });
+      if (snapped >= 0) {
+        comboW[snapped] = 1;
+        mode = `snap:${snapped}`;
+      } else
+        comboW =
+          D.feel === "between"
+            ? betweenWeights(targets, want)
+            : closestWeights(targets, want);
+    }
+    const awayW = mode === "away" ? 1 : 0;
     const flatL: Layout[] = [];
     const flatW: number[] = [];
-    D.layouts.forEach((ls, i) =>
-      ls.forEach((l, c) => {
+    D.cands.forEach((C, i) =>
+      C.layouts.forEach((l, c) => {
         flatL.push(l);
         flatW.push(comboW[i] * cws[i][c]);
       })
     );
-    // Branch transition (Dragology's `.withBranchTransition`): when `closest`
-    // switches to another state, ease from the weights on screen to the new
-    // ones over 150 ms instead of jumping, so axes and stacks move.
-    let best = 0;
-    comboW.forEach((x, i) => (x > comboW[best] ? (best = i) : 0));
-    if (feel !== "between") {
-      const now = performance.now();
-      if (D.choice !== undefined && D.choice !== best) {
-        D.switchFrom = D.shownW ?? flatW;
-        D.switchT0 = now;
-      }
-      D.choice = best;
-      if (D.switchFrom && D.switchT0 !== undefined) {
-        const u = Math.min(1, (now - D.switchT0) / 150);
-        const e = 1 - (1 - u) ** 3;
-        const from = D.switchFrom;
-        for (let i = 0; i < flatW.length; i++)
-          flatW[i] = (1 - e) * from[i] + e * flatW[i];
-        if (u < 1) requestAnimationFrame(frame);
-        else D.switchFrom = undefined;
-      }
+    if (D.away) {
+      flatL.push(D.away.layout);
+      flatW.push(awayW);
+    }
+    let best = -1;
+    if (!awayW)
+      comboW.forEach((x, i) => (best < 0 || x > comboW[best] ? (best = i) : 0));
+    // Branch transition (Dragology's `.withBranchTransition`): when the
+    // drag switches to another state (or snaps, or leaves the plot), ease
+    // from the weights on screen to the new ones over 150 ms instead of
+    // jumping, so axes and stacks move.
+    const now = performance.now();
+    const switched =
+      (D.mode !== undefined && D.mode !== mode) ||
+      (D.feel !== "between" && D.choice !== undefined && D.choice !== best);
+    if (switched) {
+      D.switchFrom = D.shownW ?? flatW;
+      D.switchT0 = now;
+    }
+    D.choice = best;
+    D.mode = mode;
+    if (D.switchFrom && D.switchT0 !== undefined) {
+      const u = Math.min(1, (now - D.switchT0) / 150);
+      const e = 1 - (1 - u) ** 3;
+      const from = D.switchFrom;
+      for (let i = 0; i < flatW.length; i++)
+        flatW[i] = (1 - e) * from[i] + e * flatW[i];
+      if (u < 1) requestAnimationFrame(frame);
+      else D.switchFrom = undefined;
     }
     D.shownW = flatW;
     let entries = blendLayouts(flatL, flatW);
+    const C = best >= 0 ? D.cands[best] : undefined;
+    // Text does not blend: during a continuous drag, labels take their text
+    // from a real layout of the drop state, made in the background.
+    if (C?.k && D.textLayout)
+      entries = entries.map((e) => {
+        const r = e.label && D.textLayout!.byKey.get(e.key);
+        return r && r.item.kind === "text" && e.item.kind === "text"
+          ? { ...e, item: { ...e.item, text: r.item.text } }
+          : e;
+      });
     // When floating, the dragged mark (and anything drawing the same rows)
     // moves to sit under the pointer.
-    const mine = (e: Entry) => e.key.startsWith(`m:${D.rowKeys}:`);
-    let off = { x: 0, y: 0 };
-    if (feel === "floating") {
+    if (D.feel === "floating" && D.markKey && D.rowKeys) {
+      const mine = (e: Entry) => e.key.startsWith(`m:${D.rowKeys}:`);
       const m = entries.find((e) => e.key === D.markKey);
       const c = m && centerOf(m);
-      if (c) off = { x: want.x - c.x, y: want.y - c.y };
-    }
-    entries = entries.map((e) =>
-      mine(e)
-        ? { ...e, at: { ...e.at, tx: e.at.tx + off.x, ty: e.at.ty + off.y } }
-        : e
-    );
-    paint(raise(entries, D));
-    // Drop state: the heaviest combo, with continuous fields at the
-    // inverted values.
-    const ids = new Set(D.rowKeys.split("|"));
-    const s0 = D.combos[best].corners[0];
-    D.drop = {
-      order: s0.order,
-      rows: s0.rows.map((r) => {
-        if (!ids.has(key(r)) || k === 0) return r;
-        const o = { ...r };
-        D.conts.forEach(
-          (f, j) => (o[f.field] = f.lo + ts[best][j] * (f.hi - f.lo))
+      if (c) {
+        const off = { x: want.x - c.x, y: want.y - c.y };
+        entries = entries.map((e) =>
+          mine(e)
+            ? { ...e, at: { ...e.at, tx: e.at.tx + off.x, ty: e.at.ty + off.y } }
+            : e
         );
-        return o;
-      }),
-    };
-    D.dropLayout = k === 0 ? D.layouts[best][0] : undefined;
+      }
+    }
+    paint(raise(entries, D));
+    // The ghost chip: under the pointer, inside the plot only if asked.
+    const gh = D.src.ghost;
+    if (gh && (awayW || gh.inside)) {
+      ghost.textContent = gh.text;
+      ghost.style.display = "block";
+      // Below and right of the pointer, clear of the preview it points at.
+      ghost.style.left = `${PAD + D.pointer.x + 10}px`;
+      ghost.style.top = `${PAD + D.pointer.y + 10}px`;
+    } else ghost.style.display = "none";
+    // Drop state: away, or the chosen candidate at the inverted parameters.
+    D.drop = awayW ? D.away!.state : C!.c.at(ts[best]);
+    D.dropLayout = awayW ? D.away!.layout : C!.k === 0 ? C!.layouts[0] : undefined;
     D.best = best;
-    D.bestCornerW = cws[best];
+    D.bestCornerW = best >= 0 ? cws[best] : undefined;
+    const dk = JSON.stringify(D.drop);
+    if (dk !== D.dropKey) {
+      D.dropKey = dk;
+      opts.onState?.(D.drop, true);
+    }
+    if (C?.k && !D.textBusy && dk !== D.textKey) {
+      D.textBusy = true;
+      const want = D.drop;
+      layout(want, false).then((l) => {
+        D.textBusy = false;
+        D.textLayout = l;
+        D.textKey = JSON.stringify(want);
+        if (drag === D) frame();
+      });
+    }
     stats.frameMs.push(performance.now() - t0);
     drawDebug(D, targets, comboW, want);
   };
@@ -875,14 +1108,24 @@ export function mountDraggable(
       for (const [k, v] of Object.entries(a)) n.setAttribute(k, String(v));
       over.appendChild(n);
     };
-    // Continuous fields: the segment each discrete state can slide along.
-    D.pos.forEach((P) => {
-      if (P.length > 1)
+    if (D.away)
+      el("rect", {
+        x: D.plot.x,
+        y: D.plot.y,
+        width: D.plot.w,
+        height: D.plot.h,
+        fill: "none",
+        stroke: "#94a3b8",
+        "stroke-dasharray": "4 4",
+      });
+    // Continuous parameters: the segment each family of states slides along.
+    D.cands.forEach((C) => {
+      if (C.pos.length > 1)
         el("line", {
-          x1: P[0].x,
-          y1: P[0].y,
-          x2: P[1].x,
-          y2: P[1].y,
+          x1: C.pos[0].x,
+          y1: C.pos[0].y,
+          x2: C.pos[1].x,
+          y2: C.pos[1].y,
           stroke: "#94a3b8",
           "stroke-dasharray": "3 3",
         });
@@ -912,33 +1155,29 @@ export function mountDraggable(
     el("circle", { cx: want.x, cy: want.y, r: 3, fill: "#111" });
   };
 
-  const end = async (ev: PointerEvent) => {
+  const end = async () => {
     if (loading) {
       // Released before the candidates were laid out: no drag happened.
       loading = false;
-      queueMicrotask(() => {
-        drag = undefined;
-        paint(current.entries);
-      });
       return;
     }
     if (!drag) return;
-    svg.releasePointerCapture?.(ev.pointerId);
     const D = drag;
     drag = undefined;
     over.replaceChildren();
+    ghost.style.display = "none";
     const next = D.drop ?? state;
     const target = D.dropLayout ?? (await layout(next));
-    if (!D.dropLayout && D.best !== undefined && D.bestCornerW) {
-      // Check the affine claim: the blend of the two cached layouts at the
-      // inverted value against a real layout of the dropped rows.
-      const pred = asLayout(blendLayouts(D.layouts[D.best], D.bestCornerW));
+    if (!D.dropLayout && D.best !== undefined && D.best >= 0 && D.bestCornerW) {
+      // Check the affine claim: the blend of the cached corner layouts at
+      // the inverted value against a real layout of the dropped state.
+      const pred = asLayout(blendLayouts(D.cands[D.best].layouts, D.bestCornerW));
       let err = 0;
       for (const e of target.entries) {
         const p = pred.byKey.get(e.key);
         const a = boxOf(e),
           b = p && boxOf(p);
-        if (a && b)
+        if (a && b && e.item.kind !== "text")
           err = Math.max(
             err,
             Math.abs(a.x - b.x),
@@ -970,18 +1209,19 @@ export function mountDraggable(
     await tweening;
     state = next;
     current = target;
+    opts.onState?.(state, false);
     if (opts.drag.precompute === "eager") await eager();
   };
-  svg.addEventListener("pointerup", end);
-  svg.addEventListener("pointercancel", end);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
 
   return {
     stats,
-    rows: () => state.rows,
-    order: () => state.order,
+    state: () => state,
     ready,
     settled: () => tweening,
     setDebug: (on) => (debug = on),
     svg,
+    chips,
   };
 }

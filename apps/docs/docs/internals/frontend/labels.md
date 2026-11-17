@@ -138,7 +138,9 @@ label lowers under its mark's build-in animation (`INTERNAL_animate`), which it
 finds through `_attachedTo`, so it follows its mark's timing
 (`src/animation/paint.ts`). The link also reaches the display list: each item a
 label lowers carries `attachedTo`, its mark's uid, which is the `id` of the
-mark's own items, so a host can move or key a label with its mark.
+mark's own items, so a host can move or key a label with its mark. A layer
+made of one ref (a layer over a selected mark) draws nothing of its own, so a
+label on it carries the ref target's uid instead.
 
 Concretely, `wrapWithLabels` builds:
 

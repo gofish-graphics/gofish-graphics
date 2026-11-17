@@ -35,3 +35,8 @@ export const TreemapReparent = {
   ...story("treemap-reparent"),
   name: "Treemap Reparent",
 };
+export const AddNote = { ...story("add-note"), name: "Add Note" };
+export const ReferenceLine = {
+  ...story("reference-line"),
+  name: "Reference Line",
+};

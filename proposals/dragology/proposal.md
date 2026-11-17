@@ -4,7 +4,7 @@
 
 **Recommendation.** A `.drag(...)` method on marks that takes a strategy from a new `Drag` family: `Drag.edit(...fields)`, `Drag.reorder()`, and `Drag.states(fn)` as the escape hatch that lists states by hand, which is what Dragology asks of every author. The data is a `signal`, and a drop writes the edited rows back to it.
 
-**Status.** Four prototypes run on a small native engine (942 lines of story-level code, no change to library source, no `dragology` or React dependency). Syntax is not signed off. Nothing here is implemented in the library.
+**Status.** Six prototypes run on a small native engine (about 1,200 lines of story-level code, no `dragology` or React dependency). The only library change is metadata: a label's display item names the mark it is attached to. Syntax is not signed off. Nothing here is implemented in the library.
 
 Prototype code: `packages/gofish-graphics/stories/drag/` (stories "Drag/Reorder Bars", "Drag/Reorder Stack", "Drag/Scheduler", "Drag/Treemap Reparent"). Measurements and walls: `research/prototype-findings.md`.
 
@@ -140,6 +140,69 @@ chart(meetings).flow(spread(by="room", dir="y", spacing=8)).mark(
 ```
 
 `Drag.edit` and `Drag.reorder` are plain data and cross the bridge like the other strategy families. `Drag.states` takes a function and uses the same callback route as `derive`.
+
+## Dragging to edit the spec: annotations
+
+In these two prototypes the drag edits the spec, not the data. The state is a small object (the notes, the lines), the spec is a function of it, and each reachable state is laid out by GoFish like the others. This section proposes no new annotation syntax. An annotation is a selection, a subject mark and a label, written with the API on main. Leader lines are not implemented.
+
+### 6. Add a note to a bar
+
+![add note](img/add-note-1.png) ![add note](img/add-note-2.png) ![add note](img/add-note-3.png) ![add note](img/add-note-4.png)
+
+Dropping the Note chip on Lake C writes:
+
+```js
+chart(totals)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(filter((bar) => project(bar, "lake") === "Lake C"))
+      .mark(([bar]) =>
+        layer([bar]).label(() => String(project(bar, "count")), {
+          position: "outset-top",
+        })
+      )
+  );
+```
+
+The chip can reach one state per bar without a note, and the preview is the state whose note is nearest the pointer. A note can reach the four label positions of its bar (outset-top, inset-top, center, inset-bottom) and the same position on each free bar. Outside the plot the preview is the chart without the note, so a drop there removes it (or, from the chip, adds nothing).
+
+A spec panel under the chart prints the state as code. The demo builds the same code next to the printer.
+
+### 7. Pull a reference line out of the axis
+
+![reference line](img/reference-line-1.png) ![reference line](img/reference-line-2.png) ![reference line](img/reference-line-3.png) ![reference line](img/reference-line-4.png)
+
+A free line is a literal row. A line snapped to the mean is a `derive` over the same data, so it follows the data:
+
+```js
+const rule = (text) =>
+  rect({ y: "count", h: 2, fill: "#333" })
+    .label(text, { position: "outset-top-end" });
+
+// released at 62
+.layer(
+  chart([{ id: "line-1", count: 62 }])
+    .mark(rule((d) => String(d[0].count)))
+)
+
+// snapped to the mean
+.layer(
+  chart(totals)
+    .flow(derive((rows) => [{
+      id: "line-1",
+      count: mean(rows, (r) => r.count),
+    }]))
+    .mark(rule((d) => `mean ${Math.round(d[0].count)}`))
+)
+```
+
+A drag starts on the y axis or on the Line chip. The value is continuous: two layouts (the line at 0 and at 96) give the pixel map. A target within 8 px wins: the mean, the max, and each bar's top (the median equals the mean here). The label then names it. Dragging a line back to the axis or out of the plot removes it.
+
+The axis is pinned while dragging, so a line above the tallest bar goes past the top tick. On drop the real layout grows the axis from 140 to 160, and the drop tween settles it.
+
+What the annotation API on main could not express is listed in the findings file: a ref has no `.label`, a layer over a ref has no datum for a field-name label, and marks over a selection do not sit on the selected mark.
 
 ## Approaches
 

@@ -52,5 +52,72 @@
       {},
       { "precompute": "eager", "suffix": "-eager", "noShots": true }
     ]
+  },
+  "add-note": {
+    "crop": "demo",
+    "steps": [
+      {
+        "grab": { "chip": "Note" },
+        "path": [
+          [200, 60],
+          [205, 22]
+        ],
+        "shots": { "1": 2 },
+        "after": 3
+      },
+      {
+        "grab": [200, 20],
+        "path": [
+          [200, 70],
+          [200, 115]
+        ],
+        "after": 4
+      },
+      {
+        "grab": [205, 121],
+        "path": [
+          [320, 235],
+          [445, 245]
+        ]
+      }
+    ],
+    "variants": [
+      {},
+      { "precompute": "eager", "suffix": "-eager", "noShots": true }
+    ]
+  },
+  "reference-line": {
+    "crop": "demo",
+    "steps": [
+      {
+        "grab": [35, 200],
+        "path": [
+          [150, 150],
+          [150, 120],
+          [150, 54]
+        ],
+        "shots": { "1": 2, "2": 3 },
+        "after": 4,
+        "wait": 250
+      },
+      {
+        "grab": [150, 51],
+        "path": [
+          [90, 60],
+          [30, 60]
+        ]
+      },
+      {
+        "grab": [35, 200],
+        "path": [
+          [150, 100],
+          [150, 3]
+        ]
+      }
+    ],
+    "variants": [
+      {},
+      { "precompute": "eager", "suffix": "-eager", "noShots": true }
+    ]
   }
 }

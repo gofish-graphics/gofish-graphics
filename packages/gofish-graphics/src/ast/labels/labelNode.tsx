@@ -255,8 +255,17 @@ export function LabelText(opts: LabelNodeOptions): LabelNode {
         if (deg) item.rotate = deg;
         items.push(item);
         // The mark this label is attached to (`INTERNAL_attach`), whose own
-        // items carry its uid as their `id`.
-        const owner = self._attachedTo?.uid;
+        // items carry its uid as their `id`. A ref draws its target, so a
+        // label on a layer made of one ref (a layer over a selected mark)
+        // names that target: the layer itself emits no item to point at.
+        const subject = self._attachedTo;
+        const only =
+          subject?.children.length === 1 ? subject.children[0] : undefined;
+        const owner = (
+          only?.type === "ref"
+            ? ((only as { targetNode?: GoFishNode }).targetNode ?? subject)
+            : subject
+        )?.uid;
         if (owner) for (const it of items) it.attachedTo = owner;
         return items;
       },

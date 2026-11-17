@@ -162,6 +162,16 @@
     display: grid;
     gap: 28px;
   }
+  .examples + .examples {
+    margin-top: 40px;
+  }
+  .group-head h2 {
+    margin: 0 0 6px;
+  }
+  .group-head p {
+    margin: 0;
+    color: var(--muted);
+  }
   .card {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -512,9 +522,10 @@
     </ul>
     <p class="status">
       The syntax is proposed and not signed off. The demos below run on a small
-      prototype engine in story code (942 lines, no change to library source, no
-      <code>dragology</code> or React dependency). Nothing here is implemented
-      in the library.
+      prototype engine in story code (about 1,200 lines, no
+      <code>dragology</code> or React dependency). The only library change is
+      metadata: a label's display item names the mark it is attached to. Nothing
+      else here is implemented in the library.
     </p>
   </header>
 
@@ -580,10 +591,9 @@ chart(catches)
         <summary>Prototype today</summary>
         <div class="inner">
           <pre><code class="language-javascript">mountDraggable(el, {
-  data: seafood,
-  order: { lake: levels("lake") },
+  state: { rows: seafood, order: { lake: levels("lake") } },
   key: (r) =&gt; `${r.lake}-${r.species}`,
-  spec: (rows, order) =&gt;
+  spec: ({ rows, order }) =&gt;
     chart(rows, { schema: { lake: Unit({ domain: Domain.discrete(order.lake) }) } })
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" })),
@@ -664,10 +674,9 @@ chart(catches)
         <summary>Prototype today</summary>
         <div class="inner">
           <pre><code class="language-javascript">mountDraggable(el, {
-  data: seafood,
-  order: { species: levels("species") },
+  state: { rows: seafood, order: { species: levels("species") } },
   key: (r) =&gt; `${r.lake}-${r.species}`,
-  spec: (rows, order) =&gt;
+  spec: ({ rows, order }) =&gt;
     chart(rows, {
       schema: { species: Unit({ domain: Domain.discrete(order.species) }) },
       color: speciesColors,
@@ -764,9 +773,9 @@ chart(catches)
         <summary>Prototype today</summary>
         <div class="inner">
           <pre><code class="language-javascript">mountDraggable(el, {
-  data: [...days, ...meetings],
+  state: { rows: [...days, ...meetings] },
   key: (r) =&gt; r.id,
-  spec: (rows) =&gt;
+  spec: ({ rows }) =&gt;
     chart(rows)
       .flow(spread({ by: "room", dir: "y", spacing: 8 }), group({ by: "id" }))
       .mark(
@@ -883,9 +892,9 @@ chart(catches)
         <summary>Prototype today</summary>
         <div class="inner">
           <pre><code class="language-javascript">mountDraggable(el, {
-  data: leaves,
+  state: { rows: leaves },
   key: (r) =&gt; r.id,
-  spec: (rows) =&gt;
+  spec: ({ rows }) =&gt;
     chart(rows, {
       axes: false,
       schema: { group: Unit({ domain: Domain.discrete(GROUPS) }) },
@@ -992,6 +1001,207 @@ chart(catches)
     </article>
   </section>
 
+  <section class="examples" aria-label="Dragging to edit the spec: annotations">
+    <header class="group-head">
+      <h2>Dragging to edit the spec: annotations</h2>
+      <p>
+        In these two demos the drag edits the spec, not the data. The state is a
+        small object (the notes, the lines), the spec is a function of it, and
+        each reachable state is laid out by GoFish like the others. An
+        annotation is a selection, a subject mark and a label. Leader lines are
+        not implemented.
+      </p>
+    </header>
+
+    <!-- Add note -->
+    <article class="card" id="add-note">
+      <h2>Add a note to a bar</h2>
+      <div class="live" data-demo="add-note">
+        <div class="live-bar">
+          <span class="caption"
+            >Drag the Note chip onto a bar. Drag a note around its bar, onto
+            another bar, or out of the plot.</span
+          >
+          <label class="toggle"
+            ><input type="checkbox" id="dbg-add-note" /> Show targets</label
+          >
+        </div>
+        <div class="stage"><div class="mount"></div></div>
+      </div>
+      <div class="strip">
+        <figure>
+          <img
+            src="img/add-note-1.png"
+            alt="A bar chart of six lakes with a Note chip above it and no notes"
+            loading="lazy"
+          />
+          <figcaption>idle</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/add-note-2.png"
+            alt="The Note chip dragged over Lake C, with a preview of the note 124 above the bar"
+            loading="lazy"
+          />
+          <figcaption>chip mid-drag</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/add-note-3.png"
+            alt="The note 124 above the Lake C bar after the drop"
+            loading="lazy"
+          />
+          <figcaption>note dropped</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/add-note-4.png"
+            alt="The note moved to the center of the Lake C bar"
+            loading="lazy"
+          />
+          <figcaption>note moved</figcaption>
+        </figure>
+      </div>
+      <div class="label">What the drop writes</div>
+      <div class="two-col">
+        <div>
+          <div class="label">Before</div>
+          <pre><code class="language-javascript">chart(totals)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }).name("bars"));</code></pre>
+        </div>
+        <div>
+          <div class="label">After (chip dropped on Lake C)</div>
+          <pre><code class="language-javascript">chart(totals)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(filter((bar) =&gt; project(bar, "lake") === "Lake C"))
+      .mark(([bar]) =&gt;
+        layer([bar]).label(() =&gt; String(project(bar, "count")), {
+          position: "outset-top",
+        })
+      )
+  );</code></pre>
+        </div>
+      </div>
+      <div class="notes">
+        <p>
+          The chip can reach one state per bar without a note, and the preview
+          is the state whose note is nearest the pointer. A note can reach the
+          four label positions of its bar (outset-top, inset-top, center,
+          inset-bottom) and the same position on each free bar. Outside the plot
+          the preview is the chart without the note.
+        </p>
+        <p>
+          The spec panel prints the state, and the demo builds the same code
+          beside the printer. Labels on a layer over a selected bar cannot read
+          the bar's row through a field name, so the text reads it with
+          <code>project</code>.
+        </p>
+      </div>
+    </article>
+
+    <!-- Reference line -->
+    <article class="card" id="reference-line">
+      <h2>Pull a reference line out of the axis</h2>
+      <div class="live" data-demo="reference-line">
+        <div class="live-bar">
+          <span class="caption"
+            >Drag from the y axis or the Line chip. The line snaps to the mean,
+            the max and each bar's top. Drag it back to the axis to remove
+            it.</span
+          >
+          <label class="toggle"
+            ><input type="checkbox" id="dbg-reference-line" /> Show
+            targets</label
+          >
+        </div>
+        <div class="stage"><div class="mount"></div></div>
+      </div>
+      <div class="strip">
+        <figure>
+          <img
+            src="img/reference-line-1.png"
+            alt="A bar chart of six lakes with a Line chip above it"
+            loading="lazy"
+          />
+          <figcaption>idle</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/reference-line-2.png"
+            alt="A line pulled out of the axis at 62, labeled 62"
+            loading="lazy"
+          />
+          <figcaption>free mid-drag</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/reference-line-3.png"
+            alt="The line snapped to the mean, labeled mean 110"
+            loading="lazy"
+          />
+          <figcaption>snapped to the mean</figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/reference-line-4.png"
+            alt="The mean line after the drop"
+            loading="lazy"
+          />
+          <figcaption>after drop</figcaption>
+        </figure>
+      </div>
+      <div class="label">What the drop writes</div>
+      <div class="two-col">
+        <div>
+          <div class="label">Free (released at 62)</div>
+          <pre><code class="language-javascript">const rule = (text) =&gt;
+  rect({ y: "count", h: 2, fill: "#333" })
+    .label(text, { position: "outset-top-end" });
+
+chart(totals)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }).name("bars"))
+  .layer(
+    chart([{ id: "line-1", count: 62 }])
+      .mark(rule((d) =&gt; String(d[0].count)))
+  );</code></pre>
+        </div>
+        <div>
+          <div class="label">Snapped to the mean</div>
+          <pre><code class="language-javascript">chart(totals)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }).name("bars"))
+  .layer(
+    chart(totals)
+      .flow(derive((rows) =&gt; [{
+        id: "line-1",
+        count: mean(rows, (r) =&gt; r.count),
+      }]))
+      .mark(rule((d) =&gt; `mean ${Math.round(d[0].count)}`))
+  );</code></pre>
+        </div>
+      </div>
+      <div class="notes">
+        <p>
+          The value is continuous: two layouts (the line at 0 and at 96) give
+          the pixel map, and the pointer is inverted through it. A target within
+          8 px of the line wins, and the label names it. A snapped line is a
+          <code>derive</code> over the same data with d3's <code>mean</code>, so
+          it follows the data, where a literal 110 would not.
+        </p>
+        <p>
+          The axis is pinned while dragging, so a line above the tallest bar
+          goes past the top tick. On drop the real layout grows the axis from
+          140 to 160, and the drop tween settles it.
+        </p>
+      </div>
+    </article>
+  </section>
+
   <section class="section" id="map">
     <h2>How the ideas map</h2>
     <div class="table-wrap">
@@ -1075,30 +1285,44 @@ chart(catches)
               <tr>
                 <td>Reorder Bars</td>
                 <td class="num">6</td>
-                <td class="num">14.5</td>
-                <td class="num">44 ms</td>
-                <td class="num">0.7 / 1.9 ms</td>
+                <td class="num">13.0</td>
+                <td class="num">39 ms</td>
+                <td class="num">0.7 / 1.4 ms</td>
               </tr>
               <tr>
                 <td>Reorder Stack</td>
                 <td class="num">5</td>
-                <td class="num">20.3</td>
-                <td class="num">51 ms</td>
-                <td class="num">1.5 / 2.3 ms</td>
+                <td class="num">18.0</td>
+                <td class="num">44 ms</td>
+                <td class="num">1.4 / 2.1 ms</td>
               </tr>
               <tr>
                 <td>Scheduler</td>
                 <td class="num">8 (4 rooms x 2 corners)</td>
-                <td class="num">9.8</td>
-                <td class="num">52 ms</td>
-                <td class="num">0.9 / 1.8 ms</td>
+                <td class="num">5.7</td>
+                <td class="num">47 ms</td>
+                <td class="num">0.8 / 1.8 ms</td>
               </tr>
               <tr>
                 <td>Treemap Reparent</td>
                 <td class="num">4</td>
-                <td class="num">13.6</td>
-                <td class="num">17 ms</td>
-                <td class="num">0.6 / 1.1 ms</td>
+                <td class="num">12.1</td>
+                <td class="num">15 ms</td>
+                <td class="num">0.5 / 1.5 ms</td>
+              </tr>
+              <tr>
+                <td>Add Note</td>
+                <td class="num">6 (chip), 9 (note)</td>
+                <td class="num">9.7</td>
+                <td class="num">55 ms (chip), 20 to 31 ms (note)</td>
+                <td class="num">0.7 / 1.3 ms</td>
+              </tr>
+              <tr>
+                <td>Reference Line</td>
+                <td class="num">9 (2 corners + 7 snaps)</td>
+                <td class="num">7.0</td>
+                <td class="num">77 ms (first drag; later drags cached)</td>
+                <td class="num">0.7 / 2.8 ms</td>
               </tr>
             </tbody>
           </table>

@@ -6,12 +6,20 @@ engine does not use the `dragology` package, React, or react-dom. It is built
 from GoFish's own pieces: `toDisplayList` lays out each state, and GoFish's
 display-list painter draws the result.
 
-- Engine: `packages/gofish-graphics/stories/drag/engine.ts` (942 lines with
+- Engine: `packages/gofish-graphics/stories/drag/engine.ts` (1,227 lines with
   comments).
 - Demos: `packages/gofish-graphics/stories/drag/demos.ts`, shared by the
   stories (`stories/drag/Drag.stories.tsx`, titles "Drag/Reorder Bars",
-  "Drag/Reorder Stack", "Drag/Scheduler", "Drag/Treemap Reparent") and by the
-  standalone bundle (`proposals/dragology/demo/demos.js`).
+  "Drag/Reorder Stack", "Drag/Scheduler", "Drag/Treemap Reparent",
+  "Drag/Add Note", "Drag/Reference Line") and by the standalone bundle
+  (`proposals/dragology/demo/demos.js`).
+- The state is any plain object, and the spec is `spec(state)`. The row
+  demos use `{ rows, order }`, and the row options (`edit`, `reorder`,
+  `states`) edit it. The annotation demos use `{ notes }` and `{ lines }`,
+  and say what a grab, an axis region or a palette chip can reach through a
+  source: a list of candidates (each a state, or a family `at(t)` with
+  continuous corners), the key of the dragged thing in each, and an `away`
+  state for outside the plot.
 - Measurements: `proposals/dragology/demo/results.json`, written by
   `proposals/dragology/demo/drive.mjs`. That script drives real pointer drags
   through Playwright on the bundle, with no network access.
@@ -20,7 +28,7 @@ display-list painter draws the result.
 
 | Dragology idea                                                                                         | Engine part                                                                                                                           | Lines                       |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| A view is a function of state; a drag moves between states                                             | `spec(rows, order)` plus `toDisplayList` per state, with a cache keyed by the state                                                   | in mount, about 25          |
+| A view is a function of state; a drag moves between states                                             | `spec(state)` plus `toDisplayList` per state, with a cache keyed by the state                                                         | in mount, about 25          |
 | Elements are matched across states by `id`                                                             | Key join over display items: `key(row)` on an item's `datum`; chrome keyed by its text, or by the nearest text for ticks and swatches | 80                          |
 | `lerp` of rendered SVG, fading elements that exist in one state only, never blending different strings | `blendValue` and `blendLayouts`: numbers, colors (through culori), path data with the same commands; text content is part of the key  | 153                         |
 | `d.closest`, `.withFloating()`, `d.between` (Delaunay weights, projection onto the hull)               | `closestWeights`, floating offset, `betweenWeights`                                                                                   | 102                         |
@@ -137,6 +145,14 @@ reformat 830 KB of minified code, and make one library change.
   I did not put the mark's `datum` on the label, as first suggested: a datum
   makes an item `role: "node"`, a hit target, and labels are meant to stay
   `"overlay"` chrome. That would have changed behavior, not just metadata.
+- **`attachedTo` through a ref.** A note in Add Note is a label on
+  `layer([bar])`, where `bar` is a ref from `selectAll("bars")`. That layer
+  emits no item, so its uid named nothing in the display list. A label on a
+  node whose only child is a ref now names the ref's target instead
+  (`labelNode.tsx`, next to the first change). This is a declared shortcut:
+  a label on a layer of several children still names the layer, which no
+  item carries. The right fix is for the display list to carry the subject
+  (a group item per layer, or a list of the items a node drew).
 
 I looked at the key join on branch `worktree-animation-grammar-proposal`
 (`src/animation/identity.ts`). I did not borrow it, because it works on the
@@ -152,8 +168,10 @@ either: they interpolate geometry channels of nodes, not display items.
   hull projection.
 - `.whenFar`, `.withSnapRadius`, `.withDropTransition` options, `.onDrop`,
   `.during`, `.withOverlay`, and chaining specs into a tree
-  (`d.closest([d.vary(...), ...])`). The engine has one fixed shape: a product
-  of discrete states and continuous corners, with one feel per chart.
+  (`d.closest([d.vary(...), ...])`). The engine has one fixed shape: a list of
+  candidates, each a discrete state or a family with continuous corners, plus
+  an optional `away` state outside the plot and one snap radius (`snap`, the
+  closest discrete target within it wins). The feel is per source.
 - `d.vary` with COBYLA constraints over arbitrary parameters. The engine only
   handles fields whose layout is affine with a fixed domain, and clamps them to
   a `[min, max]` range.
@@ -162,8 +180,9 @@ either: they interpolate geometry channels of nodes, not display items.
   0.5 px into the first one.
 - Layering control (`dragologyZIndex`). The engine always lifts the dragged
   mark to the top.
-- Drags on chrome and on marks without a box. `path` and `text` items have no
-  box in the display list, so they cannot be grabbed.
+- Drags on `path` items. They have no box in the display list. Text items get
+  a box estimated from the font size (0.6 em per character), so a note or a
+  line's label can be grabbed.
 - Several marks per row. The hit test picks the topmost box.
 
 ## Measured numbers
@@ -174,14 +193,21 @@ every candidate of every draggable mark after mount and after each drop.
 
 | Demo             | Candidates per drag     | Lazy: ms per layout | Lazy: pointer-down latency | Eager: layouts | Eager: precompute per drop | Blend + paint per frame (avg / max) |
 | ---------------- | ----------------------- | ------------------- | -------------------------- | -------------- | -------------------------- | ----------------------------------- |
-| Reorder Bars     | 6                       | 14.5                | 44 ms                      | 46             | 150 ms, then 90 ms         | 0.7 / 1.9 ms                        |
-| Reorder Stack    | 5                       | 20.3                | 51 ms                      | 29             | 156 ms, then 105 ms        | 1.5 / 2.3 ms                        |
-| Scheduler        | 8 (4 rooms x 2 corners) | 9.8                 | 52 ms                      | 106            | 239 ms, then 179 ms        | 0.9 / 1.8 ms                        |
-| Treemap Reparent | 4                       | 13.6                | 17 ms                      | 70             | 136 ms, then 90 ms         | 0.6 / 1.1 ms                        |
+| Reorder Bars     | 6                       | 13.0                | 39 ms                      | 46             | 132 ms, then 88 ms         | 0.7 / 1.4 ms                        |
+| Reorder Stack    | 5                       | 18.0                | 44 ms                      | 29             | 134 ms, then 79 ms         | 1.4 / 2.1 ms                        |
+| Scheduler        | 8 (4 rooms x 2 corners) | 5.7                 | 47 ms                      | 130            | 212 ms, then 138 ms        | 0.8 / 1.8 ms                        |
+| Treemap Reparent | 4                       | 12.1                | 15 ms                      | 70             | 107 ms, then 75 ms         | 0.5 / 1.5 ms                        |
+| Add Note         | 6 (chip), 9 (note)      | 9.7                 | 55 ms, then 20 and 31 ms   | 25             | 65 ms, then 55 to 65 ms    | 0.7 / 1.3 ms                        |
+| Reference Line   | 9 (2 corners + 7 snaps) | 7.0                 | 77 ms, then cached         | 55             | 81 ms, then 0 to 51 ms     | 0.7 / 2.8 ms                        |
 
-The eager runs report 3.9 to 10.6 ms per layout, because the JIT warms up over
+Add Note and Reference Line run three drags each (add, move, remove; pull,
+remove, pull above the tallest bar). Their later drags reuse cached layouts.
+During a continuous drag, Reference Line also lays out the drop state in the
+background for the label's text, so its layout count includes those.
+
+The eager runs report 3.0 to 8.9 ms per layout, because the JIT warms up over
 many layouts. The prototypes use **lazy** mode. Pointer-down latency stays
-under 55 ms, and eager mode spends up to 0.24 s after every drop laying out
+under 80 ms, and eager mode spends up to 0.21 s after every drop laying out
 states the user never visits. Eager mode remains an option
 (`precompute: "eager"`).
 
@@ -190,8 +216,8 @@ states the user never visits. Eager mode remains an option
 own style, layout, and raster work.
 
 The standalone bundle (`proposals/dragology/demo/demos.js`, one IIFE with
-GoFish, solid-js, d3-delaunay, culori, the engine, and the data) is **832,907
-bytes** (296 KB gzipped). It contains no React and no dragology code. It ran
+GoFish, solid-js, d3-delaunay, culori, the engine, and the data) is **843,140
+bytes** (300 KB gzipped). It contains no React and no dragology code. It ran
 from `test.html` through a plain `<script>`, with every non-`file:` request
 aborted, and logged no errors. The bundle keeps one dead `import("node:fs/promises")`
 from GoFish's file-save helper. It is never called in a browser.
@@ -276,6 +302,59 @@ which I left out. This version has no resize and no conflict graph.
    data order, so it can be hidden. The scheduler has no conflict handling.
 9. **Treemap panel.** At `h: 300` the treemap fills about 220 px and leaves
    empty space below. I did not investigate this.
+10. **Engine bug, fixed: fading mutated the layout cache.** `blendLayouts`
+    set the faded opacity on the item it got back from `blendValue`, which
+    is the cached item itself when only one layout has it. A note that faded
+    in during a chip drag stayed at opacity 0.001 after the drop. The fade
+    now copies the item.
+11. **Text does not blend.** A free reference line's label shows its value,
+    but the corner layouts hold "0" and "96". During a continuous drag the
+    engine lays out the drop state in the background (about 7 ms) and takes
+    the text of labels from it, keeping the blended geometry. The label lags
+    the line by a frame or two.
+12. **The axis is pinned while dragging, then settles.** The free line's two
+    corners (0 and 96) sit inside the bars' domain, so their axis is the
+    same and the blend is exact. Past 96 the pixel map extrapolates, so a
+    line above the tallest bar (137) goes past the top tick. On drop at 141
+    the real layout grows the axis from 0 to 140 to 0 to 160, and the 200 ms
+    drop tween moves the bars and ticks there (the "blend error" for that
+    drop is 206 px, all of it the settle). Showing the new axis during the
+    drag needs the pixel map from GoFish (see below), not more corners.
+13. **The plot has no name in the display list.** "Outside the plot" (where
+    a drop removes a note or a line, or adds nothing) is the box of the data
+    marks, from the canvas top down. The y axis region is the 40 px left of
+    it. Both are read off the marks, not off the chart.
+14. **Previews pick the nearest target, not the column.** A chip drag
+    previews the bar whose note would be nearest the pointer, the same rule
+    as every other `closest` drag. A pointer low in a column can pick a
+    shorter neighbor's note. A line snaps to a target within 8 px of its
+    rule (distance to the target's box, so only height counts).
+
+## What the annotation API on main could not express
+
+The natural spelling of a note is a label on the selected bar:
+`chart(selectAll("bars")).flow(filter(...)).mark(([bar]) => bar.label(...))`.
+On main:
+
+- **A ref has no `.label`.** `bar.label` fails with "d[0].label is not a
+  function", and `ref(bar).label(...)` with "ref(...).label is not a
+  function". The nearest public spelling wraps the ref:
+  `layer([bar]).label(...)`.
+- **The layer over a ref has no datum.** `layer([bar]).label("count")` draws
+  nothing, and a function accessor gets `undefined`. The demo computes the
+  text from the ref instead: `.label(() => String(project(bar, "count")))`.
+- **Marks over a selection do not sit on the selected mark.**
+  `rect({ fill: "none" }).label(...)` and `blank().label(...)` over the
+  filtered selection lay out on their own: the label landed at the top of the
+  canvas or near the origin, not on the bar.
+- **Reference lines have no rule mark.** A line is `rect({ y: "count", h: 2
+})` over a chart of one row, layered over the bars, and it shares their
+  `count` scale. A snapped line is a `derive` over the same data, which
+  keeps it a data-driven value. No leader lines: they are not implemented,
+  and the demos do not draw one.
+- **Function labels do not serialize.** Every `.label(fn)` logs that it is
+  left out of the emitted IR, so these specs do not cross to Python as
+  written.
 
 ## What GoFish would need to expose to make this trivial
 
