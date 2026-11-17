@@ -12,6 +12,96 @@ This is the review you deferred in the sankey round ("until GoFish has many layo
 
 Names: this page uses `tile({ tiling: Tiling.squarify })` and `Placement`, the spellings decided on 11-17 (draft PR #1366). The prototype stories run on main, where they are still `treemap({ tile: Tile.squarify })` and `Place`.
 
+## The API: `layout` and `measure`
+
+Two functions, both sketches. Each returns GoFish, so a layout written with them is ordinary operators all the way down.
+
+<!-- id: p-api -->
+
+```ts
+// The space this node was offered: a width and height, and a convex shape
+// when its parent hands one down. The result is whatever the body returns.
+declare function layout(
+  body: (space: { w: number; h: number; shape?: Ring }) => Node
+): Node;
+
+// A child's geometry once it is laid out in the given space. The space
+// defaults to the one the enclosing `layout` was offered.
+declare function measure(
+  child: Node,
+  space?: { w?: number; h?: number }
+): Geometry;
+
+type Geometry = {
+  box: { min: [number, number]; max: [number, number] };
+  enclosingCircle: { cx: number; cy: number; r: number };
+  outline: Outline[];
+};
+```
+
+- `layout` is called where a node goes. Its body runs during layout, once the parent has decided how much room this node gets.
+- `measure` is called inside a `layout` body. It lays the child out and answers with its geometry: its box, its enclosing circle and its outline. These are the three answers the engine's `geometry()` has today. A contour would be a fourth.
+- Neither places anything. The body returns operators (`stack`, `layer`, `position`), and those do the placing.
+- `measure` answers in pixels, after scales are chosen. A layout that sizes itself from measurements does not take part in fitting the chart to its room. See "The layout protocol" below.
+
+`layout` in use, a treemap that reads its box (the squarify plan and drawing are below, under "Squarify, as nested stacks"):
+
+![squarify as nested stacks](img/tiling-stacks-squarify.png)
+
+<!-- id: p-layout -->
+
+```js
+// A tiling written in GoFish: read the box, plan the rows, return stacks.
+const squarified = (items) =>
+  layout(({ w, h }) => drawSquarify(squarify(items, [w, h])));
+
+squarified(countries).render(container, { w: 360, h: 300 });
+```
+
+Today the same code types the size twice, once for the plan and once for the render: `drawSquarify(squarify(countries, [360, 300]))` inside `layer({ w: 360, h: 300 }, ...)`.
+
+`measure` in use, circle packing:
+
+![built-in pack](img/greedy-builtin-pack.png) ![greedy pack](img/greedy-greedy-pack-centroid.png)
+
+<!-- id: p-measure -->
+
+```js
+// Circle packing in user space, once children can be measured.
+const packed = (children) =>
+  layout(() => {
+    const circles = children.map((c) => measure(c).enclosingCircle);
+    const at = frontChain(circles); // plain JS: d3's packSiblings, or the greedy rule
+    return layer(
+      children.map((c, i) => position({ x: at[i].x, y: at[i].y }, [c]))
+    );
+  });
+```
+
+Today the prototype can only pack circles whose radii are literal pixels, because user code cannot ask a child how big it came out.
+
+In Python the two functions take a function, so they go through the callback runner, as `derive` does:
+
+<!-- id: p-api-py -->
+
+```python
+def squarified(items):
+    return layout(lambda space: draw_squarify(squarify(items, (space.w, space.h))))
+
+
+def packed(children):
+    def body(space):
+        circles = [measure(c).enclosing_circle for c in children]
+        at = front_chain(circles)
+        return layer([position([c], x=p.x, y=p.y) for c, p in zip(children, at)])
+
+    return layout(body)
+```
+
+(A sketch. The Python calls were not run.)
+
+**Fork: the names.** `layout` and `measure` are Typst's spellings for exactly these two things, and they work anywhere a node does. The alternative is a second argument to `createMark`, `createMark((props, { box, measure }) => node)`, which adds no top-level names but ties both to defining a mark. SwiftUI calls the first `GeometryReader` and Compose `BoxWithConstraints`. This page uses `layout` and `measure`.
+
 ## Terms
 
 - **Plan.** The discrete decisions of a layout, as plain data: which items share a row, what order the nodes of a layer go in, which side of the axis a dot sits on. No pixels are placed yet.
@@ -104,17 +194,7 @@ layer({ w: 360, h: 300 }, [
 ]).render(container, { axes: false });
 ```
 
-What is missing: the `[360, 300]` is typed twice. The plan needs the box, and user code cannot read the box it will be given. Proposed (the name is the first fork, below):
-
-<!-- id: p-layout -->
-
-```js
-// A tiling written in GoFish: read the box, plan the rows, return stacks.
-const squarified = (items) =>
-  layout(({ w, h }) => drawSquarify(squarify(items, [w, h])));
-
-squarified(countries).render(container, { w: 360, h: 300 });
-```
+What is missing: the `[360, 300]` is typed twice. The plan needs the box, and user code cannot read the box it will be given. `layout` at the top of this page is the fix.
 
 ### Binary and strip, from the same machinery
 
@@ -578,21 +658,7 @@ The needs in the kernels table repeat, and they are the steps of the layout prot
 
 Two differences from the UI toolkits matter.
 
-**GoFish passes shapes, not only boxes.** A SwiftUI child answers a measurement with a width and height. A GoFish child answers with `geometry()`, which today has its box, its enclosing circle and its outline. `pack` and the beeswarm read the circle. `enclose` and label placement read the outline. A contour would be a fourth answer. Going down, a parent can offer a convex polygon along with the box, which is how a Voronoi cell hands its region to the tiling inside it. So `measure(child)` returns that geometry, and circle packing in user space reads `measure(child).enclosingCircle`.
-
-<!-- id: p-measure -->
-
-```js
-// Circle packing in user space, once children can be measured.
-const packed = (children) =>
-  layout(() => {
-    const circles = children.map((c) => measure(c).enclosingCircle);
-    const at = frontChain(circles); // plain JS: d3's packSiblings, or the greedy rule
-    return layer(
-      children.map((c, i) => position({ x: at[i].x, y: at[i].y }, [c]))
-    );
-  });
-```
+**GoFish passes shapes, not only boxes.** A SwiftUI child answers a measurement with a width and height. A GoFish child answers with `geometry()`, which today has its box, its enclosing circle and its outline. `pack` and the beeswarm read the circle. `enclose` and label placement read the outline. A contour would be a fourth answer. Going down, a parent can offer a convex polygon along with the box, which is how a Voronoi cell hands its region to the tiling inside it. So `measure(child)` returns that geometry, and circle packing in user space reads `measure(child).enclosingCircle` (the sketch is at the top of this page).
 
 **GoFish has scales, and that is the hard part.** A node describes itself to its parent twice. Before layout it says how big it wants to be as a function of the scale, which is what lets a chart fit its room. That answer is one number per axis today, so it is a box. After layout it has its full geometry in pixels. `measure` reads the second. A layout that only measures works in pixels and cannot take part in fitting, which is why `pack` does not fit its room today (#967). The layout-synthesis essay names the rule any richer before-layout answer has to keep: "responses must be monotone in the proposal". The silhouette note in `notes/design/` is the start of that design. It is the real work here, more than any one algorithm.
 
@@ -747,7 +813,7 @@ Not proposed: a geometry namespace, a phase language for graph layout (the sanke
 
 ## Three forks, each at its example
 
-**1. The names for reading the space and measuring children (squarify, packing).** `layout(({ w, h }) => node)` and `measure(child)` are Typst's spellings for exactly these two things, and they work anywhere a node does. The alternative is a second argument to `createMark`, `createMark((props, { box, measure }) => node)`, which adds no top-level names but ties both to defining a mark. SwiftUI calls the first `GeometryReader` and Compose `BoxWithConstraints`. This page uses `layout` and `measure`.
+**1. The names `layout` and `measure`.** Stated with the API at the top of this page.
 
 **2. Greedy placement as a helper or as `choose` (beeswarm, packing).** The helper is 31 lines of JS with three callbacks. It works today, for any shape, and it is opaque. The `choose` form is three options, crosses to Python, and sees real pixels, and it needs the choice proposal first. This page leans to building `choose` and showing the helper as what it lowers into.
 

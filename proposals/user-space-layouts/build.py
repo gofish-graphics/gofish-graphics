@@ -76,6 +76,9 @@ main {
   .rung b { grid-row: auto; }
 }
 ol li { margin: 4px 0; }
+ul.tight { margin: 0; padding-left: 20px; font-size: 0.92rem; }
+ul.tight li { margin: 4px 0; }
+h2.first { margin-top: 28px; }
 """
 
 out = f"""<title>Layouts in User Space</title>

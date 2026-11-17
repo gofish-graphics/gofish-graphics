@@ -545,6 +545,17 @@
   ol li {
     margin: 4px 0;
   }
+  ul.tight {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 0.92rem;
+  }
+  ul.tight li {
+    margin: 4px 0;
+  }
+  h2.first {
+    margin-top: 28px;
+  }
 </style>
 <main>
   <h1>Layouts in user space</h1>
@@ -565,7 +576,7 @@
       aria-controls="examples"
       aria-selected="true"
     >
-      Examples
+      The API and examples
     </button>
     <button
       role="tab"
@@ -614,12 +625,12 @@
           already has). No algorithm needed a new operator to draw its result.
         </li>
         <li>
-          What user code cannot do today is read two things: the space it was
-          offered and its children's measured geometry. Those are steps of the
-          layout protocol that SwiftUI and Jetpack Compose expose, and GoFish's
-          engine already works this way inside. The proposal is to make it
-          public as two functions, <code>layout</code> and <code>measure</code>,
-          that return GoFish.
+          Proposed: two functions that return GoFish.
+          <code>layout(({ w, h }) =&gt; node)</code> reads the space a node was
+          offered, and <code>measure(child)</code> reads a child's geometry.
+          They are the two steps of the layout protocol that user code cannot
+          reach today. SwiftUI and Jetpack Compose expose the same steps, and
+          GoFish's engine already works this way inside.
         </li>
         <li>
           The rectangular tilings become presets of one sequential tiling.
@@ -640,6 +651,157 @@
       </ul>
     </div>
 
+    <h2 class="first">The API: <code>layout</code> and <code>measure</code></h2>
+    <div class="gallery">
+      <div class="card">
+        <h3>The two functions <span class="tag sketch">sketch</span></h3>
+        <pre><code class="language-typescript">// The space this node was offered: a width and height, and a convex shape
+// when its parent hands one down. The result is whatever the body returns.
+declare function layout(
+  body: (space: { w: number; h: number; shape?: Ring }) =&gt; Node
+): Node;
+
+// A child&#x27;s geometry once it is laid out in the given space. The space
+// defaults to the one the enclosing `layout` was offered.
+declare function measure(
+  child: Node,
+  space?: { w?: number; h?: number }
+): Geometry;
+
+type Geometry = {
+  box: { min: [number, number]; max: [number, number] };
+  enclosingCircle: { cx: number; cy: number; r: number };
+  outline: Outline[];
+};</code></pre>
+        <ul class="tight">
+          <li>
+            <code>layout</code> is called where a node goes. Its body runs
+            during layout, once the parent has decided how much room this node
+            gets.
+          </li>
+          <li>
+            <code>measure</code> is called inside a <code>layout</code> body. It
+            lays the child out and answers with its geometry: its box, its
+            enclosing circle and its outline. These are the three answers the
+            engine's <code>geometry()</code> has today. A contour would be a
+            fourth.
+          </li>
+          <li>
+            Neither places anything. The body returns operators
+            (<code>stack</code>, <code>layer</code>, <code>position</code>), and
+            those do the placing.
+          </li>
+          <li>
+            <code>measure</code> answers in pixels, after scales are chosen. A
+            layout that sizes itself from measurements does not take part in
+            fitting the chart to its room. The review tab says what that would
+            take.
+          </li>
+        </ul>
+        <div class="callout">
+          <b>Fork: the names.</b> <code>layout</code> and
+          <code>measure</code> are Typst's spellings for exactly these two
+          things, and they work anywhere a node does. The alternative is a
+          second argument to <code>createMark</code>,
+          <code>createMark((props, { box, measure }) =&gt; node)</code>, which
+          adds no top-level names but ties both to defining a mark. This page
+          uses <code>layout</code> and <code>measure</code>.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>
+          <code>layout</code>: a treemap that reads its box
+          <span class="tag sketch">sketch</span>
+        </h3>
+        <div class="strip">
+          <figure>
+            <img
+              src="img/tiling-stacks-squarify.png"
+              alt="Squarified treemap drawn as nested stacks in user space"
+            />
+            <figcaption>
+              Rendered today with the size typed by hand. The plan and drawing
+              functions are in the squarify card below.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="label prop">Proposed</p>
+        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, return stacks.
+const squarified = (items) =&gt;
+  layout(({ w, h }) =&gt; drawSquarify(squarify(items, [w, h])));
+
+squarified(countries).render(container, { w: 360, h: 300 });</code></pre>
+        <p class="label">Today</p>
+        <p class="none">
+          The size is typed twice, once for the plan and once for the render:
+          <code>drawSquarify(squarify(countries, [360, 300]))</code> inside
+          <code>layer({ w: 360, h: 300 }, ...)</code>.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>
+          <code>measure</code>: circle packing
+          <span class="tag sketch">sketch</span>
+        </h3>
+        <div class="strip">
+          <figure>
+            <img
+              src="img/greedy-builtin-pack.png"
+              alt="Built-in circle packing"
+            />
+            <figcaption><b>pack()</b>, built-in</figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/greedy-greedy-pack-centroid.png"
+              alt="Greedy circle packing in user space"
+            />
+            <figcaption>
+              User space today, with radii given as literal pixels
+            </figcaption>
+          </figure>
+        </div>
+        <p class="label prop">Proposed</p>
+        <pre><code class="language-javascript">// Circle packing in user space, once children can be measured.
+const packed = (children) =&gt;
+  layout(() =&gt; {
+    const circles = children.map((c) =&gt; measure(c).enclosingCircle);
+    const at = frontChain(circles); // plain JS: d3&#x27;s packSiblings, or the greedy rule
+    return layer(
+      children.map((c, i) =&gt; position({ x: at[i].x, y: at[i].y }, [c]))
+    );
+  });</code></pre>
+        <p class="label">Today</p>
+        <p class="none">
+          The prototype can only pack circles whose radii are literal pixels,
+          because user code cannot ask a child how big it came out.
+        </p>
+      </div>
+
+      <div class="card">
+        <h3>In Python <span class="tag sketch">sketch, not run</span></h3>
+        <pre><code class="language-python">def squarified(items):
+    return layout(lambda space: draw_squarify(squarify(items, (space.w, space.h))))
+
+
+def packed(children):
+    def body(space):
+        circles = [measure(c).enclosing_circle for c in children]
+        at = front_chain(circles)
+        return layer([position([c], x=p.x, y=p.y) for c, p in zip(children, at)])
+
+    return layout(body)</code></pre>
+        <p class="note">
+          Both take a function, so they go through the callback runner, as
+          <code>derive</code> does. A plan that needs neither is a pure spec and
+          needs no callback.
+        </p>
+      </div>
+    </div>
+
+    <h2>The examples behind it</h2>
     <div class="gallery">
       <!-- squarify -->
       <div class="card">
@@ -728,24 +890,9 @@ function squarify(
           Missing: <code>[360, 300]</code> is typed twice. The plan needs the
           box, and user code cannot read the box it will be given.
         </p>
-        <p class="label prop">
-          Proposed <span class="tag sketch">sketch</span>
+        <p class="note">
+          <code>layout</code>, at the top of this tab, is the fix.
         </p>
-        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, return stacks.
-const squarified = (items) =&gt;
-  layout(({ w, h }) =&gt; drawSquarify(squarify(items, [w, h])));
-
-squarified(countries).render(container, { w: 360, h: 300 });</code></pre>
-        <div class="callout">
-          <b>Fork: the names for reading the space and measuring children.</b>
-          <code>layout(({ w, h }) =&gt; node)</code> and
-          <code>measure(child)</code> are Typst's spellings for exactly these
-          two things, and they work anywhere a node does. The alternative is a
-          second argument to <code>createMark</code>,
-          <code>createMark((props, { box, measure }) =&gt; node)</code>, which
-          adds no top-level names but ties both to defining a mark. This page
-          uses <code>layout</code> and <code>measure</code>.
-        </div>
       </div>
 
       <!-- binary + strip -->
@@ -1850,26 +1997,11 @@ const links = chart(edges)
       with the box, which is how a Voronoi cell hands its region to the tiling
       inside it. So <code>measure(child)</code> returns that geometry.
     </p>
-    <div class="gallery">
-      <div class="card">
-        <h3>
-          Circle packing, once children can be measured
-          <span class="tag sketch">sketch</span>
-        </h3>
-        <pre><code class="language-javascript">// Circle packing in user space, once children can be measured.
-const packed = (children) =&gt;
-  layout(() =&gt; {
-    const circles = children.map((c) =&gt; measure(c).enclosingCircle);
-    const at = frontChain(circles); // plain JS: d3&#x27;s packSiblings, or the greedy rule
-    return layer(
-      children.map((c, i) =&gt; position({ x: at[i].x, y: at[i].y }, [c]))
-    );
-  });</code></pre>
-        <p class="note">
-          It still returns GoFish. The user never calls a place function.
-        </p>
-      </div>
-    </div>
+    <p>
+      The circle packing sketch on the first tab is this:
+      <code>measure(child).enclosingCircle</code>, then a <code>layer</code> of
+      positioned children.
+    </p>
     <p>
       <b>GoFish has scales, and that is the hard part.</b> A node describes
       itself to its parent twice. Before layout it says how big it wants to be
