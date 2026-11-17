@@ -69,8 +69,8 @@
           Recommended: a user-space layout is a function that returns GoFish
           operators. <code>squarify</code>, <code>binary</code>,
           <code>slice</code> and <code>dice</code> become library code written
-          that way. The power diagram, d3's front chain and crossing reduction
-          stay built-in kernels.
+          that way. The power diagram and d3's front chain stay built-in kernels
+          for now; the review tab says what each would take in user space.
         </li>
         <li>
           What is missing is short: a way to read the box, contour spacing,
@@ -603,11 +603,12 @@
       a weight per site.
     </p>
     <p>
-      <b>Below that, no.</b> Building the diagram itself is computational
-      geometry. A Voronoi cell is an intersection of half-planes, and a two-site
-      diagram is one straight cut, the same atom as a binary treemap split. That
-      is a good way to explain it and a bad way to compute it. The diagram stays
-      a kernel.
+      <b>Below that, it is cuts.</b> A Voronoi cell is the region cut by one
+      half-plane per other site, and a two-site diagram is one straight cut, the
+      same atom as a binary treemap split. GoFish's own
+      <code>Tile.voronoi</code> computes its cells exactly this way. So the
+      diagram decomposes into cuts of a polygon, and what user code lacks is the
+      polygon helpers and a way to draw given polygons as cells.
     </p>
     <p>
       <b>Delaunay: not a layout primitive, a relation on data.</b> It answers
@@ -624,6 +625,106 @@
       the right split: GoFish is not a data transform library, and a Python user
       has <code>scipy.spatial</code> for the same job. So the additions are the
       two <code>Bin.voronoi</code> options, not a geometry namespace.
+    </p>
+
+    <h2>What the kernels would take in user space</h2>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Kernel</th>
+            <th>Today</th>
+            <th>What user code would need</th>
+            <th>How it would be written</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Crossing reduction</td>
+            <td>Not built in. I called it a kernel and that was wrong.</td>
+            <td>
+              Nothing. The prototype's <code>order</code> is 35 lines of plan.
+            </td>
+            <td>A plan function, today.</td>
+          </tr>
+          <tr>
+            <td>Power diagram (<code>Tile.voronoi</code>)</td>
+            <td>
+              340 lines in <code>voronoiTiling.ts</code>. Each cell is the
+              region cut by one half-plane per other site, then a Newton step
+              fits the weights to the areas.
+            </td>
+            <td>
+              Polygon helpers (cut by a half-plane, area, centroid), public or
+              from a library. The shape a parent hands down, readable by user
+              code. A <code>partition</code> member that takes given polygons.
+            </td>
+            <td>
+              The relaxation loop as a plan, drawn by <code>partition</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>Front chain and enclosing circle (<code>pack</code>)</td>
+            <td>
+              d3's <code>packSiblings</code> (120 lines) and
+              <code>packEnclose</code> (123 lines).
+            </td>
+            <td>
+              The children's measured sizes, readable before they are placed.
+              Placement at pixel positions in a layer that keeps its box. To fit
+              its room (#967), sizes as a function of the scale, not as pixels.
+            </td>
+            <td>
+              A fold that carries the chain from one circle to the next. It does
+              not fit <code>choose</code>, because a collision rewrites the
+              chain.
+            </td>
+          </tr>
+          <tr>
+            <td>Contour fit (<code>Spacing.contour</code>)</td>
+            <td>Not built.</td>
+            <td>
+              A child's outline per depth, readable by its parent. One spacing
+              per gap.
+            </td>
+            <td>
+              Kennedy's fold, 34 lines. The prototype already does it,
+              awkwardly.
+            </td>
+          </tr>
+          <tr>
+            <td>Outline geometry (<code>enclose</code>, label spots)</td>
+            <td><code>enclose.tsx</code> and its folder.</td>
+            <td>
+              The placed geometry of the members, readable after layout. A path
+              mark in pixels.
+            </td>
+            <td>A function from placed shapes to a path.</td>
+          </tr>
+          <tr>
+            <td>Scale solve and placement</td>
+            <td>The layout engine.</td>
+            <td>Stays. It is what everything else lowers into.</td>
+            <td>Not user code.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      The needs repeat. User code has to read three things: the box or shape it
+      was given (from above), the measured sizes and outlines of its children
+      (from below), and the placed geometry of other nodes (afterward). It also
+      has to place children at pixel positions and still report a box. Those
+      four together are the layout protocol that SwiftUI and Compose expose, and
+      they are what #692 and #1279 ask to make public. Code written at that
+      level does not lower into operators. It is library code at the floor,
+      which is also how Mojo's standard library uses its intrinsics.
+    </p>
+    <p>
+      The hard part is fitting. A kernel that works in pixels cannot take part
+      in fitting a chart to its room unless its result scales evenly when its
+      inputs do. Circle packing does. Pixel padding breaks it. That contract is
+      the real design work, not the algorithms.
     </p>
 
     <h2>Terms</h2>
