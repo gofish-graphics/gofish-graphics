@@ -514,3 +514,396 @@ export const GraphStraightened: StoryObj = {
     return container;
   },
 };
+
+// ─────────────────────────────────────────────────────────────────────────
+// Part 3: nodes of their own sizes, and the symmetry rule (van der Ploeg,
+// "Drawing non-layered tidy trees in linear time", 2014)
+// ─────────────────────────────────────────────────────────────────────────
+
+type Sized = { name: string; w?: number; h?: number; children?: Sized[] };
+const wOf = (t: Sized) => t.w ?? 2 * R;
+const hOf = (t: Sized) => t.h ?? 2 * R;
+
+// A source tree. A folder is a short wide box; a file's height is its length.
+const dir = (name: string, ...children: Sized[]): Sized => ({
+  name,
+  w: 36,
+  h: 16,
+  children,
+});
+const file = (name: string, h: number): Sized => ({ name, w: 20, h });
+
+const repo = dir(
+  "project",
+  dir(
+    "src",
+    dir(
+      "ast",
+      file("node.ts", 96),
+      file("gofish.tsx", 69),
+      dir(
+        "shapes",
+        file("rect.tsx", 33),
+        file("text.tsx", 51),
+        file("ref.tsx", 15)
+      )
+    ),
+    file("lib.ts", 18),
+    dir("util", file("color.ts", 27), file("scale.ts", 42))
+  ),
+  dir(
+    "docs",
+    file("intro.md", 30),
+    dir(
+      "api",
+      file("spread.md", 24),
+      file("stack.md", 21),
+      file("layer.md", 18)
+    )
+  ),
+  dir(
+    "tests",
+    dir("unit", file("layout.test.ts", 60), file("axis.test.ts", 39)),
+    file("e2e.test.ts", 78)
+  ),
+  file("package.json", 12)
+);
+
+const VGAP = 20; // gap between a node's bottom and its children's tops
+
+/** What the contour fold needs from one kind of extent. */
+type Fold<E> = {
+  empty: E;
+  move: (e: E, dx: number) => E;
+  merge: (p: E, q: E) => E;
+  fit: (p: E, q: E) => number;
+  flip: (e: E) => E;
+  left: (e: E) => number;
+  /** A subtree's extent: its root node above its children's merged extent. */
+  root: (t: Sized, kids: E) => E;
+};
+
+// (c) Per depth, as in Kennedy, but with node edges instead of centers so
+// nodes can have different widths. Same Extent type as (b).
+const fitEdges = (p: Extent, q: Extent): number =>
+  Math.max(0, ...p.slice(0, q.length).map(([, r], d) => r - q[d][0] + GAP));
+
+const byDepth: Fold<Extent> = {
+  empty: [],
+  move: moveExtent,
+  merge: mergeExtents,
+  fit: fitEdges,
+  flip,
+  left: leftOf,
+  root: (t, kids) => [[-wOf(t) / 2, wOf(t) / 2], ...kids],
+};
+
+// (d) By vertical position (van der Ploeg). A piece is a run of y, from the
+// subtree's top, over which the subtree's left and right edges are constant.
+// A node's piece includes the gap below it, as in the paper, so a subtree's
+// pieces run without holes from its top to its bottom.
+type Piece = { top: number; bottom: number; left: number; right: number };
+type Pieces = Piece[]; // sorted by top; the first starts at 0
+
+/** How far right q's root must sit from p's root so no pieces overlap. */
+const fitPieces = (p: Pieces, q: Pieces): number => {
+  let x = 0;
+  for (let i = 0, j = 0; i < p.length && j < q.length; ) {
+    x = Math.max(x, p[i].right - q[j].left + GAP);
+    const [pb, qb] = [p[i].bottom, q[j].bottom];
+    if (pb <= qb) i++; // advance whichever piece ends higher, or both
+    if (qb <= pb) j++;
+  }
+  return x;
+};
+/** p's left edge and q's right edge, wherever either exists. */
+const mergePieces = (p: Pieces, q: Pieces): Pieces => {
+  const out: Pieces = [];
+  for (let i = 0, j = 0, top = 0; i < p.length || j < q.length; ) {
+    const [a, b] = [p[i], q[j]];
+    const bottom = Math.min(a?.bottom ?? Infinity, b?.bottom ?? Infinity);
+    out.push({ top, bottom, left: (a ?? b).left, right: (b ?? a).right });
+    if (a?.bottom === bottom) i++;
+    if (b?.bottom === bottom) j++;
+    top = bottom;
+  }
+  return out;
+};
+
+const byPosition: Fold<Pieces> = {
+  empty: [],
+  move: (e, dx) =>
+    e.map((s) => ({ ...s, left: s.left + dx, right: s.right + dx })),
+  merge: mergePieces,
+  fit: fitPieces,
+  flip: (e) => e.map((s) => ({ ...s, left: -s.right, right: -s.left })),
+  left: (e) => Math.min(...e.map((s) => s.left)),
+  root: (t, kids) => {
+    const dy = hOf(t) + VGAP; // the node and the gap below it
+    const node = { top: 0, bottom: dy, left: -wOf(t) / 2, right: wOf(t) / 2 };
+    return [
+      node,
+      ...kids.map((s) => ({ ...s, top: s.top + dy, bottom: s.bottom + dy })),
+    ];
+  },
+};
+
+/** Pack extents left to right; the first root sits at 0. */
+const packLeft = <E,>(F: Fold<E>, es: E[]): number[] => {
+  let acc = F.empty;
+  return es.map((e) => {
+    const x = F.fit(acc, e);
+    acc = F.merge(acc, F.move(e, x));
+    return x;
+  });
+};
+/** The same packing from the right, mirrored; the last root sits at 0. */
+const packRight = <E,>(F: Fold<E>, es: E[]): number[] =>
+  packLeft(F, es.map(F.flip).reverse())
+    .map((x) => -x)
+    .reverse();
+
+/** A symmetry rule: each child's offset from its parent's center. */
+type Rule<E> = (F: Fold<E>, es: E[]) => number[];
+const centered = (xs: number[]) =>
+  xs.map((x) => x - (xs[0] + xs[xs.length - 1]) / 2);
+
+/** No rule: left-packed, parent centered over its first and last child. */
+const leftRule = <E,>(F: Fold<E>, es: E[]) => centered(packLeft(F, es));
+/** Kennedy: the mean of the left-packed and right-packed layouts. */
+const meanRule = <E,>(F: Fold<E>, es: E[]) => {
+  const [l, r] = [packLeft(F, es), packRight(F, es)];
+  return l.map((x, i) => (x + r[i]) / 2);
+};
+/** Walker: pack from the left; when subtree j is pushed right by d by
+ *  sibling i, move each sibling z between them right by d (z - i) / (j - i). */
+const spreadRule: Rule<Extent> = (_, es) => {
+  const x: number[] = [];
+  es.forEach((e, j) => {
+    x[j] = j ? x[j - 1] : 0;
+    e.forEach(([l], d) => {
+      // i: the left sibling whose right edge at depth d is rightmost
+      let i = -1;
+      for (let k = 0; k < j; k++)
+        if (es[k][d] && (i < 0 || x[k] + es[k][d][1] >= x[i] + es[i][d][1]))
+          i = k;
+      const push = i < 0 ? 0 : x[i] + es[i][d][1] - (x[j] + l) + GAP;
+      if (push <= 0) return;
+      x[j] += push;
+      for (let z = i + 1; z < j; z++) x[z] += (push * (z - i)) / (j - i);
+    });
+  });
+  return centered(x);
+};
+
+type Placed = { offsets: number[]; left: number; kids: Placed[] };
+
+/** Each child's offset from its parent, and each subtree's left edge. */
+const designBy =
+  <E,>(F: Fold<E>, rule: Rule<E>) =>
+  (t: Sized): Placed & { extent: E } => {
+    const kids = (t.children ?? []).map(designBy(F, rule));
+    const offsets = rule(
+      F,
+      kids.map((k) => k.extent)
+    );
+    const extent = F.root(
+      t,
+      kids.reduce(
+        (acc, k, i) => F.merge(acc, F.move(k.extent, offsets[i])),
+        F.empty
+      )
+    );
+    return { offsets, extent, left: F.left(extent), kids };
+  };
+
+type NodeMark = (t: Sized, path: string) => any;
+/** The gap from a node's bottom to its children's tops. */
+type Below = (t: Sized, depth: number) => number;
+
+/** (b) with any node mark and any gap below each node. */
+const placedTree = (
+  t: Sized,
+  d: Placed,
+  node: NodeMark,
+  below: Below,
+  path = "n",
+  depth = 0
+): any => {
+  const self = node(t, path);
+  if (!t.children?.length) return self;
+  const kidPaths = t.children.map((_, i) => `${path}.${i}`);
+  const kids = layer(
+    t.children.map((c, i) =>
+      placedTree(c, d.kids[i], node, below, kidPaths[i], depth + 1)
+    )
+  )
+    .relate((c) => {
+      const subs = t.children!.map((k, i) => c[sub(k, kidPaths[i])]);
+      const lefts = d.kids.map((k, i) => d.offsets[i] + k.left);
+      return [
+        Constraint.align({ y: "start" }, subs),
+        ...subs.slice(1).map((s, i) =>
+          Constraint.distribute(
+            {
+              dir: "x",
+              spacing: Spacing.pitch(lefts[i + 1] - lefts[i], { at: "start" }),
+            },
+            [subs[i], s]
+          )
+        ),
+      ];
+    })
+    .name(`${path}/kids`);
+  return layer([self, kids])
+    .relate((c) => [
+      Constraint.distribute({ dir: "y", spacing: below(t, depth) }, [
+        c[path],
+        c[`${path}/kids`],
+      ]),
+      Constraint.distribute(
+        { dir: "x", spacing: Spacing.pitch(-d.offsets[0], { at: "middle" }) },
+        [c[kidPaths[0]], c[path]]
+      ),
+    ])
+    .name(`${path}/sub`);
+};
+
+/** (a) with any node mark and any gap below each node. */
+const sizedBoxTree = (
+  t: Sized,
+  node: NodeMark,
+  below: Below,
+  path = "n",
+  depth = 0
+): any => {
+  const self = node(t, path);
+  if (!t.children?.length) return self;
+  const kids = spread(
+    { dir: "x", spacing: GAP, alignment: "start" },
+    t.children.map((c, i) =>
+      sizedBoxTree(c, node, below, `${path}.${i}`, depth + 1)
+    )
+  ).name(`${path}/kids`);
+  return layer([self, kids]).relate((c) => [
+    Constraint.distribute({ dir: "y", spacing: below(t, depth) }, [
+      c[path],
+      c[`${path}/kids`],
+    ]),
+    Constraint.align({ x: "middle" }, [c[path], c[`${path}/kids`]]),
+  ]);
+};
+
+const box: NodeMark = (t, path) =>
+  rect({
+    w: wOf(t),
+    h: hOf(t),
+    rx: 2,
+    fill: t.children ? "#457b9d" : "#a8c5da",
+    stroke: "white",
+    strokeWidth: 1,
+  }).name(path);
+
+// Links from a parent's bottom center to a child's top center.
+const edgeLinks = (t: Sized) =>
+  edges(t).map(([p, c]) =>
+    line(
+      {
+        stroke: "#9aa7b1",
+        strokeWidth: 1.25,
+        source: { y: "end" },
+        target: { y: "start" },
+      },
+      [ref(p), ref(c)]
+    ).zOrder(-1)
+  );
+
+/** The height of each depth's row: its tallest node. */
+const rowHeights = (t: Sized, depth = 0, rows: number[] = []): number[] => {
+  rows[depth] = Math.max(rows[depth] ?? 0, hOf(t));
+  t.children?.forEach((c) => rowHeights(c, depth + 1, rows));
+  return rows;
+};
+const repoRows = rowHeights(repo);
+
+const renderTree = (tree: any, links: any[]) => {
+  const container = initializeContainer();
+  layer([tree])
+    .relate(() => links)
+    .render(container, { w: 560, h: 360 });
+  return container;
+};
+
+export const TreeLayeredHeights: StoryObj = {
+  render: () =>
+    renderTree(
+      placedTree(
+        repo,
+        designBy(byDepth, meanRule)(repo),
+        box,
+        (t, depth) => repoRows[depth] - hOf(t) + VGAP
+      ),
+      edgeLinks(repo)
+    ),
+};
+
+export const TreeNonLayeredBoxes: StoryObj = {
+  render: () =>
+    renderTree(
+      sizedBoxTree(repo, box, () => VGAP),
+      edgeLinks(repo)
+    ),
+};
+
+export const TreeNonLayered: StoryObj = {
+  render: () =>
+    renderTree(
+      placedTree(repo, designBy(byPosition, meanRule)(repo), box, () => VGAP),
+      edgeLinks(repo)
+    ),
+};
+
+// The symmetry rule. A wide first child and a deep last child enclose three
+// single leaves (the shape of the paper's Figure 6).
+const wedge: Tree = {
+  name: "root",
+  children: [
+    {
+      name: "A",
+      children: [
+        { name: "a1", children: leaves("1", "2", "3", "4", "5") },
+        { name: "a2", children: leaves("6", "7", "8", "9", "10") },
+      ],
+    },
+    ...leaves("m1", "m2", "m3"),
+    {
+      name: "B",
+      children: [
+        {
+          name: "b1",
+          children: [{ name: "b11", children: leaves("x", "y", "z") }],
+        },
+        { name: "b2", children: leaves("u", "v", "w") },
+      ],
+    },
+  ],
+};
+
+const circleNode: NodeMark = (_, path) => nodeMark(path);
+
+const symmetryStory = (rule: Rule<Extent>): StoryObj => ({
+  render: () =>
+    renderTree(
+      placedTree(
+        wedge,
+        designBy(byDepth, rule)(wedge),
+        circleNode,
+        () => LEVEL
+      ),
+      links(wedge)
+    ),
+});
+
+export const TreeSymmetryLeft = symmetryStory(leftRule);
+export const TreeSymmetryMean = symmetryStory(meanRule);
+export const TreeSymmetrySpread = symmetryStory(spreadRule);

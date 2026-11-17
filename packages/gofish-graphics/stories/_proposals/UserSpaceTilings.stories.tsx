@@ -264,6 +264,250 @@ export const StacksBinary: StoryObj = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────
+// One sequential algorithm (Baudel and Broeksema 2012)
+// ─────────────────────────────────────────────────────────────────────────
+
+// Every chunk takes one full side of the room that is left, and its items
+// run across that side in one direction.
+type Side = "N" | "S" | "E" | "W";
+type Direction = "right" | "left" | "down" | "up";
+type Config = { side: Side; direction: Direction };
+type Chunk<T> = Config & { items: T[]; sizes: number[]; sum: number };
+// A plan lists the chunks in placement order. A chunk the algorithm
+// recursed into keeps its items and also has the plan of its own box.
+type SeqPlan<T> = (Chunk<T> & { subplan?: SeqPlan<T> })[];
+// What a score or phrase function can read: the room that is left, the
+// size of the items still to place in it, and the size and count of all
+// the items in this run of the algorithm.
+type State = {
+  w: number;
+  h: number;
+  remaining: number;
+  total: number;
+  count: number;
+};
+type Options<T> = {
+  order?: (items: T[]) => T[];
+  size: (item: T) => number;
+  score: (chunk: Chunk<T>, size: number, state: State) => number;
+  phrase: (previous: Chunk<T> | undefined, state: State) => Config;
+  recurse?: (chunk: Chunk<T>) => boolean;
+};
+
+const isColumn = (side: Side) => side === "W" || side === "E";
+
+// The universal algorithm (the paper's Listing 2). An item joins the chunk
+// unless the chunk's score with the item is lower than its score before;
+// then the chunk closes, takes its share of the room, and the next chunk
+// starts on the side `phrase` picks.
+function sequential<T>(
+  items: T[],
+  [w, h]: [number, number],
+  options: Options<T>
+): SeqPlan<T> {
+  const { order = (xs) => xs, size, score, phrase, recurse } = options;
+  items = order(items);
+  const sizes = items.map(size);
+  const plan: SeqPlan<T> = [];
+  let i = 0;
+  while (i < items.length) {
+    const remaining = sum(sizes.slice(i));
+    const state = { w, h, remaining, total: sum(sizes), count: items.length };
+    const config = phrase(plan[plan.length - 1], state);
+    const chunk: Chunk<T> = { ...config, items: [], sizes: [], sum: 0 };
+    let last = -Infinity;
+    while (i < items.length) {
+      const next = score(chunk, sizes[i], state);
+      if (next < last) break;
+      last = next;
+      chunk.items.push(items[i]);
+      chunk.sizes.push(sizes[i]);
+      chunk.sum += sizes[i];
+      i++;
+    }
+    const share = chunk.sum / remaining;
+    const box: [number, number] = isColumn(chunk.side)
+      ? [w * share, h]
+      : [w, h * share];
+    if (isColumn(chunk.side)) w *= 1 - share;
+    else h *= 1 - share;
+    const whole = chunk.items.length === items.length;
+    plan.push(
+      !whole && recurse?.(chunk)
+        ? { ...chunk, subplan: sequential(chunk.items, box, options) }
+        : chunk
+    );
+  }
+  return plan;
+}
+
+// Draw any plan as nested stacks: the first chunk and the rest of the plan
+// side by side, the chunk first on N and W and last on S and E; the chunk's
+// items stacked across it, in reverse when they run up or left.
+function drawSequential<T extends Country>(plan: SeqPlan<T>): any {
+  const [chunk, ...rest] = plan;
+  const reverse = chunk.direction === "up" || chunk.direction === "left";
+  const flip = <X,>(xs: X[]) => (reverse ? [...xs].reverse() : xs);
+  const here = chunk.subplan
+    ? drawSequential(chunk.subplan)
+    : stack(
+        along(isColumn(chunk.side) ? "y" : "x", flip(chunk.sizes)),
+        flip(chunk.items).map(cell)
+      );
+  if (rest.length === 0) return here;
+  const parts = [
+    { weight: chunk.sum, node: here },
+    { weight: sum(rest.map((c) => c.sum)), node: drawSequential(rest) },
+  ];
+  if (chunk.side === "S" || chunk.side === "E") parts.reverse();
+  return stack(
+    along(
+      isColumn(chunk.side) ? "x" : "y",
+      parts.map((p) => p.weight)
+    ),
+    parts.map((p) => p.node)
+  );
+}
+
+// --- Score functions (the paper's Listings 4 to 7) --------------------------
+
+type ScoreFn = Options<Country>["score"];
+const fold = (r: number) => (r > 1 ? 1 / r : r);
+// The chunk with one more item: its length along its side of the room, its
+// thickness across, and its size.
+function grown(chunk: Chunk<unknown>, size: number, s: State) {
+  const [length, across] = isColumn(chunk.side) ? [s.h, s.w] : [s.w, s.h];
+  const sum = chunk.sum + size;
+  return { length, thick: (across * sum) / s.remaining, sum };
+}
+
+const Score = {
+  // One chunk holds every item.
+  slice: ((c, _, s) => (c.items.length === s.count ? 1 : 0)) as ScoreFn,
+  // Every item is its own chunk.
+  dice: ((c) => 1 - c.items.length) as ScoreFn,
+  // Chunks of about the square root of the item count.
+  grid: ((c, _, s) => (c.items.length ** 2 <= s.count ? 1 : 0)) as ScoreFn,
+  // The aspect ratio of the item of average length, folded under 1.
+  bestAverageAspectRatio: ((c, size, s) => {
+    const g = grown(c, size, s);
+    return fold(g.length / (c.items.length + 1) / g.thick);
+  }) as ScoreFn,
+  // The aspect ratio of the smallest item, folded under 1.
+  bestMinAspectRatio: ((c, size, s) => {
+    const g = grown(c, size, s);
+    const min = Math.min(size, ...c.sizes);
+    return fold((g.length * min) / g.sum / g.thick);
+  }) as ScoreFn,
+  // Highest where the chunk holds half the size still to place.
+  pivotBySplitSize: ((c, size, s) =>
+    -((c.sum + size - s.remaining / 2) ** 2)) as ScoreFn,
+  // The squarify row rule above: minus the row's worst aspect ratio.
+  squarified:
+    (ratio = PHI): ScoreFn =>
+    (c, size, s) => {
+      const alpha = Math.max(s.w / s.h, s.h / s.w) / (s.remaining * ratio);
+      const beta = (c.sum + size) ** 2 * alpha;
+      const sizes = [...c.sizes, size];
+      return -Math.max(Math.max(...sizes) / beta, beta / Math.min(...sizes));
+    },
+};
+
+// --- Phrase functions (the paper's section 5.3 and 6.3) ---------------------
+
+type PhraseFn = Options<Country>["phrase"];
+// Spiral turns clockwise: after a chunk on one side, the next side.
+const clockwise: Record<Side, Config> = {
+  N: { side: "E", direction: "down" },
+  E: { side: "S", direction: "left" },
+  S: { side: "W", direction: "up" },
+  W: { side: "N", direction: "right" },
+};
+
+const Phrase = {
+  // Every chunk a row at the top, its items left to right.
+  strip: (() => ({ side: "N", direction: "right" })) as PhraseFn,
+  // Rows at the top, the items' direction flipping each row.
+  zigzag: ((prev) => ({
+    side: "N",
+    direction: prev?.direction === "right" ? "left" : "right",
+  })) as PhraseFn,
+  // Each chunk on the next side clockwise, continuing from the last item.
+  spiral: ((prev) => clockwise[prev?.side ?? "W"]) as PhraseFn,
+  // The chunk on the side that makes the room squarer (a column at the left
+  // of a wide room, a row at the top of a tall one), its first item at the
+  // room's top left corner, next to the first item of the chunk before.
+  bestDiscontinuous: ((_, s) =>
+    s.w >= s.h
+      ? { side: "W", direction: "down" }
+      : { side: "N", direction: "right" }) as PhraseFn,
+};
+
+const pop = (d: Country) => d.pop;
+const seq = (options: Options<Country>) =>
+  render(drawSequential(sequential(countries, [W, H], options)));
+
+export const SeqSliceDice: StoryObj = {
+  render: seq({ size: pop, score: Score.dice, phrase: Phrase.strip }),
+};
+export const SeqStrip: StoryObj = {
+  render: seq({
+    size: pop,
+    score: Score.bestMinAspectRatio,
+    phrase: Phrase.strip,
+  }),
+};
+export const SeqZigzag: StoryObj = {
+  render: seq({
+    size: pop,
+    score: Score.bestMinAspectRatio,
+    phrase: Phrase.zigzag,
+  }),
+};
+export const SeqSpiral: StoryObj = {
+  render: seq({
+    order: (xs) => [...xs].sort((a, b) => b.pop - a.pop),
+    size: pop,
+    score: Score.bestMinAspectRatio,
+    phrase: Phrase.spiral,
+  }),
+};
+export const SeqSquarify: StoryObj = {
+  render: seq({
+    size: pop,
+    score: Score.squarified(),
+    phrase: Phrase.bestDiscontinuous,
+  }),
+};
+export const SeqPivot: StoryObj = {
+  render: seq({
+    size: pop,
+    score: Score.pivotBySplitSize,
+    recurse: (c) => c.items.length > 2,
+    phrase: Phrase.bestDiscontinuous,
+  }),
+};
+// The paper's Fig. 10b setting: the same with Strip phrasing.
+export const SeqPivotStrip: StoryObj = {
+  render: seq({
+    size: pop,
+    score: Score.pivotBySplitSize,
+    recurse: (c) => c.items.length > 2,
+    phrase: Phrase.strip,
+  }),
+};
+export const SeqGrid: StoryObj = {
+  render: seq({ size: () => 1, score: Score.grid, phrase: Phrase.strip }),
+};
+export const SeqBestDiscontinuous: StoryObj = {
+  render: seq({
+    size: pop,
+    score: Score.bestMinAspectRatio,
+    phrase: Phrase.bestDiscontinuous,
+  }),
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 // Voronoi by relaxation (Lloyd)
 // ─────────────────────────────────────────────────────────────────────────
 

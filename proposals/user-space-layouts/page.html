@@ -55,10 +55,10 @@
     <div class="rules">
       <ul>
         <li>
-          Eight layout algorithms were written in user space and rendered.
-          Squarify and binary land on the built-in treemap's cells to 3e-14 px.
-          The beeswarm lands on <code>Overlap.separate</code> dot for dot. The
-          tidy tree is exactly as wide as <code>d3.tree</code>.
+          A dozen layout algorithms were written in user space and rendered.
+          Squarify and binary land on the built-in treemap's cells exactly. The
+          beeswarm lands on <code>Overlap.separate</code> dot for dot. The tidy
+          tree equals <code>d3.tree</code> node for node.
         </li>
         <li>
           Each one splits into a <b>plan</b> (the discrete decisions, as plain
@@ -66,16 +66,23 @@
           already has). No algorithm needed a new operator to draw its result.
         </li>
         <li>
-          Recommended: a user-space layout is a function that returns GoFish
-          operators. <code>squarify</code>, <code>binary</code>,
-          <code>slice</code> and <code>dice</code> become library code written
-          that way. The power diagram and d3's front chain stay built-in kernels
-          for now; the review tab says what each would take in user space.
+          What user code cannot do today is read two things: the space it was
+          offered and its children's measured geometry. Those are steps of the
+          layout protocol that SwiftUI and Jetpack Compose expose, and GoFish's
+          engine already works this way inside. The proposal is to make it
+          public as two functions, <code>layout</code> and <code>measure</code>,
+          that return GoFish.
         </li>
         <li>
-          What is missing is short: a way to read the box, contour spacing,
-          custom members (#1101), two <code>Bin.voronoi</code> options, and
-          later a sequential <code>choose</code>.
+          The rectangular tilings become presets of one sequential tiling.
+          <code>Spacing.contour</code> gives tidy trees, layered or not. A
+          sequential <code>choose</code> is the later, data form of the greedy
+          rule.
+        </li>
+        <li>
+          The hard part is not any algorithm. It is letting a layout that
+          measures shapes still take part in fitting a chart to its room. The
+          review tab says why.
         </li>
         <li>
           This is the review deferred in the sankey round, of circle packing,
@@ -125,23 +132,14 @@
         </p>
         {{code:p-layout}}
         <div class="callout">
-          <b>Fork: the name for reading the box.</b>
-          <code>layout(({ w, h }) =&gt; node)</code> is Typst's spelling for
-          exactly this and works anywhere a node does. The alternative is a
+          <b>Fork: the names for reading the space and measuring children.</b>
+          <code>layout(({ w, h }) =&gt; node)</code> and
+          <code>measure(child)</code> are Typst's spellings for exactly these
+          two things, and they work anywhere a node does. The alternative is a
           second argument to <code>createMark</code>,
-          <code>createMark((props, { box }) =&gt; node)</code>, which adds no
-          name but ties reading the box to defining a mark. This page uses
-          <code>layout</code>.
-        </div>
-        <div class="callout">
-          <b>Fork: rewrite the built-in tilings this way.</b> They match at
-          spacing 0, so <code>squarify</code>, <code>binary</code>,
-          <code>slice</code> and <code>dice</code> could drop d3-hierarchy. The
-          one difference is spacing: d3 tiles the whole box and then shrinks
-          each cell, and a stack with gaps gives each child its share of the
-          room that is left. Cell areas differ by up to 11% between the two at
-          spacing 2. This page leans to the rewrite, with the stack meaning of
-          <code>spacing</code>.
+          <code>createMark((props, { box, measure }) =&gt; node)</code>, which
+          adds no top-level names but ties both to defining a mark. This page
+          uses <code>layout</code> and <code>measure</code>.
         </div>
       </div>
 
@@ -185,6 +183,103 @@
           total weight. Squarify is the same rule with the row direction chosen
           again for each row.
         </p>
+      </div>
+
+      <!-- sequential -->
+      <div class="card">
+        <h3>One tiling, many settings <span class="tag today">today</span></h3>
+        <div class="strip">
+          <figure>
+            <img
+              src="img/tiling-seq-squarify.png"
+              alt="Squarified treemap from the generic algorithm"
+            />
+            <figcaption>
+              <b>squarify</b>: worst-aspect score, row on the side that makes
+              the room squarer. 0 px from the built-in.
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-seq-strip.png" alt="Strip treemap" />
+            <figcaption>
+              <b>strip</b>: aspect score, always a row at the top
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-seq-zigzag.png" alt="Zigzag treemap" />
+            <figcaption>
+              <b>zigzag</b>: the same, direction alternating per row
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-seq-spiral.png" alt="Spiral treemap" />
+            <figcaption>
+              <b>spiral</b>: the same, each row on the next side clockwise
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-seq-pivot.png" alt="Pivot treemap" />
+            <figcaption>
+              <b>pivot</b>: close a row at half the size left, then subdivide it
+              again
+            </figcaption>
+          </figure>
+          <figure>
+            <img src="img/tiling-seq-grid.png" alt="Grid of equal cells" />
+            <figcaption>
+              <b>grid</b>: every size 1, rows of about the square root of the
+              count
+            </figcaption>
+          </figure>
+        </div>
+        <p class="note">
+          Baudel and Broeksema (2012) show the rectangular treemaps are one
+          algorithm with five small functions plugged in: the order of the
+          items, the size of each, a score that says when to close a row,
+          whether to subdivide a closed row again, and a phrase that says which
+          side of the remaining room the next row goes on. We wrote that
+          algorithm once (40 lines) and one drawing function (24 lines) that
+          turns any of its plans into nested <code>stack</code>s.
+        </p>
+        <p class="label">Each picture is one call</p>
+        {{code:seq-use}}
+        <details class="code">
+          <summary>The algorithm: 40 lines</summary>
+          <div class="inner">{{code:seq-plan}}</div>
+        </details>
+        <details class="code">
+          <summary>The drawing: any plan as nested stacks, 24 lines</summary>
+          <div class="inner">{{code:seq-draw}}</div>
+        </details>
+        <p class="label prop">
+          Proposed: named tilings are presets
+          <span class="tag sketch">sketch</span>
+        </p>
+        {{code:p-presets}}
+        <p class="note">
+          The names are the paper's and are placeholders.
+          <code>Score</code> is a <code>Cost</code> with the sign flipped and
+          should fold into the choice proposal's <code>Cost</code> family.
+        </p>
+        <div class="callout">
+          <b>This fits <code>tile</code> as one level.</b> The paper's algorithm
+          takes a flat list of sizes and one rectangle. It never looks at the
+          levels above or below. For a hierarchy the paper runs it once per
+          node, inside the rectangle that node got, which is one
+          <code>tile</code> step per level in <code>.flow()</code>. Its
+          "recurse" setting is not the hierarchy: it subdivides a row of the
+          same level's items again, which is how pivot works.
+        </div>
+        <div class="callout">
+          <b>Fork: make the built-in tilings presets of this.</b> They match
+          exactly at spacing 0, so <code>squarify</code>, <code>slice</code> and
+          <code>dice</code> could be settings of it and drop d3-hierarchy, and
+          strip, spiral and pivot come for free. The one difference is spacing:
+          d3 tiles the whole box and then shrinks each cell, and a stack with
+          gaps gives each child its share of the room that is left. Cell areas
+          differ by up to 11% between the two at spacing 2. This page leans to
+          the presets, with the stack meaning of <code>spacing</code>.
+        </div>
       </div>
 
       <!-- beeswarm -->
@@ -329,6 +424,97 @@
           PR #1375). This is the evidence that it is the whole difference
           between a GoTree tree and a tidy tree, apart from centering the parent
           between its first and last child.
+        </p>
+      </div>
+
+      <!-- nonlayered -->
+      <div class="card">
+        <h3>
+          Non-layered trees, and the symmetry rule
+          <span class="tag today">today</span>
+        </h3>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/trees-tree-layered-heights.png"
+              alt="Layered tree with nodes of different heights"
+            />
+            <figcaption>
+              Layered: every row as tall as its tallest node. 349 by 337 px.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/trees-tree-non-layered-boxes.png"
+              alt="Non-layered tree spaced by bounding boxes"
+            />
+            <figcaption>
+              Each child group right below its own parent, spaced by boxes. 470
+              by 204 px.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/trees-tree-non-layered.png"
+              alt="Non-layered tree spaced by contours"
+            />
+            <figcaption>
+              The same spaced by contours over vertical position (van der Ploeg
+              2014). 434 by 204 px.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="note">
+          A node's height is its file's length. The box version fell out of the
+          existing recursive function with no change except node sizes. For
+          contours, the outline becomes a list of pieces with a top, bottom,
+          left and right, instead of one pair per depth, and
+          <code>fit</code> changes in the one way the paper says.
+        </p>
+        {{code:fit-both}}
+        <p class="note">
+          <code>merge</code> keeps its meaning but needs the same two-list walk
+          (12 lines instead of 4). So "one change" is true of the algorithm and
+          not quite of the code. A layered tree is the case where every node in
+          a row has the same height.
+        </p>
+        <div class="natural">
+          <figure>
+            <img
+              src="img/trees-tree-symmetry-left.png"
+              alt="Tree packed from the left"
+            />
+            <figcaption>
+              Packed from the left: the three middle leaves pile up, and the
+              mirrored tree is not the mirror image.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/trees-tree-symmetry-mean.png"
+              alt="Tree with Kennedy's mean"
+            />
+            <figcaption>
+              Kennedy's mean of a left and a right packing: symmetric, leaves
+              clustered.
+            </figcaption>
+          </figure>
+          <figure>
+            <img
+              src="img/trees-tree-symmetry-spread.png"
+              alt="Tree with Walker's spread"
+            />
+            <figcaption>
+              Walker's spread: leaves evenly between their neighbors. Equals
+              <b>d3.tree</b> node for node.
+            </figcaption>
+          </figure>
+        </div>
+        <p class="note">
+          The symmetry rule is a separate choice, and the pictures differ.
+          <code>Spacing.contour</code> uses Walker's spread, because it is what
+          d3 draws and it reads better. It matched d3 with 0 px difference on
+          this tree and on 398 random trees. Kennedy's mean is the alternative.
         </p>
       </div>
 
@@ -727,6 +913,117 @@
       the real design work, not the algorithms.
     </p>
 
+    <h2>The layout protocol</h2>
+    <p>
+      The needs in the kernels table repeat, and they are the steps of the
+      layout protocol that UI toolkits expose. GoFish's engine already works
+      this way inside; the layout-synthesis essay says "SwiftUI's protocol is
+      propose-down / respond-up". The node protocol is private, which is the
+      whole gap.
+    </p>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Step</th>
+            <th>SwiftUI Layout</th>
+            <th>Compose Layout</th>
+            <th>Typst</th>
+            <th>GoFish engine today (private)</th>
+            <th>Proposed for users</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Read the space offered</td>
+            <td>
+              <code>proposal</code> in <code>sizeThatFits</code>,
+              <code>bounds</code> in <code>placeSubviews</code>
+            </td>
+            <td><code>constraints</code></td>
+            <td><code>layout(size =&gt; ...)</code></td>
+            <td><code>layout(size, scales, children, node, shape)</code></td>
+            <td><code>layout(({ w, h, shape }) =&gt; node)</code></td>
+          </tr>
+          <tr>
+            <td>Measure a child before placing it</td>
+            <td><code>subview.sizeThatFits(proposal)</code></td>
+            <td>
+              <code>measurable.measure(constraints)</code>, once per child
+            </td>
+            <td><code>measure(content)</code></td>
+            <td>
+              <code>child.layout(size, scales)</code> returns its
+              <code>dims</code> and <code>geometry()</code>
+            </td>
+            <td><code>measure(child)</code></td>
+          </tr>
+          <tr>
+            <td>Place children</td>
+            <td><code>subview.place(at:anchor:proposal:)</code></td>
+            <td><code>placeable.place(x, y)</code></td>
+            <td>return content</td>
+            <td><code>placeable.place(axis, value, anchor)</code></td>
+            <td>
+              return operators: <code>position</code>, <code>layer</code>,
+              <code>stack</code>
+            </td>
+          </tr>
+          <tr>
+            <td>Report its own size</td>
+            <td>return a <code>CGSize</code></td>
+            <td><code>layout(width, height) { }</code></td>
+            <td>the size of what it returns</td>
+            <td><code>intrinsicDims</code></td>
+            <td>the box of what it returns</td>
+          </tr>
+          <tr>
+            <td>Read where other nodes ended up</td>
+            <td>not in the protocol</td>
+            <td>not in the protocol</td>
+            <td>not checked</td>
+            <td><code>ref</code>, <code>.relate</code></td>
+            <td>already public: <code>ref</code>, <code>selectAll</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <b>GoFish passes shapes, not only boxes.</b> A SwiftUI child answers a
+      measurement with a width and height. A GoFish child answers with
+      <code>geometry()</code>, which today has its box, its enclosing circle and
+      its outline. <code>pack</code> and the beeswarm read the circle.
+      <code>enclose</code> and label placement read the outline. A contour would
+      be a fourth answer. Going down, a parent can offer a convex polygon along
+      with the box, which is how a Voronoi cell hands its region to the tiling
+      inside it. So <code>measure(child)</code> returns that geometry.
+    </p>
+    <div class="gallery">
+      <div class="card">
+        <h3>
+          Circle packing, once children can be measured
+          <span class="tag sketch">sketch</span>
+        </h3>
+        {{code:p-measure}}
+        <p class="note">
+          It still returns GoFish. The user never calls a place function.
+        </p>
+      </div>
+    </div>
+    <p>
+      <b>GoFish has scales, and that is the hard part.</b> A node describes
+      itself to its parent twice. Before layout it says how big it wants to be
+      as a function of the scale, which is what lets a chart fit its room. That
+      answer is one number per axis today, so it is a box. After layout it has
+      its full geometry in pixels. <code>measure</code> reads the second. A
+      layout that only measures works in pixels and cannot take part in fitting,
+      which is why <code>pack</code> does not fit its room today (#967). The
+      layout-synthesis essay names the rule any richer before-layout answer has
+      to keep: "responses must be monotone in the proposal". The silhouette note
+      in <code>notes/design/</code> is the start of that design. It is the real
+      work here, more than any one algorithm.
+    </p>
+
     <h2>Terms</h2>
     <ul>
       <li>
@@ -865,8 +1162,11 @@
 
     <h2>Recommendation</h2>
     <p>
-      Approach B for what a layout returns, with A as its floor and C as the
-      next step for decisions.
+      Approach B for what a layout returns, at both levels: plans drawn in
+      operators, and kernels written with <code>layout</code> and
+      <code>measure</code> that still return operators. C is the next step for
+      decisions. A (a function from geometry to geometry per family) is then a
+      special case and is not needed as a separate mechanism.
     </p>
     <ul>
       <li>
@@ -879,12 +1179,14 @@
         <code>tile</code> keeps its members, and a member becomes a rewrite.
       </li>
       <li>
-        <b>Few new terms.</b> One new name (the box reader), and
-        <code>Spacing.contour</code>, which was already planned.
+        <b>Few new terms.</b> Two new functions, <code>layout</code> and
+        <code>measure</code>, which are Typst's names for the same two things,
+        and <code>Spacing.contour</code>, which was already planned.
       </li>
       <li>
-        <b>A closed set plus a function escape hatch.</b> Kernels keep the
-        function form of #1101, as in every other family.
+        <b>A closed set plus a function escape hatch.</b> A member is a declared
+        kind or a function, as #1101 says. The function returns GoFish, so the
+        escape hatch is the same language as everything else.
       </li>
       <li>
         <b>The same shape in Python.</b> A plan written in Python that returns
@@ -948,17 +1250,29 @@
     <h2>What to add, by how much it unlocks</h2>
     <ol>
       <li>
-        <b>A way to read the box.</b> Every dividing layout: squarify, binary,
-        strip, pivot, any responsive mark.
+        <b><code>layout</code>: read the space offered.</b> Every dividing
+        layout: squarify, strip, spiral, pivot, any responsive mark.
       </li>
       <li>
-        <b><code>Spacing.contour</code>.</b> Tidy trees, and it removes the only
-        plan that redid engine geometry.
+        <b
+          ><code>Spacing.contour</code>, over vertical position, with Walker's
+          spread.</b
+        >
+        Tidy trees, layered or not.
       </li>
       <li>
-        <b>Custom members (#1101).</b> Lets <code>squarified</code> be passed as
-        <code>tiling:</code> so it works in <code>.flow()</code>. Also the floor
-        for kernels.
+        <b>Custom members (#1101, #692).</b> Lets a function that returns GoFish
+        be passed as <code>tiling:</code> so it works in <code>.flow()</code>.
+      </li>
+      <li>
+        <b>One sequential tiling with settings.</b> <code>squarify</code>,
+        strip, spiral, pivot, <code>slice</code> and <code>dice</code> become
+        presets of it. The built-in <code>binary</code> is not shown to be one.
+      </li>
+      <li>
+        <b><code>measure</code>: read a child's geometry.</b> Circle packing,
+        label placement and contour folds in user space, in pixels. Fitting
+        needs the richer before-layout answer described on the review tab.
       </li>
       <li>
         <b><code>Bin.voronoi</code> takes a region and weights.</b> Voronoi
@@ -966,8 +1280,7 @@
       </li>
       <li>
         <b>Sequential <code>choose</code>.</b> Beeswarm, labels and greedy
-        packing as data, and it removes the pixel-scale wall. Waits on the
-        choice proposal.
+        packing as data. Waits on the choice proposal.
       </li>
     </ol>
     <p>
@@ -1007,17 +1320,19 @@
       <div class="pc">
         <h4>SwiftUI Layout, Compose Layout, CSS Houdini</h4>
         <p>
-          <code>sizeThatFits</code> and <code>placeSubviews</code>. A protocol
-          expresses everything and decomposes nothing.
+          <code>sizeThatFits</code> and <code>placeSubviews</code>;
+          <code>measure</code> and <code>place</code>. The same steps GoFish's
+          engine runs inside: offer space, measure children, place them. They
+          pass boxes; GoFish passes shapes and scales.
           <code>ViewThatFits</code> is a built-in <code>choose</code>.
         </p>
       </div>
       <div class="pc">
         <h4>Typst</h4>
         <p>
-          <code>layout(size =&gt; ...)</code> and <code>measure</code>. Reading
-          the box is one small primitive, and users write measure-then-place
-          layouts in the document language.
+          <code>layout(size =&gt; ...)</code> and <code>measure(content)</code>,
+          both returning content. The protocol as two functions that return the
+          language itself, and the model for the proposed spelling.
         </p>
       </div>
       <div class="pc">

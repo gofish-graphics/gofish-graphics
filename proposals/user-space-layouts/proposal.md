@@ -2,11 +2,11 @@
 
 **Summary.**
 
-- We wrote eight layout algorithms in user space on today's public API and rendered them: squarify, binary and strip treemaps, a Voronoi relaxation, a beeswarm, a circle packing, a tidy tree and a layered graph. Squarify and binary land on the built-in treemap's cells to 3e-14 px. The beeswarm lands on `Overlap.separate` dot for dot. The tidy tree is exactly as wide as `d3.tree`.
-- Every one splits the same way: a **plan** (the discrete decisions, as plain data) and a **drawing** (the plan written out in operators GoFish already has). The plans are 12 to 35 lines each. The drawings are 4 to 45.
-- So the language for defining layout algorithms is mostly GoFish itself. What is missing is a short list: a way for user code to read the box it was given, contour spacing, a few fixes, and a public way to register the result as a strategy member (#1101, the open design issue for user-defined strategies).
+- We wrote a dozen layout algorithms in user space on today's public API and rendered them: squarify, binary, strip, spiral and pivot treemaps, a Voronoi relaxation, a beeswarm, a circle packing, layered and non-layered tidy trees, and a layered graph. Squarify and binary land on the built-in treemap's cells exactly. The beeswarm lands on `Overlap.separate` dot for dot. The tidy tree equals `d3.tree` node for node.
+- Every one splits the same way: a **plan** (the discrete decisions, as plain data) and a **drawing** (the plan written out in operators GoFish already has). No algorithm needed a new operator to draw its result.
+- What user code cannot do today is read two things: the space it was offered and its children's measured geometry. (A third, where other nodes ended up, is already public through `ref`.) Those are the steps of the layout protocol that SwiftUI and Jetpack Compose expose, and GoFish's engine already works this way inside. The proposal is to make it public as two functions, `layout` and `measure`, that return GoFish.
 
-**Recommendation.** A layout algorithm in user space is a function that returns GoFish operators (approach B below). The built-in `squarify`, `binary`, `slice` and `dice` tilings become library code written this way, with no pixel change. Algorithms whose core is real computational geometry (the power diagram behind `Tile.voronoi`, d3's front chain behind `pack`) stay built-in kernels for now, reached through the function form that #1101 already describes. A sequential `choose` with a `Cost` (approach C) is the runner-up for the decision half, and it is worth building once the choice proposal is signed off, because it is the form that crosses to Python as data.
+**Recommendation.** A layout algorithm in user space is a function that returns GoFish operators (approach B below). It reads what it needs through `layout` (the space offered) and `measure` (its children's geometry). The rectangular tilings become presets of one sequential tiling, written this way, with no pixel change. `Spacing.contour` gives tidy trees, layered or not. A sequential `choose` with a `Cost` (approach C) is the next step for the decision half, once the choice proposal is signed off, because it is the form that crosses to Python as data.
 
 This is the review you deferred in the sankey round ("until GoFish has many layout algorithms, then look at circle packing, treemap, pretty printing, dodging and layered layouts together"). It is a design-space document. Nothing here is implemented except the prototype stories.
 
@@ -155,6 +155,143 @@ const drawStrip = (rows: Country[][]) =>
 
 A strip treemap is line wrapping where a row's height follows from its total weight. Squarify is the same rule with the row direction chosen again for each row.
 
+### One tiling, many settings
+
+Baudel and Broeksema (2012) show that the rectangular treemaps are one algorithm with five small functions plugged in: the order of the items, the size of each, a score that says when to close a row, whether to subdivide a closed row again, and a phrase that says which side of the remaining room the next row goes on and which way its items run. We wrote that algorithm once (40 lines) and one drawing function (24 lines) that turns any of its plans into nested `stack`s. Every picture below is a setting of it.
+
+![squarify](img/tiling-seq-squarify.png) ![strip](img/tiling-seq-strip.png) ![zigzag](img/tiling-seq-zigzag.png) ![spiral](img/tiling-seq-spiral.png) ![pivot](img/tiling-seq-pivot.png) ![grid](img/tiling-seq-grid.png)
+
+| Picture  | Score (when a row closes)                                  | Phrase (where the next row goes)       | Subdivide again         |
+| -------- | ---------------------------------------------------------- | -------------------------------------- | ----------------------- |
+| squarify | the squarify worst-aspect rule                             | the side that makes the room squarer   | never                   |
+| strip    | aspect ratio of the smallest item                          | always a row at the top, left to right | never                   |
+| zigzag   | aspect ratio of the smallest item                          | rows at the top, direction alternating | never                   |
+| spiral   | aspect ratio of the smallest item                          | the next side, clockwise               | never                   |
+| pivot    | closest to half the size still to place                    | the side that makes the room squarer   | while more than 2 items |
+| grid     | about the square root of the item count, with every size 1 | always a row at the top                | never                   |
+
+The squarify setting equals the built-in and the earlier hand-written plan with 0 px difference over 20 cells. Every plan the algorithm produced drew as nested two-child stacks with no special case.
+
+<!-- id: seq-use -->
+
+```ts
+const seq = (options) =>
+  render(drawSequential(sequential(countries, [W, H], options)));
+
+// squarify
+seq({ size: pop, score: Score.squarified(), phrase: Phrase.bestDiscontinuous });
+// strip, zigzag, spiral
+seq({ size: pop, score: Score.bestMinAspectRatio, phrase: Phrase.strip });
+seq({ size: pop, score: Score.bestMinAspectRatio, phrase: Phrase.zigzag });
+seq({ size: pop, score: Score.bestMinAspectRatio, phrase: Phrase.spiral });
+// grid
+seq({ size: () => 1, score: Score.grid, phrase: Phrase.strip });
+```
+
+The algorithm: an item joins the row unless the row's score with it is lower than before. Then the row closes, takes its share of the room, and the next row starts on the side the phrase picks.
+
+<!-- id: seq-plan -->
+
+```ts
+function sequential<T>(
+  items: T[],
+  [w, h]: [number, number],
+  options: Options<T>
+): SeqPlan<T> {
+  const { order = (xs) => xs, size, score, phrase, recurse } = options;
+  items = order(items);
+  const sizes = items.map(size);
+  const plan: SeqPlan<T> = [];
+  let i = 0;
+  while (i < items.length) {
+    const remaining = sum(sizes.slice(i));
+    const state = { w, h, remaining, total: sum(sizes), count: items.length };
+    const config = phrase(plan[plan.length - 1], state);
+    const chunk: Chunk<T> = { ...config, items: [], sizes: [], sum: 0 };
+    let last = -Infinity;
+    while (i < items.length) {
+      const next = score(chunk, sizes[i], state);
+      if (next < last) break;
+      last = next;
+      chunk.items.push(items[i]);
+      chunk.sizes.push(sizes[i]);
+      chunk.sum += sizes[i];
+      i++;
+    }
+    const share = chunk.sum / remaining;
+    const box: [number, number] = isColumn(chunk.side)
+      ? [w * share, h]
+      : [w, h * share];
+    if (isColumn(chunk.side)) w *= 1 - share;
+    else h *= 1 - share;
+    const whole = chunk.items.length === items.length;
+    plan.push(
+      !whole && recurse?.(chunk)
+        ? { ...chunk, subplan: sequential(chunk.items, box, options) }
+        : chunk
+    );
+  }
+  return plan;
+}
+```
+
+The drawing: the first row and the rest of the plan side by side, the row first on the top and left sides and last on the bottom and right, its items stacked across it.
+
+<!-- id: seq-draw -->
+
+```ts
+function drawSequential<T extends Country>(plan: SeqPlan<T>): any {
+  const [chunk, ...rest] = plan;
+  const reverse = chunk.direction === "up" || chunk.direction === "left";
+  const flip = <X>(xs: X[]) => (reverse ? [...xs].reverse() : xs);
+  const here = chunk.subplan
+    ? drawSequential(chunk.subplan)
+    : stack(
+        along(isColumn(chunk.side) ? "y" : "x", flip(chunk.sizes)),
+        flip(chunk.items).map(cell)
+      );
+  if (rest.length === 0) return here;
+  const parts = [
+    { weight: chunk.sum, node: here },
+    { weight: sum(rest.map((c) => c.sum)), node: drawSequential(rest) },
+  ];
+  if (chunk.side === "S" || chunk.side === "E") parts.reverse();
+  return stack(
+    along(
+      isColumn(chunk.side) ? "x" : "y",
+      parts.map((p) => p.weight)
+    ),
+    parts.map((p) => p.node)
+  );
+}
+```
+
+Proposed: the named tilings are presets of one tiling with settings. The names below are the paper's, and they are placeholders. `Score` is a `Cost` with the sign flipped and should fold into the `Cost` family of the choice proposal.
+
+<!-- id: p-presets -->
+
+```js
+// Tiling.squarify is this, by definition.
+const squarify = Tiling.sequential({
+  score: Score.squarified(),
+  phrase: Phrase.bestDiscontinuous,
+});
+
+// A tiling GoFish does not have, with no new code in the library.
+const spiral = Tiling.sequential({
+  score: Score.bestMinAspectRatio,
+  phrase: Phrase.spiral,
+});
+
+chart(countries)
+  .flow(tile({ size: "pop", tiling: spiral }))
+  .mark(rect({ fill: "continent" }));
+```
+
+**This fits `tile` as one level.** The paper's algorithm takes a flat list of sizes and one rectangle. It never looks at the levels above or below. For a hierarchy the paper runs it once per node, inside the rectangle that node got, which is one `tile` step per level in `.flow()`. Its "recurse" setting is a different thing from the hierarchy: it subdivides a row of the same level's items again (that is how pivot works). The only thing a level needs from below is each child's total size, which the flow already gives it.
+
+What the paper gets wrong or leaves open, found by implementing it: its listing recurses over all remaining items instead of the row's, its aspect scores divide by the grand total where they need the size still to place, and the phrasing it presents as an improvement over squarified is squarify's own phrasing. The story's comments list these.
+
 ### Beeswarm, by the greedy rule
 
 Built-in `Overlap.separate` on the left, user space on the right. With candidates tried in the built-in's neighbor order, 0 of 342 dots differ. In plain placement order 56 differ, and every difference starts at an exact tie (penguin masses are rounded to 25 g).
@@ -298,7 +435,43 @@ const kids = spread(
 ).name(`${path}/kids`);
 ```
 
-`Spacing.contour` is already planned (stack profiles, draft PR #1375, and the sankey proposal). This prototype is the evidence that it is the whole difference between a GoTree tree and a tidy tree, apart from centering the parent between its first and last child instead of over the group's box.
+`Spacing.contour` is already planned (stack profiles, draft PR #1375, and the sankey proposal). This prototype is the evidence that it is the whole difference between a GoTree tree and a tidy tree, apart from centering the parent between its first and last child. Measured over vertical position, it covers non-layered trees too, and a layered tree is the case where every node in a row has the same height.
+
+### Non-layered trees, and the symmetry rule
+
+A source tree where a node's height is its file's length. On the left, layered: every row is as tall as its tallest node (349 by 337 px). In the middle, each child group sits right below its own parent, spaced by bounding boxes (470 by 204). On the right, the same spaced by contours measured over vertical position (434 by 204), as in van der Ploeg (2014).
+
+![layered](img/trees-tree-layered-heights.png) ![non-layered by boxes](img/trees-tree-non-layered-boxes.png) ![non-layered by contours](img/trees-tree-non-layered.png)
+
+The box version fell out of the existing recursive function with no change except node sizes. For contours, the outline becomes a sorted list of pieces, each with a top, bottom, left and right, instead of one pair per depth. `fit` changes in the one way the paper says: after comparing a pair of pieces, only the one that ends higher advances.
+
+<!-- id: fit-both -->
+
+```ts
+// Per depth (Kennedy): one [left, right] pair per level.
+const fitEdges = (p: Extent, q: Extent): number =>
+  Math.max(0, ...p.slice(0, q.length).map(([, r], d) => r - q[d][0] + GAP));
+
+// By vertical position (van der Ploeg): pieces { top, bottom, left, right }.
+const fitPieces = (p: Pieces, q: Pieces): number => {
+  let x = 0;
+  for (let i = 0, j = 0; i < p.length && j < q.length; ) {
+    x = Math.max(x, p[i].right - q[j].left + GAP);
+    const [pb, qb] = [p[i].bottom, q[j].bottom];
+    if (pb <= qb) i++; // advance whichever piece ends higher, or both
+    if (qb <= pb) j++;
+  }
+  return x;
+};
+```
+
+`merge` keeps its meaning but needs the same two-list walk (12 lines instead of 4). So "one change" is true of the algorithm and not quite of the code.
+
+The symmetry rule is a separate choice. A parent with a wide first child, three single leaves in the middle and a deep last child: packed from the left, the leaves pile up at the left and the mirrored tree does not draw as the mirror image. Kennedy's mean of a left and a right packing is symmetric but clusters the leaves in the middle. Walker's rule spreads them evenly, and it equals `d3.tree` node for node (0 px on this tree, and on 398 random trees).
+
+![packed left](img/trees-tree-symmetry-left.png) ![Kennedy's mean](img/trees-tree-symmetry-mean.png) ![Walker's spread](img/trees-tree-symmetry-spread.png)
+
+`Spacing.contour` uses Walker's spread, because it is what d3 draws and it reads better. Kennedy's mean is the alternative.
 
 ### Layered graph, by phases
 
@@ -390,6 +563,38 @@ const links = chart(edges)
 The needs repeat. User code has to read three things: the box or shape it was given (from above), the measured sizes and outlines of its children (from below), and the placed geometry of other nodes (afterward). It also has to place children at pixel positions and still report a box. Those four together are the layout protocol that SwiftUI and Compose expose, and they are what #692 and #1279 ask to make public. Code written at that level does not lower into operators. It is library code at the floor, which is also how Mojo's standard library uses its intrinsics.
 
 The hard part is fitting. A kernel that works in pixels cannot take part in fitting a chart to its room unless its result scales evenly when its inputs do. Circle packing does. Pixel padding breaks it. That contract is the real design work, not the algorithms.
+
+## The layout protocol
+
+The needs in the kernels table repeat, and they are the steps of the layout protocol that UI toolkits expose. GoFish's engine already works this way inside (the layout-synthesis essay: "SwiftUI's protocol is propose-down / respond-up"). The node protocol is private, which is the whole gap.
+
+| Step                              | SwiftUI `Layout`                                          | Compose `Layout`                                  | Typst                       | `layout(size => ...)` and `measure(content)`, both returning content | the protocol as two functions that return the language itself. The model for the proposed spelling |
+| --------------------------------- | --------------------------------------------------------- | ------------------------------------------------- | --------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Read the space offered            | `proposal` in `sizeThatFits`, `bounds` in `placeSubviews` | `constraints`                                     | `layout(size => ...)`       | `layout(size, scales, children, node, shape)`                        | `layout(({ w, h, shape }) => node)`                                                                |
+| Measure a child before placing it | `subview.sizeThatFits(proposal)`                          | `measurable.measure(constraints)`, once per child | `measure(content)`          | `child.layout(size, scales)` returns its `dims` and `geometry()`     | `measure(child)`                                                                                   |
+| Place children                    | `subview.place(at:anchor:proposal:)`                      | `placeable.place(x, y)`                           | return content              | `placeable.place(axis, value, anchor)`                               | return operators: `position`, `layer`, `stack`                                                     |
+| Report its own size               | return a `CGSize`                                         | `layout(width, height) { }`                       | the size of what it returns | `intrinsicDims`                                                      | the box of what it returns                                                                         |
+| Read where other nodes ended up   | not in the protocol                                       | not in the protocol                               | not checked                 | `ref`, `.relate`                                                     | already public: `ref`, `selectAll`                                                                 |
+
+Two differences from the UI toolkits matter.
+
+**GoFish passes shapes, not only boxes.** A SwiftUI child answers a measurement with a width and height. A GoFish child answers with `geometry()`, which today has its box, its enclosing circle and its outline. `pack` and the beeswarm read the circle. `enclose` and label placement read the outline. A contour would be a fourth answer. Going down, a parent can offer a convex polygon along with the box, which is how a Voronoi cell hands its region to the tiling inside it. So `measure(child)` returns that geometry, and circle packing in user space reads `measure(child).enclosingCircle`.
+
+<!-- id: p-measure -->
+
+```js
+// Circle packing in user space, once children can be measured.
+const packed = (children) =>
+  layout(() => {
+    const circles = children.map((c) => measure(c).enclosingCircle);
+    const at = frontChain(circles); // plain JS: d3's packSiblings, or the greedy rule
+    return layer(
+      children.map((c, i) => position({ x: at[i].x, y: at[i].y }, [c]))
+    );
+  });
+```
+
+**GoFish has scales, and that is the hard part.** A node describes itself to its parent twice. Before layout it says how big it wants to be as a function of the scale, which is what lets a chart fit its room. That answer is one number per axis today, so it is a box. After layout it has its full geometry in pixels. `measure` reads the second. A layout that only measures works in pixels and cannot take part in fitting, which is why `pack` does not fit its room today (#967). The layout-synthesis essay names the rule any richer before-layout answer has to keep: "responses must be monotone in the proposal". The silhouette note in `notes/design/` is the start of that design. It is the real work here, more than any one algorithm.
 
 ## The review: every algorithm, side by side
 
@@ -489,12 +694,12 @@ stack({ dir: "x", size: "pop", wrap: { cost: Cost.aspect() } });
 
 ## Recommendation
 
-Approach B for what a layout returns, with A as its floor and C as the next step for decisions.
+Approach B for what a layout returns, at both levels: plans drawn in operators, and kernels written with `layout` and `measure` that still return operators. C is the next step for decisions. A (a function from geometry to geometry per family) is then a special case and is not needed as a separate mechanism.
 
 - **It lowers into the existing core.** principles.md asks that a feature desugar into the core or be rethought. Squarify and binary do, exactly. That page calls treemaps as nested stacks "an even more aspirational example" and says "the engine cannot do that today". The prototype shows it can, at spacing 0.
 - **One concept, one operator.** B adds no operator. `tile` keeps its members, and a member becomes a rewrite.
-- **Few new terms.** One new name (the box reader), and `Spacing.contour`, which was already planned.
-- **A closed set plus a function escape hatch.** Kernels keep the function form of #1101. That matches every other strategy family.
+- **Few new terms.** Two new functions, `layout` and `measure`, which are Typst's names for the same two things, and `Spacing.contour`, which was already planned.
+- **A closed set plus a function escape hatch.** A member is a declared kind or a function, as #1101 says. The function returns GoFish, so the escape hatch is the same language as everything else.
 - **The same shape in Python.** A plan written in Python that returns combinators is a pure spec: it serializes with no callback, because the drawing is just nested `stack`s. Only the box reader needs the callback runner, as `derive` does.
 
 <!-- id: p-python -->
@@ -530,21 +735,23 @@ The test of success is Lattner's: can a built-in be deleted and replaced by libr
 
 ## What to add, in order of how much it unlocks
 
-1. **A way to read the box.** Unlocks every dividing layout (squarify, binary, strip, pivot, any responsive mark).
-2. **`Spacing.contour`.** Unlocks tidy trees, and removes the only plan that redid engine geometry.
-3. **Custom members (#1101).** Lets `squarified` be passed as `tiling:` so it works in `.flow()`. Also the floor for kernels.
-4. **`Bin.voronoi` takes a region and weights.** Unlocks Voronoi layouts in user space.
-5. **Sequential `choose`.** Unlocks beeswarm, labels and greedy packing as data, and removes the pixel-scale wall. Waits on the choice proposal.
+1. **`layout`: read the space offered.** Unlocks every dividing layout (squarify, strip, spiral, pivot, any responsive mark).
+2. **`Spacing.contour`, measured over vertical position, with Walker's spread.** Unlocks tidy trees, layered or not.
+3. **Custom members (#1101, #692).** Lets a function that returns GoFish be passed as `tiling:` so it works in `.flow()`.
+4. **One sequential tiling with settings.** `squarify`, `strip`, `spiral`, `pivot`, `slice` and `dice` become presets of it. The built-in `binary` is not shown to be one.
+5. **`measure`: read a child's geometry.** Unlocks circle packing, label placement and contour folds in user space, in pixels. Fitting needs the richer before-layout answer described above.
+6. **`Bin.voronoi` takes a region and weights.** Unlocks Voronoi layouts in user space.
+7. **Sequential `choose`.** Unlocks beeswarm, labels and greedy packing as data. Waits on the choice proposal.
 
 Not proposed: a geometry namespace, a phase language for graph layout (the sankey proposal's `Layering` and `Ordering` helpers already cover it as `derive` steps), a constraint solver.
 
 ## Three forks, each at its example
 
-**1. The name for reading the box (squarify).** `layout(({ w, h }) => node)` is Typst's spelling for exactly this, and it works anywhere a node does. The alternative is a second argument to `createMark`, `createMark((props, { box }) => node)`, which adds no name but ties reading the box to defining a mark. SwiftUI calls it `GeometryReader` and Compose `BoxWithConstraints`. This page uses `layout`.
+**1. The names for reading the space and measuring children (squarify, packing).** `layout(({ w, h }) => node)` and `measure(child)` are Typst's spellings for exactly these two things, and they work anywhere a node does. The alternative is a second argument to `createMark`, `createMark((props, { box, measure }) => node)`, which adds no top-level names but ties both to defining a mark. SwiftUI calls the first `GeometryReader` and Compose `BoxWithConstraints`. This page uses `layout` and `measure`.
 
 **2. Greedy placement as a helper or as `choose` (beeswarm, packing).** The helper is 31 lines of JS with three callbacks. It works today, for any shape, and it is opaque. The `choose` form is three options, crosses to Python, and sees real pixels, and it needs the choice proposal first. This page leans to building `choose` and showing the helper as what it lowers into.
 
-**3. Rewrite the built-in tilings as library code (squarify, binary).** They match to 3e-14 px at spacing 0, so `squarify`, `binary`, `slice` and `dice` could drop d3-hierarchy. The one difference is spacing. d3 tiles the whole box and then shrinks each cell. A stack with gaps gives each child its share of the room that is left. Cell areas differ by up to 11% between the two at spacing 2. Before a rewrite, someone has to decide which of those two is the right meaning of `spacing` in a treemap. This page leans to the rewrite, with the stack meaning.
+**3. Make the built-in tilings presets of one sequential tiling (squarify and the rest).** They match exactly at spacing 0, so `squarify`, `slice` and `dice` could be settings of the one algorithm above and drop d3-hierarchy, and `strip`, `spiral` and `pivot` come for free. The one difference is spacing. d3 tiles the whole box and then shrinks each cell. A stack with gaps gives each child its share of the room that is left. Cell areas differ by up to 11% between the two at spacing 2. Before a rewrite, someone has to decide which of those two is the right meaning of `spacing`. This page leans to the presets, with the stack meaning.
 
 ## Walls and bugs the prototypes hit
 
@@ -570,7 +777,7 @@ Each of these is a candidate issue. None was worked around silently. The stories
 | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Mojo, MLIR                                      | library code for `Int` and `Float`, lowered in steps to a small floor                                                                                                       | built-ins as library code, intrinsics as the floor                                                                                                                                                                                                                                                                                                                                     |
 | d3-hierarchy                                    | `tile(node, x0, y0, x1, y1)`, a function that sets child rectangles                                                                                                         | approach A. Inside d3, squarify calls `treemapDice` or `treemapSlice` per row, so it is already a plan plus stacks                                                                                                                                                                                                                                                                     |
-| SwiftUI `Layout`, Compose `Layout`, CSS Houdini | `sizeThatFits` and `placeSubviews`                                                                                                                                          | a protocol expresses everything and decomposes nothing. `ViewThatFits` is a built-in `choose`                                                                                                                                                                                                                                                                                          |
+| SwiftUI `Layout`, Compose `Layout`, CSS Houdini | `sizeThatFits` and `placeSubviews`; `measure` and `place`                                                                                                                   | the same steps GoFish's engine runs inside: offer space, measure children, place them. They pass boxes; GoFish passes shapes and scales. `ViewThatFits` is a built-in `choose`                                                                                                                                                                                                         |
 | Typst                                           | `layout(size => ...)` and `measure`                                                                                                                                         | reading the box is one small primitive, and users write measure-then-place layouts in the document language                                                                                                                                                                                                                                                                            |
 | Kennedy, "Drawing Trees" (1996)                 | `fit`, `merge` and a fold over extents                                                                                                                                      | a tidy tree is a small algebra over contours                                                                                                                                                                                                                                                                                                                                           |
 | van der Ploeg, non-layered tidy trees (2014)    | the same contour walk over nodes with their own heights                                                                                                                     | the walk changes in one place: after comparing a pair of contour nodes, only the one that ends higher advances. A layered tree is the case where every node at a depth has the same height. For symmetry it spreads extra room evenly over the siblings in between, and says Kennedy's mean "tends to cluster smaller subtrees". Fixed y positions per node come from thin dummy nodes |
