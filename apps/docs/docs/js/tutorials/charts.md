@@ -566,8 +566,7 @@ gf.layer({ coord: gf.Coord.clock(), axes: true }, [
       gf.spread({
         by: "lake",
         dir: "x",
-        spacing: (2 * Math.PI) / 6,
-        anchor: "middle",
+        spacing: gf.Spacing.pitch((2 * Math.PI) / 6, { at: "middle" }),
         y: 50,
         label: false,
       }),

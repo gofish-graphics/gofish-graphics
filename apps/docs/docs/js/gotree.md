@@ -273,15 +273,15 @@ coord: Coord.polar(); // radial node-link
 
 **Polar authoring rule**: under `coord: Coord.polar()`, nodes render as _points_
 in the transform — only their center sweeps through, their bbox does not.
-Set `anchor: "middle"` on the sibling spread (and typically the parentChild
-spread too). `anchor: "middle"` lays out child centers `spacing` apart
+Set `spacing: Spacing.pitch(n, { at: "middle" })` on the sibling spread (and typically the parentChild
+spread too). A middle pitch lays out child centers `n` apart
 and ignores bbox widths, matching the geometry polar expects. With
-`anchor: "edge"` (the default), shape bboxes accumulate into the cartesian-x
+a bare `spacing` (an edge-to-edge `Spacing.box`), shape bboxes accumulate into the cartesian-x
 span and overflow polar's `[0, 2π]` theta domain — making the tree spiral.
 
 ```ts no-check
-parentChild: spread({ dir: "y", spacing: 40,         anchor: "middle" }), // r units
-sibling:     spread({ dir: "x", spacing: Math.PI/3,  anchor: "middle" }), // radians
+parentChild: spread({ dir: "y", spacing: Spacing.pitch(40, { at: "middle" }) }),        // r units
+sibling:     spread({ dir: "x", spacing: Spacing.pitch(Math.PI/3, { at: "middle" }) }), // radians
 coord:       Coord.polar(),
 ```
 

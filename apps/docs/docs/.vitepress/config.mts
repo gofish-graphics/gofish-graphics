@@ -599,6 +599,11 @@ export default defineConfig({
               items: [{ text: "Place", link: "/js/api/place" }],
             },
             {
+              text: "Spacing",
+              collapsed: true,
+              items: [{ text: "Spacing", link: "/js/api/spacing" }],
+            },
+            {
               text: "Reactivity",
               collapsed: true,
               items: [
@@ -726,6 +731,11 @@ export default defineConfig({
               text: "Place",
               collapsed: true,
               items: [{ text: "Place", link: "/python/api/place" }],
+            },
+            {
+              text: "Spacing",
+              collapsed: true,
+              items: [{ text: "Spacing", link: "/python/api/spacing" }],
             },
             {
               text: "GoTree",

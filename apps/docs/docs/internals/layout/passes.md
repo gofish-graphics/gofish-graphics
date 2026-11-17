@@ -566,7 +566,7 @@ upward is still seated at the seat, the band's bottom, not at the band's top. Su
 children are placed by what they hold (a value label's `spread` around a `ref` to
 its bar); seating them at the band's top lifts them off their bars.
 
-A chain of baselines (a spread with `anchor: "baseline"`) starts at its first
+A chain of baselines (a spread with `spacing: Spacing.pitch(d, { at: "baseline" })`) starts at its first
 member's origin rather than its start edge (its sequence origin in
 `solveAxisProblem`), so two such chains over the same rows solve to the same lines
 whatever their rows hold: a ridgeline's upward-growing silhouettes and its rules.

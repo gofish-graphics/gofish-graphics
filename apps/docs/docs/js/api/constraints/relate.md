@@ -187,16 +187,15 @@ gf.layer([
 Stacks a set of children end-to-end along an axis, with optional spacing.
 
 ```ts
-Constraint.distribute({ dir, spacing, anchor, order }, [ref1, ref2, ...])
+Constraint.distribute({ dir, spacing, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                                                   | Default     | Description                                                                                                                                                    |
-| --------- | ------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dir`     | `"x" \| "y"`                                           | —           | Axis to distribute along                                                                                                                                       |
-| `spacing` | `number`                                               | `8`         | Gap between each element (forced to `0` when `glue` is set)                                                                                                    |
-| `anchor`  | `"edge" \| "start" \| "middle" \| "end" \| "baseline"` | `"edge"`    | Whether `spacing` is measured between facing edges (`"edge"`), or as a fixed pitch between a chosen point on each element: `anchor[i+1] = anchor[i] + spacing` |
-| `order`   | `"forward" \| "reverse"`                               | `"forward"` | Order to place elements                                                                                                                                        |
-| `glue`    | `boolean`                                              | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis                                                                   |
+| Option    | Type                          | Default     | Description                                                                                                                                                                                                                                                                |
+| --------- | ----------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`     | `"x" \| "y"`                  | —           | Axis to distribute along                                                                                                                                                                                                                                                   |
+| `spacing` | `number \| Length \| Spacing` | `8`         | How far apart successive elements are: a [`Spacing`](/js/api/spacing) value, `Spacing.box(gap)` between facing edges or `Spacing.pitch(distance, { at })` between the same point on each element. A bare amount is `Spacing.box(amount)`. Forced to `0` when `glue` is set |
+| `order`   | `"forward" \| "reverse"`      | `"forward"` | Order to place elements                                                                                                                                                                                                                                                    |
+| `glue`    | `boolean`                     | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis                                                                                                                                                                               |
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
 
@@ -433,13 +432,13 @@ the operators delegate their space resolution, budget slicing, and placement
 walks to the same machinery the constraint path uses. These pairs are
 equivalent, **including** scale solving and auto-fit, not just placement:
 
-| Operator                                                     | Constraint equivalent                                           |
-| ------------------------------------------------------------ | --------------------------------------------------------------- |
-| `spread({ dir: "y", alignment: "start" }, items)`            | `align({ x: "start" })` + `distribute({ dir: "y" })`            |
-| `spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
-| `spread({ dir: "x", spacing: 60, anchor: "middle" }, items)` | `distribute({ dir: "x", spacing: 60, anchor: "middle" })`       |
-| `spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
-| `stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
+| Operator                                                                    | Constraint equivalent                                                    |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `spread({ dir: "y", alignment: "start" }, items)`                           | `align({ x: "start" })` + `distribute({ dir: "y" })`                     |
+| `spread({ dir: "x", alignment: "end", spacing: 10 }, items)`                | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })`          |
+| `spread({ dir: "x", spacing: Spacing.pitch(60, { at: "middle" }) }, items)` | `distribute({ dir: "x", spacing: Spacing.pitch(60, { at: "middle" }) })` |
+| `spread({ dir: "y", reverse: true }, items)`                                | `distribute({ dir: "y", order: "reverse" })`                             |
+| `stack({ dir: "y" }, items)`                                                | `distribute({ dir: "y", glue: true })`                                   |
 
 When **no child is pre-placed**, the cross-axis alignment fallback depends on
 the **axis**, not the API — `spread` and the `align` constraint resolve the
