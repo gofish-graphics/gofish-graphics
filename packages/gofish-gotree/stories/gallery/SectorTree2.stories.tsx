@@ -129,11 +129,11 @@ export const SectorTree2: StoryObj = {
           // θ: parent wedge encloses its subtree's arc (pad 0 → exact tiling).
           x: { kind: "nest", pad: 0 },
           // r: parent inner ring, child group one ring out.
-          y: { kind: "distribute", spacing: bandHeight, anchor: "edge" },
+          y: { kind: "distribute", spacing: bandHeight },
         }),
         sibling: combine({
           // θ: siblings tile their parent's arc (edge mode sums θ-widths).
-          x: { kind: "distribute", spacing: 0, anchor: "edge" },
+          x: { kind: "distribute", spacing: 0 },
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),

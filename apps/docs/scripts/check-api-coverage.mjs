@@ -25,7 +25,7 @@ const DOCS_ROOT = resolve(HERE, "..", "docs");
 const IR_DIST = resolve(REPO_ROOT, "packages/gofish-ir/dist/frontend/index.js");
 
 /**
- * Constructs deliberately without a reference page:
+ * Constructs deliberately without a `gofish-ref` block:
  *  - `mark-fn`: the Python bridge's "a lambda returning a chart" mark. It has no
  *    user-facing factory in either language.
  */
@@ -46,13 +46,20 @@ const TABLES = [
   ["leaf mark", ir.LEAF_MARKS],
   ["combinator mark", ir.COMBINATOR_MARKS],
   ["coord", ir.COORDS],
+  ["constraint", ir.CONSTRAINTS],
 ];
+// A table's namespace, when the docs name its constructs `<Namespace>.<type>`
+// (`::: gofish-ref Constraint.align`).
+const namespaceOf = new Map(
+  Object.entries(ir.DESCRIPTOR_NAMESPACES).map(([ns, table]) => [table, ns])
+);
 
 /** name (the user-facing one: pyName when present) -> kinds it appears as */
 const constructs = new Map();
 for (const [kind, table] of TABLES) {
+  const namespace = namespaceOf.get(table);
   for (const d of Object.values(table)) {
-    const name = d.pyName ?? d.type;
+    const name = namespace ? `${namespace}.${d.type}` : (d.pyName ?? d.type);
     if (!constructs.has(name))
       constructs.set(name, { kinds: [], wire: d.type });
     constructs.get(name).kinds.push(kind);

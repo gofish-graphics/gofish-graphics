@@ -74,10 +74,22 @@ import {
   pyType,
   refPyClass,
   AUTHORED_REFS,
+  DESCRIPTOR_TABLES,
 } from "gofish-ir/frontend";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_FILE = join(HERE, "..", "gofish", "_generated.py");
+
+/** The Python classes of the named types (`OPTION_TYPES`, `AUTHORED_REFS`):
+ *  `percent(n)` builds a `LengthValue`, `field(x)` a `FieldAccessor`. */
+const PY_CLASSES = [
+  ...new Set(
+    [
+      ...Object.values(OPTION_TYPES).map((s) => s.pyClass),
+      ...Object.values(AUTHORED_REFS).map((r) => r.pyClass),
+    ].filter((c): c is string => c !== undefined)
+  ),
+].sort();
 
 // ---------------------------------------------------------------------------
 // small helpers
@@ -190,7 +202,13 @@ function taggedShape(branches: FieldType[], where: string): string | null {
  *  or null when a value of this type has no option keys to rename and passes
  *  through unchanged. Object fields use the same `pyKwarg` rule as top-level
  *  kwargs. A union contributes its one dict-shaped branch (a dict value can
- *  only mean that branch). Several dict-shaped branches are allowed only as a
+ *  only mean that branch). When a union's dict branches mix named types
+ *  with a Python class and types without one, the generator emits a
+ *  `("class", ((py_class, shape), ...), rest)` shape: an instance of a class
+ *  takes its branch, and any other value takes `rest`, the shape of the
+ *  other dict branches (spread's `spacing` routes a `LengthValue` as a
+ *  `Length` and a plain dict as a `Spacing`). Several
+ *  dict-shaped branches are allowed only as a
  *  tagged union: each branch an object whose `kind` field (a literal or enum)
  *  takes values no other branch takes, so `_to_wire` picks the branch by the
  *  dict's `kind`. Any other union with several dict-shaped branches would
@@ -228,6 +246,22 @@ function wireShape(type: FieldType, where: string): string | null {
       const shapes = dictBranches.map((b) => wireShape(b, where));
       if (shapes.every((sh) => sh === null)) return null;
       if (dictBranches.length === 1) return shapes[0];
+      // A branch whose named type has a Python class (`Length`: `percent(n)`
+      // builds a `LengthValue`) takes an instance of that class; a plain
+      // dict means one of the other branches.
+      const classed = dictBranches.filter(
+        (b) => b.kind === "ref" && refPyClass(b.name) !== undefined
+      );
+      const plain = dictBranches.filter((b) => !classed.includes(b));
+      if (classed.length > 0 && plain.length > 0) {
+        const byClass = classed.map(
+          (b) =>
+            `(${pyStr(refPyClass((b as { name: string }).name)!)}, ${wireShape(b, where) ?? "None"})`
+        );
+        const rest =
+          wireShape({ kind: "union", options: plain }, where) ?? "None";
+        return `("class", (${byClass.join(", ")},), ${rest})`;
+      }
       const tagged = taggedShape(dictBranches, where);
       if (tagged !== null) return tagged;
       throw new Error(
@@ -310,16 +344,19 @@ function fieldChecks(
 
 /** Render an `_xxx_opts(...) -> dict` core: same kwargs-collection body as a
  *  leaf factory, but returns the dict instead of wrapping it in a Mark/Operator
- *  — used by hand-written dual-form dispatch in ast.py. */
+ *  — used by hand-written dual-form dispatch in ast.py. Its errors name the
+ *  call as `construct` (by default the function's name without `_` and
+ *  `_opts`, so `_pack_combinator_opts` checks its fields as `pack(...)`).
+ *  `requireOneOf`: fields of which at least one must be given. */
 function renderOptsCore(
   fnName: string,
   fields: FieldGroup,
-  doc?: string
+  doc?: string,
+  {
+    construct = fnName.replace(/^_/, "").replace(/(_combinator)?_opts$/, ""),
+    requireOneOf,
+  }: { construct?: string; requireOneOf?: readonly string[] } = {}
 ): string {
-  // `_pack_combinator_opts` checks its fields as `pack(...)`
-  const construct = fnName
-    .replace(/^_/, "")
-    .replace(/(_combinator)?_opts$/, "");
   const ents = entries(fields);
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
@@ -331,7 +368,14 @@ function renderOptsCore(
     `    """`,
   ].join("\n");
   const pairs = renderPairs(ents);
+  const oneOf = (requireOneOf ?? []).map(pyKwarg);
   const body = [
+    ...(oneOf.length > 0
+      ? [
+          `    if ${oneOf.map((py) => `${py} is None`).join(" and ")}:`,
+          `        raise ValueError(${pyStr(`${construct} requires at least one of ${oneOf.join(", ")}`)})`,
+        ]
+      : []),
     ...fieldChecks(ents, construct),
     `    opts: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
@@ -414,16 +458,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ${[
-      ...new Set(
-        [
-          ...Object.values(OPTION_TYPES).map((s) => s.pyClass),
-          ...Object.values(AUTHORED_REFS).map((r) => r.pyClass),
-        ].filter((c): c is string => c !== undefined)
-      ),
-    ]
-      .sort()
-      .join(", ")}
+    from .ast import ${PY_CLASSES.join(", ")}
 `);
 
 // --- Nested option dicts ------------------------------------------------------
@@ -443,7 +478,8 @@ parts.push(
       `# The key structure of each named option type (descriptors.ts OPTION_TYPES):`,
       `# ("object", {py_key: (wire_key, shape)}), ("ref", name), ("array", shape),`,
       `# ("tuple", (shape, ...)), ("record", value_shape),`,
-      `# ("tagged", tag_key, {tag_value: shape}); None passes a value through.`,
+      `# ("tagged", tag_key, {tag_value: shape}),`,
+      `# ("class", ((py_class, shape), ...), rest_shape); None passes a value through.`,
       `_OPTION_TYPES: Dict[str, Any] = {`,
       ...optionTypes,
       `}`,
@@ -462,6 +498,9 @@ parts.push(
       `    or unknown tag raises TypeError. A channel value built by field(...) or`,
       `    datum(...) is a dict already in wire form, so it passes through too:`,
       `    that is how a \`dims\` entry tells a channel value from an interval.`,
+      `    A ("class", ...) shape routes an instance of a named type's class (a`,
+      `    LengthValue from percent(n)) to that type's shape, and any other value`,
+      `    to the rest.`,
       `    """`,
       `    if shape is None or value is None:`,
       `        return value`,
@@ -470,6 +509,11 @@ parts.push(
       `    kind = shape[0]`,
       `    if kind == "ref":`,
       `        return _to_wire(_OPTION_TYPES[shape[1]], value, path)`,
+      `    if kind == "class":`,
+      `        for cls, sub in shape[1]:`,
+      `            if isinstance(value, getattr(_ast, cls)):`,
+      `                return _to_wire(sub, value, path)`,
+      `        return _to_wire(shape[2], value, path)`,
       `    if kind == "object":`,
       `        if not isinstance(value, dict):`,
       `            return value`,
@@ -663,6 +707,22 @@ for (const name of ["line", "ribbon", "enclose"]) {
   parts.push(renderOptsCore("_layer_opts", resolveFields(d), d.doc) + "\n");
 }
 
+// Constraint.align(refs, **options), ...: each constraint's options (the
+// `constraint` descriptor table). The hand-written Constraint methods in
+// ast.py take the refs first and pass their options through these cores,
+// named `_<type>_constraint_opts` so a constraint never shares a name with
+// a combinator core (`position` is both).
+for (const d of Object.values(DESCRIPTOR_TABLES.constraint)) {
+  const fields = resolveFields(d);
+  if (Object.keys(fields).length === 0) continue;
+  parts.push(
+    renderOptsCore(`_${d.type}_constraint_opts`, fields, d.doc, {
+      construct: `Constraint.${pyKwarg(d.type)}`,
+      requireOneOf: d.requireOneOf,
+    }) + "\n"
+  );
+}
+
 // chart(data, **options): the chart-level options (CHART_OPTIONS).
 parts.push(
   renderOptsCore(
@@ -696,6 +756,16 @@ function pyFStr(text: string, tail: string): string {
     .slice(0, -1)}${tail}"`;
 }
 
+/** The Python class a strategy param of a named type is checked as (a
+ *  `LengthValue`, which `percent(n)` and `fr(k)` build); the family module
+ *  imports it (`refClasses`). Its fields are checked where JS reads it. */
+function checkedClass(name: string): string {
+  const cls = refPyClass(name);
+  if (cls === undefined)
+    throw new Error(`no Python check for a ref to ${name}`);
+  return cls;
+}
+
 /** A param type in words, for the error messages: `a finite number >= 0`,
  *  `one of "blue", "quasi", "uniform"`, `a number >= 0 or "silverman"`. */
 function describeType(type: FieldType): string {
@@ -726,6 +796,8 @@ function describeType(type: FieldType): string {
         : `one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}`;
     case "union":
       return type.options.map(describeType).join(" or ");
+    case "ref":
+      return `a ${checkedClass(type.name)}`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -750,6 +822,8 @@ function pyTypeTest(type: FieldType, v: string): string {
       return `isinstance(${v}, list)`;
     case "tuple":
       return `isinstance(${v}, (list, tuple))`;
+    case "ref":
+      return `isinstance(${v}, ${checkedClass(type.name)})`;
     default:
       throw new Error(`no Python check for a ${type.kind} strategy param`);
   }
@@ -928,6 +1002,17 @@ interface FamilyWire {
   bare: boolean;
 }
 
+/** The Python classes a param type names: each ref with a Python class, at
+ *  any depth of a union. */
+function refClasses(type: FieldType): string[] {
+  if (type.kind === "union") return type.options.flatMap(refClasses);
+  if (type.kind === "ref") {
+    const cls = refPyClass(type.name);
+    return cls === undefined ? [] : [cls];
+  }
+  return [];
+}
+
 /** One member of a family: a function that builds the family's dict. */
 interface FamilyFactory {
   family: string;
@@ -1076,6 +1161,15 @@ function writeFamilyModule(opts: {
   const typing = ["Any", "Dict", "Literal", "Optional"].filter(
     (n) => n === "Any" || n === "Dict" || code.includes(`${n}[`)
   );
+  // The classes the checks test against (`isinstance(gap, LengthValue)`),
+  // imported at run time: the package imports `.ast` before any family.
+  const classes = [
+    ...new Set(
+      factories.flatMap((f) =>
+        Object.values(f.params).flatMap((spec) => refClasses(spec.type))
+      )
+    ),
+  ].sort();
   const keys =
     wire.keys === "snake"
       ? [
@@ -1105,9 +1199,9 @@ function writeFamilyModule(opts: {
     ``,
     ...(code.includes("math.") ? [`import math`] : []),
     `from typing import ${typing.join(", ")}`,
-    ...(bareExample !== undefined
-      ? [``, `from ._strategy import bare_kind`]
-      : []),
+    ...(bareExample !== undefined || classes.length > 0 ? [``] : []),
+    ...(bareExample !== undefined ? [`from ._strategy import bare_kind`] : []),
+    ...(classes.length > 0 ? [`from .ast import ${classes.join(", ")}`] : []),
     ``,
     `__all__ = [${factories.map((f) => pyStr(f.name)).join(", ")}]`,
     ``,

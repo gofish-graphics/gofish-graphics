@@ -189,14 +189,12 @@ function fixedParts(
       return;
     }
     const chain = chainOn(n, axis);
-    if (chain !== undefined && !chain.glue && chain.anchor === "edge") {
+    if (chain !== undefined && chain.spacing.kind === "box") {
       const gaps = chain.children.length - 1;
       // A length spacing's fixed pixels are its gap at σ = 0.
       const each = Pwl.at(n.gapOf(chain, axis), 0);
-      const spelled =
-        typeof chain.spacing === "number"
-          ? `${chain.spacing}`
-          : printLength(chain.spacing);
+      const gap = chain.spacing.gap;
+      const spelled = typeof gap === "number" ? `${gap}` : printLength(gap);
       if (each > 0 && gaps > 0)
         add(`${describeNode(n)}: spacing ${spelled} × ${gaps}`, each * gaps);
     }

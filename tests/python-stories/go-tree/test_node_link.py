@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Constraint, Coord, Curve, circle, layer, rect, text
+from gofish import Constraint, Coord, Curve, Spacing, circle, layer, rect, text
 from gofish.gotree import distribute, nest, tree
 from python_stories.gotree_data import by_depth
 
@@ -338,14 +338,16 @@ def story_radial_nodes():
                 stroke_width=1,
             ),
             link={"curve": Curve.linear(), "stroke": "#90a4ae", "stroke_width": 1.5},
-            # anchor="middle" treats the nodes as points and reads spacing in
+            # A middle pitch treats the nodes as points and reads spacing in
             # data units: radius units here.
             parent_child=distribute(
-                dir="y", spacing=70, anchor="middle", alignment="middle"
+                dir="y", spacing=Spacing.pitch(70, at="middle"), alignment="middle"
             ),
             # And radians between sibling centers.
             sibling=distribute(
-                dir="x", spacing=(2 * math.pi) / 3, anchor="middle", alignment="middle"
+                dir="x",
+                spacing=Spacing.pitch((2 * math.pi) / 3, at="middle"),
+                alignment="middle",
             ),
             coord=Coord.clock(),
         ),

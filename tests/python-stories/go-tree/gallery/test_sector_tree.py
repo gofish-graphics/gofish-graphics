@@ -62,10 +62,10 @@ def story_sector_tree():
             link="none",
             parent_child=combine(
                 x={"kind": "nest", "pad": 0},
-                y={"kind": "distribute", "spacing": RING_GAP, "anchor": "edge"},
+                y={"kind": "distribute", "spacing": RING_GAP},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 0, "anchor": "edge"},
+                x={"kind": "distribute", "spacing": 0},
                 y={"kind": "align", "alignment": "middle"},
             ),
             coord=Coord.clock(),

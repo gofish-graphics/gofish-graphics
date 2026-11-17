@@ -47,7 +47,7 @@ def _block(w, color="black"):
 def _blocks(colors, width=18):
     """A flush row of same-colored-or-mixed blocks (Bluefish's <Blocks>)."""
     return spread(
-        [_block(width, c) for c in colors], dir="x", spacing=0, anchor="edge"
+        [_block(width, c) for c in colors], dir="x", spacing=0
     )
 
 
@@ -392,7 +392,6 @@ def story_dfscq():
         ],
         dir="x",
         spacing=0,
-        anchor="edge",
         x=0,
         y=0,
     ).name(mem)
@@ -441,7 +440,6 @@ def story_dfscq():
         ],
         dir="x",
         spacing=0,
-        anchor="edge",
         x=0,
         y=0,
     ).name(diskdata)
@@ -459,7 +457,6 @@ def story_dfscq():
         ],
         dir="x",
         spacing=0,
-        anchor="edge",
     ).name(diskdata_stack)
 
     disk_data_table = enclose(

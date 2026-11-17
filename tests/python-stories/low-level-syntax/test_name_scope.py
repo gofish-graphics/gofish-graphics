@@ -10,6 +10,7 @@ import math
 from gofish import (
     Constraint,
     Shape,
+    Spacing,
     arrow,
     chart,
     circle,
@@ -190,7 +191,7 @@ def story_median_trend():
     return (
         layer([
             chart(GROUP_DENSITY, w=360, axes=False)
-            .flow(spread(by="g", dir="y", anchor="baseline", spacing=30))
+            .flow(spread(by="g", dir="y", spacing=Spacing.pitch(30, at="baseline")))
             .mark(
                 layer([
                     chart()

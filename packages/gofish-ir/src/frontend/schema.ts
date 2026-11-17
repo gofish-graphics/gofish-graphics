@@ -310,10 +310,10 @@ export interface SpreadOperator
   by?: string | FieldAccessor | ChunkKeyIR;
   /** `x`/`y`, or an axis name the enclosing coordinate space declares. */
   dir?: string;
-  /** Pixels, or a length (`percent(n)`, `fr(k)`). */
-  spacing?: number | LengthIR;
+  /** A `Spacing` strategy, or a bare amount, which is `Spacing.box(amount)`:
+   *  pixels, or a length (`percent(n)`, `fr(k)`). */
+  spacing?: SpacingOptionIR;
   alignment?: string;
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
@@ -345,7 +345,6 @@ export interface StackOperator
   /** Spread-parity passthrough; stack always glues regardless. */
   glue?: boolean;
   alignment?: string;
-  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Per-entry size — see `SpreadOperator`. */
   size?: ChannelValue;
@@ -618,6 +617,21 @@ export type OverlapIR =
       smoothing?: number | "silverman";
       padding?: number;
       seed?: number;
+    };
+
+/** How far apart a chain's neighbors are, spread's and distribute's
+ *  `spacing`: a bare amount, which is `Spacing.box(amount)`, or a strategy. */
+export type SpacingOptionIR = number | LengthIR | SpacingIR;
+
+/** How far apart `spread` sets its neighbors, made by a call in the
+ *  `Spacing` family (`Spacing.box(4)`, `Spacing.pitch(70, { at: "baseline" })`).
+ *  `spread`'s `spacing` also takes a bare amount, which is `Spacing.box`'s. */
+export type SpacingIR =
+  | { kind: "box"; gap: number | LengthIR }
+  | {
+      kind: "pitch";
+      distance: number | LengthIR;
+      at?: AlignAnchorIR;
     };
 
 /** How a path runs through its points, made by a call in the `Curve` family
@@ -1040,6 +1054,8 @@ export interface ColorOp {
 
 export interface DatumValue {
   type: "datum";
+  /** The data value, mapped through the scale of the slot it is in. */
+  datum: unknown;
   /** Pixel offset applied AFTER the datum maps through its scale — "this
    *  data position, plus pixels". Emitted by `datum(v) + px` in Python and
    *  `datum(v).offset(px)` in JS. */
@@ -1109,14 +1125,64 @@ export interface LabelSpecIR {
  */
 export type LabelIR = boolean | LabelSpecIR[];
 
-export interface ConstraintIR {
-  type: "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow";
-  /** Positioning/sizing constraints (`align`/`distribute`/`position`/`nest`)
-   *  carry `options`; z-order constraints don't. `nest` options are
-   *  `{ x?: number, y?: number }` (per-axis padding) over `refs: [outer, inner]`. */
-  options?: Record<string, unknown>;
-  refs: RelateOperandIR[];
-}
+/** A point on an operand that `align` and `position` line up. */
+export type AlignAnchorIR = "start" | "middle" | "end" | "baseline";
+
+/** One axis of an `align` constraint: an anchor or interval statistic for
+ *  every operand, or one anchor per operand. */
+export type AlignAxisIR = AlignAnchorIR | "span" | "size" | AlignAnchorIR[];
+
+/** A constraint over the operands of a `.relate()` call: `{ type, options?,
+ *  refs }`. The keys of each kind's `options` are declared once, in
+ *  gofish-ir's `CONSTRAINTS` table (descriptors.ts), which the validator and
+ *  the Python generator read; these types are checked against it
+ *  (descriptors.test.ts). */
+/** A coordinate of `Constraint.position`: a pixel or a `datum(v)`, or an
+ *  interval `[lo, hi]` of two of them. */
+export type PositionCoordinateIR =
+  | number
+  | DatumValue
+  | [number | DatumValue, number | DatumValue];
+
+export type ConstraintIR =
+  | {
+      type: "align";
+      /** At least one of `x`, `y`. */
+      options: { x?: AlignAxisIR; y?: AlignAxisIR };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "distribute";
+      options: {
+        dir: "x" | "y";
+        spacing?: SpacingOptionIR;
+        order?: "forward" | "reverse";
+        glue?: boolean;
+      };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "position";
+      /** At least one of `x`, `y`. */
+      options: {
+        x?: PositionCoordinateIR;
+        y?: PositionCoordinateIR;
+        anchor?: AlignAnchorIR;
+      };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "nest";
+      /** Per-axis padding over `refs: [outer, inner]`, on at least one of
+       *  `x`, `y`. */
+      options: { x?: number; y?: number };
+      refs: RelateOperandIR[];
+    }
+  | {
+      type: "zAbove" | "zBelow";
+      options?: Record<string, never>;
+      refs: RelateOperandIR[];
+    };
 
 /**
  * A `.relate()` operand on the wire: a ref by name (`RefMarkIR`) whose

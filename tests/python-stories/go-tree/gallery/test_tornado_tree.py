@@ -1,6 +1,6 @@
 """Equivalent of gofish-gotree/stories/gallery/TornadoTree.stories.tsx."""
 
-from gofish import Coord, rect
+from gofish import Coord, Spacing, rect
 from gofish.gotree import combine, tree
 from python_stories.gotree_data import SAMPLE_TREE, by_depth
 
@@ -37,12 +37,12 @@ def story_tornado_tree():
             node=node,
             link="none",
             parent_child=combine(
-                x={"kind": "distribute", "spacing": 0.55, "anchor": "middle"},
+                x={"kind": "distribute", "spacing": Spacing.pitch(0.55, at="middle")},
                 y={"kind": "nest", "pad": 44},
             ),
             sibling=combine(
-                x={"kind": "distribute", "spacing": 0.42, "anchor": "middle"},
-                y={"kind": "distribute", "spacing": 44, "anchor": "middle"},
+                x={"kind": "distribute", "spacing": Spacing.pitch(0.42, at="middle")},
+                y={"kind": "distribute", "spacing": Spacing.pitch(44, at="middle")},
             ),
             coord=Coord.clock(),
         ),

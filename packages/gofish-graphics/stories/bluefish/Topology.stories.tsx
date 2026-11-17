@@ -536,7 +536,7 @@ export const TopologyOverdraw: StoryObj<Args> = {
 // 6. `stack()` silently ignores `spacing` (its type comment says so — "the
 //    same as `spread` but never a gap") which is easy to reach for by
 //    analogy with `spread` and get flush-touching panels with no error.
-//    Switching to `spread({ anchor: "edge" })` fixed it, but a runtime
+//    Switching to `spread` fixed it, but a runtime
 //    warning (or accepting the option as a no-op-with-warning) would have
 //    caught this immediately instead of via a visual diff.
 //

@@ -187,8 +187,8 @@ target's `ref()`:
   would need `spacing: 0`, but that reads as touching the edge, not sitting a
   visible `offset` px inside it — so inset uses the **fixed-pitch distribute**
   trick from #762 (the same mechanism the ridgeline ports and the fixed-pitch
-  `distribute` anchor option shipped for): `distribute({ dir, anchor:
-mainAnchor, spacing: inwardSpacing(mainAnchor, offset) })` relates the
+  `Spacing.pitch` shipped for): `distribute({ dir, spacing:
+pitch(inwardSpacing(mainAnchor, offset), { at: mainAnchor }) })` relates the
   **same anchor** (`"start"` or `"end"`) on both the target ref and the label,
   with a constant pitch between them, rather than the default edge-to-edge
   gap. `inwardSpacing` just flips the pitch's sign so it always points inward:
