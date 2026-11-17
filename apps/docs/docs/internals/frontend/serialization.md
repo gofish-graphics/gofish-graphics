@@ -507,9 +507,15 @@ their refs-first signatures and build their options with the generated
 `_to_wire` there too. Options that only JS sets (spread's `origin`,
 `measure` and `hasOrder` on its distribute; partition's `region` and
 scatter's `override` on a position) are not declared. A position's `x`/`y`
-is typed `any` for now: the IR has no type for a datum on its own (it is
-one branch of a channel value, which also takes a field name), and adding
-one is its own decision.
+is a pixel or a `DatumValue` (the `datum(v)` wire shape, an `AUTHORED_REFS`
+entry), or a two-item tuple of them. An entry's `requireOneOf` (`["x", "y"]`
+for `align`, `position` and `nest`) asks for at least one of those keys:
+the validator checks it, the JSON Schema writes it as an `anyOf` of
+`required`, and the generated Python core raises
+`Constraint.<type> requires at least one of x, y`. `nest`'s two refs stay a
+hand-written check. `constraintFromIR` passes each type's wire options to
+its JS factory in its own `switch` case, so an option the factory's type
+renames or retypes fails to compile there.
 
 ## A worked example
 

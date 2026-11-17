@@ -204,7 +204,7 @@ Constraint.align([b, c], x=["end", "start"])
 Stacks a set of refs end-to-end along an axis, with optional spacing.
 
 ```python
-Constraint.distribute(refs, *, dir, spacing=None, order=None, glue=None, weights=None)
+Constraint.distribute(refs, *, dir, spacing=None, order=None, glue=None)
 ```
 
 | Parameter | Type                               | Default     | Description                                                                                                                                                                                                                                                                     |
@@ -213,7 +213,6 @@ Constraint.distribute(refs, *, dir, spacing=None, order=None, glue=None, weights
 | `spacing` | `float` \| `LengthValue` \| `dict` | `8`         | How far apart successive elements are: a [`Spacing`](/python/api/spacing) value, `Spacing.box(gap)` between facing edges or `Spacing.pitch(distance, at=...)` between the same point on each element. A bare amount is `Spacing.box(amount)`. Forced to `0` when `glue` is set. |
 | `order`   | `"forward"` \| `"reverse"`         | `"forward"` | Order to place elements.                                                                                                                                                                                                                                                        |
 | `glue`    | `bool`                             | `False`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis.                                                                                                                                                                                   |
-| `weights` | `list[float]`                      | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space.                                                                                                                                                                         |
 
 The first already-placed ref acts as an anchor; unplaced refs after it are
 distributed forward, and those before it backward so they stack flush.
@@ -239,7 +238,7 @@ built on them. A `distribute` over data-sized children composes their size
 claims (sum + spacing) into the layer's claim on that axis; when the layer is
 then given a size (an explicit `w`/`h`, or an allotted budget from its parent
 or a coordinate transform), it solves for the scale factor that makes the
-children fit, and proposes budget slices (equal, or per `weights`) to children
+children fit, and proposes equal budget slices to children
 with no size claim of their own. With `glue=True` the composed extents commit
 to an anchored positional axis instead — that's a stacked bar chart. In other
 words: a constraint-assembled layer auto-fits the same way a `spread`/`stack`
@@ -432,7 +431,6 @@ equivalent, **including** scale solving and auto-fit, not just placement:
 | `spread(items, dir="x", spacing=Spacing.pitch(60, at="middle"))` | `distribute(dir="x", spacing=Spacing.pitch(60, at="middle"))` |
 | `spread(items, dir="y", reverse=True)`                           | `distribute(dir="y", order="reverse")`                        |
 | `stack(items, dir="y")`                                          | `distribute(dir="y", glue=True)`                              |
-| `spread(items, dir="x", stackWeights=[2, 1])`                    | `distribute(dir="x", weights=[2, 1])`                         |
 
 When **no ref is pre-placed**, the cross-axis alignment fallback depends on the
 **axis**, not the API — `spread` and the `align` constraint resolve the same

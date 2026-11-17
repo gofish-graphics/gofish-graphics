@@ -108,19 +108,22 @@ export interface DistributeConstraint {
 export const createDistributeConstraint = (
   options: DistributeOptions,
   children: ConstraintRef[]
-): DistributeConstraint => ({
-  type: "distribute",
-  dir: options.dir,
-  // Glue pins spacing ≡ 0 for both the space fold and placement-solver
-  // relations, so glued children touch.
-  spacing: spacingOf(options.glue ? 0 : (options.spacing ?? 8)),
-  order: options.order ?? "forward",
-  glue: options.glue ?? false,
-  children,
-  measure: options.measure,
-  hasOrder: options.hasOrder,
-  origin: options.glue ? options.origin : undefined,
-});
+): DistributeConstraint => {
+  // Checked even under glue, which pins spacing ≡ 0 for both the space fold
+  // and placement-solver relations, so glued children touch.
+  const spacing = spacingOf(options.spacing ?? 8);
+  return {
+    type: "distribute",
+    dir: options.dir,
+    spacing: options.glue ? spacingOf(0) : spacing,
+    order: options.order ?? "forward",
+    glue: options.glue ?? false,
+    children,
+    measure: options.measure,
+    hasOrder: options.hasOrder,
+    origin: options.glue ? options.origin : undefined,
+  };
+};
 
 /** A chain's spacing as a strategy: a bare amount is `Spacing.box(amount)`,
  *  and a strategy is checked against the `Spacing` family. This is the one
@@ -128,15 +131,17 @@ export const createDistributeConstraint = (
  *  `kind`, and the one place spread's and distribute's `spacing` is
  *  checked. */
 export function spacingOf(spacing: Gap | Spacing): Spacing {
-  if (typeof spacing === "number" || isLength(spacing))
-    return { kind: "box", gap: spacing };
-  if (typeof spacing !== "object" || spacing === null)
+  const strategy: unknown =
+    typeof spacing === "number" || isLength(spacing)
+      ? { kind: "box", gap: spacing }
+      : spacing;
+  if (typeof strategy !== "object" || strategy === null)
     throw new Error(
       `[gofish] spacing: expected a number, a length (percent(n) or fr(k)) ` +
-        `or a Spacing strategy, got ${spacing === null ? "null" : typeof spacing}.`
+        `or a Spacing strategy, got ${strategy === null ? "null" : typeof strategy}.`
     );
-  Frontend.checkStrategy("Spacing", spacing, "spacing");
-  return spacing;
+  Frontend.checkStrategy("Spacing", strategy, "spacing");
+  return strategy as Spacing;
 }
 
 /** The amount a spacing lays out between neighbors: a box's gap, or a

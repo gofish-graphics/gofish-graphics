@@ -19,7 +19,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
+    from .ast import ChunkKey, DatumValue, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -1283,6 +1283,8 @@ def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | 
         x: How the operands line up on x: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.
         y: How the operands line up on y: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.
     """
+    if x is None and y is None:
+        raise ValueError("Constraint.align requires at least one of x, y")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("x", x),
@@ -1312,7 +1314,7 @@ def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthVal
             opts[_k] = _v
     return opts
 
-def _position_constraint_opts(*, x: Optional[Any] = None, y: Optional[Any] = None, anchor: Optional[str] = None) -> Dict[str, Any]:
+def _position_constraint_opts(*, x: Optional[float | DatumValue | tuple] = None, y: Optional[float | DatumValue | tuple] = None, anchor: Optional[str] = None) -> Dict[str, Any]:
     """Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.
 
     Args:
@@ -1320,6 +1322,8 @@ def _position_constraint_opts(*, x: Optional[Any] = None, y: Optional[Any] = Non
         y: A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them.
         anchor: Which point of the operand lands on a point coordinate. Default "middle".
     """
+    if x is None and y is None:
+        raise ValueError("Constraint.position requires at least one of x, y")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("x", x),
@@ -1337,6 +1341,8 @@ def _nest_constraint_opts(*, x: Optional[float] = None, y: Optional[float] = Non
         x: Padding on x, in pixels.
         y: Padding on y, in pixels.
     """
+    if x is None and y is None:
+        raise ValueError("Constraint.nest requires at least one of x, y")
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("x", x),

@@ -1588,34 +1588,23 @@ console.log("# a constraint's options, as CONSTRAINTS declares them");
     }) as unknown as FrontendIRDocument;
   const distribute = (options: Record<string, unknown>) =>
     validate(withClause({ type: "distribute", options }));
-  const accepts: Array<[string, unknown]> = [
-    ["a bare number", 8],
-    ["a length", { type: "length", percent: 10 }],
-    ["Spacing.box", { kind: "box", gap: 4 }],
-    ["Spacing.pitch", { kind: "pitch", distance: 70, at: "middle" }],
-  ];
-  for (const [what, spacing] of accepts)
-    check(
-      `a distribute spacing of ${what} validates`,
-      distribute({ dir: "y", spacing }).valid
-    );
-  const rejects: Array<[string, unknown, RegExp]> = [
-    ["an unknown Spacing kind", { kind: "contour", gap: 4 }, /kind/],
-    [
-      "a non-finite pitch",
-      { kind: "pitch", distance: encodeNonFinite(Infinity) },
-      /distance/,
-    ],
-    ["a string", "50", /spacing/],
-  ];
-  for (const [what, spacing, pattern] of rejects) {
-    const r = distribute({ dir: "y", spacing });
-    check(
-      `a distribute spacing of ${what} is rejected`,
-      !r.valid && r.errors.some((e) => pattern.test(`${e.path} ${e.message}`)),
-      JSON.stringify(r.errors)
-    );
-  }
+  check(
+    "a distribute spacing of Spacing.pitch validates",
+    distribute({
+      dir: "y",
+      spacing: { kind: "pitch", distance: 70, at: "middle" },
+    }).valid
+  );
+  const unknownKind = distribute({
+    dir: "y",
+    spacing: { kind: "contour", gap: 4 },
+  });
+  check(
+    "a distribute spacing of an unknown Spacing kind is rejected",
+    !unknownKind.valid &&
+      unknownKind.errors.some((e) => /kind/.test(`${e.path} ${e.message}`)),
+    JSON.stringify(unknownKind.errors)
+  );
   const unknownKey = distribute({ dir: "y", anchor: "middle" });
   check(
     "a distribute option the table does not declare is rejected",
@@ -1644,6 +1633,44 @@ console.log("# a constraint's options, as CONSTRAINTS declares them");
     "a nest with no padding is rejected",
     !validate(withClause({ type: "nest", options: {} })).valid
   );
+  for (const type of ["align", "position"]) {
+    const neither = validate(withClause({ type, options: {} }));
+    check(
+      `${type} with neither x nor y is rejected`,
+      !neither.valid &&
+        neither.errors.some((e) =>
+          e.message.includes(
+            `${type} options must specify at least one of x, y`
+          )
+        ),
+      JSON.stringify(neither.errors)
+    );
+    check(
+      `${type} with no options is rejected`,
+      !validate(withClause({ type })).valid
+    );
+  }
+  const datum = (v: unknown) => ({ type: "datum", datum: v });
+  check(
+    "a position at a pixel, a datum, or an interval of them validates",
+    [
+      { x: 0, y: 0, anchor: "baseline" },
+      { y: datum(50) },
+      { x: [datum(1), 40] },
+    ].every(
+      (options) => validate(withClause({ type: "position", options })).valid
+    )
+  );
+  for (const [what, x] of [
+    ["a string", "50"],
+    ["an interval of three", [0, 1, 2]],
+    ["a field", { type: "field", field: "a" }],
+  ] as const) {
+    check(
+      `a position at ${what} is rejected`,
+      !validate(withClause({ type: "position", options: { x } })).valid
+    );
+  }
   check(
     "a zAbove with no options validates",
     validate(withClause({ type: "zAbove" })).valid

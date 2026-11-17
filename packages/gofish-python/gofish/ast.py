@@ -1178,8 +1178,6 @@ class Constraint:
 
         At least one of `x` or `y` must be provided.
         """
-        if x is None and y is None:
-            raise ValueError("Constraint.align requires at least one of x, y")
         return AlignConstraint(refs, _align_constraint_opts(x=x, y=y))
 
     @staticmethod
@@ -1237,10 +1235,6 @@ class Constraint:
             anchor: "start" | "middle" | "end" — which anchor of the ref lands
                 on the coordinate. Defaults to "middle" (the ref's center).
         """
-        if x is None and y is None:
-            raise ValueError(
-                "Constraint.position requires at least one of x, y"
-            )
         return PositionConstraint(
             refs, _position_constraint_opts(x=x, y=y, anchor=anchor)
         )
@@ -1271,10 +1265,6 @@ class Constraint:
         At least one of `x` / `y` must be provided, and `refs` must have exactly
         two entries.
         """
-        if x is None and y is None:
-            raise ValueError(
-                "Constraint.nest requires at least one of x, y"
-            )
         if len(refs) != 2:
             raise ValueError(
                 "Constraint.nest requires exactly 2 refs [outer, inner], "

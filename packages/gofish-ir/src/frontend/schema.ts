@@ -619,19 +619,19 @@ export type OverlapIR =
       seed?: number;
     };
 
-/** How far apart `spread` sets its neighbors, made by a call in the
- *  `Spacing` family (`Spacing.box(4)`, `Spacing.pitch(70, { at: "baseline" })`).
- *  `spread`'s `spacing` also takes a bare amount, which is `Spacing.box`'s. */
 /** How far apart a chain's neighbors are, spread's and distribute's
  *  `spacing`: a bare amount, which is `Spacing.box(amount)`, or a strategy. */
 export type SpacingOptionIR = number | LengthIR | SpacingIR;
 
+/** How far apart `spread` sets its neighbors, made by a call in the
+ *  `Spacing` family (`Spacing.box(4)`, `Spacing.pitch(70, { at: "baseline" })`).
+ *  `spread`'s `spacing` also takes a bare amount, which is `Spacing.box`'s. */
 export type SpacingIR =
   | { kind: "box"; gap: number | LengthIR }
   | {
       kind: "pitch";
       distance: number | LengthIR;
-      at?: "start" | "middle" | "end" | "baseline";
+      at?: AlignAnchorIR;
     };
 
 /** How a path runs through its points, made by a call in the `Curve` family
@@ -1054,6 +1054,8 @@ export interface ColorOp {
 
 export interface DatumValue {
   type: "datum";
+  /** The data value, mapped through the scale of the slot it is in. */
+  datum: unknown;
   /** Pixel offset applied AFTER the datum maps through its scale — "this
    *  data position, plus pixels". Emitted by `datum(v) + px` in Python and
    *  `datum(v).offset(px)` in JS. */
@@ -1135,10 +1137,18 @@ export type AlignAxisIR = AlignAnchorIR | "span" | "size" | AlignAnchorIR[];
  *  gofish-ir's `CONSTRAINTS` table (descriptors.ts), which the validator and
  *  the Python generator read; these types are checked against it
  *  (descriptors.test.ts). */
+/** A coordinate of `Constraint.position`: a pixel or a `datum(v)`, or an
+ *  interval `[lo, hi]` of two of them. */
+export type PositionCoordinateIR =
+  | number
+  | DatumValue
+  | [number | DatumValue, number | DatumValue];
+
 export type ConstraintIR =
   | {
       type: "align";
-      options?: { x?: AlignAxisIR; y?: AlignAxisIR };
+      /** At least one of `x`, `y`. */
+      options: { x?: AlignAxisIR; y?: AlignAxisIR };
       refs: RelateOperandIR[];
     }
   | {
@@ -1153,13 +1163,18 @@ export type ConstraintIR =
     }
   | {
       type: "position";
-      /** `x`/`y`: a pixel, a `datum(v)`, or an interval `[lo, hi]` of them. */
-      options?: { x?: unknown; y?: unknown; anchor?: AlignAnchorIR };
+      /** At least one of `x`, `y`. */
+      options: {
+        x?: PositionCoordinateIR;
+        y?: PositionCoordinateIR;
+        anchor?: AlignAnchorIR;
+      };
       refs: RelateOperandIR[];
     }
   | {
       type: "nest";
-      /** Per-axis padding over `refs: [outer, inner]`. */
+      /** Per-axis padding over `refs: [outer, inner]`, on at least one of
+       *  `x`, `y`. */
       options: { x?: number; y?: number };
       refs: RelateOperandIR[];
     }

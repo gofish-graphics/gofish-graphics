@@ -14,7 +14,7 @@ from collections import deque
 from typing import Any, Callable, Dict, Iterator, List, Optional, Union
 
 from .. import curve as Curve
-from ..ast import Constraint, Mark, RefSentinel, layer, line, rect, ref
+from ..ast import Constraint, LengthValue, Mark, RefSentinel, layer, line, rect, ref
 from ..ast import spread as _gofish_spread
 
 __all__ = [
@@ -93,16 +93,17 @@ def _or(value: Any, default: Any) -> Any:
 def spread(
     *,
     dir: str,
-    spacing: Optional[Union[float, Dict[str, Any]]] = None,
+    spacing: Optional[Union[float, LengthValue, Dict[str, Any]]] = None,
     alignment: Optional[str] = None,
 ) -> Combiner:
     """Lay the children out along ``dir`` with the GoFish ``spread``
     combinator. As a ``parent_child`` combiner the parent comes first: on the
     left for ``dir="x"``, at the top for ``dir="y"``.
 
-    ``spacing`` is a bare number (a gap between facing edges, which is
-    ``Spacing.box(n)``) or ``Spacing.pitch(n, at=...)``, a fixed distance
-    between one point on each child. Use ``at="middle"`` under a coordinate
+    ``spacing`` is a bare amount, pixels or ``percent(n)`` (a gap between
+    facing edges, which is ``Spacing.box(amount)``), or
+    ``Spacing.pitch(n, at=...)``, a fixed distance between one point on each
+    child. Use ``at="middle"`` under a coordinate
     transform where nodes render as points. Mirrors JS ``spread``.
     """
     return Combiner(
@@ -131,7 +132,7 @@ def _refs(
 def distribute(
     *,
     dir: str,
-    spacing: Optional[Union[float, Dict[str, Any]]] = None,
+    spacing: Optional[Union[float, LengthValue, Dict[str, Any]]] = None,
     order: Optional[str] = None,
     alignment: Optional[str] = None,
 ) -> Combiner:

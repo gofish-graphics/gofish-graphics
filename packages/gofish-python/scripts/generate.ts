@@ -344,16 +344,19 @@ function fieldChecks(
 
 /** Render an `_xxx_opts(...) -> dict` core: same kwargs-collection body as a
  *  leaf factory, but returns the dict instead of wrapping it in a Mark/Operator
- *  — used by hand-written dual-form dispatch in ast.py. */
+ *  — used by hand-written dual-form dispatch in ast.py. Its errors name the
+ *  call as `construct` (by default the function's name without `_` and
+ *  `_opts`, so `_pack_combinator_opts` checks its fields as `pack(...)`).
+ *  `requireOneOf`: fields of which at least one must be given. */
 function renderOptsCore(
   fnName: string,
   fields: FieldGroup,
-  doc?: string
+  doc?: string,
+  {
+    construct = fnName.replace(/^_/, "").replace(/(_combinator)?_opts$/, ""),
+    requireOneOf,
+  }: { construct?: string; requireOneOf?: readonly string[] } = {}
 ): string {
-  // `_pack_combinator_opts` checks its fields as `pack(...)`
-  const construct = fnName
-    .replace(/^_/, "")
-    .replace(/(_combinator)?_opts$/, "");
   const ents = entries(fields);
   const sig = ents.map(([py, , spec]) => pySig(py, spec)).join(", ");
   const docLines = ents
@@ -365,7 +368,14 @@ function renderOptsCore(
     `    """`,
   ].join("\n");
   const pairs = renderPairs(ents);
+  const oneOf = (requireOneOf ?? []).map(pyKwarg);
   const body = [
+    ...(oneOf.length > 0
+      ? [
+          `    if ${oneOf.map((py) => `${py} is None`).join(" and ")}:`,
+          `        raise ValueError(${pyStr(`${construct} requires at least one of ${oneOf.join(", ")}`)})`,
+        ]
+      : []),
     ...fieldChecks(ents, construct),
     `    opts: Dict[str, Any] = {}`,
     `    for _k, _v in [`,
@@ -703,7 +713,10 @@ for (const name of ["line", "ribbon", "enclose"]) {
 for (const d of Object.values(CONSTRAINTS)) {
   if (Object.keys(d.fields).length === 0) continue;
   parts.push(
-    renderOptsCore(`_${d.type}_constraint_opts`, d.fields, d.doc) + "\n"
+    renderOptsCore(`_${d.type}_constraint_opts`, d.fields, d.doc, {
+      construct: `Constraint.${pyKwarg(d.type)}`,
+      requireOneOf: d.requireOneOf,
+    }) + "\n"
   );
 }
 

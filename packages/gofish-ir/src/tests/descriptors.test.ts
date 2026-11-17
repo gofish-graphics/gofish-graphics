@@ -431,6 +431,9 @@ check(
   JSON.stringify(Object.keys(CONSTRAINTS).sort()) ===
     JSON.stringify(Object.keys(SCHEMA_CONSTRAINT_KEYS).sort())
 );
+for (const [key, d] of Object.entries(CONSTRAINTS)) {
+  check(`CONSTRAINTS.${key}.type === "${key}"`, d.type === key, d.type);
+}
 for (const [type, keys] of Object.entries(SCHEMA_CONSTRAINT_KEYS)) {
   const schemaKeys = Object.keys(keys).sort();
   const descriptorKeys = Object.keys(CONSTRAINTS[type]?.fields ?? {}).sort();

@@ -103,6 +103,26 @@ async function main() {
     /distance/.test(notFinite),
     notFinite
   );
+  const bareNaN = errorOf(() => spacingOf(NaN));
+  check(
+    "a bare NaN is checked as the box it is: the error is Spacing.box(NaN)'s",
+    bareNaN !== "" && bareNaN === errorOf(() => spacingOf(Spacing.box(NaN))),
+    bareNaN
+  );
+  const glued = await spread(
+    { dir: "x", glue: true, spacing: { kind: "nope" } as any },
+    [10, 40].map((w) => rect({ w, h: 10 }))
+  )
+    .toDisplayList({})
+    .then(
+      () => "",
+      (e) => (e as Error).message
+    );
+  check(
+    "a glued spread still checks its spacing",
+    /unknown kind "nope"/.test(glued),
+    glued
+  );
   const wrongType = await rects("50").then(
     () => "",
     (e) => (e as Error).message

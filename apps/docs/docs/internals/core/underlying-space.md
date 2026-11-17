@@ -976,7 +976,8 @@ on an axis with a datum offset.
 `distribute`'s `spacing` (a `Spacing` value, `families/spacing.ts`) picks
 which pair of anchors the chain relates between adjacent children.
 `createDistributeConstraint` normalizes it once (`spacingOf`: a bare amount is
-`Spacing.box(amount)`), and `distributePlacementAnchors` dispatches on its
+`Spacing.box(amount)`, and the strategy is checked against the `Spacing`
+family, even under `glue`, which then uses a zero box), and `distributePlacementAnchors` dispatches on its
 `kind`. `Spacing.box(gap)` relates the facing edges
 (`prev.end → cur.start`, spacing = the gap between them, content-dependent);
 `Spacing.pitch(distance, { at })` relates the _same_ anchor on both sides

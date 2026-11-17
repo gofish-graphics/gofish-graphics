@@ -2,7 +2,7 @@ import {
   spread as gfSpread,
   layer,
   Constraint,
-  type Spacing,
+  type DistributeOptions as CoreDistributeOptions,
 } from "gofish-graphics";
 import type { Combiner, DepthCombiner, Alignment } from "./spec";
 
@@ -26,14 +26,14 @@ export const alternate = (combiners: Combiner[]): DepthCombiner => ({
 export type SpreadOptions = {
   dir: "x" | "y";
   /**
-   * A bare number (or `Spacing.box(n)`) is a gap between facing edges, so
+   * A bare amount (or `Spacing.box(amount)`) is a gap between facing edges, so
    * children's bbox widths sum into the stack span; `Spacing.pitch(n, { at:
    * "middle" })` places child centers `n` apart and ignores bbox widths.
    * Use the pitch under polar (or any coord transform) where nodes render
    * as points — bbox accumulation would otherwise overflow the transform's
    * domain. Spacing is in domain units (radians for polar theta).
    */
-  spacing?: number | Spacing.Spacing;
+  spacing?: CoreDistributeOptions["spacing"];
   alignment?: Alignment;
 };
 
@@ -53,8 +53,9 @@ export const spread = (opts: SpreadOptions): Combiner => {
 
 export type DistributeOptions = {
   dir: "x" | "y";
-  /** A bare number is `Spacing.box(n)`, a gap between facing edges. */
-  spacing?: number | Spacing.Spacing;
+  /** A bare amount (pixels, `percent(n)`, `fr(k)`) is `Spacing.box(amount)`,
+   *  a gap between facing edges. */
+  spacing?: CoreDistributeOptions["spacing"];
   /** "forward" (default): index 0 at low coord, walking up. "reverse": flip. */
   order?: "forward" | "reverse";
   /**
@@ -123,7 +124,7 @@ export type CombineAxis =
   | { kind: "align"; alignment?: Alignment }
   | {
       kind: "distribute";
-      spacing?: number | Spacing.Spacing;
+      spacing?: CoreDistributeOptions["spacing"];
       order?: "forward" | "reverse";
     }
   | { kind: "nest"; pad?: number };

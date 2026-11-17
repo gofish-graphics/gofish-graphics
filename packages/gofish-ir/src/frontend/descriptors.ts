@@ -627,6 +627,10 @@ const placeOffset = (fallback: number): FieldSpec => ({
   doc: `Pixels between the outline and the label. Default: the label's \`offset\`, or ${fallback}.`,
 });
 
+/** The points of a box an anchor names: `Spacing.pitch`'s `at`, and
+ *  `Constraint.align`'s and `Constraint.position`'s anchors. */
+const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
+
 /**
  * The strategy families whose values cross the Python↔JS wire, by family
  * name. A strategy is a plain object `{ kind, ...params }`, the same in JS
@@ -1121,7 +1125,7 @@ export const STRATEGIES = {
             doc: "The distance between the points, in pixels." + PERCENT_FR,
           },
           at: {
-            type: t.enum("start", "middle", "end", "baseline"),
+            type: t.enum(...ALIGN_ANCHORS),
             default: "baseline",
             doc: 'The point on each child: the start of its box, its middle, the end of its box, or its baseline (its local 0). "middle" is center to center.',
           },
@@ -1339,6 +1343,7 @@ export const AUTHORED_REFS: Readonly<
   FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
   StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
   ChunkKey: { pyClass: "ChunkKey", tag: "chunk" },
+  DatumValue: { pyClass: "DatumValue", tag: "datum" },
   LabelIR: {},
   TranslateIR: {},
   BridgeLambdaSentinel: {},
@@ -1536,7 +1541,7 @@ const spreadSizeField: FieldGroup = group({
  *  `Constraint.distribute`'s, one type. A bare amount (pixels, or a length)
  *  is `Spacing.box(amount)`. */
 const SPACING_TYPE: FieldType = t.union(
-  t.number,
+  t.num({ finite: true }),
   t.ref("Length"),
   t.ref("Spacing")
 );
@@ -2641,9 +2646,16 @@ export interface ConstraintDescriptor {
   doc?: string;
   /** The keys of the constraint's `options`. */
   fields: FieldGroup;
+  /** Options that must hold at least one of these keys (`["x", "y"]` for
+   *  an axis-wise constraint). */
+  requireOneOf?: readonly string[];
 }
 
-const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
+/** Whether a constraint's `options` must be on the wire: when one of its
+ *  fields is required, or at least one of some keys is. */
+export const constraintOptionsRequired = (d: ConstraintDescriptor): boolean =>
+  d.requireOneOf !== undefined ||
+  Object.values(d.fields).some((f) => f.required);
 
 /** An axis of `Constraint.align`: one anchor or interval statistic for every
  *  operand, or one anchor per operand. */
@@ -2655,16 +2667,27 @@ const alignAxis = (axis: string): FieldSpec => ({
   doc: `How the operands line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every operand, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per operand.`,
 });
 
+/** A coordinate of `Constraint.position`: a pixel or a `datum(v)`. */
+const POSITION_POINT: FieldType = t.union(t.number, t.ref("DatumValue"));
+
+/** An axis of `Constraint.position`: a point, or an interval `[lo, hi]`
+ *  of two points. */
+const positionAxis = (axis: string): FieldSpec => ({
+  type: t.union(POSITION_POINT, t.tuple(POSITION_POINT, POSITION_POINT)),
+  doc: `A pixel or \`datum(v)\` coordinate on ${axis}, or an interval \`[lo, hi]\` of them.`,
+});
+
 /** Every constraint that crosses the wire, by its `type` tag. JS-only
  *  options that no producer writes to the IR (distribute's `measure`,
  *  `hasOrder` and `origin`, which spread sets; position's `region`,
- *  `override` and `frame`, which partition, scatter and chrome set) are not
+ *  `override` and `in`, which partition, scatter and chrome set) are not
  *  declared, so a document that holds one is rejected. */
 export const CONSTRAINTS: Record<string, ConstraintDescriptor> = {
   align: {
     type: "align",
     doc: "Align the operands on one or both axes. At least one of `x`, `y` is required.",
     fields: { x: alignAxis("x"), y: alignAxis("y") },
+    requireOneOf: ["x", "y"],
   },
   distribute: {
     type: "distribute",
@@ -2696,25 +2719,15 @@ export const CONSTRAINTS: Record<string, ConstraintDescriptor> = {
     type: "position",
     doc: "Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.",
     fields: {
-      // TODO: a position coordinate is a pixel, a `datum(v)`, or an interval
-      // `[lo, hi]` of either, and the IR has no type for a datum on its own
-      // (it is one branch of a channel value, which also takes a field
-      // name). Declaring that type is a design decision, so x and y are not
-      // checked here yet.
-      x: {
-        type: t.any,
-        doc: "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them.",
-      },
-      y: {
-        type: t.any,
-        doc: "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them.",
-      },
+      x: positionAxis("x"),
+      y: positionAxis("y"),
       anchor: {
         type: t.enum(...ALIGN_ANCHORS),
         default: "middle",
         doc: "Which point of the operand lands on a point coordinate.",
       },
     },
+    requireOneOf: ["x", "y"],
   },
   nest: {
     type: "nest",
@@ -2723,6 +2736,7 @@ export const CONSTRAINTS: Record<string, ConstraintDescriptor> = {
       x: { type: t.number, doc: "Padding on x, in pixels." },
       y: { type: t.number, doc: "Padding on y, in pixels." },
     },
+    requireOneOf: ["x", "y"],
   },
   zAbove: {
     type: "zAbove",

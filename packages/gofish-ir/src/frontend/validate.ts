@@ -39,6 +39,7 @@ import {
   AUTHORED_REFS,
   BIN_KINDS,
   CONSTRAINTS,
+  constraintOptionsRequired,
   taggedBranches,
   LABEL_OPTIONS,
   OPTION_TYPES,
@@ -657,6 +658,16 @@ function walkRefType(
     case "StructAccessor":
       walkStructAccessor(value, path, ctx);
       return;
+    case "DatumValue":
+      if (!isObject(value) || value.type !== "datum") {
+        ctx.errors.push({
+          path,
+          message: `expected a datum(v) value, got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      walkDatumValue(value, path, ctx);
+      return;
     case "ChunkKey":
       if (!isObject(value) || value.type !== "chunk") {
         ctx.errors.push({
@@ -780,6 +791,45 @@ function walkTranslate(node: unknown, path: string, ctx: Context): void {
   rejectUnknown(node, ["x", "y"], path, ctx);
 }
 
+/** A `datum(v)` value's `offset` and `colorOps`: a channel value's datum
+ *  branch, and a `t.ref("DatumValue")`. */
+function walkDatumValue(
+  obj: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
+    ctx.errors.push({
+      path: `${path}.offset`,
+      message: 'datum "offset" must be a number (post-scale pixel offset)',
+    });
+  }
+  if (obj.colorOps !== undefined) {
+    if (!Array.isArray(obj.colorOps)) {
+      ctx.errors.push({
+        path: `${path}.colorOps`,
+        message: 'datum "colorOps" must be an array of color transforms',
+      });
+    } else {
+      obj.colorOps.forEach((c, i) => {
+        const cop = c as Record<string, unknown>;
+        if (cop?.op !== "lighten" && cop?.op !== "darken") {
+          ctx.errors.push({
+            path: `${path}.colorOps[${i}].op`,
+            message: 'colorOp "op" must be "lighten" or "darken"',
+          });
+        }
+        if (!isIRNumber(cop?.amount)) {
+          ctx.errors.push({
+            path: `${path}.colorOps[${i}].amount`,
+            message: 'colorOp "amount" must be a number',
+          });
+        }
+      });
+    }
+  }
+}
+
 /**
  * A channel value: bare primitive, the existing `{type:"datum"}` wrapper,
  * the new `{type:"field"|"literal"}` constructors, or a Python-bridge
@@ -814,36 +864,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") {
-    if (obj.offset !== undefined && !isIRNumber(obj.offset)) {
-      ctx.errors.push({
-        path: `${path}.offset`,
-        message: 'datum "offset" must be a number (post-scale pixel offset)',
-      });
-    }
-    if (obj.colorOps !== undefined) {
-      if (!Array.isArray(obj.colorOps)) {
-        ctx.errors.push({
-          path: `${path}.colorOps`,
-          message: 'datum "colorOps" must be an array of color transforms',
-        });
-      } else {
-        obj.colorOps.forEach((c, i) => {
-          const cop = c as Record<string, unknown>;
-          if (cop?.op !== "lighten" && cop?.op !== "darken") {
-            ctx.errors.push({
-              path: `${path}.colorOps[${i}].op`,
-              message: 'colorOp "op" must be "lighten" or "darken"',
-            });
-          }
-          if (!isIRNumber(cop?.amount)) {
-            ctx.errors.push({
-              path: `${path}.colorOps[${i}].amount`,
-              message: 'colorOp "amount" must be a number',
-            });
-          }
-        });
-      }
-    }
+    walkDatumValue(obj, path, ctx);
     return;
   }
   if (obj.type === "field") {
@@ -1392,35 +1413,36 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
       });
     }
   });
-  // The constraint's options, as its CONSTRAINTS entry declares them. They
-  // are required when one of them is.
-  const fields = CONSTRAINTS[t].fields;
-  walkDescriptorFields(
-    node,
-    path,
-    ctx,
-    {
-      options: {
-        type: { kind: "object", fields },
-        required: Object.values(fields).some((f) => f.required),
-      },
-    },
-    ["type", "refs"]
-  );
-  // nest pads at least one axis. (The space-fold / centering direction is
-  // resolved engine-side; the IR carries only the padding.)
+  walkDescriptorFields(node, path, ctx, CONSTRAINT_OPTIONS[t], [
+    "type",
+    "refs",
+  ]);
+  const oneOf = CONSTRAINTS[t].requireOneOf;
   const options = node.options;
   if (
-    t === "nest" &&
-    (options === undefined ||
-      (isObject(options) && options.x === undefined && options.y === undefined))
+    oneOf !== undefined &&
+    isObject(options) &&
+    oneOf.every((k) => options[k] === undefined)
   ) {
     ctx.errors.push({
       path: `${path}.options`,
-      message: "nest options must specify at least one of x, y",
+      message: `${t} options must specify at least one of ${oneOf.join(", ")}`,
     });
   }
 }
+
+/** Each constraint's `options`, as its CONSTRAINTS entry declares them. */
+const CONSTRAINT_OPTIONS: Record<string, FieldGroup> = Object.fromEntries(
+  Object.entries(CONSTRAINTS).map(([type, d]) => [
+    type,
+    {
+      options: {
+        type: { kind: "object", fields: d.fields },
+        required: constraintOptionsRequired(d),
+      },
+    },
+  ])
+);
 
 function walkBaseFields(
   node: Record<string, unknown>,

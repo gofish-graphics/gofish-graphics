@@ -504,32 +504,7 @@ for the API.
                 "$ref": "#/$defs/Number"
               },
               {
-                "type": "object",
-                "required": ["type", "datum"],
-                "properties": {
-                  "type": {
-                    "const": "datum"
-                  },
-                  "datum": {},
-                  "offset": {
-                    "$ref": "#/$defs/Number"
-                  },
-                  "colorOps": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "required": ["op", "amount"],
-                      "properties": {
-                        "op": {
-                          "enum": ["lighten", "darken"]
-                        },
-                        "amount": {
-                          "$ref": "#/$defs/Number"
-                        }
-                      }
-                    }
-                  }
-                }
+                "$ref": "#/$defs/DatumValue"
               }
             ]
           }
@@ -914,23 +889,43 @@ for the API.
           }
         },
         {
-          "type": "object",
-          "required": ["type", "datum"],
-          "properties": {
-            "type": {
-              "const": "datum"
-            },
-            "datum": {},
-            "offset": {
-              "$ref": "#/$defs/Number",
-              "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
-            }
-          }
+          "$ref": "#/$defs/DatumValue"
         },
         {
           "$ref": "#/$defs/BridgeLambdaSentinel"
         }
       ]
+    },
+    "DatumValue": {
+      "description": "A data value, emitted by datum(v): it maps through the scale of the slot it is in. A channel value, a cut slice weight, or a Constraint.position coordinate.",
+      "type": "object",
+      "required": ["type", "datum"],
+      "properties": {
+        "type": {
+          "const": "datum"
+        },
+        "datum": {},
+        "offset": {
+          "$ref": "#/$defs/Number",
+          "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
+        },
+        "colorOps": {
+          "type": "array",
+          "description": "Color transforms applied in order after the datum maps through its color scale (datum(v).lighten(t)).",
+          "items": {
+            "type": "object",
+            "required": ["op", "amount"],
+            "properties": {
+              "op": {
+                "enum": ["lighten", "darken"]
+              },
+              "amount": {
+                "$ref": "#/$defs/Number"
+              }
+            }
+          }
+        }
+      }
     },
     "BridgeLambdaSentinel": {
       "description": "Python-bridge handle for a Python function: JS calls it through the bridge by this lambda id.",
@@ -1116,7 +1111,7 @@ for the API.
         "spacing": {
           "anyOf": [
             {
-              "$ref": "#/$defs/Number"
+              "type": "number"
             },
             {
               "$ref": "#/$defs/Length"
@@ -1842,7 +1837,7 @@ for the API.
     "AlignConstraint": {
       "description": "Align the operands on one or both axes. At least one of `x`, `y` is required.",
       "type": "object",
-      "required": ["type", "refs"],
+      "required": ["type", "refs", "options"],
       "properties": {
         "type": {
           "const": "align"
@@ -1878,7 +1873,15 @@ for the API.
               ],
               "description": "How the operands line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every operand, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per operand."
             }
-          }
+          },
+          "anyOf": [
+            {
+              "required": ["x"]
+            },
+            {
+              "required": ["y"]
+            }
+          ]
         },
         "refs": {
           "type": "array",
@@ -1898,7 +1901,6 @@ for the API.
         },
         "options": {
           "type": "object",
-          "required": ["dir"],
           "properties": {
             "dir": {
               "enum": ["x", "y"],
@@ -1907,7 +1909,7 @@ for the API.
             "spacing": {
               "anyOf": [
                 {
-                  "$ref": "#/$defs/Number"
+                  "type": "number"
                 },
                 {
                   "$ref": "#/$defs/Length"
@@ -1929,7 +1931,8 @@ for the API.
               "description": "Stack semantics: the operands are glued together and their sizes sum; spacing is 0.",
               "default": false
             }
-          }
+          },
+          "required": ["dir"]
         },
         "refs": {
           "type": "array",
@@ -1942,7 +1945,7 @@ for the API.
     "PositionConstraint": {
       "description": "Place the operands at an x and/or y coordinate. At least one of `x`, `y` is required.",
       "type": "object",
-      "required": ["type", "refs"],
+      "required": ["type", "refs", "options"],
       "properties": {
         "type": {
           "const": "position"
@@ -1951,9 +1954,87 @@ for the API.
           "type": "object",
           "properties": {
             "x": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/DatumValue"
+                    }
+                  ]
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
               "description": "A pixel or `datum(v)` coordinate on x, or an interval `[lo, hi]` of them."
             },
             "y": {
+              "anyOf": [
+                {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Number"
+                    },
+                    {
+                      "$ref": "#/$defs/DatumValue"
+                    }
+                  ]
+                },
+                {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "prefixItems": [
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    },
+                    {
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/Number"
+                        },
+                        {
+                          "$ref": "#/$defs/DatumValue"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ],
               "description": "A pixel or `datum(v)` coordinate on y, or an interval `[lo, hi]` of them."
             },
             "anchor": {
@@ -1961,7 +2042,15 @@ for the API.
               "description": "Which point of the operand lands on a point coordinate.",
               "default": "middle"
             }
-          }
+          },
+          "anyOf": [
+            {
+              "required": ["x"]
+            },
+            {
+              "required": ["y"]
+            }
+          ]
         },
         "refs": {
           "type": "array",
@@ -1974,7 +2063,7 @@ for the API.
     "NestConstraint": {
       "description": "Nest the inner operand in the outer one (`refs: [outer, inner]`) with padding on each given axis. At least one of `x`, `y` is required.",
       "type": "object",
-      "required": ["type", "refs"],
+      "required": ["type", "refs", "options"],
       "properties": {
         "type": {
           "const": "nest"
@@ -1990,7 +2079,15 @@ for the API.
               "$ref": "#/$defs/Number",
               "description": "Padding on y, in pixels."
             }
-          }
+          },
+          "anyOf": [
+            {
+              "required": ["x"]
+            },
+            {
+              "required": ["y"]
+            }
+          ]
         },
         "refs": {
           "type": "array",

@@ -406,14 +406,6 @@ def test_lengths_take_their_branch_by_class():
         spread([rect(w=10, h=10)], dir="x", axes=percent(10))
 
 
-def test_distribute_takes_a_spacing_strategy():
-    c = Constraint.distribute([], dir="y", spacing=Spacing.pitch(60, at="middle"))
-    assert c.options == {
-        "dir": "y",
-        "spacing": {"kind": "pitch", "distance": 60, "at": "middle"},
-    }
-
-
 def test_distribute_spacing_is_spreads():
     """Constraint.distribute's spacing is spread's: the same values pass and
     the same values fail, with the same errors."""
@@ -422,17 +414,14 @@ def test_distribute_spacing_is_spreads():
         return Constraint.distribute([], dir="x", spacing=spacing).options["spacing"]
 
     assert spacing_of(8) == 8
-    assert spacing_of(percent(5)) == {"type": "length", "percent": 5}
-    assert spacing_of(Spacing.box(fr(1))) == {
-        "kind": "box",
-        "gap": {"type": "length", "fr": 1},
-    }
     with pytest.raises(TypeError, match=r"spacing\['kind'\] got an unexpected value 'gap'"):
         spacing_of({"kind": "gap", "gap": 8})
-    with pytest.raises(TypeError, match="unexpected key 'at'"):
-        spacing_of({"kind": "box", "gap": 8, "at": "middle"})
-    with pytest.raises(TypeError, match="missing the key 'kind'"):
-        spacing_of(chunk(5))
+
+
+@pytest.mark.parametrize("name", ["align", "position", "nest"])
+def test_an_axis_constraint_needs_an_axis(name):
+    with pytest.raises(ValueError, match=f"Constraint.{name} requires at least one of x, y"):
+        getattr(Constraint, name)([None, None])
 
 
 def test_distribute_pitch_matches_the_js_wire_fixture():

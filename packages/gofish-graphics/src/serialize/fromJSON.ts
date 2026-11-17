@@ -128,10 +128,25 @@ export function constraintFromIR(
   const operands = c.refs.map((r) =>
     relateOperandFor(r.scope, r.selection, ctx)
   );
-  if (c.type === "zAbove" || c.type === "zBelow") {
-    return (Constraint as any)[c.type](...operands);
+  // Each case passes the wire options to the factory as they are, so an
+  // option the factory's type renames or retypes is a compile error here.
+  switch (c.type) {
+    case "align":
+      return Constraint.align(c.options, operands);
+    case "distribute":
+      return Constraint.distribute(c.options, operands);
+    case "position":
+      return Constraint.position(c.options, operands);
+    case "nest":
+      return Constraint.nest(
+        c.options,
+        operands as [RelateOperand, RelateOperand]
+      );
+    case "zAbove":
+      return Constraint.zAbove(operands[0], operands[1]);
+    case "zBelow":
+      return Constraint.zBelow(operands[0], operands[1]);
   }
-  return (Constraint as any)[c.type](c.options, operands);
 }
 
 // ---------------------------------------------------------------------------
