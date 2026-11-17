@@ -400,7 +400,18 @@ export function buildPlan(
             Pwl.add(b.hi, sub(to.ascent, f.box.ascent)),
             sub(sub(to.descent, f.box.descent), b.lo),
           ];
-    const [wHi, wLo] = reach(f?.whole);
+    // A child with no claim of its own fills the box the plan gives it (a
+    // cell's child fills its cell): its claim is that box, reaching past it
+    // by its outline, as a leaf's does (#1372).
+    const c = node.children[i];
+    const o =
+      !preset && f === undefined && c instanceof GoFishNode
+        ? c.claimedOverhang
+        : 0;
+    const [wHi, wLo] =
+      o === 0
+        ? reach(f?.whole)
+        : [Pwl.addConstant(b.hi, o), Pwl.addConstant(Pwl.negate(b.lo), o)];
     whole[0].push(wHi);
     whole[1].push(wLo);
     roomOn(whole);

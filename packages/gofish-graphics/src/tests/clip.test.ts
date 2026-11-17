@@ -151,6 +151,37 @@ console.log("# intersect with paint");
   );
 }
 {
+  // The stroke is drawn centered on the result's outline, so half of it is
+  // past the 50 px lens on each side: the canvas holds it (#1372).
+  const warned: string[] = [];
+  const warn = console.warn;
+  console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+  const stroked = (size?: { w: number; h: number }) =>
+    intersect({ fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, [
+      rect({ x: 0, y: 0, w: 100, h: 100 }),
+      rect({ x: 50, y: 50, w: 100, h: 100 }),
+    ]).toDisplayList(size);
+  const unsized = (await stroked()).viewport;
+  const fitted = await stroked({ w: 100, h: 100 });
+  console.warn = warn;
+  check(
+    "a painted intersect's stroke takes room: 50 px lens, 52 px canvas",
+    unsized.w === 52 && unsized.h === 52,
+    unsized
+  );
+  check(
+    "a painted intersect's stroke is not drawn past a given canvas",
+    warned.length === 0,
+    warned
+  );
+  const lens = items(fitted).find((it) => it.kind === "path");
+  check(
+    "the lens sits 1 px in from the canvas edge",
+    lens !== undefined && /^M\s*1[ ,]/.test(lens.d ?? ""),
+    lens?.d
+  );
+}
+{
   const dl = await intersect({ fill: "#467DA8" }, [
     image({ href: "x.png", x: 0, y: 0, w: 100, h: 100 }),
     rect({ x: 50, y: 0, w: 100, h: 100 }),

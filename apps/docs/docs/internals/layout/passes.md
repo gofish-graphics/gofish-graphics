@@ -1095,9 +1095,13 @@ fixed-size nodes report their size).
   fits its content inside its box and widens the box it measures by the
   largest outline inside it (`outline` in `coord.tsx`), so its box holds its
   outlines. A space that frames its own window (geo) clips them, as it clips
-  the rest of what its window leaves out. A shape that fills the room it is
-  given has no claim to widen, and its outline is centered on the room's
-  edge.
+  the rest of what its window leaves out. A painted region composite
+  (`intersect` and the rest, with a stroke) strokes its own outline, so it
+  widens its claim the same way. A shape that fills a cell has no claim of
+  its own: the plan reads its claim as the cell widened by its outline
+  (`buildPlan`), so the outlines of the outer cells stay on the canvas. A
+  shape that fills the canvas has no claim to widen, and its outline is
+  centered on the canvas edge.
 
 At the root, `layout()` measures what the root draws past its box after its
 one layout (`drawnOverflow`): its ink and its outlines. A node's box holds
