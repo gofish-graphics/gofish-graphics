@@ -145,8 +145,11 @@
                 <td>circle packing, the greedy rule</td>
                 <td><code>measure</code>, then <code>.px</code></td>
                 <td>
-                  Pixels only. To take part in fitting it has to say how it
-                  scales, which is not designed here (#967).
+                  Pixels only, unless it scales evenly. A packing of circles
+                  whose radii all grow with the scale grows with it too, so it
+                  can run once at scale 1 and report a length. Pixel parts (a
+                  gap, a pixel radius) break that, and #967 has the plan for
+                  them.
                 </td>
               </tr>
             </tbody>
