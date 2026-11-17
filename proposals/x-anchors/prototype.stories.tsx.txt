@@ -1,0 +1,173 @@
+import type { Meta, StoryObj } from "@storybook/html";
+import { initializeContainer } from "../helper";
+import {
+  chart,
+  circle,
+  group,
+  layer,
+  rect,
+  scatter,
+  text,
+} from "../../src/lib";
+
+const meta: Meta = {
+  title: "Proposals/XAnchors",
+};
+export default meta;
+
+// Each row places the same mark at the same value, 120, by a different key.
+// The red line is x = 120.
+export const AnchorGrid: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    const row = (i: number) => 10 + i * 44;
+    const caption = (i: number, s: string) =>
+      text({
+        x: 250,
+        y: row(i) + 10,
+        text: s,
+        fontSize: 12,
+        fontFamily: "monospace",
+        fill: "#333",
+      });
+    layer([
+      caption(0, "rect({ x: 120, w: 80 })"),
+      rect({ x: 120, y: row(0), w: 80, h: 28, fill: "#4a8fd1" }),
+      caption(1, "rect({ cx: 120, w: 80 })"),
+      rect({ cx: 120, y: row(1), w: 80, h: 28, fill: "#4a8fd1" }),
+      caption(2, "rect({ x2: 120, w: 80 })"),
+      rect({ x2: 120, y: row(2), w: 80, h: 28, fill: "#4a8fd1" }),
+      caption(3, "circle({ x: 120, r: 14 })"),
+      circle({ x: 120, y: row(3), r: 14, fill: "#e8a13c" }),
+      caption(4, "circle({ cx: 120, r: 14 })"),
+      circle({ cx: 120, y: row(4), r: 14, fill: "#e8a13c" }),
+      caption(5, "circle({ x2: 120, r: 14 })"),
+      circle({ x2: 120, y: row(5), r: 14, fill: "#e8a13c" }),
+      caption(6, 'text({ x: 120, text: "Label" })'),
+      text({ x: 120, y: row(6) + 6, text: "Label", fontSize: 20 }),
+      caption(7, 'text({ cx: 120, text: "Label" })'),
+      text({ cx: 120, y: row(7) + 6, text: "Label", fontSize: 20 }),
+      caption(8, 'text({ x2: 120, text: "Label" })'),
+      text({ x2: 120, y: row(8) + 6, text: "Label", fontSize: 20 }),
+      rect({ x: 120, y: 0, w: 1, h: 9 * 44 + 4, fill: "crimson" }),
+    ]).render(container, {});
+    return container;
+  },
+};
+
+const points = [
+  { a: 10, b: 1 },
+  { a: 20, b: 2 },
+  { a: 30, b: 3 },
+  { a: 40, b: 4 },
+  { a: 50, b: 5 },
+];
+
+const dots = () =>
+  chart(points)
+    .flow(scatter({ x: "a", y: "b" }))
+    .mark(circle({ r: 2.5, fill: "black" }));
+
+// Today's scatter: a bare `x` is the center of each mark.
+export const ScatterCenter: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(points, { w: 360, h: 240 })
+      .flow(scatter({ x: "a", y: "b" }))
+      .mark(rect({ w: 28, h: 28, fill: "#4a8fd1", opacity: 0.45 }))
+      .layer(dots())
+      .render(container);
+    return container;
+  },
+};
+
+// Each mark's start edges on the data values, by the scatter's own `dims`.
+// Today this throws: a lone `min` is one end of a span, and a span needs both.
+export const ScatterStartDims: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(points, { w: 360, h: 240 })
+      .flow(scatter({ dims: { x: { min: "a" }, y: { min: "b" } } }))
+      .mark(rect({ w: 28, h: 28, fill: "#4a8fd1", opacity: 0.45 }))
+      .layer(dots())
+      .render(container);
+    return container;
+  },
+};
+
+// A zero-length span: both ends on the data value.
+export const ScatterStartSpan: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(points, { w: 360, h: 240 })
+      .flow(
+        scatter({
+          dims: { x: { min: "a", max: "a" }, y: { min: "b", max: "b" } },
+        })
+      )
+      .mark(rect({ w: 28, h: 28, fill: "#4a8fd1", opacity: 0.45 }))
+      .layer(dots())
+      .render(container);
+    return container;
+  },
+};
+
+// Each mark's start edges on the data values. The mark places itself: its
+// own `x` and `y` read the data, and a mark's bare `x` is its start edge.
+export const ScatterStart: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(points, { w: 360, h: 240 })
+      .flow(group({ by: "a" }))
+      .mark(
+        rect({ x: "a", y: "b", w: 28, h: 28, fill: "#4a8fd1", opacity: 0.45 })
+      )
+      .layer(dots())
+      .render(container);
+    return container;
+  },
+};
+
+// The explicit nested spelling of ScatterCenter.
+export const ScatterCenterNested: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(points, { w: 360, h: 240 })
+      .flow(scatter({ dims: { x: { center: "a" }, y: { center: "b" } } }))
+      .mark(rect({ w: 28, h: 28, fill: "#4a8fd1", opacity: 0.45 }))
+      .layer(dots())
+      .render(container);
+    return container;
+  },
+};
+
+const tasks = [
+  { task: "Design", row: 5, start: 0, end: 4, due: 8 },
+  { task: "Build", row: 4, start: 3, end: 10, due: 14 },
+  { task: "Test", row: 3, start: 8, end: 13, due: 17 },
+  { task: "Docs", row: 2, start: 10, end: 15, due: 19 },
+  { task: "Ship", row: 1, start: 15, end: 17, due: 21 },
+];
+
+// Three layers on one x scale: a bar spans start..end, a milestone is
+// centered on `due`, and a label starts where the bar ends.
+export const GanttAnchors: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+    chart(tasks, { w: 420, h: 180, axes: { x: { title: "day" }, y: false } })
+      .flow(scatter({ by: "task", x: "start", x2: "end", y: "row" }))
+      .mark(rect({ h: 18, fill: "#4a8fd1" }))
+      .layer(
+        chart(tasks)
+          .flow(scatter({ by: "task", x: "due", y: "row" }))
+          .mark(circle({ r: 6, fill: "#e8a13c" }))
+      )
+      .layer(
+        chart(tasks)
+          .flow(group({ by: "task" }))
+          .mark(text({ x: "end", cy: "row", text: "task", fontSize: 12 }))
+      )
+      .render(container);
+    return container;
+  },
+};

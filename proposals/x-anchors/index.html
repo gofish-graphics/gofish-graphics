@@ -1,0 +1,1259 @@
+<title>What x means</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap"
+/>
+<style>
+  /* Layout: one reading column of example cards (picture, proposed code, current code), four tabs, rules on top, appendix material last. */
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --ink: #1b2330;
+    --muted: #5b6676;
+    --line: #d9dee6;
+    --start: #2f6fb7;
+    --center: #b7791f;
+    --end: #a23b6a;
+    --plate: #ffffff;
+    --code-bg: #f0f2f6;
+    --add: #e3f1e6;
+    --del: #f8e6e6;
+    --fork: #fff7e0;
+    --fork-line: #d9a514;
+    --tok-kw: #8a3ea8;
+    --tok-str: #1c7a4a;
+    --tok-num: #b0521a;
+    --tok-com: #7a8494;
+    --tok-fn: #2f6fb7;
+    --display: "Space Grotesk", "IBM Plex Sans", system-ui, sans-serif;
+    --body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12161c;
+      --surface: #1a2029;
+      --ink: #e6eaf0;
+      --muted: #9aa5b5;
+      --line: #2e3744;
+      --start: #6aa7e8;
+      --center: #e0a84a;
+      --end: #e07fa9;
+      --plate: #ffffff;
+      --code-bg: #10141a;
+      --add: #173222;
+      --del: #3a1d20;
+      --fork: #2c2612;
+      --fork-line: #d9a514;
+      --tok-kw: #c792ea;
+      --tok-str: #8fd6a4;
+      --tok-num: #f0a36b;
+      --tok-com: #7f8a9b;
+      --tok-fn: #6aa7e8;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #12161c;
+    --surface: #1a2029;
+    --ink: #e6eaf0;
+    --muted: #9aa5b5;
+    --line: #2e3744;
+    --start: #6aa7e8;
+    --center: #e0a84a;
+    --end: #e07fa9;
+    --plate: #ffffff;
+    --code-bg: #10141a;
+    --add: #173222;
+    --del: #3a1d20;
+    --fork: #2c2612;
+    --fork-line: #d9a514;
+    --tok-kw: #c792ea;
+    --tok-str: #8fd6a4;
+    --tok-num: #f0a36b;
+    --tok-com: #7f8a9b;
+    --tok-fn: #6aa7e8;
+    color-scheme: dark;
+  }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 16px;
+    line-height: 1.55;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 28px 64px;
+  }
+  .wrap {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  h1 {
+    font-family: var(--display);
+    font-size: 2rem;
+    line-height: 1.15;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--display);
+    font-size: 1.3rem;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    margin: 0;
+  }
+  p {
+    margin: 0;
+    max-width: 68ch;
+  }
+  .lede {
+    color: var(--muted);
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+  }
+  .hljs-keyword,
+  .hljs-literal,
+  .hljs-built_in {
+    color: var(--tok-kw);
+  }
+  .hljs-string {
+    color: var(--tok-str);
+  }
+  .hljs-number {
+    color: var(--tok-num);
+  }
+  .hljs-comment {
+    color: var(--tok-com);
+  }
+  .hljs-title,
+  .hljs-attr {
+    color: var(--tok-fn);
+  }
+  nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    border-bottom: 1px solid var(--line);
+  }
+  nav a {
+    font-family: var(--display);
+    font-size: 0.95rem;
+    color: var(--muted);
+    text-decoration: none;
+    padding: 8px 12px;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+  }
+  nav a[aria-current="true"] {
+    color: var(--ink);
+    border-bottom-color: var(--start);
+  }
+  nav a:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--start);
+    outline-offset: 2px;
+  }
+  section.tab {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .rules {
+    display: grid;
+    gap: 10px;
+    padding: 0;
+    margin: 0;
+    list-style: none;
+  }
+  .rules li {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .k-start {
+    color: var(--start);
+    font-weight: 600;
+  }
+  .k-center {
+    color: var(--center);
+    font-weight: 600;
+  }
+  .k-end {
+    color: var(--end);
+    font-weight: 600;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+  }
+  .plate {
+    background: var(--plate);
+    border-radius: 6px;
+    padding: 10px;
+    overflow-x: auto;
+    text-align: center;
+  }
+  .plate img {
+    max-width: 100%;
+    height: auto;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 12px;
+  }
+  .pair > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+  }
+  .cap {
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 600;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.93rem;
+  }
+  .fork {
+    background: var(--fork);
+    border-left: 3px solid var(--fork-line);
+    border-radius: 6px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  mark.a {
+    background: var(--add);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 3px;
+  }
+  mark.d {
+    background: var(--del);
+    color: inherit;
+    padding: 0 2px;
+    border-radius: 3px;
+  }
+  .tablewrap {
+    overflow-x: auto;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.92rem;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-family: var(--display);
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 12px;
+  }
+  .grid .card {
+    padding: 14px;
+    gap: 6px;
+  }
+  .grid .card p {
+    font-size: 0.92rem;
+  }
+  details {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  details > summary {
+    cursor: pointer;
+    font-family: var(--display);
+    font-weight: 600;
+  }
+  details > *:not(summary) {
+    margin-top: 10px;
+  }
+  svg text {
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+</style>
+
+<div class="wrap">
+  <header style="display: flex; flex-direction: column; gap: 10px">
+    <h1>What <code>x</code> means</h1>
+    <p class="lede">
+      PR #1378 renames <code>scatter</code>'s <code>xMin</code>/<code
+        >xMax</code
+      >
+      to <code>x</code>/<code>x2</code>. That made one thing visible: in
+      <code>scatter</code>, a bare <code>x</code> is the center of a mark, and
+      on a mark it is the start edge. This page proposes one rule for both.
+    </p>
+    <div class="plate" style="max-width: 520px">
+      <svg
+        viewBox="0 0 480 120"
+        role="img"
+        aria-label="A box with its start edge labeled x, its center labeled cx and its end edge labeled x2"
+        style="max-width: 100%"
+      >
+        <rect
+          x="120"
+          y="44"
+          width="240"
+          height="40"
+          fill="#dfe7f2"
+          stroke="#8fa3bd"
+        />
+        <line
+          x1="120"
+          y1="30"
+          x2="120"
+          y2="98"
+          stroke="#2f6fb7"
+          stroke-width="2"
+        />
+        <line
+          x1="240"
+          y1="30"
+          x2="240"
+          y2="98"
+          stroke="#b7791f"
+          stroke-width="2"
+        />
+        <line
+          x1="360"
+          y1="30"
+          x2="360"
+          y2="98"
+          stroke="#a23b6a"
+          stroke-width="2"
+        />
+        <text x="120" y="22" text-anchor="middle" fill="#2f6fb7">x</text>
+        <text x="240" y="22" text-anchor="middle" fill="#b7791f">cx</text>
+        <text x="360" y="22" text-anchor="middle" fill="#a23b6a">x2</text>
+        <text x="120" y="114" text-anchor="middle" fill="#2f6fb7">start</text>
+        <text x="240" y="114" text-anchor="middle" fill="#b7791f">center</text>
+        <text x="360" y="114" text-anchor="middle" fill="#a23b6a">end</text>
+        <text x="240" y="69" text-anchor="middle" fill="#40506a">w (size)</text>
+      </svg>
+    </div>
+  </header>
+
+  <nav aria-label="Sections">
+    <a href="#proposal" data-tab="proposal">Proposal</a>
+    <a href="#spellings" data-tab="spellings">Other spellings</a>
+    <a href="#precedent" data-tab="precedent">Precedent</a>
+    <a href="#audit" data-tab="audit">What changes</a>
+  </nav>
+
+  <!-- ============================== PROPOSAL ============================== -->
+  <section class="tab" id="tab-proposal">
+    <ul class="rules">
+      <li>
+        <strong>One rule, everywhere.</strong> <code>x</code> is the
+        <span class="k-start">start</span> edge, <code>cx</code> is the
+        <span class="k-center">center</span>, <code>x2</code> is the
+        <span class="k-end">end</span> edge, and <code>w</code> is the size. The
+        same holds for <code>y</code>, <code>cy</code>, <code>y2</code>,
+        <code>h</code>. Marks already work this way.
+      </li>
+      <li>
+        <strong
+          ><code>scatter</code> reads the same three keys as a mark.</strong
+        >
+        A point is <code>scatter({ cx, cy })</code>. A span is
+        <code>scatter({ x, x2 })</code>, as in #1378. A bare <code>x</code> no
+        longer changes meaning when <code>x2</code> appears.
+      </li>
+      <li>
+        <strong
+          >One vocabulary: <code>start</code>, <code>center</code>,
+          <code>end</code>.</strong
+        >
+        You approved this today. It replaces <code>min</code>/<code>max</code>
+        in the <code>dims</code> object and <code>"middle"</code> in alignment.
+        The flat keys are short forms of it: <code>x</code> is
+        <code>dims.x.start</code>, <code>cx</code> is
+        <code>dims.x.center</code>, <code>x2</code> is <code>dims.x.end</code>.
+      </li>
+    </ul>
+    <p class="note">
+      "Start" is where the axis starts, so <code>x</code> is the left edge on a
+      left-to-right axis and <code>y</code> is the top edge where y reads
+      top-down and the bottom edge where it reads upward. Every picture below is
+      a real GoFish render at the #1378 head.
+    </p>
+
+    <div class="card">
+      <h2>1. Marks already follow the rule</h2>
+      <div class="plate">
+        <img
+          src="img/anchor-grid.png"
+          alt="Nine rows. A rect, a circle and a text label are each placed at 120 by x, by cx and by x2. With x the start edge sits on the red line at 120. With cx the center sits on it. With x2 the mark is drawn at 0, far from the line."
+          width="503"
+          height="424"
+        />
+      </div>
+      <p>
+        The red line is at 120. <code>x</code> puts the start edge on it and
+        <code>cx</code> puts the center on it, for a rect, a circle and a text
+        alike. A circle's <code>x</code> is its left edge, not its center.
+      </p>
+      <p>
+        The <code>x2</code> rows are a bug today: a lone <code>x2</code> is
+        ignored and the mark draws at 0, with no error. This is issue #1178 ("a
+        lone x2/y2 is silently ignored"). Under the rule the mark ends at 120.
+      </p>
+      <div class="pair">
+        <div>
+          <span class="cap">Proposed, same as today</span>
+          <pre><code class="language-js">rect({ x: 120, w: 80 }); // start edge at 120
+rect({ cx: 120, w: 80 }); // center at 120
+rect({ x2: 120, w: 80 }); // end edge at 120
+circle({ cx: 120, r: 14 });
+text({ x: 120, text: "Label" });</code></pre>
+        </div>
+        <div>
+          <span class="cap">Python</span>
+          <pre><code class="language-python">rect(x=120, w=80)
+rect(cx=120, w=80)
+rect(x2=120, w=80)
+circle(cx=120, r=14)
+text(text="Label", x=120)</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. A scatterplot is <code>scatter({ cx, cy })</code></h2>
+      <div class="plate">
+        <img
+          src="img/scatter-center.png"
+          alt="A scatterplot of five points. Each translucent square is centered on its black data dot."
+          width="431"
+          height="308"
+        />
+      </div>
+      <p>
+        Each square is centered on its data point (the black dot). Today that is
+        what a bare <code>x</code> means inside <code>scatter</code>. Under the
+        rule it is spelled <code>cx</code>, the same word a mark uses for the
+        same thing.
+      </p>
+      <div class="pair">
+        <div>
+          <span class="cap">Proposed</span>
+          <pre><code class="language-js">chart(points, { w: 360, h: 240 })
+  .flow(scatter({ cx: "a", cy: "b" }))
+  .mark(rect({ w: 28, h: 28 }))
+  .render(container);</code></pre>
+          <pre><code class="language-python">chart(points, w=360, h=240).flow(
+    scatter(cx="a", cy="b")
+).mark(rect(w=28, h=28))</code></pre>
+        </div>
+        <div>
+          <span class="cap">Today</span>
+          <pre><code class="language-js">chart(points, { w: 360, h: 240 })
+  .flow(scatter({ x: "a", y: "b" }))
+  .mark(rect({ w: 28, h: 28 }))
+  .render(container);</code></pre>
+          <pre><code class="language-python">chart(points, w=360, h=240).flow(
+    scatter(x="a", y="b")
+).mark(rect(w=28, h=28))</code></pre>
+        </div>
+      </div>
+
+      <div class="fork">
+        <h3>
+          The one real fork: what <code>scatter({ x: "a", y: "b" })</code> draws
+          afterwards
+        </h3>
+        <div class="plate">
+          <img
+            src="img/scatter-start.png"
+            alt="The same scatterplot. Each square's lower left corner sits on its data dot, so every square is shifted up and to the right of its point."
+            width="431"
+            height="308"
+          />
+        </div>
+        <p>
+          <strong>My pick: it draws this.</strong> The start edges sit on the
+          data points, because <code>x</code> is the start edge everywhere.
+          Today this picture can only be made with a mark's own
+          <code>x</code> inside <code>group</code>. In <code>scatter</code>, a
+          lone <code>dims: { x: { min: "a" } }</code> throws "a span needs both
+          ends", so <code>scatter</code> cannot place a child by its edge at
+          all.
+        </p>
+        <p>
+          The cost is real. Every other charting library writes a scatterplot
+          with <code>x</code> and <code>y</code>, so a newcomer who writes
+          <code>scatter({ x, y })</code> gets marks shifted by half their size,
+          with no error. With 5 px dots that shift is easy to miss.
+        </p>
+        <p>
+          <strong
+            >The alternative: <code>scatter</code> keeps <code>x</code> as the
+            center.</strong
+          >
+          Then <code>x</code> stays the center when alone and the start edge
+          when <code>x2</code> is given, which is the switch #1378 has now. The
+          scatterplot keeps its familiar spelling, and the two meanings of
+          <code>x</code> stay. I would change my pick if the familiar
+          <code>scatter(x=, y=)</code> matters more to you for the Python
+          audience than one rule does.
+        </p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>3. A hard example: bars, milestones and labels on one axis</h2>
+      <div class="plate">
+        <img
+          src="img/gantt-anchors.png"
+          alt="A Gantt chart of five tasks. Each task has a blue bar from its start day to its end day, an orange dot centered on its due day, and its name starting where the bar ends."
+          width="453"
+          height="250"
+        />
+      </div>
+      <p>
+        Three layers use three different anchors. The bar spans
+        <code>start</code> to <code>end</code>. The dot is centered on
+        <code>due</code>. The label starts where the bar ends. Under the rule,
+        each layer is a <code>scatter</code> and each anchor is one key.
+      </p>
+      <div class="pair">
+        <div>
+          <span class="cap">Proposed</span>
+          <pre><code class="language-js">chart(tasks, { w: 420, h: 180 })
+  .flow(
+    scatter({ by: "task", x: "start", x2: "end", cy: "row" })
+  )
+  .mark(rect({ h: 18 }))
+  .layer(
+    chart(tasks)
+      .flow(scatter({ by: "task", cx: "due", cy: "row" }))
+      .mark(circle({ r: 6 }))
+  )
+  .layer(
+    chart(tasks)
+      .flow(scatter({ by: "task", x: "end", cy: "row" }))
+      .mark(text({ text: "task" }))
+  )
+  .render(container);</code></pre>
+        </div>
+        <div>
+          <span class="cap">Today (how the picture above was drawn)</span>
+          <pre><code class="language-js">chart(tasks, { w: 420, h: 180 })
+  .flow(
+    scatter({ by: "task", x: "start", x2: "end", y: "row" })
+  )
+  .mark(rect({ h: 18 }))
+  .layer(
+    chart(tasks)
+      .flow(scatter({ by: "task", x: "due", y: "row" }))
+      .mark(circle({ r: 6 }))
+  )
+  .layer(
+    chart(tasks)
+      .flow(group({ by: "task" }))
+      .mark(text({ x: "end", cy: "row", text: "task" }))
+  )
+  .render(container);</code></pre>
+        </div>
+      </div>
+      <p>
+        Today's version shows the problem three ways. In the first
+        <code>scatter</code>, <code>x</code> is a start edge and
+        <code>y</code> is a center, in the same call. In the second,
+        <code>x</code> is a center. The label cannot be a
+        <code>scatter</code> at all, so it switches to <code>group</code> and a
+        mark's own <code>x</code> and <code>cy</code>. Fills and axis options
+        are left out of both listings.
+      </p>
+      <pre><code class="language-python">chart(tasks, w=420, h=180).flow(
+    scatter(by="task", x="start", x2="end", cy="row")
+).mark(rect(h=18)).layer(
+    chart(tasks).flow(scatter(by="task", cx="due", cy="row")).mark(circle(r=6))
+).layer(
+    chart(tasks).flow(scatter(by="task", x="end", cy="row")).mark(text(text="task"))
+)</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>4. Spans stay as #1378 has them</h2>
+      <div class="plate">
+        <img
+          src="img/span-bars.png"
+          alt="Quarterly bars on a time axis, each spanning from the start of its quarter to the end."
+          width="650"
+          height="253"
+        />
+      </div>
+      <p>
+        <code>x</code> and <code>x2</code> are the two ends of a span, on
+        <code>scatter</code> as on <code>rect</code>. This is the existing
+        <code>QuarterlyBars</code> story, unchanged.
+      </p>
+      <pre><code class="language-js">scatter({ by: "start", x: "start", x2: "end" });</code></pre>
+    </div>
+
+    <div class="card">
+      <h2>
+        5. The words: <code>start</code>, <code>center</code>, <code>end</code>
+      </h2>
+      <p>
+        The two word sets are exact synonyms today. One table in the layout code
+        maps <code>start</code> to <code>min</code>, <code>middle</code> to
+        <code>center</code> and <code>end</code> to <code>max</code>. With one
+        set, the long form and the alignment keywords read the same.
+      </p>
+      <div class="pair">
+        <div>
+          <span class="cap">Proposed</span>
+          <pre><code class="language-js">rect({ dims: { theta: { start: 0, end: 90 } } });
+circle({ dims: { r: { center: 40 } } });
+spread({ dir: "x", alignment: "center" }, [a, b]);
+Place.along({ at: "x-end" });</code></pre>
+        </div>
+        <div>
+          <span class="cap">Today</span>
+          <pre><code class="language-js">rect({ dims: { theta: { min: 0, max: 90 } } });
+circle({ dims: { r: { center: 40 } } });
+spread({ dir: "x", alignment: "middle" }, [a, b]);
+Place.along({ at: "x-max" });</code></pre>
+        </div>
+      </div>
+      <p class="note">
+        The full list of spellings that change is under "What changes".
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>What this means for #1378</h2>
+      <p>
+        #1378's <code>x</code>/<code>x2</code> span is the rule's spelling, so
+        that part stands. Both open questions in its description go away under
+        the rule:
+      </p>
+      <p>
+        <strong
+          >"A bare <code>x</code> and <code>{ center }</code> cannot be told
+          apart."</strong
+        >
+        They no longer share a slot. A bare <code>x</code> is the start and
+        <code>cx</code> is the center, so <code>{ center, end }</code> is a real
+        center and a real end, as it already is on a rect.
+      </p>
+      <p>
+        <strong>"The two ends infer differently."</strong> Only
+        <code>scatter</code>'s <code>x</code> accepts a category today, because
+        it doubles as the point. With <code>scatter</code> on the marks' table,
+        the three keys are one kind of channel.
+      </p>
+      <p>
+        I would add the <code>cx</code>/<code>cy</code> change to #1378 before
+        it merges, so the switching rule and its docs never ship. The vocabulary
+        rename is larger and independent, and I would do it as its own PR.
+        Nothing is implemented yet. I am waiting for your word on the fork in
+        example 2.
+      </p>
+    </div>
+
+    <details>
+      <summary>Why this rule</summary>
+      <p>
+        <strong>Marks lay out alike.</strong> The API design page already
+        settles that a mark's <code>y</code> is the edge of its box, for text as
+        for a rect (#681, where text <code>y</code> was briefly the baseline and
+        labels moved onto dots). So "is <code>x</code> the center or the edge"
+        is decided for marks. <code>scatter</code> is the exception.
+      </p>
+      <p>
+        <strong>No rule a user has to model.</strong> "<code>x</code> is the
+        center unless <code>x2</code> is present" is a conditional inside the
+        engine. The user cannot see it in their code or write the other case.
+      </p>
+      <p>
+        <strong>One table instead of two.</strong> The code has a mark table
+        (bare value is the start) and a scatter table (bare value is the center,
+        rewritten to the start when an end is present). Under the rule the
+        scatter table is deleted.
+      </p>
+      <p>
+        <strong>It adds reach.</strong> <code>scatter</code> can then place a
+        child by its start or end edge, which it cannot do today. Example 3's
+        label needs that.
+      </p>
+      <p>
+        <strong>Flat keys stay as short forms.</strong> <code>x</code>,
+        <code>cx</code>, <code>x2</code> were approved as the top-level keys in
+        #838, and the nested <code>dims</code> object is the long form. No story
+        or docs page uses <code>dims</code> with <code>center</code>,
+        <code>min</code> or <code>max</code> today. People write the short keys.
+      </p>
+    </details>
+  </section>
+
+  <!-- ============================== SPELLINGS ============================== -->
+  <section class="tab" id="tab-spellings" hidden>
+    <p>
+      Every spelling you listed, written out on the three lines of the Gantt
+      example (the bar, the milestone, the label) and on a plain rect. The
+      pictures do not change, only the words.
+    </p>
+
+    <div class="card">
+      <h2><code>x</code> / <code>cx</code> / <code>x2</code> (proposed)</h2>
+      <pre><code class="language-js">scatter({ by: "task", x: "start", x2: "end", cy: "row" });
+scatter({ by: "task", cx: "due", cy: "row" });
+scatter({ by: "task", x: "end", cy: "row" });
+rect({ x: 0, y: 0, w: 90, h: 40 });</code></pre>
+      <pre><code class="language-python">scatter(by="task", x="start", x2="end", cy="row")
+scatter(by="task", cx="due", cy="row")
+rect(x=0, y=0, w=90, h=40)</code></pre>
+      <p>
+        Short, and already what marks use. Vega's rect takes exactly this set
+        (<code>x</code>, <code>xc</code>, <code>x2</code>, <code>width</code>),
+        and SVG uses the same letters. The weak point is that
+        <code>x2</code> does not say "end" and the two affixes do not match each
+        other.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2><code>xStart</code> / <code>xCenter</code> / <code>xEnd</code></h2>
+      <pre><code class="language-js">scatter({ by: "task", xStart: "start", xEnd: "end", yCenter: "row" });
+scatter({ by: "task", xCenter: "due", yCenter: "row" });
+scatter({ by: "task", xStart: "end", yCenter: "row" });
+rect({ xStart: 0, yStart: 0, w: 90, h: 40 });</code></pre>
+      <pre><code class="language-python">scatter(by="task", x_start="start", x_end="end", y_center="row")
+scatter(by="task", x_center="due", y_center="row")
+rect(x_start=0, y_start=0, w=90, h=40)</code></pre>
+      <p>
+        Nothing is unmarked, so nothing is ambiguous. But three options that
+        share a prefix are a hierarchy written into names, which the "nest a
+        role instead of prefixing its name" rule turns into the next form. It is
+        also long for the most common option in the library.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>
+        <code>"x-start"</code> / <code>"x-center"</code> / <code>"x-end"</code>
+      </h2>
+      <pre><code class="language-js">scatter({ by: "task", "x-start": "start", "x-end": "end", "y-center": "row" });
+rect({ "x-start": 0, "y-start": 0, w: 90, h: 40 });</code></pre>
+      <pre><code class="language-python">scatter(by="task", **{"x-start": "start", "x-end": "end", "y-center": "row"})</code></pre>
+      <p>
+        A hyphenated key needs quotes in JavaScript and cannot be a Python
+        keyword argument. Hyphens are fine where the name is a value, as in the
+        label position <code>"x-end"</code>, and not as an option key.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2><code>x: { start, center, end }</code></h2>
+      <pre><code class="language-js">scatter({ by: "task", x: { start: "start", end: "end" }, y: { center: "row" } });
+scatter({ by: "task", x: { center: "due" }, y: { center: "row" } });
+scatter({ by: "task", x: { start: "end" }, y: { center: "row" } });
+rect({ x: { start: 0 }, y: { start: 0 }, w: 90, h: 40 });</code></pre>
+      <pre><code class="language-python">scatter(by="task", x={"start": "start", "end": "end"}, y={"center": "row"})
+scatter(by="task", x={"center": "due"}, y={"center": "row"})</code></pre>
+      <p>
+        This is the regular form, and GoFish has it today as
+        <code>dims: { x: { ... } }</code>. As the only form it is heavy: a
+        centered circle is
+        <code>circle({ x: { center: 120 }, y: { center: 80 }, r: 14 })</code>,
+        and Python needs a dict inside a keyword argument. Allowing a bare
+        <code>x: 0</code> as a short form brings back the question this page
+        started with, so it still needs the rule.
+      </p>
+      <p>
+        The proposal keeps this form under <code>dims</code>, with the new
+        words, and keeps <code>x</code>, <code>cx</code>, <code>x2</code> as its
+        short forms.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>
+        The other meaning: <code>x</code> is the center, <code>x1</code>/<code
+          >x2</code
+        >
+        are the edges
+      </h2>
+      <pre><code class="language-js">scatter({ by: "task", x1: "start", x2: "end", y: "row" });
+scatter({ by: "task", x: "due", y: "row" });
+rect({ x1: 0, y1: 0, w: 90, h: 40 });</code></pre>
+      <p>
+        This is the rule charting grammars use (ggplot2's <code>x</code> with
+        <code>xmin</code>/<code>xmax</code>, Observable Plot's
+        <code>x</code> with <code>x1</code>/<code>x2</code>). It keeps
+        <code>scatter({ x, y })</code>. It also flips every mark:
+        <code>rect({ x: 0, y: 0, w: 90, h: 40 })</code> would be centered on the
+        origin, against SVG, CSS, Canvas and Figma, and against the settled rule
+        that a mark's <code>y</code> is the edge of its box (#681). GoFish draws
+        diagrams as well as charts, and the diagram side reads <code>x</code> as
+        an edge.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Center or middle</h2>
+      <p>
+        <strong>Center.</strong> <code>cx</code> already says it. CSS, Typst,
+        SwiftUI, Flutter, Figma and Auto Layout say "center" on both axes. Where
+        "middle" appears elsewhere it is mostly the vertical word next to a
+        horizontal "center" (Plotly's <code>yanchor</code>, Vega-Lite's
+        <code>baseline</code>, HTML's <code>valign</code>), so it reads as tied
+        to one axis. SVG's <code>text-anchor: middle</code> is the exception.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================== PRECEDENT ============================== -->
+  <section class="tab" id="tab-precedent" hidden>
+    <p>
+      What a bare <code>x</code> means in other systems, and what they call the
+      three places on a box. Graphics systems read <code>x</code> as an edge.
+      Charting grammars read it as a center, or let it depend on the mark. These
+      are from my knowledge of each system's documentation and were not fetched
+      again today.
+    </p>
+
+    <h2>Graphics and layout: <code>x</code> is an edge</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>SVG</h3>
+        <pre><code class="language-xml">&lt;rect x="120" width="80"/&gt;
+&lt;circle cx="120" r="14"/&gt;
+&lt;line x1="0" x2="120"/&gt;</code></pre>
+        <p>
+          A rect's <code>x</code> is its left edge and a circle has
+          <code>cx</code>. Text adds
+          <code>text-anchor: start | middle | end</code>.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Vega</h3>
+        <pre><code class="language-js">{ x: 120, width: 80 }
+{ xc: 120, width: 80 }
+{ x: 40, x2: 120 }</code></pre>
+        <p>
+          A rect takes <code>x</code>, <code>xc</code>, <code>x2</code> and
+          <code>width</code>. This is the closest match to the proposal.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Canvas 2D</h3>
+        <pre><code class="language-js">ctx.fillRect(x, y, w, h);
+ctx.arc(x, y, r, 0, 2 * Math.PI);</code></pre>
+        <p>
+          The same letter is a corner for a rect and a center for an arc. This
+          is the split GoFish's "marks lay out alike" rule avoids.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Processing, p5</h3>
+        <pre><code class="language-js">rectMode(CORNER); // default
+ellipseMode(CENTER); // default</code></pre>
+        <p>
+          Each shape has its own default and a global mode switches it. A mode
+          is state the reader has to track.
+        </p>
+      </div>
+      <div class="card">
+        <h3>CSS</h3>
+        <pre><code class="language-css">inset-inline-start: 0;
+align-items: start | center | end;</code></pre>
+        <p>
+          <code>start</code> and <code>end</code> follow the direction of flow,
+          which is why they replaced left and right. "Center" on both axes.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Figma</h3>
+        <pre><code class="language-js">node.x = 120; // left edge
+frame.primaryAxisAlignItems = "CENTER";</code></pre>
+        <p>
+          <code>x</code> is the left edge of the box. The plugin API aligns with
+          <code>MIN | CENTER | MAX</code>, the source of GoFish's internal
+          words.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Typst, Flutter</h3>
+        <pre><code class="language-js">align(start | center | end)</code></pre>
+        <p>
+          Both use <code>start</code>, <code>center</code>, <code>end</code>.
+          Typst says <code>horizon</code> for the vertical center.
+        </p>
+      </div>
+      <div class="card">
+        <h3>SwiftUI, Auto Layout</h3>
+        <pre><code class="language-swift">.position(x: 120, y: 80) // center
+view.centerXAnchor</code></pre>
+        <p>
+          SwiftUI's <code>position</code> places the center, and alignment is
+          <code>leading | center | trailing</code>. Auto Layout names every
+          anchor in full.
+        </p>
+      </div>
+      <div class="card">
+        <h3>TikZ</h3>
+        <pre><code class="language-latex">\node at (1, 2) {A};
+\node[anchor=west] at (1, 2) {A};</code></pre>
+        <p>
+          A node sits centered on its coordinate unless an
+          <code>anchor</code> says otherwise. One default, one explicit
+          override.
+        </p>
+      </div>
+    </div>
+
+    <h2>Charting grammars: <code>x</code> is a center, or it depends</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>ggplot2</h3>
+        <pre><code class="language-r">geom_point(aes(x, y))
+geom_rect(aes(xmin, xmax, ymin, ymax))</code></pre>
+        <p>
+          <code>x</code> is the center for points, tiles and columns. Edges are
+          <code>xmin</code> and <code>xmax</code>. Text uses
+          <code>hjust</code> 0, 0.5, 1.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Observable Plot</h3>
+        <pre><code class="language-js">Plot.dot(data, { x: "a", y: "b" })
+Plot.rect(data, { x1: "start", x2: "end" })</code></pre>
+        <p>
+          <code>x</code> is a point or a band. Edges are <code>x1</code> and
+          <code>x2</code>.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Vega-Lite</h3>
+        <pre><code class="language-js">{ mark: "point", encoding: { x } }
+{ mark: "rect", encoding: { x, x2 } }</code></pre>
+        <p>
+          <code>x</code> is a center for a point and one end of a span when
+          <code>x2</code> is present. This is the same switch
+          <code>scatter</code> has now. It works there because each mark type
+          has its own fixed reading of <code>x</code>.
+        </p>
+      </div>
+      <div class="card">
+        <h3>matplotlib</h3>
+        <pre><code class="language-python">ax.bar(x, height, align="center")
+Rectangle((x, y), w, h)  # lower left</code></pre>
+        <p>
+          A bar's <code>x</code> is its center unless <code>align="edge"</code>.
+          A Rectangle patch takes its lower-left corner.
+        </p>
+      </div>
+      <div class="card">
+        <h3>Plotly</h3>
+        <pre><code class="language-python">dict(type="rect", x0=0, x1=120)
+dict(xanchor="center", yanchor="middle")</code></pre>
+        <p>
+          Shapes use <code>x0</code> and <code>x1</code>. Anchors say "center"
+          across and "middle" down.
+        </p>
+      </div>
+    </div>
+    <p>
+      GoFish draws both charts and diagrams with the same marks, so it cannot
+      take a per-chart-type reading of <code>x</code> the way Vega-Lite does.
+      The proposal takes the graphics reading for <code>x</code> and Vega's and
+      SVG's letters for the other two.
+    </p>
+  </section>
+
+  <!-- ============================== AUDIT ============================== -->
+  <section class="tab" id="tab-audit" hidden>
+    <p>
+      Every existing spelling for a place along an axis, checked against the two
+      rules. Counts are grep counts over the stories, the Python story ports and
+      the docs, so they are upper bounds.
+    </p>
+
+    <h2>The <code>x</code> / <code>cx</code> / <code>x2</code> rule</h2>
+    <div class="tablewrap">
+      <table>
+        <tr>
+          <th>Construct</th>
+          <th>Today</th>
+          <th>Under the rule</th>
+        </tr>
+        <tr>
+          <td>
+            <code>rect</code>, <code>ellipse</code>, <code>circle</code>,
+            <code>image</code>
+          </td>
+          <td>
+            <code>x</code> start, <code>cx</code> center. A lone
+            <code>x2</code> is ignored (#1178).
+          </td>
+          <td>
+            No change to <code>x</code> and <code>cx</code>. A lone
+            <code>x2</code> places the end edge.
+          </td>
+        </tr>
+        <tr>
+          <td><code>text</code></td>
+          <td>
+            <code>x</code> is the <code>textAnchor</code> point: start, center
+            or end of the box.
+          </td>
+          <td>
+            <code>x</code> is always the start edge.
+            <code>textAnchor: "middle"</code> with <code>x</code> becomes
+            <code>cx</code>. Whether <code>textAnchor</code> is still needed is
+            a follow-up question.
+          </td>
+        </tr>
+        <tr>
+          <td><code>scatter</code>, bare <code>x</code></td>
+          <td>
+            The child's center. With <code>x2</code>, the start of a span.
+          </td>
+          <td>
+            The start edge. <code>cx</code> is the center. About 170 JavaScript
+            and 110 Python lines change <code>x</code> to <code>cx</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>scatter</code>, <code>dims</code></td>
+          <td>
+            A bare value or <code>{ center }</code> is the point. A lone
+            <code>{ min }</code> throws. <code>{ center, max }</code> draws a
+            span from the center.
+          </td>
+          <td>
+            Same reading as a mark's <code>dims</code>. A lone
+            <code>{ start }</code> places the edge.
+            <code>{ center, end }</code> is a center and an end.
+          </td>
+        </tr>
+        <tr>
+          <td><code>Constraint.position({ x })</code></td>
+          <td>
+            A point with a default anchor of <code>"middle"</code>, or a pair
+            <code>[min, max]</code>.
+          </td>
+          <td>
+            Takes <code>x</code>, <code>cx</code>, <code>x2</code> like
+            everything else. The pair becomes <code>x</code> and
+            <code>x2</code>.
+          </td>
+        </tr>
+        <tr>
+          <td><code>position</code> operator</td>
+          <td>
+            <code>x</code> moves the child's start corner. Its docs warn that it
+            is "not center-anchored".
+          </td>
+          <td>
+            No change. The warning can go, since nothing is center-anchored by
+            default.
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <code>layer</code>, <code>spread</code>, <code>stack</code> box
+            <code>x</code>
+          </td>
+          <td>The start edge of the operator's box.</td>
+          <td>No change.</td>
+        </tr>
+        <tr>
+          <td><code>petal</code></td>
+          <td>
+            <code>x</code> with no scale, no <code>cx</code> or <code>x2</code>.
+          </td>
+          <td>Left alone. It is being replaced (#1339).</td>
+        </tr>
+      </table>
+    </div>
+
+    <h2>
+      The <code>start</code> / <code>center</code> / <code>end</code> vocabulary
+    </h2>
+    <div class="tablewrap">
+      <table>
+        <tr>
+          <th>Spelling</th>
+          <th>Today</th>
+          <th>After</th>
+        </tr>
+        <tr>
+          <td><code>dims</code> interval object</td>
+          <td><code>{ min, center, max, size, embedded }</code></td>
+          <td><code>{ start, center, end, size, embedded }</code></td>
+        </tr>
+        <tr>
+          <td>Box anchor type</td>
+          <td><code>"min" | "center" | "max" | "baseline"</code></td>
+          <td><code>"start" | "center" | "end" | "baseline"</code></td>
+        </tr>
+        <tr>
+          <td>
+            <code>alignment</code> on <code>spread</code>, <code>stack</code>,
+            <code>Constraint.align</code>
+          </td>
+          <td><code>"start" | "middle" | "end" | "baseline"</code></td>
+          <td><code>"middle"</code> becomes <code>"center"</code></td>
+        </tr>
+        <tr>
+          <td>Connector anchors, overlap sides</td>
+          <td><code>"start" | "middle" | "end"</code></td>
+          <td><code>"middle"</code> becomes <code>"center"</code></td>
+        </tr>
+        <tr>
+          <td><code>Place.along({ at })</code> and label edges</td>
+          <td>
+            <code>"x-min"</code>, <code>"x-max"</code>, <code>"y-min"</code>,
+            <code>"y-max"</code>, <code>"middle"</code>
+          </td>
+          <td>
+            <code>"x-start"</code>, <code>"x-end"</code>,
+            <code>"y-start"</code>, <code>"y-end"</code>, <code>"center"</code>
+          </td>
+        </tr>
+        <tr>
+          <td>Label alignment, axis label alignment</td>
+          <td><code>"start" | "center" | "end"</code></td>
+          <td>No change. These already use the words.</td>
+        </tr>
+        <tr>
+          <td>Axis <code>side</code>, bin cells</td>
+          <td><code>"start" | "end"</code>, <code>Cell(start, end)</code></td>
+          <td>No change.</td>
+        </tr>
+        <tr>
+          <td>Internal names</td>
+          <td>
+            <code>box.min</code>, <code>box.max</code>, <code>x0</code>,
+            <code>x1</code>
+          </td>
+          <td>
+            Renamed with the public ones, which also closes most of #130 (two
+            ways to talk about boxes).
+          </td>
+        </tr>
+      </table>
+    </div>
+    <p class="note">
+      <code>"middle"</code> appears on about 225 lines of JavaScript stories and
+      docs and about 270 lines of Python. Some of those are
+      <code>textAnchor</code> values, which follow SVG and are part of the
+      <code>text</code> follow-up above. The rename answers issue #281
+      (start/middle/end against min/center/max).
+    </p>
+
+    <h2>Found along the way</h2>
+    <div class="tablewrap">
+      <table>
+        <tr>
+          <th>What</th>
+          <th>Detail</th>
+        </tr>
+        <tr>
+          <td>A zero-length span hides the mark</td>
+          <td>
+            <code>scatter({ dims: { x: { min: "a", max: "a" } } })</code> sizes
+            a 28 px rect to zero, with no error.
+          </td>
+        </tr>
+        <tr>
+          <td>A category on <code>scatter</code>'s <code>x</code></td>
+          <td>
+            The survey reads the code as placing the child's center at the start
+            of its band, where the docs say the center of its position. I did
+            not render this one.
+          </td>
+        </tr>
+        <tr>
+          <td>A stale comment</td>
+          <td>
+            <code>Constraint.position</code>'s doc comment says the
+            <code>position</code> operator places marks at their center. It
+            places the start corner.
+          </td>
+        </tr>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/latex.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/swift.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/r.min.js"></script>
+<script>
+  if (window.hljs) hljs.highlightAll();
+  const tabs = ["proposal", "spellings", "precedent", "audit"];
+  function show() {
+    const h = location.hash.replace("#", "");
+    const cur = tabs.includes(h) ? h : "proposal";
+    for (const t of tabs) {
+      document.getElementById("tab-" + t).hidden = t !== cur;
+      const a = document.querySelector('nav a[data-tab="' + t + '"]');
+      a.setAttribute("aria-current", t === cur ? "true" : "false");
+    }
+  }
+  window.addEventListener("hashchange", show);
+  show();
+</script>
