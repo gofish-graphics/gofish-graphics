@@ -546,7 +546,7 @@ def test_nested_axes_keys_serialize_to_wire_keys():
 def test_legend_option_serializes_to_wire():
     # `legend` is a bool or a dict of entries, as in JS: `color`, and a
     # length entry per dimension (`False`, or a dict with a `title`).
-    legend = {"color": False, "y": {"title": "thousand unemployed"}}
+    legend = {"color": False, "y": {"title": "unemployed (thousands)"}}
     node = chart([], legend=legend).mark(rect()).to_ir()["root"]
     assert node["options"]["legend"] == legend
     assert chart([], legend=False).mark(rect()).to_ir()["root"]["options"]["legend"] is False

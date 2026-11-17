@@ -221,7 +221,7 @@ A key left out of the object is drawn.
 ```ts
 chart(data, { legend: false });
 chart(data, { legend: { color: false } });
-chart(rows, { legend: { y: { title: "thousand unemployed" } } });
+chart(rows, { legend: { y: { title: "unemployed (thousands)" } } });
 ```
 
 The length entry's title is set on `legend`, not on `axes`: a dimension with

@@ -232,7 +232,7 @@ A key left out of the dict is drawn.
 ```python
 chart(data, legend=False)
 chart(data, legend={"color": False})
-chart(rows, legend={"y": {"title": "thousand unemployed"}})
+chart(rows, legend={"y": {"title": "unemployed (thousands)"}})
 ```
 
 The length entry's title is set on `legend`, not on `axes`: a dimension with

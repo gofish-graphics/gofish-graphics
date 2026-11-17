@@ -1274,7 +1274,7 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
       t.object({
         title: {
           type: t.union(t.string, t.literal(false)),
-          doc: "The name after the amount, as in 5000 thousand unemployed. A string sets it; false drops it. Omitted, the measure's name, as an axis title is.",
+          doc: "The name after the amount, as in 2000 unemployed (thousands). A string sets it; false drops it. Omitted, the measure's name, as an axis title is.",
         },
       })
     ),

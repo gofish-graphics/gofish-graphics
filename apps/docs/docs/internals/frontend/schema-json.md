@@ -3741,7 +3741,7 @@ for the API.
                   "const": false
                 }
               ],
-              "description": "The name after the amount, as in 5000 thousand unemployed. A string sets it; false drops it. Omitted, the measure's name, as an axis title is."
+              "description": "The name after the amount, as in 2000 unemployed (thousands). A string sets it; false drops it. Omitted, the measure's name, as an axis title is."
             }
           }
         }

@@ -86,7 +86,7 @@ export type ChartOptions = {
    * - `{ color?, x?, y? }` sets each entry on its own, and one left out is
    *   drawn: `color: false` drops the color entry, `y: false` drops the
    *   length entry of the scales along y, and `y: { title }` names its
-   *   amount ("5000 thousand unemployed"; without a title, the measure's
+   *   amount ("2000 unemployed (thousands)"; without a title, the measure's
    *   name, as an axis title is).
    */
   legend?: LegendOptions;

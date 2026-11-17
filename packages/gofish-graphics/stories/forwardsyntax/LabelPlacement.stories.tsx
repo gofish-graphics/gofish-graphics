@@ -103,7 +103,11 @@ export const LineEndLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
+    chart(context.loaded.stocks, {
+      schema: { date: Unit.time() },
+      w: 560,
+      h: 320,
+    })
       .flow(group({ by: "symbol" }))
       .mark(
         line({
@@ -136,7 +140,11 @@ export const InlineSlopedLabels: StoryObj = {
   loaders: [async () => ({ stocks: await yearlyStocks() })],
   render: (_args: unknown, context: any) => {
     const container = initializeContainer();
-    chart(context.loaded.stocks, { schema: { date: Unit.time() }, w: 560, h: 320 })
+    chart(context.loaded.stocks, {
+      schema: { date: Unit.time() },
+      w: 560,
+      h: 320,
+    })
       .flow(group({ by: "symbol" }))
       .mark(
         line({
@@ -184,7 +192,9 @@ export const StreamgraphInteriorLabels: StoryObj = {
     chart(rows, { w: 560, h: 360, schema: { date: Unit.time() } })
       .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }).label("series"))
-      .render(container, { legend: { color: false } });
+      .render(container, {
+        legend: { color: false, y: { title: "unemployed (thousands)" } },
+      });
     return container;
   },
 };
@@ -392,10 +402,13 @@ const budgetChart = (side: "above" | ("above" | "below")[]) =>
   chart(budget, { w: 360, h: 220 })
     .flow(group({ by: "series" }))
     .mark(
-      line({ x: "x", y: "y", stroke: "series", strokeWidth: 2 }).label("series", {
-        position: Place.along({ at: 0.5, side, orient: "sloped" }),
-        fontWeight: 600,
-      })
+      line({ x: "x", y: "y", stroke: "series", strokeWidth: 2 }).label(
+        "series",
+        {
+          position: Place.along({ at: 0.5, side, orient: "sloped" }),
+          fontWeight: 600,
+        }
+      )
     );
 
 export const SideAbove: StoryObj = {

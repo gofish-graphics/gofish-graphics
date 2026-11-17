@@ -48,7 +48,7 @@ export const Default: StoryObj<Args> = {
       h: args.h,
       schema: { date: Unit.time() },
       axes: { x: { title: false } },
-      legend: { y: { title: "thousand unemployed" } },
+      legend: { y: { title: "unemployed (thousands)" } },
     })
       .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
       .mark(ribbon({ x: "date", h: "count", fill: "series" }))

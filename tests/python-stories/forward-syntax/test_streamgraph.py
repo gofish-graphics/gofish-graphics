@@ -14,7 +14,7 @@ LARGEST = [
     "Education and Health",
 ]
 AXES = {"x": {"title": False}}
-LEGEND = {"y": {"title": "thousand unemployed"}}
+LEGEND = {"y": {"title": "unemployed (thousands)"}}
 
 
 def story_default():
