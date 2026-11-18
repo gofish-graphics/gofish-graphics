@@ -684,10 +684,15 @@ type Geometry = {
   outline: Outline[];
 };
 
-// The space this node was offered, in pixels, after the scale is chosen.
-// The result is whatever the body returns.
+// The space this node was offered, in pixels, after the scale is chosen,
+// and the children it was given. The body returns an arrangement of those
+// children.
 declare function layout(
-  body: (space: { w: number; h: number; shape?: Ring }) =&gt; Node
+  children: Node[],
+  body: (
+    space: { w: number; h: number; shape?: Ring },
+    children: Node[]
+  ) =&gt; Node
 ): Node;</code></pre>
         <p class="note">
           The engine is symbolic, and the types have to show it. Before the
@@ -793,6 +798,95 @@ declare function layout(
       </div>
 
       <div class="card">
+        <h3>How the stages work</h3>
+        <p class="note">
+          The stacks a <code>layout</code> body returns do take part in layout,
+          but in a second run of their own. The engine works in stages (resolve
+          what each axis means, collect size claims, solve the scale, lay out),
+          and the body can only run in the last one, because that is when the
+          space is known. So the nodes it returns arrive after the earlier
+          stages have finished for everything around them.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>What exists</th>
+                <th>What happens</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The spec is built</td>
+                <td>
+                  the <code>layout</code> node and the children it was given
+                </td>
+                <td>
+                  Names, color scales, legends and axis meaning see the
+                  children, as for any node.
+                </td>
+              </tr>
+              <tr>
+                <td>Size claims</td>
+                <td>the same</td>
+                <td>
+                  The <code>layout</code> node asks for no room. Its children's
+                  own claims are known.
+                </td>
+              </tr>
+              <tr>
+                <td>Scale solved, layout</td>
+                <td>the space offered, in pixels</td>
+                <td>The body runs and returns stacks over the children.</td>
+              </tr>
+              <tr>
+                <td>A second run, inside the box</td>
+                <td>the returned arrangement</td>
+                <td>
+                  The engine collects claims, solves and lays out the
+                  arrangement as its own scope, in the space offered.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="tight">
+          <li>
+            <b>The marks exist up front.</b> Data, names and colors live on the
+            children, so legends, <code>selectAll</code> and animation keys see
+            them at the usual time. Only the grouping is late.
+            <code>stack</code>, <code>layer</code> and
+            <code>position</code> carry no data, so creating them late loses
+            nothing. That is why the children are an argument.
+          </li>
+          <li>
+            <b>A mark created inside the body is too late</b> for legends,
+            shared scales and names. That should be a loud error and not a
+            silently missing legend entry.
+          </li>
+          <li>
+            <b>Nothing shares a scale across the boundary.</b> The inside is
+            solved against the box after the outside is settled. Children can
+            share a scale with each other. They cannot share one with a sibling
+            of the <code>layout</code> node, and no axis runs through it.
+          </li>
+          <li>
+            <b><code>treemap</code> already works this way.</b> Its children
+            exist up front, and each is laid out in a room of its own (its tile)
+            after the tiling is decided. <code>layout</code> makes the deciding
+            step user code.
+          </li>
+          <li>
+            <b>A function that calls <code>measure</code> runs earlier</b>,
+            while size claims are collected, so what it returns joins the same
+            solve as everything around it. That is why it can take part in
+            fitting and a <code>layout</code> body cannot.
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
         <h3>
           <code>layout</code>: a treemap that reads its box
           <span class="tag sketch">sketch</span>
@@ -810,11 +904,17 @@ declare function layout(
           </figure>
         </div>
         <p class="label prop">Proposed</p>
-        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, return stacks.
-const squarified = (items) =&gt;
-  layout(({ w, h }) =&gt; drawSquarify(squarify(items, [w, h])));
+        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, and return
+// stacks of the cells it was given.
+const squarified = (cells, weights) =&gt;
+  layout(cells, ({ w, h }, cells) =&gt;
+    drawPlan(squarify(weights, [w, h]), cells)
+  );
 
-squarified(countries).render(container, { w: 360, h: 300 });</code></pre>
+squarified(
+  countries.map(cell),
+  countries.map((d) =&gt; d.pop)
+).render(container, { w: 360, h: 300 });</code></pre>
         <p class="label">Today</p>
         <p class="none">
           The size is typed twice, once for the plan and once for the render:
@@ -876,8 +976,11 @@ const fit = (p, q) =&gt;
 
       <div class="card">
         <h3>In Python <span class="tag sketch">sketch, not run</span></h3>
-        <pre><code class="language-python">def squarified(items):
-    return layout(lambda space: draw_squarify(squarify(items, (space.w, space.h))))</code></pre>
+        <pre><code class="language-python">def squarified(cells, weights):
+    return layout(
+        cells,
+        lambda space, cells: draw_plan(squarify(weights, (space.w, space.h)), cells),
+    )</code></pre>
         <p class="note">
           <code>layout</code> takes a function, so it goes through the callback
           runner, as <code>derive</code> does. A function that calls
@@ -2580,11 +2683,17 @@ chart(countries)
           <span class="tag today">today</span>
           <span class="tag sketch">plus one primitive</span>
         </h3>
-        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, return stacks.
-const squarified = (items) =&gt;
-  layout(({ w, h }) =&gt; drawSquarify(squarify(items, [w, h])));
+        <pre><code class="language-javascript">// A tiling written in GoFish: read the box, plan the rows, and return
+// stacks of the cells it was given.
+const squarified = (cells, weights) =&gt;
+  layout(cells, ({ w, h }, cells) =&gt;
+    drawPlan(squarify(weights, [w, h]), cells)
+  );
 
-squarified(countries).render(container, { w: 360, h: 300 });</code></pre>
+squarified(
+  countries.map(cell),
+  countries.map((d) =&gt; d.pop)
+).render(container, { w: 360, h: 300 });</code></pre>
         <p class="note">
           Every example on the first tab is this. The result is ordinary nodes,
           so axes, coordinates, selection, animation and nesting apply with no

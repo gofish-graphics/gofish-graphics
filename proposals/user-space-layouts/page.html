@@ -209,6 +209,95 @@
       </div>
 
       <div class="card">
+        <h3>How the stages work</h3>
+        <p class="note">
+          The stacks a <code>layout</code> body returns do take part in layout,
+          but in a second run of their own. The engine works in stages (resolve
+          what each axis means, collect size claims, solve the scale, lay out),
+          and the body can only run in the last one, because that is when the
+          space is known. So the nodes it returns arrive after the earlier
+          stages have finished for everything around them.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>What exists</th>
+                <th>What happens</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>The spec is built</td>
+                <td>
+                  the <code>layout</code> node and the children it was given
+                </td>
+                <td>
+                  Names, color scales, legends and axis meaning see the
+                  children, as for any node.
+                </td>
+              </tr>
+              <tr>
+                <td>Size claims</td>
+                <td>the same</td>
+                <td>
+                  The <code>layout</code> node asks for no room. Its children's
+                  own claims are known.
+                </td>
+              </tr>
+              <tr>
+                <td>Scale solved, layout</td>
+                <td>the space offered, in pixels</td>
+                <td>The body runs and returns stacks over the children.</td>
+              </tr>
+              <tr>
+                <td>A second run, inside the box</td>
+                <td>the returned arrangement</td>
+                <td>
+                  The engine collects claims, solves and lays out the
+                  arrangement as its own scope, in the space offered.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <ul class="tight">
+          <li>
+            <b>The marks exist up front.</b> Data, names and colors live on the
+            children, so legends, <code>selectAll</code> and animation keys see
+            them at the usual time. Only the grouping is late.
+            <code>stack</code>, <code>layer</code> and
+            <code>position</code> carry no data, so creating them late loses
+            nothing. That is why the children are an argument.
+          </li>
+          <li>
+            <b>A mark created inside the body is too late</b> for legends,
+            shared scales and names. That should be a loud error and not a
+            silently missing legend entry.
+          </li>
+          <li>
+            <b>Nothing shares a scale across the boundary.</b> The inside is
+            solved against the box after the outside is settled. Children can
+            share a scale with each other. They cannot share one with a sibling
+            of the <code>layout</code> node, and no axis runs through it.
+          </li>
+          <li>
+            <b><code>treemap</code> already works this way.</b> Its children
+            exist up front, and each is laid out in a room of its own (its tile)
+            after the tiling is decided. <code>layout</code> makes the deciding
+            step user code.
+          </li>
+          <li>
+            <b>A function that calls <code>measure</code> runs earlier</b>,
+            while size claims are collected, so what it returns joins the same
+            solve as everything around it. That is why it can take part in
+            fitting and a <code>layout</code> body cannot.
+          </li>
+        </ul>
+      </div>
+
+      <div class="card">
         <h3>
           <code>layout</code>: a treemap that reads its box
           <span class="tag sketch">sketch</span>

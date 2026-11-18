@@ -40,10 +40,15 @@ type Geometry = {
   outline: Outline[];
 };
 
-// The space this node was offered, in pixels, after the scale is chosen.
-// The result is whatever the body returns.
+// The space this node was offered, in pixels, after the scale is chosen,
+// and the children it was given. The body returns an arrangement of those
+// children.
 declare function layout(
-  body: (space: { w: number; h: number; shape?: Ring }) => Node
+  children: Node[],
+  body: (
+    space: { w: number; h: number; shape?: Ring },
+    children: Node[]
+  ) => Node
 ): Node;
 ```
 
@@ -57,10 +62,33 @@ The engine is symbolic, and the types have to show it. Before the scale is chose
 
 - `measure` answers in lengths. Arithmetic that stays inside `Length` (add, subtract, scale by a number, max) keeps the result solvable, which is the same rule the engine's own code follows.
 - `.px` leaves the symbolic world. It works only for a length with no scale in it. A comparison, a product of two lengths, a square root or a division needs `.px`.
-- `layout` gives pixels, because space comes down after the scale is solved. Its body runs then, so a `layout` node cannot ask for room of its own.
+- `layout` gives pixels, because space comes down after the scale is solved. Its body runs then, so a `layout` node cannot ask for room of its own. It takes its children as an argument and returns an arrangement of them (see "How the stages work").
 - Neither places anything. The function returns operators (`stack`, `layer`, `position`), and those do the placing. `position` takes lengths as well as numbers.
 - A function that calls `measure` needs its children's types resolved first, so it runs inside the engine and not when the spec is built. How it is registered (a lazy operator, issue #1334) is not designed here.
 - Decisions are the catch. Kennedy's mean uses only add, subtract, max and halving, so it stays symbolic. Walker's spread and the by-position `fit` compare positions, so they need pixels wherever a position depends on the scale.
+
+### How the stages work
+
+The stacks a `layout` body returns do take part in layout, but in a second run of their own. The engine works in stages (resolve what each axis means, collect size claims, solve the scale, lay out), and the body can only run in the last one, because that is when the space is known. So the nodes it returns arrive after the earlier stages have finished for everything around them.
+
+| When                         | What exists                                     | What happens                                                                                           |
+| ---------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| The spec is built            | the `layout` node and the children it was given | names, color scales, legends and axis meaning see the children, as for any node                        |
+| Size claims                  | the same                                        | the `layout` node asks for no room. Its children's own claims are known                                |
+| Scale solved, layout         | the space offered, in pixels                    | the body runs and returns stacks over the children                                                     |
+| A second run, inside the box | the returned arrangement                        | the engine collects claims, solves and lays out the arrangement as its own scope, in the space offered |
+
+That is why the children are an argument and the body returns only an arrangement of them.
+
+- **The marks exist up front.** Data, names and colors live on the children, so legends, `selectAll` and animation keys see them at the usual time. Only the grouping is late. `stack`, `layer` and `position` carry no data, so creating them late loses nothing.
+- **A mark created inside the body is too late** for legends, shared scales and names. That should be a loud error and not a silently missing legend entry.
+- **Nothing shares a scale across the boundary.** The inside is solved against the box after the outside is settled. Children can share a scale with each other, because their claims are folded together in the second run. They cannot share one with a sibling of the `layout` node, and no axis runs through it.
+- **`treemap` already works this way.** Its children exist up front, and each is laid out in a room of its own (its tile) after the tiling is decided (`nestEach` in the engine). `layout` makes the deciding step user code.
+- **The cost is one more run per `layout` node**, over the arrangement only.
+
+Compose has the same split, from memory and not checked here: `BoxWithConstraints` is built on a separate mechanism, `SubcomposeLayout`, because composing content during measurement is a second stage there too.
+
+A function that calls `measure` is in a different position. It runs earlier, while size claims are collected, so what it returns joins the same solve as everything around it. That is why a layout built with add, subtract and max can take part in fitting and a `layout` body cannot.
 
 `layout` in use, a treemap that reads its box (the squarify plan and drawing are below, under "Squarify, as nested stacks"):
 
@@ -69,11 +97,17 @@ The engine is symbolic, and the types have to show it. Before the scale is chose
 <!-- id: p-layout -->
 
 ```js
-// A tiling written in GoFish: read the box, plan the rows, return stacks.
-const squarified = (items) =>
-  layout(({ w, h }) => drawSquarify(squarify(items, [w, h])));
+// A tiling written in GoFish: read the box, plan the rows, and return
+// stacks of the cells it was given.
+const squarified = (cells, weights) =>
+  layout(cells, ({ w, h }, cells) =>
+    drawPlan(squarify(weights, [w, h]), cells)
+  );
 
-squarified(countries).render(container, { w: 360, h: 300 });
+squarified(
+  countries.map(cell),
+  countries.map((d) => d.pop)
+).render(container, { w: 360, h: 300 });
 ```
 
 Today the same code types the size twice, once for the plan and once for the render: `drawSquarify(squarify(countries, [360, 300]))` inside `layer({ w: 360, h: 300 }, ...)`.
@@ -118,8 +152,11 @@ In Python `layout` takes a function, so it goes through the callback runner, as 
 <!-- id: p-api-py -->
 
 ```python
-def squarified(items):
-    return layout(lambda space: draw_squarify(squarify(items, (space.w, space.h))))
+def squarified(cells, weights):
+    return layout(
+        cells,
+        lambda space, cells: draw_plan(squarify(weights, (space.w, space.h)), cells),
+    )
 ```
 
 (A sketch. The Python calls were not run.)
