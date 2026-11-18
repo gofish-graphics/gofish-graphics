@@ -261,7 +261,7 @@ function reduceToAxisProblem<T>(
       continue;
     }
     if (fact.type === "anchor-relation") {
-      const chain = fact.chain !== undefined;
+      const chain = fact.chain === true;
       const fromApart = apart?.has(fact.from.node) === true;
       const toApart = apart?.has(fact.to.node) === true;
       const fromOffset = resolveOffset(

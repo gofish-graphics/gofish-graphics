@@ -31,7 +31,7 @@
 // import THIS module's class at runtime without a cycle.
 import type { MaybeValue } from "./data";
 import { median } from "d3-array";
-import { checkSummable, COUNT, type Quantity } from "./measure";
+import { checkSummable, type Quantity } from "./measure";
 import { withWire, wireOf } from "./wire";
 import {
   binStepToJSON,
@@ -57,6 +57,7 @@ import {
   type ValueExpr,
 } from "./groupExpr";
 import {
+  COUNT_QUANTITY,
   distOf,
   distQuantities,
   isDistData,
@@ -1278,10 +1279,6 @@ export function evalFieldValues<T>(
   );
 }
 
-/** What `.count()` and `.distinct()` report: counts, read from no column,
- *  which add up. */
-const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT };
-
 /**
  * Resolve the Python callbacks of an expression's maps and reduce for every
  * group in `groups`, so the synchronous passes read them from the step cache
@@ -1326,8 +1323,11 @@ export async function resolveGroupSteps(
  *  value: it holds a reduce or a member (of a reduce's result or of the
  *  distribution its column holds), or it is a distribution expression. */
 export const liftsPerGroup = (v: unknown): boolean =>
-  isDistExpr(v) ||
-  getFieldOps(v).some((op) => op.op === "reduce" || op.op === "member");
+  isDistExpr(v) || getFieldOps(v).some(lifts);
+
+/** Whether an op's result is lifted by its shape: a reduce, or a member. */
+const lifts = (op: FieldOp): boolean =>
+  op.op === "reduce" || op.op === "member";
 
 /** Whether a field expression's ops hold a Python callback, which must be
  *  resolved over the groups before inference ({@link resolveGroupSteps}). */
@@ -1350,10 +1350,7 @@ export const holdsClosureStep = (accessor: unknown): boolean =>
 export function hasWindowMaps(accessor: unknown): boolean {
   const ops = getFieldOps(accessor);
   const i = trailingMapsStart(ops);
-  return (
-    i < ops.length &&
-    !ops.slice(0, i).some((op) => op.op === "reduce" || op.op === "member")
-  );
+  return i < ops.length && !ops.slice(0, i).some(lifts);
 }
 
 /** Where the maps at the end of `ops` start (`ops.length` when it ends in

@@ -444,8 +444,12 @@ export function distOf(data: DistData): Dist {
  *  kernel density, a probability for a family. */
 export const massQuantity = (family: DistData["family"]): Quantity =>
   family === "kde"
-    ? { name: "count", unit: COUNT }
+    ? COUNT_QUANTITY
     : { name: "probability", unit: PROBABILITY };
+
+/** Counts, read from no column, which add up: a kernel density's mass, and
+ *  what `.count()` and `.distinct()` report. */
+export const COUNT_QUANTITY: Quantity = { name: "count", unit: COUNT };
 
 // ---------------------------------------------------------------------------
 // Restriction.
