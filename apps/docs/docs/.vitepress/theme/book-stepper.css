@@ -1,0 +1,272 @@
+/*
+ * Under the Sea: the figure frame and the stepper, shared by every
+ * chapter figure (components/book/BookFigure.vue, BookStepper.vue and
+ * TreeStepper.vue). The palette variables come from book.css.
+ */
+
+/* ---- frame ------------------------------------------------------------- */
+
+/* A figure that is one SVG. */
+.book-figure > .bf-body > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.book-page .vp-doc .bf-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.76rem;
+  color: var(--book-ink-2);
+}
+.book-page .vp-doc .bf-legend li {
+  margin: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* A swatch per palette kind. Tree items (TreeStepper) wear the same mark. */
+.book-figure .bf-swatch,
+.tree-stepper .ts-item::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  vertical-align: 1px;
+  border-radius: 1px;
+}
+.book-figure .bf-swatch {
+  width: 10px;
+  height: 10px;
+}
+.book-figure .k-user::before,
+.book-figure .bf-swatch.k-user {
+  background: var(--fig-user);
+}
+.book-figure .k-added::before,
+.book-figure .bf-swatch.k-added {
+  background: var(--fig-added);
+}
+.book-figure .k-ref::before,
+.book-figure .bf-swatch.k-ref {
+  border: 1.5px dashed var(--fig-ref);
+  width: 8px;
+  height: 8px;
+}
+.book-figure .k-constraint::before,
+.book-figure .bf-swatch.k-constraint {
+  height: 5px;
+  width: 8px;
+  vertical-align: 2px;
+  border-top: 1.5px solid var(--fig-constraint);
+  border-bottom: 1.5px solid var(--fig-constraint);
+  border-radius: 0;
+}
+/* A type: a note that typing writes on a node, not a node. A round mark. */
+.book-figure .k-type::before,
+.book-figure .bf-swatch.k-type {
+  box-sizing: border-box;
+  border: 1.5px solid var(--book-ink-2);
+  border-radius: 50%;
+}
+/* Generated: drawn as a dotted underline in the figures. */
+.book-figure .bf-swatch.k-generated {
+  width: 14px;
+  height: 0;
+  vertical-align: 3px;
+  border-bottom: 2px dotted var(--fig-generated);
+  border-radius: 0;
+}
+
+/* ---- stepper ----------------------------------------------------------- */
+
+.book-stepper > .bf-body {
+  border-top: 1px solid var(--book-rule);
+  border-bottom: 1px solid var(--book-rule);
+  padding: 1.1rem 0 1.3rem;
+}
+.book-stepper.is-still > .bf-body {
+  border: 0;
+  padding: 0;
+}
+.book-stepper .bs-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.book-stepper .bs-steps,
+.book-stepper .bs-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.book-stepper .bs-btn {
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  line-height: 1.2;
+  padding: 0.42rem 0.7rem;
+  border-radius: 5px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--book-ink-2);
+  border: 1px solid var(--book-rule);
+}
+.book-stepper .bs-btn:hover:not(:disabled):not([aria-pressed="true"]) {
+  color: var(--book-ink-strong);
+  border-color: var(--book-ink-3);
+}
+.book-stepper .bs-btn[aria-pressed="true"] {
+  background: var(--book-ink-strong);
+  border-color: var(--book-ink-strong);
+  color: var(--book-bg);
+}
+.book-stepper .bs-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.book-stepper .bs-btn:focus-visible {
+  outline: 2px solid var(--book-accent);
+  outline-offset: 1px;
+}
+.book-page .vp-doc .book-stepper .bs-note {
+  min-height: 3.2em;
+  margin: 0.85rem 0 0.9rem;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--book-ink);
+}
+.book-stepper .bs-count {
+  color: var(--book-ink-3);
+}
+.book-stepper .bs-gap {
+  height: 0.9rem;
+}
+
+/* A piece that keeps its place at every step and is hidden when it is not
+   shown (BookStepper's `stepClass`). */
+.book-stepper .bs-piece {
+  transition: opacity 260ms ease;
+}
+.book-stepper .bs-piece.is-future,
+.book-stepper .bs-piece.is-past {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .book-figure *,
+  .book-figure *::before {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* ---- tree stepper ------------------------------------------------------ */
+
+.tree-stepper .ts-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+.tree-stepper .ts-grid.has-pic {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 380px);
+}
+.tree-stepper .ts-tree-wrap {
+  overflow-x: auto;
+}
+.tree-stepper .ts-tree {
+  font-family: var(--vp-font-family-mono);
+  font-size: 12.5px;
+  line-height: 1.66;
+  color: var(--book-ink-strong);
+  white-space: pre;
+}
+.tree-stepper .ts-line {
+  display: block;
+}
+.tree-stepper .ts-item {
+  display: inline-block;
+  padding: 0 4px;
+  margin-left: -4px;
+  border-radius: 3px;
+  outline: 1.5px solid transparent;
+  outline-offset: -1px;
+  transition:
+    opacity 260ms ease,
+    background-color 160ms;
+  cursor: default;
+}
+.tree-stepper .ts-item:focus-visible {
+  outline: 2px solid var(--book-accent);
+  outline-offset: 1px;
+}
+.tree-stepper .ts-item.k-type {
+  font-style: italic;
+  color: var(--book-ink-2);
+}
+.tree-stepper .ts-type {
+  color: var(--book-ink-2);
+}
+.tree-stepper .ts-item.is-future,
+.tree-stepper .ts-item.is-past {
+  opacity: 0.16;
+}
+/* A line that has gone away is struck through, so it does not read as one
+   still to come. */
+.tree-stepper .ts-item.is-past {
+  text-decoration: line-through;
+}
+.tree-stepper .ts-item.is-new {
+  background: var(--fig-new-bg);
+  color: var(--fig-new);
+}
+.tree-stepper .ts-item.is-new .ts-type {
+  color: var(--fig-new);
+}
+.tree-stepper .ts-item.is-hl {
+  outline-color: var(--fig-hl);
+  background: var(--fig-hl-bg);
+}
+.tree-stepper .ts-item.is-hl-ref {
+  outline: 1.5px dashed var(--fig-ref);
+  outline-offset: -1px;
+}
+.tree-stepper .ts-pic {
+  position: sticky;
+  top: calc(var(--vp-nav-height) + 16px);
+}
+.tree-stepper .ts-pic svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.tree-stepper [data-id] {
+  transition: opacity 320ms ease;
+}
+.tree-stepper [data-id].is-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@container (max-width: 720px) {
+  .tree-stepper .ts-grid.has-pic {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tree-stepper .ts-pic {
+    order: -1;
+    position: static;
+    max-width: 360px;
+    width: 100%;
+    margin-inline: auto;
+  }
+}
