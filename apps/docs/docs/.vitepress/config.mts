@@ -753,6 +753,10 @@ export default defineConfig({
         icon: "github",
         link: "https://github.com/gofish-graphics/gofish-graphics",
       },
+      {
+        icon: "discord",
+        link: "https://discord.gg/RTKDYBBybB",
+      },
     ],
   },
 });
