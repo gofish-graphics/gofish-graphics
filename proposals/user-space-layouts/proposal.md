@@ -686,6 +686,195 @@ Two differences from the UI toolkits matter.
 
 **GoFish has scales, and that is the hard part.** A node describes itself to its parent twice. Before the scale is chosen it says how much room it needs as a function of the scale (an `Extent` in `Pwl.Value`), which is what lets a chart fit its room. That answer is one extent per axis today, so it is a box. After layout it has its full geometry in pixels: `geometry()`, with the circle and the outline. So of the `Geometry` that `measure` is sketched to return, only the box exists in lengths today. The circle and the outline exist only in pixels, which is why `pack` reads them after layout and does not fit its room (#967). Carrying a circle, an outline or a contour in lengths is the engine work this proposal depends on. The layout-synthesis essay names the rule any such answer has to keep: "responses must be monotone in the proposal". The silhouette note in `notes/design/` is the start of that design. It is the real work here, more than any one algorithm.
 
+## Keeping relations instead of positions
+
+The plans above hand GoFish positions. Two experiments tested whether a layout can hand over relations instead, the way `spread` lowers into `align` and `distribute`.
+
+### A minimum gap: "at least this far apart, in this order"
+
+`distribute` says "exactly this gap". Its inequality sibling says "at least this gap", and each item takes the nearest position that satisfies all its constraints (WebCoLa calls this a separation constraint). A set of them with no cycles is solved in one pass in dependency order. We wrote that solver once (56 lines) and re-expressed four layouts as a plan that emits minimum gaps.
+
+| Layout              | Result                                                                       | Plan                                 |
+| ------------------- | ---------------------------------------------------------------------------- | ------------------------------------ |
+| Tidy tree           | exact: 0 px from the contour tree, on the test trees and on 600 random trees | 29 lines, replacing the 34-line fold |
+| Graph layering      | exact: identical ranks on the course graph and on 200 random graphs          | 6 lines, replacing 12                |
+| Graph straightening | same numbers, but see below                                                  | 25 lines, replacing 24               |
+| One-sided beeswarm  | fails: 229 of 342 dots differ                                                | does not work                        |
+
+![tree, packed to the start](img/sep-tree-start.png) ![tree, centered](img/sep-tree-center.png) ![graph layers, start](img/sep-graph-layers.png) ![graph layers, end](img/sep-graph-layers-end.png)
+
+<!-- id: sep-plans -->
+
+```ts
+// Layering: every link's target is at least 1 layer after its source.
+export const sepLayers = (nodes: string[], links: Link[], policy: Policy) =>
+  solveSeparations(
+    nodes,
+    links.map((l) => ({ after: l.source, before: l.target, gap: 1 })),
+    { policy }
+  );
+
+// Tidy tree, inside the recursion: child j clears every earlier child i,
+// by their two contours alone.
+const seps = kids.flatMap((b, j) =>
+  kids.slice(0, j).map((a, i) => ({
+    after: ids[i],
+    before: ids[j],
+    gap: fitPair(a.contour, b.contour),
+  }))
+);
+const x = solveSeparations(ids, seps, { policy });
+```
+
+- **The tree match is exact, not approximate.** Fitting against the merged outline of all earlier siblings is the same computation as the longest-path step. Packed to the start is the left-packed tree. The mean of the start and end solutions is Kennedy's mean.
+- **Where the slack goes is a policy.** Start, end and center are all one-pass. For layering, start and end are both legible (end lines up the sinks) and center is not: it gives half layers.
+- **The beeswarm is not a set of minimum gaps.** A minimum gap says "this dot is above that one". The built-in swarm puts a later dot below an earlier one in 154 pairs, by dropping it into a hole or keeping it low beside a tall neighbor. That is an either-or per pair, and deciding it is the greedy rule itself. Given the built-in's choices, the solver matches all 342 dots. So the constraint can check and tighten a swarm but cannot place one.
+- **Straightening is a soft target, not a constraint.** The numbers match only because "at least the wanted position" and "at most the wanted position" were solved as two separate systems and averaged. As one system they contradict each other for 17 of 19 nodes. Pulling a node toward a position is a different thing from a minimum gap.
+- **Centering a parent over its children is an exact relation.** It is done in the plan as an equality.
+- **The pairwise form is quadratic in the number of siblings.** Kennedy's fold is linear, so the engine would want the fold as its implementation of the same constraint.
+
+Proposed spelling, a sketch. A minimum gap is a spacing, so it extends `distribute` and `spread` through the `Spacing` family instead of adding a constraint. `justify` is CSS's name for where slack goes, and is a placeholder.
+
+<!-- id: p-separation -->
+
+```js
+// A minimum gap is a spacing, so it goes where a gap goes today.
+Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(10) }, [a, b]);
+
+// Contour spacing lowers to one of these per pair of siblings, with the
+// gap read from their two contours. `justify` says where the slack goes.
+spread({ dir: "x", spacing: Spacing.contour(10), justify: "center" }, subtrees);
+
+// Layering: every link's target is at least one column after its source.
+layer(nodes).relate((n) =>
+  links.map((l) =>
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(112) }, [
+      n[l.source],
+      n[l.target],
+    ])
+  )
+);
+```
+
+**One constraint in the API, two kinds in the engine.** An exact gap and a minimum gap are the same idea with different slack, and Auto Layout spells them as one constraint with a relation. Inside the engine they should stay two kinds of fact. Exact gaps glue items into rigid groups that can be resolved in any order, and a disagreement between two of them is an error. Minimum gaps need a dependency order, never conflict (the larger wins), and are the only ones that leave slack. Resolving the rigid groups first and then separating them keeps it to one pass. "At most" gaps would bring back cycles and systems with no solution, so they are left out.
+
+The solver, as the semantics of the constraint:
+
+<!-- id: sep-solver -->
+
+```ts
+/** pos[before] - pos[after] >= gap. A lower bound `x >= p` is a separation
+ *  of gap p from a fixed zero item. */
+export type Sep = { after: string; before: string; gap: number };
+export type Policy = "start" | "end" | "center";
+
+/** Items in an order where every separation points forward. */
+const topoOrder = (items: string[], seps: Sep[]): string[] => {
+  const ins = new Map(items.map((id) => [id, 0]));
+  for (const s of seps) ins.set(s.before, ins.get(s.before)! + 1);
+  const ready = items.filter((id) => ins.get(id) === 0);
+  for (let k = 0; k < ready.length; k++)
+    for (const s of seps)
+      if (s.after === ready[k]) {
+        ins.set(s.before, ins.get(s.before)! - 1);
+        if (ins.get(s.before) === 0) ready.push(s.before);
+      }
+  if (ready.length < items.length)
+    throw new Error("solveSeparations: the separations have a cycle");
+  return ready;
+};
+
+/** One pass in order: each item as near `base` as its separations allow. */
+const nearest = (
+  order: string[],
+  into: (id: string) => [string, number][],
+  base: number
+): Map<string, number> => {
+  const pos = new Map<string, number>();
+  for (const id of order) {
+    const from = into(id).map(([u, gap]) => pos.get(u)! + gap);
+    pos.set(id, from.length ? Math.max(...from) : base);
+  }
+  return pos;
+};
+
+/** "start": every item as near the start as its separations allow.
+ *  "end": as near the end. "center": the mean of the two. */
+export function solveSeparations(
+  items: string[],
+  seps: Sep[],
+  { policy = "start", upper }: { policy?: Policy; upper?: number } = {}
+): Map<string, number> {
+  const order = topoOrder(items, seps);
+  const least = nearest(
+    order,
+    (id) => seps.filter((s) => s.before === id).map((s) => [s.after, s.gap]),
+    0
+  );
+  if (policy === "start") return least;
+  const top = upper ?? Math.max(...least.values());
+  // The greatest solution is the least one of the mirrored problem.
+  const mirrored = nearest(
+    [...order].reverse(),
+    (id) => seps.filter((s) => s.after === id).map((s) => [s.before, s.gap]),
+    -top
+  );
+  return new Map(
+    items.map((id) => {
+      const greatest = -mirrored.get(id)!;
+      return [
+        id,
+        policy === "end" ? greatest : (least.get(id)! + greatest) / 2,
+      ];
+    })
+  );
+}
+```
+
+### Circle packing as contour spacing in polar coordinates
+
+The idea: a circle slides in along a ray from the origin until it first touches something, which is contour spacing along the radius. The only decision is the angle. A beeswarm would be the same rule with vertical rays and the ray given by the data. We wrote that as one 43-line function.
+
+![built-in pack](img/skyline-builtin-pack.png) ![skyline pack, lowest notch](img/skyline-skyline-pack.png) ![skyline pack, golden angle](img/skyline-skyline-pack-golden.png) ![the same pack unrolled: angle against distance](img/skyline-skyline-unrolled.png)
+
+<!-- id: skyline-use -->
+
+```ts
+// A beeswarm: the ray is given by the data.
+const swarm = skyline(
+  weighed.map((p) => ({ x: xPx(p["Body Mass (g)"]!), r: DOT })),
+  cartesian,
+  { lane: (d) => d.x, floor: DOT, pad: 1 }
+);
+
+// A circle packing: rays from an origin, and the ray is chosen.
+const notchPack = skyline(circles, polar);
+const goldenPack = skyline(circles, polar, {
+  lane: (_, i) => (i * 137.50776 * Math.PI) / 180,
+});
+
+// The two coordinate systems: vertical rays over x, and rays from an origin.
+const cartesian: Rays = { at: (x, y) => ({ x, y }), laneOf: (p) => p.x };
+const polar: Rays = {
+  at: (t, d) => ({ x: d * Math.cos(t), y: d * Math.sin(t) }),
+  laneOf: (p) => Math.atan2(p.y, p.x),
+};
+```
+
+It holds only in part.
+
+- **One function does both.** It produces a valid beeswarm and a valid packing, changing only the family of rays and whether the ray is given or chosen.
+- **It packs about as tightly as d3.** Choosing the angle where the circle comes to rest deepest gives an enclosing radius of 0.97 to 1.00 times d3's on average over 200 random sets. The golden angle needs no search and is 7 to 23% larger.
+- **d3's packing is not this rule.** 91 to 93% of d3's circles in input order sit exactly where sliding in along their own angle would put them, and 99 to 100% largest first. The rest are tucked under an overhang, usually under one of the two circles they rest against, where a straight slide from outside cannot reach.
+- **The built-in beeswarm is not this rule either.** 229 of 342 dots differ and the sliding version is 45% taller, because the built-in fills holes.
+- **It is slow as written.** The exact version takes 1.2 s for 1000 circles against d3's 1.6 ms. The short readable version is as slow as the greedy helper.
+- **It needs a fixed origin.** A moving origin packs well but is no longer one coordinate space. With the first circle's center as origin there are exact ties, and Node and the browser picked different layouts until a tie rule was added.
+- **GoFish cannot draw it through `Coord.polar()` today.** Circles stay round, but the distance from the origin is fitted as a data scale, so the pack shrinks toward a ring and circles overlap by up to 20 px. There is no way to say a coordinate is already in pixels, which is the same wall the beeswarm hit.
+
+![the pack drawn through Coord.polar today](img/skyline-skyline-pack-polar.png)
+
+So sliding in is a real third relation, weaker than "touches these two" and cheaper to state, and it does unify packing with one-directional stacking. It does not replace the existing algorithms, because both of them use holes.
+
 ## The review: every algorithm, side by side
 
 | Algorithm       | Plan (decisions)                         | Drawing (operators)             | Kernel it needs                             | Result of the prototype                           |
