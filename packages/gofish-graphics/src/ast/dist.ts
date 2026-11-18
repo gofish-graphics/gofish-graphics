@@ -323,11 +323,16 @@ function kernelDist(values: readonly unknown[], bandwidth?: number): Dist {
   const xs = sortedValues(values, where);
   const n = xs.length;
   if (bandwidth !== undefined) positive(where, "bandwidth", bandwidth);
+  if (n === 0)
+    throw new Error(
+      `${where}: the sample has no values: every one is missing. A kernel ` +
+        `density needs at least one.`
+    );
   const bw = bandwidth ?? silvermanBandwidth(xs);
-  if (n === 0 || !(bw > 0))
+  if (!(bw > 0))
     throw new Error(
       `${where}: Silverman's rule gives no bandwidth for ` +
-        `${n === 0 ? "no values" : `the values ${n === 1 ? xs[0] : `all ${xs[0]}`}`}` +
+        `${n === 1 ? `the one value ${xs[0]}` : `values that are all ${xs[0]}`}` +
         `: it needs two different values. Give one: kde(column, { bandwidth }).`
     );
   const domain = { min: xs[0] - KDE_CUT * bw, max: xs[n - 1] + KDE_CUT * bw };
@@ -360,8 +365,10 @@ function kernelDist(values: readonly unknown[], bandwidth?: number): Dist {
       if (e < 0) lo = t;
       else hi = t;
       const step = t - (e * n) / Math.max(densityAt(t), 1e-300);
-      t = step > lo && step < hi ? step : (lo + hi) / 2;
-      if (hi - lo <= 1e-12 * Math.max(1, Math.abs(t))) break;
+      const next = step > lo && step < hi ? step : (lo + hi) / 2;
+      const tol = 1e-12 * Math.max(1, Math.abs(next));
+      if (Math.abs(next - t) <= tol || hi - lo <= tol) return next;
+      t = next;
     }
     return t;
   };

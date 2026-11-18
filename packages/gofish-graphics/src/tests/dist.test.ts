@@ -206,6 +206,11 @@ const kdeData = (values: unknown[], bandwidth?: number): DistData => ({
     distOf(kdeData([1, null, 3, undefined, 2])).mass === 3
   );
   check(
+    "no values is an error, with a bandwidth or without",
+    /has no values/.test(throws(() => distOf(kdeData([null])))) &&
+      /has no values/.test(throws(() => distOf(kdeData([], 1))))
+  );
+  check(
     "one value has no bandwidth by Silverman's rule: give one",
     /Silverman's rule gives no bandwidth.*kde\(column, \{ bandwidth \}\)/.test(
       throws(() => distOf(kdeData([4, 4])))
