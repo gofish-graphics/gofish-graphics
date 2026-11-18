@@ -887,6 +887,148 @@ declare function layout(
       </div>
 
       <div class="card">
+        <h3>Staging: what other systems do</h3>
+        <p class="note">
+          A related-work search found close precedents for both functions. The
+          split that organizes them comes from build systems (Mokhov, Mitchell
+          and Peyton Jones, "Build Systems à la Carte", 2018): whether the
+          structure of a computation is known before it runs. Applying it to
+          layout is our reading, not something a paper states.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Structure</th>
+                <th>In GoFish</th>
+                <th>What it can do</th>
+                <th>Precedent</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Fixed, values flow through it</td>
+                <td>a function that calls <code>measure</code></td>
+                <td>Joins the one solve, takes part in fitting.</td>
+                <td>
+                  Scala's <code>Rep[T]</code>, where the type says when a value
+                  is known. SwiftUI's <code>Layout</code>, which sizes and
+                  places the subviews it is handed and cannot create views.
+                </td>
+              </tr>
+              <tr>
+                <td>A choice among alternatives that all exist up front</td>
+                <td><code>choose([a, b])</code></td>
+                <td>
+                  Every alternative is measured in lengths, one is picked,
+                  nothing is created late.
+                </td>
+                <td>
+                  SwiftUI's <code>ViewThatFits</code>. Selective functors
+                  (Mokhov and others, 2019).
+                </td>
+              </tr>
+              <tr>
+                <td>Depends on a value known only late</td>
+                <td><code>layout(children, body)</code></td>
+                <td>A nested second run inside its box.</td>
+                <td>
+                  Compose's <code>SubcomposeLayout</code>, Flutter's
+                  <code>LayoutBuilder</code>. Higher-order attribute grammars
+                  (Vogt, Swierstra and Kuiper, 1989).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">
+          So <code>layout</code> is the escape hatch, and the first two rows
+          should cover what they can. A layout that only switches between
+          arrangements by the room it has is the middle row. Tilings stay in the
+          third: squarify compares aspect ratios, which is outside what a length
+          can do.
+        </p>
+        <p class="label prop">
+          The middle row <span class="tag sketch">sketch</span>
+        </p>
+        <pre><code class="language-javascript">// A row when it fits, a column otherwise. Both arrangements exist up front,
+// so nothing is created late and both are measured in lengths.
+choose([spread({ dir: &quot;x&quot; }, cards), spread({ dir: &quot;y&quot; }, cards)]);</code></pre>
+        <ul class="tight">
+          <li>
+            <b>Containment.</b> A <code>layout</code> node's size is set from
+            outside and cannot depend on what its body builds.
+            <a href="https://www.w3.org/TR/css-contain-3/"
+              >CSS container queries</a
+            >
+            require exactly this, and it is what made them possible.
+          </li>
+          <li>
+            <b>No size question through a builder.</b>
+            <a href="https://developer.android.com/develop/ui/compose/phases"
+              >Compose</a
+            >
+            rejects intrinsic measurement of a <code>SubcomposeLayout</code>,
+            and
+            <a
+              href="https://api.flutter.dev/flutter/widgets/LayoutBuilder-class.html"
+              >Flutter</a
+            >
+            rejects it for <code>LayoutBuilder</code>, because answering would
+            mean running the builder speculatively. This is why a
+            <code>layout</code> node asks for no room.
+          </li>
+          <li>
+            <b>The body arranges, it does not create.</b> SwiftUI's
+            <code>Layout</code> and
+            <a href="https://drafts.css-houdini.org/css-layout-api/"
+              >CSS Houdini's</a
+            >
+            <code>layout(children, ...)</code> hand the children in. This is why
+            the children are an argument.
+          </li>
+          <li>
+            <b>The body is pure</b>, so it can be run again.
+            <a href="https://docs.julialang.org/en/v1/manual/metaprogramming/"
+              >Julia's generated functions</a
+            >
+            have the same rule.
+          </li>
+          <li>
+            <b>A length must not leave its scope.</b> A length computed inside a
+            nested run refers to that run's scale, so it must not flow into the
+            solve outside. Multi-stage languages call this scope extrusion. It
+            is new to our list.
+          </li>
+          <li>
+            <b>Never loop back.</b>
+            <a href="https://typst.app/docs/reference/context/">Typst</a> lays
+            out again up to five times and warns "layout did not converge within
+            5 attempts". LaTeX asks for a rerun. GoFish solves once, and nothing
+            here should change that.
+          </li>
+        </ul>
+        <p class="note">
+          Names worth borrowing:
+          <a href="https://ggplot2.tidyverse.org/reference/aes_eval.html"
+            >ggplot2</a
+          >
+          names its stages in user code (<code>after_stat</code>,
+          <code>after_scale</code>, <code>stage()</code>), which is the
+          precedent for naming ours (resolve, measure, solve, place). Shading
+          languages call "when a value is known" its rate, which reads better
+          than "too late" in an error.
+        </p>
+        <p class="note">
+          Not verified: several details in the search came from memory. One
+          claim needs checking before it is cited: that a
+          <code>Length</code> is exactly the "partially static data" of Yallop,
+          von Glehn and Kammar (ICFP 2018). The paper is real. Applying it to
+          piecewise-linear values is a reading.
+        </p>
+      </div>
+
+      <div class="card">
         <h3>
           <code>layout</code>: a treemap that reads its box
           <span class="tag sketch">sketch</span>
@@ -2914,6 +3056,54 @@ stack({ dir: &quot;x&quot;, size: &quot;pop&quot;, wrap: { cost: Cost.aspect() }
   >
     <h2>Precedent</h2>
     <div class="prec">
+      <div class="pc">
+        <h4>Compose SubcomposeLayout, Flutter LayoutBuilder</h4>
+        <p>
+          Children are built during layout, from the constraints. Both refuse
+          size questions through the builder. The model for
+          <code>layout</code> and for its rule that it asks for no room.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Higher-order attribute grammars (1989)</h4>
+        <p>
+          An attribute computes a new tree, which is then attributed by the
+          earlier visits. The formal version of the nested second run, with the
+          condition that the new tree cannot feed back into what defined it.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Lightweight Modular Staging (Scala)</h4>
+        <p>
+          <code>Rep[T]</code> against <code>T</code>: the type says when a value
+          is known, and using it too early is a type error at the use site. The
+          model for <code>Length</code> against a number.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>CSS container queries</h4>
+        <p>
+          A query on a container's size needs containment, so the container's
+          size cannot depend on its contents. Without it the query could feed
+          back into the size it asks about.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Typst context, LaTeX reruns</h4>
+        <p>
+          Layout that reads its own results, settled by repeating it. Typst
+          stops after five attempts. The model GoFish avoids by solving once.
+        </p>
+      </div>
+      <div class="pc">
+        <h4>Build Systems à la Carte (2018)</h4>
+        <p>
+          Tasks whose dependencies are known up front against tasks that find
+          them while running, with selective functors in between. The three-way
+          split of <code>measure</code>, <code>choose</code> and
+          <code>layout</code>.
+        </p>
+      </div>
       <div class="pc">
         <h4>Mojo, MLIR</h4>
         <p>

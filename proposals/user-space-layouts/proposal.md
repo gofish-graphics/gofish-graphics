@@ -90,6 +90,41 @@ Compose has the same split, from memory and not checked here: `BoxWithConstraint
 
 A function that calls `measure` is in a different position. It runs earlier, while size claims are collected, so what it returns joins the same solve as everything around it. That is why a layout built with add, subtract and max can take part in fitting and a `layout` body cannot.
 
+### Staging: what other systems do
+
+A related-work search found close precedents for both functions. The split that organizes them comes from build systems (Mokhov, Mitchell and Peyton Jones, "Build Systems à la Carte", 2018): whether the structure of a computation is known before it runs. Applying it to layout is our reading, not something a paper states.
+
+| Structure                                           | In GoFish                       | What it can do                                                                   | Precedent                                                                                                                                                 |
+| --------------------------------------------------- | ------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Fixed, values flow through it                       | a function that calls `measure` | joins the one solve, takes part in fitting                                       | Scala's `Rep[T]`, where the type says when a value is known. SwiftUI's `Layout`, which sizes and places the subviews it is handed and cannot create views |
+| A choice among alternatives that all exist up front | `choose([a, b])`                | every alternative is measured in lengths, one is picked, nothing is created late | SwiftUI's `ViewThatFits`. Selective functors (Mokhov and others, 2019)                                                                                    |
+| Depends on a value known only late                  | `layout(children, body)`        | a nested second run inside its box                                               | Compose's `SubcomposeLayout`, Flutter's `LayoutBuilder`. Higher-order attribute grammars (Vogt, Swierstra and Kuiper, 1989)                               |
+
+So `layout` is the escape hatch, and the first two rows should cover what they can. A layout that only switches between arrangements by the room it has is the middle row:
+
+<!-- id: p-choose-responsive -->
+
+```js
+// A row when it fits, a column otherwise. Both arrangements exist up front,
+// so nothing is created late and both are measured in lengths.
+choose([spread({ dir: "x" }, cards), spread({ dir: "y" }, cards)]);
+```
+
+Tilings stay in the third row. Squarify compares aspect ratios, which is outside what a length can do.
+
+The rules those systems impose, all of which the sketch above already follows or should adopt:
+
+- **Containment.** A `layout` node's size is set from outside and cannot depend on what its body builds. CSS container queries require exactly this (`container-type`), and it is what made them possible.
+- **No size question through a builder.** Compose rejects intrinsic measurement of a `SubcomposeLayout`, and Flutter rejects it for `LayoutBuilder`, because answering would mean running the builder speculatively. This is why a `layout` node asks for no room.
+- **The body arranges, it does not create.** SwiftUI's `Layout` and CSS Houdini's `layout(children, ...)` hand the children in. This is why the children are an argument.
+- **The body is pure**, so it can be run again. Julia's generated functions have the same rule.
+- **A length must not leave its scope.** A length computed inside a nested run refers to that run's scale, so it must not flow into the solve outside. Multi-stage languages call this scope extrusion. It is new to our list.
+- **Never loop back.** Typst lays out again up to five times and warns "layout did not converge within 5 attempts". LaTeX asks for a rerun. GoFish solves once, and nothing here should change that.
+
+Names worth borrowing: ggplot2 names its stages in user code (`after_stat`, `after_scale`, `stage()`), which is the precedent for naming ours (resolve, measure, solve, place). Shading languages call "when a value is known" its rate, which reads better than "too late" in an error.
+
+Not verified: several details in the search came from memory (exact SwiftUI signatures, Racket and Lean mechanics). One claim needs checking before it is cited: that a `Length` is exactly the "partially static data" of Yallop, von Glehn and Kammar (ICFP 2018). The paper is real. Applying it to piecewise-linear values is a reading.
+
 `layout` in use, a treemap that reads its box (the squarify plan and drawing are below, under "Squarify, as nested stacks"):
 
 ![squarify as nested stacks](img/tiling-stacks-squarify.png)
@@ -709,13 +744,19 @@ The hard part is fitting. A kernel that works in pixels cannot take part in fitt
 
 The needs in the kernels table repeat, and they are the steps of the layout protocol that UI toolkits expose. GoFish's engine already works this way inside (the layout-synthesis essay: "SwiftUI's protocol is propose-down / respond-up"). The node protocol is private, which is the whole gap.
 
-| Step                              | SwiftUI `Layout`                                          | Compose `Layout`                                  | Typst                       | `layout(size => ...)` and `measure(content)`, both returning content | the protocol as two functions that return the language itself. The model for the proposed spelling |
+| Step | SwiftUI `Layout` | Compose `Layout` | Typst | `layout(size => ...)` and `measure(content)`, both returning content | the protocol as two functions that return the language itself. The model for the proposed spelling |
+| Compose `SubcomposeLayout`, Flutter `LayoutBuilder` | children built during layout, from the constraints | both refuse size questions through the builder. The model for `layout` and for its rule that it asks for no room |
+| Higher-order attribute grammars (Vogt, Swierstra, Kuiper 1989) | an attribute computes a new tree, which is then attributed | the formal version of the nested second run, with the condition that the new tree cannot feed back into what defined it |
+| Lightweight Modular Staging (Scala) | `Rep[T]` against `T` | the type says when a value is known, and using it too early is a type error. The model for `Length` against a number |
+| CSS container queries | `container-type`, then a query on the container's size | a size query needs containment, so the container's size cannot depend on its contents |
+| Typst `context`, LaTeX reruns | layout that reads its own results | settled by repeating layout, up to five attempts in Typst. The model GoFish avoids by solving once |
+| Build Systems à la Carte (2018), selective functors (2019) | tasks with dependencies known up front, or found while running | the three-way split of `measure`, `choose` and `layout` |
 | --------------------------------- | --------------------------------------------------------- | ------------------------------------------------- | --------------------------- | -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| Read the space offered            | `proposal` in `sizeThatFits`, `bounds` in `placeSubviews` | `constraints`                                     | `layout(size => ...)`       | `layout(size, scales, children, node, shape)`                        | `layout(({ w, h, shape }) => node)`                                                                |
-| Measure a child before placing it | `subview.sizeThatFits(proposal)`                          | `measurable.measure(constraints)`, once per child | `measure(content)`          | `child.layout(size, scales)` returns its `dims` and `geometry()`     | `measure(child)`                                                                                   |
-| Place children                    | `subview.place(at:anchor:proposal:)`                      | `placeable.place(x, y)`                           | return content              | `placeable.place(axis, value, anchor)`                               | return operators: `position`, `layer`, `stack`                                                     |
-| Report its own size               | return a `CGSize`                                         | `layout(width, height) { }`                       | the size of what it returns | `intrinsicDims`                                                      | the box of what it returns                                                                         |
-| Read where other nodes ended up   | not in the protocol                                       | not in the protocol                               | not checked                 | `ref`, `.relate`                                                     | already public: `ref`, `selectAll`                                                                 |
+| Read the space offered | `proposal` in `sizeThatFits`, `bounds` in `placeSubviews` | `constraints` | `layout(size => ...)` | `layout(size, scales, children, node, shape)` | `layout(({ w, h, shape }) => node)` |
+| Measure a child before placing it | `subview.sizeThatFits(proposal)` | `measurable.measure(constraints)`, once per child | `measure(content)` | `child.layout(size, scales)` returns its `dims` and `geometry()` | `measure(child)` |
+| Place children | `subview.place(at:anchor:proposal:)` | `placeable.place(x, y)` | return content | `placeable.place(axis, value, anchor)` | return operators: `position`, `layer`, `stack` |
+| Report its own size | return a `CGSize` | `layout(width, height) { }` | the size of what it returns | `intrinsicDims` | the box of what it returns |
+| Read where other nodes ended up | not in the protocol | not in the protocol | not checked | `ref`, `.relate` | already public: `ref`, `selectAll` |
 
 Two differences from the UI toolkits matter.
 
