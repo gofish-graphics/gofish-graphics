@@ -3379,12 +3379,12 @@ def _check_bin(key: str, value: Any, where: str) -> Dict[str, Any]:
     ``struct(x=..., y=...).bin(...)``, which takes ``Binning.hex`` and
     ``Binning.voronoi``. A kind of the other key is a TypeError naming the key
     that takes it. The kinds of each key are the ``Partition`` and
-    ``StructBin`` option types, each one tagged union (gofish-ir
-    ``BIN_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
-    ``Frontend.checkStructBin``."""
+    ``StructBinning`` option types, each one tagged union (gofish-ir
+    ``BINNING_KINDS``). Mirrors JS ``Frontend.checkPartition`` and
+    ``Frontend.checkStructBinning``."""
     from ._generated import _OPTION_TYPES, _to_wire
 
-    own, other = ("Partition", "StructBin") if key == "field" else ("StructBin", "Partition")
+    own, other = ("Partition", "StructBinning") if key == "field" else ("StructBinning", "Partition")
     kind = value.get("kind") if isinstance(value, dict) else None
     # A Calendar value bins one field only: on a struct it is no other
     # key's kind, just not one of the struct's.

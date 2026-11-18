@@ -660,19 +660,19 @@ export type CurveIR =
 /** The cells a key is binned into, made by a call in the `Binning` family.
  *  `Binning.step(size)`, `Binning.thresholds(countOrEdges)` and
  *  `Binning.quantiles(countOrProbabilities)` bin one field
- *  (`field(x).bin(...)`, {@link FieldBinIR}); `Binning.hex({ radius })` and
+ *  (`field(x).bin(...)`, {@link FieldBinningIR}); `Binning.hex({ radius })` and
  *  `Binning.voronoi({ seeds })` bin two together (`struct({ x, y }).bin(...)`,
- *  {@link StructBinIR}). */
-export type BinningIR = FieldBinIR | StructBinIR;
+ *  {@link StructBinningIR}). */
+export type BinningIR = FieldBinningIR | StructBinningIR;
 
 /** The `Binning` kinds that cut the line of one field into intervals. */
-export type FieldBinIR =
+export type FieldBinningIR =
   | { kind: "step"; size: number }
   | { kind: "thresholds"; thresholds: number | number[] }
   | { kind: "quantiles"; quantiles: number | number[] };
 
 /** The `Binning` kinds that divide the plane of two fields into polygons. */
-export type StructBinIR =
+export type StructBinningIR =
   | { kind: "hex"; radius: number | { x: number; y: number } }
   | { kind: "voronoi"; seeds: Record<string, unknown>[] };
 
@@ -990,7 +990,7 @@ export type AxisDims = Record<string, ChannelValue | AxisInterval>;
  *  `Binning.thresholds(countOrEdges)`, `Binning.quantiles(countOrProbabilities)`).
  *  One tagged union, told apart by `kind`
  *  (`OPTION_TYPES.Partition`). */
-export type PartitionIR = CalendarPartitionIR | FieldBinIR;
+export type PartitionIR = CalendarPartitionIR | FieldBinningIR;
 
 export interface FieldAccessor {
   type: "field";
@@ -1011,7 +1011,7 @@ export interface StructAccessor {
 }
 
 /** One op in a `struct(...)` pipeline: the cells it is binned into. */
-export type StructOpIR = { op: "bin"; partition: StructBinIR };
+export type StructOpIR = { op: "bin"; partition: StructBinningIR };
 
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */

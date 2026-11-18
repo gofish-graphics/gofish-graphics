@@ -30,7 +30,7 @@ import { field } from "../ast/data";
 import { partition as srcPartition } from "../lib";
 
 const { chart, partition, region, circle } = GoFish as any;
-const DistBin = (GoFish as any).Binning;
+const DistBinning = (GoFish as any).Binning;
 const distStruct = (GoFish as any).struct;
 const distField = (GoFish as any).field;
 /** The domain of `values` (a column's `HasDomain`): their least and
@@ -418,7 +418,7 @@ async function main() {
       /do not apply/.test(
         errorOf(() =>
           partition({
-            by: distStruct({ x: "a", y: "b" }).bin(DistBin.hex({ radius: 1 })),
+            by: distStruct({ x: "a", y: "b" }).bin(DistBinning.hex({ radius: 1 })),
             dir: "x",
           })
         ) ?? ""
@@ -442,7 +442,7 @@ async function main() {
       { a: 0.1, b: 0.2 },
       { a: 2, b: 1 },
     ];
-    const key = distStruct({ x: "a", y: "b" }).bin(DistBin.hex({ radius: 1 }));
+    const key = distStruct({ x: "a", y: "b" }).bin(DistBinning.hex({ radius: 1 }));
     // No legend: the circles below have none, and a legend takes room
     // (#1032), so the two charts would map the plane differently.
     const dl = await chart(rows, { axes: false, legend: false })
@@ -583,7 +583,7 @@ async function main() {
     const vdl = await chart(rows, { axes: false })
       .flow(
         partition({
-          by: distStruct({ x: "a", y: "b" }).bin(DistBin.voronoi({ seeds })),
+          by: distStruct({ x: "a", y: "b" }).bin(DistBinning.voronoi({ seeds })),
         })
       )
       .mark(region({ stroke: "white" }))

@@ -1152,7 +1152,7 @@ export type StrategyFamilyName = keyof typeof STRATEGIES;
  *  cells are intervals of a line, or two fields together,
  *  `struct({ x, y }).bin(b)`, whose cells are polygons of the plane. A kind
  *  is valid only on its key. */
-export const BIN_KINDS = {
+export const BINNING_KINDS = {
   field: ["step", "thresholds", "quantiles"],
   struct: ["hex", "voronoi"],
 } as const satisfies Record<
@@ -1318,19 +1318,19 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
-  // The cells a key is binned into, by the key (BIN_KINDS). A
+  // The cells a key is binned into, by the key (BINNING_KINDS). A
   // `field(x).bin(...)` partition is a Calendar kind or a Binning kind that cuts
   // one field's line: one tagged union of both families' kinds.
   Partition: {
     doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Binning.step(size), Binning.thresholds(countOrEdges) or Binning.quantiles(countOrProbabilities).",
     type: t.union(
       ...kindBranches(STRATEGIES.Calendar),
-      ...kindBranches(STRATEGIES.Binning, BIN_KINDS.field)
+      ...kindBranches(STRATEGIES.Binning, BINNING_KINDS.field)
     ),
   },
-  StructBin: {
+  StructBinning: {
     doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Binning.hex({ radius }) or Binning.voronoi({ seeds }).",
-    type: strategyType(STRATEGIES.Binning, BIN_KINDS.struct),
+    type: strategyType(STRATEGIES.Binning, BINNING_KINDS.struct),
   },
   // Each strategy family (`STRATEGIES`) is one entry, under its family name.
   ...Object.fromEntries(

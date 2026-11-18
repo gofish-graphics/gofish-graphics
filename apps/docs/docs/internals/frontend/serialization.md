@@ -635,7 +635,7 @@ today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
 value of an axis's `label`), `AxisInterval` (`{min, center, max, size,
 embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
-the predicate of `filter`), `Calendar`, `Partition` and `StructBin` (the
+the predicate of `filter`), `Calendar`, `Partition` and `StructBinning` (the
 kinds valid on each key, below), and one entry per strategy family. A
 `t.ref(name)` resolves against it first, so the validator, the JSON Schema,
 and the Python generator all read one declaration of each. `ChartOptions` is
@@ -658,11 +658,11 @@ so an option that takes a family is `t.ref` of its name, as in
 (`positional: "size"`): `Binning.step(0.5)` in JS, `Binning.step(0.5)` with a
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
 the wire either way. A construct descriptor has the same field: `COORDS.geo`
-takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Binning` kinds bin one of two keys (`BIN_KINDS`):
+takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Binning` kinds bin one of two keys (`BINNING_KINDS`):
 `step`, `thresholds` and `quantiles` cut the line of one field, and `hex` and `voronoi`
-divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
-derived from the one `Binning` entry, so a struct's bin op takes a `StructBin`,
-and the JS layout checks a struct's bin with `checkStructBin(value, where)`
+divide the plane of two. `OPTION_TYPES.StructBinning` is the kinds of the plane,
+derived from the one `Binning` entry, so a struct's bin op takes a `StructBinning`,
+and the JS layout checks a struct's bin with `checkStructBinning(value, where)`
 and a field's with `checkPartition(value, where)`, each of which names the
 right key for a kind of the other one.
 
@@ -729,7 +729,7 @@ no shape matched. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
 whole document. Every JS-side check is that one walk (`walkOrThrow`), so
-it throws the validator's own message: `checkPartition`, `checkStructBin`,
+it throws the validator's own message: `checkPartition`, `checkStructBinning`,
 and `checkOption(name, value, where)`, which checks a named option object
 of `OPTION_TYPES` (layout checks each axis's options against
 `AxisOptions` with it, so a JS caller and a Python one get the same
@@ -755,7 +755,7 @@ A named type may say which Python class builds a value of it (`pyClass`):
 `FieldPredicate` here, and `FieldAccessor`, `StructAccessor` and `ChunkKey`
 in `AUTHORED_REFS`, the list of refs to hand-authored shapes (a struct key,
 `{ type: "struct", fields: { x, y }, ops? }`, is walked by its own walker,
-whose bin op is checked against `OPTION_TYPES.StructBin`). `ChunkKey` is the
+whose bin op is checked against `OPTION_TYPES.StructBinning`). `ChunkKey` is the
 `{ type: "chunk", size }` that `chunk(size)` builds, the `by` key that groups
 consecutive rows; a split operator's `by` takes a field name, a
 `FieldAccessor`, or a `ChunkKey`. Such a value already carries its wire keys, so
@@ -938,7 +938,10 @@ first) and emits `gofish/_generated.py`, one module per family in
 (from `COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
-generated Python" norm Altair and Plotly.py both follow.
+generated Python" norm Altair and Plotly.py both follow. Each family module
+starts with one marker line, and after writing, the generator deletes any
+`gofish/*.py` that starts with it but was not written in that run (the module
+of a renamed or deleted family), so the freshness check sees the deletion.
 
 Python kwargs are in snake case, while the wire stays in camel case. One
 function in `descriptors.ts`, `pyKwarg(fieldName)`, gives each field's

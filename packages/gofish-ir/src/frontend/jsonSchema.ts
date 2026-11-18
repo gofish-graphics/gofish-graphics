@@ -431,7 +431,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             additionalProperties: false,
             properties: {
               op: { const: "bin" },
-              partition: { $ref: "#/$defs/StructBin" },
+              partition: { $ref: "#/$defs/StructBinning" },
             },
           },
         },

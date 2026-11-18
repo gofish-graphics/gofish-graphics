@@ -37,7 +37,7 @@ import {
 } from "./nonFinite.js";
 import {
   AUTHORED_REFS,
-  BIN_KINDS,
+  BINNING_KINDS,
   CONSTRAINTS,
   DESCRIPTOR_TABLES,
   optionsRequired,
@@ -540,9 +540,9 @@ export function checkOption(
  * field's line (`Binning.step`) throws, naming `field(x).bin`; anything else is
  * checked as {@link checkStrategy} checks it.
  */
-export function checkStructBin(v: unknown, where: string): void {
+export function checkStructBinning(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
-  if ((BIN_KINDS.field as readonly unknown[]).includes(kind))
+  if ((BINNING_KINDS.field as readonly unknown[]).includes(kind))
     throw new Error(
       `[gofish] ${where}: Binning.${kind} bins one field. Bin each field with ` +
         `field(x).bin(Binning.${kind}(...)); struct({ x, y }).bin takes ` +
@@ -558,7 +558,7 @@ export function checkStructBin(v: unknown, where: string): void {
  */
 export function checkPartition(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
-  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
+  if ((BINNING_KINDS.struct as readonly unknown[]).includes(kind))
     throw new Error(
       `[gofish] ${where}: Binning.${kind} bins two fields together into cells ` +
         `of the plane. Bin them with struct({ x, y }).bin(Binning.${kind}(...)); ` +
@@ -920,7 +920,7 @@ function walkFieldAccessor(
  * A key built from two fields (`struct({ x, y })`), with the cells it is
  * binned into: `{ type: "struct", fields: { x, y }, ops?: [{ op: "bin",
  * partition }] }`, the partition a `Binning` kind that bins two fields
- * (`OPTION_TYPES.StructBin`).
+ * (`OPTION_TYPES.StructBinning`).
  */
 function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
   const fail = (message: string, at = path) =>
@@ -960,7 +960,7 @@ function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
         }
         rejectUnknown(op, ["op", "partition"], at, ctx);
         walkFieldType(
-          OPTION_TYPES.StructBin.type,
+          OPTION_TYPES.StructBinning.type,
           op.partition,
           `${at}.partition`,
           ctx

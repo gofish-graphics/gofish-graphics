@@ -89,14 +89,14 @@ abstract class NumberBinning {
   }
 
   /** The partition's params, without a format. */
-  protected abstract wire(): Frontend.FieldBinIR;
+  protected abstract wire(): Frontend.FieldBinningIR;
 
   /** The builder spelling, `Binning.step(0.5)`, for error messages. */
   protected abstract spelling(): string;
 
   /** The wire form. A partition with a `.format(fn)` has none (a loud
    *  error), as for a Calendar value. */
-  toJSON(key?: string): Frontend.FieldBinIR {
+  toJSON(key?: string): Frontend.FieldBinningIR {
     if (this.#format !== undefined) throw noWireForm(this, key);
     return this.wire();
   }
@@ -124,7 +124,7 @@ export class StepBinning extends NumberBinning {
     return new StepBinning(this.size, checkFormat<NumberCellFormat>(this, fn));
   }
 
-  protected wire(): Frontend.FieldBinIR {
+  protected wire(): Frontend.FieldBinningIR {
     return { kind: "step", size: this.size };
   }
 
@@ -153,7 +153,7 @@ export class ThresholdsBinning extends NumberBinning {
     );
   }
 
-  protected wire(): Frontend.FieldBinIR {
+  protected wire(): Frontend.FieldBinningIR {
     return { kind: "thresholds", thresholds: this.thresholds };
   }
 
@@ -183,7 +183,7 @@ export class QuantilesBinning extends NumberBinning {
     );
   }
 
-  protected wire(): Frontend.FieldBinIR {
+  protected wire(): Frontend.FieldBinningIR {
     return { kind: "quantiles", quantiles: this.quantiles };
   }
 

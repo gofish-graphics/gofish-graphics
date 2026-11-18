@@ -17,7 +17,7 @@
  * its wire form, `{ kind, ...params }`, so it crosses the Python bridge as
  * IR. The kinds and their params are declared once, in gofish-ir's
  * `STRATEGIES` table, which checks a strategy where `.bin` reads it
- * (`Frontend.checkPartition`, `Frontend.checkStructBin`). `Binning.step`,
+ * (`Frontend.checkPartition`, `Frontend.checkStructBinning`). `Binning.step`,
  * `Binning.thresholds` and `Binning.quantiles` are objects of a class
  * (`StepBinning`, `ThresholdsBinning`, `QuantilesBinning`, ast/cells.ts) for
  * their `.format(fn)`, which labels their cells; the cells themselves are made in `ast/cells.ts`
@@ -33,10 +33,13 @@ export type {
 } from "../ast/cells";
 
 /** `hex()`: a grid of hexagons. See {@link hex}. */
-export type HexBinning = Extract<Frontend.StructBinIR, { kind: "hex" }>;
+export type HexBinning = Extract<Frontend.StructBinningIR, { kind: "hex" }>;
 
 /** `voronoi()`: one cell per seed. See {@link voronoi}. */
-export type VoronoiBinning = Extract<Frontend.StructBinIR, { kind: "voronoi" }>;
+export type VoronoiBinning = Extract<
+  Frontend.StructBinningIR,
+  { kind: "voronoi" }
+>;
 
 /** The kinds that cut the line of one field: the `Binning` value of
  *  `field(x).bin(...)`. */

@@ -235,7 +235,7 @@ for the API.
                 "const": "bin"
               },
               "partition": {
-                "$ref": "#/$defs/StructBin"
+                "$ref": "#/$defs/StructBinning"
               }
             }
           }
@@ -4207,7 +4207,7 @@ for the API.
       ],
       "description": "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Binning.step(size), Binning.thresholds(countOrEdges) or Binning.quantiles(countOrProbabilities)."
     },
-    "StructBin": {
+    "StructBinning": {
       "anyOf": [
         {
           "type": "object",

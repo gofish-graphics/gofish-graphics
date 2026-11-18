@@ -10,7 +10,7 @@ import {
   allExamples,
   validate,
   checkStrategy,
-  checkStructBin,
+  checkStructBinning,
   checkPartition,
   checkOption,
   encodeIR,
@@ -1471,8 +1471,9 @@ console.log("\n# Strategies");
     errorIn(() => checkPartition({ kind: "step", size: 1 }, "where")) === ""
   );
   check(
-    "checkStructBin accepts a struct bin",
-    errorIn(() => checkStructBin({ kind: "hex", radius: 1 }, "where")) === ""
+    "checkStructBinning accepts a struct bin",
+    errorIn(() => checkStructBinning({ kind: "hex", radius: 1 }, "where")) ===
+      ""
   );
   {
     const why = errorIn(() =>
@@ -1487,10 +1488,10 @@ console.log("\n# Strategies");
   }
   {
     const why = errorIn(() =>
-      checkStructBin({ kind: "step", size: 1 }, "where")
+      checkStructBinning({ kind: "step", size: 1 }, "where")
     );
     check(
-      "checkStructBin rejects Binning.step, naming field",
+      "checkStructBinning rejects Binning.step, naming field",
       /Binning\.step bins one field/.test(why) && why.includes("field(x).bin"),
       why
     );
