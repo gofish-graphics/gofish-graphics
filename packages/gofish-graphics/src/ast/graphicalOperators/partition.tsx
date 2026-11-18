@@ -76,9 +76,9 @@ import type { Alignment } from "./alignment";
  * (the rows are the distribution's parameters), and in it the distribution
  * is the whole one restricted to the cell (groupCell.ts), so a
  * `ribbon({ x: d.domain(), h: d.density() })` in each cell draws the part
- * of the curve over it, and the parts meet. A field's cells do the same
- * for a distribution of the field (`field(x).density()`) and a band
- * through the rows over it.
+ * of the curve over it, and the parts meet. A field binned over a column
+ * that holds a distribution (after `derive(kde(x))`) is cut the same way,
+ * and a field's cells restrict a band through the rows over it too.
  *
  * **The plane form**, `by: struct({ x, y }).bin(b)`, divides both axes at
  * once into polygon cells. It is the same split and the same constraints:

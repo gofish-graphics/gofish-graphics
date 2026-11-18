@@ -1,7 +1,8 @@
 /**
- * Distributions: the run-time record (ast/dist.ts),
- * the families and `Dist.sample`, a distribution expression
- * (ast/distExpr.ts) and the field members (`field(x).density()`), their
+ * Distributions: the run-time record (ast/dist.ts), the families and the
+ * kernel density, the data form a column holds and `kde`, the derive helper
+ * that makes one, a distribution expression (ast/distExpr.ts) and the field
+ * members that read a column's distribution (`field(x).density()`), their
  * units, and their wire form.
  *
  * Run: `tsx src/tests/dist.test.ts` (wired as `pnpm test:dist`).
@@ -10,18 +11,20 @@ import {
   familyDist,
   normalCdf,
   normalQuantile,
+  distOf,
   restrictDist,
-  sample,
-  sampleIn,
   type Dist,
+  type DistData,
 } from "../ast/dist";
+import { kde } from "../ast/marks/chart";
 import { evalGroup, FieldExpr, medianOf, meanOf } from "../ast/fieldExpr";
 import { integrate } from "../ast/fun";
 import { hasNoWireForm } from "../ast/groupExpr";
 import * as DistNS from "../families/dist";
 import * as BinNS from "../families/bin";
 import { splitEntries } from "../ast/datumProjection";
-import { applySchema } from "../ast/schema";
+import { resolveColumn } from "../ast/channels";
+import { applySchema, getColumnTypes } from "../ast/schema";
 import { penguins } from "../data/penguins";
 import { silvermanBandwidth } from "../ast/graphicalOperators/overlap";
 import { Unit as UnitNS } from "../lib";
@@ -87,11 +90,11 @@ for (const [name, d, inside] of families) {
   for (const p of [0.1, 0.5, 0.9])
     check(
       `${name}: quantile(${p}) inverts the cdf`,
-      near(d.cdf.at(d.quantile(p)!), p, 1e-9)
+      near(d.cdf.at(d.quantile(p)), p, 1e-9)
     );
   check(
     `${name}: median is quantile(0.5)`,
-    near(d.median, d.quantile(0.5)!, 1e-9)
+    near(d.median, d.quantile(0.5), 1e-9)
   );
   check(`${name}: mass is 1`, d.mass === 1);
   check(
@@ -112,25 +115,29 @@ check(
   )
 );
 
-console.log("\n# a sample");
+console.log("\n# a kernel density");
 const masses = penguins
   .map((p) => p["Body Mass (g)"])
   .filter((v): v is number => v !== null);
+const kdeData = (values: unknown[], bandwidth?: number): DistData => ({
+  type: "dist",
+  family: "kde",
+  params: { values, ...(bandwidth !== undefined ? { bandwidth } : {}) },
+});
 {
-  const d = sample(masses);
+  const d = distOf(kdeData(masses));
+  const n = masses.length;
   // Past 3 bandwidths a kernel has Φ(−3) of its mass on that side, so the
-  // area over the drawn interval is short of the count by less than that share of
-  // the values at each end: at most 2 Φ(−3) n.
+  // area over the drawn interval is short of the count by less than that
+  // share of the values at each end: at most 2 Φ(−3) n.
   const tail = normalCdf(-3);
   const area = integrate(d.density);
   check(
     "its density's area is the number of values, less the tails",
-    area <= masses.length && area >= masses.length * (1 - 2 * tail),
-    `${area} vs ${masses.length}`
+    area <= n && area >= n * (1 - 2 * tail),
+    `${area} vs ${n}`
   );
-  check("its mass is the number of values", d.mass === masses.length);
-  check("its median is the values' median", d.median === medianOf(masses));
-  check("its mean is the values' mean", near(d.mean, meanOf(masses)!, 1e-9));
+  check("its mass is the number of values", d.mass === n);
   const bw = silvermanBandwidth([...masses].sort((a, b) => a - b));
   check(
     "it is drawn 3 bandwidths past the values",
@@ -141,127 +148,161 @@ const masses = penguins
   );
   check(
     "it tapers to near zero at both ends",
-    d.density.at(d.density.domain.min) < 0.02 * d.density.at(d.median!) &&
-      d.density.at(d.density.domain.max) < 0.02 * d.density.at(d.median!)
+    d.density.at(d.density.domain.min) < 0.02 * d.density.at(d.median) &&
+      d.density.at(d.density.domain.max) < 0.02 * d.density.at(d.median)
   );
-  check(
-    "its cdf is 0 below the least value and 1 above the greatest",
-    d.cdf.at(d.cdf.domain.min) === 0 &&
-      d.cdf.at(Math.min(...masses)) === 0 &&
-      d.cdf.at(Math.max(...masses)) === 1 &&
-      d.cdf.at(d.cdf.domain.max) === 1
-  );
-  // Tied values hold the mass of all their copies, so at a tie the cdf
-  // passes p; between different values it inverts the quantile exactly.
-  for (const p of [0, 0.1, 0.25, 0.5, 0.9, 1])
+  const { min } = d.density.domain;
+  for (const t of [3000, 3500, 4200, 5000, 6000]) {
+    const below = integrate(restrictDist(d, { min, max: t }).density);
     check(
-      `its cdf at its quantile ${p} is at least ${p}`,
-      d.cdf.at(d.quantile(p)!) >= p - 1e-12
+      `its cdf is its density's integral over its mass, at ${t}`,
+      near(d.cdf.at(t) - d.cdf.at(min), below / n, 1e-6),
+      `${d.cdf.at(t) - d.cdf.at(min)} vs ${below / n}`
     );
-  const distinct = sample([1, 2, 4, 7, 11, 16]);
-  for (const p of [0, 0.1, 0.33, 0.5, 0.9, 1])
+  }
+  for (const p of [0.001, 0.1, 0.25, 0.5, 0.9, 0.999])
     check(
-      `with no ties its cdf inverts its quantile at ${p}`,
-      near(distinct.cdf.at(distinct.quantile(p)!), p, 1e-12)
+      `its quantile inverts its cdf at ${p}`,
+      near(d.cdf.at(d.quantile(p)), p, 1e-9)
     );
-  // A tie is a jump: the quantile is flat across its copies, so the cdf
-  // runs from one value's last copy to the next value's first and jumps
-  // between a tie's first copy and its last.
-  const tied = sample([1, 2, 2, 3]);
   check(
-    "with a tie its cdf is linear between values and jumps at the tie",
-    near(tied.cdf.at(1.5), 1 / 6, 1e-12) &&
-      near(tied.cdf.at(2), 2 / 3, 1e-12) &&
-      near(tied.cdf.at(2.5), 5 / 6, 1e-12)
+    "its quantile at 0 and 1 is the ends of the line",
+    d.quantile(0) === -Infinity && d.quantile(1) === Infinity
   );
-  const tiedLeast = sample([1, 1, 2, 3]);
+  check("its median is quantile(0.5)", d.median === d.quantile(0.5));
+  // The density's own mean, over the drawn interval: the kernels' tails
+  // past it are short by the same share on each side, nearly.
+  const steps = 4000;
+  const h = (d.density.domain.max - min) / steps;
+  let m0 = 0;
+  let m1 = 0;
+  for (let i = 0; i <= steps; i++) {
+    const t = min + i * h;
+    const w = i === 0 || i === steps ? 0.5 : 1;
+    m0 += w * d.density.at(t);
+    m1 += w * t * d.density.at(t);
+  }
   check(
-    "with a tie at the least value its cdf is 0 below it and jumps there",
-    tiedLeast.cdf.at(0.99) === 0 && near(tiedLeast.cdf.at(1), 1 / 3, 1e-12)
+    "its mean is its density's mean, the values' mean",
+    near(d.mean, meanOf(masses)!, 1e-9) && near(m1 / m0, d.mean, 1),
+    `${m1 / m0} vs ${d.mean}`
+  );
+  check(
+    "its data form is built once",
+    distOf(kdeData(masses)) !== d &&
+      (() => {
+        const data = kdeData(masses);
+        return distOf(data) === distOf(data);
+      })()
+  );
+  const wire = JSON.parse(JSON.stringify(kdeData(masses)));
+  check(
+    "its data form round-trips as JSON to the same distribution",
+    distOf(wire).density.at(4000) === d.density.at(4000) &&
+      distOf(wire).median === d.median
   );
   check(
     "missing values are left out",
-    sample([1, null, 3, undefined, 2]).mass === 3
+    distOf(kdeData([1, null, 3, undefined, 2])).mass === 3
   );
   check(
-    "one value has quantiles but no density",
-    sample([4, 4]).median === 4 &&
-      /at least two different values/.test(
-        throws(() => sample([4, 4]).density.at(4))
-      )
+    "one value has no bandwidth by Silverman's rule: give one",
+    /Silverman's rule gives no bandwidth.*kde\(column, \{ bandwidth \}\)/.test(
+      throws(() => distOf(kdeData([4, 4])))
+    ) && distOf(kdeData([4, 4], 1)).median === 4
   );
   check(
     "a bandwidth must be positive",
     /bandwidth must be a positive number/.test(
-      throws(() => sample(masses, { bandwidth: 0 }))
+      throws(() => distOf(kdeData(masses, 0)))
+    )
+  );
+  check(
+    "its values are numbers",
+    /finite numbers/.test(throws(() => distOf(kdeData([1, "2", 3]))))
+  );
+  const normal = distOf({
+    type: "dist",
+    family: "normal",
+    params: { mean: 3, sd: 2 },
+  });
+  check(
+    "a family's data form is the family",
+    normal.median === 3 &&
+      normal.density.at(4) ===
+        familyDist("normal", { mean: 3, sd: 2 }).density.at(4)
+  );
+}
+
+console.log("\n# kde, the derive helper");
+{
+  const rows = [
+    { g: "a", v: 1, day: 1 },
+    { g: "a", v: null, day: 2 },
+    { g: "a", v: 4, day: 3 },
+  ];
+  const [row, ...rest] = kde("v")(rows);
+  check(
+    "one row: the column holds the data form, with the constant columns",
+    rest.length === 0 &&
+      row.g === "a" &&
+      !("day" in row) &&
+      JSON.stringify(row.v) ===
+        JSON.stringify({
+          type: "dist",
+          family: "kde",
+          params: { values: [1, 4] },
+        })
+  );
+  check(
+    "a bandwidth is kept in the data form",
+    (kde("v", { bandwidth: 2 })(rows)[0].v as any).params.bandwidth === 2
+  );
+  check("no rows give no row", kde("v")([]).length === 0);
+  check(
+    "a sample with no density is an error at the kde",
+    /kde: Silverman's rule/.test(throws(() => kde("v")([{ v: 1 }])))
+  );
+  // In each group of a split, as derive runs after a spread.
+  const col = "Body Mass (g)";
+  const bySpecies = new Map<string, any[]>();
+  for (const p of penguins)
+    bySpecies.set(p.Species, [...(bySpecies.get(p.Species) ?? []), p]);
+  const groups = [...bySpecies].map(([species, g]) => ({
+    species,
+    count: g.filter((p) => p[col] !== null).length,
+    row: kde(col)(g)[0],
+  }));
+  check(
+    "per group: each row keeps its group's species and holds its own sample",
+    groups.every(
+      ({ species, count, row }) =>
+        row.Species === species && distOf(row[col] as DistData).mass === count
     )
   );
 }
 
-console.log("\n# restriction");
+console.log("\n# field reads the distribution its column holds");
 {
-  const d = familyDist("normal", { mean: 0, sd: 1 });
-  const cell = { min: -1, max: 0.5 };
-  const r = restrictDist(d, cell);
-  const share = normalCdf(0.5) - normalCdf(-1);
-  check("its mass is the cell's share", near(r.mass, share, 1e-12));
-  check(
-    "its density is the same inside",
-    near(r.density.at(0), d.density.at(0), 1e-15)
-  );
-  check(
-    "its density's area is its mass",
-    near(integrate(r.density), share, 1e-6)
-  );
-  check(
-    "its median halves the cell's mass",
-    near(d.cdf.at(r.median!) - normalCdf(-1), share / 2, 1e-9)
-  );
-  check(
-    "its cdf runs 0 to 1",
-    near(r.cdf.at(-1), 0, 1e-12) && near(r.cdf.at(0.5), 1, 1e-12)
-  );
-  const lo = restrictDist(d, { min: -10, max: 0 });
-  const hi = restrictDist(d, { min: 0, max: 10 });
-  check(
-    "two cells meet exactly",
-    lo.density.domain.max === hi.density.domain.min &&
-      lo.density.at(0) === hi.density.at(0)
-  );
-  const s = sample(masses);
-  const inCell = masses.filter((m) => m >= 4000 && m <= 5000);
-  const c = sampleIn(inCell, s, { min: 4000, max: 5000 });
-  check(
-    "a sample's cell: its median is the cell's values'",
-    c.median === medianOf(inCell)
-  );
-  check(
-    "a sample's cell: its mass is the cell's count",
-    c.mass === inCell.length
-  );
-  check(
-    "a sample's cell: the whole sample's density inside",
-    c.density.at(4500) === s.density.at(4500) &&
-      c.density.domain.min === 4000 &&
-      c.density.domain.max === 5000
-  );
-}
-
-console.log("\n# field members are the sample's");
-{
-  const rows = penguins.filter((p) => p["Body Mass (g)"] !== null);
   const col = "Body Mass (g)";
-  const d = sample(rows.map((r) => r[col]));
-  const read = (e: unknown) => evalGroup(e as any, rows, { name: col });
+  const rows = kde(col)(penguins);
+  const d = distOf(rows[0][col] as DistData);
+  const read = (e: unknown, rs: unknown[] = rows) =>
+    evalGroup(e as any, rs, { name: col });
   const med = read(field(col).quantile(0.5));
   check(
-    "quantile(0.5) is median()",
+    "quantile(0.5) is median() is the distribution's median",
     med.kind === "value" &&
-      med.value === (read(field(col).median()) as any).value
+      med.value === (read(field(col).median()) as any).value &&
+      med.value === d.median
+  );
+  check(
+    "mean() is the distribution's mean",
+    (read(field(col).mean()) as any).value === d.mean
   );
   const dens = read(field(col).density());
   check(
-    "density() is the sample's density",
+    "density() is the distribution's density",
     dens.kind === "function" && dens.fun.at(4000) === d.density.at(4000)
   );
   check(
@@ -276,48 +317,61 @@ console.log("\n# field members are the sample's");
       sup.quantity?.name === col
   );
   const cdf = read(field(col).cdf());
-  check("cdf() is a ratio", cdf.quantity?.unit?.unit === "ratio");
-  const kde = read(
-    field(col)
-      .reduce((xs) => DistNS.sample(xs))
-      .density()
+  check(
+    "cdf() is a ratio, the distribution's cdf",
+    cdf.quantity?.unit?.unit === "ratio" &&
+      cdf.kind === "function" &&
+      cdf.fun.at(4000) === d.cdf.at(4000)
   );
   check(
-    "a reduce that returns a sample lifts the same density",
-    kde.kind === "function" && kde.fun.at(4200) === d.density.at(4200)
+    "a bare read of the column is an error that names its members",
+    /density/.test(throws(() => read(field(col))))
   );
   check(
-    "a reduce's Dist: its domain() member is its density's domain()",
-    (() => {
-      const a = read(
-        field(col)
-          .reduce((xs) => DistNS.sample(xs))
-          .domain()
-      );
-      const b = read(
-        field(col)
-          .reduce((xs) => DistNS.sample(xs))
-          .density()
-          .domain()
-      );
-      return (
-        a.kind === "function" &&
-        b.kind === "function" &&
-        a.fun.domain.min === b.fun.domain.min &&
-        a.fun.domain.max === b.fun.domain.max
-      );
-    })()
+    "a data summary that is not a member is an error that names the members",
+    /field\("Body Mass \(g\)"\)\.sum\(\).*density\(\), domain\(\)/.test(
+      throws(() => read(field(col).sum()))
+    )
+  );
+  check(
+    "the same distribution in every row of a group reads as one",
+    (read(field(col).median(), [rows[0], { ...rows[0] }]) as any).value ===
+      d.median
+  );
+  const two = [...kde(col)(penguins.slice(0, 50)), ...rows];
+  check(
+    "different distributions in one group are an error that names the fix",
+    /Split the rows so each group holds one/.test(
+      throws(() => read(field(col).density(), two))
+    )
+  );
+  const raw = penguins.filter((p) => p[col] !== null);
+  for (const member of ["density", "domain", "cdf"] as const)
+    check(
+      `${member}() on a column of numbers names derive(kde(...))`,
+      /holds numbers.*derive\(kde\("Body Mass \(g\)"\)\)/s.test(
+        throws(() => read((field(col) as any)[member](), raw))
+      )
+    );
+  check(
+    "quantile(p) on a column of numbers names derive(kde(...))",
+    /derive\(kde\(/.test(throws(() => read(field(col).quantile(0.9), raw)))
+  );
+  check(
+    "median() on a column of numbers is the data's median",
+    (read(field(col).median(), raw) as any).value ===
+      medianOf(raw.map((p) => p[col] as number))
   );
 }
 
 console.log("\n# units");
 {
   const usd = { unit: "USD", symbol: "$", traits: { CanSum: {} } };
-  const rows = [{ v: 1 }, { v: 2 }, { v: 4 }];
+  const rows = kde("v")([{ v: 1 }, { v: 2 }, { v: 4 }]);
   const col = { name: "v", unit: usd };
   const dens = evalGroup(field("v").density() as any, rows, col);
   check(
-    "a density is the count per the variable's unit, which adds up",
+    "a kernel density is the count per the variable's unit, which adds up",
     dens.quantity?.unit?.unit === "count per USD" &&
       dens.quantity?.unit?.traits?.CanSum !== undefined
   );
@@ -336,12 +390,24 @@ console.log("\n# units");
   );
   const sup = evalGroup(field("v").domain() as any, rows, col);
   check("a domain is in the variable", sup.quantity === col);
-  const u = DistNS.units("USD", "count");
+  const typedIn = await applySchema([{ v: 1 }, { v: 2 }, { v: 4 }], {
+    v: { unit: UnitNS("USD") },
+  } as any);
+  // As derive types its result: the input's column types, inherited.
+  const typed = await applySchema(
+    kde("v")(typedIn),
+    {},
+    getColumnTypes(typedIn)
+  );
+  const fromSchema = evalGroup(
+    field("v").density() as any,
+    typed,
+    resolveColumn(typed, field("v")).quantity
+  );
   check(
-    "Dist.units mirrors the record",
-    u.density.HasUnit.unit === "count per USD" &&
-      u.domain.HasUnit.unit === "USD" &&
-      u.cdf.HasUnit.unit === "ratio"
+    "a column that holds a distribution keeps its unit",
+    fromSchema.quantity?.unit?.unit === "count per USD",
+    String(fromSchema.quantity?.unit?.unit)
   );
 }
 
@@ -503,41 +569,41 @@ console.log("\n# a distribution's cells");
   );
 }
 
-console.log("\n# a field's cells");
+console.log("\n# the cells of a field that holds a distribution");
 {
   const mass = field("Body Mass (g)");
-  const rows = await applySchema(
-    penguins.filter((p) => p["Body Mass (g)"] != null),
-    {}
-  );
+  const rows = await applySchema(kde("Body Mass (g)")(penguins), {});
   const groups = [...splitEntries(mass.bin(BinNS.quantiles(4)) as any, rows)];
+  check("Bin.quantiles(4) makes four cells", groups.length === 4);
+  check(
+    "each cell's group holds the row",
+    groups.every(([, g]) => g.length === 1 && g[0] === rows[0])
+  );
   const [, first] = groups[0];
   const whole = evalGroup(mass.density() as any, rows, undefined) as any;
   const cell = evalGroup(mass.density() as any, first, undefined) as any;
   const t = (cell.fun.domain.min + cell.fun.domain.max) / 2;
   check(
-    "the density in a cell is the whole sample's, restricted",
+    "the density in a cell is the whole's, restricted",
     near(cell.fun.at(t), whole.fun.at(t), 1e-9),
     `${cell.fun.at(t)} vs ${whole.fun.at(t)}`
   );
   check(
     "its domain ends at the cell's edge",
-    cell.fun.domain.max <= whole.fun.domain.max &&
-      cell.fun.domain.max < whole.fun.domain.max
+    cell.fun.domain.max < whole.fun.domain.max
   );
   check(
-    "the first cell holds the tail below the least value",
+    "the first cell holds the tail below the drawn interval",
     cell.fun.domain.min === whole.fun.domain.min
   );
   const [, last] = groups[groups.length - 1];
   const lastCell = evalGroup(mass.density() as any, last, undefined) as any;
   check(
-    "the last cell holds the tail above the greatest value",
+    "the last cell holds the tail above it",
     lastCell.fun.domain.max === whole.fun.domain.max
   );
   const domains = groups.map(
-    ([, g]) =>
-      (evalGroup(mass.domain() as any, g, undefined) as any).fun.domain
+    ([, g]) => (evalGroup(mass.domain() as any, g, undefined) as any).fun.domain
   );
   check(
     "the cells partition the domain",
@@ -545,45 +611,31 @@ console.log("\n# a field's cells");
       i === 0 ? true : dom.min === domains[i - 1].max
     )
   );
-  const other = evalGroup(
-    field("Flipper Length (mm)").density() as any,
-    first,
-    undefined
-  ) as any;
-  const own = evalGroup(
-    field("Flipper Length (mm)").density() as any,
-    [...first],
-    undefined
-  ) as any;
+  const d = distOf(rows[0]["Body Mass (g)"] as DistData);
   check(
-    "a distribution of another column is the cell rows' own",
-    near(other.fun.at(200), own.fun.at(200), 1e-9)
-  );
-
-  // A split inside a cell (a spread by species in a binned partition) keeps
-  // the cell: each species' density is its whole sample's, restricted.
-  const [, mid] = groups[1];
-  const bySpecies = [...splitEntries("Species" as any, mid)];
-  const adelie = bySpecies.find(([k]) => k === "Adelie")![1];
-  const nested = evalGroup(mass.density() as any, adelie, undefined) as any;
-  const adelieWhole = evalGroup(
-    mass.density() as any,
-    rows.filter((r: any) => r.Species === "Adelie"),
-    undefined
-  ) as any;
-  const cellDomain = (evalGroup(mass.domain() as any, mid, undefined) as any)
-    .fun.domain;
-  const tn = (cellDomain.min + cellDomain.max) / 2;
-  check(
-    "a split inside a cell keeps the cell",
-    nested.fun.domain.min === cellDomain.min &&
-      nested.fun.domain.max === cellDomain.max,
-    `${JSON.stringify(nested.fun.domain)} vs ${JSON.stringify(cellDomain)}`
+    "the cells are at the distribution's own quartiles",
+    near(domains[1].min, d.quantile(0.25), 1e-6) &&
+      near(domains[2].min, d.median, 1e-6) &&
+      near(domains[3].min, d.quantile(0.75), 1e-6)
   );
   check(
-    "and its density is its own whole's, restricted",
-    near(nested.fun.at(tn), adelieWhole.fun.at(tn), 1e-9),
-    `${nested.fun.at(tn)} vs ${adelieWhole.fun.at(tn)}`
+    "a cell's median is the whole's quantile at the middle of its share",
+    near(
+      (evalGroup(mass.median() as any, groups[1][1], undefined) as any).value,
+      d.quantile(0.375),
+      1e-6
+    )
+  );
+  check(
+    "a field's bin of a distribution takes no other op",
+    /bin/.test(
+      throws(() => [
+        ...splitEntries(
+          (mass.bin(BinNS.quantiles(4)) as any).bin(BinNS.step(10)),
+          rows
+        ),
+      ])
+    )
   );
 }
 
@@ -604,8 +656,7 @@ console.log("\n# a field's cells");
   );
   check(
     "an end cell's median is the family's quantile at the middle of its share",
-    near(cells[0].median!, d.quantile(0.1), 1e-9) &&
-      cells[0].quantile(0) === min
+    near(cells[0].median, d.quantile(0.1), 1e-9) && cells[0].quantile(0) === min
   );
 }
 {

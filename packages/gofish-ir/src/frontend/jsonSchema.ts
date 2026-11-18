@@ -563,12 +563,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
         {
           type: "object",
-          required: ["op"],
-          properties: { op: { const: "sample" } },
-          additionalProperties: false,
-        },
-        {
-          type: "object",
           required: ["op", "name"],
           properties: {
             op: { const: "member" },

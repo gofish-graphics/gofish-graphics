@@ -163,7 +163,21 @@ in `derive` or before the visualization, and returns rows that keep the
 original column names, so the axes and units join. A least-squares trend
 line over a scatter is a `derive` that returns two rows, the line's ends,
 named like the scatter's columns, drawn with `line({ x, y })`. GoFish has
-no built-in regression, smoothing or other fit.
+no built-in regression, smoothing or other fit in a channel. A helper that
+does one is a function of rows for `derive`.
+
+**A smoothing belongs in `derive`: `kde` is the worked example.** A kernel
+density was once a field method, `field(x).density()`, while `median()` of the
+same field read the data. One field then gave two different distributions,
+and its median did not sit at the middle of its density's area. Now
+`derive(kde("x"))` smooths the rows into one row whose column `x` holds a
+distribution, a value like any other. After it, every member of `field("x")`
+reads that one distribution, so its density, cdf, quantiles, median and mean
+agree. Before it, the field reads the data. A visualization that wants the
+data's median on a kernel density, as ggplot2's `geom_violin` and seaborn's
+`violinplot` draw it, reads the median before the `kde` and keeps it as a
+column. On a column of numbers, `density()` is an error that names
+`derive(kde(...))`. See [`kde`](/js/api/dist#kde).
 
 **Add a type only where a real example forces it.** A type earns its place by
 removing a special case that a real example runs into. For time and binning,

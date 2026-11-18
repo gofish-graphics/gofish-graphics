@@ -7,11 +7,11 @@ import gofish
 from gofish import Dist, field
 
 
-def test_field_members_are_a_sample_then_a_member():
+def test_field_members_read_the_distribution_the_column_holds():
     assert field("x").density() == {
         "type": "field",
         "name": "x",
-        "ops": [{"op": "sample"}, {"op": "member", "name": "density"}],
+        "ops": [{"op": "member", "name": "density"}],
     }
     assert field("x").quantile(0.9)["ops"][-1] == {
         "op": "member",

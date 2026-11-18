@@ -270,33 +270,39 @@ as a fit, belongs in [`derive`](/python/api/operators/derive)
 
 ### Distribution members {#distribution-members}
 
-Four methods read the group's values as a sample, a
-[`Dist`](/python/api/dist):
+A column can hold a distribution, a [`Dist`](/python/api/dist), instead of
+numbers: `derive(kde("x"))` smooths each group's values into a kernel density
+that the column then holds ([`kde`](/python/api/dist#kde)). A field of such a column reads the
+distribution through these methods:
 
-| Method         | Gives                                                                               |
-| -------------- | ----------------------------------------------------------------------------------- |
-| `.density()`   | a function of `t`: a kernel density of the values, with area the row count          |
-| `.domain()`    | a function of `t`: `t` itself, over the interval the density is drawn over          |
-| `.cdf()`       | a function of `t`: the share of the values at or below `t`, a ratio                 |
-| `.quantile(p)` | one value per group: the type-7 quantile at `p`, so `.quantile(0.5)` is `.median()` |
+| Method         | Gives                                                                      |
+| -------------- | -------------------------------------------------------------------------- |
+| `.density()`   | a function of `t`: the distribution's density                              |
+| `.domain()`    | a function of `t`: `t` itself, over the interval the density is drawn over |
+| `.cdf()`       | a function of `t`: the share of the mass at or below `t`, a ratio          |
+| `.quantile(p)` | one value per group: the inverse of the cdf at `p`                         |
+| `.median()`    | one value per group: `.quantile(0.5)`                                      |
+| `.mean()`      | one value per group: the distribution's mean                               |
 
-The density uses a normal kernel with Silverman's bandwidth (R's `bw.nrd0`),
-drawn from 3 bandwidths below the least value to 3 above the greatest, so it
-tapers to near zero at both ends. There is no option yet to choose how far past the
-values it runs, or to bound it at a hard limit, such as 0 for counts. It is in the
-column's count per unit, so the densities of several groups add up and
-stack. `.domain()` is in the column's unit, so its axis joins the column's.
-In a cell of a [`partition`](/python/api/operators/partition#a-distribution-s-cells)
-by the same field, each method reads the whole group's values restricted to
-the cell.
+A kernel density is in the column's count per unit, so the densities of
+several groups add up and stack. `.domain()` is in the column's unit, so its
+axis joins the column's. Every row of a group holds the same distribution;
+different ones in one group are an error. In a cell of a
+[`partition`](/python/api/operators/partition#a-distribution-s-cells) by the same field, each method reads the
+distribution restricted to the cell. The other methods are an error on such
+a column.
+
+On a column of numbers, `.median()` and `.mean()` are the data's, and
+`.density()`, `.domain()`, `.cdf()` and `.quantile(p)` are an error that
+names `derive(kde("x"))`.
 They run in JS and cross the bridge as data.
 
 ```python
 mass = field("Body Mass (g)")
 
-chart(penguins).flow(stack(by="Species", dir="y")).mark(
-    ribbon(x=mass.domain(), h=mass.density(), fill="Species")
-)
+chart(penguins).flow(
+    stack(by="Species", dir="y"), derive(kde("Body Mass (g)"))
+).mark(ribbon(x=mass.domain(), h=mass.density(), fill="Species"))
 ```
 
 One method is neither: `.between(lo, hi, closed=None)` returns a **field

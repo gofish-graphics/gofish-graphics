@@ -3374,44 +3374,44 @@ class FieldAccessor(dict):
 
         return _LiftedField(self._with_op(_step_op("reduce", all_groups, unit, where)))
 
-    def _sample_member(self, name: str, args: Optional[List[Any]] = None) -> "FieldAccessor":
-        """The member ``name`` of the group's values as a sample."""
+    def _dist_member(self, name: str, args: Optional[List[Any]] = None) -> "FieldAccessor":
+        """The member ``name`` of the distribution the column holds."""
         op: dict = {"op": "member", "name": name}
         if args:
             op["args"] = list(args)
-        return self._with_op({"op": "sample"})._with_op(op)
+        return self._with_op(op)
 
     def density(self) -> "FieldAccessor":
-        """The group's values as a sample: their kernel density, with area
-        the number of values and Silverman's bandwidth, drawn from 3
-        bandwidths below the least value to 3 above the greatest. It is in
-        the values' count per unit, so the densities of
-        several groups add up. Valid only in a channel of ``ribbon`` or
-        ``line``. Mirrors JS ``field(name).density()``."""
-        return self._sample_member("density")
+        """The density of the distribution the column holds: for a kernel
+        density (``derive(kde("x"))``), the values' count per unit of the
+        column, so the densities of several groups add up. Valid only in a
+        channel of ``ribbon`` or ``line``, and only on a column that holds a
+        distribution. Mirrors JS ``field(name).density()``."""
+        return self._dist_member("density")
 
     def domain(self) -> "FieldAccessor":
-        """``t`` over the interval :meth:`density` is drawn over: the position channel that reads the density at the
-        mark's parameter. In the values' unit."""
-        return self._sample_member("domain")
+        """``t`` over the interval :meth:`density` is drawn over: the
+        position channel that reads the density at the mark's parameter. In
+        the column's unit. Only on a column that holds a distribution."""
+        return self._dist_member("domain")
 
     def cdf(self) -> "FieldAccessor":
-        """The share of the group's values at or below t, over the values'
-        own range: the inverse of :meth:`quantile`, linear between the
-        values. A ratio. Valid only in a channel of ``ribbon`` or
-        ``line``."""
-        return self._sample_member("cdf")
+        """The share of the distribution's mass at or below t, the integral
+        of its density over its mass. A ratio. Valid only in a channel of
+        ``ribbon`` or ``line``, and only on a column that holds a
+        distribution."""
+        return self._dist_member("cdf")
 
     def quantile(self, p: float) -> "FieldAccessor":
-        """The type-7 quantile at ``p`` of the group's values (R's and
-        numpy's default), missing values aside: ``quantile(0.5)`` is
-        ``median()``. Valid only in a value (size/pos) slot."""
+        """The value with the share ``p`` of the distribution's mass at or
+        below it, the inverse of its cdf: ``quantile(0.5)`` is ``median()``.
+        In the column's unit. Only on a column that holds a distribution."""
         if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p <= 1:
             raise ValueError(
                 f'field("{self["name"]}").quantile(p): p must be a number in '
                 f"[0, 1], got {p!r}."
             )
-        return self._sample_member("quantile", [p])
+        return self._dist_member("quantile", [p])
 
     def between(
         self, lo: float, hi: float, *, closed: Optional[str] = None
@@ -3782,76 +3782,56 @@ def repeat(row: dict, field: str) -> List[dict]:
     return [row] * n
 
 
-def quantile_rows(rows: List[dict], *, x: str, density: str, n: int) -> List[dict]:
+def kde(
+    column: str, *, bandwidth: Optional[float] = None
+) -> Callable[[List[dict]], List[dict]]:
     """
-    ``n`` rows at the quantiles of the density that ``rows`` sample, one at
-    each probability ``(i + 0.5) / n``, so ``Bin.quantiles`` and
-    ``field(x).median()`` over them read the curve, not the grid. Mirrors JS
-    ``quantileRows``.
+    A derive helper, ``derive(kde("x"))``: the rows going in are a sample of
+    the column ``column``, and the one row coming out holds, in that column,
+    the sample smoothed by a normal kernel, a distribution. ``field(column)``'s
+    members read it: ``density()``, ``domain()``, ``cdf()``, ``quantile(p)``,
+    ``median()``, ``mean()``, and ``.bin(Bin.quantiles(n))`` cuts it at its
+    own quantiles. Mirrors JS ``kde(column, { bandwidth })``.
 
-    The rows are a grid of one curve, one row per position, in any order. The density is taken to
-    be linear between grid points, integrated by the trapezoid rule, and each
-    quantile is read off the result by linear interpolation. Each row made
-    holds ``x`` and every other column whose value is the same in all rows
-    (a group's ``month``); columns that vary are dropped.
+    The row also holds every other column whose value is the same in all the
+    rows (a group's species, after a split by it), and nothing else. In a
+    flow after a split, ``derive`` runs once per group, so each group's column
+    holds its own distribution. No rows give no row. Missing values are left
+    out of the sample.
 
-    A shortcut until first-class distributions (#980) replace it.
+    The distribution is data, ``{"type": "dist", "family": "kde", "params":
+    {"values": [...], "bandwidth": ...}}``, and JS computes it.
 
     Args:
-        rows: The grid rows, each a dict with ``x`` and ``density``.
-        x: The column of the grid's positions.
-        density: The column of the density, finite and 0 or more. It need
-            not integrate to 1.
-        n: How many rows to make, a whole number, 1 or more.
+        column: The column of the sample's values.
+        bandwidth: The standard deviation of each value's kernel, in the
+            column's unit. Silverman's rule (R's ``bw.nrd0``) when omitted.
     """
-    where = "quantile_rows(...)"
-    if isinstance(n, bool) or not isinstance(n, int) or n < 1:
-        raise ValueError(f"{where}: n must be a whole number, 1 or more, got {n!r}.")
-    grid = []
-    for r in rows:
-        at, d = r.get(x), r.get(density)
-        if isinstance(at, bool) or not isinstance(at, (int, float)) or not math.isfinite(at):
-            raise ValueError(f'{where}: the column "{x}" must hold finite numbers, got {at!r}.')
-        if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d) or d < 0:
-            raise ValueError(
-                f'{where}: the column "{density}" must hold finite numbers, 0 or more, got {d!r}.'
-            )
-        grid.append((float(at), float(d)))
-    grid.sort(key=lambda p: p[0])
-    # A grid has one density at each position: two rows at one position are
-    # two curves mixed together.
-    for i in range(1, len(grid)):
-        if grid[i][0] == grid[i - 1][0]:
-            raise ValueError(
-                f'{where}: two rows have "{x}" {grid[i][0]:g}, so these rows hold '
-                f"more than one curve. Call quantile_rows on each curve's rows: "
-                f"inside derive, after the flow splits the curves apart."
-            )
-    cdf = [0.0]
-    for i in range(1, len(grid)):
-        cdf.append(cdf[-1] + (grid[i][0] - grid[i - 1][0]) * (grid[i][1] + grid[i - 1][1]) / 2)
-    total = cdf[-1]
-    if not total > 0:
-        raise ValueError(
-            f'{where}: the density "{density}" has no area over "{x}", so it has '
-            f"no quantiles. It needs two or more grid points with some density."
-        )
-    first = rows[0]
-    constant = {
-        k: v
-        for k, v in first.items()
-        if k not in (x, density) and all(k in r and r[k] == v for r in rows)
-    }
-    out = []
-    j = 0
-    for i in range(n):
-        target = (i + 0.5) / n * total
-        while cdf[j + 1] < target:
-            j += 1
-        span = cdf[j + 1] - cdf[j]
-        t = (target - cdf[j]) / span if span > 0 else 0.0
-        out.append({**constant, x: grid[j][0] + t * (grid[j + 1][0] - grid[j][0])})
-    return out
+    if bandwidth is not None and (
+        isinstance(bandwidth, bool)
+        or not isinstance(bandwidth, (int, float))
+        or not math.isfinite(bandwidth)
+        or not bandwidth > 0
+    ):
+        raise ValueError(f"kde: bandwidth must be a positive number, got {bandwidth!r}.")
+
+    def smooth(rows: List[dict]) -> List[dict]:
+        if not rows:
+            return []
+        first = rows[0]
+        same = {
+            k: v
+            for k, v in first.items()
+            if k != column and all(k in r and r[k] == v for r in rows)
+        }
+        params: Dict[str, Any] = {
+            "values": [r.get(column) for r in rows if r.get(column) is not None]
+        }
+        if bandwidth is not None:
+            params["bandwidth"] = bandwidth
+        return [{**same, column: {"type": "dist", "family": "kde", "params": params}}]
+
+    return smooth
 
 
 # Mark factory functions

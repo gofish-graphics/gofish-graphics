@@ -3,6 +3,8 @@ import { initializeContainer } from "../helper";
 import { seattleWeather } from "../../src/data/seatle-weather";
 import {
   chart,
+  derive,
+  kde,
   spread,
   layer,
   field,
@@ -90,7 +92,8 @@ export const Default: StoryObj<Args> = {
           by: field("month").sort(monthNames),
           dir: "y",
           spacing: Spacing.pitch(rowPitch, { at: "baseline" }),
-        })
+        }),
+        derive(kde("temp_max"))
       )
       .mark(
         layer({ h: ridgeHeight }, [

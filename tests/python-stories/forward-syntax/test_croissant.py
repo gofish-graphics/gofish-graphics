@@ -5,12 +5,11 @@ slices, each drawn on its own with a small gap, with one dot per slice at the
 slice's median. A partition by the distribution's cells gives each cell the
 distribution restricted to it, and a ribbon of its domain and density,
 drawn in by a few pixels, draws the cell's slice. The standard normal is cut
-at its quintiles, the penguins' body mass at the deciles of its values. The
-ridgeline still draws each month's curve hidden and intersects it with each
-cell's region. The last story cuts an area into calendar months.
+at its quintiles. ``derive(kde(x))`` smooths the rows into a kernel density
+the column then holds, cut at its own quantiles: the penguins' body mass at
+its deciles, and each month's highs at the month's own quintiles. The last
+story cuts an area into calendar months.
 """
-
-import math
 
 from gofish import (
     Bin,
@@ -22,13 +21,10 @@ from gofish import (
     circle,
     derive,
     field,
-    intersect,
+    kde,
     layer,
     partition,
-    quantile_rows,
-    region,
     ribbon,
-    scatter,
     spread,
     text,
 )
@@ -39,35 +35,6 @@ STROKE = "#467DA8"
 # The colors of the paper's "Anatomy of a Croissant Chart" figure.
 PAPER_FILL = "#CBA45F"
 PAPER_STROKE = "#745931"
-
-
-def _norm_pdf(x, mu=0.0, sd=1.0):
-    return math.exp(-0.5 * ((x - mu) / sd) ** 2) / (sd * math.sqrt(2 * math.pi))
-
-
-def _grid_of(f, lo, hi, n):
-    """`n` evenly spaced grid rows `{x, pdf}` of `f` over `[lo, hi]`."""
-    rows = []
-    for i in range(n):
-        x = lo + ((hi - lo) * i) / (n - 1)
-        rows.append({"x": x, "pdf": f(x)})
-    return rows
-
-
-def _kde(values):
-    """A Gaussian kernel density estimate with Silverman's bandwidth."""
-    n = len(values)
-    mean = sum(values) / n
-    sd = math.sqrt(sum((v - mean) ** 2 for v in values) / (n - 1))
-    bw = 1.06 * sd * n**-0.2
-
-    def f(x):
-        total = 0.0
-        for v in values:
-            total += _norm_pdf(x, v, bw)
-        return total / n
-
-    return f, bw
 
 
 D = Dist.normal(mean="mean", sd="sd")
@@ -101,8 +68,11 @@ MASS = field("Body Mass (g)")
 
 def story_penguin_body_mass():
     return (
-        chart([p for p in PENGUINS if p["Body Mass (g)"] is not None])
-        .flow(partition(by=MASS.bin(Bin.quantiles(10)), dir="x"))
+        chart(PENGUINS)
+        .flow(
+            derive(kde("Body Mass (g)")),
+            partition(by=MASS.bin(Bin.quantiles(10)), dir="x"),
+        )
         .mark(
             layer(
                 [
@@ -126,27 +96,18 @@ MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def _monthly_density():
-    rows = []
-    for m, month in enumerate(MONTHS):
-        highs = [
-            d["temp_max"] for d in SEATTLE_WEATHER if int(d["date"][5:7]) - 1 == m
-        ]
-        f, bw = _kde(highs)
-        lo = min(highs) - 3 * bw
-        hi = max(highs) + 3 * bw
-        for r in _grid_of(f, lo, hi, 161):
-            rows.append({"month": month, "temp_max": r["x"], "pdf": r["pdf"]})
-    return rows
-
-
-MONTHLY_DENSITY = _monthly_density()
+# Seattle's daily highs, each with its month.
+HIGHS = [
+    {"month": MONTHS[int(d["date"][5:7]) - 1], "temp_max": d["temp_max"]}
+    for d in SEATTLE_WEATHER
+]
+TEMP = field("temp_max")
 
 
 def story_ridgeline():
     return (
         chart(
-            MONTHLY_DENSITY,
+            HIGHS,
             w=520,
             axes={"x": {"title": "Daily high (°C)"}, "y": False},
         )
@@ -155,48 +116,24 @@ def story_ridgeline():
                 by=field("month").sort(MONTHS),
                 dir="y",
                 spacing=Spacing.pitch(36, at="baseline"),
-            )
+            ),
+            derive(kde("temp_max")),
+            partition(by=TEMP.bin(Bin.quantiles(5)), dir="x"),
         )
         .mark(
             layer(
                 [
-                    chart()
-                    .flow(scatter(x="temp_max"))
-                    .mark(ribbon(h="pdf").name("density").hidden()),
+                    ribbon(
+                        x=TEMP.domain(),
+                        h=TEMP.density(),
+                        inset=2,
+                        fill=FILL,
+                        stroke=STROKE,
+                        stroke_width=1.5,
+                    ),
+                    circle(cx=TEMP.median(), cy=5, r=2.25, fill=STROKE),
                 ],
                 h=34,
-            ).relate(
-                lambda density: [
-                    chart()
-                    .flow(
-                        derive(
-                            lambda rows: quantile_rows(
-                                rows, x="temp_max", density="pdf", n=1000
-                            )
-                        ),
-                        partition(
-                            by=field("temp_max").bin(Bin.quantiles(5)), dir="x"
-                        ),
-                    )
-                    .mark(
-                        layer(
-                            [
-                                intersect(
-                                    [density, region(inset=2)],
-                                    fill=FILL,
-                                    stroke=STROKE,
-                                    stroke_width=1.5,
-                                ),
-                                circle(
-                                    cx=field("temp_max").median(),
-                                    cy=5,
-                                    r=2.25,
-                                    fill=STROKE,
-                                ),
-                            ]
-                        )
-                    ),
-                ]
             )
         ),
         {},

@@ -8,6 +8,7 @@ import { loadTemporal, temporal } from "./calendar";
 import { tagArray } from "./data";
 import { DURATION, INSTANT, meetInto, type UnitOccurrence } from "./measure";
 import { discrete } from "../families/domain";
+import { isDistData } from "./dist";
 import { Frontend } from "gofish-ir";
 
 /**
@@ -209,6 +210,8 @@ const isEpochMs = (v: unknown): boolean =>
  *    number) or a valid `Date`. A `Date` is an instant, so turning it into
  *    epoch milliseconds reinterprets nothing; a string is not one, since
  *    reading it needs a zone (only a `schema` annotation converts strings).
+ *    And a distribution over such amounts (dist.ts's `DistData`, what
+ *    `derive(kde(x))` puts in the column), so the column keeps its unit.
  *  - `HasQuantity`: anything; a name says nothing about the values.
  *  - `HasDomain`: numbers from `lo` to `hi`.
  *  - `HasInteger`: integers. */
@@ -223,6 +226,7 @@ const ACCEPTS: {
   HasMidpoint: () => true,
   HasUnit: (v, { zone }) =>
     v == null ||
+    isDistData(v) ||
     (zone !== undefined ? isEpochMs(v) || isDate(v) : typeof v === "number"),
   HasQuantity: () => true,
   HasDomain: (v, { lo, hi }) =>

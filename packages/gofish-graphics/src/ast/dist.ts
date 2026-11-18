@@ -4,45 +4,40 @@
 
 /**
  * Distributions at run time: what the engine asks a distribution, as one
- * record ({@link Dist}), and the ways to make one.
+ * record ({@link Dist}), and the data form a column holds one in
+ * ({@link DistData}).
  *
- * A `Dist` is a plain record of numbers and functions (`fun.ts`). Nothing in
- * it is specific to how it is held, so a `reduce` that returns one is lifted
- * by the general rule (`Lift` in groupExpr.ts): `d.density()`,
- * `d.domain()`, `d.quantile(0.9)`. Its members:
+ * A `Dist` is one self-consistent distribution, a plain record of numbers
+ * and functions (`fun.ts`). Its members:
  *
  * - `density`: the mass times the probability density, over the interval
  *   it is drawn over (below).
- *   For a family the mass is 1, so it is the pdf. For a sample it is a
- *   kernel density whose area is the number of values (less the kernels'
- *   tails past that interval), so the densities of several groups add up.
+ *   For a family the mass is 1, so it is the pdf. For a kernel density it
+ *   is the sum of the kernels, whose area over the whole line is the number
+ *   of values, so the densities of several groups add up.
  * - `cdf`: the share of the mass at or below t, a ratio, over the same
- *   interval.
- *   For a sample it is the inverse of its quantile, so it is the values'
- *   own share, not the integral of the smoothed density.
- * - `quantile(p)`: the value with the share p of the mass at or below it.
- * - `median`, `mean`.
+ *   interval: the integral of the density from below, over the mass.
+ * - `quantile(p)`: the value with the share p of the mass at or below it,
+ *   the inverse of the cdf.
+ * - `median`, the quantile at 0.5, and `mean`, the density's mean.
  * - `domain`: t itself (`identity`), over the same interval as `density`,
  *   so `ribbon({ x: d.domain(), h: d.density() })` reads both at one t. It
  *   is the interval the density is drawn over, not the distribution's
  *   support when that is unbounded.
- * - `mass`: 1 for a family, the number of values for a sample.
+ * - `mass`: 1 for a family, the number of values for a kernel density.
  *
  * The interval the functions run over is where the density is drawn, as
  * ggdist draws it: a family over its support, or between its 0.001 and
- * 0.999 quantiles at an end where the support is unbounded; a sample from
- * three bandwidths below its least value to three above its greatest
- * (seaborn's `cut=3`), so its density tapers to near zero at both ends.
+ * 0.999 quantiles at an end where the support is unbounded; a kernel
+ * density from three bandwidths below its least value to three above its
+ * greatest (seaborn's `cut=3`), so it tapers to near zero at both ends.
  *
  * A cell of a partition is the Dist restricted to the cell
  * ({@link restrictDist}): the same density inside, the cell's share of the
- * mass. A sample restricted to a cell is the values in the cell, with the
- * whole sample's density inside the cell ({@link sampleIn}).
+ * mass.
  */
-import { quantileSorted } from "d3-array";
 import { Frontend } from "gofish-ir";
 import {
-  add,
   constant,
   identity,
   integrate,
@@ -54,17 +49,16 @@ import {
   type Interval,
 } from "./fun";
 import { silvermanBandwidth } from "./graphicalOperators/overlap";
-import { RATIO, type Quantity } from "./measure";
+import { COUNT, PROBABILITY, RATIO, type Quantity } from "./measure";
 import type { HasUnit } from "./schema";
 
-/** What a distribution answers. See the module comment. A sample with no
- *  values (an empty cell) has no quantile, median or mean. */
+/** What a distribution answers. See the module comment. */
 export type Dist = {
   readonly density: Fun<number>;
   readonly cdf: Fun<number>;
-  quantile(p: number): number | undefined;
-  readonly median: number | undefined;
-  readonly mean: number | undefined;
+  quantile(p: number): number;
+  readonly median: number;
+  readonly mean: number;
   readonly domain: Fun<number>;
   readonly mass: number;
 };
@@ -271,21 +265,20 @@ export function familyDist<F extends FamilyName>(
 }
 
 // ---------------------------------------------------------------------------
-// Samples.
+// Kernel densities.
 
 /** How far from a value its kernel reaches, in bandwidths: past it the
- *  normal density is below 1e-14 of its peak. */
+ *  normal density is below 1e-14 of its peak, and the normal cdf within
+ *  1e-15 of 0 or 1. */
 const KERNEL_REACH = 8;
 
-/** How far past its least and greatest value a sample's density is drawn,
- *  in bandwidths (seaborn's `cut=3`). A kernel has the share Φ(−3) ≈
- *  0.00135 of its mass past 3 bandwidths on one side, so the area over the
- *  drawn interval is the number of values less at most that share of each
- *  extreme value's kernel at each end.
- *  TODO(#1371): an option for a sample's density could choose how
- *  far past the values it runs, and a bounded estimator (reflection at a
- *  hard limit, such as 0 for counts) for values that cannot go past one. */
-const SAMPLE_CUT = 3;
+/** How far past its least and greatest value a kernel density is drawn,
+ *  in bandwidths (seaborn's `cut=3`). The cells at the two ends of the drawn
+ *  interval hold the kernels' tails past it ({@link restrictDist}).
+ *  TODO(#1371): an option of `kde` could choose how far past the values it
+ *  runs, and a bounded estimator (reflection at a hard limit, such as 0 for
+ *  counts) for values that cannot go past one. */
+const KDE_CUT = 3;
 
 /** The first index of the ascending `xs` at or above `v`. */
 const lowerBound = (xs: readonly number[], v: number): number => {
@@ -299,103 +292,6 @@ const lowerBound = (xs: readonly number[], v: number): number => {
   return a;
 };
 
-/**
- * The kernel density of the ascending `sorted` over `domain`: a normal
- * kernel of standard deviation `bw` on each value, summed, so its area over
- * the whole line is the number of values.
- */
-function kernelDensity(
-  sorted: readonly number[],
-  domain: Interval,
-  bw: number
-): Fun<number> {
-  const points = sorted;
-  const reach = KERNEL_REACH * bw;
-  return opaque(
-    (t) => {
-      let s = 0;
-      for (
-        let i = lowerBound(points, t - reach);
-        i < points.length && points[i] <= t + reach;
-        i++
-      )
-        s += phi((t - points[i]) / bw);
-      return s / bw;
-    },
-    { domain }
-  );
-}
-
-/**
- * A sample's Dist over `domain` with the density `density`: its quantile is
- * the type-7 quantile of the values (R's and numpy's default, d3's
- * `quantileSorted`), so its median is `field(...).median()`'s, and its cdf
- * is the inverse of that quantile, linear between the values, 0 below the
- * least and 1 above the greatest (over the density's tails past them).
- */
-function sampleOver(
-  sorted: readonly number[],
-  domain: Interval,
-  density: Fun<number>
-): Dist {
-  const n = sorted.length;
-  const quantile = (p: number): number | undefined => {
-    if (!(p >= 0 && p <= 1))
-      throw new Error(`quantile: p must be in [0, 1], got ${p}.`);
-    return n === 0 ? undefined : quantileSorted(sorted as number[], p);
-  };
-  // The type-7 quantile is the ith value at the share i / (n − 1), linear
-  // between, and flat across the copies of a tied value. So its inverse,
-  // the cdf, runs linearly from each value's last copy to the next value's
-  // first, and jumps at a tie from its first copy's share to its last
-  // copy's. One value has all of the mass: the cdf jumps from 0 to 1 there.
-  // The cdf is drawn as a continuous line plus a step that holds the
-  // jumps, each over one knot per distinct value.
-  const knots: number[] = [];
-  const first: number[] = [];
-  const last: number[] = [];
-  sorted.forEach((x, i) => {
-    const share = n === 1 ? 1 : i / (n - 1);
-    if (knots.length > 0 && knots[knots.length - 1] === x)
-      last[last.length - 1] = share;
-    else {
-      knots.push(x);
-      first.push(n === 1 ? 0 : share);
-      last.push(share);
-    }
-  });
-  if (knots.length === 0 || knots[0] > domain.min) {
-    knots.unshift(domain.min);
-    first.unshift(0);
-    last.unshift(0);
-  }
-  if (knots[knots.length - 1] < domain.max) {
-    knots.push(domain.max);
-    first.push(1);
-    last.push(1);
-  }
-  // The jumps up to and at each knot, and the line the cdf is less them.
-  const jumps: number[] = [];
-  last.forEach((l, j) => jumps.push((jumps[j - 1] ?? 0) + l - first[j]));
-  const line = last.map((l, j) => l - jumps[j]);
-  const cdf =
-    knots.length === 1
-      ? constant(last[0], domain)
-      : add(
-          through(knots, line, { kind: "linear" }),
-          through(knots, jumps, { kind: "step" })
-        );
-  return {
-    density,
-    cdf,
-    quantile,
-    median: quantile(0.5),
-    mean: n === 0 ? undefined : sorted.reduce((a, b) => a + b, 0) / n,
-    domain: identity(domain),
-    mass: n,
-  };
-}
-
 /** The finite values of `values`, ascending, missing ones (null,
  *  undefined) aside; any other value is an error. */
 function sortedValues(values: readonly unknown[], where: string): number[] {
@@ -404,8 +300,8 @@ function sortedValues(values: readonly unknown[], where: string): number[] {
     if (v === null || v === undefined) continue;
     if (typeof v !== "number" || !Number.isFinite(v))
       throw new Error(
-        `${where}: a sample's values are finite numbers, but one is ` +
-          `${JSON.stringify(v)}.`
+        `${where}: a kernel density's values are finite numbers, but one ` +
+          `is ${JSON.stringify(v)}.`
       );
     out.push(v);
   }
@@ -413,75 +309,143 @@ function sortedValues(values: readonly unknown[], where: string): number[] {
 }
 
 /**
- * The Dist of a sample of values, as R's distributional package holds one
- * (`dist_sample`): its quantiles, median and mean are the values' (type-7
- * quantiles, so they agree with `field(x).median()`), and its density is a
- * normal kernel density with the bandwidth `bandwidth` (Silverman's rule
- * when omitted, R's `bw.nrd0`), drawn from {@link SAMPLE_CUT} bandwidths
- * below the least value to as many above the greatest. Its mass is the
- * number of values, the area under the density over the whole line.
- * Missing values (null, undefined) are left out. It needs two different
- * values.
+ * The kernel density of `values` as one distribution: a normal kernel of
+ * standard deviation `bandwidth` on each value (Silverman's rule, R's
+ * `bw.nrd0`, when omitted). Its density is the sum of the kernels, with
+ * area the number of values over the whole line; its cdf is that sum's
+ * integral over the number of values, the mean of the kernels' cdfs; its
+ * quantile inverts the cdf; its mean is the values' mean, the kernels'
+ * center of mass. It is drawn from {@link KDE_CUT} bandwidths below the
+ * least value to as many above the greatest. Missing values are left out.
  */
-export function sample(
-  values: readonly unknown[],
-  options?: { bandwidth?: number }
-): Dist {
-  const where = "Dist.sample";
-  const sorted = sortedValues(values, where);
-  if (options?.bandwidth !== undefined)
-    positive(where, "bandwidth", options.bandwidth);
-  const n = sorted.length;
-  const range =
-    n === 0 ? { min: 0, max: 0 } : { min: sorted[0], max: sorted[n - 1] };
-  // A sample of fewer than two different values has quantiles but no
-  // density: there is no spread to smooth over. Its density is an error
-  // where it is read, so its quantiles, median and mean still work.
-  if (n < 2 || sorted[0] === sorted[n - 1]) {
-    const none = () => {
-      throw new Error(
-        `${where}: a density needs at least two different values, but the ` +
-          `values are ${n === 0 ? "none" : `all ${sorted[0]}`}.`
-      );
-    };
-    return sampleOver(sorted, range, opaque(none, { domain: range }));
-  }
-  const bw = options?.bandwidth ?? silvermanBandwidth(sorted);
-  const domain = {
-    min: range.min - SAMPLE_CUT * bw,
-    max: range.max + SAMPLE_CUT * bw,
+function kernelDist(values: readonly unknown[], bandwidth?: number): Dist {
+  const where = "kde";
+  const xs = sortedValues(values, where);
+  const n = xs.length;
+  if (bandwidth !== undefined) positive(where, "bandwidth", bandwidth);
+  const bw = bandwidth ?? silvermanBandwidth(xs);
+  if (n === 0 || !(bw > 0))
+    throw new Error(
+      `${where}: Silverman's rule gives no bandwidth for ` +
+        `${n === 0 ? "no values" : `the values ${n === 1 ? xs[0] : `all ${xs[0]}`}`}` +
+        `: it needs two different values. Give one: kde(column, { bandwidth }).`
+    );
+  const domain = { min: xs[0] - KDE_CUT * bw, max: xs[n - 1] + KDE_CUT * bw };
+  const reach = KERNEL_REACH * bw;
+  // The kernels near t, past which each adds nothing to the density and
+  // all or nothing to the cdf.
+  const near = (t: number, each: (z: number) => number): number => {
+    let s = 0;
+    for (let i = lowerBound(xs, t - reach); i < n && xs[i] <= t + reach; i++)
+      s += each((t - xs[i]) / bw);
+    return s;
   };
-  return sampleOver(sorted, domain, kernelDensity(sorted, domain, bw));
+  const densityAt = (t: number) => near(t, phi) / bw;
+  const cdfAt = (t: number) =>
+    (lowerBound(xs, t - reach) + near(t, normalCdf)) / n;
+  const mean = xs.reduce((a, b) => a + b, 0) / n;
+  const quantile = (p: number): number => {
+    if (!(p >= 0 && p <= 1))
+      throw new Error(`quantile: p must be in [0, 1], got ${p}.`);
+    if (p === 0) return -Infinity;
+    if (p === 1) return Infinity;
+    // Newton's method on the cdf, whose slope is the density over the
+    // mass, kept inside a bracket that halves when a step leaves it.
+    let lo = xs[0] - reach;
+    let hi = xs[n - 1] + reach;
+    let t = Math.min(hi, Math.max(lo, mean));
+    for (let k = 0; k < 200; k++) {
+      const e = cdfAt(t) - p;
+      if (e === 0) return t;
+      if (e < 0) lo = t;
+      else hi = t;
+      const step = t - (e * n) / Math.max(densityAt(t), 1e-300);
+      t = step > lo && step < hi ? step : (lo + hi) / 2;
+      if (hi - lo <= 1e-12 * Math.max(1, Math.abs(t))) break;
+    }
+    return t;
+  };
+  return {
+    density: opaque(densityAt, { domain }),
+    cdf: opaque(cdfAt, { domain }),
+    quantile,
+    median: quantile(0.5),
+    mean,
+    domain: identity(domain),
+    mass: n,
+  };
 }
 
-/** The sample `whole` restricted to `cell`, a cell of its values' line:
- *  the values of the cell (`values`, what a split puts in the cell), with
- *  the whole sample's density inside the cell, over the part of its
- *  interval in the cell. The values in the cell are the whole sample
- *  conditioned on being in it, so this is {@link restrictDist} for a
- *  sample, read exactly off its values.
+// ---------------------------------------------------------------------------
+// The data form.
+
+/**
+ * A distribution as data holds it, a value a column can hold: a plain
+ * tagged record, so it crosses to and from Python as data.
  *
- *  The density runs past the values (its tails), and the cells of the
- *  values' line cover the values only, so a cell that reaches the least
- *  value (its 0 quantile) holds the tail below it, and one that reaches the
- *  greatest holds the tail above: the cells of one sample partition its
- *  whole drawn interval. */
-export function sampleIn(
-  values: readonly unknown[],
-  whole: Dist,
-  cell: Interval
-): Dist {
-  const drawn = whole.domain.domain;
-  const domain = meet(drawn, {
-    min: cell.min <= (whole.quantile(0) ?? cell.min) ? drawn.min : cell.min,
-    max: cell.max >= (whole.quantile(1) ?? cell.max) ? drawn.max : cell.max,
-  });
-  return sampleOver(
-    sortedValues(values, "Dist.sample"),
-    domain,
-    restrict(whole.density, domain)
-  );
+ * - A family with its parameters given: `{ type: "dist", family: "normal",
+ *   params: { mean: 0, sd: 1 } }`, the wire form of `Dist.normal(...)` with
+ *   numbers for its parameters.
+ * - A kernel density, what `kde` makes: `{ type: "dist", family: "kde",
+ *   params: { values, bandwidth? } }`, the values it smooths and, when the
+ *   spec gives one, the bandwidth.
+ *
+ * {@link distOf} turns it into the run-time {@link Dist}.
+ */
+export type DistData =
+  | {
+      readonly type: "dist";
+      readonly family: FamilyName;
+      readonly params: Readonly<Record<string, number>>;
+    }
+  | {
+      readonly type: "dist";
+      readonly family: "kde";
+      readonly params: {
+        readonly values: readonly unknown[];
+        readonly bandwidth?: number;
+      };
+    };
+
+/** Whether `v` is a distribution as data holds it ({@link DistData}). */
+export const isDistData = (v: unknown): v is DistData =>
+  typeof v === "object" &&
+  v !== null &&
+  (v as any).type === "dist" &&
+  typeof (v as any).family === "string" &&
+  typeof (v as any).params === "object" &&
+  (v as any).params !== null &&
+  (v as any).ops === undefined;
+
+/** Each data form's Dist, built once. */
+const built = new WeakMap<object, Dist>();
+
+/** The run-time {@link Dist} of a distribution's data form: the one place
+ *  a Dist is built. */
+export function distOf(data: DistData): Dist {
+  let d = built.get(data);
+  if (d === undefined) {
+    d =
+      data.family === "kde"
+        ? kernelDist(
+            (data.params as { values: readonly unknown[] }).values ?? [],
+            (data.params as { bandwidth?: number }).bandwidth
+          )
+        : familyDist(
+            data.family,
+            data.params as FamilyParams<typeof data.family>
+          );
+    built.set(data, d);
+  }
+  return d;
 }
+
+/** The quantity of a distribution's mass: the number of values for a
+ *  kernel density, a probability for a family. */
+export const massQuantity = (family: DistData["family"]): Quantity =>
+  family === "kde"
+    ? { name: "count", unit: COUNT }
+    : { name: "probability", unit: PROBABILITY };
 
 // ---------------------------------------------------------------------------
 // Restriction.
@@ -510,10 +474,10 @@ function meet(domain: Interval, cell: Interval): Interval {
 export function restrictDist(d: Dist, cell: Interval): Dist {
   const drawn = d.domain.domain;
   const domain = meet(drawn, cell);
-  // A family is drawn over less than its support (from its 0.001 to its
-  // 0.999 quantile), so a cell at an end of the drawn interval holds the
-  // tail past it too: the cells share all of the mass, as a sample's do
-  // (`sampleIn`).
+  // A distribution is drawn over less than its support (a family from its
+  // 0.001 to its 0.999 quantile, a kernel density to three bandwidths past
+  // its values), so a cell at an end of the drawn interval holds the tail
+  // past it too: the cells share all of the mass.
   const below = domain.min <= drawn.min ? 0 : d.cdf.at(domain.min);
   const w = (domain.max >= drawn.max ? 1 : d.cdf.at(domain.max)) - below;
   const density = restrict(d.density, domain);
@@ -521,7 +485,7 @@ export function restrictDist(d: Dist, cell: Interval): Dist {
     if (!(p >= 0 && p <= 1))
       throw new Error(`quantile: p must be in [0, 1], got ${p}.`);
     if (!(w > 0)) return domain.min;
-    const q = d.quantile(below + p * w)!;
+    const q = d.quantile(below + p * w);
     return Math.min(domain.max, Math.max(domain.min, q));
   };
   const area = integrate(density);

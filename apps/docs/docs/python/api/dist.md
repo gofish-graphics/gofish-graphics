@@ -9,7 +9,10 @@ reads through its members: `d.density()` and `d.domain()` are functions of
 `t` for the shape form of
 [`ribbon`](/python/api/marks/ribbon#function-channels) and
 [`line`](/python/api/marks/line#function-channels), and `d.median()` is one
-value per group for any channel.
+value per group for any channel. A column can hold a distribution too:
+[`kde`](#kde) smooths a group's values into one, and
+[`field(x)`](/python/api/operators/spread#distribution-members) reads it
+through the same members.
 
 ```python
 d = Dist.normal(mean="mean", sd="sd")
@@ -26,6 +29,7 @@ Dist.normal(mean=..., sd=...)
 Dist.lognormal(meanlog=..., sdlog=...)
 Dist.uniform(min=..., max=...)
 Dist.exponential(rate=...)
+kde(column, bandwidth=None)  # a derive helper
 d.density()
 d.cdf()
 d.domain()
@@ -68,12 +72,19 @@ call into Python.
 | `d.quantile(p)` | the value with the share `p` of the mass at or below it              | the variable              |
 | `d.median()`    | `d.quantile(0.5)`                                                    | the variable              |
 | `d.mean()`      | the mean                                                             | the variable              |
-| `d.mass()`      | 1                                                                    | a probability             |
+| `d.mass()`      | 1 for a family, the number of values for a kernel density            | a probability, or a count |
 
-The functions run over the interval the density is drawn over: the support,
-cut at the 0.001 and 0.999 quantiles where the support has no end. A normal
-runs from its 0.001 to its 0.999 quantile, a lognormal and an exponential
-from 0 to their 0.999 quantile.
+The members describe one distribution. The density's area over the whole
+line is the mass. The cdf is the density's integral over the mass, the
+quantile is the inverse of the cdf, the median is `d.quantile(0.5)`, and
+the mean is the density's mean.
+
+The functions run over the interval the density is drawn over. For a family
+that is its support, cut at the 0.001 and 0.999 quantiles where the support
+has no end: a normal runs from its 0.001 to its 0.999 quantile, a lognormal
+and an exponential from 0 to their 0.999 quantile. For a kernel density it
+runs from 3 bandwidths below the least value to 3 above the greatest, so the
+density tapers to near zero at both ends.
 
 `d.domain()` is the interval GoFish draws the density over. It is not the
 distribution's support when the support is unbounded: a normal's support is
@@ -85,11 +96,6 @@ parameter reads (`mean` for `normal`, `min` for `uniform`), so the axis of
 no name, and its axis has no title unless you give one. A density is in the mass per the variable's unit, or per a
 difference of two of its values (a density over times is per duration). A
 density adds up, so densities stack.
-
-The distribution of a group's values is `field(x).density()` and the other
-[distribution members](/python/api/operators/spread#distribution-members) of
-a field. A Python reduce cannot return a distribution: its density is a
-function of `t`, which cannot cross the bridge.
 
 ## Cells: `d.bin(p)`
 
@@ -108,3 +114,97 @@ distribution, such as `d.density().bin(p)`, is not binned, and raises a
 d = Dist.normal(mean="mean", sd="sd")
 partition(by=d.bin(Bin.quantiles(5)), dir="x")
 ```
+
+## `kde(column, bandwidth=None)` {#kde}
+
+A helper for [`derive`](/python/api/operators/derive):
+`derive(kde("x"))` takes the rows as a sample of the column `x`, and gives
+one row whose `x` holds the sample's kernel density. The row also holds
+every other column whose value is the same in all the rows, such as a
+group's species after a split by it. In a flow after a split, `derive` runs
+in each group, so each group's column holds its own distribution. No rows
+give no row.
+
+The density is a normal kernel on each value, with area the number of
+values, so the densities of several groups add up. `bandwidth` is the
+kernel's standard deviation, in the column's unit; without it, it is
+Silverman's rule (R's `bw.nrd0`), and a sample of fewer than two different
+values is an error that asks for one. Missing values are left out. The
+density is drawn from 3 bandwidths below the least value to 3 above the
+greatest, as seaborn's `cut=3` draws it. There is no option yet to choose
+how far past the values the density runs, or to bound it at a hard limit,
+such as 0 for counts.
+
+The column keeps its name and unit, so `field("x").domain()` joins the
+axis of `x`. A field of the column reads the distribution: its
+[members](/python/api/operators/spread#distribution-members) are those
+above, and `field("x").bin(Bin.quantiles(n))` is a key for
+[`partition`](/python/api/operators/partition#a-distribution-s-cells) that
+cuts it at its own quantiles. `field("x").median()` is the distribution's
+median, not the data's. `kde` runs in Python and only gathers the values;
+JS computes the distribution.
+
+```python
+mass = field("Body Mass (g)")
+
+chart(penguins).flow(
+    spread(by="Species", dir="x"), derive(kde("Body Mass (g)"))
+).mark(ribbon(y=mass.domain(), w=mass.density(), fill="Species"))
+```
+
+### The data's own summaries
+
+A summary of the data, such as its median, is read before the `kde`, while
+the rows are still the data. A column whose value is the same in a group's
+rows is kept in the `kde`'s row. Here each violin's dot is its species'
+median body mass, from the rows:
+
+```python
+from statistics import median
+
+COL = "Body Mass (g)"
+mass = field(COL)
+
+
+def with_median(rows):
+    """Each group's median, as a column of every row."""
+    m = median(r[COL] for r in rows if r[COL] is not None)
+    return [{**r, "median": m} for r in rows]
+
+
+chart(penguins).flow(
+    spread(by="Species", dir="x", spacing=64),
+    derive(with_median),
+    derive(kde(COL)),
+).mark(
+    layer(
+        [
+            stack(
+                [ribbon(y=mass.domain(), w=mass.density(), fill="Species")],
+                dir="x",
+                baseline=Baseline.middle(),
+            ),
+            circle(cy="median", r=3, fill="white"),
+        ]
+    )
+)
+```
+
+Other tools draw the same: ggplot2 4.0's `geom_violin` draws its
+`quantiles` from the data under a kernel density body, ggdist pairs a
+density estimate with the data's empirical cdf, and seaborn's `violinplot`
+draws the data's quartiles (`inner="quart"`) on a kernel density.
+
+### As data
+
+A distribution in a column is data, a plain dict, so it crosses the bridge
+as data:
+
+```python
+{"type": "dist", "family": "kde", "params": {"values": [3750, 3800, ...], "bandwidth": 100}}
+{"type": "dist", "family": "normal", "params": {"mean": 0, "sd": 1}}
+```
+
+The first is what `kde` makes: the values it smooths, and the bandwidth when
+one is given. The second is a family with numbers for its parameters, the
+wire form of `Dist.normal(mean=0, sd=1)`. A column may hold either.

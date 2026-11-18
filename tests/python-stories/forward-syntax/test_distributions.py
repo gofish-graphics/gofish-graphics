@@ -1,6 +1,6 @@
 """Equivalent of forwardsyntax/Distributions.stories.tsx — Forward Syntax/Distributions."""
 
-from gofish import Dist, chart, field, ribbon, stack
+from gofish import Dist, chart, derive, field, kde, ribbon, stack
 from python_stories.data import PENGUINS
 
 
@@ -17,8 +17,8 @@ def story_normal_curve():
 def story_stacked_species_densities():
     mass = field("Body Mass (g)")
     return (
-        chart([p for p in PENGUINS if p["Body Mass (g)"] is not None])
-        .flow(stack(by="Species", dir="y"))
+        chart(PENGUINS)
+        .flow(stack(by="Species", dir="y"), derive(kde("Body Mass (g)")))
         .mark(ribbon(x=mass.domain(), h=mass.density(), fill="Species")),
         {"w": 500, "h": 300, "axes": True},
     )

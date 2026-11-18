@@ -62,19 +62,19 @@ use [`spread`](./spread) with the same key.
 
 ## A distribution's cells
 
-`by` may also be a distribution binned into cells, `d.bin(p)`, with `d` a
-[`Dist`](/js/api/dist) family and `p` one of `Bin.step`, `Bin.thresholds` or
-`Bin.quantiles`. The cells are those of `p` over the interval the density is
+`by` may also be a distribution binned into cells, with `p` one of
+`Bin.step`, `Bin.thresholds` or `Bin.quantiles`: `d.bin(p)` with `d` a
+[`Dist`](/js/api/dist) family, or `field(x).bin(p)` where the column `x` holds a
+distribution, after [`derive(kde("x"))`](/js/api/dist#kde). The cells are those of `p` over the interval the density is
 drawn over, and `Bin.quantiles(n)` cuts at the distribution's own quantiles.
 Each cell's group holds every row, and the distribution in it is the whole
 one restricted to the cell.
 
-In a cell of a field's line or a distribution's line, the members of a
-distribution of the same variable are the whole group's, restricted to the
-cell: `field(x).density()` in a cell of `field(x).bin(p)`, and `d.density()`
-in a cell of `d.bin(p)`. So is a ribbon or a line whose `x` is the field, so
-the bands in the cells of one curve meet. A distribution of another column is
-the cell's own rows'.
+In a cell, the members of the distribution are the whole one's, restricted
+to the cell: `field(x).density()` in a cell of `field(x).bin(p)`, and
+`d.density()` in a cell of `d.bin(p)`. In a cell of a field's line, a ribbon
+or a line whose `x` is the field is the whole group's too, so the bands in
+the cells of one curve meet.
 
 ```ts
 const d = Dist.normal({ mean: "mean", sd: "sd" });

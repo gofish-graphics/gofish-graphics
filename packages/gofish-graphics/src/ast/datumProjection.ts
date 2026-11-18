@@ -31,7 +31,7 @@ import {
   type ChunkKey,
   type FieldAccessor,
 } from "./data";
-import { getFieldOps, binStepsOf, type FieldOp } from "./fieldExpr";
+import { getFieldOps, binStepsOf, heldDist, type FieldOp } from "./fieldExpr";
 import { chainCells, Cell, CycleCell, KeyCell, type Cells } from "./cells";
 import {
   columnType,
@@ -44,13 +44,15 @@ import { describe } from "./calendar";
 import { planeCells, type PolygonCells } from "./polygonCells";
 import { isStruct, structBin, type StructExprWire } from "./structExpr";
 import {
+  distCells,
   distKeyCells,
   distVariable,
   isDistKey,
   type DistExpr,
   type DistExprWire,
 } from "./distExpr";
-import { groupCellOf, setGroupCell } from "./groupCell";
+import { distOf } from "./dist";
+import { groupCellOf, setGroupCell, type CellVariable } from "./groupCell";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -578,17 +580,16 @@ function binEntries<T extends Record<string, any>>(
   return entries;
 }
 
-/** The groups of the key `d.bin(p)` over `d`: one per cell of the group's
- *  distribution, in order, each holding every row of `d` (the rows give
- *  the distribution's parameters; they are not in one cell or another) and
- *  the cell it is (groupCell.ts), so the distribution in it is the whole
- *  one restricted to it. */
+/** The groups of a key over a distribution, `cells` its cells over `d`'s
+ *  distribution of `variable`: one per cell, in order, each holding every
+ *  row of `d` (the rows give the distribution; they are not in one cell or
+ *  another) and the cell it is (groupCell.ts), so the distribution in it is
+ *  the whole one restricted to it. */
 function distEntries<T extends Record<string, any>>(
-  by: DistExpr | DistExprWire,
+  cells: readonly Cell[],
+  variable: CellVariable,
   d: T[]
 ): Map<SplitKey, T[]> {
-  const { cells } = distKeyCells(by, d);
-  const variable = distVariable(by);
   return new Map(
     cells.map((cell) => [
       cell,
@@ -694,7 +695,26 @@ export function splitEntries<T extends Record<string, any>>(
   byOpt: SplitBy | undefined,
   d: T[]
 ): SplitGroups<T> {
-  if (isDistKey(byOpt)) return distEntries(byOpt, d);
+  // A key over a distribution: `d.bin(p)`, or a field binned over a column
+  // that holds one (`derive(kde(x))`), cut at its own quantiles.
+  if (isDistKey(byOpt))
+    return distEntries(distKeyCells(byOpt, d).cells, distVariable(byOpt), d);
+  const held = isField(byOpt) ? heldDist(d, byOpt.name) : undefined;
+  if (held !== undefined) {
+    const name = (byOpt as FieldAccessor).name;
+    const where = `field("${name}").bin(...)`;
+    const ops = getFieldOps(byOpt);
+    if (ops.length !== 1 || ops[0].op !== "bin")
+      throw new Error(
+        `${where}: the column "${name}" holds a distribution, which a key ` +
+          `cuts into cells once, field("${name}").bin(p), with no other op.`
+      );
+    return distEntries(
+      distCells(ops[0].partition, distOf(held), where),
+      { kind: "column", name },
+      d
+    );
+  }
   const by = splitByOf(byOpt);
   const ops = getFieldOps(by);
   let rows = d;
@@ -762,7 +782,6 @@ export function splitEntries<T extends Record<string, any>>(
       case "normalize":
       case "map":
       case "reduce":
-      case "sample":
       case "member":
         throw new Error(
           `field(...).${op.op === "member" ? op.name : op.op}(...) computes ` +

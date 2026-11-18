@@ -272,6 +272,7 @@ export {
   createRelationalMark,
   normalize,
   repeat,
+  kde,
   log,
   layer,
   union,
@@ -288,11 +289,11 @@ export type {
   ExcludeOptions,
   AtopOptions,
 } from "./ast/graphicalOperators/porterDuff";
-export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
-// A data helper for derive: the grid rows of a density curve to rows at its
-// quantiles. A shortcut until first-class distributions (#980).
-export { quantileRows } from "./ast/quantileRows";
-export type { QuantileRowsOptions } from "./ast/quantileRows";
+export type {
+  RelatableMark,
+  DeriveOptions,
+  KdeOptions,
+} from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).

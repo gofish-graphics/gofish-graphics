@@ -1053,7 +1053,6 @@ const FIELD_OP_NAMES = [
   "distinct",
   "map",
   "reduce",
-  "sample",
   "member",
 ] as const;
 
@@ -1136,9 +1135,6 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
         });
       if (value.unit !== undefined)
         walkUnitSpec(value.unit, `${path}.unit`, ctx);
-      return;
-    case "sample":
-      rejectUnknown(value, ["op"], path, ctx);
       return;
     case "member":
       rejectUnknown(value, ["op", "name", "args"], path, ctx);

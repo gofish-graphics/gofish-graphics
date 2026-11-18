@@ -8,7 +8,10 @@ The `Dist` family holds distributions. A distribution is a value a channel
 reads through its members: `d.density()` and `d.domain()` are functions of
 `t` for the shape form of [`ribbon`](/js/api/marks/ribbon#function-channels)
 and [`line`](/js/api/marks/line#function-channels), and `d.median()` is one
-value per group for any channel.
+value per group for any channel. A column can hold a distribution too:
+[`kde`](#kde) smooths a group's values into one, and
+[`field(x)`](/js/api/operators/spread#distribution-members) reads it through
+the same members.
 
 ::: gofish
 
@@ -29,8 +32,7 @@ Dist.normal({ mean, sd });
 Dist.lognormal({ meanlog, sdlog });
 Dist.uniform({ min, max });
 Dist.exponential({ rate });
-Dist.sample(values, { bandwidth? });
-Dist.units(variable, mass);
+kde(column, { bandwidth? }); // a derive helper
 
 d.density();
 d.cdf();
@@ -73,14 +75,19 @@ error. A family's wire form is data, so it serializes.
 | `d.quantile(p)` | the value with the share `p` of the mass at or below it              | the variable              |
 | `d.median()`    | `d.quantile(0.5)`                                                    | the variable              |
 | `d.mean()`      | the mean                                                             | the variable              |
-| `d.mass()`      | 1 for a family, the number of values for a sample                    | a probability, or a count |
+| `d.mass()`      | 1 for a family, the number of values for a kernel density            | a probability, or a count |
+
+The members describe one distribution. The density's area over the whole
+line is the mass. The cdf is the density's integral over the mass, the
+quantile is the inverse of the cdf, the median is `d.quantile(0.5)`, and
+the mean is the density's mean.
 
 The functions run over the interval the density is drawn over. For a family
 that is its support, cut at the 0.001 and 0.999 quantiles where the support
 has no end: a normal runs from its 0.001 to its 0.999 quantile, a lognormal
-and an exponential from 0 to their 0.999 quantile. For a sample it runs from
-3 bandwidths below the least value to 3 above the greatest, so the density
-tapers to near zero at both ends.
+and an exponential from 0 to their 0.999 quantile. For a kernel density it
+runs from 3 bandwidths below the least value to 3 above the greatest, so the
+density tapers to near zero at both ends.
 
 `d.domain()` is the interval GoFish draws the density over. It is not the
 distribution's support when the support is unbounded: a normal's support is
@@ -110,43 +117,101 @@ const d = Dist.normal({ mean: "mean", sd: "sd" });
 partition({ by: d.bin(Bin.quantiles(5)), dir: "x" });
 ```
 
-## `Dist.sample(values, { bandwidth? })`
+## `kde(column, { bandwidth? })` {#kde}
 
-The distribution of a sample of values, as R's distributional package holds
-one (`dist_sample`). Its quantiles, median and mean are the values' own
-(type-7 quantiles, as `field(x).median()`), and its cdf is the inverse of
-its quantile: linear between the values, with a jump at a tied value, 0
-below the least value and 1 above the greatest. Its density is a normal
-kernel density with area the number of values, drawn from 3 bandwidths below the least value to 3 above the
+A helper for [`derive`](/js/api/operators/derive#data-helpers):
+`derive(kde("x"))` takes the rows as a sample of the column `x`, and gives
+one row whose `x` holds the sample's kernel density. The row also holds
+every other column whose value is the same in all the rows, such as a
+group's species after a split by it. In a flow after a split, `derive` runs
+in each group, so each group's column holds its own distribution. No rows
+give no row.
+
+The density is a normal kernel on each value, with area the number of
+values, so the densities of several groups add up. `bandwidth` is the
+kernel's standard deviation, in the column's unit; without it, it is
+Silverman's rule (R's `bw.nrd0`), and a sample of fewer than two different
+values is an error that asks for one. Missing values are left out. The
+density is drawn from 3 bandwidths below the least value to 3 above the
 greatest, as seaborn's `cut=3` draws it. Past 3 bandwidths a kernel has
 0.135% of its mass, so the area over the drawn interval is the number of
-values less at most that share at each end. `bandwidth` is the kernel's
-standard deviation; without it, it is Silverman's rule (R's `bw.nrd0`).
-Missing values are left out. A sample of fewer than two different values has
-quantiles but no density. There is no option yet to choose how far past the
-values the density runs, or to bound it at a hard limit, such as 0 for
-counts.
+values less at most that share at each end. There is no option yet to
+choose how far past the values the density runs, or to bound it at a hard
+limit, such as 0 for counts.
 
-`Dist.sample` gives a distribution at run time, not an expression. A
-[`reduce`](/js/api/operators/spread#map-and-reduce) that returns one is
-lifted by its shape, as any record is:
+The column keeps its name and unit, so `field("x").domain()` joins the
+axis of `x`. A field of the column reads the distribution: its
+[members](/js/api/operators/spread#distribution-members) are those above,
+and `field("x").bin(Bin.quantiles(n))` is a key for
+[`partition`](/js/api/operators/partition#a-distribution-s-cells) that cuts
+it at its own quantiles. `field("x").median()` is the distribution's median,
+not the data's.
 
 ```ts
-const mass = field("Body Mass (g)").reduce(
-  (xs) => Dist.sample(xs, { bandwidth: 100 }),
-  { unit: Dist.units("g", "count") }
-);
+const mass = field("Body Mass (g)");
 
-ribbon({ x: mass.domain(), h: mass.density() });
+chart(penguins)
+  .flow(spread({ by: "Species", dir: "x" }), derive(kde("Body Mass (g)")))
+  .mark(ribbon({ y: mass.domain(), w: mass.density(), fill: "Species" }));
 ```
 
-`field(x).density()` and the other
-[distribution members](/js/api/operators/spread#distribution-members) of a
-field are `Dist.sample` with the default bandwidth.
+### The data's own summaries
 
-## `Dist.units(variable, mass)`
+A summary of the data, such as its median, is read before the `kde`, while
+the rows are still the data. A column whose value is the same in a group's
+rows is kept in the `kde`'s row. Here each violin's dot is its species'
+median body mass, from the rows:
 
-The `unit` option of a reduce that returns a distribution over amounts in
-`variable`, with its mass in `mass`. Each is a unit's name or a `Unit`. It
-gives a record that mirrors the distribution's members, with the units in
-the table above.
+::: gofish
+
+```js
+const col = "Body Mass (g)";
+const mass = gf.field(col);
+// Each group's median, as a column of every row.
+const withMedian = (rows) => {
+  const xs = rows
+    .map((r) => r[col])
+    .filter((x) => x != null)
+    .sort((a, b) => a - b);
+  const h = xs.length / 2;
+  const median = xs.length % 2 ? xs[Math.floor(h)] : (xs[h - 1] + xs[h]) / 2;
+  return rows.map((r) => ({ ...r, median }));
+};
+
+gf.chart(penguins)
+  .flow(
+    gf.spread({ by: "Species", dir: "x", spacing: 64 }),
+    gf.derive(withMedian),
+    gf.derive(gf.kde(col))
+  )
+  .mark(
+    gf.layer([
+      gf.stack({ dir: "x", baseline: gf.Baseline.middle() }, [
+        gf.ribbon({ y: mass.domain(), w: mass.density(), fill: "Species" }),
+      ]),
+      gf.circle({ cy: "median", r: 3, fill: "white" }),
+    ])
+  )
+  .render(root, { w: 400, h: 300, axes: true });
+```
+
+:::
+
+Other tools draw the same: ggplot2 4.0's `geom_violin` draws its
+`quantiles` from the data under a kernel density body, ggdist pairs a
+density estimate with the data's empirical cdf, and seaborn's `violinplot`
+draws the data's quartiles (`inner="quart"`) on a kernel density.
+
+### As data
+
+A distribution in a column is data, a plain record, so it serializes and
+crosses to and from Python:
+
+```ts
+{ type: "dist", family: "kde", params: { values: [3750, 3800, ...], bandwidth: 100 } }
+{ type: "dist", family: "normal", params: { mean: 0, sd: 1 } }
+```
+
+The first is what `kde` makes: the values it smooths, and the bandwidth when
+one is given. The second is a family with numbers for its parameters, the
+wire form of `Dist.normal({ mean: 0, sd: 1 })`. A column may hold either.

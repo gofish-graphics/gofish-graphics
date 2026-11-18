@@ -8,13 +8,10 @@ import {
   derive,
   Dist,
   field,
-  intersect,
+  kde,
   layer,
   partition,
-  quantileRows,
-  region,
   ribbon,
-  scatter,
   spread,
   text,
   Unit,
@@ -28,23 +25,18 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * curve cut at its quantiles into equal-probability slices, each drawn on its
  * own with a small gap, with one dot per slice at the slice's median.
  *
- * A partition by a key over the variable gives each cell the distribution
- * restricted to the cell: `d.bin(Bin.quantiles(5))` cuts the standard normal
- * at its quintiles, and `field(x).bin(Bin.quantiles(10))` cuts the penguins'
- * body mass at the deciles of its values. In each cell a ribbon of the
- * cell's domain and density, drawn in by a few pixels (`inset`), is the
- * cell's slice, and the slices meet where the curve is cut. The last story
- * cuts an area into calendar months the same way: in a month's cell, the
- * ribbon through the rows over `date` is the year's band restricted to the
- * month.
- *
- * The ridgeline lays each month's curve out on a grid of rows, hidden, and intersected with each cell's region, over the
- * quantile rows of the curve (`quantileRows`). A field's cells are those of
- * the column's whole domain, the same in every month, so
- * `field(x).bin(Bin.quantiles(5))` would cut every month at the year's
- * quintiles, not its own.
- * TODO(#1370): a key for the cells of each group's own sample of a
- * column, so the ridgeline is a partition too.
+ * A partition by a key over a distribution gives each cell the
+ * distribution restricted to the cell: `d.bin(Bin.quantiles(5))` cuts the
+ * standard normal at its quintiles. `derive(kde(x))` smooths the rows into
+ * a kernel density that the column then holds, and
+ * `field(x).bin(Bin.quantiles(n))` cuts it at its own quantiles: the
+ * penguins' body mass at its deciles, and in the ridgeline each month's
+ * highs at the month's own quintiles, since the kde runs in each month. In
+ * each cell a ribbon of the cell's domain and density, drawn in by a few
+ * pixels (`inset`), is the cell's slice, and the slices meet where the curve
+ * is cut. The last story cuts an area into calendar months the same way: in
+ * a month's cell, the ribbon through the rows over `date` is the year's band
+ * restricted to the month.
  */
 const meta: Meta = { title: "Forward Syntax/Croissant" };
 export default meta;
@@ -97,7 +89,7 @@ export const Croissant: StoryObj<Args> = {
 };
 
 // Penguin body mass, a skewed sample with two humps (Gentoo penguins are
-// heavier), cut at the deciles of its values.
+// heavier), smoothed into a kernel density and cut at its deciles.
 const mass = field("Body Mass (g)");
 
 export const PenguinBodyMass: StoryObj<Args> = {
@@ -112,8 +104,11 @@ export const PenguinBodyMass: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(penguins.filter((p) => p["Body Mass (g)"] != null))
-      .flow(partition({ by: mass.bin(Bin.quantiles(10)), dir: "x" }))
+    chart(penguins)
+      .flow(
+        derive(kde("Body Mass (g)")),
+        partition({ by: mass.bin(Bin.quantiles(10)), dir: "x" })
+      )
       .mark(
         layer([
           ribbon({
@@ -136,31 +131,6 @@ export const PenguinBodyMass: StoryObj<Args> = {
   },
 };
 
-const normPdf = (x: number, mu = 0, sd = 1) =>
-  Math.exp(-0.5 * ((x - mu) / sd) ** 2) / (sd * Math.sqrt(2 * Math.PI));
-
-/** `n` evenly spaced grid rows `{ x, pdf }` of `f` over `[lo, hi]`. */
-const gridOf = (f: (x: number) => number, lo: number, hi: number, n: number) =>
-  Array.from({ length: n }, (_, i) => {
-    const x = lo + ((hi - lo) * i) / (n - 1);
-    return { x, pdf: f(x) };
-  });
-
-/** A Gaussian kernel density estimate of `values`, with Silverman's
- *  rule-of-thumb bandwidth. */
-const kde = (values: number[]) => {
-  const n = values.length;
-  const mean = values.reduce((s, v) => s + v, 0) / n;
-  const sd = Math.sqrt(
-    values.reduce((s, v) => s + (v - mean) ** 2, 0) / (n - 1)
-  );
-  const bw = 1.06 * sd * n ** -0.2;
-  return {
-    bw,
-    f: (x: number) => values.reduce((s, v) => s + normPdf(x, v, bw), 0) / n,
-  };
-};
-
 const months = [
   "Jan",
   "Feb",
@@ -176,21 +146,12 @@ const months = [
   "Dec",
 ];
 
-// One density per month of Seattle's daily highs, each on its own grid from
-// three bandwidths below the month's lowest high to three above its highest.
-const monthlyDensity = months.flatMap((month, m) => {
-  const highs = seattleWeather
-    .filter((d) => new Date(d.date).getUTCMonth() === m)
-    .map((d) => d.temp_max);
-  const { f, bw } = kde(highs);
-  const lo = Math.min(...highs) - 3 * bw;
-  const hi = Math.max(...highs) + 3 * bw;
-  return gridOf(f, lo, hi, 161).map(({ x, pdf }) => ({
-    month,
-    temp_max: x,
-    pdf,
-  }));
-});
+// Seattle's daily highs, each with its month.
+const highs = seattleWeather.map((d) => ({
+  month: months[new Date(d.date).getUTCMonth()],
+  temp_max: d.temp_max,
+}));
+const temp = field("temp_max");
 
 export const Ridgeline: StoryObj<Args> = {
   args: { w: 520, h: 0 },
@@ -204,7 +165,7 @@ export const Ridgeline: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    chart(monthlyDensity, {
+    chart(highs, {
       w: args.w,
       axes: { x: { title: "Daily high (°C)" }, y: false },
     })
@@ -213,41 +174,21 @@ export const Ridgeline: StoryObj<Args> = {
           by: field("month").sort(months),
           dir: "y",
           spacing: Spacing.pitch(36, { at: "baseline" }),
-        })
+        }),
+        derive(kde("temp_max")),
+        partition({ by: temp.bin(Bin.quantiles(5)), dir: "x" })
       )
       .mark(
-        // Each month's row is 34 pixels tall. The height is the row's, so
-        // both layers get it: the curve fills it, and so does each cell's
-        // region, which is in no cell on y and is as tall as its row.
         layer({ h: 34 }, [
-          chart()
-            .flow(scatter({ x: "temp_max" }))
-            .mark(ribbon({ h: "pdf" }).name("density").hidden()),
-        ]).relate(({ density }) => [
-          chart()
-            .flow(
-              derive((rows) =>
-                quantileRows(rows, { x: "temp_max", density: "pdf", n: 1000 })
-              ),
-              partition({
-                by: field("temp_max").bin(Bin.quantiles(5)),
-                dir: "x",
-              })
-            )
-            .mark(
-              layer([
-                intersect({ fill: FILL, stroke: STROKE, strokeWidth: 1.5 }, [
-                  density,
-                  region({ inset: 2 }),
-                ]),
-                circle({
-                  cx: field("temp_max").median(),
-                  cy: 5,
-                  r: 2.25,
-                  fill: STROKE,
-                }),
-              ])
-            ),
+          ribbon({
+            x: temp.domain(),
+            h: temp.density(),
+            inset: 2,
+            fill: FILL,
+            stroke: STROKE,
+            strokeWidth: 1.5,
+          }),
+          circle({ cx: temp.median(), cy: 5, r: 2.25, fill: STROKE }),
         ])
       )
       .render(container);

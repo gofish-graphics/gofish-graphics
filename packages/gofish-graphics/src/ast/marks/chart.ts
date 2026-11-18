@@ -18,6 +18,7 @@ import {
 } from "../data";
 import { predicateWire, sumIn, type FieldExpr } from "../fieldExpr";
 import { columnQuantity } from "../measure";
+import { distOf, type DistData } from "../dist";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
@@ -266,6 +267,56 @@ export const normalize = <T, K extends keyof T>(
     [field]: (d[field] as unknown as number) / (total ?? NaN),
   }));
 };
+
+/** The options of {@link kde}. */
+export type KdeOptions = {
+  /** The standard deviation of each value's kernel, in the column's unit.
+   *  Silverman's rule (R's `bw.nrd0`) when omitted. */
+  bandwidth?: number;
+};
+
+/**
+ * A derive helper, `derive(kde("x"))`: the rows going in are a sample of
+ * the column `column`, and the one row coming out holds, in that column,
+ * the sample smoothed by a normal kernel, a distribution
+ * (`{ type: "dist", family: "kde", params: { values, bandwidth? } }`, see
+ * `DistData` in dist.ts). `field(column)`'s members read it: `density()`,
+ * `domain()`, `cdf()`, `quantile(p)`, `median()`, `mean()`, and
+ * `.bin(Bin.quantiles(n))` cuts it at its own quantiles.
+ *
+ * The row also holds every other column whose value is the same in all
+ * the rows (a group's species, after a split by it), and nothing else. In a
+ * flow after a split, `derive` runs once per group, so each group's column
+ * holds its own distribution. No rows give no row. Missing values are left
+ * out of the sample.
+ */
+export const kde =
+  (column: string, options: KdeOptions = {}) =>
+  <T>(rows: T[]): Record<string, unknown>[] => {
+    if (rows.length === 0) return [];
+    const records = rows as unknown as (Record<string, unknown> | null)[];
+    const first = records.find((r) => r != null) ?? {};
+    const same = Object.fromEntries(
+      Object.entries(first).filter(
+        ([k, v]) => k !== column && records.every((r) => Object.is(r?.[k], v))
+      )
+    );
+    const data: DistData = {
+      type: "dist",
+      family: "kde",
+      params: {
+        values: records.flatMap((r) =>
+          r?.[column] == null ? [] : [r[column]]
+        ),
+        ...(options.bandwidth !== undefined
+          ? { bandwidth: options.bandwidth }
+          : {}),
+      },
+    };
+    // Built here, so a sample that has no density is an error at the kde.
+    distOf(data);
+    return [{ ...same, [column]: data }];
+  };
 
 export function log<T>(prefix?: string): Operator<T, T> {
   return mapOperator<T, T>(

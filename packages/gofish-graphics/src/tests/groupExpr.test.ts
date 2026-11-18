@@ -32,6 +32,8 @@ const {
   ribbon,
   text,
   partition,
+  derive,
+  kde,
   Bin,
   Unit,
   Trait,
@@ -478,14 +480,15 @@ async function main() {
     check("one function ribbon per group", paths === 3, `${paths} paths`);
   }
 
-  console.log("\n# a density in a split inside a binned partition's cell");
+  console.log("\n# each group's density, cut into cells");
   {
-    // Each species' density is cut at the cells: its pieces meet, and no
-    // two of them overlap, as the pieces of one curve.
+    // Each species' kde is cut at the cells of its own distribution: its
+    // pieces meet, and no two of them overlap, as the pieces of one curve.
     const dl = await chart(measured)
       .flow(
-        partition({ by: F(col()).bin(Bin.step(1000)), dir: "x" }),
-        spread({ by: "Species", dir: "y" })
+        spread({ by: "Species", dir: "y" }),
+        derive(kde(col())),
+        partition({ by: F(col()).bin(Bin.step(1000)), dir: "x" })
       )
       .mark(ribbon({ x: F(col()).domain(), h: F(col()).density() }))
       .toDisplayList({ w: 500, h: 200, axes: false });

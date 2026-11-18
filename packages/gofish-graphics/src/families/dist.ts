@@ -14,22 +14,14 @@
  * (ast/distExpr.ts). Its wire form is data, so it crosses the Python
  * bridge.
  *
- * `sample(xs)` is a distribution at run time, the record a `reduce` returns
- * (`field("x").reduce((xs) => Dist.sample(xs, { bandwidth: 2 }))`), which
- * the reduce lifts by its shape. `field("x").density()` is the same sample
- * with the default bandwidth. `units(variable, mass)` is the unit option
- * of such a reduce.
+ * A distribution of a sample is not a family: `derive(kde(x))` smooths a
+ * group's values into a distribution the column holds, and `field(x)`'s
+ * members read it (`kde` in ast/marks/chart.ts).
  *
  * The record and its members are defined in ast/dist.ts.
  */
-import {
-  densityUnit,
-  sample as sampleDist,
-  type Dist as DistRecord,
-} from "../ast/dist";
-import { RATIO } from "../ast/measure";
+import type { Dist as DistRecord } from "../ast/dist";
 import { distExpr, type DistExpr, type DistParam } from "../ast/distExpr";
-import type { HasUnit } from "../ast/schema";
 
 /** What a distribution answers: its density, cdf, quantile, median, mean,
  *  domain and mass. See ast/dist.ts. */
@@ -57,51 +49,3 @@ export const uniform = (params: { min: DistParam; max: DistParam }): DistExpr =>
  *  from 0 to its 0.999 quantile. */
 export const exponential = (params: { rate: DistParam }): DistExpr =>
   distExpr("exponential", params);
-
-/**
- * The distribution of a sample of values, as R's distributional package
- * holds one (`dist_sample`). Its quantiles, median and mean are the
- * values' own (type-7 quantiles, as `field(x).median()`). Its density is a
- * normal kernel density with area the number of values, drawn from 3
- * bandwidths below the least value to 3 above the greatest, so it tapers
- * to near zero at both ends; `bandwidth` is the kernel's standard
- * deviation, Silverman's rule (R's `bw.nrd0`) when omitted. Missing values
- * are left out.
- */
-export const sample = (
-  values: readonly unknown[],
-  options?: { bandwidth?: number }
-): Dist => sampleDist(values, options);
-
-/** A unit as `units` takes it: its name, or a unit definition. */
-type UnitArg = string | { readonly type: { readonly HasUnit?: HasUnit } };
-
-const hasUnit = (u: UnitArg, where: string): HasUnit => {
-  if (typeof u === "string") return { unit: u, symbol: u };
-  const h = u?.type?.HasUnit;
-  if (h === undefined)
-    throw new Error(
-      `${where}: give a unit's name or a Unit, got ${String(u)}.`
-    );
-  return h;
-};
-
-/**
- * The `unit` option of a reduce that returns a {@link Dist} over amounts in
- * `variable`, with its mass in `mass` (a count for a sample): the domain,
- * the quantiles, the median and the mean are in `variable`; the density is
- * `mass` per `variable`, which adds up; the cdf is a ratio.
- */
-export function units(variable: UnitArg, mass: UnitArg) {
-  const v = { HasUnit: hasUnit(variable, "Dist.units(variable)") };
-  const m = { HasUnit: hasUnit(mass, "Dist.units(mass)") };
-  return {
-    density: { HasUnit: densityUnit(v.HasUnit, m.HasUnit) },
-    cdf: { HasUnit: RATIO },
-    quantile: v,
-    median: v,
-    mean: v,
-    domain: v,
-    mass: m,
-  };
-}

@@ -235,8 +235,11 @@ Walking `withGoFish.ts:431-477`:
      ordered column lists its domain in that order. (A `derive` types its
      result with `applySchema`, like chart data: a column keeps its input's
      type while its values still fit it, and `derive(fn, { schema })`
-     overrides that, so the types reach the mark. A `filter` carries its
-     input's types over as they are.)
+     overrides that, so the types reach the mark. A unit's values fit it
+     when they are numbers or distributions as data, so the column that
+     `derive(kde("x"))` fills with a distribution keeps `x`'s name and unit.
+     `kde` is a function of rows, in `chart.ts` beside `normalize` and
+     `repeat`. A `filter` carries its input's types over as they are.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is

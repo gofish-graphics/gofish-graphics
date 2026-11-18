@@ -439,16 +439,6 @@ for the API.
         },
         {
           "type": "object",
-          "required": ["op"],
-          "properties": {
-            "op": {
-              "const": "sample"
-            }
-          },
-          "additionalProperties": false
-        },
-        {
-          "type": "object",
           "required": ["op", "name"],
           "properties": {
             "op": {
@@ -1864,7 +1854,7 @@ for the API.
               "$ref": "#/$defs/DistAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, d.bin(p) with d a Dist family and p Bin.step, Bin.thresholds or Bin.quantiles: the cells of p over the interval its density is drawn over, Bin.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell. In a cell of a field's or a distribution's line, a distribution of the same variable (field(x).density(), d.density()) is the whole group's restricted to the cell, and so is a ribbon or line through the rows over the field, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, with p Bin.step, Bin.thresholds or Bin.quantiles: d.bin(p) with d a Dist family, or field(x).bin(p) where the column holds a distribution (after derive(kde(x))). Its cells are those of p over the interval its density is drawn over, Bin.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell (field(x).density(), d.density()). In a cell of a field's line, a ribbon or line through the rows over the field is the whole group's restricted to the cell too, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",

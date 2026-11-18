@@ -22,10 +22,9 @@ column whose value is one number in each group, or a value expression
 distribution at its own quantiles, each group the distribution restricted
 to its cell.
 
-The distribution of a group's values is ``field(x).density()`` and the
-other field members. JS's ``Dist.sample`` and ``Dist.units`` have no
-Python mirror: a Python reduce cannot return a distribution, since its
-density is a function of t, which cannot cross the bridge.
+A distribution of a sample is not a family: ``derive(kde("x"))`` smooths a
+group's values into a distribution the column holds, and ``field("x")``'s
+members read it (``kde`` in ``ast.py``).
 """
 
 import copy

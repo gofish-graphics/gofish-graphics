@@ -1094,11 +1094,8 @@ export type FieldOpIR =
   /** `reduce(fn, unit=...)`: all of a group's values to one result,
    *  `fn(xs)`, a number or a record of numbers. */
   | { op: "reduce"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
-  /** The group's values as a sample, a distribution, read through its
-   *  members: `field("x").density()` is `sample` then the member
-   *  `density`. */
-  | { op: "sample" }
-  /** A member of a reduce's result, read with `args` (`s.lo()`). */
+  /** A member of a reduce's result, or of the distribution the column
+   *  holds, read with `args` (`s.lo()`, `field("x").quantile(0.9)`). */
   | { op: "member"; name: string; args?: unknown[] };
 
 /** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire

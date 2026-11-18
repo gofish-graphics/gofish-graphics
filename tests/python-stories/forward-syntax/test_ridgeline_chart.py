@@ -1,6 +1,6 @@
 """Equivalent of RidgelineChart.stories.tsx — Forward Syntax/Ridgeline Chart."""
 
-from gofish import chart, spread, field, layer, rect, datum, ribbon, Spacing, Unit
+from gofish import chart, derive, kde, spread, field, layer, rect, datum, ribbon, Spacing, Unit
 from python_stories.data import SEATTLE_WEATHER
 
 MONTH_NAMES = [
@@ -52,6 +52,7 @@ def story_default():
                 dir="y",
                 spacing=Spacing.pitch(ROW_PITCH, at="baseline"),
             ),
+            derive(kde("temp_max")),
         )
         .mark(
             layer(

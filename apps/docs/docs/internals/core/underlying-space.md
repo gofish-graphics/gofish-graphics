@@ -2835,21 +2835,34 @@ over, which is what the generic `domain()` of a `Fun` gives too, so
 has the member; a bare `Fun` has the generic rule in `liftLeaf`. Neither
 knows about the other.
 
-Two other folds give a `Dist`, on the same lift. `field(x).density()` (and
-`domain`, `cdf`, `quantile(p)`) is the fold `sample` and a member: the
-group's values as `Dist.sample`, a normal kernel density with Silverman's
-bandwidth (`silvermanBandwidth` in `overlap.ts`), drawn from 3 bandwidths
-below the least value to 3 above the greatest (`SAMPLE_CUT`, seaborn's
-`cut=3`), with area the row count less the kernels' tails past that, at most
-Φ(−3) ≈ 0.135% of a value's kernel at each end; its quantile is the values'
-type-7 quantile, so its median is `median()`'s, and its cdf is the inverse
-of that quantile, linear between the values and jumping at a tied value
-(the quantile is flat across its copies), 0 over the tail below the least
-value and 1 over the tail above the greatest. A family,
+Every `Dist` is built in one place, `distOf` in `dist.ts`, from a
+distribution's data form (`DistData`), a plain tagged record that crosses
+to and from Python: `{ type: "dist", family, params }`, a family with
+numbers for its parameters, or `{ type: "dist", family: "kde", params: {
+values, bandwidth? } }`, a kernel density. A kernel density is one
+self-consistent distribution (`kernelDist`): a normal kernel on each value
+with Silverman's bandwidth when none is given (`silvermanBandwidth` in
+`overlap.ts`), drawn from 3 bandwidths below the least value to 3 above the
+greatest (`KDE_CUT`, seaborn's `cut=3`), with area the number of values
+over the whole line; its cdf is the mean of the kernels' cdfs, the
+density's integral over the mass, its quantile inverts that cdf (Newton's
+method in a bracket), and its mean is the values' mean, the density's mean.
+`distOf` caches each data form's `Dist` by identity.
+
+A column holds a distribution after `derive(kde("x"))`, which writes the
+data form into it. `evalGroup` asks `heldDist` (`fieldExpr.ts`) whether the
+group's column holds one: the first row that is not missing decides, and a
+row with a different one (by identity, then by its JSON) is an error that
+says to split the rows so each group holds one. A column that holds one is
+lifted like a reduce's result: `liftLeaf` reads the `Dist` through the
+expression's member ops (`distMembers`; `median()` and `mean()` become
+members, every other fold is an error naming the members). A column of
+numbers has no distribution: a member op with no fold before it is an error
+in `stepsOf` that names `derive(kde(...))`. A family,
 `Dist.normal({ mean, sd })`, is its own expression (`DistExpr` in
 `distExpr.ts`, wire `{ type: "dist", family, params, ops }`): `evalGroup`
-reads its parameters over the group's rows (`distOf`), makes the family's
-`Dist`, and lifts it through its member ops.
+reads its parameters over the group's rows (`exprDist`), builds the
+family's data form, and lifts its `Dist` through its member ops.
 
 A partition by a key over a variable gives each group its cell, and the
 cell's distribution is the whole one restricted to it. The group's rows
@@ -2865,17 +2878,15 @@ whole, so a species' density in a cell is that species' density restricted
 to the cell. A group that is a cell of its own keeps its own; a group holds
 one cell, so a split binned on a second variable replaces the first's.
 Three leaves read it, and only when their variable is the cell's: a
-family's `distOf` restricts the whole group's `Dist` (`restrictDist`; a
+family's `exprDist` restricts the whole group's `Dist` (`restrictDist`; a
 family is drawn from its 0.001 to its 0.999 quantile, so a cell at an end
-of that interval also holds the tail past it), the
-`sample` fold restricts the whole rows' sample (`sampleIn`; the cells of a
-column cover its values, so a cell that reaches the least or the greatest
-value also holds the density's tail past it, and the cells partition the
-whole interval the density is drawn over), and
+of that interval also holds the tail past it), a column that holds a
+distribution restricts it the same way (`groupDist`; `splitEntries` cuts a
+field binned over such a column at the distribution's own cells,
+`distCells`, as it does a family's), and
 `bandOfRows` builds the band through the whole rows and restricts both
 edges to the cell, so the bands in neighboring cells meet. A distribution of
-another column reads the cell's own rows, which is its distribution given
-the cell. A fold over the cell's rows that is not a distribution, such as
+another variable is read whole. A fold over the cell's rows that is not a distribution, such as
 `median()` of the column, needs no tag: the cell's rows are the values in
 the cell.
 

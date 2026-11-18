@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
-import { chart, field, ribbon, stack, Dist } from "../../src/lib";
+import { chart, derive, field, kde, ribbon, stack, Dist } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Distributions",
@@ -38,8 +38,8 @@ export const StackedSpeciesDensities: StoryObj<Args> = {
     const container = initializeContainer();
 
     const mass = field("Body Mass (g)");
-    chart(penguins.filter((p) => p["Body Mass (g)"] !== null))
-      .flow(stack({ by: "Species", dir: "y" }))
+    chart(penguins)
+      .flow(stack({ by: "Species", dir: "y" }), derive(kde("Body Mass (g)")))
       .mark(ribbon({ x: mass.domain(), h: mass.density(), fill: "Species" }))
       .render(container, { w: args.w, h: args.h, axes: true });
 

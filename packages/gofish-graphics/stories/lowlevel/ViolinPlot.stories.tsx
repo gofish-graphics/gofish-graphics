@@ -3,7 +3,9 @@ import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
 import {
   chart,
+  derive,
   field,
+  kde,
   ribbon,
   spread,
   stack,
@@ -31,8 +33,11 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     const mass = field("Body Mass (g)");
-    chart(penguins.filter((p) => p["Body Mass (g)"] !== null))
-      .flow(spread({ by: "Species", dir: "x", spacing: 64 }))
+    chart(penguins)
+      .flow(
+        spread({ by: "Species", dir: "x", spacing: 64 }),
+        derive(kde("Body Mass (g)"))
+      )
       .mark(
         stack({ dir: "x", baseline: Baseline.middle() }, [
           ribbon({ y: mass.domain(), w: mass.density(), fill: "Species" }),

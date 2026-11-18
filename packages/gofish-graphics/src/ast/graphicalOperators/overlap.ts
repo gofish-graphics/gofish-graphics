@@ -363,7 +363,7 @@ function erf(x: number): number {
  * Silverman's rule of thumb for a bandwidth, as R's `bw.nrd0` (ggforce's
  * `geom_sina` default): `0.9 · min(sd, IQR / 1.34) · n^(-1/5)`, over
  * `values`, in their own units: the dots' positions on the data axis in
- * pixels here, a sample's values for `Dist.sample` (ast/dist.ts). As in R, a
+ * pixels here, a sample's values for `kde` (ast/dist.ts). As in R, a
  * zero IQR uses the standard deviation instead. Fewer than two values, or
  * every value the same, gives 0: no smoothing, so each bell is just the
  * dot's own size (see {@link noiseOutline}).

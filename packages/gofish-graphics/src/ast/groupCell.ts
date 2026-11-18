@@ -4,7 +4,8 @@
 
 /**
  * The cell a group is: a split by a key binned on a
- * line, `field(x).bin(p)` or `d.bin(p)` on a distribution, gives each cell's
+ * line, `field(x).bin(p)`, or a distribution binned into cells, `d.bin(p)`
+ * or `field(x).bin(p)` on a column that holds one, gives each cell's
  * group the interval of the cell on the key's variable and the rows of the
  * group it was split from. It rides the group's rows ARRAY, as its column
  * types do (`COLUMN_TYPES`, schema.ts), so whatever reads a group reads the
@@ -15,11 +16,10 @@
  * dist.ts), not one made from the cell's rows alone. So the cells of one
  * curve meet exactly, and each keeps the whole curve's height. The leaves
  * that read it are the three that make a function of the variable: a
- * family (`evalDistGroup`, distExpr.ts), a field's sample (the `sample`
- * fold, fieldExpr.ts), and a band through the rows over the variable
- * (`bandOfRows`, shapes/band.tsx). A distribution of another variable is
- * of the cell's rows, which is that variable's distribution given the
- * cell.
+ * family (`evalDistGroup`, distExpr.ts), a column that holds a
+ * distribution (`groupDist`, fieldExpr.ts), and a band through the rows
+ * over the variable (`bandOfRows`, shapes/band.tsx). A distribution of
+ * another variable is read whole.
  */
 import { tagArray } from "./data";
 import type { Interval } from "./fun";

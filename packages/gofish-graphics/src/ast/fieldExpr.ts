@@ -56,7 +56,15 @@ import {
   type FoldExpr,
   type ValueExpr,
 } from "./groupExpr";
-import { distQuantities, sample, sampleIn, type Dist } from "./dist";
+import {
+  distOf,
+  distQuantities,
+  isDistData,
+  massQuantity,
+  restrictDist,
+  type Dist,
+  type DistData,
+} from "./dist";
 import { cellOn } from "./groupCell";
 import { evalDistGroup, isDistExpr, type DistExprWire } from "./distExpr";
 
@@ -110,12 +118,8 @@ export type FieldOp =
   | { op: "map"; fn: unknown; unit?: UnitSpec }
   /** `reduce(fn, { unit })`: all the values to one result, `fn(xs)`. */
   | { op: "reduce"; fn: unknown; unit?: UnitSpec }
-  /** The group's values as a sample, a distribution (`Dist.sample` in
-   *  dist.ts), read through its members: `field("x").density()` is
-   *  `sample` then the member `density`. */
-  | { op: "sample" }
-  /** A member of a reduce's result, read with `args`: `s.lo()`,
-   *  `s.quantile(0.9)`. */
+  /** A member of a reduce's result, or of the distribution the column
+   *  holds, read with `args`: `s.lo()`, `field("x").quantile(0.9)`. */
   | { op: "member"; name: string; args?: unknown[] };
 
 /** The field-expression wire shape — what `FieldExpr#toJSON` emits and what
@@ -331,32 +335,32 @@ export class FieldExpr<
     ]) as any;
   }
 
-  /** The group's values as a sample ({@link Dist}): their kernel density,
-   *  with area the number of values and Silverman's bandwidth, drawn 3
-   *  bandwidths past the least and the greatest value (`Dist.sample` in
-   *  dist.ts). It is in the values' count per unit, so the densities of
-   *  several groups add up. Valid only in a channel of ribbon or line. */
+  /** The density of the distribution the column holds ({@link Dist}): for
+   *  a kernel density (`derive(kde("x"))`), the values' count per unit of
+   *  the column, so the densities of several groups add up. Valid only in a
+   *  channel of ribbon or line, and only on a column that holds a
+   *  distribution. */
   density(): FunctionExpr {
     return this._member("density") as FunctionExpr;
   }
 
   /** `t ↦ t` over the interval {@link FieldExpr.density} is drawn over:
    *  the position channel that reads the density at the mark's parameter.
-   *  In the values' unit. */
+   *  In the column's unit. Only on a column that holds a distribution. */
   domain(): FunctionExpr {
     return this._member("domain") as FunctionExpr;
   }
 
-  /** The share of the group's values at or below t, over the values' own
-   *  range: the inverse of {@link FieldExpr.quantile}, linear between the
-   *  values. A ratio. Valid only in a channel of ribbon or line. */
+  /** The share of the distribution's mass at or below t, the integral of
+   *  its density over its mass. A ratio. Valid only in a channel of ribbon
+   *  or line, and only on a column that holds a distribution. */
   cdf(): FunctionExpr {
     return this._member("cdf") as FunctionExpr;
   }
 
-  /** The type-7 quantile at `p` of the group's values (R's and numpy's
-   *  default), missing values aside: `quantile(0.5)` is `median()`. In the
-   *  values' unit. Valid only in a value (size/pos) slot. */
+  /** The value with the share `p` of the distribution's mass at or below
+   *  it, the inverse of its cdf: `quantile(0.5)` is `median()`. In the
+   *  column's unit. Only on a column that holds a distribution. */
   quantile(p: number): ValueExpr {
     if (!(typeof p === "number" && p >= 0 && p <= 1))
       throw new Error(
@@ -366,13 +370,9 @@ export class FieldExpr<
     return this._member("quantile", [p]) as ValueExpr;
   }
 
-  /** The member `name` of the group's sample. */
+  /** The member `name` of the distribution the column holds. */
   private _member(name: keyof Dist, args?: unknown[]): unknown {
-    return new FieldExpr(this.name, [
-      ...this._ops,
-      { op: "sample" },
-      { op: "member", name, ...(args ? { args } : {}) },
-    ]);
+    return this._withOp({ op: "member", name, ...(args ? { args } : {}) });
   }
 
   /**
@@ -786,12 +786,10 @@ type MapStep = {
 
 /** A fold step: all the values to one result. A named one says what the
  *  quantity of its number is; a fold whose result is lifted (a user's
- *  reduce, a sample) says the quantity of each leaf. */
+ *  reduce) says the quantity of each leaf. */
 type FoldStep = {
   op: FieldOp & object;
-  /** `of` is given when `xs` are the values of the column `of.name` over
-   *  `of.rows`, as they are, with no map before the fold. */
-  fn: (xs: readonly unknown[], of?: ColumnValues) => unknown;
+  fn: (xs: readonly unknown[]) => unknown;
   /** Checks run on the values' quantity before the fold (`sum` adds). */
   check?: (quantity: Quantity | undefined) => void;
   /** A named fold's quantity, given the values' quantity; undefined keeps
@@ -804,37 +802,6 @@ type FoldStep = {
   /** What the lift's messages call the fold. */
   where?: string;
 };
-
-/** Where a fold's values come from: the column `name` over `rows`. */
-type ColumnValues = { name: string; rows: readonly unknown[] };
-
-/**
- * The sample of a group's values of a column. In a cell of the column's
- * line (groupCell.ts) it is the whole group's sample restricted to the cell
- * (`sampleIn`): the cell's values with the whole sample's density over the
- * cell, so the cells of one density meet. Anywhere else, and over values
- * a map made, it is the values' own.
- */
-function groupSample(
-  op: object,
-  xs: readonly unknown[],
-  of: ColumnValues | undefined
-): Dist {
-  const cell =
-    of === undefined
-      ? undefined
-      : cellOn(of.rows, { kind: "column", name: of.name });
-  if (cell === undefined) return sample(xs);
-  const name = of!.name;
-  const whole = cachedStep(op, cell.whole, `field("${name}")`, () =>
-    groupSample(
-      op,
-      cell.whole.map((r) => (r as Record<string, unknown> | null)?.[name]),
-      { name, rows: cell.whole }
-    )
-  ) as Dist;
-  return sampleIn(xs, whole, cell.cell);
-}
 
 /** The quantity of a lifted result's leaf at `path` (its members, in
  *  order), a value or a function; undefined keeps the column's. */
@@ -931,15 +898,6 @@ function stepOf(
         },
       };
     }
-    case "sample":
-      return {
-        fold: {
-          op,
-          fn: (xs, of) => groupSample(op, xs, of),
-          where: `field("${name}")`,
-          lift: (base) => distLeafQuantity(base ?? { name }, COUNT_QUANTITY),
-        },
-      };
     case "sum":
     case "mean":
     case "median":
@@ -987,8 +945,11 @@ function stepsOf(
     } else {
       if (fold === undefined)
         throw new Error(
-          `field("${name}"): .${step.member.name}() reads a member of a ` +
-            `reduce's result, but there is no reduce before it.`
+          `field("${name}").${step.member.name}(): the column "${name}" ` +
+            `holds numbers, and a field of numbers has only its data ` +
+            `summaries (sum, mean, median, count, distinct, reduce). To read ` +
+            `it as a smoothed distribution, add derive(kde("${name}")) to ` +
+            `the flow before this mark, so the column holds one.`
         );
       if (fold.lift === undefined) throw liftChainError(name, fold.op, op.op);
       members.push(step.member);
@@ -1000,8 +961,8 @@ function stepsOf(
 /** The error for an op chained after a fold. A named fold gives one value
  *  per group; a map after it runs over an operator's entries, which only
  *  an operator's size channel has ({@link hasWindowMaps}), so it reaches
- *  this path only elsewhere. A lifted result (a reduce's, a sample's) is
- *  read only through its members. */
+ *  this path only elsewhere. A lifted result (a reduce's) is read
+ *  only through its members. */
 const liftChainError = (name: string, fold: FieldOp, next: string): Error => {
   const head = `field("${name}").${fold.op}(...).${next}(...)`;
   const isMap = next === "map" || next === "normalize";
@@ -1142,6 +1103,79 @@ const keyOf = <T>(
     : (r: any) => r?.[typeof accessor === "string" ? accessor : accessor.name];
 
 /**
+ * The distribution the column `name` holds in the group `rows`, when its
+ * values are distributions ({@link DistData}, what `derive(kde(name))`
+ * makes): the group holds one, so its rows hold the same one. Undefined
+ * when the column holds anything else. Rows with different distributions
+ * in one group are an error.
+ */
+export function heldDist(
+  rows: readonly unknown[],
+  name: string
+): DistData | undefined {
+  let held: DistData | undefined;
+  for (const r of rows) {
+    const v = (r as Record<string, unknown> | null)?.[name];
+    if (isMissing(v)) continue;
+    if (held === undefined) {
+      if (!isDistData(v)) return undefined;
+      held = v;
+    } else if (
+      v !== held &&
+      !(isDistData(v) && JSON.stringify(v) === JSON.stringify(held))
+    )
+      throw new Error(
+        `field("${name}"): the column "${name}" holds a distribution, and ` +
+          `a group must hold one, but this group's rows hold different ` +
+          `${isDistData(v) ? "distributions" : "values"}. Split the rows so ` +
+          `each group holds one (the kde ran in each group of a spread or ` +
+          `group), or make one distribution over the group's rows.`
+      );
+  }
+  return held;
+}
+
+/** Each group's distribution of a column, restricted to its cell. */
+const groupDists = new WeakMap<object, Map<string, Dist>>();
+
+/** The distribution `held` that the column `name` holds in the group
+ *  `rows`: in a cell of the column's line (groupCell.ts), restricted to the
+ *  cell, so the cells of one distribution meet. */
+function groupDist(
+  rows: readonly unknown[],
+  name: string,
+  held: DistData
+): Dist {
+  let byName = groupDists.get(rows);
+  if (byName === undefined) groupDists.set(rows, (byName = new Map()));
+  let d = byName.get(name);
+  if (d === undefined) {
+    const cell = cellOn(rows, { kind: "column", name });
+    d =
+      cell === undefined ? distOf(held) : restrictDist(distOf(held), cell.cell);
+    byName.set(name, d);
+  }
+  return d;
+}
+
+/** The members an expression reads of the distribution its column holds:
+ *  its member ops, and `median()` and `mean()`, the distribution's own.
+ *  Any other op is an error: a distribution is read only through its
+ *  members. */
+function distMembers(accessor: unknown, name: string): MemberOp[] {
+  return getFieldOps(accessor).map((op) => {
+    if (op.op === "member") return op;
+    if (op.op === "median" || op.op === "mean")
+      return { op: "member", name: op.op };
+    throw new Error(
+      `field("${name}").${op.op}(): the column "${name}" holds a ` +
+        `distribution, which is read through its members: density(), ` +
+        `domain(), cdf(), quantile(p), median() and mean().`
+    );
+  });
+}
+
+/**
  * Evaluate a field expression (or a bare string or function accessor) over
  * one group's rows: the one place an expression is evaluated.
  *
@@ -1180,6 +1214,18 @@ export function evalGroup<T>(
       : typeof accessor === "function"
         ? "value"
         : accessor.name;
+  // A field reads what its column holds: a column that holds a
+  // distribution is read through its members.
+  if (typeof accessor !== "function") {
+    const held = heldDist(rows, name);
+    if (held !== undefined)
+      return liftLeaf(
+        groupDist(rows, name, held),
+        distMembers(accessor, name),
+        `field("${name}")`,
+        distLeafQuantity(column ?? { name }, massQuantity(held.family))
+      );
+  }
   const { maps, fold, members } = stepsOf(accessor, name, byName);
   const key = keyOf(accessor);
   let xs: unknown[] = rows.map(key);
@@ -1196,12 +1242,8 @@ export function evalGroup<T>(
     return { kind: "rows", values: xs, ...(mapped ? { quantity } : {}) };
   fold.check?.(quantity);
   const values = xs;
-  // The values are a column's, as they are, when no map ran and the
-  // accessor names a column.
-  const of =
-    mapped || typeof accessor === "function" ? undefined : { name, rows };
   const result = cachedStep(fold.op, rows, `field("${name}").reduce(...)`, () =>
-    fold.fn(values, of)
+    fold.fn(values)
   );
   if (fold.lift === undefined) {
     const q = fold.quantity?.(quantity) ?? (mapped ? quantity : undefined);
@@ -1281,11 +1323,11 @@ export async function resolveGroupSteps(
 }
 
 /** Whether `v`'s result has a shape known only per group, a function or a
- *  value: it holds a reduce or a sample, or it is a distribution
- *  expression. */
+ *  value: it holds a reduce or a member (of a reduce's result or of the
+ *  distribution its column holds), or it is a distribution expression. */
 export const liftsPerGroup = (v: unknown): boolean =>
   isDistExpr(v) ||
-  getFieldOps(v).some((op) => op.op === "reduce" || op.op === "sample");
+  getFieldOps(v).some((op) => op.op === "reduce" || op.op === "member");
 
 /** Whether a field expression's ops hold a Python callback, which must be
  *  resolved over the groups before inference ({@link resolveGroupSteps}). */
@@ -1303,18 +1345,14 @@ export const holdsClosureStep = (accessor: unknown): boolean =>
  *  size channel, run over the entries' values (the window), not over a
  *  group's rows: the maps after its named fold, or all its maps when it has
  *  no fold. Each entry's value is the expression before them, the entry's
- *  fold or the channel's own sum. A lifted result (a reduce's, a sample's)
- *  is read only through its members, so no map follows it. */
+ *  fold or the channel's own sum. A lifted result (a reduce's, or a
+ *  distribution's) is read only through its members, so no map follows it. */
 export function hasWindowMaps(accessor: unknown): boolean {
   const ops = getFieldOps(accessor);
   const i = trailingMapsStart(ops);
   return (
     i < ops.length &&
-    !ops
-      .slice(0, i)
-      .some(
-        (op) => op.op === "reduce" || op.op === "sample" || op.op === "member"
-      )
+    !ops.slice(0, i).some((op) => op.op === "reduce" || op.op === "member")
   );
 }
 
