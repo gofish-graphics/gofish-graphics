@@ -135,14 +135,23 @@ export interface GroupItem extends BaseDisplayItem {
 
 /**
  * A filter over a group's drawing. `css` is a CSS `filter` value
- * (`grayscale(1)`, `url(#shadow)`), which SVG takes as the `filter`
- * attribute. `luminanceToAlpha` has no CSS function, so a backend draws it
- * as an SVG `<filter>` def: an `feColorMatrix type="luminanceToAlpha"` in
- * sRGB, which makes each pixel black with an alpha of its luminance.
+ * (`url(#shadow)`), which SVG takes as the `filter` attribute. `colorMatrix`
+ * is one SVG `feColorMatrix` in sRGB, with its `type` and `values`
+ * attributes: a `matrix` has `values`, the 20 numbers of its 4 by 5 matrix
+ * separated by spaces or commas as SVG allows, and a `luminanceToAlpha` has
+ * none. The `Filter` strategies lower to it (`drawFilter.ts` in
+ * gofish-graphics).
  */
 export type DisplayFilter =
   | { kind: "css"; value: string }
-  | { kind: "luminanceToAlpha" };
+  | { kind: "colorMatrix"; type: "matrix"; values: string }
+  | { kind: "colorMatrix"; type: "luminanceToAlpha" };
+
+/** The `values` of a `matrix` {@link DisplayFilter}, as a regular
+ *  expression's source: 20 numbers, separated by spaces or commas as SVG
+ *  allows. `validate.ts` and `jsonSchema.ts` both check it. */
+const SVG_NUMBER = String.raw`[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?`;
+export const MATRIX_VALUES_PATTERN = String.raw`^\s*${SVG_NUMBER}(?:(?:\s+,?\s*|,\s*)${SVG_NUMBER}){19}\s*$`;
 
 /**
  * A region composite: a set operation over its operands' regions (#1267).
