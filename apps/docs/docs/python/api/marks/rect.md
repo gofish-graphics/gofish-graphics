@@ -42,6 +42,30 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). To attach a
 text label, chain [`.label(accessor, ...)`](/python/api/core/mark#labeling-a-mark)
 on the returned mark rather than passing a `label` option here.
 
+## Position and size
+
+On each axis a rect takes a start (`x`, `y`), a center (`cx`, `cy`), an
+other end (`x2`, `y2`), and a size (`w`, `h`). Each takes a constant in
+pixels or a data value: a field name or `datum(...)`. Two of them place the
+rect on an axis. These pairs work:
+
+| On an axis                      | The rect                                |
+| ------------------------------- | --------------------------------------- |
+| start and size (`y`, `h`)       | starts at `y` and is `h` long           |
+| center and size (`cy`, `h`)     | is centered on `cy` and is `h` long     |
+| start and other end (`y`, `y2`) | spans from `y` to `y2`, in either order |
+| size only (`h`)                 | is `h` long, and its parent places it   |
+| none                            | fills the space its parent gives it     |
+
+Both ends must be data values; in any other case the rect does not span to
+`x2` or `y2`. With both ends it ignores `w` and `h`. Under
+[`Coord.polar`](/python/api/coords/polar) and
+[`Coord.clock`](/python/api/coords/clock), a rect between two fields draws as
+a straight stroke, not a bent band; give it a start and a size there.
+
+See [How to draw a mark between two values](/python/api/howto/intervals) for
+box plots, error bars, and Gantt bars.
+
 ## Axis names
 
 `x`, `y`, `w`, and `h` mean the first and second axis in any coordinate space.
@@ -83,6 +107,9 @@ chart(seafood).flow(
     spread(by="lake", dir="x"),
     stack(by="species", dir="y"),
 ).mark(rect(h="count", fill="species"))
+
+# Gantt bar: from the "start" field to the "end" field
+chart(tasks).flow(spread(by="task", dir="y")).mark(rect(x="start", x2="end", h=16))
 
 # Rounded, outlined tiles
 chart(data).mark(rect(h="count", rx=4, stroke="white", stroke_width=2))

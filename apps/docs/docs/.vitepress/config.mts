@@ -497,6 +497,10 @@ export default defineConfig({
               link: "/js/api/howto/naming-and-scoping",
             },
             { text: "Place labels", link: "/js/api/howto/label-placement" },
+            {
+              text: "Draw a mark between two values",
+              link: "/js/api/howto/intervals",
+            },
           ],
         },
         {
@@ -645,6 +649,10 @@ export default defineConfig({
               link: "/python/api/howto/naming-and-scoping",
             },
             { text: "Place labels", link: "/python/api/howto/label-placement" },
+            {
+              text: "Draw a mark between two values",
+              link: "/python/api/howto/intervals",
+            },
           ],
         },
         {
