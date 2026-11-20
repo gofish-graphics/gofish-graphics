@@ -111,7 +111,7 @@ export const Default: StoryObj<Args> = {
           dir: "y",
           spacing: Spacing.pitch(rowPitch, { at: "baseline" }),
         }),
-        scatter({ x: "temp_max", h: ridgeHeight })
+        scatter({ cx: "temp_max", h: ridgeHeight })
       )
       .mark(
         ribbon({

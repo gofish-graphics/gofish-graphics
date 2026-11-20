@@ -121,7 +121,7 @@ export const StackedArea: StoryObj<Args> = {
     const container = initializeContainer();
     chart(quarterlySales, { schema: { date: Unit.time() }, w: args.w, h: args.h })
       .flow(
-        scatter({ by: "date", x: "date" }),
+        scatter({ by: "date", cx: "date" }),
         stack({ by: "category", dir: "y" })
       )
       .mark(ribbon({ h: "sales", fill: "category", curve: Curve.linear() }))
@@ -147,7 +147,7 @@ export const CircleTimeline: StoryObj<Args> = {
     chart(quarterlySales, { schema: { date: Unit.time() }, w: args.w })
       .flow(
         spread({ by: "category", dir: "y", spacing: 60 }),
-        scatter({ by: "date", x: "date", alignment: "middle" })
+        scatter({ by: "date", cx: "date", alignment: "middle" })
       )
       .mark(circle({ area: "sales", fill: "category", opacity: 0.8 }))
       .render(container);
@@ -195,13 +195,13 @@ export const SurplusDeficitLine: StoryObj<Args> = {
       w: args.w,
       h: args.h,
     })
-      .flow(group({ by: "side" }), scatter({ by: "date", x: "date" }))
+      .flow(group({ by: "side" }), scatter({ by: "date", cx: "date" }))
       .mark(ribbon({ h: "balance", fill: "side", curve: Curve.linear() }))
       // The line: invisible anchors at the monthly values, then a line
       // through them.
       .layer(
         chart(rows, { schema })
-          .flow(scatter({ by: "date", x: "date", y: "balance" }))
+          .flow(scatter({ by: "date", cx: "date", cy: "balance" }))
           .mark(blank())
       )
       .layer(line({ stroke: "#222", strokeWidth: 1.5, curve: Curve.linear() }))

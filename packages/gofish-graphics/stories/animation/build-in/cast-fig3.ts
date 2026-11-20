@@ -13,7 +13,7 @@ import { chinstraps } from "./data";
 export default (container: HTMLElement, clock?: BuildClockOptions) =>
   chart(chinstraps, { w: 420, h: 260 })
     .flow(
-      scatter({ x: "beakLength", y: "beakDepth" }).transition({
+      scatter({ cx: "beakLength", cy: "beakDepth" }).transition({
         enter: time.stagger({ by: field("mass").sort(), lag: 100 }),
       })
     )

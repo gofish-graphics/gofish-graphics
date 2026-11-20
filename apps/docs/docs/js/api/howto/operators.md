@@ -122,7 +122,7 @@ chart(data)
 Groups data by a field and positions each group at the mean x/y coordinates of its members.
 
 ```ts no-check
-.flow(scatter({ by: "species",  x: "bill_length", y: "flipper_length" }))
+.flow(scatter({ by: "species",  cx: "bill_length", cy: "flipper_length" }))
 ```
 
 Use `scatter` when your data has numeric x and y fields and you want marks positioned by those values.
@@ -131,7 +131,7 @@ Use `scatter` when your data has numeric x and y fields and you want marks posit
 
 ```ts
 chart(penguins)
-  .flow(scatter({ by: "species", x: "bill_length", y: "flipper_length" }))
+  .flow(scatter({ by: "species", cx: "bill_length", cy: "flipper_length" }))
   .mark(circle({ r: 4, fill: "species" }));
 ```
 

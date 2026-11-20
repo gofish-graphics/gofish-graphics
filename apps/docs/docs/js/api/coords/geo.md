@@ -77,11 +77,16 @@ and as an operator's `dir`.
 
 ```ts
 chart(cities, { coord: Coord.geo("equalEarth") })
-  .flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
+  .flow(
+    scatter({
+      by: "name",
+      dims: { lon: { center: "lon" }, lat: { center: "lat" } },
+    })
+  )
   .mark(circle({ r: 3 }));
 ```
 
-This places each city exactly as `scatter({ by: "name", x: "lon", y: "lat" })`
+This places each city exactly as `scatter({ by: "name", cx: "lon", cy: "lat" })`
 does. The names only work inside a `geo` space. Anywhere else, `lon` throws an
 error that lists the names you can use there.
 
@@ -100,7 +105,7 @@ chart(world110m, {
     chart(birds)
       .flow(
         group({ by: "species" }),
-        scatter({ by: "day", x: "lon", y: "lat" })
+        scatter({ by: "day", cx: "lon", cy: "lat" })
       )
       .mark(line({ stroke: "species", strokeWidth: 1, opacity: 0.5 }))
   )

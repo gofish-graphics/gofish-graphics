@@ -55,7 +55,7 @@ Call `.name("layerName")` on a mark so another chart can reference it with
 [`ref` / `select_all`](/python/api/core/chart#cross-chart-references):
 
 ```python
-chart(data).flow(scatter(by="lake", x="x", y="y")).mark(blank().name("points"))
+chart(data).flow(scatter(by="lake", cx="x", cy="y")).mark(blank().name("points"))
 ```
 
 ## Nested chart as a mark
@@ -66,7 +66,7 @@ chart's **data off** and it inherits the incoming partition (the group's rows),
 so you don't thread the data through a callback:
 
 ```python
-chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+chart(catch_locations).flow(scatter(by="lake", cx="x", cy="y")).mark(
     chart(coord=Coord.clock())  # no data -> inherits this lake's partition
     .flow(stack(by="species", dir="x", h=20))
     .mark(rect(w="count", fill="species"))
@@ -91,7 +91,7 @@ flower = (
     .mark(petal(w="count", fill="species"))
 )
 
-chart(stem_data, axes=False).flow(scatter(by="lake", x="x")).mark(
+chart(stem_data, axes=False).flow(scatter(by="lake", cx="x")).mark(
     layer([
         rect(w=4, h="count", fill="rgb(0, 142, 91)").name("stem"),
         flower.name("flower"),
@@ -125,7 +125,7 @@ small line chart, dots with a line over them:
 ```python
 chart(sales).flow(spread(by="store", dir="x", spacing=32)).mark(
     chart(axes=False)  # inherits this store's rows
-    .flow(scatter(by="quarter", x="quarter", y="sales"))
+    .flow(scatter(by="quarter", cx="quarter", cy="sales"))
     .mark(circle(r=4, fill="#08519c"))
     .layer(line(stroke="#6baed6", stroke_width=2))  # connects this store's dots
 )
@@ -185,7 +185,7 @@ rows reads the ref from the field and places it the same way:
 ```python
 from gofish import chart, circle, layer, resolve, scatter, select_all, spread, text
 
-chart(nodes, axes=False).flow(scatter(by="id", x="grp", y="grp")).mark(
+chart(nodes, axes=False).flow(scatter(by="id", cx="grp", cy="grp")).mark(
     circle(r=16, fill="#59a14f").name("nodes")
 ).layer(
     chart(labels)

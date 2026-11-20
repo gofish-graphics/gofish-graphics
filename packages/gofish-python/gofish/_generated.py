@@ -752,18 +752,18 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, x_min: Optional[int | float | str] = None, x_max: Optional[int | float | str] = None, y_min: Optional[int | float | str] = None, y_max: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Position each child at an explicit (x, y) point or [min, max] span in data space.
+def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, dims: Optional[dict] = None, alignment: Optional[str] = None, overlap: Optional[dict] = None, axes: Optional[bool | dict] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). Any two keys of one axis are a span.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
-        x: Point position, x.
-        y: Point position, y.
-        x_min: Range form: left/bottom edge, x.
-        x_max: Range form: right/top edge, x.
-        y_min: Range form: left/bottom edge, y.
-        y_max: Range form: right/top edge, y.
-        dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span.
+        x: Where each child's start (left) edge goes on x.
+        cx: Where each child's center goes on x.
+        x2: Where each child's end (right) edge goes on x. With `x`, the child spans from `x` to `x2`.
+        y: Where each child's start edge goes on y: its top edge where y reads top-down, its bottom edge where it grows upward.
+        cy: Where each child's center goes on y.
+        y2: Where each child's other y edge goes. With `y`, the child spans from `y` to `y2`.
+        dims: Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Read as a mark's dims: a bare value or {min} is the start, like x; {center} the center, like cx; {max} the end, like x2.
         alignment: Cross-axis alignment for the axis without an explicit position. Default "baseline".
         overlap: How children keep clear of each other on the axis no field places, made by a call in the Overlap family. Overlap.separate({padding}) is a beeswarm: each dot moves to the free spot nearest the alignment line, so the counts set the width. Overlap.noise({randomness, smoothing, padding, seed}) spreads the dots inside an outline that follows how many dots share each part of the data axis: each dot adds a small bell-shaped bump, and the outline is the sum of the bumps. randomness is "blue" (default), "quasi" or "uniform". smoothing is the bandwidth of each bell in data units, 0 or more (default 0: no smoothing beyond the size of the dots), Infinity for a flat band, or "silverman" to compute it from the data. Overlap.sina() is noise with smoothing "silverman" (a violin outline), and Overlap.jitter() is noise with randomness "uniform" and smoothing Infinity (classic jitter); both make kind "noise". Both kinds grow from the `alignment` line: "middle" both ways, "start"/"baseline" to the positive side, "end" to the negative side. Omit it and every child sits on the line. Strategies move only the free axis. Linear coordinate spaces only.
         w: Fixed cross-axis extent, or a field name sizing this operator's own box from data.
@@ -774,11 +774,11 @@ def _scatter_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, x: Opt
     for _k, _v in [
         ("by", by),
         ("x", _channel(x)),
+        ("cx", _channel(cx)),
+        ("x2", _channel(x2)),
         ("y", _channel(y)),
-        ("xMin", _channel(x_min)),
-        ("xMax", _channel(x_max)),
-        ("yMin", _channel(y_min)),
-        ("yMax", _channel(y_max)),
+        ("cy", _channel(cy)),
+        ("y2", _channel(y2)),
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("alignment", alignment),
         ("overlap", _to_wire(("ref", "Overlap"), overlap, "overlap")),

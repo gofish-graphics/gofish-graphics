@@ -191,7 +191,7 @@ for (const [family, spec] of Object.entries(Frontend.STRATEGIES) as Array<
     chart([{ d: 0, y: 1 }], {
       axes: { x: { levels: [Calendar.year, true] } },
     })
-      .flow(scatter({ x: "d", y: "y", overlap: Overlap.separate }))
+      .flow(scatter({ cx: "d", cy: "y", overlap: Overlap.separate }))
       .mark(circle({ r: 2 }))
   );
   const level = ir.root.options?.axes?.x?.levels?.[0];

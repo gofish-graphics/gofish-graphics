@@ -81,7 +81,7 @@ export const L0Sugar: StoryObj<Args> = {
     })
       .flow(
         time.sequence({ by: "year", duration: 5000, playing: false, at: AT }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
       .layer(time.transition())
@@ -112,7 +112,7 @@ export const L1ExplicitKey: StoryObj<Args> = {
     })
       .flow(
         time.sequence({ by: "year", duration: 5000, playing: false, at: AT }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }).name("kf"))
       .layer(
@@ -147,7 +147,7 @@ export const L2ExplicitClock: StoryObj<Args> = {
     })
       .flow(
         group({ by: "year" }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }).name("kf"))
       .layer(
@@ -189,7 +189,7 @@ export const L3DataSpace: StoryObj<Args> = {
     })
       .flow(
         group({ by: "year" }),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(blank())
       .layer(
@@ -202,7 +202,7 @@ export const L3DataSpace: StoryObj<Args> = {
                 at: year(),
               })
             ),
-            scatter({ by: "country", x: "fertility", y: "life_expect" })
+            scatter({ by: "country", cx: "fertility", cy: "life_expect" })
           )
           .mark(circle({ r: 4, fill: "country" }))
       )

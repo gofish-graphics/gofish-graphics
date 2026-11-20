@@ -36,7 +36,7 @@ def story_default():
 
     sc = (
         chart(data)
-        .flow(scatter(by="id", x="Beak Length (mm)", y="Beak Depth (mm)"))
+        .flow(scatter(by="id", cx="Beak Length (mm)", cy="Beak Depth (mm)"))
         .mark(circle(r=3, fill="steelblue", fill_opacity=0.6))
         .name("scatter")
     )

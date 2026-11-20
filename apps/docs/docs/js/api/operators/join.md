@@ -34,7 +34,7 @@ The nested glyph chart leaves off its data, so it inherits its parent partition
 
 ```js
 gf.chart(catchLocationsArray)
-  .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(gf.scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(
     gf
       .chart({ coord: gf.Coord.clock() }) // no data → inherits this lake's partition

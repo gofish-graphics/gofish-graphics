@@ -9,7 +9,7 @@ const points = _.range(0, 61, 5).map((sigma) => ({
 gf.layer([
   gf
     .Chart(points)
-    .flow(gf.scatter({ x: "sigma", y: "width" }))
+    .flow(gf.scatter({ cx: "sigma", cy: "width" }))
     .mark(gf.circle({ r: 3.5, fill: "#3451b2" }).name("pts")),
   gf
     .Chart(gf.selectAll("pts"))

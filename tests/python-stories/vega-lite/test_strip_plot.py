@@ -20,7 +20,7 @@ def story_default():
             # Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
             derive(lambda d: sorted(d, key=lambda r: r["cylinders"])),
             spread(by="cylinders", dir="y"),
-            scatter(x="horsepower"),
+            scatter(cx="horsepower"),
         )
         .mark(rect(w=1, h=10, fill="rgb(31, 119, 180)", opacity=0.7)),
         # Horsepower (continuous) x-axis at the bottom (y-end).

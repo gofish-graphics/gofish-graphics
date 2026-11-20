@@ -65,7 +65,7 @@ def _yearly_stocks():
 def story_scatter_point_labels():
     return (
         chart(_countries(), w=640, h=440)
-        .flow(scatter(by="country", x="fertility", y="life_expect"))
+        .flow(scatter(by="country", cx="fertility", cy="life_expect"))
         .mark(circle(r=4).label("country")),
         {"axes": True},
     )
@@ -76,7 +76,7 @@ def story_scatter_point_labels():
 def story_line_end_labels():
     return (
         chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
-        .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+        .flow(group(by="symbol"), scatter(by="date", cx="date", cy="price"))
         .mark(
             line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end())
         ),
@@ -89,7 +89,7 @@ def story_line_end_labels():
 def story_inline_sloped_labels():
     return (
         chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
-        .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+        .flow(group(by="symbol"), scatter(by="date", cx="date", cy="price"))
         .mark(
             line(stroke="symbol", stroke_width=2).label(
                 "symbol",
@@ -180,7 +180,7 @@ BUDGET = [
 def _budget_chart(side):
     return (
         chart(BUDGET, w=360, h=220)
-        .flow(group(by="series"), scatter(by="x", x="x", y="y"))
+        .flow(group(by="series"), scatter(by="x", cx="x", cy="y"))
         .mark(
             line(stroke="series", stroke_width=2).label(
                 "series",
@@ -229,7 +229,7 @@ def _trend_scatter(countries):
     ]
     return (
         chart(ends, w=640, h=440)
-        .flow(scatter(by="fertility", x="fertility", y="life_expect"))
+        .flow(scatter(by="fertility", cx="fertility", cy="life_expect"))
         .mark(blank().name("ends"))
         .layer(
             chart(select_all("ends")).mark(
@@ -238,7 +238,7 @@ def _trend_scatter(countries):
         )
         .layer(
             chart(countries)
-            .flow(scatter(by="country", x="fertility", y="life_expect"))
+            .flow(scatter(by="country", cx="fertility", cy="life_expect"))
             .mark(circle(r=4).label("country", avoiding=select_all("trend")))
         )
     )

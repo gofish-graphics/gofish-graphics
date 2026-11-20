@@ -2202,7 +2202,7 @@ def join(right: Any, *, on: str) -> Operator:
 
     Pairs with a nested chart that inherits its parent partition::
 
-        chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+        chart(catch_locations).flow(scatter(by="lake", cx="x", cy="y")).mark(
             lambda data: chart(data, coord=Coord.clock())
             .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
@@ -2236,10 +2236,13 @@ def scatter(
             domain ops (``field("site").sort("yield")``). Omit for per-item
             scatter.
         **options: The generated ``_scatter_opts`` core's options; see the
-            docs options table. Give at least one of ``x``, ``y``,
-            ``x_min``/``x_max``, ``y_min``/``y_max``, or ``dims`` (placement
-            by axis name, e.g. ``dims={"theta": "bearing", "r": "distance"}``
-            in polar).
+            docs options table. Place each child on an axis by its center
+            (``cx``/``cy``), its start edge (``x``/``y``) or its end edge
+            (``x2``/``y2``), as on a mark; any two keys of one axis are a
+            span. Or use
+            ``dims`` (placement by axis name, read as a mark's ``dims``, e.g.
+            ``dims={"theta": {"center": "bearing"}, "r": {"center": "distance"}}``
+            in polar). Give at least one.
 
     Returns:
         Operator object

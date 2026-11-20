@@ -197,7 +197,7 @@ layer([
     chart(airports, color=Color.gradient("reds")).flow(
         partition(by=struct(x="longitude", y="latitude").bin(Bin.voronoi(seeds=hubs)))
     ).mark(region(fill=field("iata").count(), stroke="white")),
-    chart(hubs).flow(scatter(x="longitude", y="latitude")).mark(circle(r=3, fill="black")),
+    chart(hubs).flow(scatter(cx="longitude", cy="latitude")).mark(circle(r=3, fill="black")),
 ]).render(w=600, h=360, axes=True)
 ```
 

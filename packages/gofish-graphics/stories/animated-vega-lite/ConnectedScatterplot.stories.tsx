@@ -7,8 +7,8 @@
  *
  * How the Animated Vega-Lite spec reads in GoFish:
  *
- * - `mark: "line"` with x = miles and y = gas is `scatter({ x: "miles",
- *   y: "gas" })` in the flow and `line(...)` as the mark.
+ * - `mark: "line"` with x = miles and y = gas is `scatter({ cx: "miles",
+ *   cy: "gas" })` in the flow and `line(...)` as the mark.
  * - `order: "year"` is `along: "year"`: the line threads the years in order.
  * - `time: { field: "year", scale: { type: "band", range: { step: 200 } } }`
  *   is `time.sequence({ by: "year", on: year })`, with a clock that spends
@@ -93,7 +93,7 @@ const years = (clock: Clock, size: Args, ...between: Operator<any, any>[]) =>
   }).flow(
     time.sequence({ by: "year", on: clock }),
     ...between,
-    scatter({ x: "miles", y: "gas" })
+    scatter({ cx: "miles", cy: "gas" })
   );
 
 /** The port: the line alone, drawn in up to the playhead. Every year stays,

@@ -13,7 +13,7 @@ from gofish import chart, circle, line, scatter, Curve
 
 (
     chart(driving_shifts, axes=True)
-    .flow(scatter(by="year", x="miles", y="gas"))
+    .flow(scatter(by="year", cx="miles", cy="gas"))
     .mark(circle(r=2.5, fill="white", stroke="black", stroke_width=1))
     .layer(line(along="year", curve=Curve.monotone()))
     .render(w=400, h=300)

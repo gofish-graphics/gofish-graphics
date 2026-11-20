@@ -902,7 +902,7 @@ async function main() {
       schema: { g1: grade(), g2: grade() },
       color: Color.palette(["red", "green", "blue"]),
     })
-      .flow(scatter({ x: "a", y: "b" }))
+      .flow(scatter({ cx: "a", cy: "b" }))
       .mark(layer([circle({ r: 3, fill: "g1" }), circle({ r: 2, fill: "g2" })]))
       .toDisplayList({ w: 100, h: 100 });
     const legend = textsOf(dl).filter((t) =>
@@ -931,7 +931,7 @@ async function main() {
         },
         color: Color.palette(["red", "green", "blue"]),
       })
-        .flow(scatter({ ...(by === undefined ? {} : { by }), x: "a", y: "b" }))
+        .flow(scatter({ ...(by === undefined ? {} : { by }), cx: "a", cy: "b" }))
         .mark(circle({ r: 3, fill: "grade" }))
         .toDisplayList({ w: 100, h: 100 });
     const legend = textsOf(await dots()).filter((t) =>

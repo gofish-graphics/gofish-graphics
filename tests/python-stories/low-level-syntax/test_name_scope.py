@@ -107,7 +107,7 @@ def story_nested_callout():
     return (
         layer([
             chart(NORMAL, w=240, h=160)
-            .flow(scatter(x="x"))
+            .flow(scatter(cx="x"))
             .mark(ribbon(h="pdf", fill="#D1E4F6", stroke="#467DA8").name("density")),
         ]).relate(lambda density: [
             layer([
@@ -143,7 +143,7 @@ def story_clause_select_all():
     return (
         layer([
             chart(MONTHLY_MEANS)
-            .flow(scatter(x="month", y="mean"))
+            .flow(scatter(cx="month", cy="mean"))
             .mark(circle(r=3.5, fill="#467DA8").name("means")),
         ]).relate(lambda: [
             chart(select_all("means")).mark(line(stroke="#467DA8")),
@@ -156,7 +156,7 @@ def story_clause_with_default_axes():
     def dots(fill, r):
         return (
             chart(MONTHLY_MEANS)
-            .flow(scatter(x="month", y="mean"))
+            .flow(scatter(cx="month", cy="mean"))
             .mark(circle(r=r, fill=fill))
         )
 
@@ -195,7 +195,7 @@ def story_median_trend():
             .mark(
                 layer([
                     chart()
-                    .flow(scatter(x="x", h=28))
+                    .flow(scatter(cx="x", h=28))
                     .mark(ribbon(h="pdf", fill="#D1E4F6", stroke="#467DA8")),
                     chart().mark(
                         circle(

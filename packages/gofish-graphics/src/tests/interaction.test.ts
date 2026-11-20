@@ -133,7 +133,7 @@ function trailChart(opts: {
     legend: false,
     ...(padding !== undefined ? { padding } : {}),
   })
-    .flow(filter(pred), scatter({ x: "lon", y: "lat" }))
+    .flow(filter(pred), scatter({ cx: "lon", cy: "lat" }))
     .mark(
       circle({
         r: 3,
@@ -1814,7 +1814,7 @@ async function main() {
     })
       .flow(
         group({ by: "species" }),
-        scatter({ by: "day", x: "lon", y: "lat" })
+        scatter({ by: "day", cx: "lon", cy: "lat" })
       )
       .mark(
         line({

@@ -75,7 +75,7 @@ const points = [
 /** A scatter of `points` with one oval per group layered over it. */
 const ovals = (size?: { w: number; h: number }) =>
   chart(points, size)
-    .flow(scatter({ x: "x", y: "y" }))
+    .flow(scatter({ cx: "x", cy: "y" }))
     .mark(circle({ r: 2.5, fill: "s" }).name("points"))
     .layer(
       chart(selectAll("points"))
@@ -166,7 +166,7 @@ async function main() {
   console.log("\n# a line over the points is dressing; the labels are ink");
   {
     const node = await chart(points)
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(circle({ r: 2.5 }).name("p"))
       .layer(chart(selectAll("p")).mark(line()))
       .resolve();
@@ -189,7 +189,7 @@ async function main() {
   }
   {
     const node = await chart(points.map((p, i) => ({ ...p, n: `p${i}` })))
-      .flow(scatter({ by: "n", x: "x", y: "y" }))
+      .flow(scatter({ by: "n", cx: "x", cy: "y" }))
       .mark(circle({ r: 3 }).label("n"))
       .resolve();
     const data = await runLayout({ w: 300, h: 200, axes: false }, node);
@@ -288,7 +288,7 @@ async function main() {
     // pixels to the layer, so it has no part its axes visualize.
     const captioned = layer([
       chart(points, { axes: false, w: 100, h: 50 })
-        .flow(scatter({ x: "x", y: "y" }))
+        .flow(scatter({ cx: "x", cy: "y" }))
         .mark(circle({ r: 2 })),
       text({ x: 0, y: 80, text: "caption" }),
     ]);

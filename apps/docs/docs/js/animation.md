@@ -19,7 +19,7 @@ import { chart, circle, scatter, time } from "gofish-graphics";
 chart(gapminder, { legend: false })
   .flow(
     time.sequence({ by: "year", duration: 5000 }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(circle({ r: 4, fill: "country" }))
   .layer(time.transition())
@@ -55,7 +55,7 @@ nothing.
 chart(gapminder, { legend: false })
   .flow(
     time.sequence({ by: "year", duration: 5000 }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(circle({ r: 4, fill: "country" }))
   .render(container, { w: 500, h: 400, axes: true });
@@ -75,7 +75,7 @@ a **spatial twin** that renders as a still picture:
 chart(gapminder, { legend: false })
   .flow(
     spread({ by: "year", dir: "x", spacing: 12 }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(circle({ r: 2.5, fill: "country" }))
   .layer(line({ along: "year", stroke: "country" }))
@@ -124,13 +124,13 @@ const year = timer({ domain: [1955, 2005], duration: 5000 });
 chart(gapminder, { legend: false })
   .flow(
     time.sequence({ by: "year", on: year }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(circle({ r: 4, fill: "country" }))
   .layer(time.transition())
   .layer(
     chart([{ fertility: 7.5, life_expect: 83 }])
-      .flow(scatter({ x: "fertility", y: "life_expect" }))
+      .flow(scatter({ cx: "fertility", cy: "life_expect" }))
       .mark(
         text({
           text: live(() => String(Math.floor(year()))),
@@ -188,7 +188,7 @@ chart(drivingShifts)
   .flow(
     time.sequence({ by: "year", on: year }),
     time.history(),
-    scatter({ x: "miles", y: "gas" })
+    scatter({ cx: "miles", cy: "gas" })
   )
   .mark(line({ along: "year", curve: Curve.linear() }))
   .render(container, { w: 500, h: 500, axes: true });
@@ -232,7 +232,7 @@ fold several years onto one, derive the day of the year first.
 chart(birds)
   .flow(
     time.sequence({ by: "day", on: day, cyclic: true }),
-    scatter({ x: "lon", y: "lat" })
+    scatter({ cx: "lon", cy: "lat" })
   )
   .mark(
     layer([
@@ -295,7 +295,7 @@ const panel = (curve) =>
   chart(gapminder, { legend: false, padding: 0 })
     .flow(
       time.sequence({ by: "year", on: year }),
-      scatter({ by: "country", x: "fertility", y: "life_expect" })
+      scatter({ by: "country", cx: "fertility", cy: "life_expect" })
     )
     .mark(circle({ r: 4, fill: "country" }))
     .layer(time.transition({ curve }));
@@ -334,7 +334,7 @@ const countries = ["China", "India", "United States", "Rwanda", "South Africa"];
 chart(gapminder.filter((d) => countries.includes(d.country)))
   .flow(
     time.sequence({ by: "year", on: year }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(
     layer([
@@ -396,7 +396,7 @@ you want one moving mark per, and name the time field with `along`.
 chart(gapminder, { legend: false })
   .flow(
     time.sequence({ by: "year", duration: 5000 }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(circle({ r: 4, fill: "country" }).name("kf"))
   .layer(
@@ -418,7 +418,7 @@ const year = timer({ domain: [1955, 2005], duration: 5000 });
 chart(gapminder, { legend: false })
   .flow(
     group({ by: "year" }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(circle({ r: 4, fill: "country" }).name("kf"))
   .layer(
@@ -441,7 +441,7 @@ const year = timer({ domain: [1955, 2005], duration: 5000 });
 chart(gapminder, { legend: false })
   .flow(
     group({ by: "year" }),
-    scatter({ by: "country", x: "fertility", y: "life_expect" })
+    scatter({ by: "country", cx: "fertility", cy: "life_expect" })
   )
   .mark(blank())
   .layer(
@@ -450,7 +450,7 @@ chart(gapminder, { legend: false })
         derive((rows) =>
           interpolate(rows, { along: "year", key: "country", at: year() })
         ),
-        scatter({ by: "country", x: "fertility", y: "life_expect" })
+        scatter({ by: "country", cx: "fertility", cy: "life_expect" })
       )
       .mark(circle({ r: 4, fill: "country" }))
   )

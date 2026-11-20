@@ -151,7 +151,7 @@ const penguinShapes = (
     w,
     h,
   })
-    .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
+    .flow(scatter({ cx: "Beak Length (mm)", cy: "Beak Depth (mm)" }))
     .mark(circle({ r: 2.5, fill: "Species" }).name("points"))
     .layer(
       chart(selectAll("points"))
@@ -261,7 +261,7 @@ export const ChartAccentSubSaharanAfrica: StoryObj = {
       h: 320,
       color: Color.palette(REGION_COLORS),
     })
-      .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+      .flow(scatter({ cx: "FertilityRate", cy: "LifeExpectancy" }))
       .mark(circle({ r: 3.5, fill: "Region", opacity: 0.8 }).name("countries"))
       .layer(
         chart(selectAll("countries"))

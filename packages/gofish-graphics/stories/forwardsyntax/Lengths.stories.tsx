@@ -282,7 +282,7 @@ export const RoomOneRowScatterLabels: StoryObj = {
       ],
       { w: 300, h: 120 }
     )
-      .flow(scatter({ by: "n", x: "x", y: "y" }))
+      .flow(scatter({ by: "n", cx: "x", cy: "y" }))
       .mark(circle({ r: 5 }).label("n"))
       .render(container);
     return container;

@@ -220,7 +220,7 @@ export type InferredRelational = {
    *  the knots of its curve (see `runKnots` in `connect.tsx`). */
   along?: SplitBy;
   /** The axis the path tier places its groups on by its own `by` field, when
-   *  it does: the x of `scatter({ by: "year", x: "year" })`. That axis draws
+   *  it does: the x of `scatter({ by: "year", cx: "year" })`. That axis draws
    *  the connection variable itself, so a `step` curve lets it advance while
    *  every other coordinate holds (`stepPath` in `spline.ts`). */
   parameterAxis?: "x" | "y";
@@ -725,29 +725,6 @@ export function splitEntries<T extends Record<string, any>>(
   return ordered
     ? Object.assign(entries, { hasOrder: true as const })
     : entries;
-}
-
-/** Which axes a scatter-family opts object positions: `x`/`y` true when a
- *  plain point value or a full range (`Min`+`Max`) is given for that axis.
- *  Shared by `Scatter`'s `isPlaced` (over the axes merged with `dims`) and
- *  the `arrangement` declaration the scatter operator hands `createOperator`
- *  (both in `graphicalOperators/scatter.tsx`) so the two don't drift. */
-export function scatterPositions(opts: {
-  x?: unknown;
-  xMin?: unknown;
-  xMax?: unknown;
-  y?: unknown;
-  yMin?: unknown;
-  yMax?: unknown;
-}): { x: boolean; y: boolean } {
-  return {
-    x:
-      opts.x !== undefined ||
-      (opts.xMin !== undefined && opts.xMax !== undefined),
-    y:
-      opts.y !== undefined ||
-      (opts.yMin !== undefined && opts.yMax !== undefined),
-  };
 }
 
 /** The full set of distinct values at `path` ("every possible value"), with no

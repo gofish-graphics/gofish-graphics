@@ -53,7 +53,7 @@ export const A_StaticLines: StoryObj<Args> = {
         chart(birds)
           .flow(
             group({ by: "species" }),
-            scatter({ by: "day", x: "lon", y: "lat" })
+            scatter({ by: "day", cx: "lon", cy: "lat" })
           )
           .mark(line({ stroke: "species", strokeWidth: 1, opacity: 0.5 }))
       )

@@ -36,7 +36,7 @@ edges = [
     {"source": "c", "target": "d"},
 ]
 
-chart(nodes).flow(scatter(by="id", x="grp", y="id")).mark(
+chart(nodes).flow(scatter(by="id", cx="grp", cy="id")).mark(
     circle(r=14, fill="#4e79a7").name("nodes")
 ).layer(
     chart(edges)

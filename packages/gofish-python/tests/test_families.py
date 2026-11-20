@@ -259,7 +259,7 @@ def test_bare_kind_wire_form_at_an_option():
     def wire(curve, overlap):
         return (
             chart([{"a": 1, "b": 2}])
-            .flow(scatter(x="a", overlap=overlap))
+            .flow(scatter(cx="a", overlap=overlap))
             .mark(circle(r=2))
             .to_ir()["root"],
             ir(line(curve=curve)),
@@ -315,7 +315,7 @@ def test_place_at_a_label_crosses_as_its_plain_object():
 def test_label_avoiding_is_a_node_selection():
     doc = (
         chart([{"c": "a", "x": 1, "y": 2}])
-        .flow(scatter(by="c", x="x", y="y"))
+        .flow(scatter(by="c", cx="x", cy="y"))
         .mark(circle(r=4).label("c", avoiding=select_all("trend")))
         .to_ir()
     )

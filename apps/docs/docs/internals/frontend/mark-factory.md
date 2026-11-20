@@ -636,7 +636,7 @@ fused `LayerBuilder` (a chain whose first tier fuses gets the anchor and
 connector tiers in its place). In a `.layer(...)` chain `withData(marks)`
 binds the previous tier's marks, and the mark connects them, so it is checked
 there as one over refs is checked in `.mark()`. That is why
-`chart().flow(scatter({ x })).mark(ribbon({ h: "pdf" }))` draws one ribbon per
+`chart().flow(scatter({ cx: x })).mark(ribbon({ h: "pdf" }))` draws one ribbon per
 partition inside a `spread`, while the same chart as a `.layer(...)` tier
 throws on its `h`. A connector's paint (`fill`, `stroke`: the color channels of
 its generated channel map) may be a field name, or an accessor (a field name
@@ -726,9 +726,9 @@ arrangement tier (`spread`/`stack`) travels its own `dir`; anything else
 The same pass writes one more cell, `inferred.parameterAxis`: the axis the
 path tier places its groups on by its own `by` field, when it does. It reads
 the path tier's `fields` (its `axisFields`, which `createOperator` copies onto
-the `__arrangement` tag), so `scatter({ by: "year", x: "year" })` and
+the `__arrangement` tag), so `scatter({ by: "year", cx: "year" })` and
 `spread({ by: "year", dir: "x" })` both report `"x"`, and
-`scatter({ by: "year", x: "miles" })` reports nothing. That axis draws the
+`scatter({ by: "year", cx: "miles" })` reports nothing. That axis draws the
 connection variable itself. `line`/`ribbon` pass it to `connect`, where the
 `step` curve lets that coordinate advance while every other one holds (a
 staircase on a line chart over years, straight jumps on a connected
@@ -755,7 +755,7 @@ subtlety that declaration has to resolve, which the design note's step-3 prose
 doesn't spell out: a `spread`/`stack` tier's `dir`
 is the axis it _lays its groups out along_, so a bare fallback (no `h`/`w`,
 no explicit `dir` anywhere) resolves the travel axis to that SAME axis
-(walking the arrangement is the natural path); a `scatter`'s `x`/`y` are
+(walking the arrangement is the natural path); a `scatter`'s position keys (`x`/`cx`/`x2`, `y`/`cy`/`y2`) are
 literal per-item coordinates — a value channel exactly like `h`/`w` — so the
 travel axis there is the axis it does _not_ position. Both resolutions are
 validated against the design note's worked examples (its own "Intended?"

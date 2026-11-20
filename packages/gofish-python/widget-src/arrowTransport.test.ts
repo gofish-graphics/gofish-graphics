@@ -392,7 +392,7 @@ async function testNaiveTimesReadInTheChartZone(): Promise<boolean> {
       schema: { t: Unit.time({ zone }) },
       axes: { x: { title: false }, y: false },
     })
-      .flow(scatter({ by: "t", x: "t", y: "v" }))
+      .flow(scatter({ by: "t", cx: "t", cy: "v" }))
       .mark(circle({ r: 2 }))
       .toDisplayList({ w: 300, h: 100 });
     const out: string[] = [];

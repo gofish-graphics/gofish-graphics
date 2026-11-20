@@ -234,7 +234,7 @@ chart(prices, {
     y: true,
   },
 })
-  .flow(scatter({ by: "date", x: "date", y: "price" }))
+  .flow(scatter({ by: "date", cx: "date", cy: "price" }))
   .mark(line())
   .render(container, { w: 560, h: 200 });
 ```

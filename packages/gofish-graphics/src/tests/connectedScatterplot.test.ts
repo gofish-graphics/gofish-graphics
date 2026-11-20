@@ -86,12 +86,12 @@ const keyframes = (rows: any[], at: number, last?: number) =>
   last === undefined
     ? chart(rows).flow(
         time.sequence({ by: "year", on: clockAt(at) }),
-        scatter({ x: "miles", y: "gas" })
+        scatter({ cx: "miles", cy: "gas" })
       )
     : chart(rows).flow(
         time.sequence({ by: "year", on: clockAt(at) }),
         time.history({ last }),
-        scatter({ x: "miles", y: "gas" })
+        scatter({ cx: "miles", cy: "gas" })
       );
 
 type Point = [number, number];
@@ -193,12 +193,12 @@ async function dataSpace(rows: any[], at: number) {
         ];
       }),
       group({ by: "year" }),
-      scatter({ x: "miles", y: "gas" })
+      scatter({ cx: "miles", cy: "gas" })
     )
     .mark(line({ along: "year", curve: Curve.linear() }))
     .layer(
       chart(rows)
-        .flow(group({ by: "year" }), scatter({ x: "miles", y: "gas" }))
+        .flow(group({ by: "year" }), scatter({ cx: "miles", cy: "gas" }))
         .mark(blank())
     )
     .toDisplayList(OPTIONS);
@@ -253,7 +253,7 @@ async function main(): Promise<void> {
         }),
         time.sequence({ by: "year", on: clock }),
         time.history(),
-        scatter({ x: "miles", y: "gas" })
+        scatter({ cx: "miles", cy: "gas" })
       )
       .mark(line({ along: "year", curve: Curve.linear() }))
       .render(container, OPTIONS);
@@ -486,7 +486,7 @@ async function main(): Promise<void> {
           .flow(
             time.sequence({ by, on: clockAt(1972.5) }),
             time.history(),
-            scatter({ x: "miles", y: "gas" })
+            scatter({ cx: "miles", cy: "gas" })
           )
           .mark(line({ along: "year" }))
           .toDisplayList(OPTIONS)
@@ -549,7 +549,7 @@ async function main(): Promise<void> {
           cyclic,
         }),
         ...(last === undefined ? [] : [time.history({ last })]),
-        scatter({ x: "x", y: "y" })
+        scatter({ cx: "x", cy: "y" })
       );
     const shownDays = async (
       at: number,
@@ -834,7 +834,7 @@ async function main(): Promise<void> {
         chart(labelled)
           .flow(
             time.sequence({ by: "label", ...clock }),
-            scatter({ x: "miles", y: "gas" })
+            scatter({ cx: "miles", cy: "gas" })
           )
           .mark(circle({ r: 4 }))
           .toDisplayList(OPTIONS),
@@ -878,7 +878,7 @@ async function main(): Promise<void> {
         .flow(
           time.sequence({ by: "year", on: clockAt(1958.5) }),
           group({ by: (d: any) => d.who }),
-          scatter({ x: "miles", y: "gas" })
+          scatter({ cx: "miles", cy: "gas" })
         )
         .mark(circle({ r: 4 }))
         .layer(time.transition())
@@ -894,7 +894,7 @@ async function main(): Promise<void> {
         .flow(
           time.sequence({ by: "year", on: clockAt(1958.5) }),
           group({ by: chunk(10) }),
-          scatter({ x: "miles", y: "gas" })
+          scatter({ cx: "miles", cy: "gas" })
         )
         .mark(circle({ r: 4 }))
         .layer(time.transition())
@@ -1004,7 +1004,7 @@ async function main(): Promise<void> {
     // while gas holds, the staircase of d3's curveStepAfter.
     const overYears = vertices(
       await chart(rows)
-        .flow(scatter({ by: "year", x: "year", y: "gas" }))
+        .flow(scatter({ by: "year", cx: "year", cy: "gas" }))
         .mark(line({ curve: Curve.step() }))
         .toDisplayList(OPTIONS)
     );
@@ -1017,7 +1017,7 @@ async function main(): Promise<void> {
     // hold is a point and the riser a diagonal, the same shape as linear.
     const connected = (curve: "step" | "linear") =>
       chart(rows)
-        .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+        .flow(scatter({ by: "year", cx: "miles", cy: "gas" }))
         .mark(line({ curve: Curve[curve]() }))
         .toDisplayList(OPTIONS);
     const diff = firstDifference(

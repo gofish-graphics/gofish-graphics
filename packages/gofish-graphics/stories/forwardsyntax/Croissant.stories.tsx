@@ -86,7 +86,7 @@ const croissant = (
 ) =>
   layer([
     chart(grid)
-      .flow(scatter({ x: "x" }))
+      .flow(scatter({ cx: "x" }))
       .mark(ribbon({ h: "pdf" }).name("density").hidden()),
   ]).relate(({ density }) => [
     chart(grid)
@@ -224,7 +224,7 @@ export const Ridgeline: StoryObj<Args> = {
         // region, which is in no cell on y and is as tall as its row.
         layer({ h: 34 }, [
           chart()
-            .flow(scatter({ x: "temp_max" }))
+            .flow(scatter({ cx: "temp_max" }))
             .mark(ribbon({ h: "pdf" }).name("density").hidden()),
         ]).relate(({ density }) => [
           chart()
@@ -285,7 +285,7 @@ export const SeattleHighsByMonth: StoryObj<Args> = {
     const container = initializeContainer();
     layer([
       chart(highs2012, { schema: schema2012 })
-        .flow(scatter({ x: "date" }))
+        .flow(scatter({ cx: "date" }))
         .mark(ribbon({ h: "temp_smooth" }).name("temps").hidden()),
     ])
       .relate(({ temps }) => [

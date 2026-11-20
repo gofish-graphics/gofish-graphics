@@ -47,7 +47,7 @@ or other mark through those positions.
 
 ```python
 # Position points, draw nothing — then connect them
-chart(data).flow(scatter(by="lake", x="x", y="y")).mark(blank().name("points"))
+chart(data).flow(scatter(by="lake", cx="x", cy="y")).mark(blank().name("points"))
 chart(select_all("points")).mark(line())
 ```
 

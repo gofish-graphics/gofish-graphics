@@ -72,7 +72,7 @@ async function main() {
     ];
     const bars = (size: { w: number; h?: number }) =>
       chart(signed, { axes: false })
-        .flow(scatter({ by: "k", x: "k" }))
+        .flow(scatter({ by: "k", cx: "k" }))
         .mark(rect({ h: "v", w: 10 }))
         .toDisplayList(size);
     for (const size of [{ w: 300, h: 200 }, { w: 300 }]) {

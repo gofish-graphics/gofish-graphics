@@ -870,14 +870,15 @@ composes its targets' spaces into the layer's claim on that axis:
   (`buildChildSpans`, `constraints/proposalPlan.ts`), so the child's
   content fills the span it will be pinned across rather than being laid out
   in the whole layer and then stretched. `scatter` uses both
-  forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
-  `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
+  forms of `Constraint.position`: each of `x`, `cx` and `x2` alone → a point
+  coordinate pinning the anchor it names (`start`, `middle`, `end`), a span
+  `x` with `x2` (`y` with `y2`) → an interval coordinate (the operator no longer
   has a bespoke layout). A position constraint may instead give its target
   a **region** (`region: PositionRegion`, #1059), which is what `partition`
   uses. It sizes its target as an interval does, but pins only the
   target's middle at the cell's middle, so the target keeps the size its
   layout gave it (see [Partition](#partition-each-group-in-its-cell)). A categorical
-  scatter channel such as `x: "lake"` lowers to discrete placement coordinates
+  scatter channel such as `cx: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
 
@@ -2703,7 +2704,7 @@ is 0, which is a value). A position with no value is in no domain, since
 only defined positions make position constraints. And `scatter`, which
 places each child at its position, does not draw a child that has no value
 in a placement it is given (`placedChildren` in `scatter.tsx`): there is no
-place to draw it. So `scatter({ by: field("x").bin(p), x, y })` draws one
+place to draw it. So `scatter({ by: field("x").bin(p), cx: x, cy: y })` draws one
 point per cell that holds rows, and the empty cells leave the scale of the
 others alone.
 

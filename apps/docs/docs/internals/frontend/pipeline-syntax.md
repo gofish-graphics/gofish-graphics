@@ -282,7 +282,7 @@ chart(seafood)
 
 ```ts
 chart(seafood)
-  .flow(scatter({ x: "lakeLocX", y: "lakeLocY" }))
+  .flow(scatter({ cx: "lakeLocX", cy: "lakeLocY" }))
   .mark(circle());
 ```
 
@@ -291,7 +291,7 @@ chart(seafood)
 ```ts
 layer([
   chart(seafood)
-    .flow(scatter({ x: "lakeLocX" }))
+    .flow(scatter({ cx: "lakeLocX" }))
     .mark(blank())
     .as("points"),
   chart(selectAll("points")).mark(line()),
@@ -300,20 +300,20 @@ layer([
 
 ```ts
 chart(seafood)
-  .flow(scatter("lake", { x: "lakeLocX" }), connect())
+  .flow(scatter("lake", { cx: "lakeLocX" }), connect())
   .mark(line());
 ```
 
 ```ts
 chart(seafood)
-  .flow(scatter("lake", { x: "lakeLocX" }))
+  .flow(scatter("lake", { cx: "lakeLocX" }))
   .mark(blank())
   .layer(connect(), line());
 ```
 
 ```ts
 chart(seafood)
-  .flow(scatter("lake", { x: "lakeLocX" }))
+  .flow(scatter("lake", { cx: "lakeLocX" }))
   .mark(blank())
   .layer(chart().flow(connect()).mark(line()));
 ```
@@ -323,7 +323,7 @@ chart(seafood)
 ```ts
 layer([
   chart(seafood)
-    .flow(scatter({ x: "lakeLocX" }))
+    .flow(scatter({ cx: "lakeLocX" }))
     .mark(blank({ h: "count" }))
     .as("points"),
   chart(selectAll("points")).mark(connect()),
@@ -361,7 +361,7 @@ chart(seafood)
 ```ts
 layer([
   chart(seafood)
-    .flow(scatter({ x: "lakeLocX" }), stack("species", { dir: "y" }))
+    .flow(scatter({ cx: "lakeLocX" }), stack("species", { dir: "y" }))
     .mark(blank({ h: "count" }))
     .as("points"),
   chart(selectAll("points")).mark(group("species"), connect()),
@@ -393,7 +393,7 @@ chart(nightingale, { coord: Coord.clock() })
 layer([
   chart(seafood)
     .flow(
-      scatter({ x: "lakeLocX", alignment: "middle" }),
+      scatter({ cx: "lakeLocX", alignment: "middle" }),
       stack("species", { dir: "y" })
     )
     .mark(blank({ h: "count" }))
@@ -477,7 +477,7 @@ plot({ coord: Coord.clock() }).mark([
 const area = createMark((data, { x, y }) =>
   layer([
     chart(data)
-      .flow(scatter({ x }))
+      .flow(scatter({ cx: x }))
       .mark(blank({ h: y }))
       .as("points"),
     chart(selectAll("points")).mark(connect()),
@@ -495,7 +495,7 @@ chart(seafood)
 const area = createMark((data, { x, y }) =>
   layer([
     chart(data)
-      .flow(scatter({ x }))
+      .flow(scatter({ cx: x }))
       .mark(blank({ h: y }))
       .as("points"),
     chart(selectAll("points")).mark(connect()),
@@ -517,7 +517,7 @@ const pie = createMark((data, { category, value }) =>
 );
 
 chart(seafood)
-  .flow(scatter({ x: "lakeLocX", y: "lakeLocY" }))
+  .flow(scatter({ cx: "lakeLocX", cy: "lakeLocY" }))
   .mark(pie({ category: "species", value: "count" }));
 ```
 
@@ -526,7 +526,7 @@ chart(seafood)
 ```ts
 layer([
   chart(seafood)
-    .flow(scatter({ x: "lakeLocX" }))
+    .flow(scatter({ cx: "lakeLocX" }))
     .mark(circle())
     .as("points"),
   chart(selectAll("points")).mark(line(/* { z: -1 } */)).zIndex(-1),
@@ -545,7 +545,7 @@ layer([
 layer([
   chart(newCarColors)
     .flow(
-      scatter({ x: "Year" }),
+      scatter({ cx: "Year" }),
       derive(sortBy("Rank")),
       spread("Color", { dir: "y" })
     )
@@ -595,7 +595,7 @@ const violin = createMark((data, { x, fill }) => {
 
   layer([
     chart(densityData)
-      .flow(scatter({ y: "y", alignment: "middle" }))
+      .flow(scatter({ cy: "y", alignment: "middle" }))
       .mark(blank({ w: "x", fill }))
       .as("points"),
     chart(selectAll("points")).mark(connect()),

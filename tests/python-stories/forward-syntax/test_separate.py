@@ -12,7 +12,7 @@ def story_penguin_mass():
         .flow(
             spread(by="Species", dir="y", spacing=16),
             scatter(
-                x="Body Mass (g)",
+                cx="Body Mass (g)",
                 alignment="middle",
                 overlap=Overlap.separate(padding=1),
             ),
@@ -27,7 +27,7 @@ def story_one_sided():
         chart(WEIGHED, w=560)
         .flow(
             scatter(
-                x="Body Mass (g)",
+                cx="Body Mass (g)",
                 alignment="start",
                 overlap=Overlap.separate(padding=1),
             )
@@ -42,7 +42,7 @@ def story_mixed_radii():
         chart(WEIGHED[:120], w=480)
         .flow(
             scatter(
-                x="Flipper Length (mm)",
+                cx="Flipper Length (mm)",
                 alignment="middle",
                 overlap=Overlap.separate(padding=1),
             )

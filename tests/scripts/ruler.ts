@@ -157,7 +157,7 @@ const families = {
     Chart(rows(n)).flow(stack({ dir: "y" })).mark(rect({ w: 20, h: "v" })),
   scatter: (n) => {
     const data = Array.from({ length: n }, (_, i) => ({ x: i, y: val(i) + (i % 7) }));
-    return Chart(data).flow(scatter({ x: "x", y: "y" })).mark(circle({ r: 2 }));
+    return Chart(data).flow(scatter({ cx: "x", cy: "y" })).mark(circle({ r: 2 }));
   },
   grid: (n) => {
     const side = Math.max(1, Math.ceil(Math.sqrt(n)));

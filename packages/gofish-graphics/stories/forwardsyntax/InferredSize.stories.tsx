@@ -56,7 +56,7 @@ export const PositionScatterDefault: StoryObj = {
   render: () => {
     const container = initializeContainer();
     chart(catchLocationsArray)
-      .flow(scatter({ by: "lake", x: "x", y: "y" }))
+      .flow(scatter({ by: "lake", cx: "x", cy: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {});
     return container;

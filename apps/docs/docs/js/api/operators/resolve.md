@@ -34,7 +34,7 @@ const edges = [
 ];
 
 gf.chart(nodes)
-  .flow(gf.scatter({ by: "id", x: "grp", y: "id" }))
+  .flow(gf.scatter({ by: "id", cx: "grp", cy: "id" }))
   .mark(gf.circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
   .layer(
     gf

@@ -65,7 +65,7 @@ def story_default():
                 dir="y",
                 spacing=Spacing.pitch(ROW_PITCH, at="baseline"),
             ),
-            scatter(x="temp_max", h=RIDGE_HEIGHT),
+            scatter(cx="temp_max", h=RIDGE_HEIGHT),
         )
         .mark(
             ribbon(

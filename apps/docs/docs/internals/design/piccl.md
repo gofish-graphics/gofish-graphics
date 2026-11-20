@@ -45,7 +45,7 @@ PICCL.show([[collection, data["flower_data.csv"]]], container, { pictures });
 
 ```ts
 chart(data["flower_data.csv"])
-  .flow(scatter("country", { x: "country" }))
+  .flow(scatter("country", { cx: "country" }))
   .mark(
     layer([
       picture("stem.png", { h: "avg" }).as("stem"),
@@ -108,7 +108,7 @@ const plant = layer([
 ]);
 
 chart(data["flower_data.csv"])
-  .flow(scatter("country", { x: "country" }))
+  .flow(scatter("country", { cx: "country" }))
   .mark(plant);
 ```
 

@@ -801,7 +801,7 @@ async function main() {
     const tier = (data: any[], mark: any) =>
       gf
         .chart(data)
-        .flow(sequence(), gf.scatter({ x: "x", y: "y" }))
+        .flow(sequence(), gf.scatter({ cx: "x", cy: "y" }))
         .mark(mark);
 
     /** The bag `selectAll(name)` hands a chart drawn beside the tier. */
@@ -894,7 +894,7 @@ async function main() {
     const dots = () =>
       gf
         .chart(rows)
-        .flow(gf.scatter({ x: "x" }))
+        .flow(gf.scatter({ cx: "x" }))
         .mark(gf.circle({ r: 3 }));
     for (const axes of [true, { x: true, y: false }, false]) {
       let msg = "";
@@ -932,7 +932,7 @@ async function main() {
           .layer([
             gf
               .chart(rows)
-              .flow(gf.scatter({ x: "x", y: "y" }))
+              .flow(gf.scatter({ cx: "x", cy: "y" }))
               .mark(gf.circle({ r: 3 }).name("means")),
           ])
           .relate(() => [
@@ -1271,7 +1271,7 @@ async function main() {
     const dots = () =>
       gf
         .chart(rows)
-        .flow(gf.scatter({ x: "x", y: "y" }))
+        .flow(gf.scatter({ cx: "x", cy: "y" }))
         .mark(gf.circle({ r: 3 }).name(token));
     let seen: unknown[] = [];
     let msg = "";

@@ -96,7 +96,7 @@ chart(sales)
 
 chart(counties)
   .flow(
-    scatter({ by: "id", x: "income", y: "education" }).transition({
+    scatter({ by: "id", cx: "income", cy: "education" }).transition({
       enter: time.stagger({ by: "rate", lag: 100 }),
     })
   )
@@ -178,7 +178,7 @@ chart(budget)
 // Selection form: a numeric `by` places each group at its own value on the
 // time scale, the way time.sequence({ by: "year" }) places each year today.
 chart(counties)
-  .flow(scatter({ by: "id", x: "income", y: "education" }))
+  .flow(scatter({ by: "id", cx: "income", cy: "education" }))
   .mark(circle({ r: 3 }).name("dots"))
   .layer(
     chart(selectAll("dots"))

@@ -14,7 +14,7 @@ the value of the `curve` option of [`line`](/js/api/marks/line) and
 
 ```js
 gf.chart(drivingShifts, { axes: true })
-  .flow(gf.scatter({ by: "year", x: "miles", y: "gas" }))
+  .flow(gf.scatter({ by: "year", cx: "miles", cy: "gas" }))
   .mark(gf.circle({ r: 2.5, fill: "white", stroke: "black", strokeWidth: 1 }))
   .layer(gf.line({ along: "year", curve: gf.Curve.monotone() }))
   .render(root, { w: 400, h: 300 });

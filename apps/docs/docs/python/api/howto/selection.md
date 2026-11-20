@@ -57,7 +57,7 @@ from gofish import layer, chart, scatter, circle, line, select_all
 
 layer([
     chart(driving_shifts)
-        .flow(scatter(by="year", x="miles", y="gas"))
+        .flow(scatter(by="year", cx="miles", cy="gas"))
         .mark(circle(r=4, fill="white", stroke="black", stroke_width=2).name("points")),
     chart(select_all("points")).mark(line(stroke="black", stroke_width=2)),
 ]).render(w=400, h=250, axes=True)
@@ -78,7 +78,7 @@ from gofish import layer, chart, scatter, blank, line, select_all
 
 layer([
     chart(catch_locations)
-        .flow(scatter(by="lake", x="x", y="y"))
+        .flow(scatter(by="lake", cx="x", cy="y"))
         .mark(blank().name("points")),
     chart(select_all("points")).mark(line(stroke="steelblue", stroke_width=2)),
 ]).render(w=400, h=250, axes=True)
@@ -136,7 +136,7 @@ more than one node, which catches mistakes early:
 from gofish import layer, chart, scatter, blank, text, ref, select_all
 
 layer([
-    chart(data).flow(scatter(by="id", x="x", y="y")).mark(blank().name("origin")),
+    chart(data).flow(scatter(by="id", cx="x", cy="y")).mark(blank().name("origin")),
     # ref("origin") is a list of one ref; errors if "origin" matched 0 or >1 nodes
     chart(ref("origin")).mark(text(text="start")),
 ])

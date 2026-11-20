@@ -95,7 +95,7 @@ VISITS = _visits()
 def story_daily_line():
     return (
         chart(PRICES, schema={"date": Unit.time()}, w=560, h=200)
-        .flow(scatter(by="date", x="date", y="price"))
+        .flow(scatter(by="date", cx="date", cy="price"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {},
     )
@@ -104,7 +104,7 @@ def story_daily_line():
 def story_hourly_line():
     return (
         chart(READINGS, w=560, h=200)
-        .flow(scatter(by="time", x="time", y="temp"))
+        .flow(scatter(by="time", cx="time", cy="temp"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {},
     )
@@ -118,7 +118,7 @@ def story_daylight_saving_zone():
             w=560,
             h=200,
         )
-        .flow(scatter(by="time", x="time", y="load"))
+        .flow(scatter(by="time", cx="time", cy="load"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {},
     )
@@ -132,7 +132,7 @@ def story_event_timeline():
             axes={"x": True, "y": False},
             w=560,
         )
-        .flow(scatter(by="name", x="date"))
+        .flow(scatter(by="name", cx="date"))
         .mark(circle(r=5, fill="steelblue")),
         {},
     )
@@ -147,7 +147,7 @@ def story_week_over_month_rows():
             w=560,
             h=200,
         )
-        .flow(scatter(by="day", x="day", y="visits"))
+        .flow(scatter(by="day", cx="day", cy="visits"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {},
     )
@@ -156,7 +156,7 @@ def story_week_over_month_rows():
 def story_vertical_daily_dots():
     return (
         chart(PRICES, schema={"date": Unit.time()}, w=300, h=480)
-        .flow(scatter(by="date", x="price", y="date"))
+        .flow(scatter(by="date", cx="price", cy="date"))
         .mark(circle(r=1.5, fill="steelblue")),
         {},
     )

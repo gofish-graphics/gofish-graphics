@@ -56,8 +56,8 @@ export const Default: StoryObj<Args> = {
         chart(bySpecies(species))
           .flow(
             scatter({ by: "id", 
-              x: "Flipper Length (mm)",
-              y: "Body Mass (g)",
+              cx: "Flipper Length (mm)",
+              cy: "Body Mass (g)",
             })
           )
           .mark(

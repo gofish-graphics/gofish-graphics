@@ -89,7 +89,7 @@ def story_layered_chart_own_size_data_tier():
         .mark(rect(w=40, h="value", fill="item").name("bars"))
         .layer(
             chart([{"at": 1, "value": 0.5}, {"at": 3, "value": 1.4}])
-            .flow(scatter(x="at", y="value"))
+            .flow(scatter(cx="at", cy="value"))
             .mark(circle(r=4, fill="black"))
         ),
         {"w": 400, "h": 400},

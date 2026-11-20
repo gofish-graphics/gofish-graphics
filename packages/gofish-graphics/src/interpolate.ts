@@ -112,7 +112,7 @@ export function assertOneRowPerKnot(
     throw new Error(
       `[gofish] ${where}: ${who} has two rows at ${field} = ${knot}, so ` +
         `there is no one place it is at that moment. Aggregate to one row ` +
-        `per ${field} first; for example, scatter({ by, x, y }) places each ` +
+        `per ${field} first; for example, scatter({ by, cx, cy }) places each ` +
         `group at the mean of its rows.`
     );
   }

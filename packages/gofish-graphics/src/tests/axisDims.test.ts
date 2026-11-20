@@ -159,7 +159,12 @@ async function main() {
   console.log("\n# geo: lon/lat reach marks and scatter");
   {
     const doc = await chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
-      .flow(scatter({ by: "name", dims: { lon: "lon", lat: "lat" } }))
+      .flow(
+        scatter({
+          by: "name",
+          dims: { lon: { center: "lon" }, lat: { center: "lat" } },
+        })
+      )
       .mark(circle({ r: 4 }))
       .toDisplayList(SIZE);
     const dots = doc.items.filter((it: any) => it.kind === "ellipse");
@@ -175,11 +180,11 @@ async function main() {
       JSON.stringify(ys)
     );
     const xy = await chart(places, { coord: Coord.geo("equalEarth", WINDOW) })
-      .flow(scatter({ by: "name", x: "lon", y: "lat" }))
+      .flow(scatter({ by: "name", cx: "lon", cy: "lat" }))
       .mark(circle({ r: 4 }))
       .toDisplayList(SIZE);
     check(
-      "scatter dims {lon, lat} ≡ scatter {x, y}",
+      "scatter dims {lon, lat} centers ≡ scatter {cx, cy}",
       same(xy.items, doc.items)
     );
 
@@ -207,7 +212,12 @@ async function main() {
   console.log("\n# circle in polar: its own r stays its radius");
   {
     const doc = await chart(rose, { coord: Coord.polar() })
-      .flow(scatter({ by: "month", dims: { theta: "value", r: "value" } }))
+      .flow(
+        scatter({
+          by: "month",
+          dims: { theta: { center: "value" }, r: { center: "value" } },
+        })
+      )
       .mark(circle({ r: 4 }))
       .toDisplayList(SIZE);
     const dots = doc.items.filter((it: any) => it.kind === "ellipse");
@@ -291,13 +301,19 @@ async function main() {
     );
     const scatterTwice = await errorOf(() =>
       chart(rose, { coord: Coord.polar() })
-        .flow(scatter({ by: "month", x: "value", dims: { theta: "value" } }))
+        .flow(
+          scatter({
+            by: "month",
+            cx: "value",
+            dims: { theta: { center: "value" } },
+          })
+        )
         .mark(circle({ r: 3 }))
         .toDisplayList(SIZE)
     );
     check(
-      "scatter x with dims.theta throws",
-      scatterTwice.includes("by x"),
+      "scatter cx with dims.theta.center throws",
+      scatterTwice.includes("by cx"),
       scatterTwice
     );
   }
@@ -380,66 +396,281 @@ async function main() {
       )
     );
     check(
-      "dims {x: {min, max}} ≡ xMin/xMax",
+      "dims {x: {min, max}} ≡ x/x2",
       same(
         await dots({ dims: { x: { min: lo, max: hi } }, y: "angle" }),
-        await dots({ xMin: lo, xMax: hi, y: "angle" })
+        await dots({ x: lo, x2: hi, y: "angle" })
       )
     );
-    // `x` is discrete for a non-numeric field; `xMin`/`xMax` are not.
-    check(
-      "dims {x: <non-numeric field>} ≡ x (both discrete)",
-      same(
-        await dots({ dims: { x: "name" }, y: "angle" }),
-        await dots({ x: "name", y: "angle" })
-      )
-    );
-    // A non-numeric span is not discrete either: it has no data interval, so
-    // the chart's x axis has no position scale to place it with, and both
-    // spellings throw the same error.
-    const spanErrors: string[] = [];
-    for (const [spelling, opts] of [
-      ["dims {x: {min, max}}", { dims: { x: { min: "name", max: "name" } } }],
-      ["xMin/xMax", { xMin: "name", xMax: "name" }],
+    // `x`, `cx` and `x2` are one kind of channel: each is discrete for a
+    // non-numeric field, and each `dims` slot infers as the key it stands
+    // for.
+    for (const [slot, key] of [
+      ["bare", "x"],
+      ["min", "x"],
+      ["center", "cx"],
+      ["max", "x2"],
+    ] as const) {
+      const entry = slot === "bare" ? "name" : { [slot]: "name" };
+      const viaDims = await errorOf(() =>
+        dots({ dims: { x: entry }, y: "angle" })
+      );
+      check(
+        `dims {x: ${slot} <non-numeric field>} renders`,
+        viaDims === "",
+        viaDims
+      );
+      check(
+        `dims {x: ${slot} <non-numeric field>} ≡ ${key} (discrete)`,
+        same(
+          await dots({ dims: { x: entry }, y: "angle" }),
+          await dots({ [key]: "name", y: "angle" })
+        )
+      );
+    }
+    // A non-numeric span has no data interval: either end over a
+    // non-numeric field is a discrete position, which a span cannot end at.
+    // The scatter says so, naming the keys as written.
+    for (const [spelling, opts, keys, bad] of [
+      [
+        "dims {x: {min, max}}",
+        { dims: { x: { min: "name", max: "name" } } },
+        "scatter dims.x, scatter dims.x",
+        "scatter dims.x",
+      ],
+      ["x/x2", { x: "name", x2: "name" }, "x, x2", "x"],
+      ["x <non-numeric> with x2 <numeric>", { x: "name", x2: hi }, "x, x2", "x"],
+      ["x <numeric> with x2 <non-numeric>", { x: lo, x2: "name" }, "x, x2", "x2"],
+      ["cx <non-numeric> with x2 <numeric>", { cx: "name", x2: hi }, "cx, x2", "cx"],
     ] as const) {
       const err = await errorOf(() => dots({ ...opts, y: "angle" }));
-      spanErrors.push(err);
       check(
-        `${spelling} over a non-numeric field throws: its axis has no position scale`,
-        err.includes("no position scale"),
+        `${spelling} over a non-numeric field throws a scatter error naming ${keys}`,
+        err.startsWith(`scatter: ${keys} make a span on x, but ${bad} names a categorical field`) &&
+          err.includes("A span's ends must be numeric or time values"),
         err
       );
     }
-    check(
-      "dims {x: {min, max}} and xMin/xMax throw the same error",
-      spanErrors[0] === spanErrors[1],
-      JSON.stringify(spanErrors)
-    );
 
     const mixed = await errorOf(() =>
-      dots({ xMin: lo, dims: { x: { max: hi } }, y: "angle" })
+      dots({ x: lo, dims: { x: { max: hi } }, y: "angle" })
     );
-    check("xMin with dims.x.max is a span", mixed === "", mixed);
+    check("x with dims.x.max is a span", mixed === "", mixed);
     check(
-      "xMin with dims.x.max ≡ xMin/xMax",
+      "x with dims.x.max ≡ x/x2",
       same(
-        await dots({ xMin: lo, dims: { x: { max: hi } }, y: "angle" }),
-        await dots({ xMin: lo, xMax: hi, y: "angle" })
+        await dots({ x: lo, dims: { x: { max: hi } }, y: "angle" }),
+        await dots({ x: lo, x2: hi, y: "angle" })
       )
     );
-    const lone = await errorOf(() => dots({ xMin: "lo", y: "angle" }));
     check(
-      "a lone top-level xMin throws, naming it",
-      lone.includes("xMin") && lone.includes("both ends"),
-      lone
-    );
-    const loneDims = await errorOf(() =>
-      dots({ dims: { x: { min: "lo" } }, y: "angle" })
+      "dims.x.min with x2 ≡ x/x2",
+      same(
+        await dots({ dims: { x: { min: lo } }, x2: hi, y: "angle" }),
+        await dots({ x: lo, x2: hi, y: "angle" })
+      )
     );
     check(
-      "a lone dims.x.min throws, naming it",
-      loneDims.includes("dims.x") && loneDims.includes("both ends"),
-      loneDims
+      "a bare dims.x with x2 ≡ x/x2",
+      same(
+        await dots({ dims: { x: lo }, x2: hi, y: "angle" }),
+        await dots({ x: lo, x2: hi, y: "angle" })
+      )
+    );
+    const twice = await errorOf(() =>
+      dots({ x: lo, x2: hi, dims: { x: { min: lo } }, y: "angle" })
+    );
+    check(
+      "x and dims.x.min both setting the start throws",
+      twice.includes("dims.x") && twice.includes("set twice"),
+      twice
+    );
+    const centerTwice = await errorOf(() =>
+      dots({ cx: lo, dims: { x: { center: lo } }, y: "angle" })
+    );
+    check(
+      "cx and dims.x.center both setting the center throws",
+      centerTwice.includes("dims.x") && centerTwice.includes("by cx"),
+      centerTwice
+    );
+    const three = await errorOf(() =>
+      dots({ x: lo, cx: lo, x2: hi, y: "angle" })
+    );
+    check(
+      "x, cx and x2 on one axis throws, naming all three and the axis",
+      three.includes("x, cx, x2") &&
+        three.includes("on x,") &&
+        three.includes("at most two"),
+      three
+    );
+    const threeNamed = await errorOf(() =>
+      dots({ cy: lo, dims: { y: { min: lo, max: hi } }, x: "angle" })
+    );
+    check(
+      "three anchors on y spelled through dims names y, not an axis index",
+      threeNamed.includes("on y,") && !threeNamed.includes("axis 1"),
+      threeNamed
+    );
+    const loneX2 = await errorOf(() => dots({ x2: "hi", y: "angle" }));
+    check("a lone x2 renders", loneX2 === "", loneX2);
+    check(
+      "a lone dims.x.max ≡ x2",
+      same(
+        await dots({ dims: { x: { max: lo } }, y: "angle" }),
+        await dots({ x2: lo, y: "angle" })
+      )
+    );
+    check(
+      "a lone dims.x.min ≡ x",
+      same(
+        await dots({ dims: { x: { min: lo } }, y: "angle" }),
+        await dots({ x: lo, y: "angle" })
+      )
+    );
+    // The removed spelling: with nothing else placing x, the scatter
+    // places no axis by a field but y, so the old options name nothing.
+    const old = await errorOf(() => dots({ xMin: "lo", xMax: "hi" }));
+    check(
+      "the removed xMin/xMax spelling alone is an error",
+      old.includes("requires at least one of x or y"),
+      old
+    );
+  }
+
+  console.log("\n# scatter places the anchor each key names");
+  {
+    // A layer of two scatters shares one frame: big squares placed by the
+    // keys under test, and a dot centered on each data point.
+    const vs = [0, 10, 20];
+    const at = (v: number[]) => v.map((n) => datum(n));
+    const placed = async (opts: any, square: any = rect({ w: 40, h: 40 })) => {
+      const doc = await layer([
+        scatter(
+          opts,
+          vs.map(() => square)
+        ),
+        scatter(
+          { cx: at(vs), cy: at(vs) },
+          vs.map(() => circle({ r: 2 }))
+        ),
+      ]).toDisplayList(SIZE);
+      const all = items(doc);
+      return {
+        boxes: all.filter((it: any) => it.kind === "rect"),
+        dots: all.filter((it: any) => it.kind === "ellipse"),
+      };
+    };
+    const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
+    // Each box's [left, center, right] on x and [bottom, center, top] on y
+    // (y grows upward, so the start edge is the bottom).
+    const xs = (b: any) => [b.x, b.x + b.w / 2, b.x + b.w];
+    const ys = (b: any) => [b.y + b.h, b.y + b.h / 2, b.y];
+    const lands = async (
+      label: string,
+      opts: any,
+      ix: number,
+      iy: number,
+      square?: any
+    ) => {
+      const { boxes, dots } = await placed(opts, square);
+      check(
+        label,
+        boxes.length === 3 &&
+          dots.length === 3 &&
+          boxes.every(
+            (b: any, i: number) =>
+              near(xs(b)[ix], dots[i].cx) && near(ys(b)[iy], dots[i].cy)
+          ),
+        JSON.stringify({ boxes, dots })
+      );
+    };
+    await lands("cx/cy centers each child on its point", { cx: at(vs), cy: at(vs) }, 1, 1);
+    await lands("a lone x/y puts each child's start edges on its point", { x: at(vs), y: at(vs) }, 0, 0);
+    await lands("a lone x2/y2 puts each child's end edges on its point", { x2: at(vs), y2: at(vs) }, 2, 2);
+    await lands("cx with y: center across, start edge along y", { cx: at(vs), y: at(vs) }, 1, 0);
+    await lands(
+      "dims bare / center / max read as x / cx / x2",
+      { dims: { x: { center: at(vs) }, y: { max: at(vs) } } },
+      1,
+      2
+    );
+    // Two anchors fix the size: dims.x {center, max} is a true center and
+    // a true end, so the child is twice as wide as center to end.
+    const { boxes, dots } = await placed(
+      { dims: { x: { center: at(vs), max: at(vs.map((v) => v + 2)) } }, cy: at(vs) },
+      rect({ h: 20 })
+    );
+    const unit = (dots[1].cx - dots[0].cx) / 10;
+    check(
+      "dims.x {center, max}: the center is on the point and the end at max",
+      boxes.length === 3 &&
+        boxes.every(
+          (b: any, i: number) =>
+            near(b.x + b.w / 2, dots[i].cx) &&
+            near(b.x + b.w, dots[i].cx + 2 * unit)
+        ),
+      JSON.stringify({ boxes, dots, unit })
+    );
+
+    // Two anchors on an axis are a span: a center with one edge places the
+    // child exactly as its two edges do, 2 · center − edge being the other.
+    // That holds for a child with its own width, which the span overrides as
+    // x/x2 does, and for a child laid out in the span's length.
+    const solo = async (opts: any, child: any) =>
+      items(
+        await scatter(
+          opts,
+          vs.map(() => child)
+        ).toDisplayList(SIZE)
+      );
+    const center = at(vs);
+    const hi2 = at(vs.map((v) => v + 3));
+    const lo2 = at(vs.map((v) => v - 3));
+    for (const [what, child] of [
+      ["a rect with its own width", rect({ w: 5, h: 10 })],
+      ["a circle", circle({ r: 4 })],
+      [
+        "a stack whose layout depends on its width",
+        stack({ dir: "x", spacing: 0 }, [rect({ h: 10 }), rect({ h: 10 })]),
+      ],
+    ] as const) {
+      check(
+        `cx with x2 ≡ x/x2, for ${what}`,
+        same(
+          await solo({ cx: center, x2: hi2, cy: center }, child),
+          await solo({ x: lo2, x2: hi2, cy: center }, child)
+        )
+      );
+      check(
+        `x with cx ≡ x/x2, for ${what}`,
+        same(
+          await solo({ x: lo2, cx: center, cy: center }, child),
+          await solo({ x: lo2, x2: hi2, cy: center }, child)
+        )
+      );
+    }
+    // The implied edge is part of the domain: the first child's start edge,
+    // 2 · 0 − 3 = −3, is the smallest value on x, so it sits at the left
+    // of the frame instead of hanging past it.
+    const implied = (
+      await solo({ cx: center, x2: hi2, cy: center }, rect({ h: 10 }))
+    ).filter((it: any) => it.kind === "rect");
+    check(
+      "the start edge cx with x2 implies is in the x domain",
+      implied.length === 3 &&
+        near(Math.min(...implied.map((b: any) => b.x)), 0) &&
+        near(Math.max(...implied.map((b: any) => b.x + b.w)), SIZE.w),
+      JSON.stringify(implied)
+    );
+    // A pixel and a data value have no sum before the scale.
+    const mixedKinds = await errorOf(() =>
+      solo({ cx: center, x2: vs.map((v) => v + 3), cy: center }, rect({ h: 10 }))
+    );
+    check(
+      "cx as data with x2 as pixels throws a scatter error naming both",
+      mixedKinds.startsWith("scatter: cx, x2 place a child's center") &&
+        mixedKinds.includes("pixel literal"),
+      mixedKinds
     );
   }
 
@@ -489,7 +720,7 @@ async function main() {
       all.filter((it) => it.kind === "ellipse");
     const onePointChart = (axes: boolean) =>
       chart([{ id: 0, a: 1, b: 2 }], { axes })
-        .flow(scatter({ by: "id", x: "a", y: "b" }))
+        .flow(scatter({ by: "id", cx: "a", cy: "b" }))
         .mark(circle({ r: 3 }))
         .toDisplayList(SIZE);
     let onePoint: any[] = [];
@@ -532,7 +763,7 @@ async function main() {
         ],
         { axes }
       )
-        .flow(scatter({ by: "k", x: datum(5), y: "v" }))
+        .flow(scatter({ by: "k", cx: datum(5), cy: "v" }))
         .mark(circle({ r: 3 }))
         .toDisplayList(SIZE);
     let constant: any[] = [];

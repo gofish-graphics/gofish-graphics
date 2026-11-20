@@ -116,7 +116,7 @@ Groups data by a field and positions each group at the mean x/y coordinates of
 its members.
 
 ```python no-check
-.flow(scatter(by="species", x="bill_length", y="flipper_length"))
+.flow(scatter(by="species", cx="bill_length", cy="flipper_length"))
 ```
 
 Use `scatter` when your data has numeric x and y fields and you want marks
@@ -126,7 +126,7 @@ positioned by those values.
 
 ```python
 chart(penguins).flow(
-    scatter(by="species", x="bill_length", y="flipper_length")
+    scatter(by="species", cx="bill_length", cy="flipper_length")
 ).mark(circle(r=4, fill="species"))
 ```
 

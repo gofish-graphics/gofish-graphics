@@ -20,7 +20,7 @@ beaks = [d for d in penguins if d["Beak Depth (mm)"] is not None]
 
 (
     chart(beaks, axes=True)
-    .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
+    .flow(scatter(cx="Beak Length (mm)", cy="Beak Depth (mm)"))
     .mark(circle(r=2.5, fill="Species").name("points"))
     .layer(
         chart(select_all("points"))

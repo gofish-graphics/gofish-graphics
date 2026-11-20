@@ -27,7 +27,7 @@ def story_connected_dots_per_group():
         .flow(spread(by="store", dir="x", spacing=32))
         .mark(
             chart(axes=False)
-            .flow(scatter(by="quarter", x="quarter", y="sales"))
+            .flow(scatter(by="quarter", cx="quarter", cy="sales"))
             .mark(circle(r=4, fill="#08519c"))
             .layer(line(stroke="#6baed6", stroke_width=2))
         ),
@@ -71,11 +71,11 @@ def story_daily_highs_over_readings():
     their own, so they keep their time type and share the line's time axis."""
     return (
         chart(READINGS, w=560, h=220)
-        .flow(scatter(by="time", x="time", y="temp"))
+        .flow(scatter(by="time", cx="time", cy="temp"))
         .mark(line(stroke="steelblue", stroke_width=2))
         .layer(
             chart(DAILY_HIGHS)
-            .flow(scatter(by="time", x="time", y="temp"))
+            .flow(scatter(by="time", cx="time", cy="temp"))
             .mark(circle(r=4, fill="firebrick"))
         ),
         {},

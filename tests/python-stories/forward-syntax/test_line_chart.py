@@ -7,7 +7,7 @@ from python_stories.data import CATCH_LOCATIONS_ARRAY, DRIVING_SHIFTS
 def story_default():
     return (
         chart(CATCH_LOCATIONS_ARRAY, w=400, h=400)
-        .flow(scatter(by="lake", x="x", y="y"))
+        .flow(scatter(by="lake", cx="x", cy="y"))
         .mark(line()),
         {},
     )
@@ -16,7 +16,7 @@ def story_default():
 def story_gas_prices():
     return (
         chart(DRIVING_SHIFTS, w=500, h=400)
-        .flow(scatter(by="year", x="year", y="gas"))
+        .flow(scatter(by="year", cx="year", cy="gas"))
         .mark(line(stroke="steelblue", stroke_width=2)),
         {},
     )

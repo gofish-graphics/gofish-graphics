@@ -37,7 +37,7 @@ def story_polar():
         .flow(
             scatter(
                 by="lake",
-                x="lake",
+                cx="lake",
                 w=2 * math.pi,
                 axes={"x": False, "y": True},
             ).translate(y=50),

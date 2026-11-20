@@ -290,7 +290,7 @@ data stays a circle:
 chart(
     sunflower,
     schema={"x": "plane", "y": "plane"},
-).flow(scatter(x="x", y="y")).mark(circle(r=4, fill="i"))
+).flow(scatter(cx="x", cy="y")).mark(circle(r=4, fill="i"))
 ```
 
 A column of date strings is a time in `Unit.time()`:
@@ -300,7 +300,7 @@ A column of date strings is a time in `Unit.time()`:
 
 ```python
 chart(prices, schema={"date": Unit.time()}, axes=True).flow(
-    scatter(by="date", x="date", y="price")
+    scatter(by="date", cx="date", cy="price")
 ).mark(line(stroke="steelblue", stroke_width=2))
 ```
 

@@ -217,16 +217,16 @@ def test_rect_inset_is_a_kwarg():
 
 
 def test_scatter_serializes_separate_overlap():
-    d = ir(scatter(x="mass", alignment="middle", overlap=Overlap.separate(padding=1)))
+    d = ir(scatter(cx="mass", alignment="middle", overlap=Overlap.separate(padding=1)))
     assert d["type"] == "scatter"
     assert d["overlap"] == {"kind": "separate", "padding": 1}
     assert Overlap.separate() == {"kind": "separate"}
-    assert "overlap" not in ir(scatter(x="mass"))
+    assert "overlap" not in ir(scatter(cx="mass"))
 
 
 def test_scatter_serializes_noise_overlap():
     d = ir(scatter(
-        x="mass", alignment="middle", overlap=Overlap.noise(randomness="quasi", smoothing=100)
+        cx="mass", alignment="middle", overlap=Overlap.noise(randomness="quasi", smoothing=100)
     ))
     assert d["overlap"] == {"kind": "noise", "randomness": "quasi", "smoothing": 100}
     assert Overlap.noise() == {"kind": "noise"}
@@ -234,9 +234,9 @@ def test_scatter_serializes_noise_overlap():
     # `overlap` is a tagged union: the `kind` picks the branch whose keys are
     # checked, as for any nested option dict.
     with pytest.raises(TypeError):
-        scatter(x="mass", overlap={"kind": "swarm"})
+        scatter(cx="mass", overlap={"kind": "swarm"})
     with pytest.raises(TypeError):
-        scatter(x="mass", overlap={"kind": "separate", "randomness": "blue"})
+        scatter(cx="mass", overlap={"kind": "separate", "randomness": "blue"})
     assert Overlap.noise(smoothing=0) == {"kind": "noise", "smoothing": 0}
     # A param's type and bounds (randomness "pink", smoothing -1, ...) are
     # checked at the factory call: see test_families.py.
@@ -251,7 +251,7 @@ def test_sina_and_jitter_are_noise_with_other_defaults():
     # Any option overrides the default.
     assert Overlap.sina(smoothing=50, padding=1) == {"kind": "noise", "smoothing": 50, "padding": 1}
     assert Overlap.jitter(randomness="blue")["randomness"] == "blue"
-    d = ir(scatter(x="mass", alignment="middle", overlap=Overlap.sina()))
+    d = ir(scatter(cx="mass", alignment="middle", overlap=Overlap.sina()))
     assert d["overlap"] == {"kind": "noise", "smoothing": "silverman"}
 
 
@@ -263,7 +263,7 @@ def test_non_finite_numbers_are_tagged_in_the_ir():
 
     node = (
         chart([{"v": 1.0}, {"v": math.inf}])
-        .flow(scatter(x="v", overlap=Overlap.jitter(smoothing=math.inf)))
+        .flow(scatter(cx="v", overlap=Overlap.jitter(smoothing=math.inf)))
         .mark(circle(r=3))
         .to_ir()["root"]
     )

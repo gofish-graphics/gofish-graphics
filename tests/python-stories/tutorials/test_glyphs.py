@@ -30,7 +30,7 @@ def marker(d):
 def story_glyphs():
     return (
         chart(STATIONS, axes=False, w=260, h=170)
-        .flow(scatter(by="id", x="x", y="y"))
+        .flow(scatter(by="id", cx="x", cy="y"))
         .mark(lambda d: marker(d[0])),
         {},
     )

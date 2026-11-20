@@ -370,14 +370,18 @@ export interface ScatterOperator
   /** See `SpreadOperator.label`. */
   label?: LabelIR;
   by?: string | FieldAccessor | ChunkKeyIR;
+  /** Where each child's start edge goes. */
   x?: ChannelValue;
   y?: ChannelValue;
-  xMin?: ChannelValue;
-  xMax?: ChannelValue;
-  yMin?: ChannelValue;
-  yMax?: ChannelValue;
-  /** Per-child placement by axis name (see `AxisDims`): a bare value is the
-   *  point, `{ min, max }` the span, `{ center }` the point. */
+  /** Where each child's center goes. */
+  cx?: ChannelValue;
+  cy?: ChannelValue;
+  /** Where each child's end edge goes; with `x`, the child spans the two. */
+  x2?: ChannelValue;
+  y2?: ChannelValue;
+  /** Per-child placement by axis name (see `AxisDims`), read as a mark's:
+   *  a bare value or `{ min }` is the start, `{ center }` the center,
+   *  `{ max }` the end. */
   dims?: AxisDims;
   alignment?: string;
   /** How children keep clear of each other on the free axis. Default: none
@@ -972,8 +976,8 @@ export interface AxisInterval {
  * A `dims` option (box-dims marks, `scatter`): axis name → value or interval.
  * The names are `x`/`y` plus whatever the enclosing coordinate space declares
  * (polar `theta`/`r`, geo `lon`/`lat`); they resolve at render time, so the
- * wire keeps them open. A bare value is a position (the `min` anchor on a
- * mark, the point on a scatter).
+ * wire keeps them open. A bare value is a position at the `min` anchor, on a
+ * mark and on a scatter alike.
  */
 export type AxisDims = Record<string, ChannelValue | AxisInterval>;
 

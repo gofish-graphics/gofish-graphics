@@ -73,7 +73,7 @@ export const Polar: StoryObj<Args> = {
         .flow(
           scatter({
             by: "lake",
-            x: "lake",
+            cx: "lake",
             w: 2 * Math.PI,
             axes: { x: false, y: true },
           }).translate({ y: 50 }),

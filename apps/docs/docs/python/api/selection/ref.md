@@ -28,7 +28,7 @@ from gofish import layer, chart, scatter, blank, select_all, line
 layer([
     # Step 1: name the mark
     chart(catch_locations)
-        .flow(scatter(by="lake", x="x", y="y"))
+        .flow(scatter(by="lake", cx="x", cy="y"))
         .mark(blank().name("points")),
 
     # Step 2: select_all those nodes as data for a connector

@@ -434,7 +434,7 @@ These would be new field ops.
 - `field("y").mean()` needs an affine `T` and returns `T`.
 - `field("y").quantile(0.9)` needs an ordered `T` and returns `T`.
 - `field("y").interval(0.95)` needs an ordered `T` and returns `Interval<T>`. GoFish
-  already has interval positions (`scatter({ yMin, yMax })` and the `dims` interval form),
+  already has interval positions (`scatter({ y, y2 })` and the `dims` interval form),
   so an error bar is a summary and an existing operator.
 - `field("y").sd()` returns the difference type of `T`.
 - `field("y").prob()` needs a discrete `T` and returns a probability for each category.
@@ -481,7 +481,7 @@ A bar of an uncertain torsor:
 ```
 rect: channel "h" needs a length, but field("temp").mean() is a temperature point (°C)
 with no origin. Subtract a reference first, e.g., field("temp").minus(datum(0, "°C")),
-or show the value as a position with scatter({ y: field("temp").mean() }).
+or show the value as a position with scatter({ cy: field("temp").mean() }).
 ```
 
 A line across independent cells:
@@ -505,7 +505,7 @@ This table checks twelve target visualizations. The classes are these.
 
 | Target                                 | Mode    | Class        | GoFish pieces                                                                                                       |
 | -------------------------------------- | ------- | ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| Error bars                             | summary | type alone   | `field(y).interval(0.95)` into `scatter({ yMin, yMax })`, thin `rect`                                               |
+| Error bars                             | summary | type alone   | `field(y).interval(0.95)` into `scatter({ y, y2 })`, thin `rect`                                                    |
 | Point and multi-level interval         | summary | type alone   | two intervals and a point, `.layer(...)`. An `interval` mark would be shorter                                       |
 | Quantile dotplot                       | summary | type alone   | `quantiles(20)` as rows, `bin`, `stack` of `circle` (the unit violin pattern)                                       |
 | Fan chart over time                    | summary | type alone   | intervals at three levels per time, `ribbon` through interval marks, layered                                        |
@@ -597,7 +597,7 @@ Every cell that shares a draw ID is one outcome of the joint.
 const temp = rvar("temp", { draw: "draw", measure: "°C" });
 
 chart(draws)
-  .flow(scatter({ by: "year", x: "year" }))
+  .flow(scatter({ by: "year", cx: "year" }))
   .mark(interval({ y: temp, levels: [0.5, 0.8, 0.95] }));
 ```
 
@@ -608,7 +608,7 @@ from gofish import chart, scatter, interval, rvar
 idata = az.from_netcdf("fit.nc")
 temp = rvar(idata.posterior["temp"], dims={"year": years}, measure="°C")
 
-chart(temp.to_table()).flow(scatter(by="year", x="year")).mark(
+chart(temp.to_table()).flow(scatter(by="year", cx="year")).mark(
     interval(y=temp, levels=[0.5, 0.8, 0.95])
 )
 ```

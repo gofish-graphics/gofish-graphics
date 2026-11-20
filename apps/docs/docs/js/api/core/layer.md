@@ -193,7 +193,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
 }));
 
 gf.chart(locations, { axes: true })
-  .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
+  .flow(gf.scatter({ by: "lake", cx: "x", cy: "y" }))
   .mark(gf.circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
   .layer(gf.line({ stroke: "black", strokeWidth: 2 }))
   .render(root, { w: 400, h: 300 });
@@ -224,7 +224,7 @@ const edges = [
 ];
 
 gf.chart(nodes)
-  .flow(gf.scatter({ by: "id", x: "grp", y: "id" }))
+  .flow(gf.scatter({ by: "id", cx: "grp", cy: "id" }))
   .mark(gf.circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
   .layer(
     gf

@@ -1758,19 +1758,25 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   scatter: operator("scatter", {
-    doc: "Position each child at an explicit (x, y) point or [min, max] span in data space.",
+    doc: "Place each child in data space by its center (cx, cy), its start edge (x, y) or its end edge (x2, y2). Any two keys of one axis are a span.",
     fields: {
       by: splitBy(
         "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
       ),
-      x: ch.pos("Point position, x."),
-      y: ch.pos("Point position, y."),
-      xMin: ch.pos("Range form: left/bottom edge, x."),
-      xMax: ch.pos("Range form: right/top edge, x."),
-      yMin: ch.pos("Range form: left/bottom edge, y."),
-      yMax: ch.pos("Range form: right/top edge, y."),
+      x: ch.pos("Where each child's start (left) edge goes on x."),
+      cx: ch.pos("Where each child's center goes on x."),
+      x2: ch.pos(
+        "Where each child's end (right) edge goes on x. With `x`, the child spans from `x` to `x2`."
+      ),
+      y: ch.pos(
+        "Where each child's start edge goes on y: its top edge where y reads top-down, its bottom edge where it grows upward."
+      ),
+      cy: ch.pos("Where each child's center goes on y."),
+      y2: ch.pos(
+        "Where each child's other y edge goes. With `y`, the child spans from `y` to `y2`."
+      ),
       dims: axisDims(
-        "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). A bare value or {center} is the point, {min, max} the span."
+        "Placement by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Read as a mark's dims: a bare value or {min} is the start, like x; {center} the center, like cx; {max} the end, like x2."
       ),
       alignment: {
         type: t.string,

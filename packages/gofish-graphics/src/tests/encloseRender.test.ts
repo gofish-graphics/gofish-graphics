@@ -507,7 +507,7 @@ const steady = (name: string, members: Member[], o: any) => {
 {
   // ChartAccent's blob around the Sub-Saharan African countries
   const dl = await chart(gapminderCountries, { w: 520, h: 320 })
-    .flow(scatter({ x: "FertilityRate", y: "LifeExpectancy" }))
+    .flow(scatter({ cx: "FertilityRate", cy: "LifeExpectancy" }))
     .mark(circle({ r: 3.5 }).name("countries"))
     .layer(
       chart(selectAll("countries"))

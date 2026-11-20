@@ -56,7 +56,7 @@ export const Default: StoryObj<Args> = {
     (async () => {
       const sc = await chart(data)
         .flow(
-          scatter({ by: "id", x: "Beak Length (mm)", y: "Beak Depth (mm)" } as any)
+          scatter({ by: "id", cx: "Beak Length (mm)", cy: "Beak Depth (mm)" } as any)
         )
         .mark(circle({ r: 3, fill: "steelblue", fillOpacity: 0.6 }))
         .resolve();

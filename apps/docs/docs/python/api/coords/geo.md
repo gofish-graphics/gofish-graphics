@@ -66,11 +66,11 @@ and as an operator's `dir`.
 
 ```python
 chart(cities, coord=Coord.geo("equalEarth")) \
-    .flow(scatter(by="name", dims={"lon": "lon", "lat": "lat"})) \
+    .flow(scatter(by="name", dims={"lon": {"center": "lon"}, "lat": {"center": "lat"}})) \
     .mark(circle(r=3))
 ```
 
-This places each city exactly as `scatter(by="name", x="lon", y="lat")` does.
+This places each city exactly as `scatter(by="name", cx="lon", cy="lat")` does.
 The names only work inside a `geo` space. Anywhere else, `lon` raises an error
 that lists the names you can use there.
 
@@ -89,7 +89,7 @@ chart(
     .mark(polygon(points="ring", fill="#f7f7f7", stroke="#aaa")) \
     .layer(
         chart(birds)
-        .flow(group(by="species"), scatter(by="day", x="lon", y="lat"))
+        .flow(group(by="species"), scatter(by="day", cx="lon", cy="lat"))
         .mark(line(stroke="species", stroke_width=1, opacity=0.5))
     ) \
     .render(w=600, h=600)

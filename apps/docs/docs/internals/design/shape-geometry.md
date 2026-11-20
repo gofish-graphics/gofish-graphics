@@ -431,7 +431,7 @@ questions every frame. Our layout runs once, so a memo on the node is enough.
     and `"start"`, `"end"`, and `"baseline"` give a swarm on one side. With no strategy,
     every dot sits on the alignment line, which is today's strip plot.
   - The unit violin in `stories/atom/Violin.stories.tsx` becomes
-    `spread(pclass) → scatter({ y: "age", alignment: "middle", overlap: swarm() })`. We
+    `spread(pclass) → scatter({ cy: "age", alignment: "middle", overlap: swarm() })`. We
     accept that this is not literally the same chain as the binned version, because a
     swarm has to see all of its siblings at once.
   - **Decided (2026-09-29):** circle packing is one `pack` operator with an extensible
@@ -459,7 +459,7 @@ questions every frame. Our layout runs once, so a memo on the node is enough.
   chart(films)
     .flow(
       scatter({
-        x: "year",
+        cx: "year",
         alignment: "middle",
         overlap: swarm({ padding: 1 }),
       })

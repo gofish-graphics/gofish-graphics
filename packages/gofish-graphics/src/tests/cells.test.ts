@@ -1497,7 +1497,7 @@ async function main() {
       )
         .flow(
           spread({ by: "g", dir: "x", spacing: 20 }),
-          scatter({ x: "v", y: "w", axes: { x: true, y: false } })
+          scatter({ cx: "v", cy: "w", axes: { x: true, y: false } })
         )
         .mark(circle({ r: 2 }))
         .toDisplayList({ w: 300, h: 100 });
@@ -2215,7 +2215,7 @@ async function main() {
     const noAxes = { axes: false };
 
     const lines = await chart(pts, noAxes)
-      .flow(spread({ by: byCell(), dir: "x" }), scatter({ x: "x", y: "y" }))
+      .flow(spread({ by: byCell(), dir: "x" }), scatter({ cx: "x", cy: "y" }))
       .mark(line())
       .toDisplayList({ w: 300, h: 100 })
       .then(
@@ -2267,8 +2267,8 @@ async function main() {
       .flow(
         scatter({
           by: byCell(),
-          x: distField("x").mean(),
-          y: distField("y").mean(),
+          cx: distField("x").mean(),
+          cy: distField("y").mean(),
         })
       )
       .mark(rect({ w: 5, h: 5 }))
@@ -2287,7 +2287,7 @@ async function main() {
       ["stack", () => stack({ by: "y", dir: "y" })],
       ["spread", () => spread({ by: "y", dir: "y" })],
       ["group", () => group({ by: "y" })],
-      ["scatter", () => scatter({ x: "x", y: "y" })],
+      ["scatter", () => scatter({ cx: "x", cy: "y" })],
       ["table", () => table({ by: { x: "y", y: "y" } })],
       ["pack", () => pack()],
       ["pack by a field", () => pack({ by: "y" })],
@@ -2398,7 +2398,7 @@ async function main() {
     );
     const dots = walkItems(
       await chart(pts, noAxes)
-        .flow(scatter({ by: byCell(), x: "x", y: "y" }))
+        .flow(scatter({ by: byCell(), cx: "x", cy: "y" }))
         .mark(circle({ r: 3 }))
         .toDisplayList({ w: 300, h: 100 })
     ).filter((it) => it.kind === "ellipse");
@@ -2421,7 +2421,7 @@ async function main() {
           by: distField("x").bin(DistBin.thresholds([10, 90])),
           dir: "x",
         }),
-        scatter({ x: "x", y: "y" })
+        scatter({ cx: "x", cy: "y" })
       )
       .mark(line())
       .toDisplayList({ w: 300, h: 100 })
@@ -2448,7 +2448,7 @@ async function main() {
   {
     const pts = [0.5, 0.7, 2.5, 2.7, 4.2].map((x) => ({ x, y: 1 }));
     const bars = await chart(pts, { axes: false })
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(circle({ r: 3 }).name("points"))
       .layer(
         chart(selectAll("points"))

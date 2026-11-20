@@ -101,7 +101,7 @@ async function main() {
 
   check(
     "translate modifier exists on createOperator output",
-    typeof scatter({ x: "hp" }).translate === "function"
+    typeof scatter({ cx: "hp" }).translate === "function"
   );
   check(
     "translate modifier exists on createMark output",
@@ -518,21 +518,21 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Scatter operator with explicit x/y channels.
+  // Scatter operator with explicit cx/cy channels.
   // -------------------------------------------------------------------------
   {
     const c = chart([
       { mpg: 22, hp: 110 },
       { mpg: 19, hp: 150 },
     ])
-      .flow(scatter({ x: "hp", y: "mpg" }))
+      .flow(scatter({ cx: "hp", cy: "mpg" }))
       .mark(circle({ r: 3, fill: "steelblue" }));
     const doc = await c.toJSON();
     validateDoc(doc, "scatter chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("scatter operator", ops[0].type === "scatter");
-    check("scatter carries x", (ops[0] as any).x === "hp");
-    check("scatter carries y", (ops[0] as any).y === "mpg");
+    check("scatter carries cx", (ops[0] as any).cx === "hp");
+    check("scatter carries cy", (ops[0] as any).cy === "mpg");
   }
 
   // -------------------------------------------------------------------------
@@ -626,7 +626,7 @@ async function main() {
           chart(rows)
             .flow(
               scatter({
-                x: "a",
+                cx: "a",
                 overlap: s ? Overlap.separate : Overlap.separate(),
               })
             )
@@ -637,7 +637,7 @@ async function main() {
         (s) =>
           chart(rows)
             .flow(
-              scatter({ x: "a", overlap: s ? Overlap.jitter : Overlap.jitter() })
+              scatter({ cx: "a", overlap: s ? Overlap.jitter : Overlap.jitter() })
             )
             .mark(circle({ r: 3 })),
       ],
@@ -684,7 +684,7 @@ async function main() {
     const c = chart(rows)
       .flow(
         scatter({
-          x: "v",
+          cx: "v",
           alignment: "middle",
           overlap: Overlap.jitter(),
         })
@@ -1002,13 +1002,13 @@ async function main() {
     ];
     const lines = (position: unknown) =>
       chart(series)
-        .flow(group({ by: "s" }), scatter({ by: "x", x: "x", y: "y" }))
+        .flow(group({ by: "s" }), scatter({ by: "x", cx: "x", cy: "y" }))
         .mark(line({ stroke: "s" }).label("s", { position }));
     const cases: [string, any, unknown][] = [
       [
         "Place.around({...})",
         chart(dots)
-          .flow(scatter({ by: "c", x: "x", y: "y" }))
+          .flow(scatter({ by: "c", cx: "x", cy: "y" }))
           .mark(
             circle({ r: 4 }).label("c", {
               position: Place.around({
@@ -1073,12 +1073,12 @@ async function main() {
         { x: 0, y: 2 },
         { x: 4, y: 2 },
       ])
-        .flow(scatter({ by: "x", x: "x", y: "y" }))
+        .flow(scatter({ by: "x", cx: "x", cy: "y" }))
         .mark(blank().name("ends"))
         .layer(chart(selectAll("ends")).mark(line({ stroke: "gray" }).name("trend")))
         .layer(
           chart(dots)
-            .flow(scatter({ by: "c", x: "x", y: "y" }))
+            .flow(scatter({ by: "c", cx: "x", cy: "y" }))
             .mark(
               circle({ r: 4 }).label("c", {
                 avoiding: selectAll("trend"),
@@ -1241,10 +1241,10 @@ async function main() {
   // fields, regardless of chain order (createOperator.ts's translateOperator
   // delegates .label() back to the base operator's own setter).
   {
-    const translateThenLabel = scatter({ by: "lake", x: "count" })
+    const translateThenLabel = scatter({ by: "lake", cx: "count" })
       .translate({ y: 5 })
       .label("lake");
-    const labelThenTranslate = scatter({ by: "lake", x: "count" })
+    const labelThenTranslate = scatter({ by: "lake", cx: "count" })
       .label("lake")
       .translate({ y: 5 });
 
@@ -1477,7 +1477,7 @@ async function main() {
   // producer tier's ChartBuilder) round-trips through fromJSON.
   {
     const built = chart(connectData)
-      .flow(scatter({ by: "g", x: "a", y: "b" }))
+      .flow(scatter({ by: "g", cx: "a", cy: "b" }))
       .mark(circle({ r: 4 }).name("pts"));
     const doc = await built.toJSON();
     validateDoc(doc, "layer() producer tier");
@@ -1500,7 +1500,7 @@ async function main() {
       { x: 2, y: 3 },
     ];
     const fusedJS = chart(rows)
-      .flow(scatter({ x: "x", y: "y" }))
+      .flow(scatter({ cx: "x", cy: "y" }))
       .mark(line({}));
     check(
       "JS: a fused relational chart has no .name() or .zOrder()",
@@ -1510,7 +1510,7 @@ async function main() {
     const ir = {
       type: "chart",
       data: { type: "table", id: "t0" },
-      operators: [{ type: "scatter", x: "x", y: "y" }],
+      operators: [{ type: "scatter", cx: "x", cy: "y" }],
       mark: { type: "line" },
       options: {},
     };
@@ -1891,8 +1891,8 @@ async function main() {
         {
           type: "scatter",
           by: "k",
-          x: { __gofish_lambda: "hv" },
-          y: "v",
+          cx: { __gofish_lambda: "hv" },
+          cy: "v",
         },
       ],
       mark: { type: "circle", r: 2 },
@@ -2084,7 +2084,7 @@ async function main() {
     ];
     const nodesTier = () =>
       chart(nodes, { axes: false })
-        .flow(scatter({ by: "id", x: "grp", y: "grp" }))
+        .flow(scatter({ by: "id", cx: "grp", cy: "grp" }))
         .mark(circle({ r: 16, fill: "#59a14f" }).name("nodes"));
     const native = await nodesTier()
       .layer(
@@ -2174,7 +2174,7 @@ async function main() {
     ];
     const graph = (keep: any) =>
       chart(nodes, { axes: false })
-        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .flow(scatter({ by: "id", cx: "x", cy: "y" }))
         .mark(circle({ r: 5 }).name("nodes"))
         .layer(
           chart(edges)

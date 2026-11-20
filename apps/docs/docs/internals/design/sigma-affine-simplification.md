@@ -109,7 +109,7 @@ Producers/consumers to migrate (the whole surface):
 The internal lowering machinery (edge pins, extent side-channel) stays until
 Stage 5; this stage removes the _type_ and the parallel code paths that
 dispatch on it. Not in the wire IR (span is created during JS elaboration;
-scatter serializes as `xMin`/`xMax`), so no schema/Python work.
+scatter serializes as `x`/`x2`), so no schema/Python work.
 
 - Gate: pixel equality; `validate-python-ir` + `capture-python` untouched but
   run once to confirm.

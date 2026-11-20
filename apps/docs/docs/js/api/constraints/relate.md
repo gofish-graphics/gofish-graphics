@@ -249,8 +249,8 @@ inferred scale; literal pixels are placed directly and don't define the domain.
 instead of a point. The ref's min edge lands at `min`, its max edge at `max`,
 and the two edges **determine its size** on that axis (each endpoint is a
 literal pixel or `datum(n)`, never a categorical position). This is the
-size-setting range form the `scatter` operator's `xMin`/`xMax`/`yMin`/`yMax`
-channels lower to — use it directly to make a ref span a data range:
+size-setting span form the `scatter` operator's `x` with `x2` (and `y` with
+`y2`) lower to — use it directly to make a ref span a data range:
 
 ```ts
 // Bar occupying x ∈ [datum(0), datum(count)] — its width is set by the two

@@ -125,7 +125,7 @@ const DURATION = 20000;
  */
 const yearReadout = (clock: () => number, h: number) =>
   chart([{ value: 210000 }])
-    .flow(scatter({ x: "value" }))
+    .flow(scatter({ cx: "value" }))
     .mark(
       text({
         text: live(() => String(Math.floor(clock()))),
