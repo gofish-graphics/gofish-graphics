@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import data from "vega-datasets";
 import { initializeContainer } from "../helper";
 import {
-  Bin,
+  Binning,
   chart,
   circle,
   Color,
@@ -10,7 +10,7 @@ import {
   field,
   layer,
   partition,
-  Place,
+  Placement,
   region,
   scatter,
   struct,
@@ -60,8 +60,8 @@ export const MovieRatingsHeatmap: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("IMDB Rating").bin(Bin.step(0.5)),
-            y: field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+            x: field("IMDB Rating").bin(Binning.step(0.5)),
+            y: field("Rotten Tomatoes Rating").bin(Binning.step(5)),
           },
         })
       )
@@ -81,8 +81,8 @@ export const ProductForm: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("Flipper Length (mm)").bin(Bin.step(10)),
-            y: field("Body Mass (g)").bin(Bin.step(500)),
+            x: field("Flipper Length (mm)").bin(Binning.step(10)),
+            y: field("Body Mass (g)").bin(Binning.step(500)),
           },
         })
       )
@@ -99,11 +99,11 @@ export const NestedForm: StoryObj<Args> = {
     chart(measured, { color: Color.gradient("blues"), axes: true, w: args.w, h: args.h })
       .flow(
         partition({
-          by: field("Flipper Length (mm)").bin(Bin.step(10)),
+          by: field("Flipper Length (mm)").bin(Binning.step(10)),
           dir: "x",
         }),
         partition({
-          by: field("Body Mass (g)").bin(Bin.step(500)),
+          by: field("Body Mass (g)").bin(Binning.step(500)),
           dir: "y",
         })
       )
@@ -129,8 +129,8 @@ export const PenguinCellCounts: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("Flipper Length (mm)").bin(Bin.step(10)),
-            y: field("Body Mass (g)").bin(Bin.step(500)),
+            x: field("Flipper Length (mm)").bin(Binning.step(10)),
+            y: field("Body Mass (g)").bin(Binning.step(500)),
           },
         })
       )
@@ -150,10 +150,10 @@ export const NestedFlipperThenMass: StoryObj<Args> = {
     chart(measured, { axes: true, w: args.w, h: args.h })
       .flow(
         partition({
-          by: field("Flipper Length (mm)").bin(Bin.step(10)),
+          by: field("Flipper Length (mm)").bin(Binning.step(10)),
           dir: "x",
         }),
-        partition({ by: field("Body Mass (g)").bin(Bin.step(500)), dir: "y" })
+        partition({ by: field("Body Mass (g)").bin(Binning.step(500)), dir: "y" })
       )
       .mark(text({ text: field("Body Mass (g)").count() }))
       .render(container);
@@ -167,9 +167,9 @@ export const NestedMassThenFlipper: StoryObj<Args> = {
     const container = initializeContainer();
     chart(measured, { axes: true, w: args.w, h: args.h })
       .flow(
-        partition({ by: field("Body Mass (g)").bin(Bin.step(500)), dir: "y" }),
+        partition({ by: field("Body Mass (g)").bin(Binning.step(500)), dir: "y" }),
         partition({
-          by: field("Flipper Length (mm)").bin(Bin.step(10)),
+          by: field("Flipper Length (mm)").bin(Binning.step(10)),
           dir: "x",
         })
       )
@@ -213,7 +213,7 @@ export const AirportHexbin: StoryObj<Args> = {
       .flow(
         partition({
           by: struct({ x: "longitude", y: "latitude" }).bin(
-            Bin.hex({ radius: 1 })
+            Binning.hex({ radius: 1 })
           ),
         })
       )
@@ -245,7 +245,7 @@ export const CarHexbin: StoryObj<Args> = {
       .flow(
         partition({
           by: struct({ x: "Miles_per_Gallon", y: "Weight_in_lbs" }).bin(
-            Bin.hex({ radius: { x: 1.5, y: 250 } })
+            Binning.hex({ radius: { x: 1.5, y: 250 } })
           ),
         })
       )
@@ -279,7 +279,7 @@ export const AirportsByNearestHub: StoryObj<Args> = {
         .flow(
           partition({
             by: struct({ x: "longitude", y: "latitude" }).bin(
-              Bin.voronoi({ seeds: hubs })
+              Binning.voronoi({ seeds: hubs })
             ),
           })
         )
@@ -316,7 +316,7 @@ export const PenguinBeakVoronoi: StoryObj<Args> = {
     const key = struct({ x: "Beak Length (mm)", y: "Beak Depth (mm)" });
     layer({ w: args.w, h: args.h }, [
       chart(beaked)
-        .flow(partition({ by: key.bin(Bin.voronoi({ seeds: beaked })) }))
+        .flow(partition({ by: key.bin(Binning.voronoi({ seeds: beaked })) }))
         .mark(region({ fill: "#f4f1ea", stroke: "#b9b2a3", strokeWidth: 0.5 })),
       chart(beaked)
         .flow(scatter({ x: "Beak Length (mm)", y: "Beak Depth (mm)" }))
@@ -339,7 +339,7 @@ export const AirportHexCounts: StoryObj<Args> = {
       .flow(
         partition({
           by: struct({ x: "longitude", y: "latitude" }).bin(
-            Bin.hex({ radius: 3 })
+            Binning.hex({ radius: 3 })
           ),
         })
       )
@@ -357,7 +357,7 @@ export const AirportHexCounts: StoryObj<Args> = {
 };
 
 // The same counts written by the region's own label, inside it
-// (`Place.interior()`), so its color contrasts with the region's fill.
+// (`Placement.interior()`), so its color contrasts with the region's fill.
 export const AirportHexCountsLabeled: StoryObj<Args> = {
   args: { w: 600, h: 360 },
   loaders: [async () => ({ airports: await data["airports.csv"]() })],
@@ -376,14 +376,14 @@ export const AirportHexCountsLabeled: StoryObj<Args> = {
       .flow(
         partition({
           by: struct({ x: "longitude", y: "latitude" }).bin(
-            Bin.hex({ radius: 3 })
+            Binning.hex({ radius: 3 })
           ),
         })
       )
       .mark(
         region({ fill: field("iata").count(), stroke: "white" }).label(
           field("iata").count(),
-          { position: Place.interior() }
+          { placement: Placement.interior() }
         )
       )
       .render(container, { axes: true });

@@ -80,7 +80,7 @@ density curve with each cell of a partition, drawn in by
 ## Masks
 
 A hidden child clips the others to its region. A
-[`Filter.luminanceToAlpha()`](/js/api/filter) child gives its
+[`Effect.luminanceToAlpha()`](/js/api/effect) child gives its
 luminance as its region, so a hidden one is a luminance mask.
 
 ::: gofish

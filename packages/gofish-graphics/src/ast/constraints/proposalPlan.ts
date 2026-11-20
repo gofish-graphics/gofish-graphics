@@ -106,7 +106,7 @@ export type ChildSpan = {
  * interval that pins it there, and of the cell a `region` gives it there (a
  * {@link PositionRegion}: a `partition`'s cell); and the cell's outline as
  * its shape (#1222, `geometry/ring.ts`), when the cell has one (a hexagon
- * of `Bin.hex`, a cell of `Bin.voronoi`). `posScales` are the scales the
+ * of `Binning.hex`, a cell of `Binning.voronoi`). `posScales` are the scales the
  * layer resolves its position constraints against; a datum edge with no
  * scale gives nothing.
  *
@@ -259,7 +259,7 @@ export type LayerScales = {
  *     data-valued one, whose box its parent's σ sizes and whose content it
  *     maps into that box;
  *   - or its room is given to it from outside its content (`isScope`: a
- *     region's cell, a treemap tile, pinned data in a slot, a facet panel).
+ *     region's cell, a `tile` cell, pinned data in a slot, a facet panel).
  *     Its box is that room;
  *   - or nothing above it solved a σ to hand it (`handedSigmas` is
  *     undefined): it is the top of its space, and its box is the size it is

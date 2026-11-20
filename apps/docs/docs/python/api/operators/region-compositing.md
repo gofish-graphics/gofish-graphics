@@ -78,7 +78,7 @@ density curve with each cell of a partition, drawn in by
 ## Masks
 
 A hidden child clips the others to its region. A
-[`Filter.luminance_to_alpha`](/python/api/filter) child gives its luminance as
+[`Effect.luminance_to_alpha`](/python/api/effect) child gives its luminance as
 its region, so a hidden one is a luminance mask.
 
 ```python

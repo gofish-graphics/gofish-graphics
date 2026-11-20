@@ -35,12 +35,12 @@ const METHODS: readonly InterpolationMethod[] = [
 ];
 
 /**
- * The method a `curve` (or `method`) option names. Unset is
- * `"monotone"`: the field is numeric, so the run is a sample of a continuous
- * variable and smooths — the same conclusion `connect`'s auto rule reaches for
- * a continuous connection axis, and the reason a transition traces the curve
- * a smooth threaded line draws. Anything else that is not a method throws,
- * naming `where` the option was written.
+ * The method a `curve` option names. Unset is `"monotone"`: the field is
+ * numeric, so the run is a sample of a continuous variable and smooths — the
+ * same conclusion `connect`'s auto rule reaches for a continuous connection
+ * axis, and the reason a transition traces the curve a smooth threaded line
+ * draws. Anything else that is not a method throws, naming `where` the option
+ * was written.
  */
 export function resolveMethod(
   curve: Curve | undefined,
@@ -254,7 +254,7 @@ export type InterpolateOptions = {
    *  same reason (the field is numeric, so the run is a sample of something
    *  continuous). `Curve.step()` does not blend at all: each keyframe's values
    *  hold until the next one's time arrives. */
-  method?: Curve;
+  curve?: Curve;
   /** Which fields to interpolate. By default every field whose value is a
    *  finite number at every keyframe of the run, apart from `along` and
    *  `key`. */
@@ -281,9 +281,9 @@ export type InterpolateOptions = {
  */
 export function interpolate<T extends Record<string, unknown>>(
   rows: readonly T[],
-  { along, key, at, method: written, fields }: InterpolateOptions
+  { along, key, at, curve, fields }: InterpolateOptions
 ): Record<string, unknown>[] {
-  const method = resolveMethod(written, "interpolate({ method })");
+  const method = resolveMethod(curve, "interpolate({ curve })");
   // Key order is first appearance, so the output is a deterministic function
   // of the input rather than of a hash's iteration order.
   const runs = Map.groupBy(rows, (row) => row[key]);

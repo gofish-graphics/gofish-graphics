@@ -1,10 +1,10 @@
 /**
  * `quantileRows`: a data helper, for use inside `derive`, that turns the grid
  * rows of a drawn density curve (`{ x, pdf }`) into `n` rows at the curve's
- * quantiles, so `Bin.quantiles` and `field(x).median()` over them read the
+ * quantiles, so `Binning.quantiles` and `field(x).median()` over them read the
  * curve and not the grid.
  *
- * A declared shortcut: a first-class distribution (#980) that `Bin.quantiles`
+ * A declared shortcut: a first-class distribution (#980) that `Binning.quantiles`
  * and `median` read directly would replace it. It lives in data prep, so
  * removing it takes nothing away from the core API.
  */

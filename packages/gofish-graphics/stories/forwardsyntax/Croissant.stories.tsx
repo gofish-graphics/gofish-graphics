@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Bin,
+  Binning,
   Calendar,
   chart,
   circle,
@@ -31,7 +31,7 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * The first lays the curve out hidden (`.hidden()`): it sets the scale and is
  * read, and paints nothing. The second
  * turns the grid into quantile rows of the drawn curve (`quantileRows`),
- * partitions them into `Bin.quantiles(n)` cells (five for the standard normal,
+ * partitions them into `Binning.quantiles(n)` cells (five for the standard normal,
  * ten for the penguins, five a month in the ridgeline), and in each cell draws the curve's area intersected with the
  * cell's region, drawn in by a few pixels, plus a dot at the cell's median.
  * The second layer is a `.relate()` clause of the first, so `density` names
@@ -94,7 +94,7 @@ const croissant = (
         derive((rows) =>
           quantileRows(rows, { x: "x", density: "pdf", n: 1000 })
         ),
-        partition({ by: field("x").bin(Bin.quantiles(n)), dir: "x" })
+        partition({ by: field("x").bin(Binning.quantiles(n)), dir: "x" })
       )
       .mark(
         layer([
@@ -233,7 +233,7 @@ export const Ridgeline: StoryObj<Args> = {
                 quantileRows(rows, { x: "temp_max", density: "pdf", n: 1000 })
               ),
               partition({
-                by: field("temp_max").bin(Bin.quantiles(5)),
+                by: field("temp_max").bin(Binning.quantiles(5)),
                 dir: "x",
               })
             )

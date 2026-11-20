@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, treemap, rect, field, Tile } from "../../src/lib";
+import { chart, tile, rect, field, Tiling } from "../../src/lib";
 import { gray } from "../../src/color";
 import data from "vega-datasets";
 
@@ -39,13 +39,13 @@ export const Default: StoryObj<Args> = {
 
     chart(moviesRaw, { axes: false, w: args.w, h: args.h })
       .flow(
-        treemap({
+        tile({
           by: field("Major Genre").dropNulls(),
           size: "Worldwide Gross",
           spacing: args.spacing,
           padding: args.spacing,
           round: true,
-          tile: Tile.squarify(),
+          tiling: Tiling.squarify(),
         })
       )
       .mark(
@@ -55,7 +55,7 @@ export const Default: StoryObj<Args> = {
           strokeWidth: 1,
           rx: 2,
           ry: 2,
-        }).label("Major Genre", { position: "center", color: "white", fontSize: 12 })
+        }).label("Major Genre", { placement: "center", color: "white", fontSize: 12 })
       )
       .render(container);
 

@@ -49,7 +49,7 @@ def diverging(midpoint: Optional[float] = None) -> Dict[str, Any]:
 
 def summable() -> Dict[str, Any]:
     """The unit's amounts add up (``CanSum``): a sum of them means something
-    (money, counts, lengths), so a ``size`` channel, ``stack``, treemap
+    (money, counts, lengths), so a ``size`` channel, ``stack``, ``tile``'s
     ``size`` and ``.sum()`` may sum a column in the unit. Amounts that do not
     add up (temperatures, prices, rates) are in a unit without it."""
     return {"kind": "summable"}

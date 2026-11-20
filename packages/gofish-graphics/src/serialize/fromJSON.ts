@@ -677,7 +677,7 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
   }
 
   // Combinator-form marks: a layout operator (`spread`, `layer`, `arrow`,
-  // `treemap`, Porter-Duff) used as a mark, with explicit nested children.
+  // `tile`, Porter-Duff) used as a mark, with explicit nested children.
   if (spec.__combinator) {
     const childMarks = mapMarkChildren(
       (spec.children ?? []) as MarkSpec[],

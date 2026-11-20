@@ -33,7 +33,7 @@ import { axisScale, type AxisMap } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { bakeChildren } from "../coordinateTransforms/bake";
-import { applyFilter, displayFilter, type FilterOptions } from "../drawFilter";
+import { applyFilter, displayFilter, type WithEffect } from "../drawEffect";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import type { AxesOptions } from "../gofish";
@@ -208,7 +208,7 @@ export type LayerOptions = {
   padding?: number;
   transform?: { scale?: { x?: number; y?: number } };
   box?: boolean;
-} & FilterOptions &
+} & WithEffect &
   FancyDims;
 
 export const layer = createNodeOperatorSequential(
@@ -222,6 +222,9 @@ export const layer = createNodeOperatorSequential(
     const children = Array.isArray(childrenOrOptions)
       ? childrenOrOptions
       : maybeChildren || [];
+    // `effect` filters the layer's whole drawing (`drawEffect.ts`), with a
+    // coord or without. It is checked once, here.
+    const filter = displayFilter(options.effect, "layer({ effect })");
 
     // With a coord, the layer is the coordinate space's box: the space takes
     // the layer's dims (`w`, `h`, `dims`, ...), key, axes and padding (#535).
@@ -231,7 +234,7 @@ export const layer = createNodeOperatorSequential(
         coord: coordTransform,
         transform: _transform,
         box: _box,
-        filter: _filter,
+        effect: _effect,
         ...rest
       } = options;
       // A coordinate space lays out nodes. A `ref` stand-in's place is its
@@ -242,7 +245,7 @@ export const layer = createNodeOperatorSequential(
           { ...rest, transform: coordTransform },
           children.filter((c): c is GoFishNode => c instanceof GoFishNode)
         ),
-        displayFilter(options.filter, "layer({ filter })")
+        filter
       );
     }
 
@@ -1681,9 +1684,6 @@ export const layer = createNodeOperatorSequential(
     // found anywhere in this layer's subtree, kept apart so a later
     // `.relate()` keeps them (see `applyRelationalZBelowDefaults`).
     node._paintDefaults = applyRelationalZBelowDefaults(node, children);
-    return applyFilter(
-      node,
-      displayFilter(options.filter, "layer({ filter })")
-    );
+    return applyFilter(node, filter);
   }
 );

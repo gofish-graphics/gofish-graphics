@@ -45,7 +45,7 @@ partition({
   by: field("date").bin(Calendar.year).bin(Calendar.month),
   dir: "x",
 }); // the same cells
-partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }); // a histogram
+partition({ by: field("rating").bin(Binning.step(0.5)), dir: "x" }); // a histogram
 ```
 
 A level binned alone that is a part of a larger level is a part of a cycle,
@@ -82,15 +82,18 @@ region, and `dir` and `alignment` are not allowed.
 
 ```ts
 partition({
-  by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(0.5)) },
+  by: {
+    x: field("a").bin(Binning.step(1)),
+    y: field("b").bin(Binning.step(0.5)),
+  },
 });
 ```
 
 It is the same as the 1D partition on x, then the 1D partition on y:
 
 ```ts
-(partition({ by: field("a").bin(Bin.step(1)), dir: "x" }),
-  partition({ by: field("b").bin(Bin.step(0.5)), dir: "y" }));
+(partition({ by: field("a").bin(Binning.step(1)), dir: "x" }),
+  partition({ by: field("b").bin(Binning.step(0.5)), dir: "y" }));
 ```
 
 A partition inside a cell of another partition gives each of its groups that
@@ -115,12 +118,14 @@ draws that 0.
 ## Cells of the plane
 
 With `by` a binned struct, `partition` divides both axes at once into the
-cells of a [`Bin`](/js/api/bin) call: `Bin.hex({ radius })` for a grid of
-hexagons, or `Bin.voronoi({ seeds })` for one cell per seed. `dir` and
+cells of a [`Binning`](/js/api/binning) call: `Binning.hex({ radius })` for a grid of
+hexagons, or `Binning.voronoi({ seeds })` for one cell per seed. `dir` and
 `alignment` are not allowed.
 
 ```ts
-partition({ by: struct({ x: "lon", y: "lat" }).bin(Bin.hex({ radius: 0.5 })) });
+partition({
+  by: struct({ x: "lon", y: "lat" }).bin(Binning.hex({ radius: 0.5 })),
+});
 ```
 
 Each group gets its cell's outline. A [`region`](/js/api/marks/region) draws
@@ -134,13 +139,13 @@ hexagon is a group with no rows, so it is drawn with a count of 0.
 A mark with a size of its own is centered in its cell's box, which for a
 hexagon is its center. The example writes each count with
 [`.label()`](/js/api/core/mark#modifiers) at
-[`Place.interior()`](/js/api/place), inside the hexagon, so its color
+[`Placement.interior()`](/js/api/placement), inside the hexagon, so its color
 contrasts with the hexagon's fill.
 
 ::: gofish example:airport-counts-in-hexagons
 :::
 
-With `Bin.voronoi`, each row goes to its nearest seed.
+With `Binning.voronoi`, each row goes to its nearest seed.
 
 ::: gofish example:us-airports-by-nearest-hub
 :::

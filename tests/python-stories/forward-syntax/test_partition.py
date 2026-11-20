@@ -1,10 +1,10 @@
 """Equivalent of Partition.stories.tsx — Forward Syntax/Partition."""
 
 from gofish import (
-    Bin,
+    Binning,
     Color,
     Constraint,
-    Place,
+    Placement,
     chart,
     circle,
     field,
@@ -37,8 +37,8 @@ def story_movie_ratings_heatmap():
         .flow(
             partition(
                 by={
-                    "x": field("IMDB Rating").bin(Bin.step(0.5)),
-                    "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+                    "x": field("IMDB Rating").bin(Binning.step(0.5)),
+                    "y": field("Rotten Tomatoes Rating").bin(Binning.step(5)),
                 }
             )
         )
@@ -55,8 +55,8 @@ def story_product_form():
         .flow(
             partition(
                 by={
-                    "x": field("Flipper Length (mm)").bin(Bin.step(10)),
-                    "y": field("Body Mass (g)").bin(Bin.step(500)),
+                    "x": field("Flipper Length (mm)").bin(Binning.step(10)),
+                    "y": field("Body Mass (g)").bin(Binning.step(500)),
                 }
             )
         )
@@ -69,8 +69,8 @@ def story_nested_form():
     return (
         chart(MEASURED, color=Color.gradient("blues"), axes=True, w=320, h=320)
         .flow(
-            partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
-            partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(Binning.step(10)), dir="x"),
+            partition(by=field("Body Mass (g)").bin(Binning.step(500)), dir="y"),
         )
         .mark(region(fill=field("Body Mass (g)").count())),
         {},
@@ -83,8 +83,8 @@ def story_penguin_cell_counts():
         .flow(
             partition(
                 by={
-                    "x": field("Flipper Length (mm)").bin(Bin.step(10)),
-                    "y": field("Body Mass (g)").bin(Bin.step(500)),
+                    "x": field("Flipper Length (mm)").bin(Binning.step(10)),
+                    "y": field("Body Mass (g)").bin(Binning.step(500)),
                 }
             )
         )
@@ -100,8 +100,8 @@ def story_nested_flipper_then_mass():
     return (
         chart(MEASURED, axes=True, w=420, h=320)
         .flow(
-            partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
-            partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(Binning.step(10)), dir="x"),
+            partition(by=field("Body Mass (g)").bin(Binning.step(500)), dir="y"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
         {},
@@ -112,8 +112,8 @@ def story_nested_mass_then_flipper():
     return (
         chart(MEASURED, axes=True, w=420, h=320)
         .flow(
-            partition(by=field("Body Mass (g)").bin(Bin.step(500)), dir="y"),
-            partition(by=field("Flipper Length (mm)").bin(Bin.step(10)), dir="x"),
+            partition(by=field("Body Mass (g)").bin(Binning.step(500)), dir="y"),
+            partition(by=field("Flipper Length (mm)").bin(Binning.step(10)), dir="x"),
         )
         .mark(text(text=field("Body Mass (g)").count())),
         {},
@@ -148,7 +148,7 @@ def story_airport_hexbin():
         )
         .flow(
             partition(
-                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1))
+                by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=1))
             )
         )
         .mark(region(fill=field("longitude").count(), stroke="white")),
@@ -166,7 +166,7 @@ def story_car_hexbin():
         .flow(
             partition(
                 by=struct(x="Miles_per_Gallon", y="Weight_in_lbs").bin(
-                    Bin.hex(radius={"x": 1.5, "y": 250})
+                    Binning.hex(radius={"x": 1.5, "y": 250})
                 )
             )
         )
@@ -188,7 +188,7 @@ def story_airports_by_nearest_hub():
                 .flow(
                     partition(
                         by=struct(x="longitude", y="latitude").bin(
-                            Bin.voronoi(seeds=hubs)
+                            Binning.voronoi(seeds=hubs)
                         )
                     )
                 )
@@ -220,7 +220,7 @@ def story_penguin_beak_voronoi():
         layer(
             [
                 chart(BEAKED)
-                .flow(partition(by=key.bin(Bin.voronoi(seeds=BEAKED))))
+                .flow(partition(by=key.bin(Binning.voronoi(seeds=BEAKED))))
                 .mark(region(fill="#f4f1ea", stroke="#b9b2a3", stroke_width=0.5)),
                 chart(BEAKED)
                 .flow(scatter(x="Beak Length (mm)", y="Beak Depth (mm)"))
@@ -242,7 +242,7 @@ def story_airport_hex_counts():
         chart(airports, color=Color.gradient("blues"), w=600, h=360)
         .flow(
             partition(
-                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
+                by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=3))
             )
         )
         .mark(
@@ -262,19 +262,19 @@ def story_airport_hex_counts():
 
 
 # The same counts written by the region's own label, inside it
-# (Place.interior()), so its color contrasts with the region's fill.
+# (Placement.interior()), so its color contrasts with the region's fill.
 def story_airport_hex_counts_labeled():
     airports = _contiguous_airports()
     return (
         chart(airports, color=Color.gradient("blues"), w=600, h=360)
         .flow(
             partition(
-                by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=3))
+                by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=3))
             )
         )
         .mark(
             region(fill=field("iata").count(), stroke="white").label(
-                field("iata").count(), position=Place.interior()
+                field("iata").count(), placement=Placement.interior()
             )
         ),
         {"axes": True},

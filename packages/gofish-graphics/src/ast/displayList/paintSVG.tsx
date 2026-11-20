@@ -210,11 +210,9 @@ function paintSVG(
       const children = item.children.map((c) =>
         paintSVG(c, filterId, interactive)
       );
-      const f = item.filter;
-      // `luminanceToAlpha` has no CSS function: it is an SVG `<filter>` def
-      // the render writes once ({@link paintDocument}).
-      const filter =
-        f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
+      // `luminanceToAlpha` refers to the SVG `<filter>` def the render
+      // writes once ({@link paintDocument}).
+      const filter = DisplayList.filterAttribute(item.filter, filterId);
       return (
         <g transform={transform} filter={filter}>
           {children}

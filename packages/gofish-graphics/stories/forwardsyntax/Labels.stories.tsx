@@ -66,7 +66,7 @@ export const Center: StoryObj<Args> = {
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
-          position: "center",
+          placement: "center",
           fontSize: 10,
         })
       )
@@ -85,7 +85,7 @@ export const Above: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake",  dir: "x" }))
-      .mark(rect({ h: "count" }).label(field("count").sum(), { position: "outset" }))
+      .mark(rect({ h: "count" }).label(field("count").sum(), { placement: "outset" }))
       .render(container);
     return container;
   },
@@ -106,7 +106,7 @@ export const Below: StoryObj<Args> = {
       )
       .mark(
         rect({ w: "count", fill: "species" }).label("count", {
-          position: "outset-bottom",
+          placement: "outset-bottom",
           fontSize: 9,
         })
       )
@@ -130,7 +130,7 @@ export const Left: StoryObj<Args> = {
       )
       .mark(
         rect({ w: "count", fill: "species" }).label("count", {
-          position: "outset-left",
+          placement: "outset-left",
           fontSize: 9,
           offset: 13,
         })
@@ -150,7 +150,7 @@ export const Right: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { w: args.w, h: args.h })
       .flow(spread({ by: "lake",  dir: "y" }))
-      .mark(rect({ w: "count" }).label(field("count").sum(), { position: "outset-right", offset: 15 }))
+      .mark(rect({ w: "count" }).label(field("count").sum(), { placement: "outset-right", offset: 15 }))
       .render(container);
     return container;
   },
@@ -171,7 +171,7 @@ export const AboveStart: StoryObj<Args> = {
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
-          position: "outset-top-start",
+          placement: "outset-top-start",
           fontSize: 9,
         })
       )
@@ -195,7 +195,7 @@ export const AboveEnd: StoryObj<Args> = {
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
-          position: "outset-top-end",
+          placement: "outset-top-end",
           fontSize: 9,
         })
       )
@@ -248,7 +248,7 @@ export const AllPositions: StoryObj = {
           .flow(spread({ by: "lake", dir: "x" }))
           .mark(
             rect({ h: "count" }).label(field("count").sum(), {
-              position,
+              placement: position,
               fontSize: 9,
             })
           ),
@@ -292,7 +292,7 @@ export const LabelOnSpread: StoryObj<Args> = {
     chart(seafood, { axes: false, w: args.w, h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 50 }).label("lake", {
-          position: "outset-top-start",
+          placement: "outset-top-start",
           fontSize: 13,
           rotate: 60,
         })
@@ -324,7 +324,7 @@ export const LabelOnStackOperator: StoryObj<Args> = {
     chart(titanicPassengers, { axes: false, h: args.h })
       .flow(
         stack({ by: "pclass", dir: "y" }).label("pclass", {
-          position: "center",
+          placement: "center",
           fontSize: 14,
           color: "white",
         })
@@ -350,7 +350,7 @@ export const LabelOnStackAggregate: StoryObj<Args> = {
     chart(titanicPassengers, { axes: false, h: args.h })
       .flow(
         stack({ by: "pclass", dir: "y" }).label(field("survived").count(), {
-          position: "center",
+          placement: "center",
           fontSize: 14,
           color: "white",
         })
@@ -388,7 +388,7 @@ export const HeatmapWithLabels: StoryObj<Args> = {
     chart(heatData, { color: Color.gradient(["#e0f3ff", "#08519c"]), w: args.w, h: args.h })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))
       .mark(
-        rect({ fill: "value" }).label("value", { position: "center", fontSize: 11 })
+        rect({ fill: "value" }).label("value", { placement: "center", fontSize: 11 })
       )
       .render(container);
     return container;
@@ -411,7 +411,7 @@ export const Rotated: StoryObj = {
             .flow(spread({ by: "lake", dir: "x" }))
             .mark(
               rect({ h: "count" }).label(field("count").sum(), {
-                position: "outset-top",
+                placement: "outset-top",
                 rotate,
               })
             )
@@ -468,7 +468,7 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
       )
       .mark(
         rect({ fill: "sex" }).label("people", {
-          position: "center",
+          placement: "center",
           color: "white",
         })
       )
@@ -494,11 +494,11 @@ export const TwoLabelsPerBar: StoryObj<Args> = {
       .mark(
         rect({ h: field("count").sum() })
           .label(field("count").sum(), {
-            position: "center",
+            placement: "center",
             color: "white",
             fontWeight: "bold",
           })
-          .label("lake", { position: "outset-top", fontSize: 9 })
+          .label("lake", { placement: "outset-top", fontSize: 9 })
       )
       .render(container);
     return container;
@@ -544,7 +544,7 @@ export const PositionShowcase: StoryObj = {
     const mark = positions.reduce(
       (m, position) =>
         m.label(position, {
-          position,
+          placement: position,
           fontSize: 11,
           fontFamily: "monospace",
           color: position.startsWith("outset") ? "#92400e" : "#1d4ed8",

@@ -24,7 +24,7 @@ import {
 import { createMark } from "../withGoFish";
 import { MARK_CHANNELS } from "../markChannels.generated";
 import { boxOfDims, ellipseOutline, outlinePaint } from "../geometry";
-import { around } from "../../families/place";
+import { around } from "../../families/placement";
 import { literalBoxExtents } from "../extent";
 import { type LengthValue } from "../length";
 import type { DisplayList } from "gofish-ir";
@@ -63,7 +63,7 @@ export const Ellipse = ({
     {
       type: "ellipse",
       // A dot is labeled around itself.
-      labelPosition: around(),
+      labelPlacement: around(),
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
       args: { dims },

@@ -48,7 +48,7 @@ of the plane (see [Cells of the plane](#cells-of-the-plane)).
 ```python
 partition(by=field("date").bin([Calendar.year, Calendar.month]), dir="x")  # true month widths
 partition(by=field("date").bin(Calendar.year).bin(Calendar.month), dir="x")  # the same cells
-partition(by=field("rating").bin(Bin.step(0.5)), dir="x")  # a histogram
+partition(by=field("rating").bin(Binning.step(0.5)), dir="x")  # a histogram
 ```
 
 A level binned alone that is a part of a larger level is a part of a cycle,
@@ -91,14 +91,14 @@ With `by` a dict keyed by axis, `partition` divides both axes. Each key must
 have a region, and `dir` and `alignment` are not allowed.
 
 ```python
-partition(by={"x": field("a").bin(Bin.step(1)), "y": field("b").bin(Bin.step(0.5))})
+partition(by={"x": field("a").bin(Binning.step(1)), "y": field("b").bin(Binning.step(0.5))})
 ```
 
 It is the same as the 1D partition on x, then the 1D partition on y:
 
 ```python
-partition(by=field("a").bin(Bin.step(1)), dir="x"),
-partition(by=field("b").bin(Bin.step(0.5)), dir="y")
+partition(by=field("a").bin(Binning.step(1)), dir="x"),
+partition(by=field("b").bin(Binning.step(0.5)), dir="y")
 ```
 
 A partition inside a cell of another partition gives each of its groups that
@@ -113,13 +113,13 @@ whose `fill` is a count.
 :::
 
 ```python
-from gofish import Bin, Color, chart, field, partition, region
+from gofish import Binning, Color, chart, field, partition, region
 
 chart(movies, color=Color.gradient("blues"), axes=True).flow(
     partition(
         by={
-            "x": field("IMDB Rating").bin(Bin.step(0.5)),
-            "y": field("Rotten Tomatoes Rating").bin(Bin.step(5)),
+            "x": field("IMDB Rating").bin(Binning.step(0.5)),
+            "y": field("Rotten Tomatoes Rating").bin(Binning.step(5)),
         }
     )
 ).mark(region(fill=field("IMDB Rating").count())).render(w=480, h=320)
@@ -131,14 +131,14 @@ A mark with a size of its own is centered in its rectangle.
 :::
 
 ```python
-from gofish import Bin, chart, field, partition, text
+from gofish import Binning, chart, field, partition, text
 
 # measured: the penguins that have both a flipper length and a body mass
 chart(measured, axes=True).flow(
     partition(
         by={
-            "x": field("Flipper Length (mm)").bin(Bin.step(10)),
-            "y": field("Body Mass (g)").bin(Bin.step(500)),
+            "x": field("Flipper Length (mm)").bin(Binning.step(10)),
+            "y": field("Body Mass (g)").bin(Binning.step(500)),
         }
     )
 ).mark(text(text=field("Body Mass (g)").count())).render(w=420, h=320)
@@ -150,12 +150,12 @@ draws that 0.
 ## Cells of the plane
 
 With `by` a binned struct, `partition` divides both axes at once into the
-cells of a [`Bin`](/python/api/bin) call: `Bin.hex(radius=...)` for a grid
-of hexagons, or `Bin.voronoi(seeds=...)` for one cell per seed. `dir` and
+cells of a [`Binning`](/python/api/binning) call: `Binning.hex(radius=...)` for a grid
+of hexagons, or `Binning.voronoi(seeds=...)` for one cell per seed. `dir` and
 `alignment` are not allowed.
 
 ```python
-partition(by=struct(x="lon", y="lat").bin(Bin.hex(radius=0.5)))
+partition(by=struct(x="lon", y="lat").bin(Binning.hex(radius=0.5)))
 ```
 
 Each group gets its cell's outline. A [`region`](/python/api/marks/region)
@@ -167,35 +167,35 @@ hexagon is a group with no rows, so it is drawn with a count of 0.
 :::
 
 ```python
-from gofish import Bin, Color, chart, field, partition, region, struct
+from gofish import Binning, Color, chart, field, partition, region, struct
 
 # airports: the airports of the contiguous United States
 chart(airports, color=Color.gradient("blues"), axes=True).flow(
-    partition(by=struct(x="longitude", y="latitude").bin(Bin.hex(radius=1)))
+    partition(by=struct(x="longitude", y="latitude").bin(Binning.hex(radius=1)))
 ).mark(region(fill=field("longitude").count(), stroke="white")).render(w=600, h=360)
 ```
 
 A mark with a size of its own is centered in its cell's box, which for a
 hexagon is its center. The example writes each count with
 [`.label()`](/python/api/core/mark#labeling-a-mark) at
-[`Place.interior()`](/python/api/place), inside the hexagon, so its color
+[`Placement.interior()`](/python/api/placement), inside the hexagon, so its color
 contrasts with the hexagon's fill.
 
 ::: gofish example:airport-counts-in-hexagons hidden
 :::
 
-With `Bin.voronoi`, each row goes to its nearest seed.
+With `Binning.voronoi`, each row goes to its nearest seed.
 
 ::: gofish example:us-airports-by-nearest-hub hidden
 :::
 
 ```python
-from gofish import Bin, Color, chart, circle, field, layer, partition, region, scatter, struct
+from gofish import Binning, Color, chart, circle, field, layer, partition, region, scatter, struct
 
 # hubs: twenty hub airports, from the same table
 layer([
     chart(airports, color=Color.gradient("reds")).flow(
-        partition(by=struct(x="longitude", y="latitude").bin(Bin.voronoi(seeds=hubs)))
+        partition(by=struct(x="longitude", y="latitude").bin(Binning.voronoi(seeds=hubs)))
     ).mark(region(fill=field("iata").count(), stroke="white")),
     chart(hubs).flow(scatter(x="longitude", y="latitude")).mark(circle(r=3, fill="black")),
 ]).render(w=600, h=360, axes=True)

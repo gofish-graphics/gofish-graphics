@@ -498,11 +498,11 @@ function binKey(
     if (bin === undefined)
       throw new Error(
         `struct({ x: "${x}", y: "${y}" }) as a key needs .bin(...): bin it ` +
-          `with a call in the Bin family, e.g. .bin(Bin.hex({ radius: 1 })), ` +
+          `with a call in the Binning family, e.g. .bin(Binning.hex({ radius: 1 })), ` +
           `so each group is a cell.`
       );
     // A struct from the wire (Python) did not pass `.bin`'s check.
-    Frontend.checkStructBin(bin, where);
+    Frontend.checkStructBinning(bin, where);
     const plane = domainPlane(by.fields, data, bin, where);
     return {
       cells: plane.cells,

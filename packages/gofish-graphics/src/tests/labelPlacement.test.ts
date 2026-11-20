@@ -1,5 +1,5 @@
 /**
- * Label placement with the `Place` family: the strategies' candidates
+ * Label placement with the `Placement` family: the strategies' candidates
  * (`labels/strategies.ts`), the chooser (`labels/placeStep.ts`) through real
  * charts, the defaults by geometry, the auto color read from where a label
  * landed, and the errors. Run via `tsx` (`pnpm test:label-placement`).
@@ -8,7 +8,7 @@
  * 1 em line), which is enough to check geometry.
  */
 import { GoFishNode } from "../ast/_node";
-import * as Place from "../families/place";
+import * as Placement from "../families/placement";
 import {
   aroundCandidates as aroundSpots,
   alongCandidates as alongSpots,
@@ -133,20 +133,20 @@ const circleShape = (cx: number, cy: number, r: number): TargetShape => {
   };
 };
 
-console.log("# Place family");
+console.log("# Placement family");
 {
   ok(
     "a bare kind is its value",
-    JSON.stringify(Place.end) === '{"kind":"end"}'
+    JSON.stringify(Placement.end) === '{"kind":"end"}'
   );
   ok(
     "calling a kind sets options",
-    JSON.stringify(Place.along({ at: 0.6, orient: "sloped" })) ===
+    JSON.stringify(Placement.along({ at: 0.6, orient: "sloped" })) ===
       '{"kind":"along","at":0.6,"orient":"sloped"}'
   );
   ok(
     "an option left undefined is not set",
-    !("side" in Place.around({ side: undefined }))
+    !("side" in Placement.around({ side: undefined }))
   );
 }
 
@@ -157,7 +157,7 @@ console.log("# around");
     circleShape(0, 0, 10),
     size,
     0,
-    Place.around(),
+    Placement.around(),
     3
   );
   ok("eight candidates by default", cands.length === 8);
@@ -181,7 +181,7 @@ console.log("# around");
     },
     size,
     0,
-    Place.around({ directions: ["top"], side: ["outset", "inset"] }),
+    Placement.around({ directions: ["top"], side: ["outset", "inset"] }),
     3
   );
   ok(
@@ -240,7 +240,7 @@ console.log("# along");
     type: "connect",
   };
   const size = { hx: 15, hy: 5 };
-  const on = alongCandidates(flat, size, 0, Place.along({ at: 0.25 }), 3);
+  const on = alongCandidates(flat, size, 0, Placement.along({ at: 0.25 }), 3);
   ok(
     "on: the first spot is at 25% of the length",
     near(on[0].cx, 50) && near(on[0].cy, 50)
@@ -255,7 +255,7 @@ console.log("# along");
     flat,
     size,
     0,
-    Place.along({ side: "above" }),
+    Placement.along({ side: "above" }),
     3
   );
   ok(
@@ -263,17 +263,17 @@ console.log("# along");
     near(above[0].cy, 50 - 3 - 5),
     JSON.stringify(above[0])
   );
-  const left = alongCandidates(flat, size, 0, Place.along({ side: "left" }), 3);
+  const left = alongCandidates(flat, size, 0, Placement.along({ side: "left" }), 3);
   ok("left of rightward travel is up the screen", left[0].cy < 50);
   const right = alongCandidates(
     flat,
     size,
     0,
-    Place.along({ side: "right" }),
+    Placement.along({ side: "right" }),
     3
   );
   ok("right of rightward travel is down the screen", right[0].cy > 50);
-  const start = alongCandidates(flat, size, 0, Place.along({ at: "start" }), 3);
+  const start = alongCandidates(flat, size, 0, Placement.along({ at: "start" }), 3);
   ok(
     "at start: the label's start is flush with the path's",
     near(start[0].cx, 15)
@@ -293,14 +293,14 @@ console.log("# along");
   };
   ok(
     "above: no spot on a vertical path",
-    alongCandidates(vertical, size, 0, Place.along({ side: "above" }), 3)
+    alongCandidates(vertical, size, 0, Placement.along({ side: "above" }), 3)
       .length === 0
   );
   const both = alongCandidates(
     flat,
     size,
     0,
-    Place.along({ side: ["above", "below"] }),
+    Placement.along({ side: ["above", "below"] }),
     3
   );
   ok(
@@ -323,7 +323,7 @@ console.log("# along");
     },
     size,
     0,
-    Place.along({ orient: "sloped" }),
+    Placement.along({ orient: "sloped" }),
     3
   );
   ok("sloped: turned to the path", near(sloped[0].angle, 45));
@@ -338,7 +338,7 @@ console.log("# along");
       },
       size,
       0,
-      Place.along({ orient: "sloped" }),
+      Placement.along({ orient: "sloped" }),
       3
     ).length === 0
   );
@@ -350,7 +350,7 @@ console.log("# along");
     box,
     size,
     0,
-    Place.along({ at: "x-max", side: "outset" }),
+    Placement.along({ at: "x-max", side: "outset" }),
     3
   );
   ok(
@@ -367,12 +367,12 @@ console.log("# along");
       },
       size,
       0,
-      Place.along({ at: "x-max", side: "outset" }),
+      Placement.along({ at: "x-max", side: "outset" }),
       3
     ).length === 0
   );
   const msg = await errorOf(() =>
-    alongCandidates(flat, size, 0, Place.along({ side: "inset" }), 3)
+    alongCandidates(flat, size, 0, Placement.along({ side: "inset" }), 3)
   );
   ok(
     "inset on an open path is an error naming it",
@@ -380,7 +380,7 @@ console.log("# along");
     msg
   );
   const partMsg = await errorOf(() =>
-    alongCandidates(flat, size, 0, Place.along({ at: "y-max" }), 3)
+    alongCandidates(flat, size, 0, Placement.along({ at: "y-max" }), 3)
   );
   ok(
     "an unknown part is an error",
@@ -428,7 +428,7 @@ console.log("# start, end, dodge");
   );
   ok(
     "end on a closed outline is an error",
-    closedMsg?.includes("Place.end needs an open path") ?? false,
+    closedMsg?.includes("Placement.end needs an open path") ?? false,
     closedMsg
   );
 }
@@ -484,7 +484,7 @@ console.log("# interior");
   ok(
     "interior on an open path is an error naming it",
     msg ===
-      "[gofish] Place.interior needs a filled region; connect has an open one.",
+      "[gofish] Placement.interior needs a filled region; connect has an open one.",
     msg
   );
 }
@@ -564,7 +564,7 @@ console.log("# one call, one placement");
       spread({ by: "x", dir: "x", spacing: 30 }),
       stack({ by: "c", dir: "y" })
     )
-    .mark(rect({ h: "v", w: 10 }).label("c", { position: Place.around() }))
+    .mark(rect({ h: "v", w: 10 }).label("c", { placement: Placement.around() }))
     .resolve()) as GoFishNode;
   const doc = await node.toDisplayList({ w: 200, h: 200 });
   const labels = [...walk(node)].filter((n) => n.type === "label");
@@ -649,7 +649,7 @@ console.log("# defaults by geometry");
   const xs = (path.d as string).match(/-?\d+(\.\d+)?/g)!.map(Number);
   const pathRight = Math.max(...xs.filter((_, i) => i % 2 === 0));
   ok(
-    "a line is labeled past its end (Place.end)",
+    "a line is labeled past its end (Placement.end)",
     t !== undefined && t.x >= pathRight,
     JSON.stringify({ t, pathRight })
   );
@@ -662,7 +662,7 @@ console.log("# defaults by geometry");
   const [dt] = textItems(ddoc);
   const e = items(ddoc).find((i) => i.kind === "ellipse");
   ok(
-    "a dot is labeled at its upper right (Place.around)",
+    "a dot is labeled at its upper right (Placement.around)",
     dt.x > e.cx && dt.y < e.cy,
     JSON.stringify({ dt, e })
   );
@@ -705,7 +705,7 @@ console.log("# the auto color reads where the label landed");
       .mark(
         polygon({ points: "ring", fill }).label(
           "n",
-          position ? { position } : undefined
+          position ? { placement: position } : undefined
         )
       )
       .resolve()) as GoFishNode;
@@ -719,7 +719,7 @@ console.log("# the auto color reads where the label landed");
   );
   const inside = await render();
   ok(
-    "Place.interior inside it takes the inside color",
+    "Placement.interior inside it takes the inside color",
     inside.style.fill === autoLabelColorForStyle({ fill }, true),
     inside.style.fill
   );
@@ -848,13 +848,13 @@ console.log("# the label reads the color directly behind its glyphs");
       .resolve()) as GoFishNode;
     return textItems(await node.toDisplayList({ w: 200, h: 200 }))[0];
   };
-  const boxed = await render({ position: "center", background: {} });
+  const boxed = await render({ placement: "center", background: {} });
   ok(
     "a centered label with a default background box is not white on white",
     boxed.style.fill !== "white" && boxed.style.fill === darkTint,
     boxed.style.fill
   );
-  const haloed = await render({ position: "center", halo: {} });
+  const haloed = await render({ placement: "center", halo: {} });
   ok(
     "a centered label with a default halo is not white on white",
     haloed.style.fill !== "white" && haloed.style.fill === darkTint,
@@ -884,7 +884,7 @@ console.log("# a fill that puts down no paint is no ink");
         fill: "transparent",
         stroke: "#59a14f",
         strokeWidth: 2,
-      }).label("v", { position: "center" })
+      }).label("v", { placement: "center" })
     )
     .resolve()) as GoFishNode;
   const [t] = textItems(await node.toDisplayList({ w: 200, h: 200 }));
@@ -902,7 +902,7 @@ console.log("# the label's mark paints before it, whatever its z-order");
   // its color from, whatever the z-order of the mark's parent.
   for (const z of [1, -1]) {
     const mark = Rect({ x: 0, y: 0, w: 40, h: 40, fill: "#1f3a93" });
-    mark.label(() => "A", { position: "center" });
+    mark.label(() => "A", { placement: "center" });
     const parent = Layer([mark]).zOrder(z);
     const sibling = Rect({ x: 100, y: 0, w: 40, h: 40, fill: "#e15759" });
     const doc = await toDisplayList(Layer([parent, sibling]), {
@@ -967,7 +967,7 @@ console.log("# a label read from an outline the mark does not draw");
     new GoFishNode(
       {
         type: "probe",
-        labelPosition: "outline",
+        labelPlacement: "outline",
         resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
         layout: () => ({
           intrinsicDims: [
@@ -1081,7 +1081,7 @@ console.log("# unfilled regions");
   ok(
     "interior on an unfilled polygon is an error naming it",
     msg ===
-      "[gofish] Place.interior needs a filled region; polygon has a closed one with no fill.",
+      "[gofish] Placement.interior needs a filled region; polygon has a closed one with no fill.",
     msg
   );
   const chartMsg = await errorOf(async () => {
@@ -1089,14 +1089,14 @@ console.log("# unfilled regions");
       .flow(group({ by: "n" }))
       .mark(
         polygon({ points: "ring", fill: "none", stroke: "black" }).label("n", {
-          position: Place.interior(),
+          placement: Placement.interior(),
         })
       )
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
   ok(
-    "Place.interior on a polygon with fill none throws through a chart",
+    "Placement.interior on a polygon with fill none throws through a chart",
     chartMsg === msg,
     chartMsg
   );
@@ -1150,25 +1150,25 @@ console.log("# errors");
       { x: 1, y: 1 },
     ])
       .flow(scatter({ x: "x", y: "y" }))
-      .mark(line().label(() => "l", { position: Place.interior() }))
+      .mark(line().label(() => "l", { placement: Placement.interior() }))
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
   ok(
-    "Place.interior on a line names the missing outline",
+    "Placement.interior on a line names the missing outline",
     lineMsg ===
-      "[gofish] Place.interior needs a filled region; connect has an open one.",
+      "[gofish] Placement.interior needs a filled region; connect has an open one.",
     lineMsg
   );
   const polarMsg = await errorOf(async () => {
     const node = (await chart([{ c: "a", v: 3 }], { coord: Coord.polar() })
       .flow(spread({ by: "c", dir: "x" }))
-      .mark(rect({ h: "v" }).label("v", { position: Place.around() }))
+      .mark(rect({ h: "v" }).label("v", { placement: Placement.around() }))
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
   ok(
-    "a Place strategy in polar coordinates is not supported yet",
+    "a Placement strategy in polar coordinates is not supported yet",
     polarMsg?.includes("issues/1201") ?? false,
     polarMsg
   );
@@ -1193,13 +1193,13 @@ console.log("# errors");
   const bad = await errorOf(async () => {
     const node = (await chart([{ c: "a", v: 3 }])
       .flow(spread({ by: "c", dir: "x" }))
-      .mark(rect({ h: "v" }).label("v", { position: { kind: "repel" } as any }))
+      .mark(rect({ h: "v" }).label("v", { placement: { kind: "repel" } as any }))
       .resolve()) as GoFishNode;
     await node.toDisplayList({ w: 100, h: 100 });
   });
   ok(
     "an unknown strategy is an error",
-    bad?.includes("Make one with the Place family") ?? false,
+    bad?.includes("Make one with the Placement family") ?? false,
     bad
   );
 }
@@ -1249,7 +1249,7 @@ async function arrowDoc(childLabels: boolean) {
   const box = (x: number, n: string) =>
     childLabels
       ? rect({ x, y: 40, w: 20, h: 20, fill: "#ccc" }).label(() => n, {
-          position: "center",
+          placement: "center",
         })
       : rect({ x, y: 40, w: 20, h: 20, fill: "#ccc" }).name(n === "A" ? a : b);
   const edge = (children: any[]) =>
@@ -1304,11 +1304,11 @@ console.log("# one call's labels keep a later call's off");
   const node = layer([
     layer([
       rect({ x: 0, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "AAAAAAAA", {
-        position: Place.around({ directions: ["right"] }),
+        placement: Placement.around({ directions: ["right"] }),
       }),
     ]),
     rect({ x: 110, y: 0, w: 10, h: 10, fill: "#ccc" }).label(() => "BBBBBBBB", {
-      position: Place.around({ directions: ["left"] }),
+      placement: Placement.around({ directions: ["left"] }),
     }),
   ]);
   const saved = console.info;
@@ -1363,7 +1363,7 @@ console.log("# end labels dodge only labels they overlap");
   console.info = (m: string) => info.push(m);
   const cnode = (await chart(cross, { axes: false })
     .flow(group({ by: "s" }), scatter({ by: "k", x: "x", y: "y" }))
-    .mark(line({ strokeWidth: 2 }).label("s", { position: Place.end() }))
+    .mark(line({ strokeWidth: 2 }).label("s", { placement: Placement.end() }))
     .resolve()) as GoFishNode;
   const cdoc = await cnode.toDisplayList({ w: 300, h: 100 });
   console.info = saved;
@@ -1379,7 +1379,7 @@ console.log("# end labels dodge only labels they overlap");
   );
   ok(
     "and counted in the note",
-    ca !== undefined || info.some((m) => m.includes("Place.end()")),
+    ca !== undefined || info.some((m) => m.includes("Placement.end()")),
     JSON.stringify(info)
   );
 }
@@ -1405,13 +1405,13 @@ console.log("# a label is a text on its chart, whatever groups its mark");
       .flow(spread({ by: "name", dir: "x" }))
       .mark(
         wrap
-          ? layer([rect({ h: "v" }).label("name", { position })])
-          : rect({ h: "v" }).label("name", { position })
+          ? layer([rect({ h: "v" }).label("name", { placement: position })])
+          : rect({ h: "v" }).label("name", { placement: position })
       )
       .resolve()) as GoFishNode;
   for (const [what, position] of [
     ["a position string", "outset-top"],
-    ["the chooser", Place.around()],
+    ["the chooser", Placement.around()],
   ] as const) {
     const bare = await geometry(await bars(false, position), 200, 120);
     const wrapped = await geometry(await bars(true, position), 200, 120);
@@ -1425,7 +1425,7 @@ console.log("# a label is a text on its chart, whatever groups its mark");
   // With no chart, the label's layer is on the render root.
   const box = () =>
     rect({ x: 10, y: 10, w: 40, h: 20 }).label(() => "box", {
-      position: "outset-top",
+      placement: "outset-top",
     });
   const bare = await geometry(layer([box()]), 100, 80);
   const wrapped = await geometry(layer([layer([box()])]), 100, 80);
@@ -1444,10 +1444,10 @@ console.log("# a chosen label keeps off the labels of a chart inside");
   // it keeps off a label at a position string beside it.
   const doc = await layer([
     chart([{ n: "INNER LABEL" }], { axes: false, w: 120, h: 40 }).mark(
-      rect({ w: 120, h: 40, fill: "#eee" }).label("n", { position: "center" })
+      rect({ w: 120, h: 40, fill: "#eee" }).label("n", { placement: "center" })
     ),
     rect({ x: 59, y: 28, w: 2, h: 2 }).label(() => "OUTER", {
-      position: Place.around(),
+      placement: Placement.around(),
     }),
   ]).toDisplayList({ w: 200, h: 100 });
   const texts = textItems(doc);

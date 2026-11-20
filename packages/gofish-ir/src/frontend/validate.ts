@@ -37,7 +37,7 @@ import {
 } from "./nonFinite.js";
 import {
   AUTHORED_REFS,
-  BIN_KINDS,
+  BINNING_KINDS,
   CONSTRAINTS,
   DESCRIPTOR_TABLES,
   optionsRequired,
@@ -502,7 +502,7 @@ function walkOrThrow(
  * Check a strategy against its family in `STRATEGIES`: a known `kind`, and
  * only that kind's params, each of its declared type. Throws the first
  * problem, naming `where` the strategy was written
- * (`"treemap({ tile })"`). This is the one check a strategy gets on the JS
+ * (`"tile({ tiling })"`). This is the one check a strategy gets on the JS
  * side, wherever it came from (a family member, a hand-written object, or
  * Python IR; a kind used bare is read as its value where the option
  * entered); the validator runs the same walk over a whole document.
@@ -535,35 +535,35 @@ export function checkOption(
 }
 
 /**
- * Check the `Bin` strategy of `struct({ x, y }).bin(b)`, which takes the
- * kinds that divide a plane (`Bin.hex`, `Bin.voronoi`). A kind that cuts one
- * field's line (`Bin.step`) throws, naming `field(x).bin`; anything else is
+ * Check the `Binning` strategy of `struct({ x, y }).bin(b)`, which takes the
+ * kinds that divide a plane (`Binning.hex`, `Binning.voronoi`). A kind that cuts one
+ * field's line (`Binning.step`) throws, naming `field(x).bin`; anything else is
  * checked as {@link checkStrategy} checks it.
  */
-export function checkStructBin(v: unknown, where: string): void {
+export function checkStructBinning(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
-  if ((BIN_KINDS.field as readonly unknown[]).includes(kind))
+  if ((BINNING_KINDS.field as readonly unknown[]).includes(kind))
     throw new Error(
-      `[gofish] ${where}: Bin.${kind} bins one field. Bin each field with ` +
-        `field(x).bin(Bin.${kind}(...)); struct({ x, y }).bin takes ` +
-        `Bin.hex({ radius }) or Bin.voronoi({ seeds }).`
+      `[gofish] ${where}: Binning.${kind} bins one field. Bin each field with ` +
+        `field(x).bin(Binning.${kind}(...)); struct({ x, y }).bin takes ` +
+        `Binning.hex({ radius }) or Binning.voronoi({ seeds }).`
     );
-  checkStrategy("Bin", v, where);
+  checkStrategy("Binning", v, where);
 }
 
 /**
- * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Bin` kind
- * that cuts one field's line (`OPTION_TYPES.Partition`). A `Bin` kind that
- * divides a plane (`Bin.hex`) throws, naming `struct({ x, y }).bin`.
+ * Check the partition of `field(x).bin(p)`: a Calendar kind or a `Binning` kind
+ * that cuts one field's line (`OPTION_TYPES.Partition`). A `Binning` kind that
+ * divides a plane (`Binning.hex`) throws, naming `struct({ x, y }).bin`.
  */
 export function checkPartition(v: unknown, where: string): void {
   const kind = isObject(v) ? v.kind : undefined;
-  if ((BIN_KINDS.struct as readonly unknown[]).includes(kind))
+  if ((BINNING_KINDS.struct as readonly unknown[]).includes(kind))
     throw new Error(
-      `[gofish] ${where}: Bin.${kind} bins two fields together into cells ` +
-        `of the plane. Bin them with struct({ x, y }).bin(Bin.${kind}(...)); ` +
-        `field(x).bin takes Bin.step(size), Bin.thresholds(countOrEdges), ` +
-        `Bin.quantiles(countOrProbabilities), ` +
+      `[gofish] ${where}: Binning.${kind} bins two fields together into cells ` +
+        `of the plane. Bin them with struct({ x, y }).bin(Binning.${kind}(...)); ` +
+        `field(x).bin takes Binning.step(size), Binning.thresholds(countOrEdges), ` +
+        `Binning.quantiles(countOrProbabilities), ` +
         `or a Calendar value.`
     );
   walkOrThrow(
@@ -571,8 +571,8 @@ export function checkPartition(v: unknown, where: string): void {
     v,
     where,
     `Make one with a Calendar value (Calendar.month, ` +
-      `Calendar.hour({ every: 6 }), ...), Bin.step(size), ` +
-      `Bin.thresholds(countOrEdges), or Bin.quantiles(countOrProbabilities).`
+      `Calendar.hour({ every: 6 }), ...), Binning.step(size), ` +
+      `Binning.thresholds(countOrEdges), or Binning.quantiles(countOrProbabilities).`
   );
 }
 
@@ -919,8 +919,8 @@ function walkFieldAccessor(
 /**
  * A key built from two fields (`struct({ x, y })`), with the cells it is
  * binned into: `{ type: "struct", fields: { x, y }, ops?: [{ op: "bin",
- * partition }] }`, the partition a `Bin` kind that bins two fields
- * (`OPTION_TYPES.StructBin`).
+ * partition }] }`, the partition a `Binning` kind that bins two fields
+ * (`OPTION_TYPES.StructBinning`).
  */
 function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
   const fail = (message: string, at = path) =>
@@ -960,7 +960,7 @@ function walkStructAccessor(value: unknown, path: string, ctx: Context): void {
         }
         rejectUnknown(op, ["op", "partition"], at, ctx);
         walkFieldType(
-          OPTION_TYPES.StructBin.type,
+          OPTION_TYPES.StructBinning.type,
           op.partition,
           `${at}.partition`,
           ctx
@@ -1045,7 +1045,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
   }
 }
 
-/** A `bin` op's partition: a Calendar value or a `Bin` kind that bins one
+/** A `bin` op's partition: a Calendar value or a `Binning` kind that bins one
  *  field (`OPTION_TYPES.Partition`, one tagged union), or a product of
  *  Calendar values (a list of two or more). Which levels a product may
  *  combine is the renderer's check (`checkBinStep` in gofish-graphics'

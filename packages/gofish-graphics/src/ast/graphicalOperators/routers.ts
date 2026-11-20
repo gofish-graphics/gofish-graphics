@@ -28,6 +28,7 @@ import type { Curve } from "../../families/curve";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { getBoxToBoxArrow } from "perfect-arrows";
 import { Frontend } from "gofish-ir";
+import { kindValue } from "../strategyKind";
 import {
   SMOOTH_CURVES,
   catmullRomPath,
@@ -65,14 +66,16 @@ export type Router = (
  * `Router`.
  */
 
-/** The name of a curve value, or undefined when it is omitted. Anything that
- *  is not a Curve-family value (an unknown kind, an undeclared or
- *  out-of-bounds param) throws, naming `where` the option was written. */
+/** The name of a curve value, or undefined when it is omitted. A bare kind
+ *  (`Curve.monotone`) is read as its call. Anything that is not a
+ *  Curve-family value (an unknown kind, an undeclared or out-of-bounds param)
+ *  throws, naming `where` the option was written. */
 export function curveName(
-  curve: Curve | undefined,
+  given: Curve | undefined,
   where: string
 ): string | undefined {
-  if (curve === undefined) return undefined;
+  if (given === undefined) return undefined;
+  const curve = kindValue(given);
   Frontend.checkStrategy("Curve", curve, where);
   return curve.kind;
 }

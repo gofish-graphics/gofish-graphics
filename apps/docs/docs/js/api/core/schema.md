@@ -203,7 +203,7 @@ A column record takes the keys `name` and `unit`. Any other key is an error.
 **`CanSum`.**
 
 - A `size` channel (`w`, `h`, ...), a [`stack`](/js/api/operators/stack), a
-  [`treemap`](/js/api/operators/treemap) `size`, `field(x).sum()` and
+  [`tile`](/js/api/operators/tile) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
   unit needs `CanSum`: without it, it is an error that names the column and
   the unit, and says to declare the unit with `Unit(name, { traits: [Trait.summable()] })`, or,

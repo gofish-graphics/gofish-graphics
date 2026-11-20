@@ -47,7 +47,7 @@ const {
   literal,
   Serialize,
   Overlap,
-  Place,
+  Placement,
   group,
   table,
   blank,
@@ -641,8 +641,8 @@ async function main() {
             )
             .mark(circle({ r: 3 })),
       ],
-      // (A JS treemap has no IR form yet, so Tile is covered by
-      // families.test.ts, which compares each Tile kind's JSON.)
+      // (A JS `tile` has no IR form yet, so Tiling is covered by
+      // families.test.ts, which compares each Tiling kind's JSON.)
       [
         "Calendar.month in field(x).bin(...) and an axis's levels",
         (s) =>
@@ -892,7 +892,7 @@ async function main() {
   // Chained .label("accessor", {options})
   {
     const c = chart([{ a: 1, count: 5 }]).mark(
-      rect({ h: "count" }).label("count", { position: "outset", fontSize: 10 })
+      rect({ h: "count" }).label("count", { placement: "outset", fontSize: 10 })
     );
     const doc = await c.toJSON();
     validateDoc(doc, "chart with chained .label()");
@@ -902,7 +902,7 @@ async function main() {
     check(".label() accessor preserved", mark.label?.[0]?.accessor === "count");
     check(
       ".label() options preserved",
-      mark.label?.[0]?.position === "outset" &&
+      mark.label?.[0]?.placement === "outset" &&
         mark.label?.[0]?.fontSize === 10
     );
   }
@@ -913,11 +913,11 @@ async function main() {
     const c = chart([{ a: 1, count: 5, lake: "A" }]).mark(
       rect({ h: "count" })
         .label("count", {
-          position: "center",
+          placement: "center",
           color: "white",
           fontWeight: "bold",
         })
-        .label("lake", { position: "outset-top", fontSize: 9 })
+        .label("lake", { placement: "outset-top", fontSize: 9 })
     );
     const doc = await c.toJSON();
     validateDoc(doc, "chart with two chained .label() calls");
@@ -926,14 +926,14 @@ async function main() {
     check(
       "first .label() entry preserved",
       mark.label?.[0]?.accessor === "count" &&
-        mark.label?.[0]?.position === "center" &&
+        mark.label?.[0]?.placement === "center" &&
         mark.label?.[0]?.color === "white" &&
         mark.label?.[0]?.fontWeight === "bold"
     );
     check(
       "second .label() entry preserved",
       mark.label?.[1]?.accessor === "lake" &&
-        mark.label?.[1]?.position === "outset-top" &&
+        mark.label?.[1]?.placement === "outset-top" &&
         mark.label?.[1]?.fontSize === 9
     );
 
@@ -979,9 +979,9 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Label placement: a Place strategy, avoiding, halo and background.
+  // Label placement: a Placement strategy, avoiding, halo and background.
   // -------------------------------------------------------------------------
-  console.log("\n# Place, avoiding, halo and background round-trip");
+  console.log("\n# Placement, avoiding, halo and background round-trip");
   {
     const paint = async (b: any) =>
       JSON.stringify(await b.toDisplayList({ w: 300, h: 200 }), (k, v) =>
@@ -1003,15 +1003,15 @@ async function main() {
     const lines = (position: unknown) =>
       chart(series)
         .flow(group({ by: "s" }), scatter({ by: "x", x: "x", y: "y" }))
-        .mark(line({ stroke: "s" }).label("s", { position }));
+        .mark(line({ stroke: "s" }).label("s", { placement: position }));
     const cases: [string, any, unknown][] = [
       [
-        "Place.around({...})",
+        "Placement.around({...})",
         chart(dots)
           .flow(scatter({ by: "c", x: "x", y: "y" }))
           .mark(
             circle({ r: 4 }).label("c", {
-              position: Place.around({
+              placement: Placement.around({
                 directions: ["top-right", "bottom-left"],
                 side: ["outset", "inset"],
                 offset: 2,
@@ -1026,20 +1026,20 @@ async function main() {
         },
       ],
       [
-        "Place.along({...})",
-        lines(Place.along({ at: 0.6, side: "above", orient: "sloped" })),
+        "Placement.along({...})",
+        lines(Placement.along({ at: 0.6, side: "above", orient: "sloped" })),
         { kind: "along", at: 0.6, side: "above", orient: "sloped" },
       ],
-      ["Place.start({ offset })", lines(Place.start({ offset: 6 })), { kind: "start", offset: 6 }],
-      ["Place.end used bare", lines(Place.end), { kind: "end" }],
+      ["Placement.start({ offset })", lines(Placement.start({ offset: 6 })), { kind: "start", offset: 6 }],
+      ["Placement.end used bare", lines(Placement.end), { kind: "end" }],
       [
-        "Place.interior()",
+        "Placement.interior()",
         chart(series)
           .flow(
             spread({ by: "x", dir: "x", spacing: 40 }),
             stack({ by: "s", dir: "y" })
           )
-          .mark(ribbon({ h: "y", fill: "s" }).label("s", { position: Place.interior() })),
+          .mark(ribbon({ h: "y", fill: "s" }).label("s", { placement: Placement.interior() })),
         { kind: "interior" },
       ],
     ];
@@ -1047,7 +1047,7 @@ async function main() {
       const doc = await built.toJSON();
       validateDoc(doc, `a label at ${name}`);
       const position = JSON.stringify(doc).match(
-        /"position":(\{[^}]*\})/
+        /"placement":(\{[^}]*\})/
       )?.[1];
       check(
         `${name} is written as its plain object`,
@@ -1151,7 +1151,7 @@ async function main() {
     const built = chart(groupData)
       .flow(
         stack({ by: "lake", dir: "x" }).label("lake", {
-          position: "outset-top",
+          placement: "outset-top",
         })
       )
       .mark(rect({ h: "count", fill: "species" }));
@@ -1162,7 +1162,7 @@ async function main() {
     check("operator .label() accessor preserved", op.label?.[0]?.accessor === "lake");
     check(
       "operator .label() options preserved",
-      op.label?.[0]?.position === "outset-top"
+      op.label?.[0]?.placement === "outset-top"
     );
 
     const rebuilt = Serialize.buildIR(doc);
@@ -1171,7 +1171,7 @@ async function main() {
     check(
       "round-trip preserves operator .label()",
       op2.label?.[0]?.accessor === "lake" &&
-        op2.label?.[0]?.position === "outset-top"
+        op2.label?.[0]?.placement === "outset-top"
     );
   }
 
@@ -1181,8 +1181,8 @@ async function main() {
     const built = chart(groupData)
       .flow(
         stack({ by: "lake", dir: "x" })
-          .label("lake", { position: "outset-top" })
-          .label(field("count").sum(), { position: "center" })
+          .label("lake", { placement: "outset-top" })
+          .label(field("count").sum(), { placement: "center" })
       )
       .mark(rect({ h: "count", fill: "species" }));
     const doc = await built.toJSON();
@@ -1191,13 +1191,13 @@ async function main() {
     check("two operator .label() calls preserved as a 2-entry array", op.label?.length === 2);
     check(
       "first operator .label() entry preserved",
-      op.label?.[0]?.accessor === "lake" && op.label?.[0]?.position === "outset-top"
+      op.label?.[0]?.accessor === "lake" && op.label?.[0]?.placement === "outset-top"
     );
     check(
       "second operator .label() entry preserved",
       op.label?.[1]?.accessor?.type === "field" &&
         op.label?.[1]?.accessor?.name === "count" &&
-        op.label?.[1]?.position === "center"
+        op.label?.[1]?.placement === "center"
     );
 
     const rebuilt = Serialize.buildIR(doc);

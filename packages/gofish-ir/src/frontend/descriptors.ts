@@ -105,7 +105,7 @@ export interface FieldSpec {
   /** Wire key, when it differs from the descriptor's field name. */
   wire?: string;
   /** On a strategy family's `OPTION_TYPES` entry: the Python namespace whose
-   *  calls make a value (`Tile`, as in `Tile.squarify()`). The docs name the
+   *  calls make a value (`Tiling`, as in `Tiling.squarify()`). The docs name the
    *  option by it; a signature annotates the value's own type instead
    *  (`dict`), since a namespace is not a type ({@link pyType}). */
   pyFamily?: string;
@@ -391,7 +391,7 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
  *
  *  `label` is the `.label(accessor, options?)` chain (createOperator.ts's
  *  `attachLabelOption`) available on every dual-mode operator (spread/stack/
- *  group/scatter/table/treemap). `log` doesn't carry this field at all — it
+ *  group/scatter/table/tile). `log` doesn't carry this field at all — it
  *  isn't built via `createOperator` and never gets `.label()`; its own
  *  console-prefix option is the unrelated `prefix` field on `LogOperator`.
  *  The `accessor` a `LabelIR` object carries may be a bare string (must be
@@ -427,13 +427,13 @@ export const COMBINATOR_OPTIONS_BASE_FIELDS: FieldGroup = group({
  *  them; the JSON Schema's `LabelIR`, the validator, and the Python
  *  generator (`_label_opts`) all read this group. */
 export const LABEL_OPTIONS: FieldGroup = group({
-  position: {
-    type: t.union(t.string, t.ref("Place")),
-    doc: 'Where the label goes: a position string, one spot by the mark\'s box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Place strategy, which reads the mark\'s outline and tries spots in order (Place.around(), Place.along({at}), Place.start(), Place.end(), Place.interior()). The labels of one .label() call that a Place strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Place.around() for a dot, Place.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Place.end() for an open path, Place.interior() for a filled region and Place.around() for one with no fill; and "outset" for anything else. In a polar or other curved coordinate space a Place strategy is an error, and the default is "outset".',
+  placement: {
+    type: t.union(t.string, t.ref("Placement")),
+    doc: 'Where the label goes: a position string, one spot by the mark\'s box ("center", "outset", "outset-top", "inset-bottom-start", ...), or a Placement strategy, which reads the mark\'s outline and tries spots in order (Placement.around(), Placement.along({at}), Placement.start(), Placement.end(), Placement.interior()). The labels of one .label() call that a Placement strategy places take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden. Omitted, by the mark: Placement.around() for a dot, Placement.end() for an arrow; for a line, a band or a polygon, by the outline it draws, Placement.end() for an open path, Placement.interior() for a filled region and Placement.around() for one with no fill; and "outset" for anything else. In a polar or other curved coordinate space a Placement strategy is an error, and the default is "outset".',
   },
   avoiding: {
     type: t.ref("NodeSelectionIR"),
-    doc: "Nodes a Place label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.",
+    doc: "Nodes a Placement label keeps off, beside the labeled marks and the other labels: a list of nodes or refs, or a `selectAll(name)` selection. A position string ignores it.",
   },
   halo: {
     type: t.object({
@@ -461,7 +461,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
         doc: "Pixels between the text and the box's edge: one number for both axes, or [x, y].",
       },
     }),
-    doc: "A filled box drawn behind the text. An empty object draws the default box. A Place label counts the box as part of the label when it looks for a free spot.",
+    doc: "A filled box drawn behind the text. An empty object draws the default box. A Placement label counts the box as part of the label when it looks for a free spot.",
   },
   fontSize: { type: t.number, doc: "Font size in pixels." },
   color: {
@@ -470,7 +470,7 @@ export const LABEL_OPTIONS: FieldGroup = group({
   },
   offset: {
     type: t.number,
-    doc: "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Place strategy's own `offset` overrides it; omitted in both, a Place label is 3 pixels from the outline (4 for Place.start and Place.end).",
+    doc: "Pixels between the mark and the label. At a position string it is the distance from the shape's edge, 6 when omitted. A Placement strategy's own `offset` overrides it; omitted in both, a Placement label is 3 pixels from the outline (4 for Placement.start and Placement.end).",
   },
   rotate: { type: t.number, doc: "Rotation in degrees, clockwise on screen." },
   fontFamily: {
@@ -548,7 +548,7 @@ export interface StrategyKind {
   doc: string;
   params: FieldGroup;
   /** The param the factory takes as its argument, not in an options
-   *  object: `Bin.step(0.5)`, not `Bin.step({ size: 0.5 })`. In Python it
+   *  object: `Binning.step(0.5)`, not `Binning.step({ size: 0.5 })`. In Python it
    *  is a positional-only parameter. The wire form is the same either way
    *  (`{ kind: "step", size: 0.5 }`). */
   positional?: string;
@@ -566,9 +566,9 @@ export interface StrategyPreset {
 
 /** A strategy family: an option's value is one choice from its kinds, made
  *  by a member of the family's namespace. A kind with no required params is
- *  a value as it is, and calling it sets options: `Tile.squarify` is
- *  `Tile.squarify()`, and `Tile.squarify({ ratio: 1 })` sets its ratio. A
- *  kind with a required param is a call only (`Bin.step(0.5)`). */
+ *  a value as it is, and calling it sets options: `Tiling.squarify` is
+ *  `Tiling.squarify()`, and `Tiling.squarify({ ratio: 1 })` sets its ratio. A
+ *  kind with a required param is a call only (`Binning.step(0.5)`). */
 export interface StrategyFamily {
   doc: string;
   /** The kinds, by their wire `kind`. Each also has a factory of the same
@@ -605,7 +605,7 @@ const calendarKind = (doc: string): StrategyKind => ({
   params: { every: calendarEvery },
 });
 
-/** The screen directions of `Place.around`, in its default order (Imhof's
+/** The screen directions of `Placement.around`, in its default order (Imhof's
  *  order for point labels). */
 const PLACE_DIRECTIONS = [
   "top-right",
@@ -618,7 +618,7 @@ const PLACE_DIRECTIONS = [
   "bottom",
 ] as const;
 
-/** The sides of `Place.along`. */
+/** The sides of `Placement.along`. */
 const PLACE_SIDES = [
   "on",
   "above",
@@ -629,7 +629,7 @@ const PLACE_SIDES = [
   "outset",
 ] as const;
 
-/** Pixels between a mark's outline and a `Place` label beside it. */
+/** Pixels between a mark's outline and a `Placement` label beside it. */
 const placeOffset = (fallback: number): FieldSpec => ({
   type: t.num({ finite: true }),
   doc: `Pixels between the outline and the label. Default: the label's \`offset\`, or ${fallback}.`,
@@ -646,7 +646,7 @@ const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
  * wire keys at the option it is passed to, like any nested option dict.
  *
  * Read by: the `OPTION_TYPES` entry each family derives (so a field takes a
- * strategy with `t.ref("Tile")`, and the validator, the JSON Schema and the
+ * strategy with `t.ref("Tiling")`, and the validator, the JSON Schema and the
  * Python generator all see one shape), `checkStrategy` in validate.ts (the
  * one check the JS layout runs on a strategy it is handed), and the Python
  * generator, which writes `gofish/<family>.py` from it.
@@ -657,8 +657,8 @@ const ALIGN_ANCHORS = ["start", "middle", "end", "baseline"] as const;
  * `_tag` and takes its one argument by position.
  */
 export const STRATEGIES = {
-  Filter: {
-    doc: "How a mark's or a layer's drawing is filtered as one picture: the value of its `filter` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape.",
+  Effect: {
+    doc: "How a mark's or a layer's drawing is filtered as one picture: the value of its `effect` option, beside a raw CSS filter string. `luminanceToAlpha` turns a drawing into a mask shape.",
     kinds: {
       grayscale: {
         doc: "Draw in grays: CSS `grayscale(amount)`.",
@@ -676,8 +676,8 @@ export const STRATEGIES = {
       },
     },
   },
-  Tile: {
-    doc: "How `treemap` tiles its region: the value of its `tile` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
+  Tiling: {
+    doc: "How `tile` tiles its region: the value of its `tiling` option. The rectangular kinds (squarify, slice, dice, binary) are d3-hierarchy's tiling methods and need a rectangular region; voronoi tiles any convex region.",
     kinds: {
       squarify: {
         doc: "Squarified tiling (d3's `treemapSquarify`): make tiles as close as possible to the aspect `ratio`. The default.",
@@ -701,7 +701,7 @@ export const STRATEGIES = {
         params: {},
       },
       voronoi: {
-        doc: "Voronoi tiling: cut the region into convex cells with rounded, irregular shapes, each with an area proportional to its weight, by a weighted Voronoi diagram whose sites and weights are adjusted until the areas match (Nocaj and Brandes 2012). It tiles any convex region, such as a Voronoi cell of the treemap around it or the oval of an `enclose` around it, so its cells can hold another Voronoi level.",
+        doc: "Voronoi tiling: cut the region into convex cells with rounded, irregular shapes, each with an area proportional to its weight, by a weighted Voronoi diagram whose sites and weights are adjusted until the areas match (Nocaj and Brandes 2012). It tiles any convex region, such as a Voronoi cell of the `tile` around it or the oval of an `enclose` around it, so its cells can hold another Voronoi level.",
         params: {
           seed: {
             type: t.num({ finite: true }),
@@ -850,7 +850,7 @@ export const STRATEGIES = {
       },
     },
   },
-  Bin: {
+  Binning: {
     doc: "The cells a key is binned into. `step`, `thresholds` and `quantiles` cut the line of one field into intervals: the value of `field(x).bin(...)`. `hex` and `voronoi` divide the plane of two fields into polygons: the value of `struct({ x, y }).bin(...)`. Each kind makes cells that do not overlap, and puts each row in the cell its value falls in.",
     kinds: {
       step: {
@@ -1036,8 +1036,8 @@ export const STRATEGIES = {
       },
     },
   },
-  Place: {
-    doc: "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden.",
+  Placement: {
+    doc: "Where a label goes on the mark it labels: the value of `.label()`'s `placement` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden.",
     kinds: {
       around: {
         doc: "Around a mark, by screen direction: each spot is at the point of the mark's outline farthest in one direction (on a circle, the circle itself, not its box), just outside it. The default for a dot.",
@@ -1143,20 +1143,21 @@ export const STRATEGIES = {
   },
 } satisfies Record<string, StrategyFamily>;
 
-/** The name of a strategy family: `"Filter"`, `"Tile"`, `"Overlap"`,
- *  `"Curve"`, `"Bin"`, `"Calendar"`, `"Shape"`, `"Place"` or `"Spacing"`. */
+/** The name of a strategy family: `"Effect"`, `"Tiling"`, `"Overlap"`,
+ *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"`, `"Placement"` or
+ *  `"Spacing"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
-/** The `Bin` kinds by the key they bin: one field, `field(x).bin(b)`, whose
+/** The `Binning` kinds by the key they bin: one field, `field(x).bin(b)`, whose
  *  cells are intervals of a line, or two fields together,
  *  `struct({ x, y }).bin(b)`, whose cells are polygons of the plane. A kind
  *  is valid only on its key. */
-export const BIN_KINDS = {
+export const BINNING_KINDS = {
   field: ["step", "thresholds", "quantiles"],
   struct: ["hex", "voronoi"],
 } as const satisfies Record<
   "field" | "struct",
-  readonly (keyof typeof STRATEGIES.Bin.kinds)[]
+  readonly (keyof typeof STRATEGIES.Binning.kinds)[]
 >;
 
 /** One object type per kind of a strategy family (or per kind in `only`),
@@ -1317,19 +1318,19 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
     doc: "A `dims` entry: a bare channel value (a position) or an interval. A channel value that is an object is tagged (`field(...)`, `datum(...)`), so an untagged object is an interval.",
     type: t.union(t.channel("number", "pos"), t.ref("AxisInterval")),
   },
-  // The cells a key is binned into, by the key (BIN_KINDS). A
-  // `field(x).bin(...)` partition is a Calendar kind or a Bin kind that cuts
+  // The cells a key is binned into, by the key (BINNING_KINDS). A
+  // `field(x).bin(...)` partition is a Calendar kind or a Binning kind that cuts
   // one field's line: one tagged union of both families' kinds.
   Partition: {
-    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Bin.step(size), Bin.thresholds(countOrEdges) or Bin.quantiles(countOrProbabilities).",
+    doc: "The cells `field(x).bin(...)` cuts a field's line into: a Calendar value (Calendar.month, Calendar.hour({ every: 6 })), Binning.step(size), Binning.thresholds(countOrEdges) or Binning.quantiles(countOrProbabilities).",
     type: t.union(
       ...kindBranches(STRATEGIES.Calendar),
-      ...kindBranches(STRATEGIES.Bin, BIN_KINDS.field)
+      ...kindBranches(STRATEGIES.Binning, BINNING_KINDS.field)
     ),
   },
-  StructBin: {
-    doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Bin.hex({ radius }) or Bin.voronoi({ seeds }).",
-    type: strategyType(STRATEGIES.Bin, BIN_KINDS.struct),
+  StructBinning: {
+    doc: "The cells `struct({ x, y }).bin(...)` divides the plane of its two fields into: Binning.hex({ radius }) or Binning.voronoi({ seeds }).",
+    type: strategyType(STRATEGIES.Binning, BINNING_KINDS.struct),
   },
   // Each strategy family (`STRATEGIES`) is one entry, under its family name.
   ...Object.fromEntries(
@@ -1376,7 +1377,7 @@ export function refPyClass(name: string): string | undefined {
  * (`"doc"`). A channel takes a literal or a field name; a named type is its
  * Python class when it has one, else the type it stands for. The one
  * difference between the two uses: a strategy family is a namespace, not a
- * type, so the docs name it (`Tile`) and an annotation spells the value it
+ * type, so the docs name it (`Tiling`) and an annotation spells the value it
  * makes (`dict`).
  */
 export function pyType(
@@ -1449,7 +1450,7 @@ const axisDims = (doc: string): FieldSpec => ({
  *  which mean axis 0/1 in every coordinate space, plus the open `dims` bag
  *  keyed by axis name. Included wholesale by marks whose factory spreads a
  *  bare `...fancyDims: FancyDims<MaybeValue<number>>` (rect, ellipse, petal,
- *  text, image, treemap, layer's `Layer(dims, children)` form), and by
+ *  text, image, tile, layer's `Layer(dims, children)` form), and by
  *  circle, which hands them to its ellipse. Marks that destructure a fixed
  *  subset (blank) declare their own fields instead of including this group. */
 export const boxDims: FieldGroup = group({
@@ -1488,12 +1489,12 @@ export const paint: FieldGroup = group({
   opacity: { type: t.number, default: 1, doc: "Opacity, 0 to 1." },
 });
 
-/** The `filter` option every mark and `layer` take: the node's whole drawing
+/** The `effect` option every mark and `layer` take: the node's whole drawing
  *  is filtered as one picture (#1267). */
-export const filtered: FieldGroup = group({
-  filter: {
-    type: t.union(t.ref("Filter"), t.string),
-    doc: 'A filter over this whole drawing: a `Filter` strategy (`Filter.grayscale()`, `Filter.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).',
+export const withEffect: FieldGroup = group({
+  effect: {
+    type: t.union(t.ref("Effect"), t.string),
+    doc: 'A filter over this whole drawing: an `Effect` strategy (`Effect.grayscale()`, `Effect.luminanceToAlpha()`) or a raw CSS filter string (`"blur(2px)"`, `"url(#shadow)"`).',
   },
 });
 
@@ -1515,7 +1516,7 @@ export const SHARED_FIELD_GROUPS: ReadonlyArray<{
 
 /** The box fields `spread`, `stack` (a re-tagged `spread({glue: true})`) and
  *  `group` share. `x`/`y` place the operator's box in the parent's space:
- *  `Spread` spreads its `FancyDims` into the box, like treemap's. `w`/`h` are
+ *  `Spread` spreads its `FancyDims` into the box, like `tile`'s. `w`/`h` are
  *  the data-driven operator extent (#4/#20, field/datum-driven cross-axis
  *  sizing). */
 const operatorBoxFields: FieldGroup = group({
@@ -1566,7 +1567,7 @@ const ENCLOSE_FIELDS: FieldGroup = group({
   },
   shape: {
     type: t.ref("Shape"),
-    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a treemap, a region), the outline is the space it is given: Shape.box() is that space (a treemap's Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
+    doc: "The outline, made by a call in the Shape family: Shape.box({rx, ry}) draws the padded bounding box with rounded corners (the default). Shape.oval() draws the smallest-area ellipse around the padded members, rotated to follow them. Shape.fillet({radius, neck, holes}) draws the padded members with every concave corner a circular arc of `radius`, the contour of a bubble treemap. Shape.blob({convexity, connection, neck, holes, separate}) draws a smooth region: the members split into pieces by `connection`, each joined by a spanning tree of tubes and filled up to `convexity` (0 the tree, 1 the padded hull, 2 the oval). Shape.hull() is a blob with convexity 1 and neck 1 (the padded convex hull, rounded), and Shape.spine() is a blob with convexity 0 (the spanning tree of tubes alone); any option overrides the preset. Around a fresh member with no size of its own (a `tile`, a region), the outline is the space it is given: Shape.box() is that space (a `tile`'s Voronoi cell, when it is in one) and Shape.oval() the oval inscribed in it, and the member fills the outline; Shape.fillet() and Shape.blob() are an error there.",
   },
   avoiding: {
     type: t.ref("NodeSelectionIR"),
@@ -1835,16 +1836,16 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   // Dual-form like spread/stack/scatter/group/table — also usable as a
-  // low-level combinator mark (see COMBINATOR_MARKS.treemap, which reuses
+  // low-level combinator mark (see COMBINATOR_MARKS.tile, which reuses
   // this field list). Confirmed as a genuine `.flow()` operator by a real
   // Python story (atom/titanic-unit-dots), which is why it's here despite
   // the design doc's audit assuming it was combinator-only — see the note
   // on `OPERATOR_TYPES` in schema.ts.
-  treemap: operator("treemap", {
+  tile: operator("tile", {
     doc: "d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.",
     fields: {
-      // Both forms take the same `TreemapProps`, which spreads `FancyDims` —
-      // `Treemap` runs the whole bag through `elaborateDims`, so the box's
+      // Both forms take the same `TileProps`, which spreads `FancyDims` —
+      // `TileNode` runs the whole bag through `elaborateDims`, so the box's
       // position (`x`/`y`) and size (`w`/`h`) are both real options. Only
       // `w`/`h` carry channel annotations (`createOperator`'s `channels`), so
       // those two resolve data-driven values; `x`/`y` pass through as literals.
@@ -1852,21 +1853,21 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // resolveAliases pass (`deferAxisDims`); each slot infers as its
       // top-level counterpart.
       x: ch.pos(
-        "Left edge of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        "Left edge of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it."
       ),
       y: ch.pos(
-        "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the treemap tiles into, in the parent's space (pixels). Omitted, the parent places the treemap."
+        "Start edge on y (top where y reads top-down, bottom where it grows upward) of the box the operator tiles into, in the parent's space (pixels). Omitted, the parent places it."
       ),
       w: lengthSize(
-        "Width of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots." +
+        "Width of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots." +
           PERCENT_FR
       ),
       h: lengthSize(
-        "Height of the box the treemap tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the treemap fills the slot its parent allots." +
+        "Height of the box the operator tiles into; a number is pixels, a data-driven value scales through the layout. Omitted, the operator fills the slot its parent allots." +
           PERCENT_FR
       ),
       dims: axisDims(
-        "The box the treemap tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
+        "The box the operator tiles into, by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}."
       ),
       by: splitBy(
         "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
@@ -1879,17 +1880,17 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       padding: {
         type: t.number,
         default: 0,
-        doc: "Inset around the outer edge of the treemap, in pixels.",
+        doc: "Inset around the outer edge of the tiled box, in pixels.",
       },
       round: {
         type: t.boolean,
         default: true,
-        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tile.voronoi cells are not rounded.",
+        doc: "Round pixel positions and sizes. Applies to the rectangular tilings; Tiling.voronoi cells are not rounded.",
       },
-      tile: {
-        type: t.ref("Tile"),
+      tiling: {
+        type: t.ref("Tiling"),
         default: { kind: "squarify" },
-        doc: "The tiling strategy, made by a call in the Tile family: Tile.squarify({ ratio? }), Tile.slice(), Tile.dice(), Tile.binary(), or Tile.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tile.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
+        doc: "The tiling strategy, made by a call in the Tiling family: Tiling.squarify({ ratio? }), Tiling.slice(), Tiling.dice(), Tiling.binary(), or Tiling.voronoi({ seed? }). The first four are d3-hierarchy's tiling methods and need a rectangular region: inside a Voronoi cell or an oval they are an error. Tiling.voronoi tiles any convex region, so it can sit inside a Voronoi cell.",
       },
       sort: {
         type: t.enum("asc", "desc", "none"),
@@ -1922,7 +1923,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       by: {
         type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
         required: true,
-        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Binning.step(size), Binning.thresholds(countOrEdges), Binning.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Binning.hex({ radius })) or .bin(Binning.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,
@@ -1975,7 +1976,7 @@ const COMPOSITE_PAINT = {
 export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   rect: leafMark("rect", {
     doc: "A rectangle. Box geometry via the shared dims channels.",
-    include: [lengthBoxDims, paint, filtered],
+    include: [lengthBoxDims, paint, withEffect],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       rx: {
@@ -2011,7 +2012,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   circle: leafMark("circle", {
     doc: "A circle: an ellipse locked to a 1:1 aspect ratio, with the same box dimensions. Its size is set by at most one of r, area, w, or h and applies to both axes; with none, the circle fills the space it is given.",
-    include: [boxDims, filtered],
+    include: [boxDims, withEffect],
     fields: {
       r: ch.size(
         "Radius. The diameter is 2r for a number (pixels), a field name, or an accessor alike. Pass at most one of r, area, w, and h."
@@ -2046,7 +2047,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   ellipse: leafMark("ellipse", {
     doc: "An ellipse. Box geometry via the shared dims channels; paint is `paint` plus fillOpacity.",
-    include: [lengthBoxDims, filtered],
+    include: [lengthBoxDims, withEffect],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -2073,7 +2074,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   petal: leafMark("petal", {
     doc: "A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.",
-    include: [boxDims, filtered],
+    include: [boxDims, withEffect],
     fields: {
       fill: ch.color("Fill color, or a field name for a color scale."),
       stroke: ch.color("Stroke color. Defaults to `fill`."),
@@ -2091,7 +2092,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   text: leafMark("text", {
     doc: "A text label. Box geometry via the shared dims channels positions the text anchor.",
-    include: [boxDims, filtered],
+    include: [boxDims, withEffect],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       text: {
@@ -2143,7 +2144,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   image: leafMark("image", {
     doc: "An embedded raster/SVG image. Box geometry via the shared dims channels.",
-    include: [lengthBoxDims, filtered],
+    include: [lengthBoxDims, withEffect],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       href: { type: t.string, required: true, doc: "Image URL or data URI." },
@@ -2162,7 +2163,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   polygon: leafMark("polygon", {
     doc: "A closed polygon defined by local-coordinate points (in the frame the polygon sits in: top-down on a plain canvas, upward inside a continuous y), given literally or read from a field. No dims channels — the bbox is computed from `points`.",
-    include: [filtered],
+    include: [withEffect],
     fields: {
       points: {
         type: t.union(t.array(t.tuple(t.number, t.number)), t.string),
@@ -2209,8 +2210,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   region: leafMark("region", {
-    doc: "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Bin.hex, a cell of Bin.voronoi), and a rectangle otherwise.",
-    include: [paint, filtered],
+    doc: "Draws the cell it is in, such as a partition's cell. It has no size or position of its own: on each axis where it is in a cell, it is that cell, placed by its data through the partition's scale, and on an axis where it is in no cell, it fills the space it is given. It draws the cell's outline when the cell has one (a hexagon of Binning.hex, a cell of Binning.voronoi), and a rectangle otherwise.",
+    include: [paint, withEffect],
     fields: {
       inset: {
         type: t.number,
@@ -2226,7 +2227,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   line: leafMark("line", {
     doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
-    include: [filtered],
+    include: [withEffect],
     fields: {
       // Center mode paints `fill: "none"` on the path (connect.tsx's
       // `mode === "center" ? "none" : ...`), but `fill` is still the channel the
@@ -2296,7 +2297,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   ribbon: leafMark("ribbon", {
     doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
-    include: [filtered],
+    include: [withEffect],
     fields: {
       fill: ch.color(
         "Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects."
@@ -2347,7 +2348,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
   enclose: leafMark("enclose", {
     doc: "Draw an outline around a set of nodes, under them: their padded bounding box (`Shape.box()`, the default), the smallest ellipse around them (`Shape.oval()`), the padded members with arc corners (`Shape.fillet()`), or a smooth region (`Shape.blob()`, `Shape.hull()`, `Shape.spine()`), kept out of the nodes in `avoiding`. Combinator form `enclose(opts, children)`: fresh children are laid out as `layer` lays them out, and `ref(...)` children are enclosed where they already are. Bag form over a ref array (`chart(selectAll(name)).mark(enclose(opts))`), one outline per group when the flow groups the refs. Flow-step form `.flow(..., enclose(opts), ...)`: an outline around each group's subtree, laid out with it, so the operator above packs or places the outlined group and an outer `enclose` hugs this outline; in a chart's `operators`, its IR is this mark's.",
-    include: [filtered],
+    include: [withEffect],
     fields: ENCLOSE_FIELDS,
     flowStep: true,
   }),
@@ -2405,7 +2406,7 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
 
   layer: combinatorMark("layer", {
     doc: "Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.",
-    include: [lengthBoxDims, filtered],
+    include: [lengthBoxDims, withEffect],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },
       // A real `layer` option, not a chart-only one: `layer({ coord }, children)`
@@ -2525,10 +2526,10 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     fields: resolveFields(LEAF_MARKS.ribbon),
   }),
 
-  treemap: combinatorMark("treemap", {
-    doc: "Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.",
+  tile: combinatorMark("tile", {
+    doc: "Low-level combinator form of `tile` (single level). Same fields as the operator form (OPERATORS.tile) plus `key`.",
     fields: {
-      ...resolveFields(OPERATORS.treemap),
+      ...resolveFields(OPERATORS.tile),
       key: { type: t.string, doc: "Internal per-node key override." },
     },
   }),

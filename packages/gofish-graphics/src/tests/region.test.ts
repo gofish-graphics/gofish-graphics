@@ -30,7 +30,7 @@ async function main() {
     chart,
     partition,
     field,
-    Bin,
+    Binning,
     region,
     text,
     layer: layerOf,
@@ -41,7 +41,7 @@ async function main() {
     // Cells [0, 1) and [1, 2) of a 200px-wide chart over [0, 2].
     const rects = items(
       await chart([{ v: 0.5 }, { v: 1.5 }], { axes: false })
-        .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+        .flow(partition({ by: field("v").bin(Binning.step(1)), dir: "x" }))
         .mark(region())
         .toDisplayList({ w: 200, h: 100 })
     )
@@ -75,8 +75,8 @@ async function main() {
       { a: 1.5, b: 1.5, name: "dddd" },
     ];
     const nested = (mark: any, first: "x" | "y") => {
-      const px = partition({ by: field("a").bin(Bin.step(1)), dir: "x" });
-      const py = partition({ by: field("b").bin(Bin.step(1)), dir: "y" });
+      const px = partition({ by: field("a").bin(Binning.step(1)), dir: "x" });
+      const py = partition({ by: field("b").bin(Binning.step(1)), dir: "y" });
       return chart(rows, { axes: false })
         .flow(...(first === "x" ? [px, py] : [py, px]))
         .mark(mark)
@@ -204,7 +204,7 @@ async function main() {
   {
     const rows = [{ v: 0.5 }, { v: 1.5 }, { v: 1.7 }];
     const dl = await chart(rows, { axes: false })
-      .flow(partition({ by: field("v").bin(Bin.step(1)), dir: "x" }))
+      .flow(partition({ by: field("v").bin(Binning.step(1)), dir: "x" }))
       .mark(region())
       .toDisplayList({ w: 200, h: 100 });
     check(
@@ -231,14 +231,14 @@ async function main() {
       { m: 1.5, x: 1.5, pdf: 4 },
     ];
     const dl = await chart(rows, { axes: false })
-      .flow(partition({ by: field("m").bin(Bin.step(1)), dir: "y" }))
+      .flow(partition({ by: field("m").bin(Binning.step(1)), dir: "y" }))
       .mark(
         row({ h: 80 }, [
           chart()
             .flow(scatter({ x: "x" }))
             .mark(rect({ w: 4, h: "pdf" })),
           chart()
-            .flow(partition({ by: field("x").bin(Bin.step(1)), dir: "x" }))
+            .flow(partition({ by: field("x").bin(Binning.step(1)), dir: "x" }))
             .mark(region()),
         ])
       )
@@ -263,7 +263,7 @@ async function main() {
     // before the round resolves the references, so the operand is read as
     // the handle it is.
     const inner = chart([{ b: 0.5 }, { b: 1.5 }], { axes: false })
-      .flow(partition({ by: field("b").bin(Bin.step(1)), dir: "y" }))
+      .flow(partition({ by: field("b").bin(Binning.step(1)), dir: "y" }))
       .mark(region());
     let error = "";
     let rects: any[] = [];
@@ -312,7 +312,7 @@ async function main() {
     const spreadOn = (dir: "x" | "y") =>
       chart(rows, { axes: false })
         .flow(
-          partition({ by: field("v").bin(Bin.step(1)), dir: "x" }),
+          partition({ by: field("v").bin(Binning.step(1)), dir: "x" }),
           spread({ by: "g", dir })
         )
         .mark(region())

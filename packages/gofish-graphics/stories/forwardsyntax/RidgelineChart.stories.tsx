@@ -150,7 +150,7 @@ export const Default: StoryObj<Args> = {
               h: 1,
               fill: "#999",
             }).label("month", {
-              position: "outset-left-end",
+              placement: "outset-left-end",
               fontSize: 11,
               color: "#666",
             })

@@ -72,7 +72,7 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * `columns` names, per axis, the column the cell is placed along there, as
  * a map from a value to its datum. A cell of a line ({@link Cell}) is placed
  * along one axis, the partition's `dir`; a cell of the plane (a hexagon of
- * `Bin.hex`, a cell of `Bin.voronoi`) along both. The region reads the cell
+ * `Binning.hex`, a cell of `Binning.voronoi`) along both. The region reads the cell
  * through them once: `spans` holds, per axis, the cell's two edges as datums
  * of its column, so they carry the column's measure and type as any datum
  * read from it does, and they make the layer's position domain on that axis.
@@ -90,7 +90,7 @@ export type ColumnDatum = (v: number) => MaybeValue<number>;
  * hexagon gives its children the hexagon's box, cut down to their cells,
  * and not the hexagon clipped to them. The fix is to clip the shape the
  * inner layer is handed (the hexagon) to each cell's box with
- * `intersectRings`, the way `enclose` cuts its oval to a treemap cell.
+ * `intersectRings`, the way `enclose` cuts its oval to a `tile` cell.
  */
 export class PositionRegion {
   readonly spans: readonly [

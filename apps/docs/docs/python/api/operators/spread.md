@@ -202,7 +202,7 @@ order.
 ```python
 # One bar per half-point cell of `rating`, height = row count per cell
 chart(data).flow(
-    spread(by=field("rating").bin(Bin.step(0.5)), dir="x")
+    spread(by=field("rating").bin(Binning.step(0.5)), dir="x")
 ).mark(rect(h=field("rating").count()))
 
 # One bar per month of the year, all Junes in one bar
@@ -224,11 +224,11 @@ holds its start and not its end. The partition is one of:
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | a [Calendar](/python/api/core/calendar) value | The calendar cells of a time column, in the column's zone. A level that is a part of a larger one gives its parts, a cycle: `Calendar.month` is the month of the year, so all Junes are one cell. `Calendar.year` and `Calendar.week` are parts of nothing and give cells of the time line. |
 | a list of Calendar values                     | A product, `[Calendar.year, Calendar.month]`: one cell where one cell of each level meets one of the next (the June of 2015), labeled `"Jun 2015"`.                                                                                                                                         |
-| `Bin.step(size)`                              | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
-| `Bin.thresholds(n)`                           | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Bin.thresholds(10)`.                                                                                                                                                                  |
-| `Bin.thresholds([t1, ...])`                   | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
+| `Binning.step(size)`                          | Cells `size` wide, starting at multiples of `size`.                                                                                                                                                                                                                                         |
+| `Binning.thresholds(n)`                       | About `n` cells, with the step a numeric axis with `n` ticks uses. The default, with no argument, is `Binning.thresholds(10)`.                                                                                                                                                              |
+| `Binning.thresholds([t1, ...])`               | Cells cut at the given edges, with the smallest and largest values as the outer edges.                                                                                                                                                                                                      |
 
-`Bin.step` and `Bin.thresholds` are members of the [`Bin`](/python/api/bin)
+`Binning.step` and `Binning.thresholds` are members of the [`Binning`](/python/api/binning)
 family. A thresholds partition includes its top edge, so the largest value
 falls in the last cell. Custom cell labels (`.format`) are JS-only for now.
 
@@ -265,7 +265,7 @@ on a continuous axis, use [`partition`](/python/api/operators/partition) with th
 # Rows with a null/missing "genre" are excluded entirely, instead of
 # forming their own "null" group
 chart(data).flow(
-    treemap(by=field("genre").drop_nulls(), size="worldwideGross")
+    tile(by=field("genre").drop_nulls(), size="worldwideGross")
 )
 ```
 

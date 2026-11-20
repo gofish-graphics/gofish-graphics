@@ -1,7 +1,7 @@
 /**
  * The `Curve` family: how a path runs through its points. It is the value of
  * the `curve` option of `line` and `ribbon`, of `time.transition` and
- * `Animation.tween`, and of `interpolate`'s `method`.
+ * `Animation.tween`, and of `interpolate`.
  *
  * `lib.ts` binds this module as `Curve` (`Curve.monotone`), and
  * `gofish-graphics/curve` exports the same module. No curve has a required

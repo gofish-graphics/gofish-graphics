@@ -168,10 +168,10 @@ A chart's `data` is one of three:
 There is no inline form: a chart with rows has a table, by one rule
 wherever it sits, so a nested chart's rows cross as Arrow too, with their
 column types (#1088). Operators are a flat list (`derive`, `resolve`,
-`join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `treemap`,
-`pack`). `treemap`'s `tile` is a strategy object made by a call in the `Tile`
-family (`Tile.squarify({ ratio })`, `Tile.slice()`, `Tile.dice()`,
-`Tile.binary()`, `Tile.voronoi({ seed })` in both languages). Every strategy has
+`join`, `filter`, `spread`, `stack`, `group`, `scatter`, `table`, `log`, `tile`,
+`pack`). `tile`'s `tiling` is a strategy object made by a call in the `Tiling`
+family (`Tiling.squarify({ ratio })`, `Tiling.slice()`, `Tiling.dice()`,
+`Tiling.binary()`, `Tiling.voronoi({ seed })` in both languages). Every strategy has
 one shape, `{ kind, ...params }`, which is both the JS value and the wire
 form, e.g. `{ "kind": "squarify", "ratio": 1 }`, and the JS layout
 dispatches on `kind`. `scatter`'s `overlap` (the `Overlap` family) and a
@@ -199,7 +199,7 @@ relational mark's combinator form carries its IR tag (`tagCombinator`), and
 a ref child is written as a `RefMarkIR`, so an `enclose(opts, [ref("a")])`
 inside a chart serializes. JS does not serialize a `.relate()` callback (it
 is a closure), so a relate clause's IR comes from Python. A label's
-`position` takes a position string or a strategy of the `Place` family
+`placement` takes a position string or a strategy of the `Placement` family
 (`{ "kind": "along", "at": 0.6, "orient": "sloped" }`), and its `avoiding`
 is a `NodeSelectionIR` like `enclose`'s. A `.label()` chain is not a construct
 with a descriptor, so the emitter writes it with `wireLabels` in `toJSON.ts`:
@@ -237,7 +237,7 @@ measure `provenance` map for the rows of the `bin()` data helper; both are
 gone, #1058.) A binned key, `field("date").bin(Calendar.month)`, is an op in
 the field expression's `ops`: `{ "op": "bin", "partition": { "kind": "month",
 "step": 1 } }`, where the partition is a Calendar value's wire form, a
-`Bin` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
+`Binning` kind that bins one field, `{ "kind": "step", "size": 0.5 }` or
 `{ "kind": "thresholds", "thresholds": 20 }` or
 `{ "kind": "quantiles", "quantiles": 10 }` (`PartitionIR`, one union told
 apart by `kind`), or a list of
@@ -251,11 +251,11 @@ with a JS `.format(fn)` has no wire form, and serializing it is an error. Marks 
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `position`, `line`, `ribbon`, `enclose`, `treemap`, `pack`, and the
+`arrow`, `position`, `line`, `ribbon`, `enclose`, `tile`, `pack`, and the
 Porter-Duff family),
 refs, the two self-discriminating wrapper marks `offset` and `cut` (below), a
 whole `ChartIR`, or a `LayerChainIR`. The `__combinator` flag stays: `line`,
-`ribbon`, `enclose`, `spread`, `stack`, `treemap` and `pack` are both leaf marks or
+`ribbon`, `enclose`, `spread`, `stack`, `tile` and `pack` are both leaf marks or
 operators and combinators, so their `type` alone does not say which.
 `enclose` is a leaf mark (the bag form) and a combinator, and its leaf mark
 may also stand in `operators` as a flow step (`flowStep: true` on
@@ -365,7 +365,7 @@ writes it as the mark's `__datum` (and `__key`) bridge fields, which
 them once, after it builds the mark of any kind: the position holds a mark that
 ignores the rows it is offered and calls the built mark with `__datum` and
 `__key`, which is what the JS expression `mark(d, key)` puts there. The same
-fields carry a treemap combinator's children, each applied to its own row.
+fields carry a `tile` combinator's children, each applied to its own row.
 The input is data that JSON holds; Python raises when it holds a mark or a
 ref, and a ref, a `cut` and an `offset` (nodes, not mark functions) raise
 when called.
@@ -600,7 +600,7 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `position`, `line`, `ribbon`, `treemap`, `pack`, Porter-Duff) rather than the
+`arrow`, `position`, `line`, `ribbon`, `tile`, `pack`, Porter-Duff) rather than the
 leaf-mark registry — same `type` discriminator namespace, different code path.
 
 ## The descriptor table — one authored source for construct field lists
@@ -635,7 +635,7 @@ today `AxesOptions` (a boolean, or `{x, y}`), `AxisOptions` (a boolean, or
 value of an axis's `label`), `AxisInterval` (`{min, center, max, size,
 embedded}`), `AxisDimsValue` (a channel value or an `AxisInterval`, the
 value of a `dims` entry), `FieldPredicate` (`{field, between, closed}`,
-the predicate of `filter`), `Calendar`, `Partition` and `StructBin` (the
+the predicate of `filter`), `Calendar`, `Partition` and `StructBinning` (the
 kinds valid on each key, below), and one entry per strategy family. A
 `t.ref(name)` resolves against it first, so the validator, the JSON Schema,
 and the Python generator all read one declaration of each. `ChartOptions` is
@@ -647,30 +647,31 @@ the Python generator builds `_chart_opts` from `CHART_OPTIONS`, and the docs
 build the chart options table from it (`::: gofish-ref ChartOptions`).
 
 `STRATEGIES` declares the strategy families whose values cross the wire:
-`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape` and `Place`. For each it lists the kinds, each with its
+`Effect`, `Tiling`, `Overlap`, `Curve`, `Binning`, `Calendar`, `Shape`,
+`Placement` and `Spacing`. For each it lists the kinds, each with its
 params (types, defaults and docs), and the presets: a factory that makes a
 kind with some params already set, such as `Overlap.sina()`, which is
 `noise` with `smoothing: "silverman"`. Each family derives its
 `OPTION_TYPES` entry, a union of one object per kind with a literal `kind`,
-so the strategy options are `t.ref("Tile")`, `t.ref("Overlap")`,
-`t.ref("Curve")`, `t.ref("Shape")` and `t.ref("Place")`. A kind may take a param by position
-(`positional: "size"`): `Bin.step(0.5)` in JS, `Bin.step(0.5)` with a
+so an option that takes a family is `t.ref` of its name, as in
+`t.ref("Tiling")`. A kind may take a param by position
+(`positional: "size"`): `Binning.step(0.5)` in JS, `Binning.step(0.5)` with a
 positional-only parameter in Python, and `{ kind: "step", size: 0.5 }` on
 the wire either way. A construct descriptor has the same field: `COORDS.geo`
-takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Bin` kinds bin one of two keys (`BIN_KINDS`):
+takes `projection` by position (`Coord.geo("mercator", { lon })`). The `Binning` kinds bin one of two keys (`BINNING_KINDS`):
 `step`, `thresholds` and `quantiles` cut the line of one field, and `hex` and `voronoi`
-divide the plane of two. `OPTION_TYPES.StructBin` is the kinds of the plane,
-derived from the one `Bin` entry, so a struct's bin op takes a `StructBin`,
-and the JS layout checks a struct's bin with `checkStructBin(value, where)`
+divide the plane of two. `OPTION_TYPES.StructBinning` is the kinds of the plane,
+derived from the one `Binning` entry, so a struct's bin op takes a `StructBinning`,
+and the JS layout checks a struct's bin with `checkStructBinning(value, where)`
 and a field's with `checkPartition(value, where)`, each of which names the
 right key for a kind of the other one.
 
 A field's bin op takes a Calendar value, `{ kind: "month", every? }` or
 `{ kind: "week", every?, start? }` or `{ kind: "weekday", start? }` (a weekday
-has no step), or a `Bin` kind that cuts one field's line.
+has no step), or a `Binning` kind that cuts one field's line.
 The `Calendar` family declares the Calendar kinds, one per level, and
 `OPTION_TYPES.Calendar` is its union. `OPTION_TYPES.Partition` is one tagged
-union of the Calendar kinds and the `Bin` kinds `step`, `thresholds` and
+union of the Calendar kinds and the `Binning` kinds `step`, `thresholds` and
 `quantiles`, so
 the validator, the JSON Schema and the Python generator each read a field's
 partition by its `kind`, and the JS layout checks one with
@@ -717,7 +718,7 @@ a list of quantile probabilities. The validator, the JSON Schema (`minimum`,
 `uniqueItems`) and the Python generator check
 them. When a
 value matches no branch of an untagged union, and only one branch is of the
-value's kind (a number for `Bin.hex`'s `radius: number | { x, y }`), the
+value's kind (a number for `Binning.hex`'s `radius: number | { x, y }`), the
 validator reports that branch's own findings (`expected a number above 0`).
 A union whose branches are all tagged by the same field is checked against
 the one branch its value's tag names: a strategy's `kind`, or the `type` of
@@ -728,7 +729,7 @@ no shape matched. The JS
 layout checks a strategy where it reads it, with `checkStrategy(family,
 value, where)` from `validate.ts`, the same walk the validator runs over a
 whole document. Every JS-side check is that one walk (`walkOrThrow`), so
-it throws the validator's own message: `checkPartition`, `checkStructBin`,
+it throws the validator's own message: `checkPartition`, `checkStructBinning`,
 and `checkOption(name, value, where)`, which checks a named option object
 of `OPTION_TYPES` (layout checks each axis's options against
 `AxisOptions` with it, so a JS caller and a Python one get the same
@@ -743,8 +744,8 @@ two surfaces but not in this table: a coordinate transform is a JS object of
 functions, rebuilt from a `type`-tagged config (`COORDS`), and a color scale
 is tagged by `_tag` and takes its one argument by position.
 
-`schema.ts` keeps the TypeScript types of the strategies, `TileIR`,
-`OverlapIR`, `CurveIR`, `BinIR`, `CalendarPartitionIR`, `ShapeIR` and `PlaceIR`, by hand, and each family's JS type is one of them
+`schema.ts` keeps the TypeScript types of the strategies, `TilingIR`,
+`OverlapIR`, `CurveIR`, `BinningIR`, `CalendarPartitionIR`, `ShapeIR` and `PlacementIR`, by hand, and each family's JS type is one of them
 (`Curve.Curve` is `CurveIR`; `Shape.Shape` is `ShapeIR`). `descriptors.test.ts` checks that their kinds
 and params agree with `STRATEGIES`. Every family is closed: there is no
 public way to add a kind, so every strategy can cross the wire (user-defined
@@ -754,7 +755,7 @@ A named type may say which Python class builds a value of it (`pyClass`):
 `FieldPredicate` here, and `FieldAccessor`, `StructAccessor` and `ChunkKey`
 in `AUTHORED_REFS`, the list of refs to hand-authored shapes (a struct key,
 `{ type: "struct", fields: { x, y }, ops? }`, is walked by its own walker,
-whose bin op is checked against `OPTION_TYPES.StructBin`). `ChunkKey` is the
+whose bin op is checked against `OPTION_TYPES.StructBinning`). `ChunkKey` is the
 `{ type: "chunk", size }` that `chunk(size)` builds, the `by` key that groups
 consecutive rows; a split operator's `by` takes a field name, a
 `FieldAccessor`, or a `ChunkKey`. Such a value already carries its wire keys, so
@@ -768,9 +769,9 @@ payload collects its callbacks too). One function, `pyType` in
 signatures (the strategy modules' too) annotate with it and the Python docs
 tables print it, so the two agree. A ref prints as its `pyClass` when it has
 one, else as the Python type it stands for (`AxesOptions` is `bool | dict`).
-A strategy family's entry names its Python namespace (`pyFamily`: `Tile`,
+A strategy family's entry names its Python namespace (`pyFamily`: `Tiling`,
 `Overlap`, `Curve`): the docs print that name, since users write
-`Tile.squarify(...)`, and a signature annotates the value it makes (`dict`),
+`Tiling.squarify(...)`, and a signature annotates the value it makes (`dict`),
 since a namespace is not a type.
 
 **What's still authored, not in the table**: the envelope
@@ -894,7 +895,7 @@ The high-level structure:
     "ChartIR":    { /* type, data, operators, mark, options, zOrder, ... */ },
     "LayerChainIR": { /* type, tiers (first a ChartIR, then MarkIRs) */ },
     "DataIR":     { "oneOf": [/* table, select, previous-tier */] },
-    "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TreemapOperator */ },
+    "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TileOperator */ },
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR, ChartIR, LayerChainIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
@@ -932,13 +933,15 @@ its JSON Schema enum, matching what `descriptors.ts` already modeled.
 [`packages/gofish-python/scripts/generate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-python/scripts/generate.ts)
 imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
 package export, so it needs `pnpm --filter gofish-ir build` to have run
-first) and emits `gofish/_generated.py` and the family modules
-`gofish/tile.py`, `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`
-and `gofish/calendar.py` (from `STRATEGIES`) and `gofish/coord.py` (from
-`COORDS`) — checked into the repo, with a
+first) and emits `gofish/_generated.py`, one module per family in
+`STRATEGIES` (`gofish/tiling.py` for `Tiling`, and so on) and `gofish/coord.py`
+(from `COORDS`) — checked into the repo, with a
 CI freshness check (`pnpm --filter gofish-python gen` then `git diff
 --exit-code`) rather than a build-time step, matching the "commit the
-generated Python" norm Altair and Plotly.py both follow.
+generated Python" norm Altair and Plotly.py both follow. Each family module
+starts with one marker line, and after writing, the generator deletes any
+`gofish/*.py` that starts with it but was not written in that run (the module
+of a renamed or deleted family), so the freshness check sees the deletion.
 
 Python kwargs are in snake case, while the wire stays in camel case. One
 function in `descriptors.ts`, `pyKwarg(fieldName)`, gives each field's
@@ -997,7 +1000,7 @@ spread's `spacing`, a number, a length or a `Spacing`, walks a
 as a `Spacing`; a length written by hand as a plain dict, or a `chunk(5)`,
 is a `TypeError` there. The other exception is a tagged union: when every dict branch is an
 object whose `kind` field is a literal or enum, and no two branches share a
-`kind` value (a strategy family: treemap's `tile`, `{kind: "squarify",
+`kind` value (a strategy family: `tile`'s `tiling`, `{kind: "squarify",
 ratio?}` or `{kind: "slice"}` or ...; scatter's `overlap`; a `curve`), the generator emits a
 `("tagged", "kind", {kind_value: branch_shape})` shape, and `_to_wire` picks
 the branch by the dict's `kind`. A missing or unknown `kind`, or a key that
@@ -1016,9 +1019,9 @@ It emits:
   each named by its wire `type`, which is its public name (`union`,
   `intersect`, `subtract`, `exclude`, `atop`).
 - `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
-  `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
+  `stack`, `scatter`, `group`, `table`, `tile`, `line`, `ribbon`,
   `layer`, `pack`), with separate combinator-form
-  cores for `spread`, `stack`, and `treemap` (their combinator entries add
+  cores for `spread`, `stack`, and `tile` (their combinator entries add
   `key`; `spread` and `stack` also include the whole `boxDims` group, since
   JS `Spread` spreads its `FancyDims` into its box), and `_chart_opts` for
   `chart()` and the chart-tier `layer([...])` — just the kwargs→dict half. The
@@ -1030,14 +1033,16 @@ It emits:
   `enclose(clearance=-1)` raises `ValueError`, as JS's
   `enclose({ clearance: -1 })` throws at render. Every generated function
   does this, the cores and the leaf and combinator-only factories.
-- One module per **strategy family** in `STRATEGIES` (`gofish/tile.py`,
-  `gofish/overlap.py`, `gofish/curve.py`, `gofish/bin.py`,
-  `gofish/calendar.py`, `gofish/shape.py`, `gofish/filter_.py`), bound in `__init__.py`
-  under the family name (`Tile`, `Overlap`, `Curve`, `Bin`, `Calendar`, `Shape`,
-  `Filter`): one factory per kind and per preset, named by `pyKwarg`
-  (`Curve.catmull_rom`, `Overlap.separate`). A module whose name is an
-  operator's gets a trailing underscore, as a keyword kwarg does: `gofish.filter`
-  is the `filter` operator, so the `Filter` family is `gofish/filter_.py`.
+- One module per **strategy family** in `STRATEGIES`
+  (`packages/gofish-ir/src/frontend/descriptors.ts`; the families are listed
+  above, under the descriptor table), bound in `__init__.py` under the family name (`gofish/tiling.py` as
+  `Tiling`): one factory per kind and per preset, named by `pyKwarg`
+  (`Curve.catmull_rom`, `Overlap.separate`). The module is the family's
+  name in lowercase. A Python package's submodule and its attribute share
+  one name, so a family named like an operator or a mark would replace that
+  construct on import. The
+  [naming rule](/internals/design/api-design#naming) forbids the clash, and
+  the generator stops with an error naming both when one occurs.
   A factory with no required param is decorated with `bare_kind`, so it is
   also the value its call with no arguments makes.
   Each returns `{"kind": ..., **params}` with snake_case param keys, and the
@@ -1051,11 +1056,11 @@ It emits:
   `ValueError` that names the call and the kwarg
   (`Overlap.separate(padding=...) must be >= 0, got -1`). An optional param
   is checked when it is given; a required one always, so `None` is a
-  `TypeError` (`Bin.step(None)`). An unknown kwarg is
+  `TypeError` (`Binning.step(None)`). An unknown kwarg is
   a `TypeError` from the signature, which for a bare kind lists its options
-  (`Calendar.month(step=3)` names `every=...`). A dict param (`Bin.hex`'s
+  (`Calendar.month(step=3)` names `every=...`). A dict param (`Binning.hex`'s
   `radius={"x": 2, "y": 500}`) has its keys and each value checked the
-  same way, and a table param (an array of records: `Bin.voronoi`'s
+  same way, and a table param (an array of records: `Binning.voronoi`'s
   `seeds`) is read first with `to_records`, so a dataframe works too, and
   goes on the wire as dict rows. These are the same constraints
   `checkStrategy` checks on the JS side, read from the same table, so Python

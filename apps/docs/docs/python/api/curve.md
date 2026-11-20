@@ -39,7 +39,7 @@ No curve has a required option, so each member is a curve as it is, and
 calling it sets options: `Curve.monotone` and `Curve.monotone()` are the same
 curve, and `Curve.arc(direction="down")` sets the arc's direction. This holds
 in every strategy family: a kind with no required option is a value, and a
-kind with one is a call only, like `Bin.step(size)`.
+kind with one is a call only, like `Binning.step(size)`.
 ([#1145](https://github.com/gofish-graphics/gofish-graphics/issues/1145)
 moves the examples to the bare spelling.) A curve is a plain dict,
 `{"kind": ..., **params}`, with snake_case param keys,

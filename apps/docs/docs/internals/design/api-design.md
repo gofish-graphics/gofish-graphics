@@ -71,7 +71,7 @@ the same (#1267).
 stroke and its opacity. There is no separate shape channel. `.hidden()` drops
 a node's paint and keeps its shape, so a hidden child of a compositing
 operator is a mask, and a filter that writes alpha
-(`Filter.luminanceToAlpha`) makes a luminance mask (#1267).
+(`Effect.luminanceToAlpha`) makes a luminance mask (#1267).
 
 **A node's box is as tight as the visible result allows, while staying cheap
 to compute.** An intersect's box is the overlap (#1267).
@@ -218,12 +218,12 @@ between them: `chart(data)`, `field("x")`, `layer([a, b])`, and the operators
 handed to `.flow(spread(...), stack(...))`. A method chain is a universal
 interface that can read the caller's internal state, and even branch on it,
 or turn it into a new object: `.bin(...)` reads the field's type (a time
-column takes `Calendar`, a number takes `Bin`), `.format(fn)` sees fields that
+column takes `Calendar`, a number takes `Binning`), `.format(fn)` sees fields that
 depend on the partition it is called on, `.sort()` uses the type's order, and
 `chart(...).flow(...).mark(...)` builds a spec step by step. An option is a
 local adjective of one thing, usually specific to its kind, such as
 `Calendar.month({ every: 3 })`, `Calendar.week({ start })` or
-`Bin.hex({ radius })`; a few, such as `w`, `h` and `fill`, apply almost
+`Binning.hex({ radius })`; a few, such as `w`, `h` and `fill`, apply almost
 everywhere. So `every` is an option, because it describes the month
 partition and reads nothing from a parent, while `.format(fn)` is a method
 (#1133).
@@ -239,9 +239,20 @@ several named strategies, the family is a capitalized namespace such as
 `Overlap.separate` or `Curve.monotone` (#1013). A kind with no required option
 is a value as it is, and calling it sets options: `Curve.monotone` is
 `Curve.monotone()`, and `Calendar.month({ every: 3 })` sets the step. A kind
-with a required option is a call only, as in `Bin.step(0.5)` (#1133). An
-option may also take a bare value as shorthand for one member: a bare
-`spacing` amount is `Spacing.box(amount)`. The
+with a required option is a call only, as in `Binning.step(0.5)` (#1133). A
+family is a capitalized noun for what one member is. When the members are the
+ways an operator does its work, the noun is what the operator makes
+(`Tiling`, `Packing`, `Binning`, `Placement`), and it is never the operator's
+own name. The option key is always the same word in lowercase:
+`curve: Curve.monotone`, `tiling: Tiling.voronoi`,
+`placement: Placement.around`, `effect: Effect.grayscale`. The rule does not
+apply where there is no single keyed slot. Several slots are named by their
+roles, as in `.transition({ enter, exit })` and an axis's `levels`, a list of
+`Calendar` units with one per level. A method whose only argument
+is the strategy takes it bare, as in `.bin(Binning.step(0.5))`. `pack` will
+follow the rule with `pack({ packing: Packing.circles })` when it gets a
+second strategy (#1355). An option may also take a bare value as shorthand
+for one member: a bare `spacing` amount is `Spacing.box(amount)`. The
 details, and why an option with one strategy has no option at all, are in
 [Three Surfaces](/internals/design-evolution/three-surfaces).
 

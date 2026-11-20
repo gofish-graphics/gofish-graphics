@@ -1,11 +1,11 @@
 ---
-title: treemap
+title: tile
 order: 60
 ---
 
-# treemap
+# tile
 
-Lays out children into a treemap: a 2D tiling of rectangles, or of convex polygons with `Tile.voronoi`, whose **areas are proportional to a weight**.
+Lays out children into a treemap: a 2D tiling of rectangles, or of convex polygons with `Tiling.voronoi`, whose **areas are proportional to a weight**.
 
 :::: gofish
 
@@ -18,10 +18,10 @@ const items = [
   { name: "Horror", value: 40 },
 ];
 
-// Each child gets its own rectangle; treemap assigns its (x,y,w,h).
+// Each child gets its own rectangle; tile assigns its (x,y,w,h).
 // `size` is an explicit per-child weight array (one value per child, in
 // child order) that drives each leaf's tile area.
-gf.treemap(
+gf.tile(
   {
     size: items.map((d) => d.value),
     spacing: 2,
@@ -37,7 +37,7 @@ gf.treemap(
         rx: 3,
         ry: 3,
       })
-      .label("name", { position: "center", color: "white", fontSize: 12 })(
+      .label("name", { placement: "center", color: "white", fontSize: 12 })(
       d,
       d.name
     )
@@ -47,7 +47,7 @@ gf.treemap(
 
 ::::
 
-Inside `.flow(...)` (the fluent chart API), `treemap({ by, size, ... })` partitions the
+Inside `.flow(...)` (the fluent chart API), `tile({ by, size, ... })` partitions the
 rows itself, mirroring `spread`/`group`: `by` groups the flow's rows (a field
 name or a `field(...)` accessor carrying domain ops, e.g.
 `field("genre").dropNulls()`), and `size` — an entry-flagged channel — sums a
@@ -58,38 +58,38 @@ this mirrors.
 ## Signature
 
 ```ts
-treemap(options); // .flow() operator form
-treemap(options, children); // combinator form
+tile(options); // .flow() operator form
+tile(options, children); // combinator form
 ```
 
 ## Parameters
 
-::: gofish-ref treemap
+::: gofish-ref tile
 :::
 
 ## Strategies
 
-`tile` holds the tiling strategy, a member of the `Tile` family. You make a
+The `tiling` option holds the tiling strategy, a member of the `Tiling` family. You make a
 strategy with a function call. A strategy with no required option is also a
-value as it is: `Tile.voronoi` is `Tile.voronoi()`. The family is also the
-module `gofish-graphics/tile`, so
-`import { squarify } from "gofish-graphics/tile"` gives the same function as
-`Tile.squarify`.
+value as it is: `Tiling.voronoi` is `Tiling.voronoi()`. The family is also the
+module `gofish-graphics/tiling`, so
+`import { squarify } from "gofish-graphics/tiling"` gives the same function as
+`Tiling.squarify`.
 
 The first four are tiling methods from d3-hierarchy. They tile a rectangle,
 so they need a rectangular region: inside a Voronoi cell or the oval of an
-[`enclose`](./enclose.md), they are an error that names `Tile.voronoi`.
+[`enclose`](./enclose.md), they are an error that names `Tiling.voronoi`.
 
-- `Tile.squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
+- `Tiling.squarify({ ratio? })` makes tiles as close as it can to the aspect ratio
   `ratio`, the longer side over the shorter side. `ratio` must be at least 1,
   and it does not choose between wide and tall tiles. It is the default. Without `ratio`, it uses
-  d3's default, the golden ratio. `Tile.squarify({ ratio: 1 })` aims for square
+  d3's default, the golden ratio. `Tiling.squarify({ ratio: 1 })` aims for square
   tiles, which suits one circle per leaf.
-- `Tile.slice()` puts the tiles in one column, stacked along y.
-- `Tile.dice()` puts the tiles in one row, side by side along x.
-- `Tile.binary()` splits the tiles into two halves of about equal weight, and
+- `Tiling.slice()` puts the tiles in one column, stacked along y.
+- `Tiling.dice()` puts the tiles in one row, side by side along x.
+- `Tiling.binary()` splits the tiles into two halves of about equal weight, and
   repeats on each half.
-- `Tile.voronoi({ seed? })` cuts the region into convex cells with rounded,
+- `Tiling.voronoi({ seed? })` cuts the region into convex cells with rounded,
   irregular shapes, by a weighted Voronoi diagram (Nocaj and Brandes 2012).
   It tiles any convex region, so a Voronoi level can sit inside a Voronoi
   cell, inside a rectangle of a squarified level, or inside the oval of an
@@ -99,29 +99,29 @@ so they need a rectangular region: inside a Voronoi cell or the oval of an
   between them.
 
 ```js
-gf.treemap({
+gf.tile({
   by: "genre",
   size: "gross",
-  tile: gf.Tile.squarify({ ratio: 1 }),
+  tiling: gf.Tiling.squarify({ ratio: 1 }),
 });
 ```
 
-Each `treemap` in a flow is one level, and each level can use its own
+Each `tile` in a flow is one level, and each level can use its own
 tiling. A level hands each child its cell, and [`region()`](../marks/region.md)
 draws the cell it is in. `spacing` is the gap between sibling cells, and
-`padding` the inset at the treemap's own edge, under every tiling.
+`padding` the inset at the `tile`'s own edge, under every tiling.
 
 ::: gofish example:voronoi-treemap
 :::
 
-The classic slice-and-dice treemap alternates `Tile.slice` and `Tile.dice` by
+The classic slice-and-dice treemap alternates `Tiling.slice` and `Tiling.dice` by
 level, one flow step each:
 
 ```js
 chart(countryPopulations)
   .flow(
-    treemap({ by: "continent", size: "pop", tile: Tile.slice }),
-    treemap({ by: "region", size: "pop", tile: Tile.dice })
+    tile({ by: "continent", size: "pop", tiling: Tiling.slice }),
+    tile({ by: "region", size: "pop", tiling: Tiling.dice })
   )
   .mark(rect({ fill: "continent" }));
 ```
@@ -130,6 +130,6 @@ chart(countryPopulations)
 
 - The tile d3 places first sits at the top left. With the default
   `sort: "desc"`, that is the largest tile.
-- A treemap accepts a **flat list of children**; for multi-level treemaps, chain one `treemap(...)` per level in `.flow(...)`, or nest `treemap(...)` calls.
-- A treemap with no size of its own fills the shape its parent hands it: a cell of the treemap around it, or the shape of an `enclose` around it.
+- A `tile` accepts a **flat list of children**; for multi-level treemaps, chain one `tile(...)` per level in `.flow(...)`, or nest `tile(...)` calls.
+- A `tile` with no size of its own fills the shape its parent hands it: a cell of the `tile` around it, or the shape of an `enclose` around it.
 - In the combinator form, `size` is an **explicit array**, one weight per child in child order — it does not read back off each child's bound datum.

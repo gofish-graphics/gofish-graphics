@@ -4,7 +4,7 @@ Croissant charts: a density curve cut at its quantiles into equal-probability
 slices, each drawn on its own with a small gap, with one dot per slice at the
 slice's median. The first layer draws the curve, unseen; the `.relate()`
 clause turns the grid into quantile rows of that curve, partitions them into
-`Bin.quantiles(n)` cells (five for the standard normal, ten for the penguins,
+`Binning.quantiles(n)` cells (five for the standard normal, ten for the penguins,
 five a month in the ridgeline), and in each
 cell draws the curve intersected with the cell's region, drawn in by a few
 pixels, plus a dot at the cell's median. The last story cuts an area into
@@ -14,7 +14,7 @@ calendar months the same way.
 import math
 
 from gofish import (
-    Bin,
+    Binning,
     Calendar,
     Spacing,
     Unit,
@@ -84,7 +84,7 @@ def _croissant(grid, n=10, fill=FILL, stroke=STROKE):
                 derive(
                     lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)
                 ),
-                partition(by=field("x").bin(Bin.quantiles(n)), dir="x"),
+                partition(by=field("x").bin(Binning.quantiles(n)), dir="x"),
             )
             .mark(
                 layer(
@@ -179,7 +179,7 @@ def story_ridgeline():
                             )
                         ),
                         partition(
-                            by=field("temp_max").bin(Bin.quantiles(5)), dir="x"
+                            by=field("temp_max").bin(Binning.quantiles(5)), dir="x"
                         ),
                     )
                     .mark(

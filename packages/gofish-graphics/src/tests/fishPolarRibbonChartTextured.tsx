@@ -217,7 +217,7 @@ export const testFishPolarRibbonChartTextured = (
                   fill: fishColors[d.species as keyof typeof fishColors],
                   stroke: "black",
                   strokeWidth: 3,
-                  filter: "url(#filter-drop-shadow)",
+                  effect: "url(#filter-drop-shadow)",
                 })
               )
               .value()

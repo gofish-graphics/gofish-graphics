@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Bin, chart, circle, field, partition } from "../../src/lib";
+import { Binning, chart, circle, field, partition } from "../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/circle_binned.html
@@ -34,8 +34,8 @@ export const Default: StoryObj<Args> = {
       .flow(
         partition({
           by: {
-            x: field("IMDB Rating").bin(Bin.step(1)),
-            y: field("Rotten Tomatoes Rating").bin(Bin.step(10)),
+            x: field("IMDB Rating").bin(Binning.step(1)),
+            y: field("Rotten Tomatoes Rating").bin(Binning.step(10)),
           },
         })
       )

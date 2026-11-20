@@ -20,7 +20,7 @@ covers:
   - packages/gofish-graphics/src/ast/cells.ts
   - packages/gofish-graphics/src/ast/polygonCells.ts
   - packages/gofish-graphics/src/ast/structExpr.ts
-  - packages/gofish-graphics/src/families/bin.ts
+  - packages/gofish-graphics/src/families/binning.ts
   - packages/gofish-graphics/src/families/calendar.ts
   - packages/gofish-graphics/src/families/domain.ts
   - packages/gofish-graphics/src/families/spacing.ts
@@ -303,7 +303,7 @@ sides, like a font's ascent and descent. In the type the two sides are the two
 ends of the interval: the ascent is `max` and the descent is `−min`. In the
 claim they are two values in σ. A rect of value 30 has data ascent 30 and
 claims ascent `30σ`; a rect of value −20 has data descent 20 and claims
-descent `20σ` (a rect length is signed, while a text, image, or treemap size
+descent `20σ` (a rect length is signed, while a text, image, or `tile` size
 is a nonnegative magnitude). Most extents sit wholly above their data 0 and
 never spell the descent. Every claim is measured from data 0, whatever its
 origin state, so a side can be negative: a pinned `[30, 50]` claims ascent
@@ -968,7 +968,7 @@ sharing rule. Like the type hook, each node type has its own rule
 (`resolveSharing`, read through `GoFishNode.sharing()`, which memoizes the plan
 and clears it with the types), and a node without one lets every child share
 (`shareAll`). Three rows of the table are node-level rules: a layer with a
-data-valued `w`/`h` nests its content on that axis, a `treemap` detaches each
+data-valued `w`/`h` nests its content on that axis, a `tile` detaches each
 child and nests it in its tile on both axes (`nestEach`), and the `position`
 operator detaches its child on an axis with a pixel offset and keeps it shared
 on an axis with a datum offset.
@@ -1656,10 +1656,10 @@ an axis when its size there is given to it rather than computed from σ:
 - a node with a literal `w`/`h`;
 - a node with a data-valued `w`/`h`, whose box its parent's σ sizes and whose
   content it maps into that box;
-- a node whose room its parent gives it (a region's cell, a treemap tile),
+- a node whose room its parent gives it (a region's cell, a `tile` cell),
   with content that σ sizes, sized by that room;
 - a node with pinned data in a slot its parent nests it in (a spread, grid
-  or treemap slot: a facet panel), sized by its slot;
+  or `tile` slot: a facet panel), sized by its slot;
 - a node handed no σ at all because nothing above it could solve one, sized
   by the box it is given.
 
@@ -2037,8 +2037,8 @@ checks it with `checkSummable`: a size channel's sum over its rows
 takes the op's value and sums nothing), `.sum()` in any channel or label
 (every caller of `evalFieldValues` passes the column's quantity), the
 total of `.normalize()`, and the total of the `normalize(rows, field)` data
-helper. A treemap's layout adds its tiles' weights on every pass, so the
-treemap checks its `size` channel with `checkSummable` once, where it is
+helper. A `tile`'s layout adds its tiles' weights on every pass, so the
+`tile` checks its `size` channel with `checkSummable` once, where it is
 built. A cut's sizes are slices of a whole it adds up, so its per-row size
 channel (`inferEntrySize`) checks its column with `checkSummable` too. These sums read the unit as their
 chart knows it. A stack adds spaces, not values, in the type walk, so a
@@ -2063,7 +2063,7 @@ a group holds. A bar of one date or one temperature is the missing zero
 (`HasZero`, #1051), not this check.
 
 One gap remains. A sum taken while a chart is built (a size channel,
-`.sum()`, a treemap, a cut, `.normalize()`) runs before the type walk, so
+`.sum()`, a `tile`, a cut, `.normalize()`) runs before the type walk, so
 it cannot see a definition of its unit in another chart: a bar chart of
 `"USD"` beside another chart's `Unit("USD")` sums its bars. Only the
 stack's sum, which the walk takes, sees the whole figure. Closing it needs
@@ -2473,7 +2473,7 @@ a unit has one trait of its own (`CanSum`):
   values are all finite numbers (missing values aside; a time's values are
   epoch milliseconds by then), after the other traits. It is what a binned
   key's cells cover (see [Cells](#cells-a-binned-key)). `sorted()` gives
-  the same values in order, for the cells of `Bin.quantiles`: it reads them
+  the same values in order, for the cells of `Binning.quantiles`: it reads them
   off the typed rows on its first call only and keeps them, so a column no
   quantile reads is never copied.
 - `HasInteger` (`{}`): the values are integers. JS has one number type, so
@@ -2592,7 +2592,7 @@ error rather than silently doing the wrong thing:
 - **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin(partition?)`,
   `.dropNulls()`) apply to a `by` grouping key. `splitEntries`
   (`datumProjection.ts`) is the shared split-plus-ops helper behind
-  `spread`/`stack`/`group`/`scatter`/`treemap`'s `by` (and `time.sequence`'s,
+  `spread`/`stack`/`group`/`scatter`/`tile`'s `by` (and `time.sequence`'s,
   which splits keyframes the same way — its groups are laid out in one shared
   frame, so the space they occupy is the space of the whole dataset, which is
   what keeps a playing chart's axes still; the `TimeTier` it hands a
@@ -2636,7 +2636,7 @@ predicate `(row) => boolean` for the `filter` flow operator, and a predicate
 belongs to none of the three slots: it never decides which groups exist, never
 folds a group to a value, and never scales anything. Giving it an op would mean
 a fourth slot that every evaluation site had to learn to ignore. For the same
-reason it THROWS when the expression carries ops: `field("x").bin(Bin.step(10)).between(...)`
+reason it THROWS when the expression carries ops: `field("x").bin(Binning.step(10)).between(...)`
 would have tested the raw `x`, silently. `closed` is polars' `is_between`
 argument, comparing by value (SQL `RANGE`) rather than by row count (Vega's
 window `frame`). The bounds are plain numbers; a window that follows a `timer()`
@@ -2654,15 +2654,15 @@ never in the expression's `ops`, so the three slots stay as they are.
 
 `field(x).bin(p)` (#1058) is a value transform: it maps each value of `x` to
 its **cell** in the partition `p` (`cells.ts`). A partition is a Calendar
-value (`calendar.ts`), `Bin.step(size)`, `Bin.thresholds(countOrEdges)`
-(a count, or a list of edges), or `Bin.quantiles(countOrProbabilities)`, the
-three `Bin` kinds that bin one field (`families/bin.ts`). Those three are
-objects of a class, `StepBin`, `ThresholdsBin` and `QuantilesBin`, whose own keys are their wire form (`{ kind: "step", size }`)
+value (`calendar.ts`), `Binning.step(size)`, `Binning.thresholds(countOrEdges)`
+(a count, or a list of edges), or `Binning.quantiles(countOrProbabilities)`, the
+three `Binning` kinds that bin one field (`families/binning.ts`). Those three are
+objects of a class, `StepBinning`, `ThresholdsBinning` and `QuantilesBinning`, whose own keys are their wire form (`{ kind: "step", size }`)
 and whose `.format(fn)` is held off those keys, as a Calendar value's is. The
 wire form of the op is `{ op: "bin", partition? }` with the partition's own
-wire form, a Calendar value's `{ kind: "month", every: 1 }` or a `Bin` kind's,
+wire form, a Calendar value's `{ kind: "month", every: 1 }` or a `Binning` kind's,
 one union told apart by `kind`. `checkPartition` reads either form, and
-rejects a `Bin` kind that bins two fields, naming `struct({ x, y }).bin`. A `Cell`
+rejects a `Binning` kind that bins two fields, naming `struct({ x, y }).bin`. A `Cell`
 keeps the whole value: the interval `[start, end)` (its region), its id (its
 start, as text, so `String(cell)` is the key a node gets), its label (the
 partition's `.format(fn)`, else the default: `"0.5–1"`, or the calendar label),
@@ -2707,13 +2707,13 @@ place to draw it. So `scatter({ by: field("x").bin(p), x, y })` draws one
 point per cell that holds rows, and the empty cells leave the scale of the
 others alone.
 
-A cell holds its start and not its end, and a Calendar value or a `Bin.step`
+A cell holds its start and not its end, and a Calendar value or a `Binning.step`
 puts a value in the cell that holds it whatever the domain (March 1 is in
-March). A `Bin.thresholds` partition is fitted to the domain, so it covers
+March). A `Binning.thresholds` partition is fitted to the domain, so it covers
 the closed domain: the count's step is the one a numeric axis with that many
 ticks uses (`tickIncrement`), and the largest value falls in the last cell
 when it sits on an edge, as in numpy's `histogram` and d3's `bin`. A
-`Bin.quantiles` partition is fitted the same way, with its inner edges at
+`Binning.quantiles` partition is fitted the same way, with its inner edges at
 type-7 quantiles (`quantileSorted`) of the column's values in the data it
 was typed with (`HasDomain.sorted`), so it too reads no group's rows. Two
 edges at one value, as many equal values give, throw rather than merge, as
@@ -2895,8 +2895,8 @@ cells does. That is read off the cells, not off how they were binned: no two
 cells overlap (a cell in two parts is one interval in both, so `[0, 10)` and
 `[5, 10)` are of two partitions), and calendar cells share a calendar
 partition (`CalendarPartition.sameCells`), since a time axis labels them all
-by one partition's rows. A `Bin.step` over two domains gives the cells of one
-partition; a `Bin.thresholds` fitted to two domains may not. The type is what tells the
+by one partition's rows. A `Binning.step` over two domains gives the cells of one
+partition; a `Binning.thresholds` fitted to two domains may not. The type is what tells the
 axis that it places cells: a time axis over calendar cells ticks at their
 partition and labels each cell between its two boundary ticks
 ([Axes](/internals/frontend/axes)). A numeric axis over numeric cells keeps
@@ -2924,7 +2924,7 @@ child: a `PositionRegion` holds the cell's outline in datums (`outline`,
 The layer of the partition maps it through both of the child's scales into
 the child's frame, in the same walk that gives the child its span
 (`buildChildSpans`, `constraints/proposalPlan.ts`), and hands it to the
-child as its shape, the same channel a `treemap` hands its
+child as its shape, the same channel a `tile` hands its
 tiles down and an `enclose` its outline (see
 [The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)).
 A layer passes its shape on to a child it proposes its own box
@@ -2943,9 +2943,9 @@ cells, not the hexagon's outline clipped to them.
 A hexagon depends on two fields together, so a `.bin` on each field cannot
 express it. `struct({ x, y })` (`structExpr.ts`, after polars' `pl.struct`)
 is a key that reads two columns, one per axis, and `.bin(b)` bins it with a
-strategy of the `Bin` family (`families/bin.ts`): `Bin.hex({ radius })` or
-`Bin.voronoi({ seeds })`, the two kinds that bin two fields (a kind that bins
-one field, such as `Bin.step`, is an error here that names `field(x).bin`). Its type carries the same phantom flag as a field
+strategy of the `Binning` family (`families/binning.ts`): `Binning.hex({ radius })` or
+`Binning.voronoi({ seeds })`, the two kinds that bin two fields (a kind that bins
+one field, such as `Binning.step`, is an error here that names `field(x).bin`). Its type carries the same phantom flag as a field
 expression (`StructExpr<true>` once binned), so `partition` over an unbinned
 struct is a type error, and the split checks the wire form. The class's own
 fields are its wire form (`{ type: "struct", fields, ops? }`), so the
@@ -2962,7 +2962,7 @@ the same cells and empty cells are kept (a cache keyed by the two columns'
 
 - **Hexagons.** A pointy-top grid (as in d3-hexbin, ggplot2's `geom_hex` and
   Observable Plot) with a hexagon centered on (0, 0), so the grid does not
-  move with the data, as `Bin.step` cells are aligned to multiples of the
+  move with the data, as `Binning.step` cells are aligned to multiples of the
   step. The radius is in data units, one number or one per axis; a hexagon is
   the unit hexagon scaled by the x radius on x and the y radius on y. A point
   goes to the hexagon with the nearest center (axial coordinates and cube

@@ -105,7 +105,7 @@ def story_default():
                     fill="#999",
                 ).label(
                     "month",
-                    position="outset-left-end",
+                    placement="outset-left-end",
                     font_size=11,
                     color="#666",
                 )

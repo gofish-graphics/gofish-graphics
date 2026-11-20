@@ -268,7 +268,7 @@ export type CellFormat = (cell: CalendarCell | CalendarPart) => string;
 
 /** `fn`, checked to be a function of the cell, for `partition.format(fn)`:
  *  one check for every partition with a `.format` (a Calendar value, and
- *  `Bin.step` and `Bin.thresholds`, cells.ts). */
+ *  `Binning.step` and `Binning.thresholds`, cells.ts). */
 export function checkFormat<F>(partition: object, fn: unknown): F {
   if (typeof fn !== "function")
     throw new Error(
@@ -644,7 +644,7 @@ const hasStart = (unit: CalendarUnit): unit is StartUnit =>
   unit === "week" || unit === "weekday";
 
 /** `value` as an error message shows it. A partition (a Calendar value, or
- *  `Bin.step(...)`, cells.ts) shows as its builder spelling, its own
+ *  `Binning.step(...)`, cells.ts) shows as its builder spelling, its own
  *  `toString`, and nothing calls `toJSON` (a partition with a format has no
  *  wire form, and its `toJSON` throws). */
 export function describe(value: unknown): string {

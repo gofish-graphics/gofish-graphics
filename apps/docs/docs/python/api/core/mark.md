@@ -232,14 +232,14 @@ The input crosses to JS as the mark's `__datum` field (and `key` as
 
 ## Labeling a mark
 
-Call `.label(accessor, position=..., avoiding=..., halo=..., background=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`
+Call `.label(accessor, placement=..., avoiding=..., halo=..., background=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`
 on a mark to attach a deferred text label, mirroring JS's `.label(accessor, options?)`:
 
 ```python
-rect(h="count").label("count", position="center", font_size=10)
+rect(h="count").label("count", placement="center", font_size=10)
 ```
 
-`position` is a position string or a value of the [`Place`](/python/api/place)
+`placement` is a position string or a value of the [`Placement`](/python/api/placement)
 family, which reads the mark's outline and keeps the labels of one call off
 the marks, off each other, and off the nodes in `avoiding`
 (`avoiding=select_all("trend")`). `halo={"color": ..., "width": ...}` draws an
@@ -256,14 +256,14 @@ adds its own label, and all of them round-trip through the IR as an array:
 
 ```python
 rect(h="count").label(
-    field("count").sum(), position="center", color="white", font_weight="bold"
-).label("lake", position="outset-top", font_size=9)
+    field("count").sum(), placement="center", color="white", font_weight="bold"
+).label("lake", placement="outset-top", font_size=9)
 ```
 
 ### `.label()` on operators {#operator-label}
 
 Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
-`treemap`) also accepts `.label(accessor, ...)`, with the same kwargs as
+`tile`) also accepts `.label(accessor, ...)`, with the same kwargs as
 `Mark.label`. Chaining it on the operator instead of the mark labels the
 **group**, not each individual mark instance — every node a split leaf (one
 group's rows) produces gets stamped with that leaf's own subdata, and
@@ -286,13 +286,13 @@ group's rows) produces gets stamped with that leaf's own subdata, and
 
   ```python
   chart(data).flow(
-      stack(by="class", dir="y").label(field("count").sum(), position="center")
+      stack(by="class", dir="y").label(field("count").sum(), placement="center")
   ).mark(rect(h="count"))
   ```
 
 ```python
 chart(data).flow(
-    stack(by="class", dir="y").label("class", position="center")
+    stack(by="class", dir="y").label("class", placement="center")
 ).mark(rect(h="count"))
 ```
 
