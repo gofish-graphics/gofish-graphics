@@ -50,8 +50,12 @@ import type { ColumnType, HasUnit, UnitTraits } from "./schema";
 /** What one channel's values are amounts of, as its column says (pure data,
  *  carried by a datum value). */
 export type Quantity = {
-  /** Titles the axis and names the unit variable. */
-  name: string;
+  /** Titles the axis and names the unit variable. Absent: the values are
+   *  amounts of no named quantity, though they may be in a declared unit (a
+   *  distribution family's variable is in its location column's unit, but
+   *  is not that column): they title no axis, and their unknown unit is a
+   *  fresh variable, which claims nothing. */
+  name?: string;
   /** The declared unit, if any, with its traits when they are known.
    *  Absent: unknown, the variable `name`. */
   unit?: HasUnit;
@@ -61,6 +65,10 @@ export type Quantity = {
   /** Set on the square root of an amount of a quantity, which an area
    *  channel hands its mark ({@link sqrtQuantity}): that quantity. */
   rootOf?: Quantity;
+  /** Set on values computed by a user's `map` or `reduce` with no declared
+   *  unit: what computed them (`field("v").reduce(...)`). Their unit is
+   *  unknown, and has no CanSum. */
+  undeclared?: string;
 };
 
 // A declared unit is a `HasUnit` (schema.ts): its `unit` says which units
@@ -91,6 +99,20 @@ export const INSTANT = {
 /** The unit `.count()` and `.distinct()` declare. Counts add up. */
 export const COUNT = {
   unit: "count",
+  traits: { CanSum: {} },
+} satisfies HasUnit;
+
+/** The unit of a share of a whole, a cdf's (ast/dist.ts): a plain number
+ *  from 0 to 1, which does not add up. */
+export const RATIO = {
+  unit: "ratio",
+  traits: {},
+} satisfies HasUnit;
+
+/** The unit of a distribution family's mass, a probability. The
+ *  probabilities of parts that do not overlap add up. */
+export const PROBABILITY = {
+  unit: "probability",
   traits: { CanSum: {} },
 } satisfies HasUnit;
 
@@ -141,7 +163,7 @@ export const sqrtQuantity = (q: Quantity): Quantity => {
   let root = sqrtQuantities.get(q);
   if (root === undefined) {
     root = {
-      name: `√${q.name}`,
+      ...(q.name !== undefined ? { name: `√${q.name}` } : {}),
       rootOf: q,
       ...(q.unit !== undefined
         ? {
@@ -193,6 +215,13 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
         `stacking them, or size them by a length (r, w or h) if their sizes ` +
         `should add up.`
     );
+  if (q.undeclared !== undefined)
+    throw new Error(
+      `${where} sums the values of ${q.undeclared}, whose unit is not ` +
+        `declared, so they cannot be summed or stacked. If they add up, ` +
+        `declare their unit in its options: { unit: Unit("USD", { traits: ` +
+        `[Trait.summable()] }) }.`
+    );
   const difference = q.unit!.difference;
   if (difference?.traits?.CanSum !== undefined)
     throw new Error(
@@ -208,7 +237,7 @@ export function checkSummable(q: Quantity | undefined, where: string): void {
       `lengths), declare it with ` +
       `Unit("${unit}", { traits: [Trait.summable()] }). If ` +
       `they do not (temperatures, prices, rates), average them instead, ` +
-      `e.g. field("${q.column ?? q.name}").mean().`
+      `e.g. field("${q.column ?? q.name ?? "value"}").mean().`
   );
 }
 
@@ -223,7 +252,9 @@ export type UnitOccurrence = { traits?: UnitTraits; who: Quantity };
 export const whoOf = (q: Quantity): string =>
   q.column !== undefined
     ? `the column "${q.column}"`
-    : `the values of "${q.name}"`;
+    : q.name !== undefined
+      ? `the values of "${q.name}"`
+      : `the values in "${q.unit?.unit}"`;
 
 /** How a definition of unit `name` with `traits` is written. */
 const definitionOf = (name: string, traits: UnitTraits): string =>
@@ -457,8 +488,10 @@ export class Units {
   }
 
   /** The variable of unknown quantity `q`'s name, shared by every unknown
-   *  quantity of that name. */
+   *  quantity of that name. A quantity with no name has a fresh one of its
+   *  own, which unifies with anything and binds nothing else. */
   variable(q: Quantity): UnitVar {
+    if (q.name === undefined) return new UnitVar("value");
     let v = this.vars.get(q.name);
     if (v === undefined) {
       v = new UnitVar(q.name);
@@ -485,7 +518,7 @@ const withTraits = (q: Quantity, traits: UnitTraits): Quantity => ({
 export const unitOf = (q: Quantity): UnitVar => {
   if (q.unit === undefined) return currentUnits().variable(q);
   currentUnits().meet(q);
-  return declaredVar(q.name, q.unit, q.column);
+  return declaredVar(q.name ?? q.unit.unit, q.unit, q.column);
 };
 
 let current: Units | undefined;

@@ -44,7 +44,6 @@ export const testScatterPie2 = () =>
           stackX(
             {
               h: _(sample.collection).sumBy("count") / 7,
-              spacing: 0,
               alignment: "start",
             },
             sample.collection.map((d, i) =>

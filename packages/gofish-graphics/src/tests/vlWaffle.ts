@@ -1,9 +1,9 @@
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
 import _ from "lodash";
-import { stackY } from "../ast/graphicalOperators/stackY";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { seattleWeather } from "../data/seatle-weather";
+import { spreadX } from "../ast/graphicalOperators/spreadX";
+import { spreadY } from "../ast/graphicalOperators/spreadY";
 
 const colorScale = {
   sun: "#e7ba52",
@@ -35,8 +35,8 @@ const stackedBarDataset = _(seattleWeather).groupBy((d) => {
 export const testVLWaffle = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height },
-    stackX(
-      { spacing: 4 },
+    spreadX(
+      { spacing: 0},
       _(stackedBarDataset)
         .toPairs()
         .sortBy(([month]) => {
@@ -58,8 +58,8 @@ export const testVLWaffle = (size: { width: number; height: number }) =>
         })
         .fromPairs()
         .map((d) =>
-          stackY(
-            { spacing: 0.5, alignment: "start" },
+          spreadY(
+            { spacing: 0, alignment: "start" },
             _(d)
               .sortBy((d) => {
                 const order = { drizzle: 4, fog: 3, rain: 2, snow: 1, sun: 0 };
@@ -68,8 +68,8 @@ export const testVLWaffle = (size: { width: number; height: number }) =>
               .chunk(3)
               .reverse()
               .map((d) =>
-                stackX(
-                  { spacing: 0.5 },
+                spreadX(
+                  { spacing: 0},
                   d.map((d) =>
                     rect({
                       w: 3.5,

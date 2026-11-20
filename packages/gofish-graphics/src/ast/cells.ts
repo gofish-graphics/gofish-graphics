@@ -711,6 +711,54 @@ function numberCell(
 }
 
 /**
+ * The cells of a numeric partition over a distribution (`d.bin(p)`), from
+ * `lo` to `hi`, the interval it is drawn over: `Bin.quantiles` cuts it at
+ * its own quantiles (`quantile`, the distribution's), so each cell holds
+ * the same share of its mass; `Bin.step` and `Bin.thresholds` cut the
+ * interval as they cut a column's domain. Two edges at one value throw, as
+ * for a column.
+ */
+export function distributionCells(
+  p: NumberPartition,
+  lo: number,
+  hi: number,
+  quantile: (p: number) => number,
+  where: string
+): Cell[] {
+  const bin = spell(p);
+  let edges: number[];
+  if (p.kind === "quantiles") {
+    const given = p.quantiles;
+    const ps = Array.isArray(given)
+      ? [...given].sort((a, b) => a - b)
+      : Array.from({ length: given - 1 }, (_, i) => (i + 1) / given);
+    edges = [lo, ...ps.map(quantile), hi];
+    for (let i = 1; i < edges.length; i++)
+      if (!(edges[i] > edges[i - 1]))
+        throw new Error(
+          `${where}: ${String(p)} puts two cell edges at the same value, ` +
+            `${round12(edges[i])}, so a cell between them would be empty. ` +
+            `Ask for fewer cells.`
+        );
+  } else {
+    edges = numberEdges(
+      p,
+      {
+        lo,
+        hi,
+        sorted: () => {
+          throw new Error(`${where}: a distribution has no rows to sort.`);
+        },
+      },
+      where
+    );
+  }
+  return edges
+    .slice(0, -1)
+    .map((start, i) => numberCell(p, start, edges[i + 1], bin));
+}
+
+/**
  * Split each of `parents` (cells of the line, in order) by the cells of `p`
  * over the same domain: one cell where each parent meets each of `p`'s
  * cells, holding its parent. A cell of `p` across a parent's edge is cut in

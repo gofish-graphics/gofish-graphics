@@ -33,6 +33,7 @@ import {
 
 export { MeasureClash, type MeasureSite } from "./measure";
 import { nice as d3Nice } from "d3-array";
+import { add, constant, isConstant, type Fun } from "./fun";
 import { Cell, CycleCell, type AxisCell, type KeyCell } from "./cells";
 import { niceToCells, tickPartition, type CalendarPartition } from "./calendar";
 
@@ -48,14 +49,16 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  * Where a continuous space's local origin (its data 0) sits:
  *
  *   - `"pinned"`: the local origin IS data 0, so the data interval is the
- *     absolute data domain. Renders an absolute axis. (The old POSITION.)
+ *     absolute data domain. Renders an absolute axis.
  *   - `"free"`: the extent hangs from a baseline that nothing has placed yet.
  *     The data interval is `[−descent, ascent]` about that baseline. A parent
  *     can still pin it (a baseline align, a glued stack, the `position`
- *     operator). Renders no axis. (The old SIZE.)
+ *     operator). Renders no axis.
  *   - `"none"`: there is no origin at all, only a width. The data interval is
- *     `[0, width]`, and only differences along it mean anything. Renders a
- *     delta axis. Produced by middle-align, and absorbing. (The old DIFFERENCE.)
+ *     `[0, width]`, and only differences along it mean anything. Renders no
+ *     axis: it has no positions to name. At the render root its scale gets a
+ *     length entry in the legend instead (`lengthEntry`). Produced by
+ *     middle-align, and absorbing.
  *
  * The origin state is the whole placement fact: whether an extent has
  * committed a position (`pinned`), can still be given one (`free`), or can
@@ -103,8 +106,9 @@ export type CONTINUOUS_TYPE = {
   coordinateTransform?: CoordinateTransform;
   /** True when both sides of the 0 hold nonnegative amounts measured away from
    *  it, rather than signed values (#984's "mirrored side": magnitudes with a
-   *  side). A stack centered on a `HasMidpoint` column builds it: a Likert
-   *  chart's parts left of the center are counts too. An axis over it labels
+   *  side). A stack whose parts are all nonnegative builds it, whatever its
+   *  origin (`distributeSpaceFold`): a Likert chart's parts left of the
+   *  center are counts too. An axis over it labels
    *  each tick with its distance from 0. A union keeps it only when every
    *  part has it ({@link allMirrored}).
    *  TODO(#995): layer axis merging, a coord's declared window, and anchorAt drop it. */
@@ -116,6 +120,13 @@ export type CONTINUOUS_TYPE = {
    *  (axes/elaborate.tsx). A union keeps them only when every part has them
    *  ({@link mergeCells}). */
   cells?: readonly Cell[];
+  /** The interval the content covers along this axis at each position u on
+   *  the other axis (u in that axis's data units), about the same local
+   *  origin as `dataInterval`, which is its hull. Absent, the content covers
+   *  `dataInterval` at every u, as a box does. Read it with
+   *  {@link crossSectionOf}; set it with {@link withProfile}, which never
+   *  stores a constant one. */
+  profile?: Fun<Interval>;
 };
 
 export type ORDINAL_TYPE = {
@@ -273,16 +284,33 @@ export const isOneValue = (
 
 /** The axis a space renders over its data interval, one read of its origin
  *  state: a pinned space has data coordinates, so it renders an `"absolute"`
- *  axis; an origin-less one has only differences, so it renders a `"delta"`
- *  axis; a free magnitude, still waiting for its parent to place it, renders
- *  none (undefined), and neither does a non-continuous space. */
+ *  axis. Every other space renders none (undefined): a free magnitude is
+ *  still waiting for its parent to place it, an origin-less one has only
+ *  widths and no positions for an axis to name (its scale gets a length
+ *  entry in the legend instead), and a non-continuous space has no interval. */
 export const axisOver = (
   space: UnderlyingSpace | undefined
-): "absolute" | "delta" | undefined =>
+): "absolute" | undefined =>
+  domainOver(space) === "positions" ? "absolute" : undefined;
+
+/** The kind of scale a space is, read off its origin state, and so the
+ *  guide it gets. A pinned space is a POSITION scale, `"positions"`: its
+ *  data has places in the plot (`px(d) = σ·d + originPx`), so it is drawn
+ *  in place, as an axis ({@link axisOver}). An origin-less space is a
+ *  LENGTH scale, `"widths"`: it has a scale factor σ and no origin, so its
+ *  data has no place in the plot, only lengths, and it is drawn aside, as
+ *  an entry in the legend (`KeyedDomains.lengthScales`), as a color scale
+ *  is. Undefined for a free magnitude (until its scope places it,
+ *  {@link placeBaseline}) and a non-continuous space. The keyed domains are
+ *  keyed by the same read (`domainId` in keyedDomains.ts), and a scope
+ *  widens widths centered (`widenTo`). */
+export const domainOver = (
+  space: UnderlyingSpace | undefined
+): "positions" | "widths" | undefined =>
   originIs(space, "pinned")
-    ? "absolute"
+    ? "positions"
     : originIs(space, "none")
-      ? "delta"
+      ? "widths"
       : undefined;
 
 /** A space as its scope root places it. A scope root seats a free space's
@@ -300,20 +328,19 @@ export const placeBaseline = <T extends UnderlyingSpace | undefined>(
 export const dataWidth = (space: CONTINUOUS_TYPE): number =>
   intervalWidth(space.dataInterval);
 
-/** Where a difference axis over `content` (a space with no data 0) spans
- *  its niced width `niced` in the content's frame. That frame measures
- *  widths from the content's start, wherever its interval starts (an
- *  overlay of a free bar below 0 and an origin-less one has a negative
- *  min), and the content sits centered in the niced width, as centering
- *  makes a difference axis: `[−slack, width − slack]`. The axis is drawn
- *  there (`elaborateDifferenceAxis`) and the plot covers it
- *  (`GoFishNode.domainSpan`). */
+/** Where the widths `wide` that a scope maps over `content` (a space with
+ *  no data 0) span in the content's frame. That frame measures widths from
+ *  the content's start, wherever its interval starts (an overlay of a free
+ *  bar below 0 and an origin-less one has a negative min), and the content
+ *  sits centered in the wider width, as centering widens it (`widenTo`):
+ *  `[−slack, width − slack]`. The plot covers it (`GoFishNode.domainSpan`),
+ *  and the legend's length entry ends at its top (`lengthEntry`). */
 export const differenceSpan = (
   content: CONTINUOUS_TYPE,
-  niced: CONTINUOUS_TYPE
+  wide: CONTINUOUS_TYPE
 ): [number, number] => {
-  const slack = (dataWidth(niced) - dataWidth(content)) / 2;
-  return [-slack, dataWidth(niced) - slack];
+  const slack = (dataWidth(wide) - dataWidth(content)) / 2;
+  return [-slack, dataWidth(wide) - slack];
 };
 
 /** What an axis ticks at, which is what a scope that draws the axis nices
@@ -348,7 +375,7 @@ export const cellPartition = (
 ): CalendarPartition | undefined => space.cells?.[0]?.calendar?.partition;
 
 /** Nice the interval a space renders an axis over (issue #659): a pinned
- *  domain's `[min, max]`, or a delta axis's width from 0, rounded outward to
+ *  domain's `[min, max]`, rounded outward to
  *  the axis's ticks (`ticks`): d3-nice bounds for `ticks.count` on a numeric
  *  axis, or the cells of the axis's inner row on a time axis (a calendar
  *  space, {@link axisTickPartition}), so a scope solved with
@@ -385,22 +412,13 @@ export const niceContinuous = <T extends UnderlyingSpace | undefined>(
   // An empty interval (min > max: a column of nulls) or a non-finite one
   // (NaN) has no ends to round, over numbers or instants alike.
   if (!isFiniteInterval(iv)) return space;
-  // An absolute axis nices its domain's ends: to round numbers, or, over
-  // instants, to cell starts of its inner row. A delta axis has only a
-  // width, which it nices from 0 so its steps are even (ticks 20, 40, …, 160
-  // rather than 20, 40, …, 140, 147). The low edge of an origin-less
-  // interval means nothing, so it stays.
+  // An axis nices its domain's ends: to round numbers, or, over instants,
+  // to cell starts of its inner row. An origin-less space draws no axis, so
+  // it has no ticks to nice to and is never niced (`axisOver`).
   const [lo, hi] =
-    axis === "absolute"
-      ? spaceZone(s) !== undefined
-        ? niceToCells(
-            iv.min,
-            iv.max,
-            axisTickPartition(s, ticks),
-            spaceZone(s)!
-          )
-        : d3Nice(iv.min, iv.max, ticks.count)
-      : [iv.min, iv.min + d3Nice(0, iv.max - iv.min, ticks.count)[1]];
+    spaceZone(s) !== undefined
+      ? niceToCells(iv.min, iv.max, axisTickPartition(s, ticks), spaceZone(s)!)
+      : d3Nice(iv.min, iv.max, ticks.count);
   return {
     ...(space as CONTINUOUS_TYPE),
     dataInterval: interval(lo, hi),
@@ -419,8 +437,23 @@ export const mirrored = (
 export const allMirrored = (spaces: CONTINUOUS_TYPE[]): boolean =>
   spaces.length > 0 && spaces.every((s) => s.mirrored === true);
 
+/** A continuous space's cross-section ({@link CONTINUOUS_TYPE.profile}): its
+ *  profile, or, for a space without one, its data interval at every u over
+ *  the whole line. Every reader asks this, so nothing asks whether a space
+ *  has a profile. */
+export const crossSectionOf = (space: CONTINUOUS_TYPE): Fun<Interval> =>
+  space.profile ?? constant(space.dataInterval);
+
+/** `space` with the cross-section `profile`, which is stored only when it is
+ *  not one interval everywhere: a constant profile is what a space without
+ *  one already means. */
+export const withProfile = <T extends CONTINUOUS_TYPE>(
+  space: T,
+  profile: Fun<Interval>
+): T => (isConstant(profile) ? space : { ...space, profile });
+
 /** Pin a continuous space with its local origin at data coordinate `at`: shift
- *  its interval by `at` and pin the origin. A free `[−descent, ascent]` lands
+ *  its interval (and its profile) by `at` and pin the origin. A free `[−descent, ascent]` lands
  *  on `[at − descent, at + ascent]`; an origin-less `[0, width]` lands its low
  *  edge at `at`; a pinned space (whose origin is data 0) moves by `at`. Used by
  *  the `position` operator. `measure` defaults to the space's own. */
@@ -428,13 +461,23 @@ export const anchorAt = (
   space: CONTINUOUS_TYPE,
   at: number,
   measure?: UnitRecord
-): CONTINUOUS_TYPE =>
-  CONTINUOUS(
+): CONTINUOUS_TYPE => {
+  const pinned = CONTINUOUS(
     interval(space.dataInterval.min + at, space.dataInterval.max + at),
     "pinned",
     measure ?? space.measure,
     space.coordinateTransform
   );
+  return space.profile === undefined
+    ? pinned
+    : {
+        ...pinned,
+        profile: add(
+          space.profile,
+          constant({ min: at, max: at }, space.profile.domain)
+        ),
+      };
+};
 
 /** An ordinal space over `domain`, titled by the grouping field `title`. */
 export const ORDINAL = (
@@ -635,7 +678,7 @@ export type UnitRecord = {
 
 /** The units of values of quantity `q`: its unit (`unitOf`: its declared
  *  unit, zone and all, else the variable of its name in the type walk's
- *  union-find), its name as the title, and `q` itself as a summand when its
+ *  union-find), its name as the title (none when it has no name), and `q` itself as a summand when its
  *  unit is declared. */
 export const quantityUnits = (
   q: Quantity | undefined
@@ -644,7 +687,7 @@ export const quantityUnits = (
     ? undefined
     : {
         unit: unitOf(q),
-        titles: [q.name],
+        titles: q.name === undefined ? [] : [q.name],
         ...(q.unit !== undefined ? { summands: [q] } : {}),
       };
 

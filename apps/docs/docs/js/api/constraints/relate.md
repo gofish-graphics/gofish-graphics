@@ -14,7 +14,7 @@ layer([
   .relate(({ bg, label }) => [
     Constraint.align({ x: "middle", y: "end" }, [label, bg]),
   ])
-  .render(container, { w: 300, h: 200 });
+  .render(container);
 ```
 
 ::: gofish
@@ -29,7 +29,7 @@ gf.layer([
     gf.Constraint.align({ x: "end", y: "end" }, [label, bg]),
     gf.Constraint.align({ x: "start", y: "start" }, [badge, bg]),
   ])
-  .render(root, { w: 300, h: 200 });
+  .render(root);
 ```
 
 :::
@@ -72,7 +72,7 @@ gf.layer([
     gf.Constraint.align({ x: "middle" }, [mercury, label]),
     gf.Constraint.distribute({ dir: "y", spacing: 10 }, [row, label]),
   ])
-  .render(root, { w: 300, h: 120 });
+  .render(root);
 ```
 
 :::
@@ -102,7 +102,7 @@ gf.layer([
     gf.Constraint.distribute({ dir: "x", spacing: 60 }, [a, b]),
     gf.arrow({ bow: 0, stretch: 0, stroke: gf.color.blue[4] }, [a, b]),
   ])
-  .render(root, { w: 240, h: 80 });
+  .render(root);
 ```
 
 :::
@@ -175,7 +175,7 @@ gf.layer([
     gf.Constraint.align({ x: "end" }, [a, b, c]),
     gf.Constraint.distribute({ dir: "y" }, [a, b, c]),
   ])
-  .render(root, { w: 300, h: 200 });
+  .render(root);
 ```
 
 :::
@@ -219,7 +219,7 @@ gf.layer([
     gf.Constraint.align({ x: "start" }, [a, b, c]),
     gf.Constraint.distribute({ dir: "y", spacing: 8 }, [a, b, c]),
   ])
-  .render(root, { w: 300, h: 200 });
+  .render(root);
 ```
 
 :::
@@ -337,7 +337,7 @@ gf.layer([
   .relate(({ outer, inner }) => [
     gf.Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
   ])
-  .render(root, { w: 200, h: 160 });
+  .render(root);
 ```
 
 :::

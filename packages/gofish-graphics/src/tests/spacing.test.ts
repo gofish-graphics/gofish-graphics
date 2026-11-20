@@ -141,34 +141,22 @@ async function main() {
   check(
     "a box relates end to start",
     JSON.stringify(
-      distributePlacementAnchors({ spacing: Spacing.box(4), glue: false })
+      distributePlacementAnchors({ spacing: Spacing.box(4) })
     ) === JSON.stringify({ from: "end", to: "start" })
   );
   for (const at of ["start", "middle", "end", "baseline"] as const) {
     check(
       `a pitch at "${at}" relates ${at} to ${at}`,
       JSON.stringify(
-        distributePlacementAnchors({
-          spacing: Spacing.pitch(30, { at }),
-          glue: false,
-        })
+        distributePlacementAnchors({ spacing: Spacing.pitch(30, { at }) })
       ) === JSON.stringify({ from: at, to: at })
     );
   }
   check(
     "a pitch's at defaults to baseline",
     JSON.stringify(
-      distributePlacementAnchors({ spacing: Spacing.pitch(30), glue: false })
+      distributePlacementAnchors({ spacing: Spacing.pitch(30) })
     ) === JSON.stringify({ from: "baseline", to: "baseline" })
-  );
-  check(
-    "a stack relates head to tail whatever its spacing",
-    JSON.stringify(
-      distributePlacementAnchors({
-        spacing: Spacing.pitch(30, { at: "middle" }),
-        glue: true,
-      })
-    ) === JSON.stringify({ from: "head", to: "tail" })
   );
 
   console.log("\n# layout");

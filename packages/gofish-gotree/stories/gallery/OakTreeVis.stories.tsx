@@ -68,35 +68,32 @@ const node = (d: any) =>
 
 export const OakTreeVis: StoryObj = {
   render: () =>
-    mount(
-      {
-        node,
-        // curveStepBefore unsupported → linear (see GAP 4).
-        link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 2 },
-        parentChild: combine({
-          // θ: parent angularly centered over its subtree's span (dsl within/align).
-          x: { kind: "align", alignment: "middle" },
-          // r: dsl wants nest (radial containment); approximated with distribute
-          //    (parent inner, children outward) — see GAP 1. mode center → r-units.
-          y: {
-            kind: "distribute",
-            spacing: Spacing.pitch(121, { at: "middle" }),
-          },
-        }),
-        sibling: combine({
-          // θ: fan siblings angularly (radians between centers, center mode).
-          x: {
-            kind: "distribute",
-            spacing: Spacing.pitch((2 * Math.PI) / 6, { at: "middle" }),
-          },
-          // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
-          y: {
-            kind: "distribute",
-            spacing: Spacing.pitch(61, { at: "middle" }),
-          },
-        }),
-        coord: Coord.clock(),
-      },
-      { w: 520, h: 520 }
-    ),
+    mount({
+      node,
+      // curveStepBefore unsupported → linear (see GAP 4).
+      link: { curve: Curve.linear(), stroke: "#90a4ae", strokeWidth: 2 },
+      parentChild: combine({
+        // θ: parent angularly centered over its subtree's span (dsl within/align).
+        x: { kind: "align", alignment: "middle" },
+        // r: dsl wants nest (radial containment); approximated with distribute
+        //    (parent inner, children outward) — see GAP 1. mode center → r-units.
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(121, { at: "middle" }),
+        },
+      }),
+      sibling: combine({
+        // θ: fan siblings angularly (radians between centers, center mode).
+        x: {
+          kind: "distribute",
+          spacing: Spacing.pitch((2 * Math.PI) / 6, { at: "middle" }),
+        },
+        // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(61, { at: "middle" }),
+        },
+      }),
+      coord: Coord.clock(),
+    }),
 };

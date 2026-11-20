@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { seafood } from "../../src/data/catch";
-import { chart, spread, stack } from "../../src/lib";
-import { ribbon } from "../../src/lib";
+import { unemployment } from "../../src/data/unemployment";
+import { chart, stack, ribbon, Baseline, Unit } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax/Streamgraph",
   argTypes: {
+    w: {
+      control: { type: "number", min: 100, max: 1000, step: 10 },
+    },
     h: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
     },
@@ -14,27 +16,42 @@ const meta: Meta = {
 };
 export default meta;
 
-type Args = { h: number };
+type Args = { w: number; h: number };
+
+// The six industries with the most unemployment over the decade, one for
+// each color of the default palette.
+const largest = [
+  "Wholesale and Retail Trade",
+  "Manufacturing",
+  "Leisure and hospitality",
+  "Business services",
+  "Construction",
+  "Education and Health",
+];
 
 export const Default: StoryObj<Args> = {
-  args: { h: 400 },
+  args: { w: 560, h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
       title: "Streamgraph",
       description:
-        "A streamgraph of fish catch by species across six lakes, with the stacked bands centered around a wandering baseline so each species reads as a flowing organic layer.",
+        "Unemployment in the six largest US industries from 2000 to 2010 as a streamgraph, the bands stacked about a baseline that moves to keep them as flat as it can.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
+    const rows = unemployment.filter((d) => largest.includes(d.series));
 
-    chart(seafood, { h: args.h })
-      .flow(
-        spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
-        stack({ by: "species", dir: "y" })
-      )
-      .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }))
+    chart(rows, {
+      w: args.w,
+      h: args.h,
+      schema: { date: Unit.time() },
+      axes: { x: { title: false } },
+      legend: { y: { title: "unemployed (thousands)" } },
+    })
+      .flow(stack({ by: "series", dir: "y", baseline: Baseline.wiggle() }))
+      .mark(ribbon({ x: "date", h: "count", fill: "series" }))
       .render(container);
 
     return container;

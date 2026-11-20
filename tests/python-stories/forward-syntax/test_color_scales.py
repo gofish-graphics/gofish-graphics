@@ -94,7 +94,7 @@ def story_paired_palettes():
         .flow(
             derive(_assign_colors),
             spread(by="pair", dir="x"),
-            stack(by="type", dir="x"),
+            spread(by="type", dir="x", spacing=0),
         )
         .mark(rect(h="value", fill="color")),
         {},
@@ -125,7 +125,7 @@ def story_nested_derive():
                 for item in d
             ]),
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=0),
         )
         .mark(rect(h="count", fill="highlight")),
         {},
@@ -141,7 +141,7 @@ def story_selective_derive():
                 for item in d
             ]),
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=0),
         )
         .mark(rect(h="count", fill="highlight")),
         {},
@@ -153,7 +153,7 @@ def story_selective_group():
         chart(SEAFOOD, color=Color.palette({"Salmon": "#e15759"}), w=400, h=400)
         .flow(
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=0),
         )
         .mark(rect(h="count", fill="species")),
         {},

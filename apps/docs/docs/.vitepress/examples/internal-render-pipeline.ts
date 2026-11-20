@@ -32,7 +32,6 @@ steps.forEach(([label, fill], i) => {
 });
 
 // GoFish's y axis points up, so reverse for a top-to-bottom reading order.
-gf.stackY({ spacing: 9, alignment: "middle" }, items.slice().reverse()).render(
-  root,
-  { w: W + 60, h: 386 }
+gf.spreadY({ spacing: 9, alignment: "middle" }, items.slice().reverse()).render(
+  root
 );

@@ -62,6 +62,39 @@ A plain field has no region, so `partition(by="date", dir="x")` raises a
 `partition(by=struct(x="lon", y="lat"))`. To give each value an equal slot instead, use
 [`spread`](./spread) with the same key.
 
+## A distribution's cells
+
+`by` may also be a distribution binned into cells, with `p` one of
+`Bin.step`, `Bin.thresholds` or `Bin.quantiles`: `d.bin(p)` with `d` a
+[`Dist`](/python/api/dist) family, or `field(x).bin(p)` where the column `x` holds a
+distribution, after [`derive(kde("x"))`](/python/api/dist#kde). The cells are those of `p` over the interval the density
+is drawn over, and `Bin.quantiles(n)` cuts at the distribution's own
+quantiles. Each cell's group holds every row, and the distribution in it is
+the whole one restricted to the cell.
+
+In a cell, the members of the distribution are the whole one's, restricted
+to the cell: `field(x).density()` in a cell of `field(x).bin(p)`, and
+`d.density()` in a cell of `d.bin(p)`. In a cell of a field's line, a ribbon
+or a line whose `x` is the field is the whole group's too, so the bands in
+the cells of one curve meet.
+
+```python
+d = Dist.normal(mean="mean", sd="sd")
+
+(
+    chart([{"mean": 0, "sd": 1}])
+    .flow(partition(by=d.bin(Bin.quantiles(5)), dir="x"))
+    .mark(
+        layer(
+            [
+                ribbon(x=d.domain(), h=d.density(), inset=3),
+                circle(cx=d.median(), cy=6, r=3),
+            ]
+        )
+    )
+)
+```
+
 ## Filling the cell
 
 A mark with no size along `dir` fills its cell. [`rect`](/python/api/marks/rect)

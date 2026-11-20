@@ -1,6 +1,6 @@
 """Equivalent of BarGrouped.stories.tsx — Forward Syntax/Bar/Grouped."""
 
-from gofish import chart, spread, stack, rect
+from gofish import chart, spread, rect
 from python_stories.data import SEAFOOD
 
 
@@ -9,7 +9,7 @@ def story_default():
         chart(SEAFOOD, w=400, h=400)
         .flow(
             spread(by="lake", dir="x", spacing=24),
-            stack(by="species", dir="x"),
+            spread(by="species", dir="x", spacing=0),
         )
         .mark(rect(h="count", fill="species")),
         {},

@@ -37,5 +37,5 @@ def story_cartesian_deep_tree():
                 y={"kind": "align", "alignment": "start"},
             ),
         ),
-        {"w": 900, "h": 520},
+        {},
     )

@@ -4,10 +4,11 @@ order: 50
 
 # ribbon
 
-Fills the region between a baseline and a set of data points as a filled band.
-Like [`line`](/python/api/marks/line), a ribbon traces a layout produced by
-another chart, selected with [`select_all()`](/python/api/core/chart#cross-chart-references)
-— an array of refs whose placed geometry the ribbon reads.
+Fills a band. It has two forms. The shape form, `ribbon(x=..., h=...)`, draws
+one band per group from its rows: an area chart. The connector form traces a
+layout produced by another chart, selected with
+[`select_all()`](/python/api/core/chart#cross-chart-references): an array of
+refs whose placed geometry the ribbon reads.
 
 ::: gofish example:area-chart hidden
 :::
@@ -26,6 +27,12 @@ layer([
 ## Signature
 
 ```python
+# Shape form
+ribbon(x=..., h=..., fill=None, stroke=None, stroke_width=None, opacity=None,
+     blend_mode=None, curve=None) -> Mark
+ribbon(y=..., w=..., ...) -> Mark
+
+# Connector form
 ribbon(stroke=None, stroke_width=None, opacity=None, blend_mode=None,
      dir=None, curve=None, along=None, w=None, h=None, em_x=None, em_y=None) -> Mark
 ```
@@ -36,6 +43,50 @@ ribbon(stroke=None, stroke_width=None, opacity=None, blend_mode=None,
 :::
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
+
+## Shape form
+
+Given `x`, the ribbon draws one band per group, from 0 to `h` at each row's
+`x`. Given `y`, it draws from 0 to `w` at each row's `y`. The rows are sorted
+by `x` (or `y`), which must be a numeric or time column. Two rows of one
+group at the same `x` are an error: split them with
+[`group`](/python/api/operators/group) first. `h` may be negative, and the
+band then goes below the baseline. The curve defaults to `Curve.monotone()`
+and takes `Curve.linear()`, `Curve.step()`, `Curve.monotone()` or
+`Curve.smooth()`.
+
+```python
+(
+    chart(unemployment, schema={"date": Unit.time()})
+    .flow(group(by="series"))
+    .mark(ribbon(x="date", h="count", fill="series", opacity=0.5))
+)
+```
+
+A [`stack`](/python/api/operators/stack#stacked-areas) of shape-form ribbons is
+a stacked area. Each band keeps its thickness at every `x`, and sits on the
+bands before it. Outside its own rows a band has thickness 0.
+
+```python
+(
+    chart(unemployment, schema={"date": Unit.time()})
+    .flow(stack(by="series", dir="y"))
+    .mark(ribbon(x="date", h="count", fill="series"))
+)
+```
+
+A shape-form ribbon takes `inset`, a number of pixels. It is drawn in by
+`inset` from each end of its `x`, so the bands in the cells of a
+[`partition`](/python/api/operators/partition#a-distribution-s-cells) are drawn apart. Its values are not
+drawn in: the band stays on the baseline its data gives it. Only what is
+drawn changes: the band's box is the same.
+
+## Function channels
+
+In JavaScript, the shape form reads a function value made with
+[`fun`](/python/api/core/fun) in place of a column. Python does not support
+function values yet: `fun` raises. Give the function's values at sample
+points as rows instead.
 
 ## The ribbon pattern
 

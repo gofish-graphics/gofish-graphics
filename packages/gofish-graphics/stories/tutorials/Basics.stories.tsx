@@ -43,7 +43,7 @@ export const Basics: StoryObj = {
           circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
         )
       ),
-    ]).render(container, { w: 410, h: 116 });
+    ]).render(container);
 
     return container;
   },

@@ -2283,8 +2283,9 @@ async function main() {
       String(placedGroups)
     );
 
-    for (const [name, inner] of [
-      ["stack", () => stack({ by: "y", dir: "y" })],
+    for (const [name, inner, mark] of [
+      // A stack adds data amounts, so its parts have a data height.
+      ["stack", () => stack({ by: "y", dir: "y" }), () => rect({ w: 5, h: "y" })],
       ["spread", () => spread({ by: "y", dir: "y" })],
       ["group", () => group({ by: "y" })],
       ["scatter", () => scatter({ x: "x", y: "y" })],
@@ -2296,7 +2297,7 @@ async function main() {
     ] as const) {
       const got = await chart(pts, noAxes)
         .flow(spread({ by: byCell(), dir: "x" }), inner())
-        .mark(rect({ w: 5, h: 5 }))
+        .mark(mark?.() ?? rect({ w: 5, h: 5 }))
         .toDisplayList({ w: 300, h: 100 })
         .then(
           (dl: any) => walkItems(dl).filter((it) => it.kind === "rect"),

@@ -20,7 +20,6 @@ const vedge = (cx, cy, h) =>
 const lbl = (text) => gf.text({ text, fontSize: 12, fill: "#444" });
 
 const W = 420;
-const H = 262;
 const boxH = 42;
 const parentCy = 224; // y up: parent near the top
 const childCy = 36; // children near the bottom
@@ -44,4 +43,4 @@ gf.layer([
   // local information flow
   gf.position({ x: W / 2, y: 158 }, lbl("↓  proposes a size")),
   gf.position({ x: W / 2, y: 104 }, lbl("↑  reports its size")),
-]).render(root, { w: W, h: H });
+]).render(root);

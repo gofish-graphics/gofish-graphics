@@ -35,5 +35,5 @@ def story_elastic_hierarchy():
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

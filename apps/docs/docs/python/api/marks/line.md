@@ -4,10 +4,11 @@ order: 40
 
 # line
 
-Connects data points with a line. A line draws **through** a set of points, so
-it is most often paired with [`select_all()`](/python/api/core/chart#cross-chart-references)
-to trace a layout produced by another chart. `select_all` hands `line` an array
-of refs, and the line reads placed geometry off them.
+Draws a path. It has two forms. The shape form, `line(x=..., y=...)`, draws
+one path per group through its rows. The connector form draws **through** a
+set of points another chart placed, so it is often paired with
+[`select_all()`](/python/api/core/chart#cross-chart-references). `select_all`
+hands `line` an array of refs, and the line reads placed geometry off them.
 
 ::: gofish example:line-chart hidden
 :::
@@ -26,6 +27,10 @@ layer([
 ## Signature
 
 ```python
+# Shape form
+line(x=..., y=..., stroke=None, stroke_width=None, stroke_dasharray=None, opacity=None, curve=None) -> Mark
+
+# Connector form
 line(stroke=None, stroke_width=None, stroke_dasharray=None, opacity=None, curve=None, along=None, w=None, h=None, em_x=None, em_y=None) -> Mark
 ```
 
@@ -43,6 +48,29 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 out, a line over a continuous axis uses `Curve.monotone()`, and any other line
 uses `Curve.linear()`. The [`Curve`](/python/api/curve#curves-through-data) page
 compares the curves.
+
+## Shape form
+
+Given `x` and `y`, the line draws one path per group through its rows, sorted
+by `x`. `x` must be a numeric or time column. Two rows of one group at the
+same `x` are an error: split them with [`group`](/python/api/operators/group)
+first. The curve defaults to `Curve.monotone()` and takes `Curve.linear()`,
+`Curve.step()`, `Curve.monotone()` or `Curve.smooth()`.
+
+```python
+(
+    chart(prices, schema={"date": Unit.time()})
+    .flow(group(by="symbol"))
+    .mark(line(x="date", y="price", stroke="symbol"))
+)
+```
+
+## Function channels
+
+In JavaScript, the shape form reads a function value made with
+[`fun`](/python/api/core/fun) in place of a column. Python does not support
+function values yet: `fun` raises. Give the function's values at sample
+points as rows instead.
 
 ## The line pattern
 

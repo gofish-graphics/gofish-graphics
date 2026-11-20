@@ -28,5 +28,5 @@ def story_arc_tree():
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

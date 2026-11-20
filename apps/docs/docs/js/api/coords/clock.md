@@ -77,7 +77,7 @@ chart(data, { coord: Coord.clock({ innerRadius: 0.6 }) })
 
 // Rose chart (radial bar chart)
 chart(data, { coord: Coord.clock() })
-  .flow(stack({ by: "month", dir: "x" }))
+  .flow(spread({ by: "month", dir: "x", spacing: 0 }))
   .mark(rect({ w: (Math.PI * 2) / 12, emX: true, h: "value" }));
 ```
 

@@ -17,8 +17,6 @@ import { titanic } from "../data/titanic";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
 import {
-  stackY,
-  stackX,
   rect,
   groupBy,
   map,
@@ -66,8 +64,8 @@ const internalSpacing = 2;
 export const testSankeyIcicle = () =>
   layer([
     spread({ dir: "x", spacing: layerSpacing, alignment: "middle" }, [
-      stackY(
-        { alignment: "middle" },
+      spreadY(
+        { spacing: 0, alignment: "middle" },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
@@ -87,8 +85,8 @@ export const testSankeyIcicle = () =>
           .map((items, cls) =>
             spread({ dir: "x", spacing: layerSpacing, alignment: "middle" },
               [
-                stackY(
-                  {
+                spreadY(
+                  { spacing: 0,
                     name: `${cls}-tgt`,
                     alignment: "middle",
                   },
@@ -118,8 +116,8 @@ export const testSankeyIcicle = () =>
                           alignment: "middle",
                         },
                         [
-                          stackY(
-                            {
+                          spreadY(
+                            { spacing: 0,
                               name: `${cls}-${sex}-tgt`,
                               alignment: "middle",
                             },
@@ -280,8 +278,8 @@ export const testSankeyIcicle = () =>
 export const testSankeyIcicleWithFor = () =>
   layer([
     spreadX({ spacing: layerSpacing, alignment: "middle" }, [
-      stackY(
-        { alignment: "middle" },
+      spreadY(
+        { spacing: 0, alignment: "middle" },
         map(groupBy(titanic, "class"), (items, cls) =>
           rect({
             w: 40,
@@ -294,8 +292,8 @@ export const testSankeyIcicleWithFor = () =>
         { spacing: internalSpacing, alignment: "middle" },
         map(groupBy(titanic, "class"), (items, cls) =>
           spreadX({ spacing: layerSpacing, alignment: "middle" }, [
-            stackY(
-              { alignment: "middle" },
+            spreadY(
+              { spacing: 0, alignment: "middle" },
               map(groupBy(items, "sex"), (items, sex) =>
                 rect({
                   w: 40,
@@ -312,8 +310,8 @@ export const testSankeyIcicleWithFor = () =>
               },
               map(groupBy(items, "sex"), (items, sex) =>
                 spreadX({ spacing: layerSpacing, alignment: "middle" }, [
-                  stackY(
-                    {
+                  spreadY(
+                    { spacing: 0,
                       alignment: "middle",
                     },
                     map(groupBy(items, "survived"), (survivedItems, survived) =>

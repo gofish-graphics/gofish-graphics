@@ -202,7 +202,7 @@ export const RadialTreeIncline: StoryObj = {
     // is last within `nodes` so its dark disc caps the spoke convergence.
     layer({ coord: Coord.clock() as any }, [
       layer([...links, ...nodes]),
-    ]).render(container, { w: 520, h: 520 });
+    ]).render(container);
     return container;
   },
 };

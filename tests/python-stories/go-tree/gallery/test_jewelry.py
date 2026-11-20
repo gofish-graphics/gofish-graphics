@@ -34,5 +34,5 @@ def story_jewelry():
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

@@ -318,6 +318,9 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Where the result puts its own 0 (`Baseline`). Not taken yet without
+   *  `glue`. */
+  baseline?: BaselineIR;
   /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
    *  pixel number sizing each split entry. A `field(name).normalize()`
    *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
@@ -333,19 +336,15 @@ export interface StackOperator
     OperatorFlagsIR,
     OperatorBoxIR {
   type: "stack";
-  /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
+  /** See `SpreadOperator.label`. */
   label?: LabelIR;
   by?: string | FieldAccessor | ChunkKeyIR;
   /** See `SpreadOperator.dir`. */
   dir?: string;
-  /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
-   *  true})`, so producers may put spread's options on the wire. Glue
-   *  semantics force the effective gap to 0. */
-  spacing?: number;
-  /** Spread-parity passthrough; stack always glues regardless. */
-  glue?: boolean;
   alignment?: string;
   reverse?: boolean;
+  /** Where the stack puts its own 0 (`Baseline`). */
+  baseline?: BaselineIR;
   /** Per-entry size — see `SpreadOperator`. */
   size?: ChannelValue;
   axes?: AxesOptions;
@@ -556,7 +555,11 @@ export interface PartitionOperator
   label?: LabelIR;
   /** A key that has a region: a binned field accessor, one per axis, or a
    *  binned struct of two fields. */
-  by: FieldAccessor | { x: FieldAccessor; y: FieldAccessor } | StructAccessor;
+  by:
+    | FieldAccessor
+    | { x: FieldAccessor; y: FieldAccessor }
+    | StructAccessor
+    | DistAccessor;
   /** The axis to divide. Required with a single key; not allowed with a
    *  key per axis. */
   dir?: string;
@@ -618,6 +621,22 @@ export type OverlapIR =
       padding?: number;
       seed?: number;
     };
+
+/** A point on one part of a stack: a fraction of the way from the part's
+ *  tail to its head, or one of its anchors (`"baseline"` is its tail). */
+export type BaselinePointIR = number | "start" | "middle" | "end" | "baseline";
+
+/** Where a stack puts its own 0, made by a call in the `Baseline` family
+ *  (`Baseline.start()`, `Baseline.end()`, `Baseline.middle()`,
+ *  `Baseline.wiggle()`, `Baseline.at(part, point)`). The `part` of `at` is a
+ *  value of the `by` column in a flow, and a child index in the combinator
+ *  form. */
+export type BaselineIR =
+  | { kind: "start" }
+  | { kind: "end" }
+  | { kind: "middle" }
+  | { kind: "wiggle" }
+  | { kind: "at"; part: string | number; point: BaselinePointIR };
 
 /** How far apart a chain's neighbors are, spread's and distribute's
  *  `spacing`: a bare amount, which is `Spacing.box(amount)`, or a strategy. */
@@ -944,8 +963,34 @@ export type ChannelValue =
   | boolean
   | null
   | FieldAccessor
+  | DistAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/** The parameters of each distribution family, by name, as
+ *  `Dist.normal({ mean, sd })` takes them. gofish-graphics' `ast/dist.ts`
+ *  reads this table. */
+export const DIST_FAMILIES = {
+  normal: ["mean", "sd"],
+  lognormal: ["meanlog", "sdlog"],
+  uniform: ["min", "max"],
+  exponential: ["rate"],
+} as const;
+
+/** A distribution family's name. */
+export type DistFamilyIR = keyof typeof DIST_FAMILIES;
+
+/** A distribution as a channel holds it, emitted by `Dist.normal({ mean,
+ *  sd })` and the other families: each parameter is a number, a column
+ *  name, or a value expression, read over each group's rows. `ops` are the
+ *  members it is read through (`d.density()` is one `member` op), as for a
+ *  reduce's result. gofish-graphics' `ast/distExpr.ts` mirrors it. */
+export interface DistAccessor {
+  type: "dist";
+  family: DistFamilyIR;
+  params: Record<string, number | string | FieldAccessor>;
+  ops?: FieldOpIR[];
+}
 
 /**
  * A length (#1176 step 6), as `percent(n)` and `fr(k)` build it: `percent`
@@ -1042,7 +1087,23 @@ export type FieldOpIR =
   | { op: "mean" }
   | { op: "median" }
   | { op: "count" }
-  | { op: "distinct" };
+  | { op: "distinct" }
+  /** `map(fn, unit=...)`: each value to a new one, `fn(x, i, xs)`. Only a
+   *  Python function has a wire form, a bridge handle. */
+  | { op: "map"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** `reduce(fn, unit=...)`: all of a group's values to one result,
+   *  `fn(xs)`, a number or a record of numbers. */
+  | { op: "reduce"; fn: BridgeLambdaSentinel; unit?: UnitSpecIR }
+  /** A member of a reduce's result, or of the distribution the column
+   *  holds, read with `args` (`s.lo()`, `field("x").quantile(0.9)`). */
+  | { op: "member"; name: string; args?: unknown[] };
+
+/** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire
+ *  traits (`{ HasUnit }`), or a record that mirrors the result's shape. */
+export type UnitSpecIR =
+  | string
+  | { HasUnit: unknown; [trait: string]: unknown }
+  | { [member: string]: UnitSpecIR };
 
 /** A post-scale color transform carried by a datum value, applied AFTER the
  *  datum maps through its color scale — the color analog of {@link

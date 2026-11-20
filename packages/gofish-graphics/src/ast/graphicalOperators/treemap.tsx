@@ -37,6 +37,7 @@ import { rejectLength, type LengthValue } from "../length";
 import { createOperator } from "../marks/createOperator";
 import { SplitBy, splitEntries } from "../datumProjection";
 import type { FieldExpr } from "../fieldExpr";
+import type { ValueExpr } from "../groupExpr";
 import { checkSummable } from "../measure";
 import { squarify, type Tile } from "../../families/tile";
 import { Frontend } from "gofish-ir";
@@ -447,7 +448,7 @@ export type TreemapOptions<T = any> = Omit<TreemapProps, "size"> & {
    *  an explicit per-entry array — mirrors `spread`'s entry-flagged `size`.
    *  `inferSize` sums by default for a bare field name, so `size:
    *  "Worldwide Gross"` aggregates per group. */
-  size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
+  size?: (keyof T & string) | FieldExpr | ValueExpr | MaybeValue<number>[];
 };
 
 export const treemap = createOperator<any, TreemapOptions>(

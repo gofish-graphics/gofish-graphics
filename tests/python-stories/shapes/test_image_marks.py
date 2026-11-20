@@ -22,7 +22,7 @@ reconstruct the byte-identical percent-encoding here with Python's
 import os
 from urllib.parse import quote
 
-from gofish import image, spread, stack, text
+from gofish import image, spread, text
 
 _REPO_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "..")
@@ -52,7 +52,7 @@ INLINE_BADGE_SVG = (
 
 
 def _labeled_image(label, image_node):
-    return stack(
+    return spread(
         [
             text(text=label, font_size=14, fill="#1f2937"),
             image_node,

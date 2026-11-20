@@ -24,7 +24,7 @@ gf.chart([{}])
       fill: "steelblue",
     })
   )
-  .render(root, { w: 100, h: 60 });
+  .render(root);
 ```
 
 :::

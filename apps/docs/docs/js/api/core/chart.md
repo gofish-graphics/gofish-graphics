@@ -43,6 +43,10 @@ Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js
 
 ## Axes
 
+An axis is drawn only for a dimension whose scale has positions. A dimension
+with no origin, such as a streamgraph's y, is a length scale: it draws no
+axis, and its scale gets an entry in the [legend](#legend) instead.
+
 `axes` accepts a boolean, a per-dimension object, or per-dimension title control:
 
 ```ts
@@ -189,18 +193,51 @@ chart(seafood, { axes: true })
 
 ## Legend
 
-When a chart's marks color by a field, GoFish resolves a color scale and draws
-it beside the plot: a swatch column for a categorical scale, a colorbar for a
-gradient. `legend: false` suppresses that chrome. The marks keep their colors —
-only the legend goes away.
+Axes are for scales that have positions. Legends are for scales that do not.
+The legend sits beside the plot and holds one entry for each such scale:
+
+- **Color.** When the marks color by a field, the entry is a swatch column for
+  a categorical scale, or a colorbar for a gradient.
+- **Length.** A space with no origin is a length scale. Its data has lengths
+  but no places, as in a streamgraph or a stack centered with
+  `Baseline.middle()`. That dimension gets no axis. Its entry is a bracket of
+  a round amount near a quarter of the data's widest extent, drawn at the
+  plot's scale and labeled once with the amount and the measure's name, for
+  example "2000 count". It sits at the top of the legend, above the swatches.
+
+A length entry stands in for the axis the dimension would have if its space
+had an origin, so by default it is drawn where that axis would be: along a
+dimension whose axes the chart draws. A chart draws its axes unless `axes`
+turns them off, so with `axes: { y: false }` the length entry along y is not
+drawn either. A figure rendered without `chart()` draws no axes by default,
+and no length entries. The color entry is drawn either way.
+
+`legend` turns entries on or off. The marks keep their colors and sizes; only
+the legend goes away.
+
+| Value                     | Draws                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| omitted (default)         | the color entry, and the length entries where axes are drawn |
+| `true`                    | every entry                                                  |
+| `false`                   | no entries                                                   |
+| `{ color: false }`        | the length entries, no color entry                           |
+| `{ y: false }`            | no length entry for the scales along y                       |
+| `{ y: { title: "..." } }` | the length entry along y, its amount named by the title      |
+
+A key left out of the object keeps its default.
 
 ```ts
 chart(data, { legend: false });
+chart(data, { legend: { color: false } });
+chart(rows, { legend: { y: { title: "unemployed (thousands)" } } });
 ```
 
-Use it when the legend would cost more than it explains: a map colored by 72
-species, where the swatch column would take more room than the map itself, or a
-chart whose colors are already labeled in place.
+The length entry's title is set on `legend`, not on `axes`: a dimension with
+no origin draws no axis, so `axes.y` does not apply there.
+
+Turn the legend off when it would cost more than it explains: a map colored by
+72 species, where the swatch column would take more room than the map itself,
+or a chart whose colors are already labeled in place.
 
 ## Equal scale from a shared unit
 

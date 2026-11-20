@@ -11,6 +11,7 @@
 
 import {
   COMBINATOR_MARK_TYPES,
+  DIST_FAMILIES,
   LEAF_MARK_TYPES,
   OPERATOR_TYPES,
   type ChannelValue,
@@ -660,6 +661,16 @@ function walkRefType(
     case "StructAccessor":
       walkStructAccessor(value, path, ctx);
       return;
+    case "DistAccessor":
+      if (!isObject(value) || value.type !== "dist") {
+        ctx.errors.push({
+          path,
+          message: `expected a distribution (Dist.normal(...).bin(p)), got ${JSON.stringify(value)}`,
+        });
+        return;
+      }
+      walkDistAccessor(value, path, ctx);
+      return;
     case "DatumValue":
       if (!isObject(value) || value.type !== "datum") {
         ctx.errors.push({
@@ -873,6 +884,10 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     walkFieldAccessor(obj, path, ctx);
     return;
   }
+  if (obj.type === "dist") {
+    walkDistAccessor(obj, path, ctx);
+    return;
+  }
   if (obj.type === "literal") {
     if (!("value" in obj)) {
       ctx.errors.push({
@@ -913,6 +928,58 @@ function walkFieldAccessor(
     } else {
       obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
     }
+  }
+}
+
+/**
+ * A distribution (`Dist.normal({ mean, sd })`): `{ type: "dist", family,
+ * params, ops? }`, one parameter per name the family takes
+ * (`DIST_FAMILIES`), each a number, a column name or a field expression,
+ * and `ops` its members (and, as a `by` key, its `bin`).
+ */
+function walkDistAccessor(
+  obj: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  rejectUnknown(obj, ["type", "family", "params", "ops"], path, ctx);
+  const family = obj.family;
+  if (typeof family !== "string" || !Object.hasOwn(DIST_FAMILIES, family)) {
+    ctx.errors.push({
+      path: `${path}.family`,
+      message: `dist "family" must be one of ${Object.keys(DIST_FAMILIES).join(", ")}, got ${JSON.stringify(family)}`,
+    });
+    return;
+  }
+  const names = DIST_FAMILIES[family as keyof typeof DIST_FAMILIES];
+  const params = obj.params;
+  if (!isObject(params)) {
+    ctx.errors.push({
+      path: `${path}.params`,
+      message: `dist "params" must be an object of ${names.join(", ")}`,
+    });
+  } else {
+    rejectUnknown(params, [...names], `${path}.params`, ctx);
+    for (const k of names) {
+      const v = params[k];
+      const at = `${path}.params.${k}`;
+      if (v === undefined)
+        ctx.errors.push({ path: at, message: `Dist.${family} needs "${k}"` });
+      else if (isObject(v) && v.type === "field") walkFieldAccessor(v, at, ctx);
+      else if (typeof v !== "string" && !isIRNumber(v))
+        ctx.errors.push({
+          path: at,
+          message: `a dist parameter is a number, a column name or a field expression, got ${typeNameOf(v)}`,
+        });
+    }
+  }
+  if (obj.ops !== undefined) {
+    if (!Array.isArray(obj.ops))
+      ctx.errors.push({
+        path: `${path}.ops`,
+        message: 'dist "ops" must be an array when present',
+      });
+    else obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
   }
 }
 
@@ -984,7 +1051,26 @@ const FIELD_OP_NAMES = [
   "median",
   "count",
   "distinct",
+  "map",
+  "reduce",
+  "member",
 ] as const;
+
+/** The `unit` option of `map` or `reduce`: a unit's name, a unit's wire
+ *  traits (`{ HasUnit }`), or a record that mirrors the result's shape. */
+function walkUnitSpec(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "string") return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `unit must be a unit's name, a unit, or a record of units, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  if ("HasUnit" in value) return;
+  for (const [k, v] of Object.entries(value))
+    walkUnitSpec(v, `${path}.${k}`, ctx);
+}
 
 /** One op in a `field(...)` pipeline. Rejects an unrecognized op name
  *  consistently with this validator's other enum-style checks. */
@@ -1038,6 +1124,30 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       rejectUnknown(value, ["op", "partition"], path, ctx);
       if (value.partition !== undefined)
         walkPartition(value.partition, `${path}.partition`, ctx);
+      return;
+    case "map":
+    case "reduce":
+      rejectUnknown(value, ["op", "fn", "unit"], path, ctx);
+      if (!isObject(value.fn) || typeof value.fn.__gofish_lambda !== "string")
+        ctx.errors.push({
+          path: `${path}.fn`,
+          message: `${value.op} "fn" must be a Python function's bridge handle ({ __gofish_lambda })`,
+        });
+      if (value.unit !== undefined)
+        walkUnitSpec(value.unit, `${path}.unit`, ctx);
+      return;
+    case "member":
+      rejectUnknown(value, ["op", "name", "args"], path, ctx);
+      if (typeof value.name !== "string")
+        ctx.errors.push({
+          path: `${path}.name`,
+          message: `member "name" must be a string`,
+        });
+      if (value.args !== undefined && !Array.isArray(value.args))
+        ctx.errors.push({
+          path: `${path}.args`,
+          message: `member "args" must be an array when present`,
+        });
       return;
     default:
       // reverse/dropNulls/normalize/sum/mean/median/count/distinct carry no extra fields.

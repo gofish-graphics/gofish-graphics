@@ -202,6 +202,42 @@ for the API.
         }
       }
     },
+    "DistAccessor": {
+      "description": "A distribution, emitted by Dist.normal({ mean, sd }) and the other families. Each parameter is a number, a column name or a field expression, read over each group's rows; ops are the members it is read through (d.density()).",
+      "type": "object",
+      "required": ["type", "family", "params"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "dist"
+        },
+        "family": {
+          "enum": ["normal", "lognormal", "uniform", "exponential"]
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "$ref": "#/$defs/Number"
+              },
+              {
+                "$ref": "#/$defs/FieldAccessor"
+              }
+            ]
+          }
+        },
+        "ops": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FieldOpIR"
+          }
+        }
+      }
+    },
     "StructAccessor": {
       "description": "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Bin.hex or Bin.voronoi). Valid as a partition's `by` only once binned.",
       "type": "object",
@@ -383,6 +419,59 @@ for the API.
             "op": {
               "const": "distinct"
             }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["op", "fn"],
+          "properties": {
+            "op": {
+              "enum": ["map", "reduce"]
+            },
+            "fn": {
+              "$ref": "#/$defs/BridgeLambdaSentinel"
+            },
+            "unit": {
+              "$ref": "#/$defs/UnitSpecIR"
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": ["op", "name"],
+          "properties": {
+            "op": {
+              "const": "member"
+            },
+            "name": {
+              "type": "string"
+            },
+            "args": {
+              "type": "array"
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "UnitSpecIR": {
+      "description": "The unit option of map or reduce: a unit's name, a unit's wire traits ({ HasUnit }), or a record that mirrors the result's shape.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "object",
+          "required": ["HasUnit"]
+        },
+        {
+          "type": "object",
+          "not": {
+            "required": ["HasUnit"]
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitSpecIR"
           }
         }
       ]
@@ -879,6 +968,9 @@ for the API.
           "$ref": "#/$defs/FieldAccessor"
         },
         {
+          "$ref": "#/$defs/DistAccessor"
+        },
+        {
           "type": "object",
           "required": ["type", "value"],
           "properties": {
@@ -1138,6 +1230,10 @@ for the API.
           "description": "Stack semantics: children glued, sizes sum; spacing forced to 0.",
           "default": false
         },
+        "baseline": {
+          "$ref": "#/$defs/Baseline",
+          "description": "Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`."
+        },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },
@@ -1193,7 +1289,7 @@ for the API.
       }
     },
     "StackOperator": {
-      "description": "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
+      "description": "Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1219,14 +1315,6 @@ for the API.
           "type": "string",
           "description": "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat)."
         },
-        "spacing": {
-          "$ref": "#/$defs/Number",
-          "description": "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity."
-        },
-        "glue": {
-          "type": "boolean",
-          "description": "Spread-parity passthrough; stack always glues regardless."
-        },
         "alignment": {
           "type": "string",
           "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
@@ -1236,6 +1324,13 @@ for the API.
           "type": "boolean",
           "description": "Reverse the children's order along dir.",
           "default": false
+        },
+        "baseline": {
+          "$ref": "#/$defs/Baseline",
+          "description": "Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error.",
+          "default": {
+            "kind": "start"
+          }
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
@@ -1754,9 +1849,12 @@ for the API.
             },
             {
               "$ref": "#/$defs/StructAccessor"
+            },
+            {
+              "$ref": "#/$defs/DistAccessor"
             }
           ],
-          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error."
+          "description": "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, with p Bin.step, Bin.thresholds or Bin.quantiles: d.bin(p) with d a Dist family, or field(x).bin(p) where the column holds a distribution (after derive(kde(x))). Its cells are those of p over the interval its density is drawn over, Bin.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell (field(x).density(), d.density()). In a cell of a field's line, a ribbon or line through the rows over the field is the whole group's restricted to the cell too, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error."
         },
         "dir": {
           "type": "string",
@@ -1928,7 +2026,7 @@ for the API.
             },
             "glue": {
               "type": "boolean",
-              "description": "Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis.",
+              "description": "Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`.",
               "default": false
             }
           },
@@ -3282,7 +3380,7 @@ for the API.
       }
     },
     "LineMark": {
-      "description": "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
+      "description": "A path. Given `x` and `y`, the shape form: the mark owns its rows and draws one path per group through them, sorted by `x`. Without them, the connector form: the path between the centers of consecutive marks another flow placed, in bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -3336,7 +3434,7 @@ for the API.
         },
         "curve": {
           "$ref": "#/$defs/Curve",
-          "description": "Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear()."
+          "description": "Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate \"monotone\". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted."
         },
         "dir": {
           "enum": ["x", "y"],
@@ -3376,6 +3474,14 @@ for the API.
           "$ref": "#/$defs/ChannelValue",
           "description": "Blank-fusion anchor key — see `emX`. Ignored by `line` itself."
         },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The path runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `y`."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Shape form: each row's y, a position on the y axis. Needs `x`."
+        },
         "name": {
           "type": "string"
         },
@@ -3414,7 +3520,7 @@ for the API.
       }
     },
     "RibbonMark": {
-      "description": "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
+      "description": "A filled band. Given `x` (with `h`) or `y` (with `w`), the shape form: the mark owns its rows and draws one band per group, from its baseline to `h` at each row's `x` (or to `w` at each row's `y`), sorted by it. Without them, the connector form: a band between the facing edges of consecutive marks another flow placed (sankey ribbons, bands between bars).",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -3468,7 +3574,7 @@ for the API.
         },
         "curve": {
           "$ref": "#/$defs/Curve",
-          "description": "Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band."
+          "description": "Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate \"monotone\"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted."
         },
         "from": {
           "type": "string"
@@ -3490,11 +3596,23 @@ for the API.
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself."
+          "description": "Shape form with `y`: the band's width at each row, an amount from its baseline (negative values extend the other way). Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself."
+          "description": "Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself."
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Shape form: each row's y, for a band that runs up the y axis. Needs `w`."
+        },
+        "inset": {
+          "$ref": "#/$defs/Number",
+          "description": "Shape form: pixels the band is drawn in by from each end of its parameter, so the bands in the cells of a partition are drawn apart. Its values are not drawn in: the band stays on the baseline its data gives it, as a bar's data height is never inset. It changes only what is drawn: the band's box is the same. Not allowed on the connector form."
         },
         "name": {
           "type": "string"
@@ -3851,6 +3969,55 @@ for the API.
       ],
       "description": "Per-node axis override: a boolean shows or hides both axes; an object sets each axis on its own."
     },
+    "LegendOptions": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "color": {
+              "type": "boolean",
+              "description": "The color scale's entry: its swatches, or its colorbar for a gradient."
+            },
+            "x": {
+              "$ref": "#/$defs/LengthEntryOptions",
+              "description": "The length entry of the scales along x that have no origin."
+            },
+            "y": {
+              "$ref": "#/$defs/LengthEntryOptions",
+              "description": "The length entry of the scales along y that have no origin."
+            }
+          }
+        }
+      ],
+      "description": "Which legend entries to draw: a boolean for every entry; an object sets each on its own, and an entry left out keeps its default (the color entry is drawn, and a length entry is drawn along a dimension whose axes are drawn)."
+    },
+    "LengthEntryOptions": {
+      "anyOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": false
+                }
+              ],
+              "description": "The name after the amount, as in 2000 unemployed (thousands). A string sets it; false drops it. Omitted, the measure's name, as an axis title is."
+            }
+          }
+        }
+      ],
+      "description": "One length entry's options: a boolean draws it or not; an object sets its title."
+    },
     "AxisInterval": {
       "type": "object",
       "properties": {
@@ -3968,9 +4135,8 @@ for the API.
           "default": true
         },
         "legend": {
-          "type": "boolean",
-          "description": "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
-          "default": true
+          "$ref": "#/$defs/LegendOptions",
+          "description": "Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Omitted, the color entry is drawn, and a length entry is drawn along a dimension whose axes the chart draws (`axes`): it stands in for that dimension's axis. Turned off, the marks keep their colors and sizes and only the entry is dropped."
         },
         "padding": {
           "$ref": "#/$defs/Number",
@@ -5076,6 +5242,80 @@ for the API.
         }
       ],
       "description": "Where a label goes on the mark it labels: the value of `.label()`'s `position` option, beside the position strings. Each kind reads one kind of geometry from the mark's outline and proposes spots in order. The labels of one `.label()` call take, in data order, their first spot that covers no labeled mark, no label already placed and no node in `avoiding`; a label with no free spot is hidden."
+    },
+    "Baseline": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "start"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "end"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "middle"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "wiggle"
+            }
+          },
+          "required": ["kind"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "at"
+            },
+            "part": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/Number"
+                }
+              ],
+              "description": "The part: a value of the `by` column in a flow, or a child index in the combinator form."
+            },
+            "point": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                {
+                  "enum": ["start", "middle", "end", "baseline"]
+                }
+              ],
+              "description": "Where on the part: a fraction of the way from its tail to its head (0 is its tail, 1 its head), or one of its anchors, \"start\", \"middle\", \"end\" or \"baseline\" (its own 0: a bar's tail, or the baseline of a nested spread or stack)."
+            }
+          },
+          "required": ["kind", "part", "point"]
+        }
+      ],
+      "description": "Where a stack or a spread puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack` and `spread`. On a spread the start is its first child's start, the end its last child's end, and the gaps between children are part of the way; a spread's baseline only places it. For a stack, the parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: a position on the stack's axis is no amount, and its axis shows only differences. The 0 is still the stack's baseline, which its parent lines up."
     },
     "Spacing": {
       "anyOf": [

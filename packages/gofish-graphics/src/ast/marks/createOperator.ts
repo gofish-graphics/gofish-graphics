@@ -69,9 +69,9 @@ import { fieldNameOf, isChunk } from "../data";
 import { splitByOf, type SplitKey } from "../datumProjection";
 import type { MaybeValue, Value } from "../data";
 import {
-  hasNormalizeOp,
-  splitAtNormalize,
-  applyEntryNormalize,
+  hasWindowMaps,
+  splitWindowMaps,
+  applyWindowMaps,
   FieldExpr,
 } from "../fieldExpr";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -94,6 +94,11 @@ import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
 import { GoFishRef } from "../_ref";
+import {
+  functionInChannelError,
+  isFunValue,
+  type ValueExpr,
+} from "../groupExpr";
 
 export type { LayerContext } from "./markResult";
 export { resolveMarkResult } from "./markResult";
@@ -776,7 +781,12 @@ export type ChannelAnnotations<Options> = MarkChannelAnnotations<
  */
 type ChannelInput<Spec, Datum> = Spec extends { type: infer Type; entry: true }
   ? Type extends "size"
-    ? (keyof Datum & string) | FieldExpr | MaybeValue<number>[] | undefined
+    ?
+        | (keyof Datum & string)
+        | FieldExpr
+        | ValueExpr
+        | MaybeValue<number>[]
+        | undefined
     : Type extends "pos"
       ? (keyof Datum & string) | MaybeValue<number>[] | undefined
       : Type extends "color"
@@ -1038,7 +1048,8 @@ function applyChannels<Options extends Record<string, any>>(
   opts: Options,
   channels: ChannelAnnotations<Options> | undefined,
   d: any,
-  entries: Map<SplitKey, any> | undefined
+  entries: Map<SplitKey, any> | undefined,
+  operator: string
 ): Options {
   if (!channels) return opts;
   const out: any = { ...opts };
@@ -1063,6 +1074,8 @@ function applyChannels<Options extends Record<string, any>>(
     const spec = channels[key];
     const val = out[key];
     if (val === undefined || spec === undefined) continue;
+    // Only the shape form of ribbon and line reads a function value.
+    if (isFunValue(val)) throw functionInChannelError(operator, String(key));
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     if (type !== "dims") {
       out[key] = infer(type, spec, val);
@@ -1145,21 +1158,25 @@ function applyChannel(
         discretePosition(i, entries.size)
       );
     }
-    // Windowed normalize (`field(...).normalize()` on an operator's
-    // entry-flagged size channel): this is expression evaluation, not
-    // channel logic, so the WINDOW is all this factory supplies — run the
-    // per-entry channel with the PRE-normalize
-    // expression (an aggregate op if present, else the channel's own
-    // default sum, exactly as any size accessor would), then hand the
-    // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
-    // compute shares across the window. `channels.ts` gains no ops
-    // knowledge from this.
-    if (type === "size" && hasNormalizeOp(val)) {
-      const { pre } = splitAtNormalize(val);
+    // Window maps (`field(...).normalize()`, or any map with no fold after
+    // it, on an operator's entry-flagged size channel): this is expression
+    // evaluation, not channel logic, so the WINDOW is all this factory
+    // supplies. Each entry evaluates the expression before its trailing
+    // maps (its fold if it has one, else the channel's own default sum,
+    // exactly as any size accessor would), and fieldExpr.ts's
+    // applyWindowMaps runs the maps over the entries' values (normalize's
+    // shares). `channels.ts` gains no ops knowledge from this.
+    if (type === "size" && hasWindowMaps(val)) {
+      const { pre, maps } = splitWindowMaps(val);
       const rawEntryValues = [...entries.values()].map((items) =>
         CHANNEL_INFER[type](pre, items, column)
       );
-      return applyEntryNormalize(rawEntryValues, fieldNameOf(opts.by));
+      return applyWindowMaps(
+        rawEntryValues,
+        maps,
+        fieldNameOf(val) ?? "value",
+        fieldNameOf(opts.by)
+      );
     }
     // Value aggregation uses each entry's items; the column comes from
     // `wholeData` (the binned array still carries the symbol — each per-entry
@@ -1199,21 +1216,29 @@ async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   d: Datum[],
   entries: Map<SplitKey, Datum[]> | undefined,
   layoutOpts: Record<string, unknown> | undefined,
-  layerContext: LayerContext
+  layerContext: LayerContext,
+  operator = "operator"
 ): Promise<Options> {
-  const pending = resolveChannelAccessors(opts, channels, () => {
-    const rows = new Set<unknown>(d);
-    for (const items of entries?.values() ?? []) {
-      for (const row of items) rows.add(row);
-    }
-    // The input's rows, with its column types (a Python accessor's call
-    // sends them, typed, across the bridge).
-    return copyColumnTypes([...rows], d);
-  });
+  const pending = resolveChannelAccessors(
+    opts,
+    channels,
+    () => {
+      const rows = new Set<unknown>(d);
+      for (const items of entries?.values() ?? []) {
+        for (const row of items) rows.add(row);
+      }
+      // The input's rows, with its column types (a Python accessor's call
+      // sends them, typed, across the bridge).
+      return copyColumnTypes([...rows], d);
+    },
+    // The groups a Python map or reduce is read over: the whole input and
+    // each entry, the arrays `applyChannels` reads.
+    () => [d, ...(entries?.values() ?? [])]
+  );
   const resolved = isThenable(pending) ? await pending : pending;
   // The one call of an operator's channel functions.
   const withChannels = withRegistrar(layerContext.registrar, () =>
-    applyChannels(resolved, channels, d, entries)
+    applyChannels(resolved, channels, d, entries, operator)
   );
   const stripped = stripFactoryKeys(withChannels);
   // Merge the opts the split computed (e.g. colKeys, rowKeys for table).
@@ -1270,7 +1295,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             d,
             undefined,
             undefined,
-            layerContext
+            layerContext,
+            cfg.serialize
           );
           // The one call of the layout function, in the scope of the context
           // the operator is applied in (`time.sequence` reads its clock in it).
@@ -1451,7 +1477,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           d,
           entries,
           splitLayoutOpts,
-          layerContext
+          layerContext,
+          cfg.serialize
         );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the

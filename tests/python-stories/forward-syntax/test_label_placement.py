@@ -10,7 +10,6 @@ from datetime import datetime
 
 from gofish import (
     chart,
-    blank,
     circle,
     group,
     line,
@@ -21,10 +20,11 @@ from gofish import (
     select_all,
     spread,
     stack,
+    Baseline,
     Place,
     Unit,
 )
-from python_stories.data import SEAFOOD
+from python_stories.data import UNEMPLOYMENT
 from python_stories.vega_data_urls import read_csv, read_json
 
 
@@ -76,9 +76,11 @@ def story_scatter_point_labels():
 def story_line_end_labels():
     return (
         chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
-        .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+        .flow(group(by="symbol"))
         .mark(
-            line(stroke="symbol", stroke_width=2).label("symbol", position=Place.end())
+            line(x="date", y="price", stroke="symbol", stroke_width=2).label(
+                "symbol", position=Place.end()
+            )
         ),
         {"axes": True, "legend": False},
     )
@@ -89,9 +91,9 @@ def story_line_end_labels():
 def story_inline_sloped_labels():
     return (
         chart(_yearly_stocks(), schema={"date": Unit.time()}, w=560, h=320)
-        .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+        .flow(group(by="symbol"))
         .mark(
-            line(stroke="symbol", stroke_width=2).label(
+            line(x="date", y="price", stroke="symbol", stroke_width=2).label(
                 "symbol",
                 position=Place.along(at=0.6, orient="sloped"),
                 halo={},
@@ -104,15 +106,23 @@ def story_inline_sloped_labels():
 
 # ─── areas: Place.interior() ─────────────────────────────────────────────────
 
+# The four industries with the most unemployment, so every band is thick
+# enough somewhere to hold its name.
+LARGEST_INDUSTRIES = [
+    "Wholesale and Retail Trade",
+    "Manufacturing",
+    "Leisure and hospitality",
+    "Business services",
+]
+
+
 def story_streamgraph_interior_labels():
+    rows = [d for d in UNEMPLOYMENT if d["series"] in LARGEST_INDUSTRIES]
     return (
-        chart(SEAFOOD, h=360)
-        .flow(
-            spread(by="lake", dir="x", spacing=64, alignment="middle"),
-            stack(by="species", dir="y"),
-        )
-        .mark(ribbon(h="count", fill="species", opacity=0.8).label("species")),
-        {"legend": False},
+        chart(rows, w=560, h=360, schema={"date": Unit.time()})
+        .flow(stack(by="series", dir="y", baseline=Baseline.wiggle()))
+        .mark(ribbon(x="date", h="count", fill="series").label("series")),
+        {"legend": {"color": False, "y": {"title": "unemployed (thousands)"}}},
     )
 
 
@@ -180,9 +190,9 @@ BUDGET = [
 def _budget_chart(side):
     return (
         chart(BUDGET, w=360, h=220)
-        .flow(group(by="series"), scatter(by="x", x="x", y="y"))
+        .flow(group(by="series"))
         .mark(
-            line(stroke="series", stroke_width=2).label(
+            line(x="x", y="y", stroke="series", stroke_width=2).label(
                 "series",
                 position=Place.along(at=0.5, side=side, orient="sloped"),
                 font_weight=600,
@@ -229,12 +239,10 @@ def _trend_scatter(countries):
     ]
     return (
         chart(ends, w=640, h=440)
-        .flow(scatter(by="fertility", x="fertility", y="life_expect"))
-        .mark(blank().name("ends"))
-        .layer(
-            chart(select_all("ends")).mark(
-                line(stroke="#9e9e9e", stroke_width=2).name("trend")
-            )
+        .mark(
+            line(
+                x="fertility", y="life_expect", stroke="#9e9e9e", stroke_width=2
+            ).name("trend")
         )
         .layer(
             chart(countries)

@@ -459,24 +459,20 @@ console.log("# noise: outline and offsets");
   check(
     "Silverman's rule matches R's bw.nrd0",
     Math.abs(
-      silvermanBandwidth([1, 2, 3, 4, 10].map((at) => ({ at, r: 1 }))) -
-        0.973585
+      silvermanBandwidth([1, 2, 3, 4, 10]) - 0.973585
     ) < 1e-5
   );
   check(
     "Silverman's rule uses the standard deviation when the IQR is 0",
-    Math.abs(
-      silvermanBandwidth([1, 1, 1, 1, 5].map((at) => ({ at, r: 1 }))) -
-        1.166865
-    ) < 1e-5
+    Math.abs(silvermanBandwidth([1, 1, 1, 1, 5]) - 1.166865) < 1e-5
   );
   check(
     "Silverman's rule gives 0 for one value",
-    silvermanBandwidth([3, 3, 3].map((at) => ({ at, r: 1 }))) === 0
+    silvermanBandwidth([3, 3, 3]) === 0
   );
   check(
     "Silverman's rule gives 0 for fewer than two dots",
-    silvermanBandwidth([{ at: 3, r: 1 }]) === 0
+    silvermanBandwidth([3]) === 0
   );
 
   for (const randomness of ["blue", "quasi", "uniform"] as const) {

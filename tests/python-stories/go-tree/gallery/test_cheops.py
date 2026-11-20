@@ -36,5 +36,5 @@ def story_cheops():
                 y={"kind": "align", "alignment": "start"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

@@ -47,33 +47,30 @@ const node = (d: any) =>
 
 export const SideTree: StoryObj = {
   render: () =>
-    mount(
-      {
-        node,
-        link: { curve: Curve.linear(), stroke: "#607d8b", strokeWidth: 1.5 },
-        // parentChild = (distribute θ, distribute r): child leans away in angle
-        // and steps outward in radius from its parent.
-        parentChild: combine({
-          x: {
-            kind: "distribute",
-            spacing: Spacing.pitch(0.5, { at: "middle" }),
-          },
-          y: {
-            kind: "distribute",
-            spacing: Spacing.pitch(84, { at: "middle" }),
-          },
-        }),
-        // sibling = (align θ, distribute r): siblings share a spoke (one angle)
-        // and stack out along the radius.
-        sibling: combine({
-          x: { kind: "align", alignment: "middle" },
-          y: {
-            kind: "distribute",
-            spacing: Spacing.pitch(109, { at: "middle" }),
-          },
-        }),
-        coord: Coord.clock(),
-      },
-      { w: 560, h: 560 }
-    ),
+    mount({
+      node,
+      link: { curve: Curve.linear(), stroke: "#607d8b", strokeWidth: 1.5 },
+      // parentChild = (distribute θ, distribute r): child leans away in angle
+      // and steps outward in radius from its parent.
+      parentChild: combine({
+        x: {
+          kind: "distribute",
+          spacing: Spacing.pitch(0.5, { at: "middle" }),
+        },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(84, { at: "middle" }),
+        },
+      }),
+      // sibling = (align θ, distribute r): siblings share a spoke (one angle)
+      // and stack out along the radius.
+      sibling: combine({
+        x: { kind: "align", alignment: "middle" },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(109, { at: "middle" }),
+        },
+      }),
+      coord: Coord.clock(),
+    }),
 };

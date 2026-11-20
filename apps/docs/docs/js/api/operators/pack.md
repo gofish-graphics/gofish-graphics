@@ -17,7 +17,7 @@ packing.
 gf.chart(seafood)
   .flow(gf.pack({ by: "lake" }), gf.pack())
   .mark(gf.circle({ r: 12, fill: "species" }))
-  .render(root, { w: 420, h: 420 });
+  .render(root);
 ```
 
 :::
@@ -45,7 +45,7 @@ gf.pack({}, [
     gf.circle({ r: 18 }),
     gf.circle({ r: 14 }),
   ]),
-]).render(root, { w: 420, h: 420 });
+]).render(root);
 ```
 
 :::

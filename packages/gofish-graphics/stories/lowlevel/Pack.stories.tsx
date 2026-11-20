@@ -41,7 +41,7 @@ export const MixedShapes: StoryObj = {
         circle({ r: 6, fill: colors[0] }),
       ]),
       circle({ r: 30, fill: colors[4] }),
-    ]).render(container, { w: 420, h: 420 });
+    ]).render(container);
 
     return container;
   },
@@ -62,7 +62,7 @@ export const Enclosed: StoryObj = {
         circle({ r: 12, fill: colors[4] }),
         circle({ r: 22, fill: colors[0] }),
       ]),
-    ]).render(container, { w: 300, h: 300 });
+    ]).render(container);
 
     return container;
   },

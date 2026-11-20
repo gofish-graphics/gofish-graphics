@@ -299,9 +299,9 @@ A column of date strings is a time in `Unit.time()`:
 :::
 
 ```python
-chart(prices, schema={"date": Unit.time()}, axes=True).flow(
-    scatter(by="date", x="date", y="price")
-).mark(line(stroke="steelblue", stroke_width=2))
+chart(prices, schema={"date": Unit.time()}, axes=True).mark(
+    line(x="date", y="price", stroke="steelblue", stroke_width=2)
+)
 ```
 
 Five summary columns of one quantity title their axis once:

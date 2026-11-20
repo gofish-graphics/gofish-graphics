@@ -28,7 +28,7 @@
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
 import { paintOf } from "../displayList/shapeOnly";
-import { GoFishNode, placeUnplacedChild } from "../_node";
+import { GoFishNode, outlineOverhang, placeUnplacedChild } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import { Extent } from "../extent";
@@ -319,6 +319,9 @@ function compositeNode(
       ...(painted && {
         color: isValue(paint.fill) ? paint.fill : paint.stroke,
       }),
+      // A painted result strokes its own outline, which reaches past its
+      // box as a shape's does, so it takes room the same way (#1372).
+      strokeOverhang: outlineOverhang(drawn.stroke, strokeWidth),
       resolveUnderlyingSpace: (
         children: Size<UnderlyingSpace>[],
         _childNodes: readonly GoFishAST[]

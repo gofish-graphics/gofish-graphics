@@ -172,7 +172,7 @@ export const RadialTree: StoryObj = {
     // go FIRST to draw under the nodes; the root node is last within `nodes`.
     layer({ coord: Coord.clock() as any }, [
       layer([...links, ...nodes]),
-    ]).render(container, { w: 560, h: 560 });
+    ]).render(container);
     return container;
   },
 };

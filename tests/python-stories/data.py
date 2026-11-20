@@ -13,6 +13,10 @@ GENDER_PAY_GAP = load_json("gender_pay_gap")
 PAY_GRADE = load_json("pay_grade")
 CATCH_LOCATIONS = load_json("catch_locations")  # {lake: {"x", "y"}}
 
+# US unemployment by industry, monthly 2000-2010 (series, date, count in
+# thousands) — mirrors packages/gofish-graphics/src/data/unemployment.ts.
+UNEMPLOYMENT = load_json("unemployment")
+
 # Seattle daily weather 2012-2015 (date, precipitation, temp_max, temp_min,
 # wind, weather) — mirrors packages/gofish-graphics/src/data/seatle-weather.ts.
 SEATTLE_WEATHER = load_json("seatle_weather")

@@ -38,8 +38,8 @@ const lbl = (text, size, fill, weight) =>
   });
 
 const stackedLabel = (lines, size, fill, weight) =>
-  gf.stackY(
-    { spacing: 1, alignment: "middle" },
+  gf.spreadY(
+    { spacing: 0, alignment: "middle" },
     lines
       .slice()
       .reverse()

@@ -24,5 +24,5 @@ def story_readable_tree_layout():
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

@@ -7,8 +7,9 @@ import { AxisName, Direction, FancyDims, resolveAxisName } from "../dims";
 import { Collection } from "lodash";
 import { SplitBy, orderEntries, splitEntries } from "../datumProjection";
 import { isField } from "../data";
-import { columnType, stackOrigin } from "../schema";
-import type { StackOrigin } from "../constraints/distribute";
+import { columnType, stackBaseline } from "../schema";
+import type { StackBaseline } from "../constraints/distribute";
+import type { Baseline } from "../../families/baseline";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
@@ -20,6 +21,7 @@ import type { Gap } from "../constraints/gap";
 import { createOperator } from "../marks/createOperator";
 import { Mark, MarkChild, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
+import type { ValueExpr } from "../groupExpr";
 import { withWire, wireOf } from "../wire";
 
 // Utility function to unwrap lodash wrapped arrays
@@ -42,13 +44,11 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:
  * size[i] }, [child])` on the stack axis. A prop-less child (e.g. a rect with
  * only `fill`) fills its wrapper's proposed size, so the usual mark stays
- * unchanged — only the wrapping is new. This replaces the old `normalize`
- * layout flag: `size: field(<name>).normalize()` computes each entry's SHARE
- * of the window (see fieldExpr.ts's `applyEntryNormalize`) as a data-driven
- * SIZE claim on the wrapper, whose content layer.tsx nests in the wrapper's box
- * as a sized node — the same space-filling-spine effect `normalize: true` used
- * to special-case, but now just the general "a data-valued size nests its
- * content" rule.
+ * unchanged; only the wrapping is added. `size: field(<name>).normalize()`
+ * computes each entry's share of the window (see fieldExpr.ts's
+ * `applyWindowMaps`) as a data-driven size claim on the wrapper, whose
+ * content layer.tsx nests in the wrapper's box as a sized node: the general
+ * rule that a data-valued size nests its content.
  */
 export const Spread = createNodeOperator(
   async (
@@ -59,7 +59,8 @@ export const Spread = createNodeOperator(
       alignment = "baseline",
       reverse = false,
       glue = false,
-      origin,
+      baseline,
+      hasMidpoint,
       hasOrder,
       size,
       axes,
@@ -78,11 +79,18 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
-      /** A stack's {@link StackOrigin}, its part a child index. Omitted: the
-       *  first part's tail. The `stack` operator's split sets it from a
-       *  `HasMidpoint` column (`stackOrigin` in schema.ts). Ignored without
-       *  `glue`: a spread packs boxes and has no origin. */
-      origin?: StackOrigin<number>;
+      /** Where the spread or stack puts its own 0 (`Baseline`), the part of
+       *  an `at` a child index. Omitted: a stack's is `Baseline.start()`,
+       *  and a spread's 0 is its start. In a flow the split sets it from
+       *  the `baseline` option, whose `at` part is a value of the `by`
+       *  column, or from a `HasMidpoint` column (`stackBaseline` in
+       *  schema.ts). A spread takes every baseline but `wiggle`, and only
+       *  for placement: its type stays a sequence of separate spaces. */
+      baseline?: StackBaseline<number>;
+      /** The `by` column's order has a midpoint (`HasMidpoint`), which set
+       *  `baseline`: the split sets it, and the stack checks that each part
+       *  is a nonnegative amount. Ignored without `glue`. */
+      hasMidpoint?: boolean;
       /** The `by` column's values have an order (`HasOrder`, from the chart's
        *  `schema`): the split sets it, and the ORDINAL space this spread
        *  folds carries it, so its axis knows its keys are ordered. */
@@ -172,6 +180,13 @@ export const Spread = createNodeOperator(
       const alignAxis = axisName((1 - stackDir) as Direction);
       const stackAxis = axisName(stackDir);
       const refs = childSlots(node);
+      // In the combinator form the part of an `at` is a child index.
+      if (baseline?.kind === "at" && refs[baseline.part] === undefined)
+        throw new Error(
+          `${glue ? "stack" : "spread"}: its baseline is ` +
+            `\`Baseline.at(${baseline.part}, ...)\`, a child index, but it ` +
+            `has ${refs.length} ${refs.length === 1 ? "child" : "children"}.`
+        );
       // The cross-axis align: it shares the frame (unions the children's
       // domain) and, for free children (bars), commits a baseline. A
       // self-positioned child (a scatter facet) is left alone by `align`
@@ -185,7 +200,11 @@ export const Spread = createNodeOperator(
             spacing,
             glue,
             order: reverse ? "reverse" : "forward",
-            origin: origin && { ...origin, part: refs[origin.part] },
+            baseline:
+              baseline?.kind === "at"
+                ? { ...baseline, part: refs[baseline.part] }
+                : baseline,
+            hasMidpoint,
             // The grouping field for this (stack) axis → the ORDINAL
             // space's measure, so a spread-by-category axis titles itself
             // off its space.
@@ -220,6 +239,11 @@ export type SpreadOptions<T = any> = {
   alignment?: "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   glue?: boolean;
+  /** Where the spread puts its own 0 (`Baseline`), the point its parent
+   *  lines up with other baselines: `start`, `end`, `middle` or `at`, on
+   *  the way from its first child's start to its last child's end, gaps
+   *  included. `wiggle` is for `stack` only. Omitted, its 0 is its start. */
+  baseline?: Baseline;
   w?: number | (keyof T & string) | LengthValue;
   h?: number | (keyof T & string) | LengthValue;
   /** The size of each CHILD along `dir` (a distributive singular, like a
@@ -232,7 +256,7 @@ export type SpreadOptions<T = any> = {
    *  entries) becomes a data-driven size claim, whose box nests that entry's
    *  subtree, so its segments fill the box in proportion to their share (see
    *  the `Spread` doc comment above). */
-  size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
+  size?: (keyof T & string) | FieldExpr | ValueExpr | MaybeValue<number>[];
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
@@ -243,38 +267,48 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // lives in createOperator (it dispatches on the mark's kind), not here, so
   // this split stays kind-agnostic.
   //
-  // A stack over a column with HasMidpoint (from the chart's `schema`) puts its
-  // origin at the midpoint of the column's order instead of at its first
-  // part's tail; the split knows the groups present, so it computes it. It
-  // reorders every level of the order the way it reorders the groups, so the
-  // stack knows which way it lays the order out even in a row with one part.
+  // A `baseline` names its part by a value of the `by` column, and a spread
+  // or stack over a column with HasMidpoint (from the chart's `schema`) puts
+  // its 0 at the midpoint of the column's order; the split knows the groups
+  // present, so it resolves either to a child index (`stackBaseline` in
+  // schema.ts). A part the data lacks is placed by the column's declared
+  // order, which the split reorders the way it reorders the groups, so the
+  // chain knows which way it lays the order out even in a row with one part.
   // Over ordered keys, the split says so (`SplitGroups.hasOrder`), so the
   // ordinal space it folds knows its keys are ordered.
-  split: ({ by, glue, reverse }, d) => {
+  split: ({ by, glue, reverse, baseline }, d) => {
     const entries = splitEntries(by, d);
     const hasOrder = entries.hasOrder;
-    if (!glue)
-      return hasOrder ? { entries, layoutOpts: { hasOrder } } : entries;
     const column = fieldNameOf(by);
     const type = columnType(d, column);
-    // Only a column with HasMidpoint moves the origin (as in `stackOrigin`),
-    // so the level order is built only for one. The stack's origin stays
-    // undefined, the default.
-    if (!type?.HasMidpoint)
-      return { entries, layoutOpts: { hasOrder, origin: undefined } };
-    const levels = (type?.HasLevels?.levels ?? []) as (string | number)[];
-    const split = orderEntries(
-      by,
-      new Map(levels.map((level) => [level, entries.get(level) ?? []]))
-    );
-    const origin = stackOrigin(
-      column,
-      type,
-      [...split.keys()],
-      [...entries.keys()],
-      reverse
-    );
-    return { entries, layoutOpts: { hasOrder, origin } };
+    const levels = type?.HasLevels?.levels as (string | number)[] | undefined;
+    // The level order is built only when the baseline is read off it.
+    const split =
+      levels !== undefined &&
+      (type?.HasMidpoint !== undefined || baseline?.kind === "at")
+        ? [
+            ...orderEntries(
+              by,
+              new Map(levels.map((level) => [level, entries.get(level) ?? []]))
+            ).keys(),
+          ]
+        : undefined;
+    return {
+      entries,
+      layoutOpts: {
+        hasOrder,
+        baseline: stackBaseline(
+          column,
+          type,
+          split,
+          [...entries.keys()],
+          reverse,
+          baseline,
+          glue ? "stack" : "spread"
+        ),
+        hasMidpoint: type?.HasMidpoint !== undefined,
+      },
+    };
   },
   channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
@@ -293,10 +327,14 @@ export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   serialize: "spread",
 });
 
-/** Stack glues children together, summing sizes into a POSITION at the spread
- * level. Neither `spacing` nor `glue` is configurable — stacked children always
- * touch (use `spread({ spacing: N })` instead if you want gaps). */
-export type StackOptions<T = any> = Omit<SpreadOptions<T>, "spacing" | "glue">;
+/** A stack adds its children's data amounts: each part starts where the one
+ * before it ends, in one data space, so there is no spacing or anchor to
+ * set. Every part needs a data size along `dir` (`distributeSpaceFold`);
+ * parts that only touch are a `spread({ spacing: 0 })`. */
+export type StackOptions<T = any> = Omit<
+  SpreadOptions<T>,
+  "spacing" | "glue" | "anchor"
+>;
 
 export function stack(
   opts: StackOptions,
@@ -307,8 +345,8 @@ export function stack(
   opts: StackOptions,
   marks?: MarkChild[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
-  // A stack glues its parts, so its spacing takes no length: checked
-  // against its own descriptor, not the spread's it forwards to.
+  // A stack has no spacing, so it takes no length there: checked against
+  // its own descriptor, not the spread's it forwards to.
   checkLengths(
     Frontend.acceptedFields("operator", "stack"),
     "stack",

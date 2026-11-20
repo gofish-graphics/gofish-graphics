@@ -34,6 +34,7 @@ async function main() {
     region,
     text,
     layer: layerOf,
+    rect: rectOf,
   } = await import("../lib");
 
   console.log("# a region reads its cell from the partition around it");
@@ -418,6 +419,36 @@ async function main() {
       console.log(
         `  xfail an align on a cell's axis leaves the cells in place — ${JSON.stringify(rects)}`
       );
+  }
+
+  console.log("# a cell's child claims its outline (#1372)");
+  {
+    // Each rect fills its cell and strokes its edge, half of the stroke
+    // past the cell: the outer cells' outlines stay on the canvas.
+    const rows = [{ v: 5 }, { v: 15 }, { v: 25 }];
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => void warned.push(String(args[0]));
+    const dl = await chart(rows, { axes: false })
+      .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+      .mark(rectOf({ h: 40, fill: "#ccc", stroke: "black", strokeWidth: 2 }))
+      .toDisplayList({ w: 300, h: 60 });
+    console.warn = warn;
+    const rects = items(dl).filter((it) => it.kind === "rect");
+    check(
+      "a stroked rect in a partition is not drawn past the canvas",
+      warned.length === 0,
+      warned
+    );
+    const first = rects[0];
+    const last = rects[rects.length - 1];
+    check(
+      "the cells span the canvas less the outer outlines: 1 px to 299 px",
+      rects.length === 3 &&
+        near(first.x!, 1) &&
+        near(last.x! + last.w!, 299),
+      rects.map((r) => [r.x, r.w])
+    );
   }
 
   report();

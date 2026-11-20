@@ -17,7 +17,7 @@ from gofish import chart, circle, pack
 chart(seafood).flow(
     pack(by="lake"),
     pack(),
-).mark(circle(r=12, fill="species")).render(w=420, h=420)
+).mark(circle(r=12, fill="species")).render()
 ```
 
 ## Signature
@@ -39,7 +39,7 @@ pack([
     circle(r=60),
     ellipse(w=90, h=44),
     pack([circle(r=26), circle(r=18), circle(r=14)]),
-]).render(w=420, h=420)
+]).render()
 ```
 
 ## Parameters

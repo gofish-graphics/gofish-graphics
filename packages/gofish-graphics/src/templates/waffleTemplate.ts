@@ -1,8 +1,8 @@
 import _ from "lodash";
-import { stackX } from "../ast/graphicalOperators/stackX";
-import { stackY } from "../ast/graphicalOperators/stackY";
+import { spreadX } from "../ast/graphicalOperators/spreadX";
+import { spreadY } from "../ast/graphicalOperators/spreadY";
 import { rect } from "../ast/shapes/rect";
-import { stackXTemplate } from "./stackXTemplate";
+import { spreadXTemplate } from "./spreadXTemplate";
 
 // Shared waffle mark function
 export const waffleTemplate = (
@@ -16,15 +16,15 @@ export const waffleTemplate = (
     orderBy?: { field: string; sort: string[] };
   }
 ) =>
-  stackXTemplate(
+  spreadXTemplate(
     data,
     {
-      spacing: options.x.spacing,
+      spacing: 0,
       groupBy: { field: options.x.field, sort: options.x.sort },
     },
     (d) =>
-      stackY(
-        { spacing: options.spacing, alignment: "start" },
+      spreadY(
+        { spacing: 0, alignment: "start" },
         _(d)
           .sortBy(
             (d) =>
@@ -32,8 +32,8 @@ export const waffleTemplate = (
           )
           .chunk(options.chunkSize)
           .map((row) =>
-            stackX(
-              { spacing: options.spacing },
+            spreadX(
+              { spacing: 0 },
               row.map((d) =>
                 rect({
                   w: options.rectSize,
