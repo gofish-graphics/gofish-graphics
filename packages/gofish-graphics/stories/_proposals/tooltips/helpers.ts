@@ -267,50 +267,186 @@ export function noPointer(container: HTMLElement) {
   }
 }
 
+/* ------------------------- nearest in the hull --------------------------- */
+
+/** A box in svg px, the space of `pointer().pos()`. */
+export type Box = { x0: number; y0: number; x1: number; y1: number };
+/** A mark, or a group of marks (a stack), the focus can land on: its drawn
+ *  box, and the SVG elements it is drawn as, each with its own box. */
+export type Item = { box: Box; parts: { el: Element; box: Box }[] };
+type Pt = { x: number; y: number };
+
+const gap = (v: number, lo: number, hi: number) => Math.max(lo - v, 0, v - hi);
+/** Distance from a point to a box, zero inside it. */
+export const boxDistance = (p: Pt, b: Box) =>
+  Math.hypot(gap(p.x, b.x0, b.x1), gap(p.y, b.y0, b.y1));
+
+/** The convex hull of the items' box corners (Andrew's monotone chain),
+ *  counterclockwise in y-down px. */
+function hullOf(items: { box: Box }[]): Pt[] {
+  const pts = items
+    .flatMap(({ box: b }) => [
+      { x: b.x0, y: b.y0 },
+      { x: b.x1, y: b.y0 },
+      { x: b.x0, y: b.y1 },
+      { x: b.x1, y: b.y1 },
+    ])
+    .sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const half = (ps: Pt[]) => {
+    const h: Pt[] = [];
+    for (const p of ps) {
+      while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop();
+      h.push(p);
+    }
+    h.pop();
+    return h;
+  };
+  return [...half(pts), ...half([...pts].reverse())];
+}
+
+function inHull(p: Pt, hull: Pt[]) {
+  if (hull.length < 3) return false;
+  for (let i = 0; i < hull.length; i++) {
+    const a = hull[i];
+    const b = hull[(i + 1) % hull.length];
+    if ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) < 0) return false;
+  }
+  return true;
+}
+
+const hulls = new WeakMap<object, Pt[]>();
+
 /**
- * WORKAROUND, story-side, for a library bug: `pointer().dataPos()` converts
- * only through the render ROOT's scales, and a chart that sets its own `w`/`h`
- * is a frame below the root, so the root has no scale and `dataPos()` is
- * undefined. Sizing the render instead (the first try) draws the axes past the
- * canvas. So the live line and scatter charts keep their own size and map the
- * pointer through where their marks were DRAWN.
+ * The focus rule. Inside the convex hull of the items, the focus is the
+ * nearest item, with no distance limit, so a gap between two bars picks the
+ * nearer bar. Outside the hull, it is the nearest item within `radius` px, or
+ * nothing. The distance is to the item's drawn box, zero inside it. The idea
+ * is the declarative dragging criterion (#1294): the nearest reachable state
+ * inside the hull of the states.
  *
- * `drawnScales` reads the centers of the marks `selector` picks (in svg px, the
- * space of `pointer().pos()`) and, per axis, the data extent those marks
- * cover. A position is affine in its data value, so the smallest and largest
- * values sit at the extreme drawn centers (in y the largest is on top). It
- * returns the data → px map of each axis given. The result is kept per `<svg>`,
- * since every re-render draws a new one.
+ * `axis` measures the distance inside the hull along that axis only, ties
+ * broken by the full distance: for a banded layout (bars spread in y), the
+ * pointer's row decides, not the nearest end of a longer bar.
  */
-export type DrawnScales = { x?: (v: number) => number; y?: (v: number) => number };
-const drawnCache = new WeakMap<Element, DrawnScales>();
-export function drawnScales(
+export function nearestInHull<I extends { box: Box }>(
+  p: Pt,
+  items: I[],
+  { radius, axis }: { radius: number; axis?: "x" | "y" }
+): I | undefined {
+  if (items.length === 0) return undefined;
+  let hull = hulls.get(items);
+  if (!hull) hulls.set(items, (hull = hullOf(items)));
+  const inside = inHull(p, hull);
+  const along = (b: Box) =>
+    axis === "x" ? gap(p.x, b.x0, b.x1) : axis === "y" ? gap(p.y, b.y0, b.y1) : 0;
+  let best: I | undefined;
+  let bestKey: [number, number] = [Infinity, Infinity];
+  for (const it of items) {
+    const key: [number, number] = [inside ? along(it.box) : 0, boxDistance(p, it.box)];
+    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
+      best = it;
+      bestKey = key;
+    }
+  }
+  return inside || bestKey[1] <= radius ? best : undefined;
+}
+
+/** An element's drawn box in svg px. */
+function drawnBox(el: Element, inv: DOMMatrix): Box {
+  const r = el.getBoundingClientRect();
+  const a = new DOMPoint(r.left, r.top).matrixTransform(inv);
+  const b = new DOMPoint(r.right, r.bottom).matrixTransform(inv);
+  return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
+}
+
+/**
+ * The items, read off the drawn chart: the first `count` elements `selector`
+ * picks (the marks are painted first, before the tooltip layer, the axes and
+ * the legend), one item each, or grouped by `groupBy` of their box into one
+ * item per group, whose box is the union of its parts.
+ */
+export function drawnMarks(selector: string, count: number, groupBy?: (b: Box) => number) {
+  return (svg: SVGSVGElement, inv: DOMMatrix): Item[] => {
+    const parts = [...svg.querySelectorAll(selector)]
+      .slice(0, count)
+      .map((el) => ({ el, box: drawnBox(el, inv) }));
+    if (!groupBy) return parts.map((p) => ({ box: p.box, parts: [p] }));
+    const groups = new Map<number, Item>();
+    for (const p of parts) {
+      const k = groupBy(p.box);
+      const g = groups.get(k);
+      if (!g) groups.set(k, { box: { ...p.box }, parts: [p] });
+      else {
+        g.parts.push(p);
+        g.box = {
+          x0: Math.min(g.box.x0, p.box.x0),
+          y0: Math.min(g.box.y0, p.box.y0),
+          x1: Math.max(g.box.x1, p.box.x1),
+          y1: Math.max(g.box.y1, p.box.y1),
+        };
+      }
+    }
+    return [...groups.values()];
+  };
+}
+
+/** The drawn bars of the stories: interactive rects that are not axis ticks. */
+export const BARS = 'rect[data-gf-id]:not([fill="gray"])';
+
+/** Group key: marks in the same column (a stack, a year). */
+export const column = (b: Box) => Math.round((b.x0 + b.x1) / 2);
+
+/**
+ * PRIVATE HOOK (3), story-side: the runtime's hit-test is "the mark under
+ * the pointer". This re-targets each real `pointermove` and `pointerdown`
+ * on the chart to the mark `nearestInHull` picks (to the `<svg>` itself when
+ * it picks nothing), by stopping the event and dispatching a copy at the same
+ * client position on that mark's element. So `pointer().datum()` is the
+ * nearest mark's datum and `pointer().pos()` is still the real position, and
+ * nothing else in the stories changes. In the library this rule is the
+ * runtime's hit-test. Items are read once per drawn `<svg>`.
+ */
+export function snapToNearest(
   container: HTMLElement,
-  selector: string,
-  extent: { x?: [number, number]; y?: [number, number] }
-): DrawnScales | undefined {
-  const svg = container.querySelector("svg");
-  const ctm = svg?.getScreenCTM();
-  if (!svg || !ctm) return undefined;
-  const cached = drawnCache.get(svg);
-  if (cached) return cached;
-  const inv = ctm.inverse();
-  const centers = [...svg.querySelectorAll(selector)].map((el) => {
-    const r = el.getBoundingClientRect();
-    return new DOMPoint(r.x + r.width / 2, r.y + r.height / 2).matrixTransform(inv);
-  });
-  if (centers.length < 2) return undefined;
-  const axis = (cs: number[], [lo, hi]: [number, number], up: boolean) => {
-    const [a, b] = [Math.min(...cs), Math.max(...cs)];
-    const [p0, p1] = up ? [b, a] : [a, b];
-    return (v: number) => p0 + ((v - lo) / (hi - lo)) * (p1 - p0);
+  items: (svg: SVGSVGElement, inv: DOMMatrix) => Item[],
+  opts: { radius: number; axis?: "x" | "y" }
+) {
+  let drawn: { svg: SVGSVGElement; items: Item[] } | undefined;
+  const retarget = (e: PointerEvent) => {
+    if (!e.isTrusted) return;
+    const svg = container.querySelector("svg");
+    const ctm = svg?.getScreenCTM();
+    if (!svg || !ctm || !svg.contains(e.target as Node)) return;
+    const inv = ctm.inverse();
+    if (drawn?.svg !== svg) drawn = { svg, items: items(svg, inv) };
+    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(inv);
+    const item = nearestInHull(p, drawn.items, opts);
+    const target: Element = item
+      ? item.parts.reduce((a, b) => (boxDistance(p, b.box) < boxDistance(p, a.box) ? b : a)).el
+      : svg;
+    const hit = (e.target as Element).closest("[data-gf-id]");
+    if (hit === target || (!item && !hit)) return;
+    e.stopPropagation();
+    target.dispatchEvent(
+      new PointerEvent(e.type, {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        screenX: e.screenX,
+        screenY: e.screenY,
+        pointerId: e.pointerId,
+        pointerType: e.pointerType,
+        isPrimary: e.isPrimary,
+        button: e.button,
+        buttons: e.buttons,
+      })
+    );
   };
-  const out: DrawnScales = {
-    x: extent.x && axis(centers.map((c) => c.x), extent.x, false),
-    y: extent.y && axis(centers.map((c) => c.y), extent.y, true),
-  };
-  drawnCache.set(svg, out);
-  return out;
+  container.addEventListener("pointermove", retarget, true);
+  container.addEventListener("pointerdown", retarget, true);
 }
 
 /** A mark's datum is its row, or (for a mark drawn per group) its rows. */

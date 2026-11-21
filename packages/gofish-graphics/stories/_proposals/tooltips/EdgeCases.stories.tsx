@@ -17,7 +17,19 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { chart, spread, rect, selectAll, filter, group, live, pointer } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import { rowTooltip, beside, focusFrom, hitRow, noPointer, type Side, heldOnTouch, rowOf } from "./helpers";
+import {
+  rowTooltip,
+  beside,
+  focusFrom,
+  hitRow,
+  noPointer,
+  type Side,
+  heldOnTouch,
+  rowOf,
+  snapToNearest,
+  drawnMarks,
+  BARS,
+} from "./helpers";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Edge Cases", excludeStories: /^[a-z]/ };
@@ -129,6 +141,7 @@ export const Flipped: StoryObj = {
  *  (proposals/tooltips/demo). */
 export function mountInteractiveFlipped(container: HTMLElement) {
   noPointer(container);
+  snapToNearest(container, drawnMarks(BARS, totals.length), { radius: 8, axis: "x" });
   const p = pointer();
   const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
   return edgeChart(

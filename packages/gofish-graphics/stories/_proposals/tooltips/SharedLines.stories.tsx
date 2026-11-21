@@ -21,7 +21,19 @@ import {
   live,
 } from "../../../src/lib";
 import { unemployment } from "../../../src/data/unemployment";
-import { box, table, beside, focusFrom, thousands, drawnScales, heldOnTouch } from "./helpers";
+import {
+  box,
+  table,
+  beside,
+  focusFrom,
+  thousands,
+  heldOnTouch,
+  hitRow,
+  noPointer,
+  snapToNearest,
+  drawnMarks,
+  column,
+} from "./helpers";
 
 // The lowercase and all-caps exports are builders, data and mounts, not stories.
 const meta: Meta = {
@@ -55,7 +67,7 @@ const YEARS = [...new Set(yearly.map((d) => d.year))];
 /** The chart's own size, for the static stories. */
 export const SIZE = { w: 520, h: 300 };
 /** A render size, used only by the Measure stories, which ran before the
- *  live story switched to `drawnScales`. WALL: `pointer().dataPos()` converts
+ *  live story switched to reading positions off the drawn marks. WALL: `pointer().dataPos()` converts
  *  nothing when the chart has a size of its own, and a render-sized chart
  *  with a tier that claims nothing (the closed tooltip, or an ink box) draws
  *  its axes past the canvas. See NOTES.md. */
@@ -161,27 +173,24 @@ export const Closed: StoryObj = {
 };
 
 /**
- * Live. The focus is the year whose x is NEAREST the pointer's x, not a
- * hit-test, so the pointer never has to be on a line, and a box under the
- * cursor cannot steal the focus. The pointer is registered by `ping`.
- *
- * The chart keeps its own size, so `pointer().dataPos()` is undefined (see
- * `drawnScales`): the year's x in px is read off the drawn dots, one per row
- * (`r: 4`, invisible except at the focused year), and compared with
- * `pointer().pos()`. Shared by the Interactive story and the proposal page's
- * demo bundle (proposals/tooltips/demo).
+ * Live. The focus is the year whose column is nearest the pointer, the same
+ * rule as every other story, in x only: a year's item is its column of dots
+ * (`r: 4`, invisible except at the focused year), stretched to any height.
+ * So the pointer never has to be on a line, and a box under the cursor cannot
+ * steal the focus. The pointer is registered by `ping`. Shared by the
+ * Interactive story and the proposal page's demo bundle
+ * (proposals/tooltips/demo).
  */
 export function mountInteractive(container: HTMLElement) {
+  noPointer(container);
+  const dots = drawnMarks('ellipse[rx="4"]', yearly.length, column);
+  snapToNearest(
+    container,
+    (svg, inv) => dots(svg, inv).map((it) => ({ ...it, box: { ...it.box, y0: -1e6, y1: 1e6 } })),
+    { radius: 8, axis: "x" }
+  );
   const p = pointer();
-  const extent: [number, number] = [YEARS[0], YEARS[YEARS.length - 1]];
-  const nearestYear = () => {
-    const at = p.pos();
-    if (at === undefined) return undefined;
-    const px = drawnScales(container, 'ellipse[rx="4"]', { x: extent })?.x;
-    if (!px) return undefined;
-    return YEARS.reduce((a, b) => (Math.abs(px(b) - at.x) < Math.abs(px(a) - at.x) ? b : a));
-  };
-  const year = focusFrom(heldOnTouch(container, nearestYear));
+  const year = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.year));
   return sharedLines(year, () => p.pos()).render(container);
 }
 

@@ -29,10 +29,10 @@ mounts, so a blocked bundle leaves the pictures.
 
 Story-side fixes made for the live demos:
 
-- `drawnScales` replaces render sizing. `pointer().dataPos()` is undefined in
-  a chart with its own `w`/`h` (a library bug), and render sizing clipped the
-  axes. The line and scatter charts now keep their own size and map the
-  pointer through where their marks were drawn. The axes are no longer clipped.
+- No render sizing. `pointer().dataPos()` is undefined in a chart with its
+  own `w`/`h` (a library bug), and render sizing clipped the axes. The line
+  and scatter charts keep their own size, and the focus is read off the drawn
+  marks (below). The axes are no longer clipped.
 - `heldOnTouch`: a tap ends with `pointerleave`, which clears the pointer. So
   after a touch the last mark stays focused until the next tap.
 - `noPointer` also turns off hits for everything painted after the box, so a
@@ -44,6 +44,50 @@ Story-side fixes made for the live demos:
 - `sideOf` opens the box to the left for the last lakes. Past the right edge
   the box widened the canvas and moved the axis labels.
 - `EdgeCases` has a new `InteractiveFlipped` story.
+
+## The focus: nearest in the hull
+
+Every live demo picks its focus with one rule (`nearestInHull` in
+`helpers.ts`). Inside the convex hull of the marks' drawn boxes, the focus is
+the nearest mark, with no limit. Outside the hull, it is the nearest mark
+within `radius` px (8 for bars and years, 30 for the scatter). The distance is
+to the mark's box, zero inside it. A group focus (a stack) uses one box per
+group, the union of its segments. The lines use one column per year, in x
+only. The idea is the declarative dragging criterion (#1294).
+
+PRIVATE HOOK (3): `snapToNearest` re-targets each real `pointermove` and
+`pointerdown` to the element of the picked mark, so `pointer().datum()` is
+that mark's datum. In the library this would be the runtime's hit-test.
+
+`axis` measures the distance inside the hull along one axis only, ties broken
+by plain distance. The bar demos use the axis the bars are spread on.
+
+Measured in the headless browser with the real mouse:
+
+- **Issue bar, level with a short bar, to its right.** With `axis: "y"` the
+  pointer's row decides. At bar 6 (INF→VO, ends at x 268, row y 172 to 195),
+  the pointer at y 183 and x 273, 288, 328 and 388 picks INF→VO every time.
+  With plain distance, x 288 and 328 pick VO→VO→VO (the bar above) and x 388
+  picks VO→INF (three rows up). At bar 10 (other→VO, ends at x 188), x 208
+  picks INF→INF→INF by plain distance. At bar 13 (INF→PK), x 166 picks
+  PK→INF. So `axis` is the default for banded layouts. The hull's right side
+  runs from the end of the longest bar to the end of the shortest, so level
+  with a short bar the hull ends some way right of it: at bar 13 the box
+  closes 60 px right of the bar's end, and at bar 10, 120 px right.
+- **Stacked bar segments, the 8 px gap between Lake B and Lake C.** Swept
+  in 0.5 px steps at five heights: one change each, at 4.5 px into the gap,
+  from a Lake B segment to the Lake C segment at the same height. Above Lake
+  C's top (but inside the hull) the column decides: Lake C's top segment.
+  Before, the box closed for the whole gap.
+- **Scatter, 1 px moves over the box.** The switching is real nearest-point
+  picking. At svg (180.71, 307.50) point #119 is 2.83 px away and #26 3.20 px.
+  At (183.04, 307.50) point #79 is 2.81 px away and #119 5.17 px. The two
+  points are about 2 px apart, so a 1 px move crosses between them.
+- **Issue bar, slow sweep down across all 15 bars** (x 92, 1 px steps).
+  Before: 30 focus changes, 16 closed states, 30 layout re-runs. After: 16
+  focus changes (open on the first bar, one per boundary between bars, close
+  8 px below the last bar), 2 closed states (before and after), 16 layout
+  re-runs, and no closed state between bars.
 
 ## The helpers (`helpers.ts`)
 

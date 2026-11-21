@@ -20,7 +20,19 @@ import {
   live,
 } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import { box, beside, focusFrom, hitRow, noPointer, heldOnTouch, rowOf } from "./helpers";
+import {
+  box,
+  beside,
+  focusFrom,
+  hitRow,
+  noPointer,
+  heldOnTouch,
+  rowOf,
+  snapToNearest,
+  drawnMarks,
+  column,
+  BARS,
+} from "./helpers";
 import { sideOf } from "./StackedBar.stories";
 
 // The lowercase exports are builders and mounts, not stories.
@@ -73,6 +85,7 @@ export const Pinned: StoryObj = {
  *  proposal page's demo bundle (proposals/tooltips/demo). */
 export function mountInteractive(container: HTMLElement) {
   noPointer(container);
+  snapToNearest(container, drawnMarks(BARS, seafood.length, column), { radius: 8, axis: "x" });
   const p = pointer();
   const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
   return chartInTooltip(

@@ -624,8 +624,9 @@
         the mark.
       </li>
       <li>
-        The focus is the mark whose outline is nearest the pointer within
-        <code>radius</code> pixels. Being inside a mark is distance zero.
+        Inside the convex hull of the marks, the focus is the nearest mark.
+        Outside it, the focus is the nearest mark within <code>radius</code>
+        pixels. Being inside a mark is distance zero.
       </li>
       <li>The box floats. It takes no room and is not a pointer target.</li>
     </ul>
@@ -1015,9 +1016,10 @@ chart(yearly)
       <div class="head">
         <h3>Scatterplot, the nearest point</h3>
         <p>
-          The focus is the point nearest the pointer within 30 pixels, so the
-          pointer does not have to be on a point. The ring is one more layer
-          over the focus. In the pinned picture, the red cross is the pointer.
+          The focus is the point nearest the pointer. Outside the points' hull
+          it must be within 30 pixels, so the pointer does not have to be on a
+          point. The ring is one more layer over the focus. In the pinned
+          picture, the red cross is the pointer.
         </p>
       </div>
       <div class="figs">
@@ -1436,10 +1438,21 @@ circle(r=3).tooltip(by="year")</code></pre>
     <div class="section">
       <h2>The focus</h2>
       <p>
-        One rule: the mark whose outline is nearest the pointer within
-        <code>radius</code> pixels, where being inside a mark is distance zero.
-        A bar is picked when the pointer is on it. A small point or a thin line
-        is picked when the pointer is near it. There is no mode to switch. #849
+        One rule, among the marks the tooltip is on. While the pointer is inside
+        their convex hull, the focus is the nearest mark. Outside the hull, it
+        is the nearest mark within <code>radius</code> pixels. Being inside a
+        mark is distance zero. So the gap between two bars picks the nearer bar,
+        and the box stays open while the pointer moves among the marks. A small
+        point or a thin line is picked when the pointer is near it. There is no
+        mode to switch. The idea comes from declarative dragging (#1294), where
+        a drag follows the nearest reachable state inside the hull of the
+        states.
+      </p>
+      <p>
+        For bars spread along one axis, the prototype measures the distance
+        inside the hull along that axis only, so the pointer's row picks the
+        bar. By plain distance, a pointer level with a short bar but to its
+        right picked a longer bar above it. This is the open point. #849
         sketches a rule per kind of space (distance to a point, distance to a
         polyline, membership in a band). This single rule is close to that one,
         and the two need to be reconciled. Compare Plot's
@@ -2393,7 +2406,8 @@ girafe(ggobj = gg)</code></pre>
                 pointer.
               </td>
               <td>
-                The prototype estimates pixel distance from the chart size.
+                The live demos read the marks' drawn boxes and send the
+                pointer's hit to the nearest mark.
               </td>
               <td>#849, nearest-mark hover</td>
             </tr>

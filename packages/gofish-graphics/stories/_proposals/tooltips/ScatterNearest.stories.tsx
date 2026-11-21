@@ -20,7 +20,16 @@ import {
   live,
 } from "../../../src/lib";
 import { penguins } from "../../../src/data/penguins";
-import { rowTooltip, beside, focusFrom, drawnScales, heldOnTouch } from "./helpers";
+import {
+  rowTooltip,
+  beside,
+  focusFrom,
+  heldOnTouch,
+  hitRow,
+  noPointer,
+  snapToNearest,
+  drawnMarks,
+} from "./helpers";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Scatter Nearest", excludeStories: /^[a-z]/ };
@@ -118,32 +127,19 @@ export const Closed: StoryObj = {
 };
 
 /**
- * Live. The pointer is registered by a `live()` read of it in the opacity
- * (paint only); the nearest point is mapped to the focus outside the spec, so the
- * spec re-runs only when the nearest point changes.
- *
- * The chart keeps its own size, so `pointer().dataPos()` is undefined (see
- * `drawnScales`): each row's position in px comes from the data → px map read
- * off the drawn points (`r: 3`), and the distance to `pointer().pos()` is a
- * true pixel distance. Shared by the Interactive story and the proposal
- * page's demo bundle (proposals/tooltips/demo).
+ * Live. The focus is the nearest point inside the points' hull, and the
+ * nearest within RADIUS px outside it (`snapToNearest`), read in true pixels
+ * off the drawn points. The pointer is registered by a `live()` read of it in
+ * the opacity (paint only); the nearest point is mapped to the focus outside
+ * the spec, so the spec re-runs only when the nearest point changes. Shared by
+ * the Interactive story and the proposal page's demo bundle
+ * (proposals/tooltips/demo).
  */
 export function mountInteractive(container: HTMLElement) {
+  noPointer(container);
+  snapToNearest(container, drawnMarks('ellipse[rx="3"]', rows.length), { radius: RADIUS });
   const p = pointer();
-  const nearestPx = () => {
-    const at = p.pos();
-    if (at === undefined) return undefined;
-    const px = drawnScales(container, 'ellipse[rx="3"]', { x: [x0, x1], y: [y0, y1] });
-    if (!px?.x || !px.y) return undefined;
-    let best: any;
-    let bestD = Infinity;
-    for (const r of rows) {
-      const d = Math.hypot(px.x(r[X]) - at.x, px.y(r[Y]) - at.y);
-      if (d < bestD) [best, bestD] = [r, d];
-    }
-    return bestD <= RADIUS ? best.id : undefined;
-  };
-  const focus = focusFrom(heldOnTouch(container, nearestPx));
+  const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.id));
   // `live(() => 0.75)` that reads the pointer: a paint-only read whose only
   // job is to register the pointer with the chart. It is on the opacity, not
   // the fill, so the fill keeps its color scale and legend.

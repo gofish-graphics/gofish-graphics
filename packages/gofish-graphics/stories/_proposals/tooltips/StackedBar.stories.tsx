@@ -20,7 +20,22 @@ import {
   pointer,
 } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import { rowTooltip, box, table, beside, focusFrom, hitRow, noPointer, thousands, heldOnTouch, rowOf } from "./helpers";
+import {
+  rowTooltip,
+  box,
+  table,
+  beside,
+  focusFrom,
+  hitRow,
+  noPointer,
+  thousands,
+  heldOnTouch,
+  rowOf,
+  snapToNearest,
+  drawnMarks,
+  column,
+  BARS,
+} from "./helpers";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Stacked Bar", excludeStories: /^[a-z]/ };
@@ -133,6 +148,8 @@ export const Closed: StoryObj = {
  *  (proposals/tooltips/demo). */
 export function mountInteractiveSegment(container: HTMLElement) {
   noPointer(container);
+  // The nearest segment inside the hull; the column decides first.
+  snapToNearest(container, drawnMarks(BARS, seafood.length), { radius: 8, axis: "x" });
   const p = pointer();
   const key = (r: any) => (r ? `${r.lake}|${r.species}` : undefined);
   const focusKey = focusFrom(heldOnTouch(container, () => key(hitRow(p))));
@@ -158,6 +175,8 @@ export const InteractiveSegment: StoryObj = {
 /** Live: hover any segment for its whole stack. */
 export function mountInteractiveWholeStack(container: HTMLElement) {
   noPointer(container);
+  // The nearest stack (its segments' union box) inside the stacks' hull.
+  snapToNearest(container, drawnMarks(BARS, seafood.length, column), { radius: 8, axis: "x" });
   const p = pointer();
   const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
   return stackTooltip(

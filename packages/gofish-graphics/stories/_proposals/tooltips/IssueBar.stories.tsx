@@ -25,6 +25,9 @@ import {
   noPointer,
   heldOnTouch,
   rowOf,
+  snapToNearest,
+  drawnMarks,
+  BARS,
 } from "./helpers";
 
 // The lowercase exports are builders and mounts, not stories.
@@ -90,6 +93,8 @@ export const Closed: StoryObj = {
  *  the proposal page's demo bundle (proposals/tooltips/demo). */
 export function mountInteractive(container: HTMLElement) {
   noPointer(container);
+  // The focus is the nearest bar inside the bars' hull, by the pointer's row.
+  snapToNearest(container, drawnMarks(BARS, pathTypes.length), { radius: 8, axis: "y" });
   const p = pointer();
   const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.path));
   return issueBar(
