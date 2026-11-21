@@ -12,6 +12,7 @@ Exercises the Python wrapper's new `connect` operator with keyword anchors
 
 from gofish import (
     Constraint,
+    Curve,
     create_name,
     line,
     layer,
@@ -131,3 +132,37 @@ def story_node_link():
         ),
         {"w": 420, "h": 220},
     )
+
+
+def _anchored(curve):
+    """Two boxes joined from the middle of a's right side to the middle of
+    b's left side by a line routed by ``curve``."""
+    return (
+        layer(
+            [
+                rect(x=0, y=0, w=76, h=40, fill="#e2ebf6").name("a"),
+                rect(x=220, y=120, w=76, h=40, fill="#e2ebf6").name("b"),
+            ],
+            x=20,
+            y=20,
+        ).relate(
+            lambda a, b: [
+                line(
+                    [a, b],
+                    source=["end", "middle"],
+                    target=["start", "middle"],
+                    curve=curve,
+                    **EDGE_OPTS,
+                ).z_order(-1),
+            ]
+        ),
+        {"w": 340, "h": 200},
+    )
+
+
+def story_anchored_bezier():
+    return _anchored(Curve.bezier())
+
+
+def story_anchored_arc():
+    return _anchored(Curve.arc())

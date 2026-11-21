@@ -46,7 +46,8 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 `curve` takes a member of the [`Curve`](/python/api/curve) family, such as
 `Curve.monotone()` or `Curve.orthogonal(bend="auto")`. When `curve` is left
 out, a line over a continuous axis uses `Curve.monotone()`, and any other line
-uses `Curve.linear()`. The [`Curve`](/python/api/curve#curves-through-data) page
+uses `Curve.linear()`. A line with `source` or `target` runs between those
+anchor points, routed by `curve`, and is straight when `curve` is left out. The [`Curve`](/python/api/curve#curves-through-data) page
 compares the curves.
 
 ## Shape form

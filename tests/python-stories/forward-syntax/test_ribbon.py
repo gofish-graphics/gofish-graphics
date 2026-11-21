@@ -14,6 +14,7 @@ from gofish import (
     spread,
     stack,
     Coord,
+    Curve,
 )
 from python_stories.data import SEAFOOD
 
@@ -53,4 +54,30 @@ def story_polar():
     return (
         layer([bars, overlay], coord=Coord.clock(), w=500, h=500),
         {"axes": True},
+    )
+
+
+def story_orthogonal():
+    return (
+        chart(SEAFOOD, h=400)
+        .flow(
+            spread(by="lake", dir="x", spacing=64),
+            stack(by=field("species").sort("count"), dir="y"),
+        )
+        .mark(rect(h="count", fill="species"))
+        .layer(ribbon(opacity=0.8, curve=Curve.orthogonal())),
+        {},
+    )
+
+
+def story_orthogonal_vertical():
+    return (
+        chart(SEAFOOD, w=400)
+        .flow(
+            spread(by="lake", dir="y", spacing=64),
+            stack(by=field("species").sort("count"), dir="x"),
+        )
+        .mark(rect(w="count", fill="species"))
+        .layer(ribbon(dir="y", opacity=0.8, curve=Curve.orthogonal())),
+        {},
     )

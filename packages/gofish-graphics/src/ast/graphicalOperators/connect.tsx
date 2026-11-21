@@ -422,9 +422,13 @@ export const connect = createNodeOperator(
                 `keyframe marks (or in the flow) instead.`
             );
           }
-          // TODO(connect-edges): the time cut is built for one open edge
-          // through the operands' centers. A band (two edges, closed) and an
-          // edge pinned to points on its operands are not cut yet.
+          // TODO: the time cut is built for one open edge through the
+          // operands' centers. A band (two edges, closed) and an edge pinned
+          // to points on its operands are not cut yet. The right fix cuts
+          // each edge at the same data time, from where it leaves one
+          // keyframe's operand to where it enters the next one's (the
+          // attachments, not the centers), and for a band closes the two cut
+          // edges across the cut, as `ring` closes them across the ends.
           const pinned = anchors.some(
             (a) => a.source !== undefined || a.target !== undefined
           );
@@ -664,11 +668,18 @@ export const connect = createNodeOperator(
                   return centerPoint(b);
                 }
                 if (a.source === undefined || a.target === undefined) {
+                  // Only a line can get here: a ribbon gives both ends.
+                  const given = a.source === undefined ? "target" : "source";
+                  const missing = given === "source" ? "target" : "source";
                   throw new Error(
-                    `[gofish] line/ribbon({ curve: Curve.${resolvedCurveName}() ` +
-                      `}): a sequence curve threads one knot per operand, so ` +
-                      `an edge with one end pinned and the other omitted, ` +
-                      `which attaches by the other end, has none.`
+                    `[gofish] line({ ${given}, curve: Curve.${resolvedCurveName}() }): ` +
+                      `Curve.${resolvedCurveName}() threads one curve through ` +
+                      `a point on each mark, the point midway between where ` +
+                      `the line enters the mark (target) and where it leaves ` +
+                      `it (source). With only \`${given}\` given, that point ` +
+                      `is not known. Give \`${missing}\` too, or use a curve ` +
+                      `that routes each pair of marks on its own, such as ` +
+                      `Curve.linear() or Curve.bezier().`
                   );
                 }
                 const enter = pointOn(b, a.target);

@@ -8,7 +8,11 @@ import {
   type AnchorAlignment,
   type AnchorSpec,
 } from "../graphicalOperators/connect";
-import { curveName, sequenceCurve } from "../graphicalOperators/routers";
+import {
+  bandEdgeCurveNames,
+  curveName,
+  drawsBandEdge,
+} from "../graphicalOperators/routers";
 import { GoFishNode } from "../_node";
 import {
   getValue,
@@ -1086,9 +1090,10 @@ export type LineOptions = FilterOptions & {
   // `Curve.perfectArrows({ bow })`, …). The single path-shaping key.
   curve?: Curve;
   dir?: "x" | "y";
-  // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
+  // Anchors: pin each endpoint to a normalized point on its mark's bbox
   // (Bluefish-style `Line`) instead of the center — for ropes, node-link edges,
-  // etc. When given, the anchor points win over the routed center path.
+  // etc. `curve` routes the line between the anchor points; omitted, an
+  // anchored line is straight.
   source?: AnchorSpec;
   target?: AnchorSpec;
   from?: string;
@@ -1256,12 +1261,17 @@ const lineConnector = createRelationalMark<LineOptions>(
       {
         direction: o.dir ?? "x",
         edges: [{ source: o.source, target: o.target }],
-        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
-        // points share a continuous connection axis, else a straight line.
+        // Omitted, the curve of a line through its marks' centers is "auto":
+        // connect smooths it (monotone) when the marks share a continuous
+        // connection axis, else draws it straight. An anchored line's
+        // (`source`/`target`) is straight: the smoothing reads the operands'
+        // centers as samples of one continuous variable, and an edge pinned
+        // to points on its operands is not that.
         curve:
-          o.source !== undefined || o.target !== undefined
-            ? pinnedCurve(o.curve)
-            : o.curve,
+          o.curve ??
+          (o.source !== undefined || o.target !== undefined
+            ? linearCurve()
+            : undefined),
         discreteCurve: linearCurve(),
         fill: o.fill,
         stroke: o.stroke,
@@ -1275,16 +1285,6 @@ const lineConnector = createRelationalMark<LineOptions>(
       children
     )
 );
-
-/** The curve a line pinned to `source`/`target` draws: checked as any
- *  curve is, then straight. TODO(connect-edges): a pinned line has always
- *  been straight, whatever its curve. Connect would route the pinned edge by
- *  the curve (an arc between the anchors, a monotone spline over a
- *  continuous axis); held straight until that is decided. */
-const pinnedCurve = (curve: Curve | undefined): Curve => {
-  curveName(curve, "line/ribbon({ curve })");
-  return linearCurve();
-};
 
 /**
  * `line` has two forms, picked by whether a position channel is given:
@@ -1332,8 +1332,9 @@ export type RibbonOptions = FilterOptions & {
   opacity?: number | LiveValue;
   blendMode?: BlendMode;
   dir?: "x" | "y";
-  // Screen-space path shape for the band edges (`"linear"` | `bezier()`).
-  // Edge mode honors linear (linear band) vs bezier (S-curve band).
+  // Screen-space path shape for the band edges: a curve that draws a band
+  // edge (`drawsBandEdge` in `routers.ts`), such as `Curve.bezier()` or
+  // `Curve.orthogonal()`. `Curve.arc()` and `Curve.perfectArrows()` throw.
   curve?: Curve;
   from?: string;
   to?: string;
@@ -1370,7 +1371,7 @@ export type RibbonOptions = FilterOptions & {
 // `ribbon`'s connector form: two edges, the near and far sides of a band,
 // each from the far face of one mark to the near face of the next along
 // `dir`, closed into a filled region (sankey ribbons, bands between discrete
-// marks, stacked areas).
+// marks, stacked areas). Its curve draws a band edge (`ribbon` checks it).
 const ribbonConnector = createRelationalMark<RibbonOptions>(
   "ribbon",
   (o, children, inferred) => {
@@ -1388,7 +1389,7 @@ const ribbonConnector = createRelationalMark<RibbonOptions>(
         closed: true,
         // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
         // connection axis, else a bezier band.
-        curve: bandCurve(o.curve),
+        curve: o.curve,
         discreteCurve: bezier(),
         blendMode: o.blendMode ?? "normal",
         fill: o.fill,
@@ -1402,20 +1403,6 @@ const ribbonConnector = createRelationalMark<RibbonOptions>(
     );
   }
 );
-
-/** The curve a ribbon's edges draw. TODO(connect-edges): a ribbon has only
- *  ever honored a straight, a bezier or a sequence curve, and drawn a
- *  straight band for every other route. Connect would route both edges by
- *  it (an orthogonal or arc band); held straight until that is decided. */
-const bandCurve = (curve: Curve | undefined): Curve | undefined => {
-  const kind = curveName(curve, "line/ribbon({ curve })");
-  return kind === undefined ||
-    kind === "linear" ||
-    kind === "bezier" ||
-    sequenceCurve(kind) !== undefined
-    ? curve
-    : linearCurve();
-};
 
 /**
  * `ribbon` has two forms, picked by whether a position channel is given:
@@ -1455,6 +1442,20 @@ export function ribbon(
         "[gofish] ribbon({ inset }): inset draws in the band of the shape " +
           "form, ribbon({ x, h }) or ribbon({ y, w }). The connector form " +
           "joins the edges of other marks, which it does not draw in."
+      );
+    const kind = curveName(options?.curve, "ribbon({ curve })");
+    if (kind !== undefined && !drawsBandEdge(options!.curve!))
+      throw new Error(
+        `[gofish] ribbon({ curve: Curve.${kind}() }): a ribbon is the band ` +
+          `between two edges that each run along its axis (dir), one value ` +
+          `across it at each point along it, and this curve does not draw ` +
+          `such an edge. An arc or a perfect-arrows bow turns back along ` +
+          `the axis, and an elbow with bend: "auto" picks an axis for each ` +
+          `edge on its own, so two of them bound no band. Use one of ` +
+          bandEdgeCurveNames()
+            .map((name) => `Curve.${name}()`)
+            .join(", ") +
+          `.`
       );
     return children === undefined
       ? ribbonConnector(options)

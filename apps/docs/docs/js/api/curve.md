@@ -72,7 +72,8 @@ A curve that is read over time can also move a mark: `time.transition()`,
 
 When a `line` or `ribbon` has no `curve`, it looks at the connected points. If
 they share a continuous connection axis, it uses `Curve.monotone()`. Otherwise a
-`line` uses `Curve.linear()` and a `ribbon` uses `Curve.bezier()`.
+`line` uses `Curve.linear()` and a `ribbon` uses `Curve.bezier()`. A `line`
+with `source` or `target` uses `Curve.linear()`.
 `time.transition()`, `Animation.tween()` and `interpolate()` default to
 `Curve.monotone()`.
 
@@ -160,4 +161,6 @@ its moving mark can sit slightly off a Catmull-Rom line.
 geometry instead, for layouts with no single growth axis. `Curve.arc()` bulges
 up by default; `{ direction: "down" }` flips it. A line threaded through the
 keyframes of a `time.sequence` cannot use `Curve.orthogonal()`, `Curve.arc()` or
-`Curve.perfectArrows()`.
+`Curve.perfectArrows()`. A `ribbon` cannot use `Curve.arc()` or
+`Curve.perfectArrows()`: each edge of a band runs along the connection axis,
+and these two bow away from the line between their ends.

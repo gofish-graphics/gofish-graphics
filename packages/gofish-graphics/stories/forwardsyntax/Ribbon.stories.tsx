@@ -11,6 +11,7 @@ import {
   selectAll,
   field,
   Coord,
+  Curve,
 } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
 
@@ -84,6 +85,45 @@ export const Polar: StoryObj<Args> = {
         .flow(group({ by: "species" }))
         .mark(ribbon({ opacity: 0.8 })),
     ]).render(container, { axes: true });
+
+    return container;
+  },
+};
+
+// The ribbon chart's bands drawn with orthogonal edges: each band runs level
+// from a bar, steps at the midpoint of the gap, and runs level into the next.
+export const Orthogonal: StoryObj<Args> = {
+  args: { h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(seafood, { h: args.h })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        stack({ by: field("species").sort("count"), dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(ribbon({ opacity: 0.8, curve: Curve.orthogonal() }))
+      .render(container);
+
+    return container;
+  },
+};
+
+// The same with the lakes down y and each lake's bar stacked across x.
+export const OrthogonalVertical: StoryObj<Args> = {
+  args: { w: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(seafood, { w: args.w })
+      .flow(
+        spread({ by: "lake", dir: "y", spacing: 64 }),
+        stack({ by: field("species").sort("count"), dir: "x" })
+      )
+      .mark(rect({ w: "count", fill: "species" }))
+      .layer(ribbon({ dir: "y", opacity: 0.8, curve: Curve.orthogonal() }))
+      .render(container);
 
     return container;
   },

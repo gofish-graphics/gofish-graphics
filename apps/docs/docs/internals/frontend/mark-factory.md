@@ -514,9 +514,19 @@ combinator form.
 the shape form's `Band` uses. Each end of an edge is a point on its operand's
 box, or is omitted. An omitted end attaches as near the other end as the box
 allows: the box's nearest point to a point, or the whole box, which the
-curve's route reads, when both ends are omitted. `line` is one open edge, from `source` to `target` when they are
-given. `ribbon` is two edges, from the far face of each operand to the near
-face of the next along `dir`, closed into a filled region.
+curve's route reads, when both ends are omitted. A point is a box of zero size,
+so a route reads an anchored end the same way. `line` is one open edge, from
+`source` to `target` when they are given. Its curve routes the edge between
+them, and an anchored line with no curve is straight: the omitted curve
+smooths only a line through its marks' centers, which it reads as samples of
+one continuous variable. `ribbon` is two edges, from the far face of each
+operand to the near face of the next along `dir`, closed into a filled region.
+A ribbon's curve must draw a _band edge_, a path that goes on along the
+connection axis from one end to the other, as each edge of the shape form's
+band is a function of its parameter. Each curve declares whether it does where
+it is registered (`bandEdge` in `routers.ts`): every sequence curve, `linear`,
+`bezier` and `orthogonal` do, and `arc` and `perfectArrows`, which bow away
+from the chord and turn back, do not, so `ribbon` throws on them.
 
 `createRelationalMark` dispatches on the shape of its arguments into four call
 forms:

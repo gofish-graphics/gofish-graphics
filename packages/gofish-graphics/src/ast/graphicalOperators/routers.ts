@@ -10,8 +10,10 @@
  * Built-ins below are the *routing* curves (linear / bezier / orthogonal /
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
  * pairwise, and the *sequence* curves (step, monotone, smooth,
- * catmullRom), which thread the whole point run (`sequenceCurve`). The set is
- * closed: the kinds of the Curve family in gofish-ir's STRATEGIES table.
+ * catmullRom), which thread the whole point run (`sequenceCurve`). Each
+ * declares whether it draws a band edge (`Route`), the curves a ribbon takes
+ * (`drawsBandEdge`). The set is closed: the kinds of the Curve family in
+ * gofish-ir's STRATEGIES table.
  */
 import {
   type Path,
@@ -91,6 +93,25 @@ export type SequenceCurve = {
   /** Whether the curve is read over the run's parameter (so `connect` works
    *  one out), or is a shape on screen that ignores it. */
   takesKnots: boolean;
+  /** Whether what it draws is a band edge ({@link Route}). */
+  bandEdge: boolean;
+};
+
+/**
+ * A pairwise route: the router, and whether the path it draws is a *band
+ * edge*, a function of the connection axis, which goes on along that axis
+ * from one end to the other and never turns back along it (it may jump
+ * across it, as a step does). A ribbon is the region between two band edges,
+ * as the shape form's band is the region between two functions of its
+ * parameter (`shapes/band.tsx`). A path that bows away from the line between
+ * its ends and turns back along the axis (an arc) bounds no band. It is
+ * asked of the curve's options, since they can decide it: an elbow is a band
+ * edge when it bends on the connection axis, and not when each edge picks
+ * its own axis (`bend: "auto"`), as a band's two edges then disagree.
+ */
+type Route = {
+  router: Router;
+  bandEdge: (options: Record<string, any>) => boolean;
 };
 
 /** What a sequence curve knows of the parameter a run is read over. */
@@ -109,7 +130,7 @@ export type RunParameter = {
 // curves are the built-ins below, and nothing outside this module adds one.
 
 /** The pairwise routes, by curve kind. */
-const routes = new Map<string, Router>();
+const routes = new Map<string, Route>();
 
 /** The sequence curves, by curve kind: `connect` threads them over the whole
  *  run, which a router never sees. */
@@ -126,6 +147,18 @@ export function sequenceCurve(
 /** The names of the registered sequence curves. */
 export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
 
+/** Whether `curve` draws a band edge (`Route`), so a ribbon can take it. */
+export const drawsBandEdge = ({ kind, ...options }: Curve): boolean =>
+  routes.get(kind)?.bandEdge(options) ??
+  sequenceCurves.get(kind)?.bandEdge === true;
+
+/** The names of the curves that draw a band edge with their default
+ *  options, routes first. */
+export const bandEdgeCurveNames = (): string[] =>
+  [...routes.keys(), ...sequenceCurves.keys()].filter((kind) =>
+    drawsBandEdge({ kind } as Curve)
+  );
+
 /** Resolve a `Curve` to its router fn + options: the params beside its
  *  `kind`. */
 export function resolveCurve(curve: Curve): {
@@ -133,12 +166,12 @@ export function resolveCurve(curve: Curve): {
   options: Record<string, any>;
 } {
   const { kind, ...options } = curve;
-  const router = routes.get(kind);
-  if (router === undefined)
+  const route = routes.get(kind);
+  if (route === undefined)
     throw new Error(
       `[gofish] Curve.${kind}() is not a pairwise route (${[...routes.keys()].join(", ")}).`
     );
-  return { router, options };
+  return { router: route.router, options };
 }
 
 // --- geometry helpers -------------------------------------------------------
@@ -272,29 +305,42 @@ export const perfectArrowsRouter: Router = (b0, b1, { opts }) => {
   return [quadratic([sx, sy], [cx, cy], [ex, ey])];
 };
 
-routes.set("linear", linearRouter);
-routes.set("bezier", bezierRouter);
-routes.set("orthogonal", orthogonalRouter);
-routes.set("arc", arcRouter);
-routes.set("perfectArrows", perfectArrowsRouter);
+// A straight segment, a bezier with both control points on the midline, and
+// an elbow that bends at the midline each go on along the connection axis.
+// An arc and a perfect-arrows bow bulge away from the chord and turn back.
+routes.set("linear", { router: linearRouter, bandEdge: () => true });
+routes.set("bezier", { router: bezierRouter, bandEdge: () => true });
+routes.set("orthogonal", {
+  router: orthogonalRouter,
+  bandEdge: ({ bend }) => bend !== "auto",
+});
+routes.set("arc", { router: arcRouter, bandEdge: () => false });
+routes.set("perfectArrows", {
+  router: perfectArrowsRouter,
+  bandEdge: () => false,
+});
 
 // The data-space curves are read over the run's parameter. A smooth one
 // threads a run with none with centripetal knots. `step` holds every
 // coordinate but the one that draws the parameter, which a run with no
 // parameter of its own has none of. The Catmull-Rom is a shape on screen: its
-// knots are always centripetal.
+// knots are always centripetal. Each threads a run whose points go on along
+// the connection axis, as a ribbon's do, as a band edge.
 sequenceCurves.set("step", {
   thread: (points, { parameterAxis }) => stepPath(points, parameterAxis),
   takesKnots: true,
+  bandEdge: true,
 });
 for (const smooth of SMOOTH_CURVES) {
   sequenceCurves.set(smooth, {
     thread: (points, { knots }) =>
       threadPath(points, knots ?? centripetalKnots(points), smooth),
     takesKnots: true,
+    bandEdge: true,
   });
 }
 sequenceCurves.set("catmullRom", {
   thread: (points) => catmullRomPath(points).map((seg) => evenStep([seg])),
   takesKnots: false,
+  bandEdge: true,
 });

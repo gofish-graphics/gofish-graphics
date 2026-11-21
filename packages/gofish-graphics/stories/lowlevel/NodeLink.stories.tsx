@@ -9,6 +9,7 @@ import {
   rect,
   text,
   ref,
+  Curve,
 } from "../../src/lib";
 
 // A small node-link diagram built with the nested-tier pattern
@@ -132,6 +133,62 @@ export const NodeLink: StoryObj<Args> = {
           c.e3,
           c.t3,
         ]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+// An anchored line routed by its curve: from the right side of box a to the
+// left side of box b. With no curve the line would be straight.
+export const AnchoredBezier: StoryObj<Args> = {
+  args: { w: 340, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    layer({ x: 20, y: 20 }, [
+      rect({ x: 0, y: 0, w: 76, h: 40, fill: "#e2ebf6" }).name("a"),
+      rect({ x: 220, y: 120, w: 76, h: 40, fill: "#e2ebf6" }).name("b"),
+    ])
+      .relate(({ a, b }) => [
+        line(
+          {
+            ...edge,
+            source: ["end", "middle"],
+            target: ["start", "middle"],
+            curve: Curve.bezier(),
+          },
+          [a, b]
+        ).zOrder(-1),
+      ])
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+// The same anchors with an arc: a half circle between the two anchor points,
+// which the graphic's box grows to hold.
+export const AnchoredArc: StoryObj<Args> = {
+  args: { w: 340, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    layer({ x: 20, y: 20 }, [
+      rect({ x: 0, y: 0, w: 76, h: 40, fill: "#e2ebf6" }).name("a"),
+      rect({ x: 220, y: 120, w: 76, h: 40, fill: "#e2ebf6" }).name("b"),
+    ])
+      .relate(({ a, b }) => [
+        line(
+          {
+            ...edge,
+            source: ["end", "middle"],
+            target: ["start", "middle"],
+            curve: Curve.arc(),
+          },
+          [a, b]
+        ).zOrder(-1),
       ])
       .render(container, { w: args.w, h: args.h });
 

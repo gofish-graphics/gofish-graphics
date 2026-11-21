@@ -47,7 +47,9 @@ line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve?, along?, fro
 `Curve.monotone()` or `Curve.orthogonal({ bend: "auto" })`. When `curve` is
 omitted, `line` inspects the connected points. If they share a continuous
 connection axis, it smooths them with `Curve.monotone()`. Otherwise it draws a
-straight polyline, `Curve.linear()`. The [`Curve`](/js/api/curve#curves-through-data)
+straight polyline, `Curve.linear()`. A line with `source` or `target` runs
+between those anchor points, routed by `curve`, and is straight when `curve` is
+omitted. The [`Curve`](/js/api/curve#curves-through-data)
 page compares the curves and says how a line picks the knots of its curve.
 
 ## Shape form

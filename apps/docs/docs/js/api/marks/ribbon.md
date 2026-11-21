@@ -107,8 +107,12 @@ coordinate transform too.
 ## Connector form
 
 `curve` takes a member of the [`Curve`](/js/api/curve) family:
-`Curve.linear()`, `Curve.bezier()`, `Curve.step()`, `Curve.monotone()`,
-`Curve.smooth()` or `Curve.catmullRom()`. When `curve` is omitted, `ribbon`
+`Curve.linear()`, `Curve.bezier()`, `Curve.orthogonal()`, `Curve.step()`,
+`Curve.monotone()`, `Curve.smooth()` or `Curve.catmullRom()`. Each edge of the
+band runs along the connection axis, so `Curve.arc()` and
+`Curve.perfectArrows()`, which bow away from the line between their ends, are
+errors, and so is `Curve.orthogonal({ bend: "auto" })`, which picks a bend axis
+for each edge on its own. When `curve` is omitted, `ribbon`
 inspects the connection axis: over a homogeneous **continuous** axis (a stacked
 area / streamgraph sampling a continuous variable) it smooths the band edges
 with `Curve.monotone()` — matching its [`line`](/js/api/marks/line) sibling —

@@ -70,7 +70,8 @@ from gofish.curve import monotone  # the same function as Curve.monotone
 
 When a `line` or `ribbon` has no `curve`, it looks at the connected points. If
 they share a continuous connection axis, it uses `Curve.monotone()`. Otherwise a
-`line` uses `Curve.linear()` and a `ribbon` uses `Curve.bezier()`.
+`line` uses `Curve.linear()` and a `ribbon` uses `Curve.bezier()`. A `line`
+with `source` or `target` uses `Curve.linear()`.
 
 ## Curves through data
 
@@ -124,4 +125,6 @@ on the screen. It can overshoot between two points.
 `Curve.perfect_arrows()` route each pair of neighboring points on their own. The
 `Curve.orthogonal()` elbow bends at the midpoint of the connector's `dir` axis;
 `Curve.orthogonal(bend="auto")` infers the bend axis from the endpoint geometry
-instead. `Curve.arc()` bulges up by default; `direction="down"` flips it.
+instead. `Curve.arc()` bulges up by default; `direction="down"` flips it. A
+`ribbon` cannot use `Curve.arc()` or `Curve.perfect_arrows()`: each edge of a
+band runs along the connection axis, and these two bow away from the line between their ends.
