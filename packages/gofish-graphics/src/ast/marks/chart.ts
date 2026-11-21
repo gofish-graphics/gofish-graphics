@@ -5,8 +5,10 @@
 import type { Curve } from "../../families/curve";
 import {
   connect as Connect,
+  type AnchorAlignment,
   type AnchorSpec,
 } from "../graphicalOperators/connect";
+import { curveName, sequenceCurve } from "../graphicalOperators/routers";
 import { GoFishNode } from "../_node";
 import {
   getValue,
@@ -52,7 +54,7 @@ import {
   type FunctionExpr,
   type ValueExpr,
 } from "../groupExpr";
-import { monotone } from "../../families/curve";
+import { bezier, linear as linearCurve, monotone } from "../../families/curve";
 import type { ParameterCurve } from "../fun";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
@@ -1244,33 +1246,45 @@ function shapeForm(
   return withWire(nameableMark(mark), { type, opts: options });
 }
 
-// `line`'s connector form — a center-mode connector (the "line" component):
-// the path between the centers of consecutive marks. `route` picks the shape
-// (linear | bezier | orthogonal | arc | perfectArrows | …).
+// `line`'s connector form: one open edge from each mark to the next, from
+// its center (the whole box, which the curve's route reads) or from the
+// `source`/`target` points on it.
 const lineConnector = createRelationalMark<LineOptions>(
   "line",
   (o, children, inferred) =>
     Connect(
       {
         direction: o.dir ?? "x",
-        mode: "center",
+        edges: [{ source: o.source, target: o.target }],
+        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
+        // points share a continuous connection axis, else a straight line.
+        curve:
+          o.source !== undefined || o.target !== undefined
+            ? pinnedCurve(o.curve)
+            : o.curve,
+        discreteCurve: linearCurve(),
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 1,
         strokeDasharray: o.strokeDasharray,
         opacity: o.opacity,
         blendMode: o.blendMode,
-        // Omitted ⇒ "auto": connect smooths (monotone) when the connected
-        // points share a continuous connection axis, else a straight line.
-        curve: o.curve,
-        source: o.source,
-        target: o.target,
         along: inferred.along,
         parameterAxis: inferred.parameterAxis,
       },
       children
     )
 );
+
+/** The curve a line pinned to `source`/`target` draws: checked as any
+ *  curve is, then straight. TODO(connect-edges): a pinned line has always
+ *  been straight, whatever its curve. Connect would route the pinned edge by
+ *  the curve (an arc between the anchors, a monotone spline over a
+ *  continuous axis); held straight until that is decided. */
+const pinnedCurve = (curve: Curve | undefined): Curve => {
+  curveName(curve, "line/ribbon({ curve })");
+  return linearCurve();
+};
 
 /**
  * `line` has two forms, picked by whether a position channel is given:
@@ -1353,30 +1367,55 @@ export type RibbonOptions = FilterOptions & {
   y?: ShapeChannel;
 };
 
-// `ribbon`'s connector form — an edge-mode connector: a filled band between
-// the facing edges of consecutive marks (sankey ribbons, bands between
-// discrete marks).
+// `ribbon`'s connector form: two edges, the near and far sides of a band,
+// each from the far face of one mark to the near face of the next along
+// `dir`, closed into a filled region (sankey ribbons, bands between discrete
+// marks, stacked areas).
 const ribbonConnector = createRelationalMark<RibbonOptions>(
   "ribbon",
-  (o, children, inferred) =>
-    Connect(
+  (o, children, inferred) => {
+    const main = o.dir ?? "x";
+    const cross = main === "x" ? "y" : "x";
+    const side = (m: AnchorAlignment, c: AnchorAlignment): AnchorSpec =>
+      ({ [main]: m, [cross]: c }) as AnchorSpec;
+    return Connect(
       {
-        direction: o.dir ?? "x",
-        mode: "edge",
+        direction: main,
+        edges: [
+          { source: side("end", "start"), target: side("start", "start") },
+          { source: side("end", "end"), target: side("start", "end") },
+        ],
+        closed: true,
+        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
+        // connection axis, else a bezier band.
+        curve: bandCurve(o.curve),
+        discreteCurve: bezier(),
         blendMode: o.blendMode ?? "normal",
         fill: o.fill,
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        // Omitted ⇒ "auto": a smooth (monotone) band over a continuous
-        // connection axis, else a bezier band.
-        curve: o.curve,
         along: inferred.along,
         parameterAxis: inferred.parameterAxis,
       },
       children
-    )
+    );
+  }
 );
+
+/** The curve a ribbon's edges draw. TODO(connect-edges): a ribbon has only
+ *  ever honored a straight, a bezier or a sequence curve, and drawn a
+ *  straight band for every other route. Connect would route both edges by
+ *  it (an orthogonal or arc band); held straight until that is decided. */
+const bandCurve = (curve: Curve | undefined): Curve | undefined => {
+  const kind = curveName(curve, "line/ribbon({ curve })");
+  return kind === undefined ||
+    kind === "linear" ||
+    kind === "bezier" ||
+    sequenceCurve(kind) !== undefined
+    ? curve
+    : linearCurve();
+};
 
 /**
  * `ribbon` has two forms, picked by whether a position channel is given:

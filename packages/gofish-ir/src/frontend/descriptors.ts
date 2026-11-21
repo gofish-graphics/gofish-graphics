@@ -2302,8 +2302,8 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
     doc: "A path. Given `x` and `y`, the shape form: the mark owns its rows and draws one path per group through them, sorted by `x`. Without them, the connector form: the path between the centers of consecutive marks another flow placed, in bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
     include: [filtered],
     fields: {
-      // Center mode paints `fill: "none"` on the path (connect.tsx's
-      // `mode === "center" ? "none" : ...`), but `fill` is still the channel the
+      // An open connector paints `fill: "none"` on the path (connect.tsx's
+      // `closed ? ... : "none"`), but `fill` is still the channel the
       // color scale reads (`color: isValue(fill) ? fill : stroke`) and the
       // stroke's fallback (`stroke ?? fill ?? "black"`).
       fill: ch.color(

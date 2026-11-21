@@ -510,6 +510,14 @@ and pairwise forms), so an option that names a layer (a blob's
 `avoiding: selectAll(name)`) resolves against it; it is undefined in the
 combinator form.
 
+`connect` draws one or more _edges_ from each operand to the next, the model
+the shape form's `Band` uses. Each end of an edge is a point on its operand's
+box, or is omitted. An omitted end attaches as near the other end as the box
+allows: the box's nearest point to a point, or the whole box, which the
+curve's route reads, when both ends are omitted. `line` is one open edge, from `source` to `target` when they are
+given. `ribbon` is two edges, from the far face of each operand to the near
+face of the next along `dir`, closed into a filled region.
+
 `createRelationalMark` dispatches on the shape of its arguments into four call
 forms:
 

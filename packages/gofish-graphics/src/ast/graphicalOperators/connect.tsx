@@ -48,7 +48,6 @@ import {
   type RunParameter,
 } from "./routers";
 import {
-  bezier,
   linear as linearCurve,
   monotone,
   type Curve,
@@ -71,6 +70,8 @@ import {
 // keywords map to {start: 0, middle: 0.5, end: 1}, in the connector's axis
 // order (see `axisDirection.ts`): on a y that grows upward `start` is the
 // bottom, on one that reads top-down it is the top.
+// TODO: the decided anchor vocabulary is `start`/`center`/`end`; `middle`
+// here is the public `line({ source, target })` spelling, not renamed yet.
 export type AnchorAlignment = "start" | "middle" | "end";
 export type AnchorAxis = number | AnchorAlignment;
 // One of:
@@ -189,53 +190,128 @@ const boxDims = (box: BoundingBox): Size<{ min: number; size: number }> =>
         { min: box.minY, size: box.maxY - box.minY },
       ];
 
+/**
+ * One edge of a connector: a path from each operand to the next. Each end
+ * says where the edge meets its operand: a point on the operand's box
+ * ({@link AnchorSpec}, in x and y), or omitted. An omitted end attaches as
+ * near the other end as the box allows: to a point, at the point of the box
+ * nearest it, clamped per axis (Bluefish's `Line`), which gives an
+ * axis-aligned edge when the point lies within the box on one axis; to an
+ * omitted end, at the whole box, which the curve's route reads (a straight
+ * route runs from its center, perfect-arrows from its side).
+ */
+export type ConnectEdge = { source?: AnchorSpec; target?: AnchorSpec };
+
+/** Where one end of an edge meets an operand in one pair: a box the route
+ *  reads, and the point the end is at (a point attachment is a box of zero
+ *  size, so a route reads the point). */
+type Attachment = { box: Dimensions; at: [number, number] };
+
+/** The coordinate at fraction `f` of a box axis: `min + f · size`, and at
+ *  `f = 1` the axis's own `max`. The far end is read, not re-derived: a box
+ *  seen through a reflected y (`reflectInterval`) has `min = −max′`, and
+ *  `min + size` then differs from its `max` in the last bit. */
+const fractionOf = (d: Dimensions[number], f: number): number =>
+  f === 1 ? d.max! : d.min! + f * d.size!;
+
+/** The point at fractions `f` of a box. */
+const pointOn = (b: Dimensions, f: [number, number]): [number, number] => [
+  fractionOf(b[0], f[0]),
+  fractionOf(b[1], f[1]),
+];
+
+const clamp = (v: number, lo: number, hi: number): number =>
+  Math.max(lo, Math.min(hi, v));
+
+/** The point of `onto` nearest `p`, per axis. */
+const clampOnto = (p: [number, number], onto: Dimensions): [number, number] => [
+  clamp(p[0], onto[0].min!, onto[0].max!),
+  clamp(p[1], onto[1].min!, onto[1].max!),
+];
+
+/** A point as an attachment: a box of zero size at it. */
+const atPoint = (p: [number, number]): Attachment => ({
+  box: [
+    { min: p[0], center: p[0], max: p[0], size: 0 },
+    { min: p[1], center: p[1], max: p[1], size: 0 },
+  ],
+  at: p,
+});
+
+/** A whole box as an attachment, at its center. */
+const atBox = (b: Dimensions): Attachment => ({ box: b, at: centerPoint(b) });
+
+/** Whether an edge entering an operand where `a` is leaves it where `b` is,
+ *  so the paths on either side meet: the same whole box, or the same point
+ *  to within rounding (an operand with no extent between the two points, as
+ *  an area's zero-width points are). */
+const EPS = 1e-6;
+const samePlace = (a: Attachment, b: Attachment): boolean =>
+  a.box === b.box ||
+  (a.box[0].size === 0 &&
+    b.box[0].size === 0 &&
+    a.box[1].size === 0 &&
+    b.box[1].size === 0 &&
+    Math.abs(a.at[0] - b.at[0]) < EPS &&
+    Math.abs(a.at[1] - b.at[1]) < EPS);
+
+/** Two edges joined into one closed region: the first forward, across at
+ *  the last operand, the second back, and across at the first. */
+const ring = (
+  first: Path,
+  second: Path,
+  start: [[number, number], [number, number]],
+  end: [[number, number], [number, number]]
+): Path => [
+  ...first,
+  { type: "line", points: [end[0], end[1]] },
+  ...reversePath(second),
+  { type: "line", points: [start[1], start[0]] },
+];
+
 export const connect = createNodeOperator(
   (
     {
+      edges,
+      closed = false,
       direction,
       fill,
       curve,
+      discreteCurve = linearCurve(),
       stroke,
       strokeWidth,
       strokeDasharray,
       opacity,
-      mode = "edge",
       blendMode,
-      source,
-      target,
       along,
       parameterAxis,
     }: {
-      // Optional in anchor mode (source/target), where it is ignored.
+      // The paths it draws from each operand to the next: one for a line,
+      // the two sides of a band for a ribbon (`ConnectEdge`).
+      edges: ConnectEdge[];
+      // Whether its two edges are joined into one filled region, closed
+      // across the first and last operand. Open, each edge is its own path,
+      // never filled.
+      closed?: boolean;
+      // The connection axis: the axis the operands follow one another along.
+      // A route that bends reads it (`bezier`, `orthogonal`), and so does an
+      // omitted curve, and which operands are cross-sections (see below).
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
       // The single screen-space path-shaping key: a call in the Curve family
       // (`Curve.linear()`, `Curve.bezier()`, `Curve.orthogonal()`,
-      // `Curve.arc({ direction })`, `Curve.perfectArrows({ bow })`, …).
-      // Center ("line") mode resolves it through the curve registry; edge
-      // ("ribbon") mode only honors `linear` (linear band) vs `bezier`
-      // (S-curve band). Omitted, it is chosen below.
+      // `Curve.arc({ direction })`, `Curve.perfectArrows({ bow })`, …). A
+      // sequence curve threads each edge through the whole run; a route
+      // shapes each edge between the two ends it is given. Omitted, it is a
+      // monotone cubic over a continuous connection axis, else
+      // `discreteCurve`.
       curve?: Curve;
+      discreteCurve?: Curve;
       stroke?: MaybeValue<string>;
       strokeWidth?: number;
       strokeDasharray?: string;
       opacity?: number;
-      mode?: "edge" | "center";
       blendMode?: BlendMode;
-      // Per-endpoint anchor on each child's bbox. Accepts a per-axis tuple
-      // `[fx, fy]` of numbers (`min + f * size`) or alignment keywords
-      // (`start | middle | end` → `0 | 0.5 | 1`), with a single keyword as
-      // shorthand for both axes (e.g. `"middle"` ≡ `[0.5, 0.5]`).
-      //
-      // When either is given, the connector runs straight between the
-      // anchored points of each consecutive child pair, ignoring
-      // `direction`/`mode`. If both are given, the line runs directly between
-      // them. If only one is given, the other endpoint is the specified
-      // point clamped onto the opposite bbox per axis (Bluefish `Line`
-      // behavior) — yielding an axis-aligned line when the point lies within
-      // that box on one axis.
-      source?: AnchorSpec;
-      target?: AnchorSpec;
       // The connection variable: the key of the flow tier the connector
       // threads (`along: "year"` names years). A smooth run reads each
       // operand's value of it as its knots (see `runKnots`), and only then.
@@ -250,27 +326,37 @@ export const connect = createNodeOperator(
   ) => {
     const drawnAxis: 0 | 1 | undefined =
       parameterAxis === undefined ? undefined : parameterAxis === "x" ? 0 : 1;
-    const resolvedSource =
-      source !== undefined ? resolveAnchor(source) : undefined;
-    const resolvedTarget =
-      target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
+    const mainAxis = dir as 0 | 1;
+    const crossAxis = (1 - mainAxis) as 0 | 1;
     // A curve that is not a Curve-family object fails here, where the
     // connector is made.
     curveName(curve, "line/ribbon({ curve })");
-    // What it draws: a closed band per run for a ribbon (edge mode), and an
-    // open path per run for a line (center mode, or a connector between two
-    // anchors).
-    const closed =
-      mode !== "center" &&
-      resolvedSource === undefined &&
-      resolvedTarget === undefined;
+    if (closed && edges.length !== 2)
+      throw new Error(
+        `[gofish] connect: a closed connector is the region between two ` +
+          `edges, but it was given ${edges.length}.`
+      );
+    const anchors = edges.map((e) => ({
+      source: e.source === undefined ? undefined : resolveAnchor(e.source),
+      target: e.target === undefined ? undefined : resolveAnchor(e.target),
+    }));
+    // An operand the edges meet at two places across the connection axis is
+    // a cross-section of what they draw (each operand of a ribbon spans the
+    // band from its near side to its far side). It is embedded on the
+    // connection axis, and its box is part of the connector's.
+    const spans = (ends: ([number, number] | undefined)[]): boolean =>
+      new Set(ends.flatMap((f) => (f === undefined ? [] : [f[crossAxis]])))
+        .size > 1;
+    const crossSections =
+      spans(anchors.map((a) => a.source)) ||
+      spans(anchors.map((a) => a.target));
     // How it paints its paths, from its fill color (its first child's when
-    // it sets none) and its stroke color: a ribbon is filled, a line never,
-    // and either is stroked with its stroke, or its fill when it sets none.
+    // it sets none) and its stroke color: filled when closed, never when
+    // open, and stroked with its stroke, or its fill when it sets none.
     // `lower` reads it with the colors resolved, `geometry` as given.
     const paintOf = <C,>(color: C | undefined, strokeColor: C | undefined) => ({
-      fill: mode === "center" ? "none" : (color ?? "none"),
+      fill: closed ? (color ?? "none") : "none",
       stroke: strokeColor ?? color ?? "black",
       strokeWidth: strokeWidth ?? 0,
     });
@@ -299,11 +385,6 @@ export const connect = createNodeOperator(
         },
         layout: (size, scales, children, node) => {
           const defaultColor = children[0]?.color ?? "black";
-
-          const paths: Path[] = [];
-
-          const hasAnchors =
-            resolvedSource !== undefined || resolvedTarget !== undefined;
 
           // A connector over a `time.sequence`'s keyframes is read in time as
           // well as in space, by the lifetime of the marks it connects (see
@@ -341,21 +422,29 @@ export const connect = createNodeOperator(
                 `keyframe marks (or in the flow) instead.`
             );
           }
-          if (threadsTime && (mode !== "center" || hasAnchors)) {
+          // TODO(connect-edges): the time cut is built for one open edge
+          // through the operands' centers. A band (two edges, closed) and an
+          // edge pinned to points on its operands are not cut yet.
+          const pinned = anchors.some(
+            (a) => a.source !== undefined || a.target !== undefined
+          );
+          if (threadsTime && (closed || edges.length !== 1 || pinned)) {
             throw new Error(
-              `[gofish] ${mode === "center" ? "line" : "ribbon"}(): this ` +
-                `connector threads the keyframes of a time.sequence, so it ` +
-                `is drawn only over the stretch of time the sequence shows, ` +
-                `cut at the exact point in data time. That cut is built for ` +
-                `a line through the keyframes' centers; ` +
-                (mode === "center"
-                  ? "a line pinned to `source`/`target` anchors"
-                  : "a ribbon's band") +
+              `[gofish] line/ribbon(): this connector threads the keyframes ` +
+                `of a time.sequence, so it is drawn only over the stretch of ` +
+                `time the sequence shows, cut at the exact point in data ` +
+                `time. That cut is built for a line through the keyframes' ` +
+                `centers; ` +
+                (closed
+                  ? "a ribbon's band"
+                  : pinned
+                    ? "a line pinned to `source`/`target` anchors"
+                    : "a connector of several edges") +
                 ` is not built yet.`
             );
           }
 
-          if (mode === "edge" && !hasAnchors) {
+          if (crossSections) {
             for (const child of children) {
               // toggle embedding on the direction axis
               (child as GoFishAST).embed(direction ?? 0);
@@ -445,98 +534,48 @@ export const connect = createNodeOperator(
                 return originIs(s, "pinned");
               }));
 
-          // Resolve the curve. An omitted curve smooths with the
-          // monotone cubic over a continuous connection axis, for BOTH
-          // lines and ribbons: a stacked area should curve like its
-          // line-chart sibling. Otherwise it falls back to the mode's
-          // always-drawable discrete connector: a *line* (center) is a
-          // straight polyline between the points; a *ribbon* (edge) is a
-          // bezier band between discrete regions (bezier is to a band what a
-          // straight segment is to a line — the honest discrete-region
-          // connector). Connecting two arbitrary points is therefore always
-          // valid — it just isn't smoothed. Explicit curves always win.
+          // Resolve the curve. An omitted curve smooths with the monotone
+          // cubic over a continuous connection axis, for lines and ribbons
+          // alike: a stacked area should curve like its line-chart sibling.
+          // Otherwise it is `discreteCurve`, the connector's always-drawable
+          // curve between discrete operands. Explicit curves always win.
           const resolvedCurve: Curve =
             curve !== undefined
               ? curve
               : continuousConnectionAxis()
                 ? monotone()
-                : mode === "center"
-                  ? linearCurve()
-                  : bezier();
+                : discreteCurve;
           const resolvedCurveName = resolvedCurve.kind;
-          // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
-          // monotone / catmullRom = smoothed band, else linear band.
-          const edgeBezier = resolvedCurveName === "bezier";
 
-          // Anchor mode: connect normalized points on each endpoint's bbox.
-          if (hasAnchors) {
-            const onlySource =
-              resolvedSource !== undefined && resolvedTarget === undefined;
-            const onlyTarget =
-              resolvedTarget !== undefined && resolvedSource === undefined;
+          // Where each edge meets the two operands of each pair.
+          const attachments: [Attachment, Attachment][][] = bboxPairs.map(
+            ([b0, b1]) =>
+              anchors.map(({ source, target }) => {
+                const p0 = source && pointOn(b0, source);
+                const p1 = target && pointOn(b1, target);
+                const s = p0 ?? (p1 && clampOnto(p1, b0));
+                const t = p1 ?? (p0 && clampOnto(p0, b1));
+                return [
+                  s === undefined ? atBox(b0) : atPoint(s),
+                  t === undefined ? atBox(b1) : atPoint(t),
+                ];
+              })
+          );
 
-            // Resolve a normalized [fx, fy] anchor to an absolute point on a bbox.
-            const anchorPoint = (
-              b: Dimensions,
-              f: [number, number]
-            ): [number, number] => [
-              b[0].min! + f[0] * b[0].size!,
-              b[1].min! + f[1] * b[1].size!,
-            ];
-
-            // When one anchor is omitted, clamp the specified point's
-            // coordinates into the other bbox's range (per-axis). This is
-            // Bluefish's Line behavior: it produces an axis-aligned line when
-            // the specified point lies within the other box on one axis, and
-            // falls back to the nearest corner otherwise.
-            const clamp = (v: number, lo: number, hi: number): number =>
-              Math.max(lo, Math.min(hi, v));
-            const clampOnto = (
-              pt: [number, number],
-              onto: Dimensions
-            ): [number, number] => [
-              clamp(pt[0], onto[0].min!, onto[0].max!),
-              clamp(pt[1], onto[1].min!, onto[1].max!),
-            ];
-
-            for (const [b0, b1] of bboxPairs) {
-              let p0: [number, number];
-              let p1: [number, number];
-              if (onlySource) {
-                p0 = anchorPoint(b0, resolvedSource!);
-                p1 = clampOnto(p0, b1);
-              } else if (onlyTarget) {
-                p1 = anchorPoint(b1, resolvedTarget!);
-                p0 = clampOnto(p1, b0);
-              } else {
-                p0 = anchorPoint(b0, resolvedSource ?? [0.5, 0.5]);
-                p1 = anchorPoint(b1, resolvedTarget ?? [0.5, 0.5]);
-              }
-              paths.push([{ type: "line", points: [p0, p1] }]);
-            }
-            return {
-              intrinsicDims: boxDims(pathBounds(paths.flat())),
-              transform: { translate: [0, 0] },
-              renderData: { paths, defaultColor },
-            };
-          }
-          /** A line's path, one step from each point to the next: one
-           *  segment, or for a sequence curve the segments that draw one step,
-           *  with their shares of its time (`SequenceCurve.thread`). */
-          let steps: Step[] = [];
-
-          // The box starts from the endpoints (their centers in center mode,
-          // their boxes in edge mode). Each endpoint counts once: the
-          // operands the run's pairs join (a run of one point joins none),
-          // however many points each stands at.
+          // The box starts from where the edges meet the operands, and
+          // holds every operand that is a cross-section whole. Each endpoint
+          // counts once: the operands the run's pairs join (a run of one
+          // point joins none), however many points each stands at.
           let box = empty();
-          const ends = bboxPairs.length > 0 ? new Set(childPlaceables) : [];
-          for (const { dims: b } of ends) {
-            if (mode === "center") {
-              const cx = (b[0].min! + b[0].max!) / 2;
-              const cy = (b[1].min! + b[1].max!) / 2;
-              box = union(box, bbox(cx, cx, cy, cy));
-            } else {
+          for (const pair of attachments) {
+            for (const ends of pair) {
+              for (const { at } of ends) {
+                box = union(box, bbox(at[0], at[0], at[1], at[1]));
+              }
+            }
+          }
+          if (crossSections && bboxPairs.length > 0) {
+            for (const { dims: b } of new Set(childPlaceables)) {
               box = union(
                 box,
                 bbox(b[0].min!, b[0].max!, b[1].min!, b[1].max!)
@@ -544,20 +583,22 @@ export const connect = createNodeOperator(
             }
           }
 
-          // A *sequence* curve (`monotone`, `smooth`,
-          // `catmullRom`) threads the whole
-          // run of points as one spline, bypassing the pairwise router loop.
-          // A line (center) threads its centers; a ribbon (edge) threads BOTH
-          // facing boundaries of the band — forward along the near edge, a
-          // cap across, back along the far edge — so a continuous stacked
-          // area curves like its line-chart sibling.
-          const mainAxis = dir as 0 | 1;
-          const edgePoint = (main: number, cross: number): [number, number] => {
-            const p: [number, number] = [0, 0];
-            p[mainAxis] = main;
-            p[1 - mainAxis] = cross;
-            return p;
-          };
+          /** What it draws: one path per edge for each run of pairs that
+           *  meet, the two joined into one when closed. */
+          const drawn: Path[] = [];
+          /** Each edge's path, one step from each point to the next: one
+           *  segment, or for a sequence curve the segments that draw one
+           *  step, with their shares of its time (`SequenceCurve.thread`). */
+          let steps: Step[][] = anchors.map(() => []);
+
+          // A *sequence* curve (`monotone`, `smooth`, `step`, `catmullRom`)
+          // threads each edge through the whole run as one spline, one knot
+          // per operand, bypassing the pairwise routes. An edge's knot on an
+          // operand is midway between where it enters the operand and where
+          // it leaves it: an operand's center for an edge that meets the
+          // whole operand (a line), the middle of each side of the band for
+          // a ribbon. So a continuous stacked area curves like its line-chart
+          // sibling.
           const sequence = sequenceCurve(resolvedCurveName);
           if (sequence !== undefined) {
             const mains = childPlaceables.map(
@@ -617,224 +658,85 @@ export const connect = createNodeOperator(
             const parameter: RunParameter = sequence.takesKnots
               ? (dataKnots() ?? {})
               : {};
-            // A path drawn back along the run (a ribbon's far edge) is the
-            // same curve threaded forward, then reversed.
-            const thread = (points: [number, number][]): Step[] =>
-              sequence.thread(points, parameter);
-            if (mode === "center") {
-              const centers = childPlaceables.map((c) => centerPoint(c.dims));
-              const threaded = thread(centers);
-              paths.push(threaded.flatMap((step) => step.segments));
-              steps = threaded;
-            } else {
-              const near: [number, number][] = [];
-              const far: [number, number][] = [];
-              childPlaceables.forEach((c, i) => {
-                const b = c.dims;
-                near.push(edgePoint(mains[i], b[1 - mainAxis].min!));
-                far.push(edgePoint(mains[i], b[1 - mainAxis].max!));
+            const knotsOf = (a: (typeof anchors)[number]) =>
+              childPlaceables.map(({ dims: b }): [number, number] => {
+                if (a.source === undefined && a.target === undefined) {
+                  return centerPoint(b);
+                }
+                if (a.source === undefined || a.target === undefined) {
+                  throw new Error(
+                    `[gofish] line/ribbon({ curve: Curve.${resolvedCurveName}() ` +
+                      `}): a sequence curve threads one knot per operand, so ` +
+                      `an edge with one end pinned and the other omitted, ` +
+                      `which attaches by the other end, has none.`
+                  );
+                }
+                const enter = pointOn(b, a.target);
+                const leave = pointOn(b, a.source);
+                return [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2];
               });
-              const edge = (points: [number, number][]): Path =>
-                thread(points).flatMap((step) => step.segments);
-              paths.push([
-                ...edge(near),
-                {
-                  type: "line",
-                  points: [near[near.length - 1], far[far.length - 1]],
-                },
-                ...reversePath(edge(far)),
-                { type: "line", points: [far[0], near[0]] },
-              ]);
-            }
-          } else if (mode === "center") {
-            const { router, options: routeOpts } = resolveCurve(resolvedCurve);
-            for (const [b0, b1] of bboxPairs) {
-              paths.push(
-                router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
+            const knots = anchors.map(knotsOf);
+            steps = knots.map((k) => sequence.thread(k, parameter));
+            const paths = steps.map((s) => s.flatMap((step) => step.segments));
+            if (closed) {
+              const [near, far] = knots;
+              drawn.push(
+                ring(
+                  paths[0],
+                  paths[1],
+                  [near[0], far[0]],
+                  [near[near.length - 1], far[far.length - 1]]
+                )
               );
-            }
-            steps = paths.map(evenStep);
-          } else if (dir === 0) {
-            // Edge ("ribbon") mode: a filled quad between the facing edges.
-            if (!edgeBezier) {
-              for (const [b0, b1] of bboxPairs) {
-                paths.push([
-                  {
-                    type: "line",
-                    points: [
-                      [b0[0].max!, b0[1].min!],
-                      [b1[0].min!, b1[1].min!],
-                    ],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b1[0].min!, b1[1].min!],
-                      [b1[0].min!, b1[1].max!],
-                    ],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b1[0].min!, b1[1].max!],
-                      [b0[0].max!, b0[1].max!],
-                    ],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b0[0].max!, b0[1].max!],
-                      [b0[0].max!, b0[1].min!],
-                    ],
-                  },
-                ]);
-              }
             } else {
-              for (const [b0, b1] of bboxPairs) {
-                const midX = (b0[0].max! + b1[0].min!) / 2;
-                paths.push([
-                  {
-                    type: "bezier",
-                    start: [b0[0].max!, b0[1].min!],
-                    control1: [midX, b0[1].min!],
-                    control2: [midX, b1[1].min!],
-                    end: [b1[0].min!, b1[1].min!],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b1[0].min!, b1[1].min!],
-                      [b1[0].min!, b1[1].max!],
-                    ],
-                  },
-                  {
-                    type: "bezier",
-                    start: [b1[0].min!, b1[1].max!],
-                    control1: [midX, b1[1].max!],
-                    control2: [midX, b0[1].max!],
-                    end: [b0[0].max!, b0[1].max!],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b0[0].max!, b0[1].max!],
-                      [b0[0].max!, b0[1].min!],
-                    ],
-                  },
-                ]);
-              }
+              drawn.push(...paths);
             }
           } else {
-            if (!edgeBezier) {
-              for (const [b0, b1] of bboxPairs) {
-                paths.push([
-                  {
-                    type: "line",
-                    points: [
-                      [b0[0].min!, b0[1].max!],
-                      [b1[0].min!, b1[1].min!],
-                    ],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b1[0].min!, b1[1].min!],
-                      [b1[0].max!, b1[1].min!],
-                    ],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b1[0].max!, b1[1].min!],
-                      [b0[0].max!, b0[1].max!],
-                    ],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b0[0].max!, b0[1].max!],
-                      [b0[0].min!, b0[1].max!],
-                    ],
-                  },
+            // A route shapes each edge of each pair between the two ends it
+            // is given.
+            const { router, options: routeOpts } = resolveCurve(resolvedCurve);
+            const routed: Path[][] = anchors.map((_, e) =>
+              attachments.map((pair) =>
+                router(pair[e][0].box, pair[e][1].box, {
+                  dir: mainAxis,
+                  opts: routeOpts,
+                })
+              )
+            );
+            steps = routed.map((paths) => paths.map(evenStep));
+
+            // Consecutive pairs whose edges meet at the operand between them
+            // are drawn as one path (#520). Each pair was routed on its own,
+            // but where adjacent pairs share an exact endpoint, rendering
+            // them as separate <path>s lets antialiasing open hairline ~0.5px
+            // seams off the pixel grid. One path per run is gap-proof by
+            // construction. The edges meet at operand i+1 when each enters it
+            // where the next pair's leaves it: the whole operand (a line
+            // through centers), or the same point (an area's zero-width
+            // points; bar-like operands with real width genuinely don't share
+            // an edge and stay separate).
+            const meets = (i: number): boolean =>
+              attachments[i].every((ends, e) =>
+                samePlace(ends[1], attachments[i + 1][e][0])
+              );
+            let from = 0;
+            for (let i = 0; i < attachments.length; i++) {
+              if (i < attachments.length - 1 && meets(i)) continue;
+              const paths = routed.map((p) => p.slice(from, i + 1).flat());
+              if (closed) {
+                const [near, far] = [0, 1].map((e) => [
+                  attachments[from][e][0].at,
+                  attachments[i][e][1].at,
                 ]);
+                drawn.push(
+                  ring(paths[0], paths[1], [near[0], far[0]], [near[1], far[1]])
+                );
+              } else {
+                drawn.push(...paths);
               }
-            } else {
-              for (const [b0, b1] of bboxPairs) {
-                const midY = (b0[1].max! + b1[1].min!) / 2;
-                paths.push([
-                  {
-                    type: "bezier",
-                    start: [b0[0].min!, b0[1].max!],
-                    control1: [b0[0].min!, midY],
-                    control2: [b1[0].min!, midY],
-                    end: [b1[0].min!, b1[1].min!],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b1[0].min!, b1[1].min!],
-                      [b1[0].max!, b1[1].min!],
-                    ],
-                  },
-                  {
-                    type: "bezier",
-                    start: [b1[0].max!, b1[1].min!],
-                    control1: [b1[0].max!, midY],
-                    control2: [b0[0].max!, midY],
-                    end: [b0[0].max!, b0[1].max!],
-                  },
-                  {
-                    type: "line",
-                    points: [
-                      [b0[0].max!, b0[1].max!],
-                      [b0[0].min!, b0[1].max!],
-                    ],
-                  },
-                ]);
-              }
+              from = i + 1;
             }
           }
-
-          // Merge consecutive segments that meet at a zero-extent joint into a
-          // single region/polyline (#520). Each pair was emitted as its own path,
-          // but adjacent segments share an edge at exact coordinates, so rendering
-          // them as separate <path>s lets antialiasing open hairline ~0.5px seams
-          // off the pixel grid. One path per run is gap-proof by construction.
-          //
-          // The joint between paths[i] and paths[i+1] is child i+1; it "has no
-          // extent" when that child collapses to a point on the connection
-          // (direction) axis (area points are zero-width; bar-like children with
-          // real width genuinely don't share an edge and must stay separate).
-          const EPS = 1e-6;
-          const jointMerges = (i: number): boolean => {
-            // center mode connects exact center points — always contiguous
-            if (mode === "center") return true;
-            // the joint between paths[i] and paths[i+1] is child i+1
-            const b = childPlaceables[i + 1].dims;
-            return Math.abs((b[dir].max ?? 0) - (b[dir].min ?? 0)) < EPS;
-          };
-
-          const flushRun = (run: Path[]): Path => {
-            if (run.length === 1) return run[0];
-            if (mode === "center") {
-              // Single-segment lines → one continuous polyline.
-              return run.flat();
-            }
-            // Each edge-mode segment is a quad
-            // [leadingEdge, endCap, trailingEdge, startCap]. Trace every leading
-            // edge forward, cap the last segment, trace every trailing edge back
-            // (reverse order; interior caps are zero-length so segments chain
-            // exactly), then cap the first — one closed region.
-            return [
-              ...run.map((p) => p[0]),
-              run[run.length - 1][1],
-              ...run
-                .slice()
-                .reverse()
-                .map((p) => p[2]),
-              run[0][3],
-            ];
-          };
 
           // A threaded line is cut inside one step of its path by data time
           // (`windowPath`), which needs each step to run from the one
@@ -842,13 +744,14 @@ export const connect = createNodeOperator(
           // shared among its segments. A sequence curve's step says so
           // (`SequenceCurve.thread`). A pairwise route says nothing about
           // time, so its step can be cut only when it is ONE straight or
-          // cubic segment, whose own parameter is then the time.
+          // cubic segment, whose own parameter is then the time. (The check
+          // above leaves one open edge.)
           let timeRun: TimeRun | undefined;
           if (timeKnots !== undefined) {
             const centers = childPlaceables.map((c) => centerPoint(c.dims));
             const ends = (seg: Path[number]): [number, number][] =>
               seg.type === "line" ? seg.points : [seg.start, seg.end];
-            const threads = steps.every(({ segments }, i) => {
+            const threads = steps[0].every(({ segments }, i) => {
               if (sequence === undefined && segments.length !== 1) {
                 return false;
               }
@@ -879,25 +782,15 @@ export const connect = createNodeOperator(
             }
             timeRun = {
               knots: timeKnots,
-              pieces: steps,
+              pieces: steps[0],
               sequence: keyframes![0].sequence,
               last: last!,
             };
           }
 
-          const mergedPaths: Path[] = [];
-          let run: Path[] = [];
-          for (let i = 0; i < paths.length; i++) {
-            run.push(paths[i]);
-            if (i === paths.length - 1 || !jointMerges(i)) {
-              mergedPaths.push(flushRun(run));
-              run = [];
-            }
-          }
-
           // The drawn path can leave the endpoints' box: an arc bulges, a
           // perfect-arrows bow curves, a smooth curve overshoots (#1166).
-          box = union(box, pathBounds(paths.flat()));
+          box = union(box, pathBounds(drawn.flat()));
 
           return {
             intrinsicDims: boxDims(box),
@@ -906,7 +799,7 @@ export const connect = createNodeOperator(
             // uses over its run, the way a transition claims its whole
             // trajectory, so the window moving changes nothing above it.
             renderData: {
-              paths: mergedPaths,
+              paths: drawn,
               defaultColor,
               timeRun,
             },
@@ -938,7 +831,7 @@ export const connect = createNodeOperator(
             ...paintOf(resolvedFill, resolvedStroke),
             strokeDasharray,
             opacity: opacity ?? 1,
-            // Normal (none) by default for both modes; a ribbon that wants
+            // Normal (none) by default; a ribbon that wants
             // overlaps to darken opts into `blendMode: "multiply"` explicitly.
             mixBlendMode: blendMode,
           });
