@@ -47,8 +47,12 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 `Curve.monotone()` or `Curve.orthogonal(bend="auto")`. When `curve` is left
 out, a line over a continuous axis uses `Curve.monotone()`, and any other line
 uses `Curve.linear()`. A line with `source` or `target` runs between those
-anchor points, routed by `curve`, and is straight when `curve` is left out. The [`Curve`](/python/api/curve#curves-through-data) page
-compares the curves.
+anchor points, routed by `curve`, and is straight when `curve` is left out.
+With `Curve.step()`, `Curve.monotone()`, `Curve.smooth()` or
+`Curve.catmull_rom()`, an anchored line leaves the first mark at its `source`
+point, enters the last mark at its `target` point, and passes each mark between
+them midway between the two. The
+[`Curve`](/python/api/curve#curves-through-data) page compares the curves.
 
 ## Shape form
 

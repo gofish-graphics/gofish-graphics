@@ -42,7 +42,7 @@ import {
 } from "../../interaction/live";
 import { rect as generatedRect, baseBlank } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
-import type { XYWHDims } from "../dims";
+import { elaborateDirection, type XYWHDims } from "../dims";
 import { Mark, MarkChild, Operator } from "../types";
 import {
   addRenderMethod,
@@ -127,7 +127,7 @@ import {
   type SchemaEntry,
 } from "../schema";
 import { withWire } from "../wire";
-import { withKindValues } from "../strategyKind";
+import { kindValue, withKindValues } from "../strategyKind";
 import { LayerContext, datumOfInput, markContext } from "./markResult";
 import { withRegistrar } from "../../interaction/resolveContext";
 import { withFlowStep } from "./compose";
@@ -1377,13 +1377,14 @@ export type RibbonOptions = FilterOptions & {
 const ribbonConnector = createRelationalMark<RibbonOptions>(
   "ribbon",
   (o, children, inferred) => {
-    const main = o.dir ?? "x";
-    const cross = main === "x" ? "y" : "x";
+    // Each side as an [x, y] anchor: `m` along the connection axis, `c`
+    // across it, for every direction form `connect` takes.
+    const main = elaborateDirection(o.dir ?? "x");
     const side = (m: AnchorAlignment, c: AnchorAlignment): AnchorSpec =>
-      ({ [main]: m, [cross]: c }) as AnchorSpec;
+      main === 0 ? [m, c] : [c, m];
     return Connect(
       {
-        direction: main,
+        direction: o.dir ?? "x",
         edges: [
           { source: side("end", "start"), target: side("start", "start") },
           { source: side("end", "end"), target: side("start", "end") },
@@ -1405,6 +1406,14 @@ const ribbonConnector = createRelationalMark<RibbonOptions>(
     );
   }
 );
+
+/** A curve as the call that makes it: `Curve.orthogonal({ bend: "auto" })`,
+ *  or `Curve.arc()` when it sets no options. */
+const curveCall = ({ kind, ...options }: Curve): string => {
+  const set = Object.entries(options).filter(([, v]) => v !== undefined);
+  const args = set.map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join(", ");
+  return `Curve.${kind}(${set.length === 0 ? "" : `{ ${args} }`})`;
+};
 
 /**
  * `ribbon` has two forms, picked by whether a position channel is given:
@@ -1445,10 +1454,15 @@ export function ribbon(
           "form, ribbon({ x, h }) or ribbon({ y, w }). The connector form " +
           "joins the edges of other marks, which it does not draw in."
       );
-    const kind = curveName(options?.curve, "ribbon({ curve })");
-    if (kind !== undefined && !drawsBandEdge(options!.curve!))
+    // A bare kind (`Curve.monotone`) is its value, as `createRelationalMark`
+    // reads it.
+    const curve = kindValue(options?.curve);
+    if (
+      curveName(curve, "ribbon({ curve })") !== undefined &&
+      !drawsBandEdge(curve!)
+    )
       throw new Error(
-        `[gofish] ribbon({ curve: Curve.${kind}() }): a ribbon is the band ` +
+        `[gofish] ribbon({ curve: ${curveCall(curve!)} }): a ribbon is the band ` +
           `between two edges that each run along its axis (dir), one value ` +
           `across it at each point along it, and this curve does not draw ` +
           `such an edge. An arc or a perfect-arrows bow turns back along ` +

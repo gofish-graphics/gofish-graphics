@@ -583,6 +583,8 @@ export const connect = createNodeOperator(
           // The geometry needs only the attachment points and the path; a
           // cross-section's whole box is included to keep the connector's
           // box what it was (layout compatibility).
+          // TODO: make the box the attachment points and the path only, and
+          // drop the cross-sections' boxes (a layout change to measure).
           if (crossSections && bboxPairs.length > 0) {
             for (const { dims: b } of new Set(childPlaceables)) {
               box = union(
@@ -603,26 +605,37 @@ export const connect = createNodeOperator(
 
           // A *sequence* curve (`monotone`, `smooth`, `step`, `catmullRom`)
           // threads each edge through the whole run as one spline, one knot
-          // per operand, bypassing the pairwise routes. An edge enters an
-          // operand at its `target` point and leaves it at its `source`
-          // point, and its knot there is midway between the two. An omitted
-          // end attaches as near the other end as the box allows, which on
-          // the same operand is the other end's own point; with neither
-          // given, both are the operand's center. So a line through its
-          // marks' centers threads the centers, a line given only `source`
-          // threads each mark's `source` point, and a ribbon threads the
-          // middle of each side of the band, so a continuous stacked area
-          // curves like its line-chart sibling.
+          // per operand, bypassing the pairwise routes. An edge leaves the
+          // first operand at its `source` point, enters the last at its
+          // `target` point, and passes each operand between midway between
+          // where it enters it (`target`) and where it leaves it (`source`).
+          // An omitted end attaches as near the other end as the box allows,
+          // which on the same operand is the other end's own point; with
+          // neither given, both are the operand's center. So a line through
+          // its marks' centers threads the centers, a line given only
+          // `source` threads each mark's `source` point, and a ribbon runs
+          // from the far face of its first operand to the near face of its
+          // last, through the middle of each operand between, so a
+          // continuous stacked area curves like its line-chart sibling.
           const sequence = sequenceCurve(resolvedCurveName);
           if (sequence !== undefined) {
-            for (const [i, [b0, b1]] of bboxPairs.entries()) {
-              for (const a of anchors) {
-                const [s, t] = endsOf(b0, b1, a);
-                addPoint(s ?? centers[i]);
-                addPoint(t ?? centers[i + 1]);
-              }
+            const last = childPlaceables.length - 1;
+            const knotsOf = (a: EdgeAnchors) =>
+              childPlaceables.map(({ dims: b }, j): Point => {
+                const at = (f: Point | undefined): Point =>
+                  f === undefined ? centers[j] : pointOn(b, f);
+                const enter = at(a.target ?? a.source);
+                const leave = at(a.source ?? a.target);
+                if (last > 0 && j === 0) return leave;
+                if (last > 0 && j === last) return enter;
+                return [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2];
+              });
+            const knots = anchors.map(knotsOf);
+            // The path passes through its knots, and `pathBounds` below
+            // holds the rest of it.
+            if (bboxPairs.length > 0) {
+              for (const k of knots) k.forEach(addPoint);
             }
-            const mains = centers.map((c) => c[mainAxis]);
             // A curve read over the run's parameter (a data-space curve)
             // takes the run's own parameter when it has one (#635), so the
             // curve follows the data rather than the distances between its
@@ -655,7 +668,11 @@ export const connect = createNodeOperator(
             // field it groups them by (`parameterAxis`, worked out where the
             // flow is known), such as a line chart over years. `step` reads
             // it; the smooth curves do not need it.
-            const dataKnots = (): RunParameter | undefined => {
+            //
+            // Read from position, an edge's parameter is where each of its
+            // knots is on the connection axis, so the end knots, on the end
+            // operands' faces, are read where they are.
+            const dataKnots = (k: Point[]): RunParameter | undefined => {
               const time = runKnots(timeKnots);
               if (time !== undefined) {
                 return { knots: time, parameterAxis: drawnAxis };
@@ -668,25 +685,18 @@ export const connect = createNodeOperator(
                 return { knots: byAlong, parameterAxis: drawnAxis };
               }
               const byPosition = continuousConnectionAxis()
-                ? runKnots(mains)
+                ? runKnots(k.map((p) => p[mainAxis]))
                 : undefined;
               return byPosition === undefined
                 ? undefined
                 : { knots: byPosition, parameterAxis: mainAxis };
             };
-            const parameter: RunParameter = sequence.takesKnots
-              ? (dataKnots() ?? {})
-              : {};
-            const knotsOf = (a: EdgeAnchors) =>
-              childPlaceables.map(({ dims: b }, j): Point => {
-                const at = (f: Point | undefined): Point =>
-                  f === undefined ? centers[j] : pointOn(b, f);
-                const enter = at(a.target ?? a.source);
-                const leave = at(a.source ?? a.target);
-                return [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2];
-              });
-            const knots = anchors.map(knotsOf);
-            steps = knots.map((k) => sequence.thread(k, parameter));
+            steps = knots.map((k) =>
+              sequence.thread(
+                k,
+                sequence.takesKnots ? (dataKnots(k) ?? {}) : {}
+              )
+            );
             drawn.push(
               ...drawEdges(
                 steps.map((s) => s.flatMap((step) => step.segments)),

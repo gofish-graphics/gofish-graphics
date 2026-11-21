@@ -49,7 +49,10 @@ omitted, `line` inspects the connected points. If they share a continuous
 connection axis, it smooths them with `Curve.monotone()`. Otherwise it draws a
 straight polyline, `Curve.linear()`. A line with `source` or `target` runs
 between those anchor points, routed by `curve`, and is straight when `curve` is
-omitted. The [`Curve`](/js/api/curve#curves-through-data)
+omitted. With `Curve.step()`, `Curve.monotone()`, `Curve.smooth()` or
+`Curve.catmullRom()`, an anchored line leaves the first mark at its `source`
+point, enters the last mark at its `target` point, and passes each mark between
+them midway between the two. The [`Curve`](/js/api/curve#curves-through-data)
 page compares the curves and says how a line picks the knots of its curve.
 
 ## Shape form

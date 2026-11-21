@@ -520,8 +520,12 @@ so a route reads an anchored end the same way. `line` is one open edge, from
 them, and an anchored line with no curve is straight, a default of `line` for
 node-link edges and ropes: the omitted curve smooths only a line through its
 marks' centers. A sequence curve threads each edge through one knot per
-operand, midway between where the edge enters it (`target`) and leaves it
-(`source`), so a line given only `source` threads each mark's `source` point.
+operand. The edge leaves the first operand at its `source` point, enters the
+last at its `target` point, and passes each operand between midway between
+where it enters it (`target`) and leaves it (`source`), so a line given only
+`source` threads each mark's `source` point. Over a continuous connection axis
+the curve's parameter is each knot's position on that axis, the end knots'
+included.
 The connector itself has no default discrete curve: `line` passes a straight
 one and `ribbon` a bezier. `ribbon` is two edges, from the far face of each
 operand to the near face of the next along `dir`, closed into a filled region.

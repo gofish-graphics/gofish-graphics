@@ -189,18 +189,84 @@ async function main() {
     );
   }
 
+  console.log(
+    "\n# an anchored sequence curve leaves the first mark and enters the last"
+  );
+  {
+    // Three boxes along x; the edge leaves each at the middle of its right
+    // side and enters each at the middle of its left side.
+    const through = (anchors: object) =>
+      layer([
+        rect({ x: 0, y: 0, w: 40, h: 40, fill: "#ccc" }).name("a"),
+        rect({ x: 100, y: 80, w: 40, h: 40, fill: "#ccc" }).name("b"),
+        rect({ x: 200, y: 20, w: 40, h: 40, fill: "#ccc" }).name("c"),
+      ]).relate(({ a, b, c }: any) => [
+        line({ ...anchors, stroke: "black", curve: Curve.monotone() }, [
+          a,
+          b,
+          c,
+        ]),
+      ]);
+    /** The path's start, the end of its first cubic, and its end. */
+    const knotsOf = (d: string): Point[] => {
+      const cmds = commands(d);
+      const end = (args: number[]): Point => [
+        args[args.length - 2],
+        args[args.length - 1],
+      ];
+      return cmds.length === 3
+        ? [cmds[0].args as Point, end(cmds[1].args), end(cmds[2].args)]
+        : [];
+    };
+    {
+      const { rects, paths } = await drawn(
+        through({ source: ["end", "middle"], target: ["start", "middle"] })
+      );
+      const [a, b, c] = [...rects].sort((r, s) => r.x - s.x);
+      const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
+      // The middle mark is passed midway between where the edge enters and
+      // leaves it: its center.
+      check(
+        "it starts at the first mark's source point, passes the middle " +
+          "mark's center, and ends at the last mark's target point",
+        knots.length === 3 &&
+          close(knots[0], [a.x + a.w, a.y + a.h / 2]) &&
+          close(knots[1], [b.x + b.w / 2, b.y + b.h / 2]) &&
+          close(knots[2], [c.x, c.y + c.h / 2]),
+        paths.map((p) => p.d)
+      );
+    }
+    {
+      const { rects, paths } = await drawn(through({}));
+      const centers = [...rects]
+        .sort((r, s) => r.x - s.x)
+        .map((r): Point => [r.x + r.w / 2, r.y + r.h / 2]);
+      const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
+      check(
+        "unanchored, it threads the marks' centers",
+        knots.length === 3 && knots.every((k, i) => close(k, centers[i])),
+        paths.map((p) => p.d)
+      );
+    }
+  }
+
   console.log("\n# a ribbon takes only a curve that draws a band edge");
   {
-    for (const [name, curve] of [
-      ["arc", Curve.arc()],
-      ["perfectArrows", Curve.perfectArrows()],
+    for (const [call, curve] of [
+      ["Curve.arc()", Curve.arc()],
+      ["Curve.perfectArrows()", Curve.perfectArrows()],
       // Each edge would pick its own bend axis, so the two can disagree.
-      ["orthogonal", Curve.orthogonal({ bend: "auto" })],
+      [
+        'Curve.orthogonal({ bend: "auto" })',
+        Curve.orthogonal({ bend: "auto" }),
+      ],
+      // A bare kind is its value.
+      ["Curve.arc()", Curve.arc],
     ] as const) {
       const message = errorOf(() => ribbon({ curve }));
       check(
-        `ribbon({ curve: Curve.${name}() }) throws, naming the curves that work`,
-        message.startsWith(`[gofish] ribbon({ curve: Curve.${name}() }): `) &&
+        `ribbon({ curve: ${call} }) throws, naming the curves that work`,
+        message.startsWith(`[gofish] ribbon({ curve: ${call} }): `) &&
           message.includes("Curve.orthogonal()") &&
           message.includes("Curve.monotone()") &&
           !message.includes("Curve.arc(),"),
@@ -226,10 +292,51 @@ async function main() {
     check(
       "ribbon({ curve: Curve.orthogonal() }) draws a band of straight segments",
       bands.length === 2 &&
-        bands.every((b) =>
-          commands(b.d).every((c) => "MLZ".includes(c.op))
-        ),
+        bands.every((b) => commands(b.d).every((c) => "MLZ".includes(c.op))),
       bands.map((b) => b.d)
+    );
+    check(
+      "a bare band-edge kind works: ribbon({ curve: Curve.monotone })",
+      errorOf(() => ribbon({ curve: Curve.monotone })) === "" &&
+        errorOf(() => ribbon({ curve: Curve.orthogonal })) === ""
+    );
+    const bare = items(
+      await chart(seafood, { axes: false })
+        .flow(
+          spread({ by: "lake", dir: "x", spacing: 40 }),
+          stack({ by: "species", dir: "y" })
+        )
+        .mark(rect({ h: "count", fill: "species" }))
+        .layer(ribbon({ curve: Curve.orthogonal }))
+        .toDisplayList({ w: 300, h: 200 })
+    ).filter((i) => i.kind === "path");
+    check(
+      "ribbon({ curve: Curve.orthogonal }) draws what Curve.orthogonal() draws",
+      bare.length === 2 && bare.every((b, i) => b.d === bands[i].d),
+      bare.map((b) => b.d)
+    );
+
+    console.log("\n# a ribbon's dir may be a numeric direction");
+    const vertical = async (dir: any) =>
+      items(
+        await chart(seafood, { axes: false })
+          .flow(
+            spread({ by: "lake", dir: "y", spacing: 40 }),
+            stack({ by: "species", dir: "x" })
+          )
+          .mark(rect({ w: "count", fill: "species" }))
+          .layer(ribbon({ dir }))
+          .toDisplayList({ w: 300, h: 200 })
+      )
+        .filter((i) => i.kind === "path")
+        .map((b) => b.d);
+    const [byName, byNumber] = [await vertical("y"), await vertical(1)];
+    check(
+      'ribbon({ dir: 1 }) draws what ribbon({ dir: "y" }) draws',
+      byName.length === 2 &&
+        byNumber.length === 2 &&
+        byName.every((d, i) => d === byNumber[i]),
+      { byName, byNumber }
     );
   }
 

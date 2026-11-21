@@ -49,7 +49,10 @@ In the connector form, `curve` takes `Curve.linear()`, `Curve.bezier()`,
 `Curve.catmull_rom()`. Each edge of the band runs along the connection axis, so
 `Curve.arc()` and `Curve.perfect_arrows()`, which bow away from the line between
 their ends, are errors, and so is `Curve.orthogonal(bend="auto")`, which picks a
-bend axis for each edge on its own.
+bend axis for each edge on its own. A band drawn with `Curve.step()`,
+`Curve.monotone()`, `Curve.smooth()` or `Curve.catmull_rom()` starts at the far
+side of its first mark and ends at the near side of its last mark, along `dir`,
+and passes the middle of each mark between.
 
 ## Shape form
 
