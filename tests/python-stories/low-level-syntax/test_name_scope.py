@@ -5,10 +5,9 @@ nested anywhere inside the layer (`mercury` inside enclose › spread), and a
 constrained mark repeated per chart row reuses its local names in every row.
 """
 
-import math
-
 from gofish import (
     Constraint,
+    Dist,
     Shape,
     Spacing,
     arrow,
@@ -93,12 +92,7 @@ def story_per_row_names():
     )
 
 
-def _normal_row(i):
-    x = -4 + i / 10
-    return {"x": x, "pdf": math.exp(-0.5 * x * x) / math.sqrt(2 * math.pi)}
-
-
-NORMAL = [_normal_row(i) for i in range(81)]
+NORMAL = Dist.normal(mean="mean", sd="sd")
 
 
 def story_nested_callout():
@@ -106,9 +100,14 @@ def story_nested_callout():
     # named "density"; the operand keeps the outer layer's binding.
     return (
         layer([
-            chart(NORMAL, w=240, h=160)
-            .flow(scatter(x="x"))
-            .mark(ribbon(h="pdf", fill="#D1E4F6", stroke="#467DA8").name("density")),
+            chart([{"mean": 0, "sd": 1}], w=240, h=160).mark(
+                ribbon(
+                    x=NORMAL.domain(),
+                    h=NORMAL.density(),
+                    fill="#D1E4F6",
+                    stroke="#467DA8",
+                ).name("density")
+            ),
         ]).relate(lambda density: [
             layer([
                 rect(x=55, y=205, w=12, h=12, fill="#D1E4F6", stroke="#467DA8").name(
@@ -176,13 +175,7 @@ GROUPS = [
 ]
 
 
-def _group_row(g, mu, i):
-    x = -3 + i / 10
-    z = x - mu
-    return {"g": g, "mu": mu, "x": x, "pdf": math.exp(-0.5 * z * z) / math.sqrt(2 * math.pi)}
-
-
-GROUP_DENSITY = [_group_row(d["g"], d["mu"], i) for d in GROUPS for i in range(81)]
+GROUP_DENSITY = Dist.normal(mean="mu", sd=1)
 
 
 def story_median_trend():
@@ -190,13 +183,23 @@ def story_median_trend():
     # outside the spread gathers all six.
     return (
         layer([
-            chart(GROUP_DENSITY, w=360, axes=False)
+            chart(GROUPS, w=360, axes=False)
             .flow(spread(by="g", dir="y", spacing=Spacing.pitch(30, at="baseline")))
             .mark(
                 layer([
-                    chart()
-                    .flow(scatter(x="x", h=28))
-                    .mark(ribbon(h="pdf", fill="#D1E4F6", stroke="#467DA8")),
+                    chart().mark(
+                        layer(
+                            [
+                                ribbon(
+                                    x=GROUP_DENSITY.domain(),
+                                    h=GROUP_DENSITY.density(),
+                                    fill="#D1E4F6",
+                                    stroke="#467DA8",
+                                ),
+                            ],
+                            h=28,
+                        )
+                    ),
                     chart().mark(
                         circle(
                             cx=field("mu").median(), cy=4, r=3, fill="#C0392B"
