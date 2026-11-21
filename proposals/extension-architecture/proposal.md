@@ -2,7 +2,7 @@
 
 **Summary.** GoFish should own the middle of the pipeline (data types, composition, the scale and layout solve, and the display list) and let other libraries own the two ends: where data comes from and what draws the picture. A lonboard or fastplotlib program can then be written in GoFish style, with the domain package adding only what belongs to its domain.
 
-**Recommendation.** Do two small things now, both on the display list that already exists: (1) make the engine a pure function with text measurement passed in, and (2) run that engine inside Python through an embedded JavaScript runtime. Both worked as throwaway prototypes. Hold the larger pieces (columns in the display list, open coords, registration of extension constructs) until the three forks below are settled.
+**Recommendation.** Do two small things now, both on the display list that already exists: (1) make the engine a pure function with text measurement passed in, and (2) run that engine inside Python through an embedded JavaScript runtime. Both worked as throwaway prototypes. Hold the larger pieces (columns in the display list, open coords, registration of extension constructs) until the three forks below are settled. The two steps help GoFish's own Python users whether or not any other library ever builds on GoFish. Before building anything for a partner, fix the wall where one render has one set of scales, and build one visualization that crosses domains and that no single library can draw.
 
 **Status.** Exploratory. Nothing here is signed off. The evidence is real: nine example programs rendered with today's GoFish, and a spike that ran the engine in Node and in Python and drew the result with matplotlib and pygfx.
 
@@ -317,16 +317,49 @@ On progressive sources: the ProVega paper (arXiv 2604.02096, a Vega-Lite extensi
 | deck.gl             | A layer with accessors, or binary column attributes             | The GPU pipeline                                         | Columns go by reference, never as per-row objects                                                  |
 | Observable Plot     | A mark, with a note on whether it handles projections           | Scales and projection                                    | Each mark says whether a projection bends it or only moves it                                      |
 
+## Who benefits
+
+The rewritten programs are about as long as the originals. Line count is not the benefit. The benefit is in what the originals cannot do at all, and it falls unevenly.
+
+### Who gains
+
+| Who                                  | What they gain                                                                                                                                   | What it depends on                                             |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------- |
+| GoFish's own Python users            | A plain script can save an SVG or a PNG, with no notebook. This is already on the 1.0 list                                                       | Step 2 only. No partner, no fork                               |
+| People whose work crosses domains    | One grammar for views that today come from three libraries. The views share scales and legends, and they link with a `filter`                    | The scale wall fixed, then the painter slot                    |
+| Authors of new domain libraries      | They do not build legends, axes, layout, widgets or export. They write the column types, sources and painter for their domain                    | Registration (fork 3)                                          |
+| Authors of existing domain libraries | The parts they have not built. Neither lonboard nor fastplotlib has legends, and linking two lonboard maps takes hand-written observer callbacks | Fork 1 for their speed, and their own wish to depend on GoFish |
+| Progressive libraries                | Every GoFish visualization, in place of a few views written by hand. ProgressiVis computes but knows nothing about marks                         | A source that answers more than once                           |
+
+The second row is the strongest case in the long run. A neuroscientist with a movie, traces, a histogram and a brain map uses several libraries today, each with its own colormap, its own legend and its own idea of selection. The movie example in the corpus is this case in small: the frame, the regions, the traces and the time markers are one spec, and one slider drives all of them.
+
+New libraries gain more than existing ones. lonboard and fastplotlib have already paid for most of what GoFish would supply. Someone starting a genomics library today has not.
+
+### Who does not gain
+
+- **A user who wants one map quickly.** `viz(gdf)` is shorter than any GoFish spec, and it stays that way.
+- **Anyone who needs the domain library's speed today.** Until fork 1 is done, a GoFish painter draws browser-sized data only.
+- **Anyone who needs what GoFish has no model for.** A 3D camera with pitch and bearing, or changing GPU buffers at frame rate, are two examples from the corpus.
+
+### Two weak points in the case
+
+**The benefit across domains depends on core work, not on extensions.** Five of the nine examples hit the wall where one render has one set of scales. Until that is fixed, the composed version looks worse than the separate libraries do: in the movie example the traces are squashed, because their panel took the image's y range.
+
+**The benefit to partners is a guess.** Neither author has asked for this. Depending on a young library is a real cost to them, and the design assumes they would accept it.
+
+So the work is ordered by who is sure to benefit.
+
 ## Order of work
 
 1. **Step 1.** Text measurer as a render option, text metrics on text items, image size as a host answer, stable ids, an engine import with no SolidJS, the geo `toJSON` fix. This closes most of #577 and #814 (export a text measurement utility) and prepares #1337 (one SVG backend).
-2. **Step 2.** The Python headless host: `save` and `to_svg` in plain scripts, `to_display_list`, and a painter protocol in Python with matplotlib as the reference painter. This closes the rest of #577 and #578 (PNG export).
-3. **Investigate before going further.**
+2. **Step 2.** The Python headless host: `save` and `to_svg` in plain scripts, `to_display_list`, and a painter protocol in Python with matplotlib as the reference painter. This closes the rest of #577 and #578 (PNG export). Steps 1 and 2 serve GoFish's own users and need no partner.
+3. **Fix the scale wall.** Sibling panels in one render need their own color scale and their own position domains when their data differs.
+4. **Build one visualization that crosses domains.** A map linked to a histogram, with shared legends, is a good first one. No single library can draw it today. This is what to show the lonboard and fastplotlib authors, before building anything for them.
+5. **Ask the authors.** Would they build on this, and what would they refuse to give up?
+6. **Investigate the rest in parallel.**
    - Run `capture-diff` over the whole gallery with the bundled-font measurer against the browser, to learn how far headless layouts move.
-   - Ask the lonboard and fastplotlib authors whether they would build on this, and what they would refuse to give up. The design assumes their answer.
    - Prototype fork 1 (c) on one mark: a scatter as a column item, drawn by deck.gl's binary attributes.
    - Check that mini-racer wheels and every engine dependency work on Windows and Linux.
-   - Decide how to treat the scale-sharing wall, since five of nine examples hit it.
 
 ## Related issues
 

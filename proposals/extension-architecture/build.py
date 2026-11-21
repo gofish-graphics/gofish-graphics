@@ -548,7 +548,8 @@ def lead_examples():
 
 
 def sub(m):
-    kind, arg = m.group(1), m.group(2)
+    # prettier may wrap a long placeholder across lines
+    kind, arg = m.group(1), m.group(2) and " ".join(m.group(2).split())
     if kind == "p":
         return para(arg)
     if kind == "sec":
