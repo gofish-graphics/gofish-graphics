@@ -25,6 +25,7 @@ import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import {
   type ConstraintPosScales,
+  type ConstraintRef,
   type KeyOf,
   type ResolvedOperands,
 } from "./shared";
@@ -181,6 +182,38 @@ export function buildChildSpans(
     for (const ref of c.children) if (ref) entry(keyOf(ref)).shape = shape;
   }
   return byKey.size === 0 ? undefined : byKey;
+}
+
+/**
+ * The pixels each cell a layer's regions give its children spans, per axis
+ * (a `partition`'s cells), for a cell with a child that takes room there
+ * (`takesRoom`). A layer's box covers its cells whole, whatever its children
+ * draw in them, as its claim does (`placeByClaims`): a band through the rows
+ * over a cell's line ends at the last row, before the last cell does.
+ */
+export function cellSpans(
+  constraints: readonly ConstraintSpec[],
+  posScales: ConstraintPosScales,
+  takesRoom: (ref: ConstraintRef, axis: 0 | 1) => boolean
+): [[number, number][], [number, number][]] {
+  const out: [[number, number][], [number, number][]] = [[], []];
+  for (const c of constraints) {
+    if (c.type !== "position" || c.in !== undefined) continue;
+    for (const axis of [0, 1] as const) {
+      const edges = c.region?.spans[axis];
+      if (
+        (axis === 0 ? c.x : c.y) !== undefined ||
+        edges === undefined ||
+        !c.children.some((r) => r && takesRoom(r, axis))
+      )
+        continue;
+      const a = compilePlacementCoordinate(numbers, edges[0], posScales[axis]);
+      const b = compilePlacementCoordinate(numbers, edges[1], posScales[axis]);
+      if (a !== undefined && b !== undefined)
+        out[axis].push([Math.min(a, b), Math.max(a, b)]);
+    }
+  }
+  return out;
 }
 
 /** Choose the concrete size proposed to one child in a layer.

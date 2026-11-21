@@ -1,6 +1,6 @@
 import _ from "lodash";
-import { stackX } from "../ast/graphicalOperators/stackX";
-import { stackY } from "../ast/graphicalOperators/stackY";
+import { spreadX } from "../ast/graphicalOperators/spreadX";
+import { spreadY } from "../ast/graphicalOperators/spreadY";
 import { rect } from "../ast/shapes/rect";
 
 // Shared waffle mark function
@@ -14,15 +14,17 @@ export const waffleMark = (
     orderBy?: { field: string; sort: string[] };
   }
 ) =>
-  stackY(
-    { spacing: options.spacing, alignment: "start" },
+  spreadY(
+    { spacing: 0, alignment: "start" },
     _(data)
-      .sortBy((d) => options.orderBy?.sort?.indexOf(d[options.orderBy?.field]) ?? 0)
+      .sortBy(
+        (d) => options.orderBy?.sort?.indexOf(d[options.orderBy?.field]) ?? 0
+      )
       .chunk(options.chunkSize)
       .reverse()
       .map((row) =>
-        stackX(
-          { spacing: options.spacing },
+        spreadX(
+          { spacing: 0 },
           row.map((d) =>
             rect({
               w: options.rectSize,

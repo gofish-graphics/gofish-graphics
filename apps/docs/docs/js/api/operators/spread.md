@@ -21,7 +21,7 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 // Operator form (inside .flow):
-spread({ by?, dir, spacing?, alignment?, glue?, ... })
+spread({ by?, dir, spacing?, alignment?, glue?, baseline?, ... })
 
 // Combinator form (apply n marks to one datum):
 spread({ dir, ... }, [m1, m2, ...])
@@ -150,22 +150,52 @@ chart(selectAll("bars")) // stream of refs
   .mark(ribbon({ opacity: 0.8 }));
 ```
 
-## `spacing` vs `glue`
+## `spread` or `stack`
 
-`spacing` controls the visual gap between children. `glue` controls whether
-children's data-driven sizes get summed into a positional axis at this level:
+A `spread` keeps each child in a space of its own and puts `spacing` between
+them. A [`stack`](./stack) adds its children's data amounts, so they share
+one data axis on `dir`. A stack is for data: every part needs a data size on
+`dir`, and a part sized in pixels or by its content is an error. Pixel boxes,
+text, images and nested layouts only touch, so lay them out with
+`spread({ spacing: 0 })`. `glue: true` makes a spread a stack, with the same
+rule.
 
-- `glue: false` (default): real spread. Each child keeps its data-driven
-  size; the underlying-space kind on `dir` is SIZE (or ORDINAL when children
-  are categorical).
-- `glue: true`: stack semantics. Children are pushed together (regardless
-  of `spacing`), and their cumulative size becomes a continuous POSITION
-  domain on `dir`. This is what [`stack`](./stack) does.
+## Baselines
 
-Use `spread({ spacing: 0 })` if you want children touching but with each
-child still treated as its own thing (e.g. discrete-theta polar charts).
-Use `stack(...)` if you want a stacked-bar feel (continuous position axis
-running through the stack).
+`baseline` sets where the spread puts its own 0, the point its parent lines
+up with its other children. It takes a member of the
+[`Baseline`](/js/api/baseline) family: `Baseline.start()`, `Baseline.end()`,
+`Baseline.middle()` or `Baseline.at(part, point)`. The start of a spread is
+the start of its first child, and its end is the end of its last child. The
+gaps between children are part of the way from one to the other. Without
+`baseline`, a spread's 0 is its start. `Baseline.wiggle()` is for `stack`
+only, and on a spread it is an error.
+
+A spread's baseline only places it. The spread keeps its space, a sequence
+of separate spaces, so it draws no data axis along `dir`. Here each row's 0
+is the middle of its Neutral bar, and the rows keep the gaps between their
+bars:
+
+```ts
+chart(survey, { color: likertColors, axes: { x: false, y: true } })
+  .flow(
+    spread({ by: "question", dir: "y" }),
+    spread({
+      by: "response",
+      dir: "x",
+      spacing: 3,
+      baseline: Baseline.at("Neutral", 0.5),
+    })
+  )
+  .mark(rect({ w: "count", fill: "response" }));
+```
+
+::: gofish example:diverging-likert-chart-with-gaps hidden
+:::
+
+A parent's `alignment: "start"`, `"middle"` or `"end"` draws the same
+picture as giving each child that baseline and keeping the parent's
+default, `alignment: "baseline"`.
 
 ## Field-expression pipeline {#field-expression-pipeline}
 
@@ -178,10 +208,117 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.median()`, `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
-  position).
+  position). `.map(fn)` and `.reduce(fn)` compute values with your own
+  function ([below](#map-and-reduce)).
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 throws.
+
+### `map` and `reduce` {#map-and-reduce}
+
+```ts
+field(name).map((x, i, xs) => y, { unit? })
+field(name).reduce((xs) => result, { unit? })
+```
+
+`map` gives one new value per row: `fn(x, i, xs)`, where `xs` is all of the
+group's values. Maps come before a reduce. On an operator's `size` channel, a
+map with no reduce after it runs over the entries' values instead, as
+`normalize` does. So does a map after a named method:
+`field("n").count().normalize()` is each entry's share of the counts.
+
+`reduce` runs once per group on the group's values. Its result is lifted by
+its shape:
+
+| The reduce returns          | The expression is                                                             |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| a number                    | one value per group, for any value channel                                    |
+| a [`Fun`](/js/api/core/fun) | one function of `t` per group, for the shape form of `ribbon` and `line`      |
+| a record                    | an object with one method per member, read with `s.lo()`, each lifted in turn |
+| an array                    | a type error and a run-time error; return a record instead                    |
+
+A method member of a record keeps its arguments: `s.quantile(0.9)`. A channel
+takes only a number or a function, so a record must be read down to one.
+Nothing chains after a value: `field("v").reduce(f).sum()` is a type error
+and a run-time error.
+
+`unit` mirrors the result's shape. It is one unit for every number of the
+result, or a record with a unit per member. A number whose unit is not
+declared cannot be summed or stacked.
+
+```ts
+const box = field("body_mass_g").reduce(
+  (xs) => {
+    const s = [...xs].sort((a, b) => a - b);
+    const q = (p: number) => quantile(s, p)!;
+    return { lo: s[0], q1: q(0.25), median: q(0.5), q3: q(0.75), hi: s.at(-1) };
+  },
+  { unit: "g" }
+);
+
+chart(penguins)
+  .flow(spread({ by: "species", dir: "x" }))
+  .mark(
+    layer([
+      rect({ w: 1, y: box.lo(), y2: box.hi() }),
+      rect({ w: 16, y: box.q1(), y2: box.q3() }),
+    ])
+  );
+```
+
+Each named method is a built-in callback, on the same path:
+
+| Method         | Stands for                                              |
+| -------------- | ------------------------------------------------------- |
+| `.sum()`       | `reduce((xs) => Σ xs)`, missing values aside            |
+| `.mean()`      | `reduce((xs) => Σ xs / n)`, missing values aside        |
+| `.median()`    | `reduce((xs) => d3.median(xs))`, missing values aside   |
+| `.count()`     | `reduce((xs) => xs.length)`, in the unit "count"        |
+| `.distinct()`  | `reduce((xs) => new Set(xs).size)`, in the unit "count" |
+| `.normalize()` | `map((x, i, xs) => x / Σ xs)`, a share of the whole     |
+
+`.sum()` keeps the column's unit and checks that it adds up first. A map or a
+reduce holds a JS function, so a spec that holds one does not serialize it.
+
+`map` and `reduce` read one column. A computation over several columns, such
+as a fit, belongs in [`derive`](/js/api/operators/derive)
+([why](/internals/design/api-design#data-types)).
+
+### Distribution members {#distribution-members}
+
+A column can hold a distribution, a [`Dist`](/js/api/dist), instead of
+numbers: `derive(kde("x"))` smooths each group's values into a kernel density
+that the column then holds ([`kde`](/js/api/dist#kde)). A field of such a column reads the
+distribution through these methods:
+
+| Method         | Gives                                                                      |
+| -------------- | -------------------------------------------------------------------------- |
+| `.density()`   | a function of `t`: the distribution's density                              |
+| `.domain()`    | a function of `t`: `t` itself, over the interval the density is drawn over |
+| `.cdf()`       | a function of `t`: the share of the mass at or below `t`, a ratio          |
+| `.quantile(p)` | one value per group: the inverse of the cdf at `p`                         |
+| `.median()`    | one value per group: `.quantile(0.5)`                                      |
+| `.mean()`      | one value per group: the distribution's mean                               |
+
+A kernel density is in the column's count per unit, so the densities of
+several groups add up and stack. `.domain()` is in the column's unit, so its
+axis joins the column's. Every row of a group holds the same distribution;
+different ones in one group are an error. In a cell of a
+[`partition`](/js/api/operators/partition#a-distribution-s-cells) by the same field, each method reads the
+distribution restricted to the cell. The other methods are an error on such
+a column.
+
+On a column of numbers, `.median()` and `.mean()` are the data's, and
+`.density()`, `.domain()`, `.cdf()` and `.quantile(p)` are an error that
+names `derive(kde("x"))`.
+
+```ts
+const mass = field("Body Mass (g)");
+
+chart(penguins)
+  .flow(stack({ by: "Species", dir: "y" }), derive(kde("Body Mass (g)")))
+  .mark(ribbon({ x: mass.domain(), h: mass.density(), fill: "Species" }));
+```
 
 One method is neither: `.between(lo, hi, { closed })` returns a **row
 predicate** for [`filter`](/js/api/operators/filter) rather than appending an op,

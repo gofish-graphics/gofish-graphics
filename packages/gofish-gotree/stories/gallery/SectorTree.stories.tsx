@@ -136,7 +136,7 @@ export const SectorTree: StoryObj = {
         }),
         coord: Coord.clock(),
       },
-      { w: 560, h: 560 },
+      {},
       deepBalancedTree
     ),
 };

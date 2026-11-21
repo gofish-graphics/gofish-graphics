@@ -35,7 +35,7 @@ from gofish import Shape, circle, enclose, layer, spread
             fill_opacity=0.3,
         )
     ])
-    .render(w=380, h=150)
+    .render()
 )
 ```
 
@@ -113,7 +113,7 @@ enclose(
     fill="#4c78a8",
     fill_opacity=0.15,
     stroke="#1f3b63",
-).render(w=260, h=160)
+).render()
 ```
 
 ## `Shape.fillet()`
@@ -142,7 +142,7 @@ enclose(
     fill="#f2c14e",
     fill_opacity=0.25,
     stroke="#333",
-).render(w=220, h=220)
+).render()
 ```
 
 ## `Shape.blob()`

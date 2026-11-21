@@ -48,8 +48,7 @@ export const GasPrices: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(drivingShifts, { w: args.w, h: args.h })
-      .flow(scatter({ by: "year", x: "year", y: "gas" }))
-      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ x: "year", y: "gas", stroke: "steelblue", strokeWidth: 2 }))
       .render(container);
 
     return container;

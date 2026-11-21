@@ -101,9 +101,10 @@ def test_operators_accept_universal_debug_flag():
     assert ir(treemap(size="v", debug=True))["debug"] is True
 
 
-def test_stack_operator_accepts_spread_parity_options():
-    d = ir(stack(by="a", dir="x", spacing=2))
-    assert d["spacing"] == 2
+def test_stack_operator_has_no_spacing():
+    # A stack adds data amounts, so its parts have no gap to set.
+    with pytest.raises(TypeError):
+        stack(by="a", dir="x", spacing=2)
 
 
 def test_pack_serializes_by():
@@ -541,6 +542,24 @@ def test_nested_axes_keys_serialize_to_wire_keys():
     assert ir(stack([], dir="x", axes={"x": False}))["options"]["axes"] == {
         "x": False
     }
+
+
+def test_legend_option_serializes_to_wire():
+    # `legend` is a bool or a dict of entries, as in JS: `color`, and a
+    # length entry per dimension (`False`, or a dict with a `title`).
+    legend = {"color": False, "y": {"title": "unemployed (thousands)"}}
+    node = chart([], legend=legend).mark(rect()).to_ir()["root"]
+    assert node["options"]["legend"] == legend
+    assert chart([], legend=False).mark(rect()).to_ir()["root"]["options"]["legend"] is False
+    with pytest.raises(TypeError, match="unexpected key 'z'"):
+        chart([], legend={"z": False})
+
+
+def test_render_legend_option_reaches_the_widget():
+    from gofish.widget import GoFishChartWidget  # noqa: F401
+
+    widget = chart([], w=10, h=10).mark(rect()).render(legend={"color": False, "y": False})
+    assert widget.legend == {"color": False, "y": False}
 
 
 def test_nested_unknown_key_is_rejected():

@@ -5,15 +5,13 @@ import { d as $d } from "../components/data"; */
 
 import { value } from "../ast/data";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { ribbon } from "../lib";
+import { ribbon, spreadX } from "../lib";
 const fishColors = {
   Bass: color.blue[5],
   Trout: color.red[5],
@@ -24,13 +22,13 @@ const fishColors = {
 
 export const testFishRibbonChart = () =>
   layer([
-    stackX(
-      { spacing: 64 },
+    spreadX(
+      { spacing: 0},
       _(seafood)
         .groupBy("lake")
         .map((d) =>
           stackY(
-            { spacing: 0 },
+            {},
             _(d)
               .orderBy("count", "asc")
               .map((d) =>

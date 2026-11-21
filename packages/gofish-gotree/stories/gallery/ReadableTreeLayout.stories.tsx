@@ -45,7 +45,7 @@ export const ReadableTreeLayout: StoryObj = {
         }),
       },
       sampleTree
-    ).render(container, { w: 640, h: 420 });
+    ).render(container);
     return container;
   },
 };

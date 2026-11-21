@@ -9,10 +9,7 @@ Draws an ellipse. Unlike `circle`, allows independent control of width and heigh
 ::: gofish
 
 ```js
-gf.ellipse({ w: 100, h: 60, fill: "mediumseagreen" }).render(root, {
-  w: 150,
-  h: 100,
-});
+gf.ellipse({ w: 100, h: 60, fill: "mediumseagreen" }).render(root);
 ```
 
 :::

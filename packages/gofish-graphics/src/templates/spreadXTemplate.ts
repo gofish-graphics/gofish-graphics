@@ -1,11 +1,10 @@
 import _ from "lodash";
-import { stackX } from "../ast/graphicalOperators/stackX";
-import { stackY } from "../ast/graphicalOperators/stackY";
+import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { rect } from "../ast/shapes/rect";
 import { FancyDims } from "../ast/dims";
 import { GoFishAST } from "../ast/_ast";
 import { children } from "solid-js";
-export const stackXTemplate = (
+export const spreadXTemplate = (
   data: any[],
   options: {
     name?: string;
@@ -15,7 +14,7 @@ export const stackXTemplate = (
   } & FancyDims & { groupBy?: { field: string; sort?: string[] } },
   children: (d: any, i?: string | number) => any
 ) =>
-  stackX(
+  spreadX(
     options,
     options.groupBy
       ? _(data)

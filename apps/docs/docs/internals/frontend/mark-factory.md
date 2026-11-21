@@ -235,8 +235,11 @@ Walking `withGoFish.ts:431-477`:
      ordered column lists its domain in that order. (A `derive` types its
      result with `applySchema`, like chart data: a column keeps its input's
      type while its values still fit it, and `derive(fn, { schema })`
-     overrides that, so the types reach the mark. A `filter` carries its
-     input's types over as they are.)
+     overrides that, so the types reach the mark. A unit's values fit it
+     when they are numbers or distributions as data, so the column that
+     `derive(kde("x"))` fills with a distribution keeps `x`'s name and unit.
+     `kde` is a function of rows, in `chart.ts` beside `normalize` and
+     `repeat`. A `filter` carries its input's types over as they are.)
    - `"dims"` channel → the axis-name-keyed `dims` option
      (`rect({ dims: { theta: { size: "count" } } })`). Each slot is its own
      channel, and its kind comes from its structure, not its name: `size` is
@@ -534,6 +537,67 @@ forms:
   (`flowStepOperator`) that applies it to each group's subtree as its one
   fresh operand, with its paint resolved off that operand's rows. Position alone tells the two meanings apart; see
   [Enclose and the Shape Family](/internals/frontend/enclose).
+
+### The shape form of `line` and `ribbon`
+
+`line` and `ribbon` also have a shape form, which is not a connector. A
+position channel picks it: `ribbon({ x, h })`, `ribbon({ y, w })` or
+`line({ x, y })`. The exported `line` and `ribbon` in `chart.ts` check the
+options first. With no `x` and no `y` they return the connector built by
+`createRelationalMark`, unchanged. With one, they return `shapeForm(...)`.
+
+`shapeForm` builds an ordinary leaf mark, the way `createMark` builds one. The
+mark is called with its group's rows, like `rect`. It resolves its accessors
+from `MARK_CHANNELS`, resolves its paint once per group (`resolveGroupPaint`,
+the same check a connector makes), and builds one `Band` node
+(`src/ast/shapes/band.tsx`). It is sealed with its rows and carries its wire,
+so `.name()`, `.label()` and the round trip through the IR work as they do for
+`rect`.
+
+`bandOfRows` turns the rows into two edges, the lower and the upper. Each is a
+`Fun<number>` of the parameter in data units, made by `through` over the rows
+sorted by the parameter. A band's lower edge is 0 and its upper edge is `h`.
+A line's two edges are the same curve. Two rows of one group at one parameter
+value are an error, and so is a parameter column with levels.
+
+The node reports a pinned space on the parameter's axis. On the other axis a
+band reports a free space over `[min(0, h), max(0, h)]`, with its
+cross-section as the space's `profile`, and a line reports a pinned space over
+its values. In layout it reads its edges through the axis maps into local
+pixels (`reparameterize` in `fun.ts` for the parameter). It draws them as exact
+lines and Béziers, and resamples them only under a coordinate transform. Its
+geometry gives the box, the outline of the drawn path, and the exact
+cross-section along its value axis.
+
+A band sets the node's `shearAxis` to its value axis, so a stack can move it
+by an offset that changes along the parameter (a stacked area, see
+[the underlying space](/internals/core/underlying-space)). Options that only a
+connector reads (`dir`, `from`, `to`, `along` and the anchor keys) are an
+error in the shape form.
+
+A channel of the shape form may hold a function expression instead of a
+column: `ribbon({ x: f.domain(), h: f })` with `f` made by `fun(at, { domain
+})` (`src/ast/groupExpr.ts`). The mark then has one parameter t, and
+`bandOfFunctions` builds the edges from the functions instead of the rows:
+`groupFun` reads each channel's function for the group, their domains must be
+equal, a number in the value channel is a constant over t, and a column
+beside a function is an error. The position must be one increasing line in
+t, so the values are read through it with `reparameterize`. An opaque edge
+has no pieces, so `edgePath` draws it by sampling it to half a pixel
+(`sampledEdgePath`). Any other mark given a function value throws, in the
+channel loop of `withGoFish.ts` (`functionInChannelError`) and in an
+operator's `applyChannels`.
+
+A function expression may also be a `field(x).reduce(fn)` whose `fn`
+returns a `Fun`, one function per group. Whether a reduce gives a function
+is known only when it runs, so the shape form decides per group, inside the
+mark: `groupFun(o[parameter], rows)` asks each channel for the group's
+function (undefined for a column, or a reduce that gives a number), and
+`ofT` is true when either channel has one. The reduce runs once per group
+(the step cache in `fieldExpr.ts`), so asking here and again in
+`bandOfFunctions` costs one call. The guard in `withGoFish.ts` asks
+`groupFun` the same way, so a reduce that returns a function in a `rect`
+channel throws there.
 
 ### A connector's datum, and its `live()` channels
 

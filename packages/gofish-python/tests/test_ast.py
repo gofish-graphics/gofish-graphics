@@ -174,34 +174,27 @@ class TestOperators:
         """`.median()` is a fold, written as its op, as `.mean()` is."""
         assert field("y").median()["ops"] == [{"op": "median"}]
 
-    def test_quantile_rows(self):
-        """`quantile_rows` turns a density grid into rows at its quantiles,
-        keeping the columns that are constant, as JS `quantileRows` does."""
-        from statistics import NormalDist
+    def test_kde(self):
+        """`kde` makes one row whose column holds the sample as a kernel
+        density's data form, keeping the columns that are constant, as JS
+        `kde` does."""
+        from gofish import kde
 
-        from gofish import quantile_rows
-
-        nd = NormalDist()
-        grid = [
-            {"month": "Jan", "x": -6 + i * 0.02, "pdf": nd.pdf(-6 + i * 0.02)}
-            for i in range(601)
-        ][::-1]
-        rows = quantile_rows(grid, x="x", density="pdf", n=1000)
-        assert len(rows) == 1000
-        worst = max(abs(r["x"] - nd.inv_cdf((i + 0.5) / 1000)) for i, r in enumerate(rows))
-        assert worst < 0.005
-        assert all(r["month"] == "Jan" and "pdf" not in r for r in rows)
-        flat = quantile_rows([{"x": 0, "d": 2}, {"x": 10, "d": 2}], x="x", density="d", n=4)
-        assert [r["x"] for r in flat] == [1.25, 3.75, 6.25, 8.75]
-        with pytest.raises(ValueError, match="no area"):
-            quantile_rows([{"x": 0, "d": 1}], x="x", density="d", n=3)
-        with pytest.raises(ValueError, match="whole number"):
-            quantile_rows(grid, x="x", density="pdf", n=0)
-        # Two curves mixed together (called before the split by month): two
-        # rows at one position.
-        two_months = grid + [{**r, "month": "Feb"} for r in grid]
-        with pytest.raises(ValueError, match='"x" .*more than one curve.*inside derive'):
-            quantile_rows(two_months, x="x", density="pdf", n=10)
+        rows = [
+            {"month": "Jan", "t": 3.0, "day": 1},
+            {"month": "Jan", "t": None, "day": 2},
+            {"month": "Jan", "t": 5.0, "day": 3},
+        ]
+        assert kde("t")(rows) == [
+            {
+                "month": "Jan",
+                "t": {"type": "dist", "family": "kde", "params": {"values": [3.0, 5.0]}},
+            }
+        ]
+        assert kde("t", bandwidth=0.5)(rows)[0]["t"]["params"]["bandwidth"] == 0.5
+        assert kde("t")([]) == []
+        with pytest.raises(ValueError, match="bandwidth must be a positive number"):
+            kde("t", bandwidth=0)
 
     def test_bin_product_and_chain_wire(self):
         """A product is a list partition on one bin op; a chain is one bin op

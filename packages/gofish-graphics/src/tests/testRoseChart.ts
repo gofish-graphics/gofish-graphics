@@ -1,14 +1,14 @@
-import { coord, map, groupBy, rect, stack, stackX, v } from "../lib";
+import { coord, map, groupBy, rect, v, spread, spreadX } from "../lib";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { nightingale } from "../data/nightingale";
 
 export const testRoseChart = () =>
   coord({ transform: polar_DEPRECATED() }, [
-    stack(
+    spread(
       { y: -Math.PI / 2, dir: 1, spacing: 0, alignment: "start" },
       map(groupBy(nightingale, "Month"), (d, i) =>
-        stackX(
-          { spacing: 0 },
+        spreadX(
+          { spacing: 0},
           map(d, (d) =>
             rect({
               w: Math.sqrt(d.Death) * 3,

@@ -1024,9 +1024,9 @@ interface FamilyFactory {
   /** Param values, by field name, this member sets before the caller's. */
   preset: Record<string, unknown>;
   doc: string;
-  /** The param that is positional-only; the rest are keyword-only
-   *  (`StrategyKind.positional`, `ConstructDescriptor.positional`). */
-  positional?: string;
+  /** The params that are positional-only, in order; the rest are
+   *  keyword-only (`StrategyKind.positional`, `ConstructDescriptor.positional`). */
+  positional: readonly string[];
 }
 
 /** One member of a family module. It checks each param at the call, from
@@ -1036,14 +1036,16 @@ interface FamilyFactory {
  *  list. */
 function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
   const { family, name, tag, params, preset, doc, positional } = f;
-  if (positional !== undefined && !Object.hasOwn(params, positional))
-    throw new Error(`${family}.${name}: no param ${positional}`);
+  for (const p of positional)
+    if (!Object.hasOwn(params, p))
+      throw new Error(`${family}.${name}: no param ${p}`);
   const keyOf = (field: string) =>
     wire.keys === "snake" ? pyKwarg(field) : (params[field].wire ?? field);
-  // The positional param comes first.
-  const fields = Object.keys(params).sort(
-    (a, b) => Number(b === positional) - Number(a === positional)
-  );
+  // The positional params come first, in their order.
+  const fields = [
+    ...positional,
+    ...Object.keys(params).filter((field) => !positional.includes(field)),
+  ];
   const ents = fields.map(
     (field) => [field, pyKwarg(field), params[field]] as const
   );
@@ -1080,7 +1082,7 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
     const lines = pyParamChecks(
       spec.type,
       py,
-      field === positional
+      positional.includes(field)
         ? `${family}.${name}(${py})`
         : `${family}.${name}(${py}=...)`
     );
@@ -1116,12 +1118,13 @@ function renderFamilyFactory(wire: FamilyWire, f: FamilyFactory): string {
     `    return out`,
   ].join("\n");
   const sigs = ents.map(([, py, spec]) => pySig(py, spec));
+  const n = positional.length;
   const paramList = (
-    positional === undefined
+    n === 0
       ? [`*`, ...sigs]
-      : sigs.length === 1
-        ? [sigs[0], `/`]
-        : [sigs[0], `/`, `*`, ...sigs.slice(1)]
+      : sigs.length === n
+        ? [...sigs, `/`]
+        : [...sigs.slice(0, n), `/`, `*`, ...sigs.slice(n)]
   ).join(", ");
   return [
     ...bare,
@@ -1232,7 +1235,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
         params: k.params,
         preset: {},
         doc: k.doc,
-        positional: k.positional,
+        positional: k.positional ?? [],
       })),
       ...Object.entries(spec.presets ?? {}).map(([name, p]) => ({
         family,
@@ -1241,6 +1244,7 @@ for (const [family, spec] of Object.entries(STRATEGIES) as Array<
         params: spec.kinds[p.kind].params,
         preset: p.values,
         doc: p.doc,
+        positional: [],
       })),
     ],
   });
@@ -1260,6 +1264,6 @@ writeFamilyModule({
     params: resolveFields(d),
     preset: {},
     doc: d.doc ?? "",
-    positional: d.positional,
+    positional: d.positional === undefined ? [] : [d.positional],
   })),
 });

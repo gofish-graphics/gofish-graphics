@@ -25,12 +25,17 @@ counterpart — the single value when the row-bag agrees on the field (the same
 homogeneity collapse `by:` performs), else `undefined`. Reach for `project` to
 read a field off the datum a mark is bound to (e.g. inside a `.zOrder(d => …)`
 callback) without indexing `pluck(...)[0]`; reach for `pluck` when the field is
-genuinely multi-valued in the bag. It also exports `quantileRows(rows, { x,
-density, n })`, a data helper for `derive` that turns the grid rows of a
-density curve into `n` rows at its quantiles, so `Bin.quantiles` and
-`field(x).median()` read the curve. It is a declared shortcut, kept in its
-own module (`ast/quantileRows.ts`), until first-class distributions (#980)
-replace it.
+genuinely multi-valued in the bag. It also exports `kde(column, {
+bandwidth })`, a data helper for `derive` that smooths a group's rows into
+one row whose column holds a kernel density, a distribution as data.
+It exports `fun(at, { domain })`, a function value over `domain` (`[min,
+max]`) that the shape form of `ribbon` and `line` reads at one parameter t
+(`ast/groupExpr.ts`). It is lowercase because it is a value constructor, like
+`field`, not a family. The namespace `Dist` holds distributions
+(`ast/distExpr.ts`, `ast/dist.ts`): its families, `Dist.normal({ mean, sd
+})` and the others, are expressions a channel reads through their members
+(`d.density()`, `d.median()`), as a column that holds a distribution is
+read through `field(x)`.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has

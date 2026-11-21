@@ -70,7 +70,6 @@ def _pie():
                 [rect(w=datum(d["count"]), fill=d["color"]) for d in _PIE_DATA],
                 dir="x",
                 h=70,
-                spacing=0,
                 alignment="start",
             )
         ],

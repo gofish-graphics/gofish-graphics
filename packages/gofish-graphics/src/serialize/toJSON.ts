@@ -34,6 +34,7 @@ import { wireOf } from "../ast/wire";
 import { flowStepMarkOf } from "../ast/marks/compose";
 import { nodeSelectionOf } from "../ast/nodeSelection";
 import { schemaToWire } from "../ast/schema";
+import { hasNoWireForm } from "../ast/groupExpr";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -73,7 +74,8 @@ interface SerializeTag {
  *
  * A function value is dropped too, whatever the key: a callback or `live(...)`
  * channel is a JS closure with no JSON form (the same reason a JS `derive(fn)`
- * emits an opaque `{type: "derive"}`). A strategy kind used bare
+ * emits an opaque `{type: "derive"}`), and so is an expression that holds
+ * one (`hasNoWireForm`: a `fun(...)` value). A strategy kind used bare
  * (`Curve.monotone`) is no function here: the factory that tagged the
  * options read it as its value (`withKindValues`). A type the descriptor
  * table does not declare has no wire form at all, so it throws.
@@ -102,7 +104,7 @@ function wireFields(
 ): AnyObject {
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (Object.hasOwn(accepted, key) && typeof value !== "function")
+    if (Object.hasOwn(accepted, key) && !hasNoWireForm(value))
       out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
   }
   return out;

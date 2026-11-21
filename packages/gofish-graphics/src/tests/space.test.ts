@@ -15,7 +15,10 @@ import {
   CONTINUOUS,
   originIs,
   DEFAULT_AXIS_TICKS,
+  crossSectionOf,
+  withProfile,
 } from "../ast/underlyingSpace";
+import * as F from "../ast/fun";
 import { Extent, impliedExtent, niceScope } from "../ast/extent";
 import { ScopeRegistry, seatInScope } from "../ast/solver/scopes";
 import { pxOf } from "../ast/domain";
@@ -24,21 +27,22 @@ import { sameUnitVar, type UnitVar } from "../ast/measure";
 import { valueUnits } from "../ast/underlyingSpace";
 import { DatumValueImpl } from "../ast/data";
 import {
+  resolveAlignmentSpace,
   unionChildExtents,
   unionChildSpaces,
 } from "../ast/graphicalOperators/alignment";
 import * as Pwl from "../ast/solver/pwl";
 import { interval } from "../util/interval";
 import {
+  chainFold,
   distributeSpaceFold,
+  wiggleZero,
 } from "../ast/constraints/distribute";
 import { nestedExtent, nestedSpace } from "../ast/constraints/nest";
 import { positionNode } from "../ast/graphicalOperators/positionNode";
 import { value } from "../ast/data";
 import { declared } from "./testHelpers";
-import {
-  resolveLayerBaseSpaces,
-} from "../ast/constraints/compose";
+import { resolveLayerBaseSpaces } from "../ast/constraints/compose";
 
 let passed = 0;
 let failed = 0;
@@ -436,14 +440,18 @@ console.log("# space: a one-value axis does not bind equal measure");
   );
 }
 
-console.log("# space: fit takes the one rule for a claim in its slot (Pwl.fill)");
+console.log(
+  "# space: fit takes the one rule for a claim in its slot (Pwl.fill)"
+);
 {
   const scopes = new ScopeRegistry();
   const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
   const space = CONTINUOUS(interval(0, 10), "none");
   // No session: a fit that warned would find nowhere to put it, so a node
   // with none stands in.
-  const node = { tryGetRenderSession: () => undefined } as unknown as GoFishNode;
+  const node = {
+    tryGetRenderSession: () => undefined,
+  } as unknown as GoFishNode;
   const fitIn = (claim: Pwl.Value, px: number, limit: boolean) =>
     scopes.fit(meta, node, space, Extent(claim), { px, limit })!;
   // 100.3 px of fixed parts in 100 px: they fill the slot up to rounding,
@@ -471,12 +479,17 @@ console.log("# space: fit takes the one rule for a claim in its slot (Pwl.fill)"
   );
 }
 
-console.log("# space: solveScope centers a one-value domain despite float noise");
+console.log(
+  "# space: solveScope centers a one-value domain despite float noise"
+);
 {
   // #1176 comment 2: a slope of ~1e-15 used to solve σ ≈ 1e16.
   const scopes = new ScopeRegistry();
   const meta = { kind: "root" as const, rootKey: "t", axis: 1 as const };
-  const y = CONTINUOUS(interval(16.000000000000004, 16.000000000000004), "pinned");
+  const y = CONTINUOUS(
+    interval(16.000000000000004, 16.000000000000004),
+    "pinned"
+  );
   const claim = Extent(Pwl.affine(16.000000000000004, 3), Pwl.affine(-16, 3));
   const solved = scopes.solveScope(meta, y, claim, 200);
   ok(
@@ -728,7 +741,7 @@ console.log("# space: one fold for every origin");
 {
   const chainOpts = {
     axis: 0 as const,
-    origin: { part: 0, fraction: 0, mirrored: false },
+    baseline: { kind: "start" },
   };
   // A spread separates: along its direction its result is a sequence of
   // separate spaces, never one continuous space, whatever its targets.
@@ -827,7 +840,7 @@ console.log("# space: one fold for every origin");
       ["p", "q"],
       {
         axis: 1,
-        origin: { part: 0, fraction: 0, mirrored: false },
+        baseline: { kind: "start" },
       }
     )
   );
@@ -840,16 +853,17 @@ console.log("# space: one fold for every origin");
 
 console.log("# space: nicing is gated on an axis over the interval");
 {
+  // A space with no origin is a length scale: it draws no axis, so it is
+  // not niced, and its widths fill the scope that maps them.
   const [delta, deltaClaim] = niceScope(
     CONTINUOUS(interval(0, 137), "none"),
     Extent(Pwl.affine(137, 0)),
     DEFAULT_AXIS_TICKS
   );
   ok(
-    "a delta axis nices its width, its claim widening by half on each side",
-    JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 140)) &&
-      Pwl.at(deltaClaim!.width, 1) === 140 &&
-      Pwl.at(deltaClaim!.descent, 1) === 1.5
+    "a length scale is not niced, and its claim is left as it is",
+    JSON.stringify(delta!.dataInterval) === JSON.stringify(interval(0, 137)) &&
+      Pwl.at(deltaClaim!.width, 1) === 137
   );
   // A free magnitude renders the absolute axis of the scope that places its
   // baseline, so it nices as that axis does, about its own 0, and each side
@@ -865,6 +879,326 @@ console.log("# space: nicing is gated on an axis over the interval");
       free!.origin === "free" &&
       Pwl.at(freeClaim!.ascent, 1) === 140 &&
       Pwl.at(freeClaim!.descent, 1) === 40
+  );
+}
+
+console.log("# space: the chain fold over functions");
+{
+  // The chain fold before it ran over functions: one number per side.
+  const scalarFold = (
+    parts: { ascent: number; descent: number }[],
+    origin: { part: number; fraction: number }
+  ) => {
+    const up = [0];
+    const down = [0];
+    let at = 0;
+    let zero = 0;
+    parts.forEach((part, k) => {
+      const step = part.ascent - part.descent;
+      up.push(at + part.ascent);
+      down.push(part.descent - at);
+      if (k === origin.part) zero = at + origin.fraction * step;
+      at += step;
+    });
+    return {
+      ascent: Math.max(...up) - zero,
+      descent: Math.max(...down) + zero,
+    };
+  };
+  // A seeded generator, so a failure reproduces.
+  let seed = 12345;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+  const value = () =>
+    rand() < 0.2
+      ? 0
+      : Math.round((rand() - 0.4) * 1000) / (rand() < 0.5 ? 7 : 1);
+  let same = 0;
+  let firstDiff = "";
+  const cases = 500;
+  for (let c = 0; c < cases; c++) {
+    const n = 1 + Math.floor(rand() * 6);
+    const parts = Array.from({ length: n }, () => {
+      const ascent = Math.abs(value());
+      return { ascent, descent: rand() < 0.3 ? Math.abs(value()) / 3 : 0 };
+    });
+    const origin = {
+      part: Math.floor(rand() * n),
+      fraction: [0, 0.5, 1, 1 / 3, rand()][Math.floor(rand() * 5)],
+    };
+    const want = scalarFold(parts, origin);
+    const got = chainFold(
+      parts.map((p) => F.constant(p)),
+      { kind: "at", part: origin.part, point: origin.fraction }
+    );
+    const ascent = F.maximum(F.field(got, "ascent"));
+    const descent = F.maximum(F.field(got, "descent"));
+    if (Object.is(ascent, want.ascent) && Object.is(descent, want.descent))
+      same++;
+    else if (!firstDiff)
+      firstDiff = `${JSON.stringify({ parts, origin })}: ${ascent}, ${descent} vs ${want.ascent}, ${want.descent}`;
+  }
+  ok(
+    "over constant functions the chain fold gives the scalar fold's numbers, bit for bit",
+    same === cases,
+    firstDiff
+  );
+  ok(
+    "and its result is constant",
+    F.isConstant(
+      chainFold(
+        [
+          F.constant({ ascent: 3, descent: 1 }),
+          F.constant({ ascent: 2, descent: 0 }),
+        ],
+        { kind: "start" }
+      )
+    )
+  );
+  const stack = distributeSpaceFold(
+    [CONTINUOUS(interval(0, 30), "free"), CONTINUOUS(interval(-25, 0), "free")],
+    [undefined, undefined],
+    {
+      axis: 1,
+      glue: true,
+      baseline: { kind: "start" },
+    }
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a stack of boxes stores no profile",
+    stack.profile === undefined &&
+      JSON.stringify(stack.dataInterval) === JSON.stringify(interval(0, 30))
+  );
+
+  // Two bands over x in [0, 2], each a free extent [0, h(x)]: the stack's
+  // reach is the largest of the pointwise sum, not the sum of the largest.
+  const band = (h: number[]): CONTINUOUS_TYPE =>
+    withProfile(
+      CONTINUOUS(interval(0, Math.max(...h)), "free"),
+      F.record({
+        min: F.constant(0, { min: 0, max: 2 }),
+        max: F.through([0, 1, 2], h, { kind: "linear" }),
+      })
+    );
+  const bands = distributeSpaceFold(
+    [band([1, 4, 1]), band([4, 1, 4])],
+    [undefined, undefined],
+    { axis: 1, glue: true, baseline: { kind: "start" } }
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a stack of bands spans the largest pointwise sum",
+    bands.dataInterval.min === 0 && bands.dataInterval.max === 5,
+    JSON.stringify(bands.dataInterval)
+  );
+  ok(
+    "and keeps its cross-section",
+    bands.profile !== undefined &&
+      bands.profile.at(0).max === 5 &&
+      bands.profile.at(1).max === 5 &&
+      bands.profile.at(0.5).max === 5
+  );
+  ok(
+    "a space with no profile is read as its interval at every u",
+    crossSectionOf(CONTINUOUS(interval(-2, 7), "free")).at(1e6).min === -2
+  );
+  const shifted = anchorAt(band([1, 4, 1]), 10);
+  ok(
+    "anchorAt moves the profile with the interval",
+    shifted.profile !== undefined &&
+      shifted.profile.at(1).max === 14 &&
+      shifted.profile.at(1).min === 10 &&
+      shifted.profile.domain.max === 2
+  );
+
+  // An overlay unions its parts' cross-sections at every u.
+  const overlaid = unionChildSpaces(
+    [onY(band([1, 4, 1])), onY(band([4, 1, 4]))],
+    1
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "an overlay of bands takes the upper envelope of their edges",
+    overlaid.profile !== undefined &&
+      overlaid.profile.at(0).max === 4 &&
+      overlaid.profile.at(1).max === 4 &&
+      overlaid.profile.at(0.5).max === 2.5 &&
+      overlaid.dataInterval.max === 4
+  );
+  const started = resolveAlignmentSpace(
+    [
+      withProfile(
+        CONTINUOUS(interval(2, 6), "free"),
+        F.record({
+          min: F.constant(2, { min: 0, max: 1 }),
+          max: F.through([0, 1], [3, 6], { kind: "linear" }),
+        })
+      ),
+      CONTINUOUS(interval(0, 1), "free"),
+    ],
+    "start",
+    1
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a start alignment seats a profiled part by its box",
+    started.profile !== undefined &&
+      started.profile.at(0).min === 0 &&
+      started.profile.at(1).max === 4
+  );
+  ok(
+    "an overlay of boxes stores no profile",
+    (
+      unionChildSpaces(
+        [
+          onY(CONTINUOUS(interval(0, 3), "free")),
+          onY(CONTINUOUS(interval(-1, 2), "free")),
+        ],
+        1
+      ) as CONTINUOUS_TYPE
+    ).profile === undefined
+  );
+}
+
+console.log("# space: a wiggle stack's 0");
+{
+  // d3's stackOffsetWiggle, as d3-shape writes it: the bottom of the stack
+  // at each sample j, over series values `values[i][j]`, the stack laid in
+  // series order.
+  const d3Wiggle = (values: number[][]): number[] => {
+    const n = values.length;
+    const m = values[0].length;
+    const bottoms = [0];
+    let y = 0;
+    for (let j = 1; j < m; ++j) {
+      let s1 = 0;
+      let s2 = 0;
+      for (let i = 0; i < n; ++i) {
+        const sij0 = values[i][j];
+        const sij1 = values[i][j - 1];
+        let s3 = (sij0 - sij1) / 2;
+        for (let k = 0; k < i; ++k) s3 += values[k][j] - values[k][j - 1];
+        s1 += sij0;
+        s2 += s3 * sij0;
+      }
+      if (s1) y -= s2 / s1;
+      bottoms.push(y);
+    }
+    return bottoms;
+  };
+  // Three smooth series over u in [0, 2].
+  const curves = [
+    (u: number) => 1 + u * u,
+    (u: number) => 2 + Math.sin(2 * u),
+    (u: number) => 3 - u,
+  ];
+  const domain = { min: 0, max: 2 };
+  const zeroOf = (parts: F.Fun<number>[]) => {
+    const middles: F.Fun<number>[] = [];
+    let below: F.Fun<number> = F.constant(0, domain);
+    for (const p of parts) {
+      middles.push(F.add(below, F.scale(p, 0.5)));
+      below = F.add(below, p);
+    }
+    return wiggleZero(middles, parts);
+  };
+  const exactZero = zeroOf(curves.map((c) => F.opaque(c, { domain })));
+  // d3's bottom is minus the 0 measured from the stack's start, and its
+  // backward differences converge to the slope the 0 is the integral of.
+  const gap = (samples: number) => {
+    const us = Array.from({ length: samples + 1 }, (_, j) => (2 * j) / samples);
+    const bottoms = d3Wiggle(curves.map((c) => us.map(c)));
+    return Math.max(...us.map((u, j) => Math.abs(bottoms[j] + exactZero.at(u))));
+  };
+  const coarse = gap(50);
+  const fine = gap(5000);
+  ok(
+    "the wiggle 0 is d3's stackOffsetWiggle in the limit of fine samples",
+    fine < 1e-3 && fine < coarse / 50,
+    JSON.stringify({ coarse, fine })
+  );
+  // The same polylines with more knots on them: the same functions.
+  const knots = [0, 0.5, 1.25, 2];
+  const polylines = (ks: number[]) =>
+    curves.map((c) =>
+      F.through(
+        ks,
+        ks.map((u) =>
+          // The value of the coarse polyline at u.
+          F.through(knots, knots.map(c), { kind: "linear" }).at(u)
+        ),
+        { kind: "linear" }
+      )
+    );
+  const refined = [...knots, 0.25, 0.8, 1.6, 1.9].sort((a, b) => a - b);
+  const coarseZero = zeroOf(polylines(knots));
+  const refinedZero = zeroOf(polylines(refined));
+  const us = Array.from({ length: 41 }, (_, j) => j / 20);
+  ok(
+    "refining the knots of the same curves does not move the 0",
+    us.every((u) => Math.abs(coarseZero.at(u) - refinedZero.at(u)) < 1e-9),
+    JSON.stringify(us.map((u) => coarseZero.at(u) - refinedZero.at(u)))
+  );
+  ok(
+    "over boxes the wiggle is the start",
+    JSON.stringify(
+      chainFold(
+        [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
+        { kind: "wiggle" }
+      ).at(0)
+    ) === JSON.stringify({ ascent: 5, descent: 0 })
+  );
+  // A box is one interval over the whole line; beside a band of changing
+  // thickness the wiggle zero is drawn over the band's interval, so the
+  // fold reads, and the layer names the box as a part it cannot move.
+  const boxAndBand = chainFold(
+    [
+      F.constant({ ascent: 3, descent: 0 }),
+      F.record({
+        ascent: F.through([0, 1, 2], [1, 3, 2], { kind: "linear" }),
+        descent: F.constant(0, { min: 0, max: 2 }),
+      }),
+    ],
+    { kind: "wiggle" }
+  ).at(1);
+  ok(
+    "a wiggle over a box and a band of changing thickness is read",
+    Number.isFinite(boxAndBand.ascent) && Number.isFinite(boxAndBand.descent),
+    JSON.stringify(boxAndBand)
+  );
+  const middled = chainFold(
+    [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
+    { kind: "middle" }
+  ).at(0);
+  ok(
+    "a middle stack's 0 is halfway along its chain",
+    middled.ascent === 2.5 && middled.descent === 2.5
+  );
+  const ended = chainFold(
+    [F.constant({ ascent: 3, descent: 0 }), F.constant({ ascent: 2, descent: 0 })],
+    { kind: "end" }
+  ).at(0);
+  ok(
+    "an end stack's 0 is its last part's head",
+    ended.ascent === 0 && ended.descent === 5
+  );
+  const anchored = chainFold(
+    [F.constant({ ascent: 3, descent: 1 }), F.constant({ ascent: 2, descent: 0 })],
+    { kind: "at", part: 0, point: "start" }
+  ).at(0);
+  ok(
+    "at(part, \"start\") is the start of the part's box, below its tail",
+    anchored.ascent === 5 && anchored.descent === 0,
+    JSON.stringify(anchored)
+  );
+  const centered = distributeSpaceFold(
+    [CONTINUOUS(interval(0, 30), "free"), CONTINUOUS(interval(0, 10), "free")],
+    [undefined, undefined],
+    { axis: 1, glue: true, baseline: { kind: "middle" } }
+  ) as CONTINUOUS_TYPE;
+  ok(
+    "a middle stack has no data 0 (its axis measures differences), not mirrored",
+    centered.origin === "none" &&
+      centered.mirrored === undefined &&
+      JSON.stringify(centered.dataInterval) ===
+        JSON.stringify({ min: -20, max: 20 }),
+    JSON.stringify(centered)
   );
 }
 

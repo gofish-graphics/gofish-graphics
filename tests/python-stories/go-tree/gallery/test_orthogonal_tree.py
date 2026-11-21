@@ -28,5 +28,5 @@ def story_orthogonal_tree():
                 y={"kind": "distribute", "spacing": 18},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

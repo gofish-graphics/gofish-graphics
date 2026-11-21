@@ -51,6 +51,7 @@ const {
   group,
   table,
   blank,
+  Unit,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -605,7 +606,7 @@ async function main() {
   // kind of each family that has kinds with no required option.
   // -------------------------------------------------------------------------
   {
-    const { Curve, Calendar } = GoFish as any;
+    const { Curve, Calendar, Baseline } = GoFish as any;
     const rows = [
       { a: 1, b: 2, d: Date.UTC(2024, 0, 3), g: "x" },
       { a: 2, b: 3, d: Date.UTC(2024, 4, 9), g: "y" },
@@ -641,6 +642,19 @@ async function main() {
             )
             .mark(circle({ r: 3 })),
       ],
+      [
+        "Baseline.middle in stack({ baseline })",
+        (s) =>
+          chart(rows)
+            .flow(
+              stack({
+                by: "g",
+                dir: "y",
+                baseline: s ? Baseline.middle : Baseline.middle(),
+              })
+            )
+            .mark(rect({ h: "a" })),
+      ],
       // (A JS treemap has no IR form yet, so Tile is covered by
       // families.test.ts, which compares each Tile kind's JSON.)
       [
@@ -670,6 +684,56 @@ async function main() {
       );
       validateDoc(JSON.parse(bare), `bare ${name}`);
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // A stack's baseline round-trips: `Baseline.at` with a column value and a
+  // fraction or an anchor, through toJSON, the validator, and buildIR.
+  // -------------------------------------------------------------------------
+  {
+    const { Baseline } = GoFish as any;
+    const rows = [
+      { a: 1, g: "x" },
+      { a: 2, g: "y" },
+    ];
+    for (const baseline of [
+      Baseline.at("y", 0.5),
+      Baseline.at("x", "end"),
+      Baseline.end(),
+      Baseline.wiggle(),
+    ]) {
+      const c = chart(rows)
+        .flow(stack({ by: "g", dir: "y", baseline }))
+        .mark(rect({ h: "a" }));
+      const doc = await c.toJSON();
+      validateDoc(doc, `stack({ baseline: ${JSON.stringify(baseline)} })`);
+      const op = (doc.root as Frontend.ChartIR).operators![0] as any;
+      const doc2 = await Serialize.buildIR(doc).toJSON();
+      check(
+        `stack's baseline ${JSON.stringify(baseline)} round-trips`,
+        JSON.stringify(op.baseline) === JSON.stringify(baseline) &&
+          JSON.stringify(doc2.root) === JSON.stringify(doc.root),
+        JSON.stringify(op)
+      );
+    }
+    const bad = Frontend.validate({
+      ...(await chart(rows)
+        .flow(stack({ by: "g", dir: "y" }))
+        .mark(rect({ h: "a" }))
+        .toJSON()),
+    });
+    check("a stack with no baseline validates", bad.valid);
+    const doc = await chart(rows)
+      .flow(stack({ by: "g", dir: "y", baseline: Baseline.at("x", 0.5) }))
+      .mark(rect({ h: "a" }))
+      .toJSON();
+    (doc.root as any).operators[0].baseline.point = 2;
+    const outOfRange = Frontend.validate(doc);
+    check(
+      "a baseline point past 1 is rejected",
+      !outOfRange.valid,
+      JSON.stringify(outOfRange)
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -1150,7 +1214,7 @@ async function main() {
 
     const built = chart(groupData)
       .flow(
-        stack({ by: "lake", dir: "x" }).label("lake", {
+        stack({ by: "lake", dir: "y" }).label("lake", {
           position: "outset-top",
         })
       )
@@ -1180,7 +1244,7 @@ async function main() {
   {
     const built = chart(groupData)
       .flow(
-        stack({ by: "lake", dir: "x" })
+        stack({ by: "lake", dir: "y" })
           .label("lake", { position: "outset-top" })
           .label(field("count").sum(), { position: "center" })
       )
@@ -1272,7 +1336,7 @@ async function main() {
   // Mark-level .label(field(...).sum())
   {
     const built = chart(groupData)
-      .flow(stack({ by: "lake", dir: "x" }))
+      .flow(stack({ by: "lake", dir: "y" }))
       .mark(rect({ h: "count" }).label(field("count").sum()));
     const doc = await built.toJSON();
     validateDoc(doc, "chart with mark field-expr .label()");
@@ -1298,7 +1362,7 @@ async function main() {
   // Operator-level .label(field(...).sum())
   {
     const built = chart(groupData)
-      .flow(stack({ by: "lake", dir: "x" }).label(field("count").sum()))
+      .flow(stack({ by: "lake", dir: "y" }).label(field("count").sum()))
       .mark(rect({ h: "count" }));
     const doc = await built.toJSON();
     validateDoc(doc, "chart with operator field-expr .label()");
@@ -1405,7 +1469,7 @@ async function main() {
   // the round trip.
   {
     const c = chart([{ a: 1 }]).mark(
-      stack({ dir: "y" }, [rect({ h: 10 }), rect({ h: 20 })])
+      stack({ dir: "y" }, [rect({ h: "a" }), rect({ h: "a" })])
     );
     const doc = await c.toJSON();
     validateDoc(doc, "combinator-form stack");
@@ -1470,6 +1534,50 @@ async function main() {
     check(
       "ribbon({ along }) carries along in its wire opts",
       Serialize.wireOf(rib)?.opts?.along === "g"
+    );
+  }
+
+  // The shape form (`ribbon({ x, h })`, `line({ x, y })`): its position
+  // channels ride in the wire opts, and a rebuilt chart draws the same.
+  console.log("\n# shape form of ribbon and line");
+  {
+    const rows = [
+      { date: "2020-01-01", n: 1, s: "a" },
+      { date: "2020-02-01", n: -2, s: "a" },
+      { date: "2020-01-01", n: 3, s: "b" },
+      { date: "2020-02-01", n: 4, s: "b" },
+    ];
+    const schema = { date: Unit.time() };
+    const paint = async (b: any) =>
+      JSON.stringify(await b.toDisplayList({ w: 300, h: 200 }), (k, v) =>
+        k === "id" ? undefined : v
+      );
+    const built = chart(rows, { schema })
+      .flow(group({ by: "s" }))
+      .mark(ribbon({ x: "date", h: "n", fill: "s", opacity: 0.5 }).name("areas"))
+      .layer(
+        chart(rows, { schema })
+          .flow(group({ by: "s" }))
+          .mark(line({ x: "date", y: "n", stroke: "s" }).label("s"))
+      );
+    const doc = await built.toJSON();
+    validateDoc(doc, "shape-form ribbon and line");
+    const text = JSON.stringify(doc);
+    check(
+      "the shape form writes its position channels",
+      text.includes('"x":"date"') && text.includes('"h":"n"') && text.includes('"y":"n"'),
+      text.slice(0, 400)
+    );
+    const rebuilt = Serialize.buildIR(JSON.parse(text));
+    check(
+      "a shape-form ribbon and line round-trip",
+      JSON.stringify(await rebuilt.toJSON()) === text
+    );
+    const original = await paint(built);
+    check(
+      "a rebuilt shape-form chart draws what the original draws",
+      original === (await paint(rebuilt)) && original.includes('"path"'),
+      original.slice(0, 200)
     );
   }
 

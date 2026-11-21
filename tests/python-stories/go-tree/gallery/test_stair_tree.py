@@ -28,5 +28,5 @@ def story_stair_tree():
                 y={"kind": "distribute", "spacing": 6},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

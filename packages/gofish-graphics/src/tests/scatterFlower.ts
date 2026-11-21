@@ -91,7 +91,6 @@ export const testScatterFlower = (height: number) =>
             stackX(
               {
                 h: _(sample.collection).sumBy("count") / 7,
-                spacing: 0,
                 alignment: "start",
               },
               sample.collection.map((d, i) =>

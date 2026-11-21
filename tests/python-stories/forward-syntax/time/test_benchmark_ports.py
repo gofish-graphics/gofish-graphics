@@ -11,7 +11,6 @@ from gofish import (
     group,
     ribbon,
     line,
-    blank,
     Unit,
     Color,
     Curve,
@@ -97,8 +96,8 @@ def _epoch_ms(date):
 def story_stacked_area():
     return (
         chart(QUARTERLY_SALES, schema={"date": Unit.time()}, w=520, h=330)
-        .flow(scatter(by="date", x="date"), stack(by="category", dir="y"))
-        .mark(ribbon(h="sales", fill="category", curve=Curve.linear())),
+        .flow(stack(by="category", dir="y"))
+        .mark(ribbon(x="date", h="sales", fill="category", curve=Curve.linear())),
         {},
     )
 
@@ -152,15 +151,18 @@ def story_surplus_deficit_line():
             w=560,
             h=340,
         )
-        .flow(group(by="side"), scatter(by="date", x="date"))
-        .mark(ribbon(h="balance", fill="side", curve=Curve.linear()))
-        # The line: invisible anchors at the monthly values, then a line
-        # through them.
+        .flow(group(by="side"))
+        .mark(ribbon(x="date", h="balance", fill="side", curve=Curve.linear()))
         .layer(
-            chart(rows, schema=schema)
-            .flow(scatter(by="date", x="date", y="balance"))
-            .mark(blank())
-        )
-        .layer(line(stroke="#222", stroke_width=1.5, curve=Curve.linear())),
+            chart(rows, schema=schema).mark(
+                line(
+                    x="date",
+                    y="balance",
+                    stroke="#222",
+                    stroke_width=1.5,
+                    curve=Curve.linear(),
+                )
+            )
+        ),
         {},
     )

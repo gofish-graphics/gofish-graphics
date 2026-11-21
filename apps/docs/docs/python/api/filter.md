@@ -15,7 +15,7 @@ from gofish import Filter, layer, rect
 layer([
     rect(x=0, y=0, w=80, h=80, fill="#e06666"),
     rect(x=100, y=0, w=80, h=80, fill="#e06666", filter=Filter.grayscale),
-]).render(w=180, h=80)
+]).render()
 ```
 
 ## Signature

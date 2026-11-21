@@ -99,4 +99,4 @@ LINKS = [link_mark(p) for p in PLACED if p["parent_path"] is not None]
 
 
 def story_radial_phylogenetic_tree():
-    return layer([layer(LINKS)]), {"w": CANVAS, "h": CANVAS}
+    return layer([layer(LINKS)]), {}

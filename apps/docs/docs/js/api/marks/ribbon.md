@@ -4,7 +4,7 @@ order: 50
 
 # ribbon
 
-Fills a band between data points (edge-to-edge) — areas, streamgraphs, and sankey ribbons. Takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
+Fills a band. It has two forms. The shape form, `ribbon({ x, h })`, draws one band per group from its rows: an area chart. The connector form fills a band between marks another flow placed (edge to edge): sankey ribbons and bands between bars. It takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
 
 ::: gofish
 
@@ -22,7 +22,7 @@ gf.layer([
     .flow(gf.spread({ by: "lake", dir: "x", spacing: 64 }))
     .mark(gf.blank({ h: "count" }).name("points")),
   gf.chart(gf.selectAll("points")).mark(gf.ribbon({ opacity: 0.6 })),
-]).render(root, { w: 400, h: 250, axes: true });
+]).render(root, { h: 250, axes: true });
 ```
 
 :::
@@ -30,6 +30,11 @@ gf.layer([
 ## Signature
 
 ```ts
+// Shape form
+ribbon({ x, h, fill?, stroke?, strokeWidth = 0, opacity?, blendMode = "normal", curve? })
+ribbon({ y, w, fill?, stroke?, strokeWidth = 0, opacity?, blendMode = "normal", curve? })
+
+// Connector form
 ribbon({ stroke?, strokeWidth = 0, opacity?, blendMode = "normal", dir = "x", curve?, along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
@@ -37,6 +42,69 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, blendMode = "normal", dir = "x", cu
 
 ::: gofish-ref ribbon
 :::
+
+## Shape form
+
+Given `x`, the ribbon draws one band per group, from 0 to `h` at each row's
+`x`. Given `y`, it draws from 0 to `w` at each row's `y`. The rows are sorted
+by `x` (or `y`), which must be a numeric or time column. Two rows of one
+group at the same `x` are an error: split them with
+[`group`](/js/api/operators/group) first. `h` may be negative, and the band
+then goes below the baseline. The curve defaults to `Curve.monotone()` and
+takes `Curve.linear()`, `Curve.step()`, `Curve.monotone()` or
+`Curve.smooth()`.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(group({ by: "series" }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series", opacity: 0.5 }));
+```
+
+A [`stack`](/js/api/operators/stack#stacked-areas) of shape-form ribbons is a
+stacked area. Each band keeps its thickness at every `x`, and sits on the
+bands before it. Outside its own rows a band has thickness 0.
+
+```ts
+chart(unemployment, { schema: { date: Unit.time() } })
+  .flow(stack({ by: "series", dir: "y" }))
+  .mark(ribbon({ x: "date", h: "count", fill: "series" }));
+```
+
+A shape-form ribbon takes `inset`, a number of pixels. It is drawn in by
+`inset` from each end of its `x`, so the bands in the cells of a
+[`partition`](/js/api/operators/partition#a-distribution-s-cells) are drawn apart. Its values are not
+drawn in: the band stays on the baseline its data gives it. Only what is
+drawn changes: the band's box is the same.
+
+## Function channels
+
+`x` and `h` (or `y` and `w`) may hold a function value, made with
+[`fun`](/js/api/core/fun), in place of a column. The ribbon then has one
+parameter `t`, and reads every function channel at the same `t`. Its edges
+are the functions themselves, not curves through rows.
+
+- `x` holds `f.domain()`, which is `t` itself over the domain of `f`.
+- Every function channel has the same domain, or it is an error that names
+  both.
+- `h` may be a number instead, a constant over `t`. A column beside a
+  function is an error, since rows are not read at `t`.
+- `curve` is an error, since a function runs as it is.
+
+```ts
+const bump = fun((t) => 1 + Math.exp(-((t - 4) ** 2)), { domain: [0, 10] });
+const wave = fun((t) => 1 + 0.6 * Math.sin(t), { domain: [0, 10] });
+
+stack({ dir: "y" }, [
+  ribbon({ x: bump.domain(), h: bump }),
+  ribbon({ x: wave.domain(), h: wave }),
+]);
+```
+
+A stack of such ribbons keeps each band's thickness at every `t`, and takes
+a [`Baseline`](/js/api/baseline) like any stacked area. It draws under a
+coordinate transform too.
+
+## Connector form
 
 `curve` takes a member of the [`Curve`](/js/api/curve) family:
 `Curve.linear()`, `Curve.bezier()`, `Curve.step()`, `Curve.monotone()`,
@@ -107,8 +175,8 @@ zBelow-by-default paint order and the desugaring to the explicit `layer([...])`
 
 When there's no earlier tier at all — just raw data that needs both fresh
 anchors and a connector — place `ribbon(...)` directly in `.mark()` position
-and skip `.layer()` too. This is the fused spelling of the [Area chart](/js/examples/area-chart)
-and [Ridgeline chart](/js/examples/ridgeline-chart) gallery examples:
+and skip `.layer()` too. This is the fused spelling of the
+[Ridgeline chart](/js/examples/ridgeline-chart) gallery example:
 
 ```ts
 chart(seafood, { axes: true })

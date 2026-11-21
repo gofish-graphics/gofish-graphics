@@ -97,7 +97,10 @@ per-facet `species` axis — each living at its own tree node, the way faceting
 already nests. Each axis names itself off its own space's **measure** (a
 continuous axis by its quantity names, never its unit; an ordinal axis by its
 grouping field), so an axis title is derived from the data model, not a
-syntactic hint. The orchestrator
+syntactic hint. Which guide a scale gets follows from its kind: a scale with
+positions (a space with an origin) gets an axis, drawn in place, and a scale
+without them (color, or the lengths of a space with no origin) gets a legend
+entry, drawn aside. The orchestrator
 (`gofish.tsx`) makes the chrome take room: each chart claims its
 content plus its chrome, whose shapes claim their sizes, so a parent lays out the whole
 graphic and the render's `w`/`h` is the whole graphic, chrome included (#493,

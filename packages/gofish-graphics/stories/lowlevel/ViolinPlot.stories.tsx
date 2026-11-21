@@ -1,9 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
-import { spreadX, map, layer, stackY, rect, ribbon, v } from "../../src/lib";
-import { groupBy } from "lodash";
-import { density1d } from "fast-kde";
+import {
+  chart,
+  derive,
+  field,
+  kde,
+  ribbon,
+  spread,
+  stack,
+  Baseline,
+} from "../../src/lib";
 
 const meta: Meta = {
   title: "Low Level Syntax/Violin Plot",
@@ -13,6 +20,7 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
+  args: { w: 500, h: 300 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -24,34 +32,19 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    spreadX(
-      { spacing: 64 },
-      map(groupBy(penguins, "Species"), (d, species) => {
-        const density = Array.from(
-          density1d(d.map((p) => p["Body Mass (g)"]).filter((w) => w !== null))
-        );
-        return layer({}, [
-          stackY(
-            { alignment: "middle" },
-            map(density, (d) =>
-              rect({
-                y: -d.x / 40,
-                w: d.y * 100000,
-                h: 0,
-                fill: v(species),
-              }).name(`${species}-${d.x}`)
-            )
-          ),
-        ]).relate((names) => [
-          ribbon(
-            { dir: "y", opacity: 1, blendMode: "normal" },
-            map(density, (d) => names[`${species}-${d.x}`])
-          ),
-        ]);
-      })
-    ).render(container, {
-      axes: true,
-    });
+    const mass = field("Body Mass (g)");
+    chart(penguins)
+      .flow(
+        spread({ by: "Species", dir: "x", spacing: 64 }),
+        derive(kde("Body Mass (g)"))
+      )
+      .mark(
+        stack({ dir: "x", baseline: Baseline.middle() }, [
+          ribbon({ y: mass.domain(), w: mass.density(), fill: "Species" }),
+        ])
+      )
+      .render(container, { w: args.w, h: args.h, axes: true });
+
     return container;
   },
 };

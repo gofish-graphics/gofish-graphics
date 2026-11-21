@@ -24,5 +24,5 @@ def story_garden_layout():
                 y={"kind": "align", "alignment": "middle"},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

@@ -12,7 +12,7 @@ annotations, node names in diagrams, and axis titles.
 ```js
 gf.chart([{ label: "GoFish" }])
   .mark(gf.text({ text: "label", fontSize: 28, fill: "steelblue" }))
-  .render(root, { w: 240, h: 80 });
+  .render(root);
 ```
 
 :::

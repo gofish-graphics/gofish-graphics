@@ -42,6 +42,21 @@ export type {
   FieldPredicateWire,
 } from "./ast/fieldExpr";
 export { map } from "./ast/iterators/map";
+// `fun(at, { domain })`: a function value, the same function in every
+// group, which the shape form of ribbon and line reads at one parameter t.
+export { fun } from "./ast/groupExpr";
+export type {
+  FoldExpr,
+  FunValue,
+  FunctionExpr,
+  Lift,
+  LiftMember,
+  Units,
+  ValueExpr,
+} from "./ast/groupExpr";
+// Distributions: `Dist.normal({ mean, sd })`, read through their members
+// (`d.density()`, `d.median()`) as field expressions are.
+export * as Dist from "./families/dist";
 
 // Strategy families (#1013): an option whose value is one choice from a set
 // of named strategies gets one namespace, with a capitalized name. Each is a
@@ -73,6 +88,8 @@ export {
 } from "./ast/gofish";
 export type {
   GoFishRenderOptions,
+  LegendOptions,
+  LengthEntryOptions,
   GoFishExportOptions,
   View,
 } from "./ast/gofish";
@@ -203,6 +220,7 @@ export { scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";
 export * as Curve from "./families/curve";
+export * as Baseline from "./families/baseline";
 export { treemap } from "./ast/graphicalOperators/treemap";
 export * as Tile from "./families/tile";
 export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
@@ -254,6 +272,7 @@ export {
   createRelationalMark,
   normalize,
   repeat,
+  kde,
   log,
   layer,
   union,
@@ -270,11 +289,11 @@ export type {
   ExcludeOptions,
   AtopOptions,
 } from "./ast/graphicalOperators/porterDuff";
-export type { RelatableMark, DeriveOptions } from "./ast/marks/chart";
-// A data helper for derive: the grid rows of a density curve to rows at its
-// quantiles. A shortcut until first-class distributions (#980).
-export { quantileRows } from "./ast/quantileRows";
-export type { QuantileRowsOptions } from "./ast/quantileRows";
+export type {
+  RelatableMark,
+  DeriveOptions,
+  KdeOptions,
+} from "./ast/marks/chart";
 export { compose } from "./ast/marks/compose";
 // Animation (JS-only, like the rest of the reactive layer: a sequence owns a
 // clock, which is a live signal and does not cross the Python bridge).

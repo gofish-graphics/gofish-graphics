@@ -147,7 +147,7 @@ export const HierarchicalSectorChart: StoryObj = {
         coord: Coord.clock(),
       },
       sectorTree
-    ).render(container, { w: 560, h: 560 });
+    ).render(container);
     return container;
   },
 };

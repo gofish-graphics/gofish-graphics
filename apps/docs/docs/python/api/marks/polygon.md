@@ -21,7 +21,7 @@ chart([{}]).mark(
         ],
         fill="steelblue",
     )
-).render(w=100, h=60)
+).render()
 ```
 
 ## Signature

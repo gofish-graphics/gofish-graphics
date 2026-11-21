@@ -19,7 +19,7 @@ from . import ast as _ast
 from .ast import Mark, _channel
 
 if TYPE_CHECKING:
-    from .ast import ChunkKey, DatumValue, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
+    from .ast import ChunkKey, DatumValue, DistAccessor, FieldAccessor, FieldPredicate, LengthValue, StructAccessor
 
 
 # --- Nested option dicts -----------------------------------------------------
@@ -33,10 +33,12 @@ _OPTION_TYPES: Dict[str, Any] = {
     "AxisOptions": ("object", {"title": ("title", None), "side": ("side", None), "label": ("label", ("ref", "AxisLabelOptions")), "levels": ("levels", ("array", ("ref", "Calendar"))), "divider": ("divider", None)}),
     "AxisLabelOptions": ("object", {"angle": ("angle", None), "align": ("align", None)}),
     "AxesOptions": ("object", {"x": ("x", ("ref", "AxisOptions")), "y": ("y", ("ref", "AxisOptions"))}),
+    "LegendOptions": ("object", {"color": ("color", None), "x": ("x", ("ref", "LengthEntryOptions")), "y": ("y", ("ref", "LengthEntryOptions"))}),
+    "LengthEntryOptions": ("object", {"title": ("title", None)}),
     "AxisInterval": ("object", {"min": ("min", None), "center": ("center", None), "max": ("max", None), "size": ("size", None), "embedded": ("embedded", None)}),
     "FieldPredicate": ("object", {"field": ("field", None), "between": ("between", None), "closed": ("closed", None)}),
     "Length": ("object", {"type": ("type", None), "percent": ("percent", None), "px": ("px", None), "fr": ("fr", None)}),
-    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", None), "padding": ("padding", None), "schema": ("schema", None)}),
+    "ChartOptions": ("object", {"w": ("w", ("ref", "Length")), "h": ("h", ("ref", "Length")), "coord": ("coord", None), "color": ("color", None), "axes": ("axes", ("ref", "AxesOptions")), "legend": ("legend", ("ref", "LegendOptions")), "padding": ("padding", None), "schema": ("schema", None)}),
     "AxisDimsValue": ("ref", "AxisInterval"),
     "Partition": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)}), "step": ("object", {"kind": ("kind", None), "size": ("size", None)}), "thresholds": ("object", {"kind": ("kind", None), "thresholds": ("thresholds", None)}), "quantiles": ("object", {"kind": ("kind", None), "quantiles": ("quantiles", None)})}),
     "StructBin": ("tagged", "kind", {"hex": ("object", {"kind": ("kind", None), "radius": ("radius", ("object", {"x": ("x", None), "y": ("y", None)}))}), "voronoi": ("object", {"kind": ("kind", None), "seeds": ("seeds", None)})}),
@@ -48,6 +50,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Calendar": ("tagged", "kind", {"second": ("object", {"kind": ("kind", None), "every": ("every", None)}), "minute": ("object", {"kind": ("kind", None), "every": ("every", None)}), "hour": ("object", {"kind": ("kind", None), "every": ("every", None)}), "day": ("object", {"kind": ("kind", None), "every": ("every", None)}), "weekday": ("object", {"kind": ("kind", None), "start": ("start", None)}), "week": ("object", {"kind": ("kind", None), "every": ("every", None), "start": ("start", None)}), "month": ("object", {"kind": ("kind", None), "every": ("every", None)}), "quarter": ("object", {"kind": ("kind", None), "every": ("every", None)}), "year": ("object", {"kind": ("kind", None), "every": ("every", None)})}),
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
     "Place": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
+    "Baseline": ("tagged", "kind", {"start": ("object", {"kind": ("kind", None)}), "end": ("object", {"kind": ("kind", None)}), "middle": ("object", {"kind": ("kind", None)}), "wiggle": ("object", {"kind": ("kind", None)}), "at": ("object", {"kind": ("kind", None), "part": ("part", None), "point": ("point", None)})}),
     "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),
 }
 
@@ -678,7 +681,7 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
@@ -688,6 +691,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -703,6 +707,7 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
@@ -715,16 +720,15 @@ def _spread_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Op
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
+def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, h: Optional[int | float | str | LengthValue] = None, size: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.
 
     Args:
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
-        glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
+        baseline: Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error. Default {"kind":"start"}.
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
@@ -736,10 +740,9 @@ def _stack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Opt
     for _k, _v in [
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
-        ("glue", glue),
         ("alignment", alignment),
         ("reverse", reverse),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("x", _channel(x)),
         ("y", _channel(y)),
@@ -898,11 +901,11 @@ def _pack_opts(*, by: Optional[str | FieldAccessor | ChunkKey] = None, spacing: 
             opts[_k] = _v
     return opts
 
-def _partition_opts(*, by: FieldAccessor | StructAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _partition_opts(*, by: FieldAccessor | StructAccessor | DistAccessor, dir: Optional[str] = None, alignment: Optional[str] = None, axes: Optional[bool | dict] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.
 
     Args:
-        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.
+        by: A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Bin.step(size), Bin.thresholds(countOrEdges), Bin.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Bin.hex({ radius })) or .bin(Bin.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, with p Bin.step, Bin.thresholds or Bin.quantiles: d.bin(p) with d a Dist family, or field(x).bin(p) where the column holds a distribution (after derive(kde(x))). Its cells are those of p over the interval its density is drawn over, Bin.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell (field(x).density(), d.density()). In a cell of a field's line, a ribbon or line through the rows over the field is the whole group's restricted to the cell too, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error.
         dir: Axis to divide: x, y, or an axis name the enclosing coordinate space declares (polar theta/r). Required with a single key, and not allowed with a key per axis.
         alignment: Alignment of the children on the other axis ("start" | "middle" | "end" | "baseline"). Applies only where nothing gives the children a cell on that axis: inside a cell of another partition, each child is placed in that cell. Not allowed with a key per axis. Default "baseline".
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -959,7 +962,7 @@ def _treemap_combinator_opts(*, x: Optional[int | float | str] = None, y: Option
             opts[_k] = _v
     return opts
 
-def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float | LengthValue | dict] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `spread`. Same fields as the operator form (OPERATORS.spread) plus `key` and the full box-dims group.
 
     Args:
@@ -980,6 +983,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        baseline: Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1003,6 +1007,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
         ("alignment", alignment),
         ("reverse", reverse),
         ("glue", glue),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("size", _channel(size)),
         ("key", key),
@@ -1012,7 +1017,7 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
             opts[_k] = _v
     return opts
 
-def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, by: Optional[str | FieldAccessor | ChunkKey] = None, dir: Optional[str] = None, alignment: Optional[str] = None, reverse: Optional[bool] = None, baseline: Optional[dict] = None, axes: Optional[bool | dict] = None, size: Optional[int | float | str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Low-level combinator form of `stack`. Same fields as the operator form (OPERATORS.stack) plus `key` and the full box-dims group.
 
     Args:
@@ -1029,10 +1034,9 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
         by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group.
         dir: Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).
-        spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
-        glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         reverse: Reverse the children's order along dir. Default false.
+        baseline: Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error. Default {"kind":"start"}.
         size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         key: Internal per-node key override.
         debug: Dev-only flag every operator accepts and currently ignores — it is dropped before layout. Use the `log` operator to print the rows at a point in the flow.
@@ -1052,10 +1056,9 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
         ("dims", _channel(_to_wire(("record", ("ref", "AxisDimsValue")), dims, "dims"))),
         ("by", by),
         ("dir", dir),
-        ("spacing", spacing),
-        ("glue", glue),
         ("alignment", alignment),
         ("reverse", reverse),
+        ("baseline", _to_wire(("ref", "Baseline"), baseline, "baseline")),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
         ("size", _channel(size)),
         ("key", key),
@@ -1099,8 +1102,8 @@ def _label_opts(*, position: Optional[str | dict] = None, avoiding: Optional[Any
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, stroke_dasharray: Optional[str] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, curve: Optional[dict] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """A path. Given `x` and `y`, the shape form: the mark owns its rows and draws one path per group through them, sorted by `x`. Without them, the connector form: the path between the centers of consecutive marks another flow placed, in bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
         fill: A line's path is never filled. `fill` is the channel the shared color scale reads: a field name or an accessor colors each line by group (it must be constant within the line), and it is the line color when `stroke` is omitted.
@@ -1109,7 +1112,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         stroke_dasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
         opacity: Opacity, 0 to 1.
         blend_mode: How connectors mix where they overlap (CSS `mix-blend-mode`). Default "normal".
-        curve: Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().
+        curve: Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.
         dir: Connection axis.
         source: Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.
         target: Anchor-mode end point; see `source`.
@@ -1120,6 +1123,8 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         w: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         h: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
+        x: Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The path runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `y`.
+        y: Shape form: each row's y, a position on the y axis. Needs `x`.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
@@ -1141,14 +1146,16 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("emY", em_y),
         ("w", _channel(w)),
         ("h", _channel(h)),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, blend_mode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[dict] = None, from_: Optional[str] = None, to: Optional[str] = None, along: Optional[str] = None, em_x: Optional[bool] = None, em_y: Optional[bool] = None, w: Optional[int | float | str] = None, h: Optional[int | float | str] = None, x: Optional[int | float | str] = None, y: Optional[int | float | str] = None, inset: Optional[float] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """A filled band. Given `x` (with `h`) or `y` (with `w`), the shape form: the mark owns its rows and draws one band per group, from its baseline to `h` at each row's `x` (or to `w` at each row's `y`), sorted by it. Without them, the connector form: a band between the facing edges of consecutive marks another flow placed (sankey ribbons, bands between bars).
 
     Args:
         fill: Fill color of the band, or a field name or accessor for a color scale (constant within the band). Omitted, the band takes the color of the marks it connects.
@@ -1157,12 +1164,15 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         opacity: Opacity, 0 to 1.
         blend_mode: How bands mix where they overlap (CSS `mix-blend-mode`). Default "normal".
         dir: Connection axis.
-        curve: Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.
+        curve: Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.
         along: Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error.
         em_x: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
         em_y: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
-        w: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
-        h: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
+        w: Shape form with `y`: the band's width at each row, an amount from its baseline (negative values extend the other way). Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.
+        h: Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.
+        x: Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`.
+        y: Shape form: each row's y, for a band that runs up the y axis. Needs `w`.
+        inset: Shape form: pixels the band is drawn in by from each end of its parameter, so the bands in the cells of a partition are drawn apart. Its values are not drawn in: the band stays on the baseline its data gives it, as a bar's data height is never inset. It changes only what is drawn: the band's box is the same. Not allowed on the connector form.
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
     """
     opts: Dict[str, Any] = {}
@@ -1181,6 +1191,9 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("emY", em_y),
         ("w", _channel(w)),
         ("h", _channel(h)),
+        ("x", _channel(x)),
+        ("y", _channel(y)),
+        ("inset", inset),
         ("debug", debug),
     ]:
         if _v is not None:
@@ -1301,7 +1314,7 @@ def _distribute_constraint_opts(*, dir: str, spacing: Optional[float | LengthVal
         dir: The axis to lay the refs out along.
         spacing: How far apart neighbors are, made by a call in the Spacing family: `Spacing.box(gap)`, a gap between facing edges, or `Spacing.pitch(distance, { at })`, a fixed distance between the same point on each ref. A bare amount is `Spacing.box(amount)`: pixels, `percent(n)` of the layer's room, or `fr(k)` shares of its scope. With `glue`, it is 0. Default 8.
         order: The order the refs are laid out in. Default "forward".
-        glue: Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis. Default false.
+        glue: Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`. Default false.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
@@ -1352,7 +1365,7 @@ def _nest_constraint_opts(*, x: Optional[float] = None, y: Optional[float] = Non
             opts[_k] = _v
     return opts
 
-def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
+def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | LengthValue] = None, coord: Optional[Any] = None, color: Optional[Any] = None, axes: Optional[bool | dict] = None, legend: Optional[bool | dict] = None, padding: Optional[float] = None, schema: Optional[dict] = None) -> Dict[str, Any]:
     """Chart-level options for chart(data, **options).
 
     Args:
@@ -1361,7 +1374,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         coord: Coordinate transform for the whole chart, made by a call in the Coord family: Coord.polar(), Coord.clock(), Coord.wavy(), ...
         color: Color scale for every mark, made by a call in the Color family: Color.palette(...) or Color.gradient(...).
         axes: Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead. Default true.
-        legend: Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped. Default true.
+        legend: Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Omitted, the color entry is drawn, and a length entry is drawn along a dimension whose axes the chart draws (`axes`): it stands in for that dimension's axis. Turned off, the marks keep their colors and sizes and only the entry is dropped.
         padding: Room in pixels between a non-linear coordinate space's drawing (a polar disc, a map) and the edge of the chart's box. It has no effect on a chart in linear coordinates. Default 30.
         schema: Column types, keyed by column name: a Unit (Unit("USD", { traits: [Trait.summable()] }), Unit({ domain: Domain.discrete(levels), traits: [Trait.ordered()] }), Unit.time() for a time), a unit's name ("km²"), or a column record { name, unit }.
     """
@@ -1372,7 +1385,7 @@ def _chart_opts(*, w: Optional[float | LengthValue] = None, h: Optional[float | 
         ("coord", coord),
         ("color", color),
         ("axes", _to_wire(("ref", "AxesOptions"), axes, "axes")),
-        ("legend", legend),
+        ("legend", _to_wire(("ref", "LegendOptions"), legend, "legend")),
         ("padding", padding),
         ("schema", schema),
     ]:

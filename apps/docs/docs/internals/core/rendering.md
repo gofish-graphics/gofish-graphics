@@ -86,8 +86,8 @@ pins the root's start edge to the frame's start, which already includes any desc
 so adding it would count it twice (#574). See
 [Underlying Space](/internals/core/underlying-space).
 
-**Chrome is ordinary content.** Axes, axis titles, the legend column and the
-colorbar are elaborated as ordinary y-down shapes, in rings around the node that
+**Chrome is ordinary content.** Axes, axis titles, the legend column (its
+length entries, swatches or colorbar) are elaborated as ordinary y-down shapes, in rings around the node that
 owns them (the root, for titles and the legend). Their seating constraints run in
 the ring's axis order like any other constraint, and the sides are chosen with the
 same `axisDirection` (a title follows its axis line; the legend tops out with the

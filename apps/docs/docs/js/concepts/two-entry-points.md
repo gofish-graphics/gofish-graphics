@@ -40,7 +40,7 @@ const fruit = [
 gf.spread(
   { dir: "x", spacing: 10, alignment: "end" },
   fruit.map((d) => gf.rect({ w: 30, h: d.count * 8, fill: "#a8b8d8" }))
-).render(root, { w: 220, h: 180 });
+).render(root);
 ```
 
 :::
@@ -64,7 +64,7 @@ const fruit = [
 gf.chart(fruit)
   .flow(gf.spread({ by: "name", dir: "x", spacing: 10 }))
   .mark(gf.rect({ w: 30, h: "count", fill: "#a8b8d8" }))
-  .render(root, { w: 260, h: 200, axes: true });
+  .render(root, { h: 200, axes: true });
 ```
 
 :::
