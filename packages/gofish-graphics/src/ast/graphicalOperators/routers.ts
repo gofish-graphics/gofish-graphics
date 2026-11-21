@@ -11,8 +11,9 @@
  * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
  * pairwise, and the *sequence* curves (step, monotone, smooth,
  * catmullRom), which thread the whole point run (`sequenceCurve`). Each
- * declares whether it draws a band edge (`Route`), the curves a ribbon takes
- * (`drawsBandEdge`). The set is closed: the kinds of the Curve family in
+ * route declares whether it draws a band edge (`Route`), and every sequence
+ * curve draws one: those are the curves a ribbon takes (`drawsBandEdge`). The
+ * set is closed: the kinds of the Curve family in
  * gofish-ir's STRATEGIES table.
  */
 import {
@@ -93,8 +94,6 @@ export type SequenceCurve = {
   /** Whether the curve is read over the run's parameter (so `connect` works
    *  one out), or is a shape on screen that ignores it. */
   takesKnots: boolean;
-  /** Whether what it draws is a band edge ({@link Route}). */
-  bandEdge: boolean;
 };
 
 /**
@@ -107,7 +106,9 @@ export type SequenceCurve = {
  * its ends and turns back along the axis (an arc) bounds no band. It is
  * asked of the curve's options, since they can decide it: an elbow is a band
  * edge when it bends on the connection axis, and not when each edge picks
- * its own axis (`bend: "auto"`), as a band's two edges then disagree.
+ * its own axis (`bend: "auto"`). For a band, the two edges must also route
+ * the same way, which is why that elbow is not a band edge even though each
+ * edge alone is a function of the axis.
  */
 type Route = {
   router: Router;
@@ -147,10 +148,11 @@ export function sequenceCurve(
 /** The names of the registered sequence curves. */
 export const sequenceCurveNames = (): string[] => [...sequenceCurves.keys()];
 
-/** Whether `curve` draws a band edge (`Route`), so a ribbon can take it. */
+/** Whether `curve` draws a band edge (`Route`), so a ribbon can take it.
+ *  Every sequence curve does: it threads a run whose points go on along the
+ *  connection axis. */
 export const drawsBandEdge = ({ kind, ...options }: Curve): boolean =>
-  routes.get(kind)?.bandEdge(options) ??
-  sequenceCurves.get(kind)?.bandEdge === true;
+  routes.get(kind)?.bandEdge(options) ?? sequenceCurves.has(kind);
 
 /** The names of the curves that draw a band edge with their default
  *  options, routes first. */
@@ -329,18 +331,15 @@ routes.set("perfectArrows", {
 sequenceCurves.set("step", {
   thread: (points, { parameterAxis }) => stepPath(points, parameterAxis),
   takesKnots: true,
-  bandEdge: true,
 });
 for (const smooth of SMOOTH_CURVES) {
   sequenceCurves.set(smooth, {
     thread: (points, { knots }) =>
       threadPath(points, knots ?? centripetalKnots(points), smooth),
     takesKnots: true,
-    bandEdge: true,
   });
 }
 sequenceCurves.set("catmullRom", {
   thread: (points) => catmullRomPath(points).map((seg) => evenStep([seg])),
   takesKnots: false,
-  bandEdge: true,
 });

@@ -1,7 +1,8 @@
 /**
  * The connector form of `line` and `ribbon` (`graphicalOperators/connect.tsx`):
  * an anchored line is routed by its curve between its anchor points, and is
- * straight when it has none; a ribbon takes only a curve that draws a band
+ * straight when it has none; a sequence curve given one end threads that
+ * end's point on each mark; a ribbon takes only a curve that draws a band
  * edge (`drawsBandEdge` in `routers.ts`).
  * Run: `tsx src/tests/connector.test.ts` (wired into `pnpm test` as
  * `test:connector`).
@@ -148,6 +149,42 @@ async function main() {
         close([c[4], c[5]], to) &&
         close([c[0], c[1]], [midX, from[1]]) &&
         close([c[2], c[3]], [midX, to[1]]),
+      paths.map((p) => p.d)
+    );
+  }
+
+  console.log("\n# a sequence curve with one end given threads that end");
+  {
+    // An omitted `target` is the `source` point itself on each mark, so the
+    // curve's knots are the marks' source points.
+    const node = layer([
+      rect({ x: 0, y: 0, w: 40, h: 40, fill: "#ccc" }).name("a"),
+      rect({ x: 100, y: 80, w: 40, h: 40, fill: "#ccc" }).name("b"),
+      rect({ x: 200, y: 20, w: 40, h: 40, fill: "#ccc" }).name("c"),
+    ]).relate(({ a, b, c }: any) => [
+      line(
+        {
+          source: ["end", "middle"],
+          stroke: "black",
+          curve: Curve.monotone(),
+        },
+        [a, b, c]
+      ),
+    ]);
+    const { rects, paths } = await drawn(node);
+    const sorted = [...rects].sort((r, s) => r.x - s.x);
+    const sourceOf = (r: any): Point => [r.x + r.w, r.y + r.h / 2];
+    const cmds = paths.length === 1 ? commands(paths[0].d) : [];
+    const last = cmds[cmds.length - 1]?.args ?? [];
+    check(
+      "the path starts at the first mark's source and ends at the last's",
+      cmds.length > 1 &&
+        cmds[0].op === "M" &&
+        close(cmds[0].args as Point, sourceOf(sorted[0])) &&
+        close(
+          [last[last.length - 2], last[last.length - 1]],
+          sourceOf(sorted[2])
+        ),
       paths.map((p) => p.d)
     );
   }

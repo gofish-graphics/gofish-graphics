@@ -517,16 +517,21 @@ allows: the box's nearest point to a point, or the whole box, which the
 curve's route reads, when both ends are omitted. A point is a box of zero size,
 so a route reads an anchored end the same way. `line` is one open edge, from
 `source` to `target` when they are given. Its curve routes the edge between
-them, and an anchored line with no curve is straight: the omitted curve
-smooths only a line through its marks' centers, which it reads as samples of
-one continuous variable. `ribbon` is two edges, from the far face of each
+them, and an anchored line with no curve is straight, a default of `line` for
+node-link edges and ropes: the omitted curve smooths only a line through its
+marks' centers. A sequence curve threads each edge through one knot per
+operand, midway between where the edge enters it (`target`) and leaves it
+(`source`), so a line given only `source` threads each mark's `source` point.
+The connector itself has no default discrete curve: `line` passes a straight
+one and `ribbon` a bezier. `ribbon` is two edges, from the far face of each
 operand to the near face of the next along `dir`, closed into a filled region.
 A ribbon's curve must draw a _band edge_, a path that goes on along the
 connection axis from one end to the other, as each edge of the shape form's
 band is a function of its parameter. Each curve declares whether it does where
-it is registered (`bandEdge` in `routers.ts`): every sequence curve, `linear`,
-`bezier` and `orthogonal` do, and `arc` and `perfectArrows`, which bow away
-from the chord and turn back, do not, so `ribbon` throws on them.
+it is registered (`bandEdge` on each route in `routers.ts`): every sequence
+curve, `linear`, `bezier` and `orthogonal` do, and `arc` and `perfectArrows`,
+which bow away from the chord and turn back, do not, so `ribbon` throws on
+them.
 
 `createRelationalMark` dispatches on the shape of its arguments into four call
 forms:

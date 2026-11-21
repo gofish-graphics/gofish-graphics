@@ -21,7 +21,7 @@ import {
   roleFor,
 } from "../displayList/lowerHelpers";
 import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
-import { pairs } from "../../util";
+import { clamp, pairs } from "../../util";
 import {
   type BoundingBox,
   bbox,
@@ -47,11 +47,7 @@ import {
   curveName,
   type RunParameter,
 } from "./routers";
-import {
-  linear as linearCurve,
-  monotone,
-  type Curve,
-} from "../../families/curve";
+import { monotone, type Curve } from "../../families/curve";
 import { targetOf } from "../constraints/relationalPaint";
 import { readLive } from "../../interaction/live";
 import { setLiveSlots } from "../../interaction/liveSlots";
@@ -202,72 +198,90 @@ const boxDims = (box: BoundingBox): Size<{ min: number; size: number }> =>
  */
 export type ConnectEdge = { source?: AnchorSpec; target?: AnchorSpec };
 
+type Point = [number, number];
+
+/** An edge's ends as fractions of its operands' boxes (`resolveAnchor`). */
+type EdgeAnchors = { source?: Point; target?: Point };
+
 /** Where one end of an edge meets an operand in one pair: a box the route
- *  reads, and the point the end is at (a point attachment is a box of zero
- *  size, so a route reads the point). */
-type Attachment = { box: Dimensions; at: [number, number] };
+ *  reads, at its center. A point attachment is a box of zero size at the
+ *  point, so a route reads the point. */
+type Attachment = Dimensions;
 
 /** The coordinate at fraction `f` of a box axis: `min + f · size`, and at
- *  `f = 1` the axis's own `max`. The far end is read, not re-derived: a box
- *  seen through a reflected y (`reflectInterval`) has `min = −max′`, and
- *  `min + size` then differs from its `max` in the last bit. */
+ *  `f = 1` the axis's own `max`. Reading `max` there is a declared shortcut
+ *  for a broken invariant upstream: `reflectInterval` (`axisDirection.ts`)
+ *  flips `min` and `max` and keeps `size`, so on a box seen through a
+ *  reflected y, `min + size` differs from its `max` in the last bit.
+ *  TODO: restore the invariant `min + size === max` in `reflectInterval`,
+ *  and read `min + f · size` at every `f`. */
 const fractionOf = (d: Dimensions[number], f: number): number =>
   f === 1 ? d.max! : d.min! + f * d.size!;
 
 /** The point at fractions `f` of a box. */
-const pointOn = (b: Dimensions, f: [number, number]): [number, number] => [
+const pointOn = (b: Dimensions, f: Point): Point => [
   fractionOf(b[0], f[0]),
   fractionOf(b[1], f[1]),
 ];
 
-const clamp = (v: number, lo: number, hi: number): number =>
-  Math.max(lo, Math.min(hi, v));
-
 /** The point of `onto` nearest `p`, per axis. */
-const clampOnto = (p: [number, number], onto: Dimensions): [number, number] => [
+const clampOnto = (p: Point, onto: Dimensions): Point => [
   clamp(p[0], onto[0].min!, onto[0].max!),
   clamp(p[1], onto[1].min!, onto[1].max!),
 ];
 
-/** A point as an attachment: a box of zero size at it. */
-const atPoint = (p: [number, number]): Attachment => ({
-  box: [
-    { min: p[0], center: p[0], max: p[0], size: 0 },
-    { min: p[1], center: p[1], max: p[1], size: 0 },
-  ],
-  at: p,
-});
+/** Where an edge meets the two operands of a pair, `b0` then `b1`: the
+ *  point each end is at, or undefined for an end that meets the whole box
+ *  (`ConnectEdge`). */
+const endsOf = (
+  b0: Dimensions,
+  b1: Dimensions,
+  { source, target }: EdgeAnchors
+): [Point | undefined, Point | undefined] => {
+  const p0 = source && pointOn(b0, source);
+  const p1 = target && pointOn(b1, target);
+  return [p0 ?? (p1 && clampOnto(p1, b0)), p1 ?? (p0 && clampOnto(p0, b1))];
+};
 
-/** A whole box as an attachment, at its center. */
-const atBox = (b: Dimensions): Attachment => ({ box: b, at: centerPoint(b) });
+/** A point as an attachment: a box of zero size at it. */
+const atPoint = (p: Point): Attachment => [
+  { min: p[0], center: p[0], max: p[0], size: 0 },
+  { min: p[1], center: p[1], max: p[1], size: 0 },
+];
 
 /** Whether an edge entering an operand where `a` is leaves it where `b` is,
  *  so the paths on either side meet: the same whole box, or the same point
  *  to within rounding (an operand with no extent between the two points, as
  *  an area's zero-width points are). */
 const EPS = 1e-6;
-const samePlace = (a: Attachment, b: Attachment): boolean =>
-  a.box === b.box ||
-  (a.box[0].size === 0 &&
-    b.box[0].size === 0 &&
-    a.box[1].size === 0 &&
-    b.box[1].size === 0 &&
-    Math.abs(a.at[0] - b.at[0]) < EPS &&
-    Math.abs(a.at[1] - b.at[1]) < EPS);
+const samePlace = (a: Attachment, b: Attachment): boolean => {
+  if (a === b) return true;
+  if (a.some((d) => d.size !== 0) || b.some((d) => d.size !== 0)) {
+    return false;
+  }
+  const [p, q] = [centerPoint(a), centerPoint(b)];
+  return Math.abs(p[0] - q[0]) < EPS && Math.abs(p[1] - q[1]) < EPS;
+};
 
-/** Two edges joined into one closed region: the first forward, across at
- *  the last operand, the second back, and across at the first. */
-const ring = (
-  first: Path,
-  second: Path,
-  start: [[number, number], [number, number]],
-  end: [[number, number], [number, number]]
-): Path => [
-  ...first,
-  { type: "line", points: [end[0], end[1]] },
-  ...reversePath(second),
-  { type: "line", points: [start[1], start[0]] },
-];
+/** What a connector draws from its edges' paths, given each edge's own
+ *  start and end: open, the paths themselves; closed, the one region
+ *  between its two edges, the first forward, across at the last operand,
+ *  the second back, and across at the first. */
+const drawEdges = (
+  paths: Path[],
+  ends: [Point, Point][],
+  closed: boolean
+): Path[] =>
+  closed
+    ? [
+        [
+          ...paths[0],
+          { type: "line", points: [ends[0][1], ends[1][1]] },
+          ...reversePath(paths[1]),
+          { type: "line", points: [ends[1][0], ends[0][0]] },
+        ],
+      ]
+    : paths;
 
 export const connect = createNodeOperator(
   (
@@ -277,7 +291,7 @@ export const connect = createNodeOperator(
       direction,
       fill,
       curve,
-      discreteCurve = linearCurve(),
+      discreteCurve,
       stroke,
       strokeWidth,
       strokeDasharray,
@@ -306,7 +320,10 @@ export const connect = createNodeOperator(
       // monotone cubic over a continuous connection axis, else
       // `discreteCurve`.
       curve?: Curve;
-      discreteCurve?: Curve;
+      // The curve an omitted `curve` draws between discrete operands. Each
+      // connector mark gives its own (straight for a line, a bezier for a
+      // ribbon).
+      discreteCurve: Curve;
       stroke?: MaybeValue<string>;
       strokeWidth?: number;
       strokeDasharray?: string;
@@ -337,15 +354,17 @@ export const connect = createNodeOperator(
         `[gofish] connect: a closed connector is the region between two ` +
           `edges, but it was given ${edges.length}.`
       );
-    const anchors = edges.map((e) => ({
-      source: e.source === undefined ? undefined : resolveAnchor(e.source),
-      target: e.target === undefined ? undefined : resolveAnchor(e.target),
-    }));
+    const anchors = edges.map(
+      (e): EdgeAnchors => ({
+        source: e.source === undefined ? undefined : resolveAnchor(e.source),
+        target: e.target === undefined ? undefined : resolveAnchor(e.target),
+      })
+    );
     // An operand the edges meet at two places across the connection axis is
     // a cross-section of what they draw (each operand of a ribbon spans the
     // band from its near side to its far side). It is embedded on the
     // connection axis, and its box is part of the connector's.
-    const spans = (ends: ([number, number] | undefined)[]): boolean =>
+    const spans = (ends: (Point | undefined)[]): boolean =>
       new Set(ends.flatMap((f) => (f === undefined ? [] : [f[crossAxis]])))
         .size > 1;
     const crossSections =
@@ -432,7 +451,8 @@ export const connect = createNodeOperator(
           const pinned = anchors.some(
             (a) => a.source !== undefined || a.target !== undefined
           );
-          if (threadsTime && (closed || edges.length !== 1 || pinned)) {
+          // (A closed connector has two edges, so `edges.length` covers it.)
+          if (threadsTime && (edges.length !== 1 || pinned)) {
             throw new Error(
               `[gofish] line/ribbon(): this connector threads the keyframes ` +
                 `of a time.sequence, so it is drawn only over the stretch of ` +
@@ -551,33 +571,18 @@ export const connect = createNodeOperator(
                 : discreteCurve;
           const resolvedCurveName = resolvedCurve.kind;
 
-          // Where each edge meets the two operands of each pair.
-          const attachments: [Attachment, Attachment][][] = bboxPairs.map(
-            ([b0, b1]) =>
-              anchors.map(({ source, target }) => {
-                const p0 = source && pointOn(b0, source);
-                const p1 = target && pointOn(b1, target);
-                const s = p0 ?? (p1 && clampOnto(p1, b0));
-                const t = p1 ?? (p0 && clampOnto(p0, b1));
-                return [
-                  s === undefined ? atBox(b0) : atPoint(s),
-                  t === undefined ? atBox(b1) : atPoint(t),
-                ];
-              })
-          );
+          const centers = childPlaceables.map((c) => centerPoint(c.dims));
 
-          // The box starts from where the edges meet the operands, and
-          // holds every operand that is a cross-section whole. Each endpoint
-          // counts once: the operands the run's pairs join (a run of one
-          // point joins none), however many points each stands at.
+          // The box holds where the edges meet the operands, added by each
+          // branch below for each pair of the run (a run of one point joins
+          // none), and every operand that is a cross-section whole.
           let box = empty();
-          for (const pair of attachments) {
-            for (const ends of pair) {
-              for (const { at } of ends) {
-                box = union(box, bbox(at[0], at[0], at[1], at[1]));
-              }
-            }
-          }
+          const addPoint = (p: Point) => {
+            box = union(box, bbox(p[0], p[0], p[1], p[1]));
+          };
+          // The geometry needs only the attachment points and the path; a
+          // cross-section's whole box is included to keep the connector's
+          // box what it was (layout compatibility).
           if (crossSections && bboxPairs.length > 0) {
             for (const { dims: b } of new Set(childPlaceables)) {
               box = union(
@@ -592,22 +597,32 @@ export const connect = createNodeOperator(
           const drawn: Path[] = [];
           /** Each edge's path, one step from each point to the next: one
            *  segment, or for a sequence curve the segments that draw one
-           *  step, with their shares of its time (`SequenceCurve.thread`). */
-          let steps: Step[][] = anchors.map(() => []);
+           *  step, with their shares of its time (`SequenceCurve.thread`).
+           *  After the branch below, read only by the time cut. */
+          let steps: Step[][];
 
           // A *sequence* curve (`monotone`, `smooth`, `step`, `catmullRom`)
           // threads each edge through the whole run as one spline, one knot
-          // per operand, bypassing the pairwise routes. An edge's knot on an
-          // operand is midway between where it enters the operand and where
-          // it leaves it: an operand's center for an edge that meets the
-          // whole operand (a line), the middle of each side of the band for
-          // a ribbon. So a continuous stacked area curves like its line-chart
-          // sibling.
+          // per operand, bypassing the pairwise routes. An edge enters an
+          // operand at its `target` point and leaves it at its `source`
+          // point, and its knot there is midway between the two. An omitted
+          // end attaches as near the other end as the box allows, which on
+          // the same operand is the other end's own point; with neither
+          // given, both are the operand's center. So a line through its
+          // marks' centers threads the centers, a line given only `source`
+          // threads each mark's `source` point, and a ribbon threads the
+          // middle of each side of the band, so a continuous stacked area
+          // curves like its line-chart sibling.
           const sequence = sequenceCurve(resolvedCurveName);
           if (sequence !== undefined) {
-            const mains = childPlaceables.map(
-              (c) => centerPoint(c.dims)[mainAxis]
-            );
+            for (const [i, [b0, b1]] of bboxPairs.entries()) {
+              for (const a of anchors) {
+                const [s, t] = endsOf(b0, b1, a);
+                addPoint(s ?? centers[i]);
+                addPoint(t ?? centers[i + 1]);
+              }
+            }
+            const mains = centers.map((c) => c[mainAxis]);
             // A curve read over the run's parameter (a data-space curve)
             // takes the run's own parameter when it has one (#635), so the
             // curve follows the data rather than the distances between its
@@ -662,59 +677,57 @@ export const connect = createNodeOperator(
             const parameter: RunParameter = sequence.takesKnots
               ? (dataKnots() ?? {})
               : {};
-            const knotsOf = (a: (typeof anchors)[number]) =>
-              childPlaceables.map(({ dims: b }): [number, number] => {
-                if (a.source === undefined && a.target === undefined) {
-                  return centerPoint(b);
-                }
-                if (a.source === undefined || a.target === undefined) {
-                  // Only a line can get here: a ribbon gives both ends.
-                  const given = a.source === undefined ? "target" : "source";
-                  const missing = given === "source" ? "target" : "source";
-                  throw new Error(
-                    `[gofish] line({ ${given}, curve: Curve.${resolvedCurveName}() }): ` +
-                      `Curve.${resolvedCurveName}() threads one curve through ` +
-                      `a point on each mark, the point midway between where ` +
-                      `the line enters the mark (target) and where it leaves ` +
-                      `it (source). With only \`${given}\` given, that point ` +
-                      `is not known. Give \`${missing}\` too, or use a curve ` +
-                      `that routes each pair of marks on its own, such as ` +
-                      `Curve.linear() or Curve.bezier().`
-                  );
-                }
-                const enter = pointOn(b, a.target);
-                const leave = pointOn(b, a.source);
+            const knotsOf = (a: EdgeAnchors) =>
+              childPlaceables.map(({ dims: b }, j): Point => {
+                const at = (f: Point | undefined): Point =>
+                  f === undefined ? centers[j] : pointOn(b, f);
+                const enter = at(a.target ?? a.source);
+                const leave = at(a.source ?? a.target);
                 return [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2];
               });
             const knots = anchors.map(knotsOf);
             steps = knots.map((k) => sequence.thread(k, parameter));
-            const paths = steps.map((s) => s.flatMap((step) => step.segments));
-            if (closed) {
-              const [near, far] = knots;
-              drawn.push(
-                ring(
-                  paths[0],
-                  paths[1],
-                  [near[0], far[0]],
-                  [near[near.length - 1], far[far.length - 1]]
-                )
-              );
-            } else {
-              drawn.push(...paths);
-            }
+            drawn.push(
+              ...drawEdges(
+                steps.map((s) => s.flatMap((step) => step.segments)),
+                knots.map((k): [Point, Point] => [k[0], k[k.length - 1]]),
+                closed
+              )
+            );
           } else {
+            // Where each edge meets the two operands of each pair.
+            const attachments: [Attachment, Attachment][][] = bboxPairs.map(
+              ([b0, b1]) =>
+                anchors.map((a): [Attachment, Attachment] => {
+                  const [s, t] = endsOf(b0, b1, a);
+                  return [
+                    s === undefined ? b0 : atPoint(s),
+                    t === undefined ? b1 : atPoint(t),
+                  ];
+                })
+            );
+            for (const pair of attachments) {
+              for (const ends of pair) {
+                for (const end of ends) addPoint(centerPoint(end));
+              }
+            }
+
             // A route shapes each edge of each pair between the two ends it
             // is given.
             const { router, options: routeOpts } = resolveCurve(resolvedCurve);
             const routed: Path[][] = anchors.map((_, e) =>
               attachments.map((pair) =>
-                router(pair[e][0].box, pair[e][1].box, {
+                router(pair[e][0], pair[e][1], {
                   dir: mainAxis,
                   opts: routeOpts,
                 })
               )
             );
-            steps = routed.map((paths) => paths.map(evenStep));
+            // The time cut above leaves one open edge here.
+            steps =
+              timeKnots === undefined
+                ? []
+                : routed.map((paths) => paths.map(evenStep));
 
             // Consecutive pairs whose edges meet at the operand between them
             // are drawn as one path (#520). Each pair was routed on its own,
@@ -733,18 +746,16 @@ export const connect = createNodeOperator(
             let from = 0;
             for (let i = 0; i < attachments.length; i++) {
               if (i < attachments.length - 1 && meets(i)) continue;
-              const paths = routed.map((p) => p.slice(from, i + 1).flat());
-              if (closed) {
-                const [near, far] = [0, 1].map((e) => [
-                  attachments[from][e][0].at,
-                  attachments[i][e][1].at,
-                ]);
-                drawn.push(
-                  ring(paths[0], paths[1], [near[0], far[0]], [near[1], far[1]])
-                );
-              } else {
-                drawn.push(...paths);
-              }
+              drawn.push(
+                ...drawEdges(
+                  routed.map((p) => p.slice(from, i + 1).flat()),
+                  anchors.map((_, e): [Point, Point] => [
+                    centerPoint(attachments[from][e][0]),
+                    centerPoint(attachments[i][e][1]),
+                  ]),
+                  closed
+                )
+              );
               from = i + 1;
             }
           }
@@ -759,7 +770,6 @@ export const connect = createNodeOperator(
           // above leaves one open edge.)
           let timeRun: TimeRun | undefined;
           if (timeKnots !== undefined) {
-            const centers = childPlaceables.map((c) => centerPoint(c.dims));
             const ends = (seg: Path[number]): [number, number][] =>
               seg.type === "line" ? seg.points : [seg.start, seg.end];
             const threads = steps[0].every(({ segments }, i) => {

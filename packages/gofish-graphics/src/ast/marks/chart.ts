@@ -1264,9 +1264,11 @@ const lineConnector = createRelationalMark<LineOptions>(
         // Omitted, the curve of a line through its marks' centers is "auto":
         // connect smooths it (monotone) when the marks share a continuous
         // connection axis, else draws it straight. An anchored line's
-        // (`source`/`target`) is straight: the smoothing reads the operands'
-        // centers as samples of one continuous variable, and an edge pinned
-        // to points on its operands is not that.
+        // (`source`/`target`) is straight. That is a default of `line`, not
+        // of the connector model: anchors are used for node-link edges and
+        // ropes, where a straight segment is what is meant.
+        // TODO: decide whether an anchored line over a continuous axis
+        // should smooth, as a ribbon's edges (also anchored) do.
         curve:
           o.curve ??
           (o.source !== undefined || o.target !== undefined
