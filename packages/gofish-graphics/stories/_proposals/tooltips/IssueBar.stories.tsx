@@ -93,8 +93,8 @@ export const Closed: StoryObj = {
  *  the proposal page's demo bundle (proposals/tooltips/demo). */
 export function mountInteractive(container: HTMLElement) {
   noPointer(container);
-  // The focus is the nearest bar inside the bars' hull, by the pointer's row.
-  snapToNearest(container, drawnMarks(BARS, pathTypes.length), { radius: 8, axis: "y" });
+  // A bar's position is its `spread` slot in y; in x it only has a length.
+  snapToNearest(container, drawnMarks(BARS, pathTypes.length, { position: ["y"] }), { radius: 8 });
   const p = pointer();
   const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.path));
   return issueBar(

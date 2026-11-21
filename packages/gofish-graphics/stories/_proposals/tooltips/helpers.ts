@@ -267,25 +267,36 @@ export function noPointer(container: HTMLElement) {
   }
 }
 
-/* ------------------------- nearest in the hull --------------------------- */
+/* ------------------------------ the focus -------------------------------- */
 
 /** A box in svg px, the space of `pointer().pos()`. */
 export type Box = { x0: number; y0: number; x1: number; y1: number };
-/** A mark, or a group of marks (a stack), the focus can land on: its drawn
- *  box, and the SVG elements it is drawn as, each with its own box. */
-export type Item = { box: Box; parts: { el: Element; box: Box }[] };
 type Pt = { x: number; y: number };
+/** One SVG element of a mark: its drawn box, and whether it is a dot (an
+ *  ellipse, hit within its circle) or a box. */
+export type Part = { el: Element; box: Box; dot: boolean };
+/**
+ * A mark, or a group of marks (a stack), the focus can land on: the elements
+ * it is drawn as, and its placed POSITION, one point. Along an axis that
+ * places the mark (a `spread` slot, a `stack` place, a scatter's `x`/`y`) the
+ * point is the mark's center. An axis where the mark only has a size from
+ * a shared baseline (a bar's length) is left out, so it drops out of the
+ * distance.
+ */
+export type Item = { parts: Part[]; at: { x?: number; y?: number } };
+export type Axis = "x" | "y";
 
-const gap = (v: number, lo: number, hi: number) => Math.max(lo - v, 0, v - hi);
-/** Distance from a point to a box, zero inside it. */
-export const boxDistance = (p: Pt, b: Box) =>
-  Math.hypot(gap(p.x, b.x0, b.x1), gap(p.y, b.y0, b.y1));
+const center = (b: Box): Pt => ({ x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 });
+const contains = (p: Pt, { box: b, dot }: Part) => {
+  if (!dot) return p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1;
+  const c = center(b);
+  return Math.hypot(p.x - c.x, p.y - c.y) <= (b.x1 - b.x0) / 2;
+};
 
-/** The convex hull of the items' box corners (Andrew's monotone chain),
- *  counterclockwise in y-down px. */
-function hullOf(items: { box: Box }[]): Pt[] {
-  const pts = items
-    .flatMap(({ box: b }) => [
+/** The convex hull of the boxes' corners (Andrew's monotone chain). */
+function hullOf(boxes: Box[]): Pt[] {
+  const pts = boxes
+    .flatMap((b) => [
       { x: b.x0, y: b.y0 },
       { x: b.x1, y: b.y0 },
       { x: b.x0, y: b.y1 },
@@ -305,51 +316,62 @@ function hullOf(items: { box: Box }[]): Pt[] {
   return [...half(pts), ...half([...pts].reverse())];
 }
 
-function inHull(p: Pt, hull: Pt[]) {
-  if (hull.length < 3) return false;
+/** Distance from a point to a convex polygon, zero inside it. */
+export function hullDistance(p: Pt, hull: Pt[]) {
+  let inside = hull.length >= 3;
+  let d = Infinity;
   for (let i = 0; i < hull.length; i++) {
     const a = hull[i];
     const b = hull[(i + 1) % hull.length];
-    if ((b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x) < 0) return false;
+    const [vx, vy] = [b.x - a.x, b.y - a.y];
+    if (vx * (p.y - a.y) - vy * (p.x - a.x) < 0) inside = false;
+    const len2 = vx * vx + vy * vy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
+    d = Math.min(d, Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy));
   }
-  return true;
+  return inside ? 0 : d;
 }
 
-const hulls = new WeakMap<object, Pt[]>();
+export type FocusOptions = {
+  /** How far outside the drawn marks' hull a focus starts, in px. It is kept
+   *  out to `radius + 4` (hysteresis, Dragology's `whenFar`). */
+  radius: number;
+  /** The current focus's head start when comparing positions, in px
+   *  (Dragology's `closest` stickiness). */
+  stickiness?: number;
+};
 
 /**
- * The focus rule. Inside the convex hull of the items, the focus is the
- * nearest item, with no distance limit, so a gap between two bars picks the
- * nearer bar. Outside the hull, it is the nearest item within `radius` px, or
- * nothing. The distance is to the item's drawn box, zero inside it. The idea
- * is the declarative dragging criterion (#1294): the nearest reachable state
- * inside the hull of the states.
+ * The focus rule. Returns the index of the focused item, or undefined.
  *
- * `axis` measures the distance inside the hull along that axis only, ties
- * broken by the full distance: for a banded layout (bars spread in y), the
- * pointer's row decides, not the nearest end of a longer bar.
+ *  1. A pointer inside a mark's drawn box (inside a dot's circle) picks it.
+ *  2. Otherwise the focus is the item nearest BY POSITION (`Item.at`), its
+ *     size ignored, the current focus with a head start of `stickiness` px.
+ *  3. Rule 2 applies while the pointer is within `radius` px of the convex
+ *     hull of the drawn marks, and once there is a focus, within
+ *     `radius + 4` px. Farther out there is no focus.
+ *
+ * This is Declarative Dragging's (#1294) `closest` over one point per state,
+ * with a mark's placed position as its point, `whenFar` for the hull, and
+ * the direct hit, which dragging does not need.
  */
-export function nearestInHull<I extends { box: Box }>(
+export function focusAt(
   p: Pt,
-  items: I[],
-  { radius, axis }: { radius: number; axis?: "x" | "y" }
-): I | undefined {
-  if (items.length === 0) return undefined;
-  let hull = hulls.get(items);
-  if (!hull) hulls.set(items, (hull = hullOf(items)));
-  const inside = inHull(p, hull);
-  const along = (b: Box) =>
-    axis === "x" ? gap(p.x, b.x0, b.x1) : axis === "y" ? gap(p.y, b.y0, b.y1) : 0;
-  let best: I | undefined;
-  let bestKey: [number, number] = [Infinity, Infinity];
-  for (const it of items) {
-    const key: [number, number] = [inside ? along(it.box) : 0, boxDistance(p, it.box)];
-    if (key[0] < bestKey[0] || (key[0] === bestKey[0] && key[1] < bestKey[1])) {
-      best = it;
-      bestKey = key;
-    }
-  }
-  return inside || bestKey[1] <= radius ? best : undefined;
+  items: Item[],
+  hull: Pt[],
+  current: number | undefined,
+  { radius, stickiness = 4 }: FocusOptions
+): number | undefined {
+  const hit = items.findIndex((it) => it.parts.some((part) => contains(p, part)));
+  if (hit >= 0) return hit;
+  if (hullDistance(p, hull) > radius + (current === undefined ? 0 : 4)) return undefined;
+  let best: number | undefined;
+  let bestD = Infinity;
+  items.forEach((it, i) => {
+    const d = Math.hypot(p.x - (it.at.x ?? p.x), p.y - (it.at.y ?? p.y)) - (i === current ? stickiness : 0);
+    if (d < bestD) [best, bestD] = [i, d];
+  });
+  return best;
 }
 
 /** An element's drawn box in svg px. */
@@ -360,34 +382,55 @@ function drawnBox(el: Element, inv: DOMMatrix): Box {
   return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
 }
 
+export type Drawn = { items: Item[]; hull: Pt[] };
+
 /**
  * The items, read off the drawn chart: the first `count` elements `selector`
  * picks (the marks are painted first, before the tooltip layer, the axes and
  * the legend), one item each, or grouped by `groupBy` of their box into one
- * item per group, whose box is the union of its parts.
+ * item per group. `position` names the axes that place the mark (see
+ * `Item`); a group's point is the center of its union box on those axes.
+ * The hull is over the parts' boxes, plus the first `hull.count` elements
+ * `hull.selector` picks, for marks drawn but not focusable (the lines).
  */
-export function drawnMarks(selector: string, count: number, groupBy?: (b: Box) => number) {
-  return (svg: SVGSVGElement, inv: DOMMatrix): Item[] => {
-    const parts = [...svg.querySelectorAll(selector)]
+export function drawnMarks(
+  selector: string,
+  count: number,
+  {
+    position,
+    groupBy,
+    hull,
+  }: {
+    position: Axis[];
+    groupBy?: (b: Box) => number;
+    hull?: { selector: string; count: number };
+  }
+) {
+  return (svg: SVGSVGElement, inv: DOMMatrix): Drawn => {
+    const parts: Part[] = [...svg.querySelectorAll(selector)]
       .slice(0, count)
-      .map((el) => ({ el, box: drawnBox(el, inv) }));
-    if (!groupBy) return parts.map((p) => ({ box: p.box, parts: [p] }));
-    const groups = new Map<number, Item>();
-    for (const p of parts) {
-      const k = groupBy(p.box);
-      const g = groups.get(k);
-      if (!g) groups.set(k, { box: { ...p.box }, parts: [p] });
-      else {
-        g.parts.push(p);
-        g.box = {
-          x0: Math.min(g.box.x0, p.box.x0),
-          y0: Math.min(g.box.y0, p.box.y0),
-          x1: Math.max(g.box.x1, p.box.x1),
-          y1: Math.max(g.box.y1, p.box.y1),
-        };
-      }
-    }
-    return [...groups.values()];
+      .map((el) => ({ el, box: drawnBox(el, inv), dot: el.tagName === "ellipse" }));
+    const groups = new Map<number, Part[]>();
+    parts.forEach((part, i) => {
+      const k = groupBy ? groupBy(part.box) : i;
+      groups.set(k, [...(groups.get(k) ?? []), part]);
+    });
+    const items = [...groups.values()].map((ps): Item => {
+      const c = center({
+        x0: Math.min(...ps.map((q) => q.box.x0)),
+        y0: Math.min(...ps.map((q) => q.box.y0)),
+        x1: Math.max(...ps.map((q) => q.box.x1)),
+        y1: Math.max(...ps.map((q) => q.box.y1)),
+      });
+      return {
+        parts: ps,
+        at: { x: position.includes("x") ? c.x : undefined, y: position.includes("y") ? c.y : undefined },
+      };
+    });
+    const extra = hull
+      ? [...svg.querySelectorAll(hull.selector)].slice(0, hull.count).map((el) => drawnBox(el, inv))
+      : [];
+    return { items, hull: hullOf([...parts.map((q) => q.box), ...extra]) };
   };
 }
 
@@ -400,31 +443,33 @@ export const column = (b: Box) => Math.round((b.x0 + b.x1) / 2);
 /**
  * PRIVATE HOOK (3), story-side: the runtime's hit-test is "the mark under
  * the pointer". This re-targets each real `pointermove` and `pointerdown`
- * on the chart to the mark `nearestInHull` picks (to the `<svg>` itself when
- * it picks nothing), by stopping the event and dispatching a copy at the same
- * client position on that mark's element. So `pointer().datum()` is the
- * nearest mark's datum and `pointer().pos()` is still the real position, and
+ * on the chart to the item `focusAt` picks (to the `<svg>` itself when it
+ * picks nothing), by stopping the event and dispatching a copy at the same
+ * client position on that item's element. So `pointer().datum()` is the
+ * focused mark's datum and `pointer().pos()` is still the real position, and
  * nothing else in the stories changes. In the library this rule is the
- * runtime's hit-test. Items are read once per drawn `<svg>`.
+ * runtime's hit-test. Items are read once per drawn `<svg>`; the current
+ * focus is kept by index, since every re-render draws the marks in the same
+ * order.
  */
 export function snapToNearest(
   container: HTMLElement,
-  items: (svg: SVGSVGElement, inv: DOMMatrix) => Item[],
-  opts: { radius: number; axis?: "x" | "y" }
+  read: (svg: SVGSVGElement, inv: DOMMatrix) => Drawn,
+  opts: FocusOptions
 ) {
-  let drawn: { svg: SVGSVGElement; items: Item[] } | undefined;
+  let drawn: (Drawn & { svg: SVGSVGElement }) | undefined;
+  let current: number | undefined;
   const retarget = (e: PointerEvent) => {
     if (!e.isTrusted) return;
     const svg = container.querySelector("svg");
     const ctm = svg?.getScreenCTM();
     if (!svg || !ctm || !svg.contains(e.target as Node)) return;
     const inv = ctm.inverse();
-    if (drawn?.svg !== svg) drawn = { svg, items: items(svg, inv) };
+    if (drawn?.svg !== svg) drawn = { svg, ...read(svg, inv) };
     const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(inv);
-    const item = nearestInHull(p, drawn.items, opts);
-    const target: Element = item
-      ? item.parts.reduce((a, b) => (boxDistance(p, b.box) < boxDistance(p, a.box) ? b : a)).el
-      : svg;
+    current = focusAt(p, drawn.items, drawn.hull, current, opts);
+    const item = current === undefined ? undefined : drawn.items[current];
+    const target: Element = item ? (item.parts.find((q) => contains(p, q)) ?? item.parts[0]).el : svg;
     const hit = (e.target as Element).closest("[data-gf-id]");
     if (hit === target || (!item && !hit)) return;
     e.stopPropagation();
@@ -447,6 +492,10 @@ export function snapToNearest(
   };
   container.addEventListener("pointermove", retarget, true);
   container.addEventListener("pointerdown", retarget, true);
+  // The runtime clears the pointer when it leaves the chart; so does this.
+  container.addEventListener("pointerleave", (e) => {
+    if (e.target === container) current = undefined;
+  });
 }
 
 /** A mark's datum is its row, or (for a mark drawn per group) its rows. */

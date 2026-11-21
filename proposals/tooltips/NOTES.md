@@ -45,24 +45,71 @@ Story-side fixes made for the live demos:
   the box widened the canvas and moved the axis labels.
 - `EdgeCases` has a new `InteractiveFlipped` story.
 
-## The focus: nearest in the hull
+## The focus: direct hit, then nearest by position
 
-Every live demo picks its focus with one rule (`nearestInHull` in
-`helpers.ts`). Inside the convex hull of the marks' drawn boxes, the focus is
-the nearest mark, with no limit. Outside the hull, it is the nearest mark
-within `radius` px (8 for bars and years, 30 for the scatter). The distance is
-to the mark's box, zero inside it. A group focus (a stack) uses one box per
-group, the union of its segments. The lines use one column per year, in x
-only. The idea is the declarative dragging criterion (#1294).
+Every live demo picks its focus with one rule (`focusAt` in `helpers.ts`):
+
+1. A pointer inside a mark's drawn box (inside a scatter dot's circle) picks
+   that mark.
+2. Otherwise the focus is the mark nearest by position, its size ignored.
+   Each mark is one point. Along an axis where the layout or a position
+   channel places the mark (a `spread` slot, a `stack` place, a scatter's
+   `x`/`y`) the point is the mark's center. Along an axis where the mark only
+   has a size from a shared baseline (a bar's length) the axis drops out. Each
+   story passes the placing axes as data (`position: ["y"]` for the issue
+   bars, `["x", "y"]` for segments and scatter points, `["x"]` for stacks,
+   the edge bars and the years) with a comment saying which operator or
+   channel places the mark.
+3. The current focus has a head start of `stickiness` px (default 4) in rule 2. A direct hit on another mark always switches.
+4. Rule 2 applies while the pointer is within `radius` px of the convex hull
+   of the drawn marks (8 for bars and years, 30 for the scatter). Once there
+   is a focus it is kept out to `radius + 4` px. Farther out there is no
+   focus. The lines' hull is over the year dots and the drawn lines.
+
+This is Declarative Dragging's rule (#1294): `closest` over one point per
+state with a stickiness bonus, and `whenFar` with in and out thresholds. Here a
+mark's placed position is its point, and the direct hit is added, which
+dragging does not need.
 
 PRIVATE HOOK (3): `snapToNearest` re-targets each real `pointermove` and
-`pointerdown` to the element of the picked mark, so `pointer().datum()` is
+`pointerdown` to the element of the focused mark, so `pointer().datum()` is
 that mark's datum. In the library this would be the runtime's hit-test.
 
-`axis` measures the distance inside the hull along one axis only, ties broken
-by plain distance. The bar demos use the axis the bars are spread on.
+Measured in the headless browser with the real mouse (probe page, client px):
 
-Measured in the headless browser with the real mouse:
+- **a. Issue bar, level with a short bar, to its right.** Bar 6 (INF→VO) at
+  x 273, 288, 328 and 388: INF→VO each time. Bar 10 (other→VO) at x 208:
+  other→VO. Bar 13 (INF→PK) at x 166: INF→PK. The pointer's row decides
+  with no `axis` option.
+- **b. Issue bar, slow sweep across all 15 bars** (x 92, 0.5 px steps). Down:
+  16 focus changes, 2 closed states (before the first bar and after the
+  last), 16 layout re-runs. Every switch is 2.0 to 2.5 px past the middle of
+  the 4 px gap (bar pitch 26.9 px). Up: the same counts, and every switch is
+  2.0 to 2.5 px past the middle the other way. So the hysteresis band is
+  about 4 to 5 px wide, from the 4 px head start.
+- **c. Stacked segments.** In Lake A, a 66.3 px Catfish segment under a 27.4
+  px one: 1, 2 and 4 px inside Catfish's top edge the focus is Catfish (a
+  direct hit), though the short segment's center is nearer (14.7 px against
+  32.1 px at 1 px). In the 8 px gap between Lake B and Lake C, swept in 0.5
+  px steps: at y 326 one switch at 4.5 px into the gap (Bass to Bass), at y
+  216 one switch at 3.0 px (Lake B Trout to Lake C Catfish, the nearer
+  center), at y 58 one switch at 8.0 px (on reaching Lake C, a direct hit).
+  At y 48 and 33, above Lake C's top, Lake B's Salmon stays: its center is
+  nearer than Lake C's.
+- **d. Scatter, the old switching spot** (svg 180.71, 307.5 and 183.04,
+  307.5). Six 1 px moves: no switch. Approached from below, the focus is
+  #141 throughout (its center 9.05 and 9.11 px away, against #119 at 5.83 and
+  #79 at 7.01, inside the 4 px head start). Approached from 3 px left, it is
+  #119 throughout (5.83 and 8.16 px, against #79 at 7.01). From #119 at
+  (180.71, 307.5) the focus changes after moving 4 px right (to #79), 5.5 px
+  down (to #141), 8 px up (to #31) or 14.75 px left (to #59).
+- **e. Leaving the marks.** Issue bar, down from the last bar's bottom edge:
+  the box closes at 12.5 px out and reopens at 8 px coming back. Scatter,
+  down from the lowest dot: closes at 34.5 px, reopens at 30 px.
+
+### Before (box distance)
+
+Measured in the headless browser with the real mouse, with the old rule (distance to each mark's box, and `axis`):
 
 - **Issue bar, level with a short bar, to its right.** With `axis: "y"` the
   pointer's row decides. At bar 6 (INF→VO, ends at x 268, row y 172 to 195),

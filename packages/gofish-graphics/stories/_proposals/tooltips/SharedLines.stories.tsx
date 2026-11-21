@@ -173,9 +173,9 @@ export const Closed: StoryObj = {
 };
 
 /**
- * Live. The focus is the year whose column is nearest the pointer, the same
- * rule as every other story, in x only: a year's item is its column of dots
- * (`r: 4`, invisible except at the focused year), stretched to any height.
+ * Live. The focus is the year nearest the pointer, by the same rule as every
+ * other story: a year's item is its column of dots (`r: 4`, invisible except
+ * at the focused year), and the hull is over the dots and the drawn lines.
  * So the pointer never has to be on a line, and a box under the cursor cannot
  * steal the focus. The pointer is registered by `ping`. Shared by the
  * Interactive story and the proposal page's demo bundle
@@ -183,12 +183,13 @@ export const Closed: StoryObj = {
  */
 export function mountInteractive(container: HTMLElement) {
   noPointer(container);
-  const dots = drawnMarks('ellipse[rx="4"]', yearly.length, column);
-  snapToNearest(
-    container,
-    (svg, inv) => dots(svg, inv).map((it) => ({ ...it, box: { ...it.box, y0: -1e6, y1: 1e6 } })),
-    { radius: 8, axis: "x" }
-  );
+  // A year's position is the `x` channel; its dots differ in y, so y drops out.
+  const years = drawnMarks('ellipse[rx="4"]', yearly.length, {
+    position: ["x"],
+    groupBy: column,
+    hull: { selector: 'path[data-gf-id][fill="none"]', count: SERIES.length },
+  });
+  snapToNearest(container, years, { radius: 8 });
   const p = pointer();
   const year = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.year));
   return sharedLines(year, () => p.pos()).render(container);

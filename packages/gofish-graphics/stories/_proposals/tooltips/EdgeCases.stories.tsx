@@ -141,7 +141,8 @@ export const Flipped: StoryObj = {
  *  (proposals/tooltips/demo). */
 export function mountInteractiveFlipped(container: HTMLElement) {
   noPointer(container);
-  snapToNearest(container, drawnMarks(BARS, totals.length), { radius: 8, axis: "x" });
+  // A bar's position is its `spread` slot in x; in y it only has a height.
+  snapToNearest(container, drawnMarks(BARS, totals.length, { position: ["x"] }), { radius: 8 });
   const p = pointer();
   const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
   return edgeChart(

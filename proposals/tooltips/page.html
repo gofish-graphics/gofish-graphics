@@ -624,9 +624,9 @@
         the mark.
       </li>
       <li>
-        Inside the convex hull of the marks, the focus is the nearest mark.
-        Outside it, the focus is the nearest mark within <code>radius</code>
-        pixels. Being inside a mark is distance zero.
+        A pointer inside a mark picks that mark. Otherwise the focus is the mark
+        nearest by position, where the layout put it. This holds within
+        <code>radius</code> pixels of the marks' convex hull.
       </li>
       <li>The box floats. It takes no room and is not a pointer target.</li>
     </ul>
@@ -1016,10 +1016,10 @@ chart(yearly)
       <div class="head">
         <h3>Scatterplot, the nearest point</h3>
         <p>
-          The focus is the point nearest the pointer. Outside the points' hull
-          it must be within 30 pixels, so the pointer does not have to be on a
-          point. The ring is one more layer over the focus. In the pinned
-          picture, the red cross is the pointer.
+          The focus is the point nearest the pointer, while the pointer is
+          within 30 pixels of the points' convex hull. So the pointer does not
+          have to be on a point. The ring is one more layer over the focus. In
+          the pinned picture, the red cross is the pointer.
         </p>
       </div>
       <div class="figs">
@@ -1438,24 +1438,24 @@ circle(r=3).tooltip(by="year")</code></pre>
     <div class="section">
       <h2>The focus</h2>
       <p>
-        One rule, among the marks the tooltip is on. While the pointer is inside
-        their convex hull, the focus is the nearest mark. Outside the hull, it
-        is the nearest mark within <code>radius</code> pixels. Being inside a
-        mark is distance zero. So the gap between two bars picks the nearer bar,
-        and the box stays open while the pointer moves among the marks. A small
-        point or a thin line is picked when the pointer is near it. There is no
-        mode to switch. The idea comes from declarative dragging (#1294), where
-        a drag follows the nearest reachable state inside the hull of the
-        states.
+        One rule, among the marks the tooltip is on. A pointer inside a mark
+        picks that mark. Otherwise the focus is the mark nearest by position. A
+        mark's position is where the layout put it, and its size does not count.
+        So bars in a column are told apart by row, and a gap between two bars
+        picks the nearer one. The current focus has a small head start, so it
+        does not flip back and forth at a boundary. All this applies while the
+        pointer is within <code>radius</code> pixels of the convex hull of the
+        drawn marks. Farther out there is no focus. There is no mode to switch.
       </p>
       <p>
-        For bars spread along one axis, the prototype measures the distance
-        inside the hull along that axis only, so the pointer's row picks the
-        bar. By plain distance, a pointer level with a short bar but to its
-        right picked a longer bar above it. This is the open point. #849
-        sketches a rule per kind of space (distance to a point, distance to a
-        polyline, membership in a band). This single rule is close to that one,
-        and the two need to be reconciled. Compare Plot's
+        In Declarative Dragging (#1294) each reachable state is one point. The
+        drag follows the nearest point, with a head start for the current one,
+        and it falls back when the pointer is far from the points' convex hull.
+        This rule is that one, with a mark's placed position as its point, plus
+        the direct hit, which dragging does not need. #849 sketches a rule per
+        kind of space (distance to a point, distance to a polyline, membership
+        in a band). This single rule is close to that one, and the two need to
+        be reconciled. Compare Plot's
         <code>pointer</code> (a 40 px <code>maxRadius</code>), Vega-Lite's
         <code>nearest: true</code> (which does not work on lines), and Plotly's
         <code>hoverdistance</code>.
@@ -2406,8 +2406,8 @@ girafe(ggobj = gg)</code></pre>
                 pointer.
               </td>
               <td>
-                The live demos read the marks' drawn boxes and send the
-                pointer's hit to the nearest mark.
+                The live demos read the marks' drawn positions and send the
+                pointer's hit to the focused mark.
               </td>
               <td>#849, nearest-mark hover</td>
             </tr>

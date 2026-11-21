@@ -155,9 +155,9 @@ chart(seafood)
 
 ## Rule 3: the focus is one rule
 
-Among the marks the tooltip is on, the focus is the nearest mark while the pointer is inside their convex hull. Outside the hull, it is the nearest mark within `radius` pixels. Being inside a mark is distance zero. So the gap between two bars picks the nearer bar, and the box stays open while the pointer moves among the marks. A small point or a thin line is picked when the pointer is near it. There is no mode to switch. The idea comes from declarative dragging (#1294), where a drag follows the nearest reachable state inside the hull of the states.
+One rule, among the marks the tooltip is on. A pointer inside a mark picks that mark. Otherwise the focus is the mark nearest by position. A mark's position is where the layout put it, and its size does not count. So bars in a column are told apart by row, and a gap between two bars picks the nearer one. The current focus has a small head start, so it does not flip back and forth at a boundary. All this applies while the pointer is within `radius` pixels of the convex hull of the drawn marks. Farther out there is no focus. There is no mode to switch.
 
-For bars spread along one axis, the prototype measures the distance inside the hull along that axis only, so the pointer's row picks the bar. By plain distance, a pointer level with a short bar but to its right picked a longer bar above it. This is the open point.
+In Declarative Dragging (#1294) each reachable state is one point. The drag follows the nearest point, with a head start for the current one, and it falls back when the pointer is far from the points' convex hull. This rule is that one, with a mark's placed position as its point, plus the direct hit, which dragging does not need.
 
 #849 sketches a rule per kind of space (distance to a point, distance to a polyline, membership in a band). This single rule is close to that one, and the two need to be reconciled. Compare Plot's `pointer` (a 40 px `maxRadius`), Vega-Lite's `nearest: true` (which does not work on lines), and Plotly's `hoverdistance`.
 
@@ -407,7 +407,7 @@ The gaps every system leaves open:
 | Finding                                                                            | What it means                                                                                                            | Issue                     |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
 | There is no way to name an operator's group.                                       | The whole-stack tooltip uses an outline of the segments as a stand-in.                                                   | #802                      |
-| Nearest within a radius needs a data-to-pixel map on the pointer.                  | The live demos read the marks' drawn boxes and send the pointer's hit to the nearest mark.                               | #849                      |
+| Nearest within a radius needs a data-to-pixel map on the pointer.                  | The live demos read the marks' drawn positions and send the pointer's hit to the focused mark.                           | #849                      |
 | An input cannot be a chart's dataset yet.                                          | The focus is computed outside the spec.                                                                                  | #830                      |
 | Node ids change on every re-run.                                                   | The focus is compared by key.                                                                                            | #673                      |
 | Every pointer move re-runs layout unless split by hand.                            | The prototype splits focus from position by hand.                                                                        | #674 is the long-term fix |

@@ -137,7 +137,10 @@ export const Closed: StoryObj = {
  */
 export function mountInteractive(container: HTMLElement) {
   noPointer(container);
-  snapToNearest(container, drawnMarks('ellipse[rx="3"]', rows.length), { radius: RADIUS });
+  // A point's position is its `scatter` x and y.
+  snapToNearest(container, drawnMarks('ellipse[rx="3"]', rows.length, { position: ["x", "y"] }), {
+    radius: RADIUS,
+  });
   const p = pointer();
   const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.id));
   // `live(() => 0.75)` that reads the pointer: a paint-only read whose only
