@@ -67,8 +67,16 @@ export function sharedLines(
       ...size,
       axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
     })
-      .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-      .mark(line({ stroke: "series", strokeWidth: 2, opacity: lineOpacity }))
+      .flow(group({ by: "series" }))
+      .mark(
+        line({
+          x: "year",
+          y: "count",
+          stroke: "series",
+          strokeWidth: 2,
+          opacity: lineOpacity,
+        })
+      )
       // The rule: one 1px rect per year, from 0 to the top of the data, kept
       // only for the focused year.
       .layer(

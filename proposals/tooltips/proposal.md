@@ -36,7 +36,7 @@ chart(pathTypes)
   .mark(rect({ w: "share" }).tooltip());
 ```
 
-Proposed, what it means. The focus is a dataset of zero or one bar. `pointer().snap(selectAll(...))` is the spelling already chosen in #849 (hover that picks the nearest mark within a radius). Treating an input as a dataset is the direction of #830 (an interaction grammar). The inner spelling is a sketch.
+Proposed, what it means. The focus is a dataset of zero or one bar. `pointer().snap(selectAll(...))` is the spelling already chosen in #849 (hover that picks the nearest mark within a radius). Treating an input as a dataset is the direction of #830 (an interaction grammar). The inner spelling is a sketch. In a layer, an empty `chart()` already means the previous tier's marks, so the expansion may not need the name.
 
 ```js
 // Sketch of the expansion. pointer().snap(...) is the spelling from #849.
@@ -198,35 +198,31 @@ spread({ by: "lake", dir: "x" }).tooltip();
 rect({ h: "count", fill: "species" }).tooltip({ by: "lake" });
 ```
 
-**With `by` on a mark.** `circle(...).tooltip({ by: "year" })` groups marks that are not one node in the tree, such as the points of every series at one year. This is the shared tooltip that Plotly calls `hovermode: "x unified"`, ECharts `trigger: "axis"`, and Highcharts `shared`. Observable Plot does not have it (its issue 2003 is open). Other libraries need a chart-wide mode for this because their tooltip belongs to one mark, and the points of every series at one year are many marks.
+**With `by` on a mark.** `line(...).tooltip({ by: "year" })` groups the rows of every line by year, so the focus is the point of each series at one year. No node in the tree holds that group. This is the shared tooltip that Plotly calls `hovermode: "x unified"`, ECharts `trigger: "axis"`, and Highcharts `shared`. Observable Plot does not have it (its issue 2003 is open). Other libraries need a chart-wide mode for this because their tooltip belongs to one mark, and the points of every series at one year are many marks.
 
-The rule and the dots are not tooltip options. They are two more ordinary layers over the same focus. A line is one mark per series, so there is nothing per year to group. The proposed code adds an invisible point per row for the tooltip to group, which is the weakest part of this example and needs a cleaner spelling. Story "Proposals/Tooltips/Shared Line Tooltip":
+The rule and the dots are not tooltip options. They are two more ordinary layers over the same focus. Here the focus is a part of each line, its point at one year, and not a whole mark. The prototype still gets those points from an extra layer of invisible circles, because a line does not yet expose where it placed each row. Story "Proposals/Tooltips/Shared Line Tooltip":
 
 ![Four lines with a rule at 2003, a dot on each line and one shared box](img/lines-shared.png)
 
 ```js
 chart(yearly)
-  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-  .mark(line({ stroke: "series" }))
-  .layer(
-    chart(yearly)
-      .flow(scatter({ x: "year", y: "count" }))
-      .mark(circle({ r: 3, opacity: 0 }).name("pts").tooltip({ by: "year" }))
+  .flow(group({ by: "series" }))
+  .mark(
+    line({ x: "year", y: "count", stroke: "series" }).tooltip({ by: "year" })
   );
 ```
 
 ```js
 // The focus the tooltip uses, bound to a constant and reused.
 // The rule and the dots are a sketch: two ordinary layers over it.
-const hover = pointer().snap(selectAll("pts"), { by: "year" });
+const hover = pointer().snap(selectAll("lines"), { by: "year" });
 
 chart(yearly)
-  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-  .mark(line({ stroke: "series" }))
-  .layer(
-    chart(yearly)
-      .flow(scatter({ x: "year", y: "count" }))
-      .mark(circle({ r: 3, opacity: 0 }).name("pts").tooltip({ by: "year" }))
+  .flow(group({ by: "series" }))
+  .mark(
+    line({ x: "year", y: "count", stroke: "series" })
+      .name("lines")
+      .tooltip({ by: "year" })
   )
   // the rule
   .layer(
@@ -239,7 +235,7 @@ chart(yearly)
 ```
 
 ```python
-circle(r=3).tooltip(by="year")
+line(x="year", y="count", stroke="series").tooltip(by="year")
 ```
 
 ## Rule 5: floating

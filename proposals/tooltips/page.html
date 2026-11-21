@@ -855,10 +855,10 @@ chart(seafood, { w: 420, h: 320 })
           belongs to one mark, and the points of every series at one year are
           many marks. Here <code>by: "year"</code> groups them, and the group is
           the focus. The rule and the dots are not tooltip options. They are two
-          more ordinary layers over the same focus. A line is one mark per
-          series, so there is nothing per year to group. The proposed code adds
-          an invisible point per row for the tooltip to group, which is the
-          weakest part of this example and needs a cleaner spelling.
+          more ordinary layers over the same focus. Here the focus is a part of
+          each line, its point at one year, and not a whole mark. The prototype
+          still gets those points from an extra layer of invisible circles,
+          because a line does not yet expose where it placed each row.
         </p>
       </div>
       <div class="figs">
@@ -878,27 +878,23 @@ chart(seafood, { w: 420, h: 320 })
         <div>
           <span class="label">Proposed</span>
           <pre><code class="language-javascript">chart(yearly)
-  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-  .mark(line({ stroke: "series" }))
-  .layer(
-    chart(yearly)
-      .flow(scatter({ x: "year", y: "count" }))
-      .mark(circle({ r: 3, opacity: 0 }).name("pts").tooltip({ by: "year" }))
+  .flow(group({ by: "series" }))
+  .mark(
+    line({ x: "year", y: "count", stroke: "series" }).tooltip({ by: "year" })
   );</code></pre>
         </div>
         <div>
           <span class="label">Proposed, with the rule and the dots</span>
           <pre><code class="language-javascript">// The focus the tooltip uses, bound to a constant and reused.
 // The rule and the dots are a sketch: two ordinary layers over it.
-const hover = pointer().snap(selectAll("pts"), { by: "year" });
+const hover = pointer().snap(selectAll("lines"), { by: "year" });
 
 chart(yearly)
-  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-  .mark(line({ stroke: "series" }))
-  .layer(
-    chart(yearly)
-      .flow(scatter({ x: "year", y: "count" }))
-      .mark(circle({ r: 3, opacity: 0 }).name("pts").tooltip({ by: "year" }))
+  .flow(group({ by: "series" }))
+  .mark(
+    line({ x: "year", y: "count", stroke: "series" })
+      .name("lines")
+      .tooltip({ by: "year" })
   )
   // the rule
   .layer(
@@ -911,14 +907,14 @@ chart(yearly)
         </div>
         <div>
           <span class="label">Proposed, Python</span>
-          <pre><code class="language-python">circle(r=3).tooltip(by="year")</code></pre>
+          <pre><code class="language-python">line(x="year", y="count", stroke="series").tooltip(by="year")</code></pre>
         </div>
         <details>
           <summary>Runs today (prototype)</summary>
           <div class="inner">
             <pre><code class="language-javascript">chart(yearly, { w: 520, h: 300 })
-  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-  .mark(line({ stroke: "series", strokeWidth: 2 }))
+  .flow(group({ by: "series" }))
+  .mark(line({ x: "year", y: "count", stroke: "series", strokeWidth: 2 }))
   // the rule: one 1 px rect, kept only for the focused year
   .layer(
     chart(
@@ -1285,7 +1281,9 @@ chart(rows, { w: 440, h: 360 })
           <code>pointer().snap(selectAll(...))</code> is the spelling already
           chosen in #849 (hover that picks the nearest mark within a radius).
           Treating an input as a dataset is the direction of #830 (an
-          interaction grammar).
+          interaction grammar). In a layer, an empty
+          <code>chart()</code> already means the previous tier's marks, so the
+          expansion may not need the name.
         </p>
       </div>
       <div class="codes">
@@ -1407,10 +1405,10 @@ circle(r=3).tooltip(by="year")</code></pre>
         </li>
         <li>
           <strong>With <code>by</code> on a mark:</strong>
-          <code>circle(...).tooltip({ by: "year" })</code> groups marks that are
-          not one node in the tree, such as the points of every series at one
-          year. This is the shared tooltip that Plotly calls
-          <code>hovermode: "x unified"</code>, ECharts
+          <code>line(...).tooltip({ by: "year" })</code> groups the rows of
+          every line by year, so the focus is the point of each series at one
+          year. No node in the tree holds that group. This is the shared tooltip
+          that Plotly calls <code>hovermode: "x unified"</code>, ECharts
           <code>trigger: "axis"</code>, and Highcharts <code>shared</code>.
           Observable Plot does not have it (its issue 2003 is open).
         </li>

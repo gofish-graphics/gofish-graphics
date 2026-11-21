@@ -106,8 +106,8 @@ Sugar:
 
 ```js
 chart(yearly, { w: 520, h: 300 })
-  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
-  .mark(line({ stroke: "series" }))
+  .flow(group({ by: "series" }))
+  .mark(line({ x: "year", y: "count", stroke: "series" }))
   .tooltip({ by: "year", focus: nearestX, rule: true, dots: true });
 ```
 
