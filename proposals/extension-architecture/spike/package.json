@@ -1,0 +1,14 @@
+{
+  "name": "gofish-extension-spike",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "esbuild": "^0.25.12",
+    "fontkit": "^3.0.0",
+    "opentype.js": "^2.0.0",
+    "pixelmatch": "^8.0.0",
+    "playwright-core": "^1.64.0",
+    "pngjs": "^7.0.0"
+  }
+}

@@ -1,0 +1,698 @@
+<title>Extension Architecture</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<style>
+  /* Layout: a title block over tabs; one reading column per tab. The
+     examples tab is a single-column gallery of cards. */
+  :root {
+    --bg: #f6f6f3;
+    --surface: #ffffff;
+    --ink: #1f2328;
+    --muted: #59636e;
+    --line: #d9dde2;
+    --accent: #2a5f9e;
+    --accent-soft: #e7eff8;
+    --lean-bg: #eef5ec;
+    --lean-edge: #4f8a45;
+    --code-bg: #f3f4f6;
+    --new-bg: #fff1bf;
+    --new-edge: #c99700;
+    --focus: #2a5f9e;
+    --img-panel: #ffffff;
+    --tok-key: #8a3ab9;
+    --tok-str: #2c7a3f;
+    --tok-num: #b0521b;
+    --tok-com: #6e7781;
+    --tok-fn: #1f62a8;
+    --tok-attr: #8a5a00;
+    --body: "Inter", system-ui, sans-serif;
+    --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+    --mono:
+      ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171c;
+      --surface: #1b1f26;
+      --ink: #e6e8eb;
+      --muted: #9ea7b2;
+      --line: #313843;
+      --accent: #86b4ea;
+      --accent-soft: #1e2b3b;
+      --lean-bg: #1d2b1d;
+      --lean-edge: #7fbf73;
+      --code-bg: #161a20;
+      --new-bg: #3b3313;
+      --new-edge: #d7ad2c;
+      --focus: #86b4ea;
+      --img-panel: #ffffff;
+      --tok-key: #cfa0ee;
+      --tok-str: #8fd19e;
+      --tok-num: #f0a46e;
+      --tok-com: #8b949e;
+      --tok-fn: #86b4ea;
+      --tok-attr: #e3c07a;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171c;
+    --surface: #1b1f26;
+    --ink: #e6e8eb;
+    --muted: #9ea7b2;
+    --line: #313843;
+    --accent: #86b4ea;
+    --accent-soft: #1e2b3b;
+    --lean-bg: #1d2b1d;
+    --lean-edge: #7fbf73;
+    --code-bg: #161a20;
+    --new-bg: #3b3313;
+    --new-edge: #d7ad2c;
+    --focus: #86b4ea;
+    --img-panel: #ffffff;
+    --tok-key: #cfa0ee;
+    --tok-str: #8fd19e;
+    --tok-num: #f0a46e;
+    --tok-com: #8b949e;
+    --tok-fn: #86b4ea;
+    --tok-attr: #e3c07a;
+    color-scheme: dark;
+  }
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15.5px/1.6 var(--body);
+  }
+  .wrap {
+    padding-block: 32px 80px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    min-width: 0;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--display);
+    line-height: 1.25;
+    text-wrap: balance;
+  }
+  h1 {
+    font-size: 2rem;
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+  h2 {
+    font-size: 1.45rem;
+    margin: 44px 0 12px;
+    font-weight: 600;
+  }
+  h3 {
+    font-size: 1.12rem;
+    margin: 26px 0 8px;
+    font-weight: 600;
+  }
+  h4 {
+    font-size: 0.98rem;
+    margin: 16px 0 6px;
+    font-weight: 600;
+  }
+  p,
+  li {
+    max-width: 65ch;
+  }
+  a {
+    color: var(--accent);
+    overflow-wrap: anywhere;
+  }
+  a:focus-visible,
+  summary:focus-visible,
+  button:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    padding: 1px 4px;
+    border-radius: 3px;
+    overflow-wrap: anywhere;
+  }
+  pre {
+    margin: 8px 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 0;
+    overflow-x: auto;
+    font-size: 12.5px;
+    line-height: 1.55;
+    max-width: 100%;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: inherit;
+    display: block;
+    width: max-content;
+    min-width: 100%;
+    overflow-wrap: normal;
+  }
+  pre code .ln {
+    display: block;
+    padding: 0 14px;
+    white-space: pre;
+    border-left: 3px solid transparent;
+  }
+  pre code .ln.new {
+    background: var(--new-bg);
+    border-left-color: var(--new-edge);
+  }
+  .hljs-keyword,
+  .hljs-built_in,
+  .hljs-meta {
+    color: var(--tok-key);
+  }
+  .hljs-string {
+    color: var(--tok-str);
+  }
+  .hljs-number,
+  .hljs-literal {
+    color: var(--tok-num);
+  }
+  .hljs-comment {
+    color: var(--tok-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_,
+  .hljs-title.class_ {
+    color: var(--tok-fn);
+  }
+  .hljs-attr,
+  .hljs-property,
+  .hljs-params {
+    color: var(--tok-attr);
+  }
+  .top {
+    margin: 0 0 10px;
+  }
+  .tabs {
+    display: flex;
+    gap: 2px;
+    border-bottom: 1px solid var(--line);
+    margin: 28px 0 0;
+    flex-wrap: wrap;
+  }
+  .tabs button {
+    font: 500 0.95rem var(--body);
+    color: var(--muted);
+    background: none;
+    border: 1px solid transparent;
+    border-bottom: none;
+    padding: 9px 14px;
+    border-radius: 6px 6px 0 0;
+    cursor: pointer;
+    margin-bottom: -1px;
+  }
+  .tabs button:hover {
+    color: var(--ink);
+  }
+  .tabs button[aria-selected="true"] {
+    color: var(--ink);
+    background: var(--surface);
+    border-color: var(--line);
+  }
+  .panel[hidden] {
+    display: none;
+  }
+  .panel > h2:first-child {
+    margin-top: 28px;
+  }
+  .gallery {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px;
+    margin-top: 14px;
+  }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px;
+    min-width: 0;
+  }
+  .card > h3 {
+    margin: 0 0 10px;
+  }
+  .card .caption {
+    font-size: 0.86rem;
+    color: var(--muted);
+  }
+  .card .caption p {
+    margin: 6px 0;
+  }
+  .card .caption ul {
+    margin: 4px 0;
+    padding-left: 20px;
+  }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+    gap: 4px 20px;
+    font-size: 0.88rem;
+  }
+  .fact {
+    min-width: 0;
+  }
+  .fact ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .fact li {
+    margin: 3px 0;
+  }
+  figure {
+    margin: 10px 0;
+    min-width: 0;
+  }
+  .imgpanel {
+    background: var(--img-panel);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px;
+  }
+  .imgpanel img {
+    display: block;
+    max-width: 100%;
+    max-height: 480px;
+    width: auto;
+    height: auto;
+    margin: 0 auto;
+  }
+  figcaption {
+    font-size: 0.84rem;
+    color: var(--muted);
+    padding: 4px 2px 0;
+  }
+  .figs {
+    display: grid;
+    gap: 12px;
+    margin: 12px 0;
+  }
+  .figs figure {
+    margin: 0;
+  }
+  .figs.single img {
+    max-height: 520px;
+    width: auto;
+  }
+  .figs.pair {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  }
+  .figs.trio {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  }
+  details {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    margin: 8px 0;
+    background: var(--surface);
+  }
+  details > summary {
+    cursor: pointer;
+    padding: 7px 12px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: var(--muted);
+  }
+  details[open] > summary {
+    color: var(--ink);
+  }
+  details > .inner {
+    padding: 0 12px 10px;
+    min-width: 0;
+  }
+  details > .inner > p:first-child {
+    margin-top: 2px;
+  }
+  details.fork {
+    border-color: var(--accent);
+  }
+  details.fork > summary {
+    color: var(--accent);
+  }
+  details.more {
+    margin: 4px 0 16px;
+  }
+  .card details > .inner {
+    font-size: 0.92rem;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.88rem;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    border-bottom: 1px solid var(--line);
+    padding: 6px 9px;
+  }
+  th {
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .tablewrap {
+    overflow-x: auto;
+    max-width: 100%;
+    margin: 8px 0;
+  }
+  .forkblock {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px 18px 14px;
+    margin: 18px 0;
+    min-width: 0;
+  }
+  .options {
+    display: grid;
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .opt {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 12px;
+    background: var(--bg);
+  }
+  .opt p {
+    margin: 8px 0;
+  }
+  .lean {
+    background: var(--lean-bg);
+    border-left: 4px solid var(--lean-edge);
+    border-radius: 4px;
+    padding: 2px 14px;
+    margin: 12px 0 4px;
+  }
+  .prec {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+    gap: 12px;
+    margin: 14px 0;
+  }
+  .pc {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 0;
+  }
+  .pc h3 {
+    margin: 0 0 6px;
+  }
+  .pc dl {
+    margin: 0;
+    font-size: 0.9rem;
+  }
+  .pc dt {
+    color: var(--muted);
+    font-size: 0.8rem;
+    margin-top: 8px;
+  }
+  .pc dd {
+    margin: 2px 0 0;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+  .legend-new {
+    display: inline-block;
+    background: var(--new-bg);
+    border-left: 3px solid var(--new-edge);
+    padding: 0 6px;
+    font-family: var(--mono);
+    font-size: 0.85em;
+  }
+  @media (max-width: 600px) {
+    h1 {
+      font-size: 1.65rem;
+    }
+    .card,
+    .forkblock {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+  }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap"
+  rel="stylesheet"
+/>
+
+<div class="wrap">
+  <main>
+    <h1>Extension architecture</h1>
+    {{p:Summary}} {{p:Recommendation}} {{p:Status}}
+
+    <div class="tabs" role="tablist" aria-label="Sections">
+      <button
+        role="tab"
+        id="tab-examples"
+        data-tab="examples"
+        aria-controls="panel-examples"
+        aria-selected="true"
+      >
+        Examples
+      </button>
+      <button
+        role="tab"
+        id="tab-two-steps"
+        data-tab="two-steps"
+        aria-controls="panel-two-steps"
+        aria-selected="false"
+      >
+        Two steps now
+      </button>
+      <button
+        role="tab"
+        id="tab-slots-forks"
+        data-tab="slots-forks"
+        aria-controls="panel-slots-forks"
+        aria-selected="false"
+      >
+        Slots and forks
+      </button>
+      <button
+        role="tab"
+        id="tab-precedent"
+        data-tab="precedent"
+        aria-controls="panel-precedent"
+        aria-selected="false"
+      >
+        Precedent
+      </button>
+      <button
+        role="tab"
+        id="tab-next"
+        data-tab="next"
+        aria-controls="panel-next"
+        aria-selected="false"
+      >
+        Next
+      </button>
+    </div>
+
+    <!-- ============================ EXAMPLES ============================ -->
+    <section
+      class="panel"
+      id="panel-examples"
+      data-tab="examples"
+      role="tabpanel"
+      aria-labelledby="tab-examples"
+    >
+      {{lead:examples}}
+      <p class="note">
+        Lines marked <span class="legend-new"># NEW</span> or
+        <span class="legend-new"># PLANNED</span> use names that do not exist
+        yet.
+      </p>
+      <details>
+        <summary>How the examples were written</summary>
+        <div class="inner">{{conventions}}</div>
+      </details>
+
+      <h2>lonboard</h2>
+      <div class="gallery">{{cards:L1,L2,L3,L4}}</div>
+
+      <h2>fastplotlib</h2>
+      <div class="gallery">{{cards:F1,F2,F3,F4}}</div>
+
+      <h2>progressive</h2>
+      <div class="gallery">{{cards:P1}}</div>
+
+      {{sec:proposal:What the corpus says overall}} {{sec:examples:The forks, in
+      one place}} {{sec:examples:Invented names}} {{sec:examples:Walls, most
+      serious first}}
+    </section>
+
+    <!-- ============================ TWO STEPS ============================ -->
+    <section
+      class="panel"
+      id="panel-two-steps"
+      data-tab="two-steps"
+      role="tabpanel"
+      aria-labelledby="tab-two-steps"
+      hidden
+    >
+      {{sec:proposal:Terms}} {{sec:proposal:What is already true in the code}}
+      {{sec:proposal:Step 1: the engine as a pure function}} {{sec:proposal:Step
+      2: the engine inside Python}}
+    </section>
+
+    <!-- ============================ SLOTS AND FORKS ============================ -->
+    <section
+      class="panel"
+      id="panel-slots-forks"
+      data-tab="slots-forks"
+      role="tabpanel"
+      aria-labelledby="tab-slots-forks"
+      hidden
+    >
+      {{sec:proposal:The extension slots}} {{intro:proposal:Three forks}}
+      {{fork:1}} {{fork:2}} {{fork:3}} {{sec:proposal:What the three consumers
+      would own}}
+    </section>
+
+    <!-- ============================ PRECEDENT ============================ -->
+    <section
+      class="panel"
+      id="panel-precedent"
+      data-tab="precedent"
+      role="tabpanel"
+      aria-labelledby="tab-precedent"
+      hidden
+    >
+      <h2>Precedent</h2>
+      {{precedent}}
+    </section>
+
+    <!-- ============================ NEXT ============================ -->
+    <section
+      class="panel"
+      id="panel-next"
+      data-tab="next"
+      role="tabpanel"
+      aria-labelledby="tab-next"
+      hidden
+    >
+      {{sec:proposal:Order of work}} {{sec:proposal:Related issues}}
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  (function () {
+    var TABS = ["examples", "two-steps", "slots-forks", "precedent", "next"];
+
+    // Highlight, then split into one span per line so NEW and PLANNED
+    // lines can carry a background. Spans that cross a newline are closed
+    // and reopened so each line is well formed.
+    try {
+      if (window.hljs) hljs.configure({ ignoreUnescapedHTML: true });
+    } catch (e) {}
+    document.querySelectorAll("pre code").forEach(function (el) {
+      var hl = (el.getAttribute("data-hl") || "")
+        .split(",")
+        .filter(Boolean)
+        .map(Number);
+      try {
+        if (window.hljs) hljs.highlightElement(el);
+      } catch (e) {}
+      var src = el.innerHTML;
+      var re = /(<span[^>]*>)|(<\/span>)|(\n)|([^<\n]+)/g;
+      var lines = [];
+      var stack = [];
+      var cur = "";
+      var m;
+      while ((m = re.exec(src))) {
+        if (m[1]) {
+          stack.push(m[1]);
+          cur += m[1];
+        } else if (m[2]) {
+          stack.pop();
+          cur += m[2];
+        } else if (m[3]) {
+          for (var k = 0; k < stack.length; k++) cur += "</span>";
+          lines.push(cur);
+          cur = stack.join("");
+        } else {
+          cur += m[4];
+        }
+      }
+      lines.push(cur);
+      el.innerHTML = lines
+        .map(function (line, i) {
+          var cls = hl.indexOf(i + 1) >= 0 ? "ln new" : "ln";
+          return '<span class="' + cls + '">' + (line || " ") + "</span>";
+        })
+        .join("");
+    });
+
+    var tabs = Array.prototype.slice.call(
+      document.querySelectorAll('[role="tab"]')
+    );
+    function panel(id) {
+      return document.getElementById("panel-" + id);
+    }
+    function show(id) {
+      if (TABS.indexOf(id) < 0) id = "examples";
+      tabs.forEach(function (t) {
+        var key = t.getAttribute("data-tab");
+        var on = key === id;
+        t.setAttribute("aria-selected", on ? "true" : "false");
+        t.tabIndex = on ? 0 : -1;
+        panel(key).hidden = !on;
+      });
+    }
+    tabs.forEach(function (t, i) {
+      t.addEventListener("click", function () {
+        var id = t.getAttribute("data-tab");
+        show(id);
+        try {
+          history.replaceState(null, "", "#" + id);
+        } catch (e) {
+          location.hash = id;
+        }
+      });
+      t.addEventListener("keydown", function (e) {
+        var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!d) return;
+        var next = tabs[(i + d + tabs.length) % tabs.length];
+        next.focus();
+        next.click();
+      });
+    });
+    function fromHash() {
+      show(location.hash.replace(/^#/, ""));
+    }
+    window.addEventListener("hashchange", fromHash);
+    fromHash();
+  })();
+</script>

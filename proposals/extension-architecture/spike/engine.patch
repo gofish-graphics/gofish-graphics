@@ -1,0 +1,36 @@
+diff --git a/packages/gofish-graphics/src/ast/shapes/text.tsx b/packages/gofish-graphics/src/ast/shapes/text.tsx
+index fbde797ec..889d043b1 100644
+--- a/packages/gofish-graphics/src/ast/shapes/text.tsx
++++ b/packages/gofish-graphics/src/ast/shapes/text.tsx
+@@ -35,6 +35,11 @@ type TextDimensions = {
+ 
+ let _measureCtx: CanvasRenderingContext2D | null | undefined;
+ 
++// SPIKE (extension-architecture): a host-supplied text measurer, for engines with no DOM.
++export type TextMeasurer = (text: string, font: { size: number; family: string; style?: string; weight?: number | string }) => TextDimensions;
++let _measurer: TextMeasurer | undefined;
++export const setTextMeasurer = (m: TextMeasurer | undefined) => { _measurer = m; };
++
+ const getMeasureContext = (): CanvasRenderingContext2D | null => {
+   if (_measureCtx !== undefined) return _measureCtx;
+   if (typeof document === "undefined") {
+@@ -53,6 +58,7 @@ export const estimateTextDimensions = (
+   fontStyle?: string,
+   fontWeight?: number | string
+ ): TextDimensions => {
++  if (_measurer) return _measurer(text, { size: fontSize, family: fontFamily, style: fontStyle, weight: fontWeight });
+   const ctx = getMeasureContext();
+   if (ctx) {
+     // Measure using the same font-family/style/weight that the <text> element
+diff --git a/packages/gofish-graphics/src/lib.ts b/packages/gofish-graphics/src/lib.ts
+index cb67c68b1..0837af41e 100644
+--- a/packages/gofish-graphics/src/lib.ts
++++ b/packages/gofish-graphics/src/lib.ts
+@@ -234,6 +234,7 @@ export { ellipse } from "./ast/shapes/ellipse";
+ export { petal } from "./ast/shapes/petal";
+ export { polygon } from "./ast/shapes/polygon";
+ export { text } from "./ast/shapes/text";
++export { setTextMeasurer, type TextMeasurer } from "./ast/shapes/text"; // SPIKE
+ export { image } from "./ast/shapes/image";
+ export { region } from "./ast/shapes/region";
+ 
