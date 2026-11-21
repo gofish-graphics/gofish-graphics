@@ -20,9 +20,10 @@ import {
   live,
 } from "../../../src/lib";
 import { penguins } from "../../../src/data/penguins";
-import { rowTooltip, beside, focusFrom } from "./helpers";
+import { rowTooltip, beside, focusFrom, drawnScales, heldOnTouch } from "./helpers";
 
-const meta: Meta = { title: "Proposals/Tooltips/Scatter Nearest" };
+// The lowercase exports are builders and mounts, not stories.
+const meta: Meta = { title: "Proposals/Tooltips/Scatter Nearest", excludeStories: /^[a-z]/ };
 export default meta;
 
 const X = "Flipper Length (mm)";
@@ -34,19 +35,14 @@ const rows = penguins
 /** The chart's own size, for the static stories. */
 const W = 440;
 const H = 360;
-/** The canvas of the live story. WALL: there the size goes to `render`, not
- *  `chart`, because `pointer().dataPos()` converts nothing when the chart
- *  has a size of its own; and a render-sized chart with a tier that claims
- *  nothing draws its axes past the canvas. See NOTES.md. The plot inside it
- *  is about W x H, which `nearest` assumes. */
-export const CANVAS = { w: 560, h: 400 };
 const RADIUS = 30; // px
 
 /**
- * The nearest row to a data position, within RADIUS px, or undefined.
- * WALL: `Pointer` gives data coordinates but no data → px map, so pixel
- * distance is approximated from the chart's own size over the data's extent
- * (the axis may nice its domain a little past the extent).
+ * The nearest row to a data position, within RADIUS px, or undefined, for
+ * the pinned story. WALL: `Pointer` gives data coordinates but no data → px
+ * map, so pixel distance is approximated from the chart's own size over the
+ * data's extent (the axis may nice its domain a little past the extent). The
+ * live story measures true pixels instead (`mountInteractive`).
  */
 const xs = rows.map((r) => r[X]);
 const ys = rows.map((r) => r[Y]);
@@ -71,12 +67,12 @@ export function scatterNearest(
   focus: () => number | undefined,
   /** Where the (virtual) pointer is, drawn as a small cross. */
   cursor?: { x: number; y: number },
-  fill: any = "Species",
-  size: { w?: number; h?: number } = { w: W, h: H }
+  /** The points' opacity, a `live()` pointer read in the live story. */
+  opacity: any = 0.75
 ) {
-  let c = chart(rows, size)
+  let c = chart(rows, { w: W, h: H })
     .flow(scatter({ x: X, y: Y }))
-    .mark(circle({ r: 3, fill, opacity: 0.75 }).name("pts"))
+    .mark(circle({ r: 3, fill: "Species", opacity }).name("pts"))
     .layer(
       chart(selectAll("pts"))
         .flow(filter((pt: any) => pt.datum[0].id === focus()), group({ by: "id" }))
@@ -121,25 +117,43 @@ export const Closed: StoryObj = {
   },
 };
 
-/** Live. The pointer is registered by a `live()` read of it in the fill
- *  (paint only); `nearest(dataPos())` is mapped to the focus outside the
- *  spec, so the spec re-runs only when the nearest point changes. */
+/**
+ * Live. The pointer is registered by a `live()` read of it in the opacity
+ * (paint only); the nearest point is mapped to the focus outside the spec, so the
+ * spec re-runs only when the nearest point changes.
+ *
+ * The chart keeps its own size, so `pointer().dataPos()` is undefined (see
+ * `drawnScales`): each row's position in px comes from the data → px map read
+ * off the drawn points (`r: 3`), and the distance to `pointer().pos()` is a
+ * true pixel distance. Shared by the Interactive story and the proposal
+ * page's demo bundle (proposals/tooltips/demo).
+ */
+export function mountInteractive(container: HTMLElement) {
+  const p = pointer();
+  const nearestPx = () => {
+    const at = p.pos();
+    if (at === undefined) return undefined;
+    const px = drawnScales(container, 'ellipse[rx="3"]', { x: [x0, x1], y: [y0, y1] });
+    if (!px?.x || !px.y) return undefined;
+    let best: any;
+    let bestD = Infinity;
+    for (const r of rows) {
+      const d = Math.hypot(px.x(r[X]) - at.x, px.y(r[Y]) - at.y);
+      if (d < bestD) [best, bestD] = [r, d];
+    }
+    return bestD <= RADIUS ? best.id : undefined;
+  };
+  const focus = focusFrom(heldOnTouch(container, nearestPx));
+  // `live(() => 0.75)` that reads the pointer: a paint-only read whose only
+  // job is to register the pointer with the chart. It is on the opacity, not
+  // the fill, so the fill keeps its color scale and legend.
+  return scatterNearest(focus, undefined, live(() => (p.pos(), 0.75))).render(container);
+}
+
 export const Interactive: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    const p = pointer();
-    const focus = focusFrom(() => nearest(p.dataPos()));
-    const palette: Record<string, string> = {
-      Adelie: "#4c78a8",
-      Chinstrap: "#f58518",
-      Gentoo: "#54a24b",
-    };
-    // A live fill must be a literal color (the color scale is resolve-time),
-    // so the species palette is spelled out here.
-    scatterNearest(focus, undefined, live((d: any) => (p.pos(), palette[d?.Species] ?? "#999")), {}).render(
-      container,
-      CANVAS
-    );
+    mountInteractive(container);
     return container;
   },
 };

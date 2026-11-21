@@ -11,7 +11,7 @@
  * one more `spread`. The two places it reaches past the public API are marked
  * PRIVATE HOOK below and listed in NOTES.md.
  */
-import { createRoot, createEffect } from "solid-js";
+import { createRoot, createEffect, createSignal } from "solid-js";
 import {
   enclose,
   spread,
@@ -204,19 +204,61 @@ export function focusFrom<K>(
 }
 
 /**
+ * Touch, story-side. The runtime listens to pointer events, so a tap is a
+ * `pointerdown` that sets the pointer, but the browser ends every tap with a
+ * `pointerleave`, which clears it, and the box would close at once. So after
+ * a touch the last key is HELD until the next tap: a tap on a mark focuses
+ * it, a tap on empty chart clears it. A mouse move drops back to plain hover.
+ * The container's capture listener runs before the chart's own `<svg>`
+ * listener, so `held` is reset before the pointer's signals change, and the
+ * `taps` signal re-runs the read even when the pointer's signals do not
+ * change (a tap on empty chart leaves `datum()` undefined, as it was).
+ */
+export function heldOnTouch<K>(container: HTMLElement, read: () => K | undefined) {
+  let touch = false;
+  let held: K | undefined;
+  const [taps, setTaps] = createSignal(0);
+  container.addEventListener(
+    "pointerdown",
+    (e) => {
+      touch = e.pointerType !== "mouse";
+      held = undefined;
+      setTaps((n) => n + 1);
+    },
+    true
+  );
+  container.addEventListener(
+    "pointermove",
+    (e) => {
+      if (e.pointerType === "mouse") touch = false;
+    },
+    true
+  );
+  return (): K | undefined => {
+    taps();
+    const k = read();
+    if (k !== undefined) held = k;
+    return touch ? held : k;
+  };
+}
+
+/**
  * PRIVATE HOOK (2), story-side CSS, no library edit: stop the tooltip from
  * taking the pointer's hit-test. GoFish sets no `pointer-events`, so a box
  * drawn under the cursor becomes the hit, `pointer().datum()` turns
  * undefined, the focus clears, the box goes, the bar is hit again: flicker.
- * The tooltip's SVG elements are found by their paint (the box's stroke, and
- * every `text`, since this story's other texts are axis labels that need no
- * hit either).
+ * The tooltip's SVG elements are found by their paint: the box's stroke, and
+ * every element painted AFTER the box (paint is a flat list and the tooltip
+ * layer is the last one, so that is the box's content, such as the bars of a
+ * chart in a tooltip, then the anchors and the axes, none of which needs a
+ * hit), and every `text`, since the stories' other texts are axis labels.
  */
 export function noPointer(container: HTMLElement) {
   const style = document.createElement("style");
   style.textContent = `
     [data-tooltip-host] text,
-    [data-tooltip-host] [stroke="${TOOLTIP_STROKE}"] { pointer-events: none; }`;
+    [data-tooltip-host] [stroke="${TOOLTIP_STROKE}"],
+    [data-tooltip-host] [stroke="${TOOLTIP_STROKE}"] ~ * { pointer-events: none; }`;
   container.setAttribute("data-tooltip-host", "");
   // In <head>: a render replaces the container's children.
   if (!document.getElementById("tooltip-no-pointer")) {
@@ -225,9 +267,55 @@ export function noPointer(container: HTMLElement) {
   }
 }
 
+/**
+ * WORKAROUND, story-side, for a library bug: `pointer().dataPos()` converts
+ * only through the render ROOT's scales, and a chart that sets its own `w`/`h`
+ * is a frame below the root, so the root has no scale and `dataPos()` is
+ * undefined. Sizing the render instead (the first try) draws the axes past the
+ * canvas. So the live line and scatter charts keep their own size and map the
+ * pointer through where their marks were DRAWN.
+ *
+ * `drawnScales` reads the centers of the marks `selector` picks (in svg px, the
+ * space of `pointer().pos()`) and, per axis, the data extent those marks
+ * cover. A position is affine in its data value, so the smallest and largest
+ * values sit at the extreme drawn centers (in y the largest is on top). It
+ * returns the data → px map of each axis given. The result is kept per `<svg>`,
+ * since every re-render draws a new one.
+ */
+export type DrawnScales = { x?: (v: number) => number; y?: (v: number) => number };
+const drawnCache = new WeakMap<Element, DrawnScales>();
+export function drawnScales(
+  container: HTMLElement,
+  selector: string,
+  extent: { x?: [number, number]; y?: [number, number] }
+): DrawnScales | undefined {
+  const svg = container.querySelector("svg");
+  const ctm = svg?.getScreenCTM();
+  if (!svg || !ctm) return undefined;
+  const cached = drawnCache.get(svg);
+  if (cached) return cached;
+  const inv = ctm.inverse();
+  const centers = [...svg.querySelectorAll(selector)].map((el) => {
+    const r = el.getBoundingClientRect();
+    return new DOMPoint(r.x + r.width / 2, r.y + r.height / 2).matrixTransform(inv);
+  });
+  if (centers.length < 2) return undefined;
+  const axis = (cs: number[], [lo, hi]: [number, number], up: boolean) => {
+    const [a, b] = [Math.min(...cs), Math.max(...cs)];
+    const [p0, p1] = up ? [b, a] : [a, b];
+    return (v: number) => p0 + ((v - lo) / (hi - lo)) * (p1 - p0);
+  };
+  const out: DrawnScales = {
+    x: extent.x && axis(centers.map((c) => c.x), extent.x, false),
+    y: extent.y && axis(centers.map((c) => c.y), extent.y, true),
+  };
+  drawnCache.set(svg, out);
+  return out;
+}
+
+/** A mark's datum is its row, or (for a mark drawn per group) its rows. */
+export const rowOf = <T>(d: unknown): T | undefined =>
+  (Array.isArray(d) ? d[0] : d) as T | undefined;
+
 /** Pointer helpers shared by the interactive stories. */
-export const hitRow = <T>(p: Pointer): T | undefined => {
-  const d = p.datum() as any;
-  // A mark's datum is its row, or (for a mark drawn per group) its rows.
-  return Array.isArray(d) ? d[0] : d;
-};
+export const hitRow = <T>(p: Pointer): T | undefined => rowOf<T>(p.datum());

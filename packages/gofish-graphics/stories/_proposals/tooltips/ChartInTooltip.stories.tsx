@@ -20,9 +20,11 @@ import {
   live,
 } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import { box, beside, focusFrom, hitRow, noPointer } from "./helpers";
+import { box, beside, focusFrom, hitRow, noPointer, heldOnTouch, rowOf } from "./helpers";
+import { sideOf } from "./StackedBar.stories";
 
-const meta: Meta = { title: "Proposals/Tooltips/Chart In Tooltip" };
+// The lowercase exports are builders and mounts, not stories.
+const meta: Meta = { title: "Proposals/Tooltips/Chart In Tooltip", excludeStories: /^[a-z]/ };
 export default meta;
 
 export function chartInTooltip(focus: () => string | undefined, opacity: any = 1) {
@@ -51,7 +53,9 @@ export function chartInTooltip(focus: () => string | undefined, opacity: any = 1
                   .flow(spread({ by: "species", dir: "x", spacing: 6 }))
                   .mark(rect({ h: "n", fill: "species" }).label("n")),
               ])
-            )
+            ),
+            // The box is wide, so the last three lakes open it to the left.
+            { side: sideOf(rows[0].lake, 3) }
           );
         }) as any)
     );
@@ -65,19 +69,26 @@ export const Pinned: StoryObj = {
   },
 };
 
+/** Live: hover a lake's stack. Shared by the Interactive story and the
+ *  proposal page's demo bundle (proposals/tooltips/demo). */
+export function mountInteractive(container: HTMLElement) {
+  noPointer(container);
+  const p = pointer();
+  const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
+  return chartInTooltip(
+    lake,
+    live((d: any) => {
+      p.pos();
+      const l = lake();
+      return l === undefined || rowOf<any>(d)?.lake === l ? 1 : 0.55;
+    })
+  ).render(container);
+}
+
 export const Interactive: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    noPointer(container);
-    const p = pointer();
-    const lake = focusFrom(() => hitRow<any>(p)?.lake);
-    chartInTooltip(
-      lake,
-      live((d: any) => {
-        const l = hitRow<any>(p)?.lake;
-        return l === undefined || d?.lake === l ? 1 : 0.55;
-      })
-    ).render(container);
+    mountInteractive(container);
     return container;
   },
 };

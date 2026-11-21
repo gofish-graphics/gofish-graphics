@@ -23,9 +23,12 @@ import {
   focusFrom,
   hitRow,
   noPointer,
+  heldOnTouch,
+  rowOf,
 } from "./helpers";
 
-const meta: Meta = { title: "Proposals/Tooltips/Issue Bar Chart" };
+// The lowercase exports are builders and mounts, not stories.
+const meta: Meta = { title: "Proposals/Tooltips/Issue Bar Chart", excludeStories: /^[a-z]/ };
 export default meta;
 
 const format = { n: thousands, n_articles: thousands, share: percent1 };
@@ -83,17 +86,22 @@ export const Closed: StoryObj = {
 
 /** Live: hover a bar. The pointer is read in the bars' `live()` fill (paint
  *  only, which also registers it), and mapped to a focus key outside the
- *  spec; the spec reads only the key. */
+ *  spec; the spec reads only the key. Shared by the Interactive story and
+ *  the proposal page's demo bundle (proposals/tooltips/demo). */
+export function mountInteractive(container: HTMLElement) {
+  noPointer(container);
+  const p = pointer();
+  const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.path));
+  return issueBar(
+    focus,
+    live((d: any) => (p.pos(), rowOf<any>(d)?.path === focus() ? "#2f5d8a" : "#4c78a8"))
+  ).render(container);
+}
+
 export const Interactive: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    noPointer(container);
-    const p = pointer();
-    const focus = focusFrom(() => hitRow<any>(p)?.path);
-    issueBar(
-      focus,
-      live((d: any) => (d?.path === hitRow<any>(p)?.path ? "#2f5d8a" : "#4c78a8"))
-    ).render(container);
+    mountInteractive(container);
     return container;
   },
 };

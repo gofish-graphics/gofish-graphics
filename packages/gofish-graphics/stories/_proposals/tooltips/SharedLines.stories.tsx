@@ -21,9 +21,13 @@ import {
   live,
 } from "../../../src/lib";
 import { unemployment } from "../../../src/data/unemployment";
-import { box, table, beside, focusFrom, thousands } from "./helpers";
+import { box, table, beside, focusFrom, thousands, drawnScales, heldOnTouch } from "./helpers";
 
-const meta: Meta = { title: "Proposals/Tooltips/Shared Line Tooltip" };
+// The lowercase and all-caps exports are builders, data and mounts, not stories.
+const meta: Meta = {
+  title: "Proposals/Tooltips/Shared Line Tooltip",
+  excludeStories: /^([a-z]|[A-Z_]+$)/,
+};
 export default meta;
 
 const SERIES = [
@@ -50,41 +54,50 @@ const YEARS = [...new Set(yearly.map((d) => d.year))];
 
 /** The chart's own size, for the static stories. */
 export const SIZE = { w: 520, h: 300 };
-/** The canvas of the live story. WALL: there the size goes to `render`, not
- *  `chart`, because `pointer().dataPos()` converts nothing when the chart
- *  has a size of its own; and a render-sized chart with a tier that claims
- *  nothing (the closed tooltip, or an ink box) draws its axes past the
- *  canvas. See NOTES.md. */
+/** A render size, used only by the Measure stories, which ran before the
+ *  live story switched to `drawnScales`. WALL: `pointer().dataPos()` converts
+ *  nothing when the chart has a size of its own, and a render-sized chart
+ *  with a tier that claims nothing (the closed tooltip, or an ink box) draws
+ *  its axes past the canvas. See NOTES.md. */
 export const CANVAS = { w: 760, h: 340 };
 
+/**
+ * `ping`, in the live story, reads the pointer inside the rule's `live()`
+ * opacity, a paint-only read whose only job is to register the pointer with
+ * the chart (a read outside any spec registers nothing). A `live()` read on
+ * the lines' opacity did not register it.
+ */
 export function sharedLines(
   focus: () => number | undefined,
-  lineOpacity: any = 1,
+  ping?: () => unknown,
   size: { w?: number; h?: number } = SIZE
 ) {
+  // The rule is hidden with no focus. Its opacity is set when the chart is
+  // built, or read at paint time in the live story.
+  const ruleOpacity = ping
+    ? live(() => (ping(), focus() === undefined ? 0 : 1))
+    : focus() === undefined
+      ? 0
+      : 1;
   return (
     chart(yearly, {
       ...size,
       axes: { x: { title: false }, y: { title: "Unemployed (thousands)" } },
     })
       .flow(group({ by: "series" }))
-      .mark(
-        line({
-          x: "year",
-          y: "count",
-          stroke: "series",
-          strokeWidth: 2,
-          opacity: lineOpacity,
-        })
-      )
-      // The rule: one 1px rect per year, from 0 to the top of the data, kept
-      // only for the focused year.
+      .mark(line({ x: "year", y: "count", stroke: "series", strokeWidth: 2 }))
+      // The rule: a 1px rect at the focused year, from 0 to the top of the
+      // data. With no focus it is still drawn (at the first year, hidden), so
+      // the y axis keeps its 0 whether a year is focused or not. A rule
+      // present only while open moved the plot on the first hover. The year
+      // is picked by a `filter`, which runs on every resolve.
       .layer(
-        chart(
-          YEARS.filter((y) => y === focus()).map((year) => ({ year, top: TOP }))
-        )
-          .flow(scatter({ by: "year", x: "year" }))
-          .mark(rect({ w: 1, h: "top", fill: "#9ca3af" }))
+        chart(YEARS.map((year) => ({ year, top: TOP })))
+          .flow(
+            filter((d: any) => d.year === (focus() ?? YEARS[0])),
+            scatter({ by: "year", x: "year" })
+          )
+          .mark(rect({ w: 1, h: "top", fill: "#9ca3af", opacity: ruleOpacity as any }))
       )
       // A point per row, named so the tooltip can select them; drawn only at
       // the focused year (the "dot on each line").
@@ -148,25 +161,34 @@ export const Closed: StoryObj = {
 };
 
 /**
- * Live. The focus is the year NEAREST the pointer's data x
- * (`pointer().dataPos()`), not a hit-test, so the pointer never has to be on
- * a line, and a box under the cursor cannot steal the focus. The pointer is
- * registered by a `live()` read on the lines' opacity.
+ * Live. The focus is the year whose x is NEAREST the pointer's x, not a
+ * hit-test, so the pointer never has to be on a line, and a box under the
+ * cursor cannot steal the focus. The pointer is registered by `ping`.
+ *
+ * The chart keeps its own size, so `pointer().dataPos()` is undefined (see
+ * `drawnScales`): the year's x in px is read off the drawn dots, one per row
+ * (`r: 4`, invisible except at the focused year), and compared with
+ * `pointer().pos()`. Shared by the Interactive story and the proposal page's
+ * demo bundle (proposals/tooltips/demo).
  */
+export function mountInteractive(container: HTMLElement) {
+  const p = pointer();
+  const extent: [number, number] = [YEARS[0], YEARS[YEARS.length - 1]];
+  const nearestYear = () => {
+    const at = p.pos();
+    if (at === undefined) return undefined;
+    const px = drawnScales(container, 'ellipse[rx="4"]', { x: extent })?.x;
+    if (!px) return undefined;
+    return YEARS.reduce((a, b) => (Math.abs(px(b) - at.x) < Math.abs(px(a) - at.x) ? b : a));
+  };
+  const year = focusFrom(heldOnTouch(container, nearestYear));
+  return sharedLines(year, () => p.pos()).render(container);
+}
+
 export const Interactive: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    const p = pointer();
-    const nearestYear = () => {
-      const x = p.dataPos()?.x;
-      if (x === undefined) return undefined;
-      return YEARS.reduce((a, b) => (Math.abs(b - x) < Math.abs(a - x) ? b : a));
-    };
-    const year = focusFrom(nearestYear);
-    // `live(() => 1)` that reads the pointer: a paint-only read whose only
-    // job is to register the pointer with the chart (a read outside any spec
-    // registers nothing).
-    sharedLines(year, live(() => (p.pos(), 1)), {}).render(container, CANVAS);
+    mountInteractive(container);
     return container;
   },
 };

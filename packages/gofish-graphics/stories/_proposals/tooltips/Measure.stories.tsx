@@ -171,7 +171,7 @@ async function measure() {
     {
       const c = host();
       const p = pointer();
-      await sharedLines(() => nearestYear(p), 1, {}).render(c, LINES_CANVAS);
+      await sharedLines(() => nearestYear(p), undefined, {}).render(c, LINES_CANVAS);
       await settle();
       const pts = linePts(c);
       out.sweepMoves_lines = pts.length;
@@ -182,7 +182,7 @@ async function measure() {
       const c = host();
       const p = pointer();
       const year = focusFrom(() => nearestYear(p));
-      await sharedLines(year, live(() => (p.pos(), 1)), {}).render(c, LINES_CANVAS);
+      await sharedLines(year, () => p.pos(), {}).render(c, LINES_CANVAS);
       await settle();
       const pts = linePts(c);
       out.reruns_lines_split = await countReruns(c, () => sweep(c, pts));

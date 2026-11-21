@@ -13,6 +13,38 @@ room in the layout.
 The sugar lines below are illustrative spellings, not a decided API. The
 expanded code is what the stories run.
 
+## The live demos on the page (`demo/`)
+
+The proposal page mounts the Interactive stories live from one bundle,
+`demo/tooltip-demos.js`. The stories export `mountInteractive...(container)`
+functions, and both Storybook and the bundle call them, so there is one
+implementation. Build from the repo root:
+
+    pnpm --filter gofish-graphics exec vite build --config ../../proposals/tooltips/demo/vite.config.mjs
+
+The entry is `demo/src/entry.ts`. It exposes
+`window.TooltipDemos.mount(name, element)`. Publish `demo/tooltip-demos.js`
+beside `page.html`, with `img/`. The page keeps each picture until its demo
+mounts, so a blocked bundle leaves the pictures.
+
+Story-side fixes made for the live demos:
+
+- `drawnScales` replaces render sizing. `pointer().dataPos()` is undefined in
+  a chart with its own `w`/`h` (a library bug), and render sizing clipped the
+  axes. The line and scatter charts now keep their own size and map the
+  pointer through where their marks were drawn. The axes are no longer clipped.
+- `heldOnTouch`: a tap ends with `pointerleave`, which clears the pointer. So
+  after a touch the last mark stays focused until the next tap.
+- `noPointer` also turns off hits for everything painted after the box, so a
+  chart inside a tooltip does not take the hit and flicker.
+- The line rule is always drawn and hidden with no focus, so the y axis keeps
+  0 whether the box is open or not.
+- A `live()` opacity on a `line` did not register the pointer. The rule's live
+  opacity reads it instead.
+- `sideOf` opens the box to the left for the last lakes. Past the right edge
+  the box widened the canvas and moved the axis labels.
+- `EdgeCases` has a new `InteractiveFlipped` story.
+
 ## The helpers (`helpers.ts`)
 
 - `table(pairs, {title})`: two `spread`s in y side by side. Names are gray and
@@ -318,21 +350,21 @@ alignment through that chooser, with a list of candidate sides.
 
 The issue column below was matched by topic and several numbers are wrong. The checked matches are in `proposal.md` under Findings.
 
-| Wall                                                                                                                                                                                                                                                                                            | Issue      | Where                    |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- | ------------------------ |
-| No name for a stack group, so no ref to the whole stack. Enclose of the segment refs as a stand-in. `layer(refs)` throws.                                                                                                                                                                       | #802       | stories 2, 5             |
-| `Pointer` has no data-to-px map, so "nearest within N px" is approximated.                                                                                                                                                                                                                      | #849       | story 4                  |
-| `pointer().dataPos()` returns undefined when the chart has its own `w`/`h`. It converts only when the size goes to `render()`.                                                                                                                                                                  | #849       | stories 3, 4 Interactive |
-| A render-sized chart with a tier that has no marks or an ink box draws its axes past the canvas (59 px left, 25 to 46 px below). So the Interactive lines and scatter stories, which need render sizing for `dataPos()`, have clipped axes. The pinned stories use chart sizing and look right. | #849, #850 | stories 3, 4 Interactive |
-| An empty layer tier moves the plot.                                                                                                                                                                                                                                                             | #850       | story 3 Closed           |
-| The pointer registers only through a read inside the spec, so a focus split needs a dummy `live()` read.                                                                                                                                                                                        | #830, #673 | all Interactive          |
-| No `pointer-events` control in paint; the box steals the hit test.                                                                                                                                                                                                                              | #674       | story 1 Interactive      |
-| A tooltip chart shares the parent's measure-keyed domains and type inference. Ink covers room, not scales.                                                                                                                                                                                      | #803       | story 5                  |
-| The color scale is not reachable outside resolve, so a `live()` fill must spell its palette as literals, and a tooltip cannot draw a series swatch.                                                                                                                                             | #673       | stories 3, 4             |
-| A relational mark paints under its operands by default, so an anchor needs `.zOrder(1)`.                                                                                                                                                                                                        |            | stories 2 to 5           |
-| `filter` with no match still calls the mark with `[]`. Adding `group({by})` after it avoids the call.                                                                                                                                                                                           |            | all                      |
-| Nothing formats numbers beyond `String()`. The helpers carry formatters.                                                                                                                                                                                                                        |            | all                      |
-| No drop shadow among the filters. No chart title.                                                                                                                                                                                                                                               |            | all                      |
+| Wall                                                                                                                                                                                                                                                                                       | Issue      | Where                    |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------------------------ |
+| No name for a stack group, so no ref to the whole stack. Enclose of the segment refs as a stand-in. `layer(refs)` throws.                                                                                                                                                                  | #802       | stories 2, 5             |
+| `Pointer` has no data-to-px map, so "nearest within N px" is approximated.                                                                                                                                                                                                                 | #849       | story 4                  |
+| `pointer().dataPos()` returns undefined when the chart has its own `w`/`h`. It converts only when the size goes to `render()`.                                                                                                                                                             | #849       | stories 3, 4 Interactive |
+| A render-sized chart with a tier that has no marks or an ink box draws its axes past the canvas (59 px left, 25 to 46 px below). So the Interactive lines and scatter stories keep chart sizing and map the pointer with `drawnScales` instead of `dataPos()`. Their axes are not clipped. | #849, #850 | stories 3, 4 Interactive |
+| An empty layer tier moves the plot.                                                                                                                                                                                                                                                        | #850       | story 3 Closed           |
+| The pointer registers only through a read inside the spec, so a focus split needs a dummy `live()` read.                                                                                                                                                                                   | #830, #673 | all Interactive          |
+| No `pointer-events` control in paint; the box steals the hit test.                                                                                                                                                                                                                         | #674       | story 1 Interactive      |
+| A tooltip chart shares the parent's measure-keyed domains and type inference. Ink covers room, not scales.                                                                                                                                                                                 | #803       | story 5                  |
+| The color scale is not reachable outside resolve, so a `live()` fill must spell its palette as literals, and a tooltip cannot draw a series swatch.                                                                                                                                        | #673       | stories 3, 4             |
+| A relational mark paints under its operands by default, so an anchor needs `.zOrder(1)`.                                                                                                                                                                                                   |            | stories 2 to 5           |
+| `filter` with no match still calls the mark with `[]`. Adding `group({by})` after it avoids the call.                                                                                                                                                                                      |            | all                      |
+| Nothing formats numbers beyond `String()`. The helpers carry formatters.                                                                                                                                                                                                                   |            | all                      |
+| No drop shadow among the filters. No chart title.                                                                                                                                                                                                                                          |            | all                      |
 
 I matched the issue numbers from the brief's list by topic. I did not reread
 the issues, so check the matches before citing them.

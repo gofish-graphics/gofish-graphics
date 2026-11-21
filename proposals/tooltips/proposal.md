@@ -8,7 +8,7 @@ A proposal for issue #1395, a request for tooltips.
 
 **Recommendation:** build `.tooltip(content?, options?)` as a rewrite into a layer over the focus, and make that rewrite public as `.layer(fn)` on marks and operators, so third parties add modifiers as imported functions.
 
-Every picture is a real capture of the prototype with the focused mark pinned, because the capture tool cannot hover. To try the real thing, run `pnpm storybook` and open the stories under "Proposals/Tooltips/". The Interactive variants respond to the mouse. The interactive line and scatter stories have clipped axes, a prototype limit listed under Findings. The stories are in `packages/gofish-graphics/stories/_proposals/tooltips/`.
+Every picture is a real capture of the prototype with the focused mark pinned, because the capture tool cannot hover. On the published page the examples are live: point at a mark, or tap one. To try the stories, run `pnpm storybook` and open the stories under "Proposals/Tooltips/". The Interactive variants respond to the mouse. The stories are in `packages/gofish-graphics/stories/_proposals/tooltips/`.
 
 ## Terms
 

@@ -20,14 +20,22 @@ import {
   pointer,
 } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import { rowTooltip, box, table, beside, focusFrom, hitRow, noPointer, thousands } from "./helpers";
+import { rowTooltip, box, table, beside, focusFrom, hitRow, noPointer, thousands, heldOnTouch, rowOf } from "./helpers";
 
-const meta: Meta = { title: "Proposals/Tooltips/Stacked Bar" };
+// The lowercase exports are builders and mounts, not stories.
+const meta: Meta = { title: "Proposals/Tooltips/Stacked Bar", excludeStories: /^[a-z]/ };
 export default meta;
 
 type Focus = { lake: string; species?: string } | undefined;
 
 const SPECIES = ["Bass", "Trout", "Catfish", "Perch", "Salmon"];
+const LAKES: string[] = [...new Set(seafood.map((d) => d.lake))];
+
+/** Keep it inside: the last two lakes open their box to the left (chosen
+ *  from the datum, see NOTES.md "keep inside"). Past the right edge, the
+ *  box widened the canvas and moved the plot. */
+export const sideOf = (lake: string, fromEnd = 2) =>
+  LAKES.indexOf(lake) >= LAKES.length - fromEnd ? ("left" as const) : ("right" as const);
 
 /** The stacked bars, segments named "segments". */
 const bars = (opacity: any = 1) =>
@@ -48,7 +56,9 @@ export function segmentTooltip(focus: () => Focus, opacity?: any) {
         group({ by: "species" })
       )
       .mark(((s: any[]) =>
-        beside(s[0], rowTooltip(s[0].datum[0], { format: { count: thousands } }))) as any)
+        beside(s[0], rowTooltip(s[0].datum[0], { format: { count: thousands } }), {
+          side: sideOf(s[0].datum[0].lake),
+        })) as any)
   );
 }
 
@@ -87,7 +97,8 @@ export function stackTooltip(focus: () => Focus, opacity?: any) {
               ],
               { title: rows[0].lake }
             )
-          )
+          ),
+          { side: sideOf(rows[0].lake) }
         );
       }) as any)
   );
@@ -117,41 +128,52 @@ export const Closed: StoryObj = {
   },
 };
 
-/** Live: hover a segment for its row. */
+/** Live: hover a segment for its row. The mounts are shared by the
+ *  Interactive stories and the proposal page's demo bundle
+ *  (proposals/tooltips/demo). */
+export function mountInteractiveSegment(container: HTMLElement) {
+  noPointer(container);
+  const p = pointer();
+  const key = (r: any) => (r ? `${r.lake}|${r.species}` : undefined);
+  const focusKey = focusFrom(heldOnTouch(container, () => key(hitRow(p))));
+  return segmentTooltip(
+    () => {
+      const k = focusKey();
+      if (!k) return undefined;
+      const [lake, species] = k.split("|");
+      return { lake, species };
+    },
+    live((d: any) => (p.pos(), focusKey() === undefined || key(rowOf(d)) === focusKey() ? 1 : 0.55))
+  ).render(container);
+}
+
 export const InteractiveSegment: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    noPointer(container);
-    const p = pointer();
-    const key = (r: any) => (r ? `${r.lake}|${r.species}` : undefined);
-    const focusKey = focusFrom(() => key(hitRow(p)));
-    segmentTooltip(
-      () => {
-        const k = focusKey();
-        if (!k) return undefined;
-        const [lake, species] = k.split("|");
-        return { lake, species };
-      },
-      live((d: any) => (key(hitRow(p)) === undefined || key(d) === key(hitRow(p)) ? 1 : 0.55))
-    ).render(container);
+    mountInteractiveSegment(container);
     return container;
   },
 };
 
 /** Live: hover any segment for its whole stack. */
+export function mountInteractiveWholeStack(container: HTMLElement) {
+  noPointer(container);
+  const p = pointer();
+  const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
+  return stackTooltip(
+    () => (lake() ? { lake: lake()! } : undefined),
+    live((d: any) => {
+      p.pos();
+      const l = lake();
+      return l === undefined || rowOf<any>(d)?.lake === l ? 1 : 0.55;
+    })
+  ).render(container);
+}
+
 export const InteractiveWholeStack: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    noPointer(container);
-    const p = pointer();
-    const lake = focusFrom(() => hitRow<any>(p)?.lake);
-    stackTooltip(
-      () => (lake() ? { lake: lake()! } : undefined),
-      live((d: any) => {
-        const l = hitRow<any>(p)?.lake;
-        return l === undefined || d?.lake === l ? 1 : 0.55;
-      })
-    ).render(container);
+    mountInteractiveWholeStack(container);
     return container;
   },
 };

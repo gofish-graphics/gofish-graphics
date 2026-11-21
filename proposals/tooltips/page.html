@@ -279,6 +279,37 @@
     height: auto;
     max-width: 100%;
   }
+  /* Live demos: the picture shows until the demo has drawn, and stays if the
+     demo cannot load. The demo draws hidden over the picture, then replaces it.
+     Its SVG scales down to the frame. */
+  .frame[data-demo] {
+    position: relative;
+  }
+  .frame .demo {
+    position: absolute;
+    inset: 6px;
+    visibility: hidden;
+    overflow: hidden;
+  }
+  .frame.is-live .demo {
+    position: static;
+    visibility: visible;
+  }
+  .frame.is-live > img {
+    display: none;
+  }
+  .frame .demo svg {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  figcaption .live-note,
+  figure.is-live figcaption .static-note {
+    display: none;
+  }
+  figure.is-live figcaption .live-note {
+    display: inline;
+  }
   .pair {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -525,12 +556,14 @@
       </dd>
     </dl>
     <p class="note">
-      Every picture is a real capture of the prototype with the focused mark
-      pinned, because the capture tool cannot hover. To try the real thing, run
+      The examples are live on this page. Move the pointer over a chart, or tap
+      it on a touch screen. They run the prototype's own stories. The pictures
+      elsewhere are captures of the prototype with the focused mark pinned,
+      because the capture tool cannot hover. To try the stories themselves, run
       <code>pnpm storybook</code> and open the stories under
       "Proposals/Tooltips/". The Interactive variants respond to the mouse. The
-      interactive line and scatter stories have clipped axes, a prototype limit
-      listed under Findings.
+      live line and scatter charts find the year or point under the pointer from
+      where the marks were drawn, a prototype workaround listed under Findings.
     </p>
   </header>
 
@@ -617,14 +650,16 @@
           <figcaption>Asked for: the issue's Vega-Lite screenshot.</figcaption>
         </figure>
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="issue-bar">
             <img
               src="img/issue-bar.png"
               alt="GoFish bar chart with a tooltip box on the top bar listing path, length, n, n_articles and share"
             />
           </div>
           <figcaption>
-            Prototype. Story: Proposals/Tooltips/Issue Bar Chart.
+            <span class="static-note">Prototype.</span>
+            <span class="live-note">Live. Point at a bar, or tap one.</span>
+            Story: Proposals/Tooltips/Issue Bar Chart.
           </figcaption>
         </figure>
       </div>
@@ -706,14 +741,16 @@ chart(pathTypes, { w: 520, h: 400 })
       </div>
       <div class="figs">
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="stack-segment">
             <img
               src="img/stack-segment.png"
               alt="Stacked bar chart of catch by lake with a tooltip on the Trout segment of Lake C"
             />
           </div>
           <figcaption>
-            Prototype, Lake C and Trout. Story: Proposals/Tooltips/Stacked Bar.
+            <span class="static-note">Prototype, Lake C and Trout.</span>
+            <span class="live-note">Live. Point at a segment, or tap one.</span>
+            Story: Proposals/Tooltips/Stacked Bar.
           </figcaption>
         </figure>
       </div>
@@ -764,14 +801,16 @@ chart(pathTypes, { w: 520, h: 400 })
       </div>
       <div class="figs">
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="stack-whole">
             <img
               src="img/stack-whole.png"
               alt="Stacked bar chart with Lake C outlined and a tooltip listing each species count and a total of 124"
             />
           </div>
           <figcaption>
-            Prototype, Lake C. Story: Proposals/Tooltips/Stacked Bar.
+            <span class="static-note">Prototype, Lake C.</span>
+            <span class="live-note">Live. Point at a stack, or tap one.</span>
+            Story: Proposals/Tooltips/Stacked Bar.
           </figcaption>
         </figure>
       </div>
@@ -863,14 +902,18 @@ chart(seafood, { w: 420, h: 320 })
       </div>
       <div class="figs">
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="lines-shared">
             <img
               src="img/lines-shared.png"
               alt="Four unemployment lines with a gray rule at 2003, a dot on each line, and one box listing all four series"
             />
           </div>
           <figcaption>
-            Prototype, 2003. Story: Proposals/Tooltips/Shared Line Tooltip.
+            <span class="static-note">Prototype, 2003.</span>
+            <span class="live-note"
+              >Live. Move the pointer along the lines, or tap a year.</span
+            >
+            Story: Proposals/Tooltips/Shared Line Tooltip.
           </figcaption>
         </figure>
       </div>
@@ -972,21 +1015,25 @@ chart(yearly)
       <div class="head">
         <h3>Scatterplot, the nearest point</h3>
         <p>
-          The red cross is the pinned pointer. It is on no point, so the point
-          nearest it within 30 pixels is the focus. The ring is one more layer
-          over the focus.
+          The focus is the point nearest the pointer within 30 pixels, so the
+          pointer does not have to be on a point. The ring is one more layer
+          over the focus. In the pinned picture, the red cross is the pointer.
         </p>
       </div>
       <div class="figs">
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="scatter-nearest">
             <img
               src="img/scatter-nearest.png"
               alt="Penguin scatterplot with a red cross near an Adelie point, which is ringed and has a tooltip"
             />
           </div>
           <figcaption>
-            Prototype. Story: Proposals/Tooltips/Scatter Nearest.
+            <span class="static-note">Prototype.</span>
+            <span class="live-note"
+              >Live. Move the pointer near a point, or tap one.</span
+            >
+            Story: Proposals/Tooltips/Scatter Nearest.
           </figcaption>
         </figure>
       </div>
@@ -1054,14 +1101,16 @@ chart(rows, { w: 440, h: 360 })
       </div>
       <div class="figs">
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="chart-in-tooltip">
             <img
               src="img/chart-in-tooltip.png"
               alt="Stacked bars with Lake B outlined and a tooltip holding a small bar chart of Lake B's species"
             />
           </div>
           <figcaption>
-            Prototype, Lake B. Story: Proposals/Tooltips/Chart In Tooltip.
+            <span class="static-note">Prototype, Lake B.</span>
+            <span class="live-note">Live. Point at a stack, or tap one.</span>
+            Story: Proposals/Tooltips/Chart In Tooltip.
           </figcaption>
         </figure>
       </div>
@@ -1126,21 +1175,28 @@ chart(rows, { w: 440, h: 360 })
     <div class="section">
       <h2>The chart does not move</h2>
       <p>
-        Two boxes are open at once here only to show both edges in one picture.
-        On the left the boxes float. On the right they take room like any layer:
-        the canvas grows from 471×353 to 497×437 and the plot moves down 84 px.
-        With floating boxes, 0 of 45 elements move.
+        The pictures open two boxes at once only to show both edges in one
+        picture. The live chart opens one at a time. On the left the boxes
+        float. On the right they take room like any layer: the canvas grows from
+        471×353 to 497×437 and the plot moves down 84 px. With floating boxes, 0
+        of 45 elements move.
       </p>
       <div class="pair">
         <figure>
-          <div class="frame">
+          <div class="frame" data-demo="edge-flip">
             <img
               src="img/edge-flip.png"
               alt="Bar chart with two floating tooltips kept inside the plot"
             />
           </div>
           <figcaption>
-            Floating. Story: Proposals/Tooltips/Edge Cases, Flipped.
+            <span class="static-note"
+              >Floating. Story: Proposals/Tooltips/Edge Cases, Flipped.</span
+            >
+            <span class="live-note"
+              >Floating, live, one box at a time. Point at a bar, or tap one.
+              Story: Proposals/Tooltips/Edge Cases, InteractiveFlipped.</span
+            >
           </figcaption>
         </figure>
         <figure>
@@ -1203,7 +1259,8 @@ chart(rows, { w: 440, h: 360 })
               <td class="num">85 / 95</td>
               <td>
                 A 0.75 px shift caused by an empty layer in the closed render.
-                It is a library bug of its own, listed under Findings.
+                It is a library bug of its own, listed under Findings. The rule
+                is now always drawn, and in the live chart nothing moves.
               </td>
             </tr>
           </tbody>
@@ -2366,17 +2423,19 @@ girafe(ggobj = gg)</code></pre>
                 sets its own <code>w</code>/<code>h</code>.
               </td>
               <td>
-                The interactive line and scatter stories size the render
-                instead.
+                The live line and scatter charts keep their own size and read
+                where each year or point was drawn off the drawn marks. The
+                scatter's live distance is then in true pixels.
               </td>
               <td>unfiled</td>
             </tr>
             <tr>
               <td>A layer with no marks moves the plot.</td>
               <td>
-                0.75 px in the closed line story. In a render-sized chart it
-                moved the x axis by 46 px, which is why the interactive line and
-                scatter stories have clipped axes.
+                0.75 px in the closed line story, whose rule layer was empty.
+                The rule is now always drawn and hidden with no focus. In a
+                render-sized chart an empty layer moved the x axis by 46 px and
+                clipped the axes, so the live charts are not render-sized.
               </td>
               <td>unfiled</td>
             </tr>
@@ -2566,5 +2625,57 @@ girafe(ggobj = gg)</code></pre>
         } catch (e) {}
       });
     }
+  })();
+</script>
+<!-- The live demos: the prototype stories, built by proposals/tooltips/demo. -->
+<script src="demo/tooltip-demos.js"></script>
+<script>
+  (function () {
+    var api = window.TooltipDemos;
+    if (!api || !("IntersectionObserver" in window)) return;
+    // Scale the SVG down to the frame. Each re-render draws a new SVG, so the
+    // observer fits every one before it is painted.
+    function fit(demo) {
+      var svg = demo.querySelector("svg");
+      if (!svg) return;
+      var box =
+        "0 0 " + svg.getAttribute("width") + " " + svg.getAttribute("height");
+      if (svg.getAttribute("viewBox") !== box) svg.setAttribute("viewBox", box);
+    }
+    function mount(frame) {
+      var demo = document.createElement("div");
+      demo.className = "demo";
+      frame.appendChild(demo);
+      new MutationObserver(function () {
+        fit(demo);
+      }).observe(demo, { childList: true, subtree: true });
+      api
+        .mount(frame.getAttribute("data-demo"), demo)
+        .then(function () {
+          if (!demo.querySelector("svg")) throw new Error("nothing drawn");
+          fit(demo);
+          frame.classList.add("is-live");
+          frame.parentElement.classList.add("is-live");
+        })
+        .catch(function (e) {
+          demo.remove();
+          console.warn("Live demo failed, the picture stays:", e);
+        });
+    }
+    // Mount a demo only when its frame comes near the screen. A frame in a
+    // hidden tab never does, until its tab is shown.
+    var io = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (e) {
+          if (!e.isIntersecting) return;
+          io.unobserve(e.target);
+          mount(e.target);
+        });
+      },
+      { rootMargin: "200px 0px" }
+    );
+    document.querySelectorAll(".frame[data-demo]").forEach(function (f) {
+      io.observe(f);
+    });
   })();
 </script>
