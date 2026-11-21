@@ -53,7 +53,7 @@ Runs today (prototype), story "Proposals/Tooltips/Issue Bar Chart":
 - **No argument:** one row per field with a single value on this mark. That is every field that is constant across the mark's rows, plus each field the mark draws, shown with its drawn value (a stacked segment's summed count). This joins Vega-Lite's "data" and "encoding" contents.
 - **A list of fields:** order is row order. This form is plain data, so it serializes and works in Python and in the notebook widget with no Python callback.
 - **A function from the rows to any mark:** the content is ordinary GoFish, so a chart in a tooltip needs nothing new. JavaScript only at first.
-- **Options:** `by` groups the marks by a field and makes the group the focus. `radius` is how near counts, in pixels. `position` takes the same `Place` family and the same chooser that labels use, so the box stays inside the chart and flips sides.
+- **Options:** `by` groups the marks by a field and makes the group the focus. `radius` is how near counts, in pixels. `position` takes the same `Place` family and the same chooser that labels use, so the box stays inside the chart and flips sides. That chooser is a first-fit `choose` over sides (the choice and cost proposal, #486), so keeping the box inside needs no rule of its own, and a box can fall back to shorter content with the same operator: `.tooltip(choose([fullTable, shortTable]))`.
 
 {{signature}}
 
@@ -212,22 +212,22 @@ The gaps every system leaves open:
 
 ## Findings
 
-| Finding                                                                            | What it means                                                                      | Issue                     |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------- |
-| There is no way to name an operator's group.                                       | The whole-stack tooltip uses an outline of the segments as a stand-in.             | #802                      |
-| Nearest within a radius needs a data-to-pixel map on the pointer.                  | The prototype estimates pixel distance from the chart size.                        | #849                      |
-| An input cannot be a chart's dataset yet.                                          | The focus is computed outside the spec.                                            | #830                      |
-| Node ids change on every re-run.                                                   | The focus is compared by key.                                                      | #673                      |
-| Every pointer move re-runs layout unless split by hand.                            | The prototype splits focus from position by hand.                                  | #674 is the long-term fix |
-| Hover cannot be captured for visual tests.                                         | The pictures pin the focus.                                                        | #672                      |
-| `pointer().dataPos()` is undefined when the chart sets its own `w`/`h`.            | The interactive line and scatter stories size the render instead.                  | unfiled                   |
-| A layer with no marks moves the plot.                                              | 0.75 px in the closed line story, and the x axis by 46 px in a render-sized chart. | unfiled                   |
-| Nothing sets `pointer-events`.                                                     | A box under the cursor steals the hit and flickers.                                | unfiled                   |
-| A chart nested in a tooltip shares the outer chart's scale for a same-named field. | The nested chart renames `count` to `n`.                                           | unfiled                   |
-| A relational mark paints under the marks it references.                            | The box needed `.zOrder(1)`.                                                       | unfiled                   |
-| `filter` with no match still calls the mark with an empty list.                    | Each story adds a `group` after the filter.                                        | unfiled                   |
-| There is no number formatting.                                                     | The helpers carry their own formatters.                                            | unfiled                   |
-| The box's side is picked by hand.                                                  | The label chooser should pick it. This is a declared shortcut in the prototype.    | unfiled                   |
+| Finding                                                                            | What it means                                                                                                            | Issue                     |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| There is no way to name an operator's group.                                       | The whole-stack tooltip uses an outline of the segments as a stand-in.                                                   | #802                      |
+| Nearest within a radius needs a data-to-pixel map on the pointer.                  | The prototype estimates pixel distance from the chart size.                                                              | #849                      |
+| An input cannot be a chart's dataset yet.                                          | The focus is computed outside the spec.                                                                                  | #830                      |
+| Node ids change on every re-run.                                                   | The focus is compared by key.                                                                                            | #673                      |
+| Every pointer move re-runs layout unless split by hand.                            | The prototype splits focus from position by hand.                                                                        | #674 is the long-term fix |
+| Hover cannot be captured for visual tests.                                         | The pictures pin the focus.                                                                                              | #672                      |
+| `pointer().dataPos()` is undefined when the chart sets its own `w`/`h`.            | The interactive line and scatter stories size the render instead.                                                        | unfiled                   |
+| A layer with no marks moves the plot.                                              | 0.75 px in the closed line story, and the x axis by 46 px in a render-sized chart.                                       | unfiled                   |
+| Nothing sets `pointer-events`.                                                     | A box under the cursor steals the hit and flickers.                                                                      | unfiled                   |
+| A chart nested in a tooltip shares the outer chart's scale for a same-named field. | The nested chart renames `count` to `n`.                                                                                 | unfiled                   |
+| A relational mark paints under the marks it references.                            | The box needed `.zOrder(1)`.                                                                                             | unfiled                   |
+| `filter` with no match still calls the mark with an empty list.                    | Each story adds a `group` after the filter.                                                                              | unfiled                   |
+| There is no number formatting.                                                     | The helpers carry their own formatters.                                                                                  | unfiled                   |
+| The box's side is picked by hand.                                                  | A first-fit `choose` over sides should pick it, as the label chooser does. This is a declared shortcut in the prototype. | unfiled                   |
 
 Related issues:
 

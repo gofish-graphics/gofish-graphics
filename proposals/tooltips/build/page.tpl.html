@@ -1039,7 +1039,11 @@
           and makes the group the focus. <code>radius</code> is how near counts,
           in pixels. <code>position</code> takes the same
           <code>Place</code> family and the same chooser that labels use, so the
-          box stays inside the chart and flips sides.
+          box stays inside the chart and flips sides. That chooser is a
+          first-fit <code>choose</code> over sides (the choice and cost
+          proposal, #486), so keeping the box inside needs no rule of its own,
+          and a box can fall back to shorter content with the same operator:
+          <code>.tooltip(choose([fullTable, shortTable]))</code>.
         </li>
       </ul>
       <div class="pair">
@@ -1958,8 +1962,9 @@
             <tr>
               <td>The box's side is picked by hand.</td>
               <td>
-                The label chooser should pick it. This is a declared shortcut in
-                the prototype.
+                A first-fit <code>choose</code> over sides should pick it, as
+                the label chooser does. This is a declared shortcut in the
+                prototype.
               </td>
               <td>unfiled</td>
             </tr>
