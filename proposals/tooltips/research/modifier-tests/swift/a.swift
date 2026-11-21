@@ -1,0 +1,2 @@
+import Plugin
+func setup() {}

@@ -1,0 +1,2567 @@
+<title>Tooltip Proposal</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap"
+/>
+<style>
+  /* Layout: one centered column of tabs; example cards put the picture beside its code on wide screens. */
+  :root {
+    --bg: #f6f7f9;
+    --surface: #ffffff;
+    --fg: #1a2230;
+    --muted: #586273;
+    --line: #dce0e7;
+    --accent: #275a9a;
+    --accent-weak: #e7eef8;
+    --code-bg: #f0f2f6;
+    --paper: #ffffff;
+    --tk-kw: #7b3aa0;
+    --tk-str: #23703f;
+    --tk-num: #a3480f;
+    --tk-com: #6a7381;
+    --tk-fn: #275a9a;
+    --tk-attr: #85590a;
+    --font-text:
+      "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+    --font-code:
+      "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11151b;
+      --surface: #171c24;
+      --fg: #e2e6ed;
+      --muted: #9ba5b4;
+      --line: #2a313c;
+      --accent: #85abe0;
+      --accent-weak: #1c2737;
+      --code-bg: #0e1217;
+      --paper: #ffffff;
+      --tk-kw: #cf9cf0;
+      --tk-str: #8fd0a1;
+      --tk-num: #eba66d;
+      --tk-com: #7f8998;
+      --tk-fn: #8fb7ee;
+      --tk-attr: #e2c27c;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11151b;
+    --surface: #171c24;
+    --fg: #e2e6ed;
+    --muted: #9ba5b4;
+    --line: #2a313c;
+    --accent: #85abe0;
+    --accent-weak: #1c2737;
+    --code-bg: #0e1217;
+    --paper: #ffffff;
+    --tk-kw: #cf9cf0;
+    --tk-str: #8fd0a1;
+    --tk-num: #eba66d;
+    --tk-com: #7f8998;
+    --tk-fn: #8fb7ee;
+    --tk-attr: #e2c27c;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-text);
+    font-size: 15px;
+    line-height: 1.55;
+  }
+  .wrap {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 36px 72px;
+  }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-head);
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1 {
+    font-size: 2rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin-top: 8px;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  p {
+    margin: 0;
+    max-width: 72ch;
+  }
+  a {
+    color: var(--accent);
+  }
+  code,
+  pre {
+    font-family: var(--font-code);
+    font-variant-ligatures: none;
+    font-feature-settings:
+      "liga" 0,
+      "calt" 0;
+  }
+  code {
+    font-size: 0.88em;
+  }
+  :not(pre) > code {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 4px;
+  }
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .section {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 40px;
+  }
+  .muted {
+    color: var(--muted);
+  }
+
+  header.top {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .summary {
+    font-size: 1.05rem;
+  }
+  .summary li {
+    margin-bottom: 2px;
+  }
+  ul,
+  ol {
+    margin: 0;
+    padding-left: 1.25em;
+    max-width: 78ch;
+  }
+  li + li {
+    margin-top: 4px;
+  }
+  dl.terms {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 6px 18px;
+    margin: 0;
+    max-width: 900px;
+  }
+  dl.terms dt {
+    font-weight: 600;
+  }
+  dl.terms dd {
+    margin: 0;
+    color: var(--muted);
+  }
+  .note {
+    border-left: 3px solid var(--accent);
+    padding: 8px 14px;
+    background: var(--accent-weak);
+    border-radius: 0 6px 6px 0;
+    max-width: 900px;
+  }
+
+  nav.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 22px;
+    border-bottom: 1px solid var(--line);
+    margin-top: 30px;
+  }
+  nav.tabs button {
+    appearance: none;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    padding: 10px 2px;
+    margin-bottom: -1px;
+    font: 500 15px var(--font-text);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  nav.tabs button:hover {
+    color: var(--fg);
+  }
+  nav.tabs button[aria-selected="true"] {
+    color: var(--fg);
+    border-bottom-color: var(--accent);
+  }
+  nav.tabs button:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 3px;
+  }
+  .panel {
+    padding-top: 26px;
+  }
+
+  .rules {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px 18px 14px 34px;
+    max-width: 900px;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 18px 24px;
+    margin-top: 22px;
+  }
+  .card > * {
+    min-width: 0;
+  }
+  .card .head {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  @media (min-width: 1060px) {
+    .card {
+      grid-template-columns: minmax(0, 520px) minmax(0, 1fr);
+    }
+  }
+  .figs {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  figcaption {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .frame {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 6px;
+  }
+  .frame img {
+    display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+  @media (max-width: 760px) {
+    .pair {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .codes {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .label {
+    display: block;
+    font: 600 11px var(--font-text);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  pre {
+    margin: 0;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 12px 14px;
+    overflow-x: auto;
+    font: 12.5px/1.55 var(--font-code);
+    color: var(--fg);
+    tab-size: 2;
+  }
+  pre code {
+    font-size: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+  }
+  details {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+  details > summary {
+    cursor: pointer;
+    padding: 8px 12px;
+    font: 600 11px var(--font-text);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+  }
+  details[open] > summary {
+    border-bottom: 1px solid var(--line);
+  }
+  details > .inner {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  details > .inner pre {
+    border: 0;
+  }
+
+  .fork {
+    grid-column: 1 / -1;
+    border-top: 1px dashed var(--line);
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .fork .opts {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+  @media (max-width: 760px) {
+    .fork .opts {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .opt {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .tag {
+    align-self: flex-start;
+    font: 600 11px var(--font-text);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .tag.pick {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-weak);
+  }
+  .opt p {
+    font-size: 14px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+  table {
+    border-collapse: collapse;
+    font-size: 14px;
+    min-width: 520px;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600;
+    color: var(--muted);
+    font-size: 12.5px;
+  }
+  td.num,
+  th.num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .appendix {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .appendix h2 {
+    font-size: 1.1rem;
+  }
+
+  .grid-pw {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+    gap: 18px;
+  }
+  .grid-pw .card {
+    margin-top: 0;
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+  }
+
+  /* highlight.js tokens, from the theme tokens above */
+  .hljs-keyword,
+  .hljs-literal,
+  .hljs-meta .hljs-keyword,
+  .hljs-selector-tag {
+    color: var(--tk-kw);
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-template-string {
+    color: var(--tk-str);
+  }
+  .hljs-number,
+  .hljs-symbol {
+    color: var(--tk-num);
+  }
+  .hljs-comment,
+  .hljs-quote {
+    color: var(--tk-com);
+    font-style: italic;
+  }
+  .hljs-title,
+  .hljs-title.function_,
+  .hljs-section {
+    color: var(--tk-fn);
+  }
+  .hljs-attr,
+  .hljs-attribute,
+  .hljs-property,
+  .hljs-name,
+  .hljs-tag {
+    color: var(--tk-attr);
+  }
+  .hljs-built_in,
+  .hljs-type,
+  .hljs-params,
+  .hljs-variable,
+  .hljs-subst {
+    color: var(--fg);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * {
+      scroll-behavior: auto !important;
+    }
+  }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1>Tooltips for GoFish</h1>
+    <p class="muted">A proposal for issue #1395, a request for tooltips.</p>
+    <ul class="summary">
+      <li>Add <code>.tooltip()</code> to every mark and every operator.</li>
+      <li>
+        It is sugar for one more layer over the focused mark, the same construct
+        as <code>.label()</code>.
+      </li>
+      <li>
+        The box floats, so the chart never moves when it opens, and its content
+        is ordinary GoFish.
+      </li>
+    </ul>
+    <dl class="terms">
+      <dt>tooltip</dt>
+      <dd>
+        A small box of details about one mark, shown while the pointer is on or
+        near it.
+      </dd>
+      <dt>focus</dt>
+      <dd>The one mark, or group of marks, the pointer currently picks.</dd>
+      <dt>modifier</dt>
+      <dd>
+        A chained method on a mark or operator that adds something about it:
+        <code>.name()</code>, <code>.label()</code>, and now
+        <code>.tooltip()</code>.
+      </dd>
+      <dt>layer</dt>
+      <dd>One more chart drawn in the same coordinate space as the first.</dd>
+      <dt>floating</dt>
+      <dd>
+        Drawn, but takes no room in the layout, so nothing else moves when it
+        appears.
+      </dd>
+    </dl>
+    <p class="note">
+      Every picture is a real capture of the prototype with the focused mark
+      pinned, because the capture tool cannot hover. To try the real thing, run
+      <code>pnpm storybook</code> and open the stories under
+      "Proposals/Tooltips/". The Interactive variants respond to the mouse. The
+      interactive line and scatter stories have clipped axes, a prototype limit
+      listed under Findings.
+    </p>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button
+      role="tab"
+      id="tab-examples"
+      aria-controls="examples"
+      data-tab="examples"
+    >
+      Examples
+    </button>
+    <button
+      role="tab"
+      id="tab-rewrite"
+      aria-controls="rewrite"
+      data-tab="rewrite"
+    >
+      The rewrite
+    </button>
+    <button
+      role="tab"
+      id="tab-extending"
+      aria-controls="extending"
+      data-tab="extending"
+    >
+      Extending
+    </button>
+    <button
+      role="tab"
+      id="tab-prior-work"
+      aria-controls="prior-work"
+      data-tab="prior-work"
+    >
+      Prior work
+    </button>
+    <button
+      role="tab"
+      id="tab-findings"
+      aria-controls="findings"
+      data-tab="findings"
+    >
+      Findings
+    </button>
+  </nav>
+
+  <!-- ============================== EXAMPLES ============================== -->
+  <section
+    class="panel"
+    id="examples"
+    role="tabpanel"
+    aria-labelledby="tab-examples"
+  >
+    <ul class="rules">
+      <li><code>.tooltip()</code> works on any mark and on any operator.</li>
+      <li>
+        With no argument it shows one row per field that has a single value on
+        the mark.
+      </li>
+      <li>
+        The focus is the mark whose outline is nearest the pointer within
+        <code>radius</code> pixels. Being inside a mark is distance zero.
+      </li>
+      <li>The box floats. It takes no room and is not a pointer target.</li>
+    </ul>
+
+    <article class="card">
+      <div class="head">
+        <h3>The issue's bar chart</h3>
+        <p>
+          The default content is every field with one value on the bar. Here
+          that is the whole row. Only the first row of data is from the issue;
+          the rest are invented.
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/issue-vega-lite.png"
+              alt="Vega-Lite bar chart of the top 15 path types with a tooltip on the top bar"
+            />
+          </div>
+          <figcaption>Asked for: the issue's Vega-Lite screenshot.</figcaption>
+        </figure>
+        <figure>
+          <div class="frame">
+            <img
+              src="img/issue-bar.png"
+              alt="GoFish bar chart with a tooltip box on the top bar listing path, length, n, n_articles and share"
+            />
+          </div>
+          <figcaption>
+            Prototype. Story: Proposals/Tooltips/Issue Bar Chart.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">chart(pathTypes)
+  .flow(spread({ by: "path", dir: "y" }))
+  .mark(rect({ w: "share" }).tooltip());</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, a list of fields with formats</span>
+          <pre><code class="language-javascript">rect({ w: "share" }).tooltip(["path", "n", field("share").format(percent)]);</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, Python</span>
+          <pre><code class="language-python">chart(path_types).flow(spread(by="path", dir="y")).mark(rect(w="share").tooltip())
+rect(w="share").tooltip(["path", "n", field("share").format(percent)])</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">// helpers.ts: rowTooltip, beside, percent1, thousands
+const format = { n: thousands, n_articles: thousands, share: percent1 };
+
+chart(pathTypes, { w: 520, h: 400 })
+  .flow(spread({ by: "path", dir: "y", spacing: 4 }))
+  .mark(rect({ w: "share" }).name("bars"))
+  .layer(
+    chart(selectAll("bars"))
+      .flow(
+        filter((bar) =&gt; bar.datum[0].path === focus()),
+        group({ by: "path" })
+      )
+      .mark((bar) =&gt;
+        beside(
+          bar[0],
+          rowTooltip(bar[0].datum[0], { format }),
+          // the side is picked by hand from the datum
+          bar[0].datum[0].share &gt; 0.09
+            ? { side: "bottom", align: "end", gap: 4 }
+            : { side: "right" }
+        )
+      )
+  );</code></pre>
+          </div>
+        </details>
+      </div>
+      <div class="fork">
+        <h3>Fork: its own modifier, or an option of label</h3>
+        <div class="opts">
+          <div class="opt">
+            <span class="tag pick">Pick</span>
+            <pre><code class="language-javascript">rect({ w: "share" }).tooltip();</code></pre>
+            <p>
+              <code>.tooltip()</code> is its own modifier, so each default fits
+              its job.
+            </p>
+          </div>
+          <div class="opt">
+            <span class="tag">Alternative</span>
+            <pre><code class="language-javascript">rect({ w: "share" }).label(content, { on: pointer() });</code></pre>
+            <p>
+              One operator fewer, but one option would then flip three defaults
+              at once: content, room, and which marks.
+            </p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
+        <h3>Stacked bar, one segment</h3>
+        <p>
+          A segment's drawn field shows its drawn value, the segment's own
+          count.
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/stack-segment.png"
+              alt="Stacked bar chart of catch by lake with a tooltip on the Trout segment of Lake C"
+            />
+          </div>
+          <figcaption>
+            Prototype, Lake C and Trout. Story: Proposals/Tooltips/Stacked Bar.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }).tooltip());</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">chart(seafood, { w: 420, h: 320 })
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }).name("segments"))
+  .layer(
+    chart(selectAll("segments"))
+      .flow(
+        filter(
+          (s) =&gt;
+            s.datum[0].lake === focus()?.lake &amp;&amp;
+            s.datum[0].species === focus()?.species
+        ),
+        group({ by: "species" })
+      )
+      .mark((s) =&gt;
+        beside(
+          s[0],
+          rowTooltip(s[0].datum[0], { format: { count: thousands } })
+        )
+      )
+  );</code></pre>
+          </div>
+        </details>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
+        <h3>Stacked bar, the whole stack</h3>
+        <p>
+          On an operator, the tooltip is for each group the operator makes. Its
+          default content is a title from the group's key, one row per child,
+          and a total. This needs operators to take <code>.name()</code>, which
+          today only marks do (#802).
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/stack-whole.png"
+              alt="Stacked bar chart with Lake C outlined and a tooltip listing each species count and a total of 124"
+            />
+          </div>
+          <figcaption>
+            Prototype, Lake C. Story: Proposals/Tooltips/Stacked Bar.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }).tooltip(),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "species" }));</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">// #802: the stack cannot be named, so an enclose of its segments stands in
+chart(seafood, { w: 420, h: 320 })
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }).name("segments"))
+  .layer(
+    chart(selectAll("segments"))
+      .flow(
+        filter((s) =&gt; s.datum[0].lake === focus()?.lake),
+        group({ by: "lake" })
+      )
+      .mark((s) =&gt; {
+        const rows = s.map((r) =&gt; r.datum[0]);
+        const total = rows.reduce((t, r) =&gt; t + r.count, 0);
+        const bySpecies = SPECIES.map((sp) =&gt;
+          rows.find((r) =&gt; r.species === sp)
+        )
+          .filter((r) =&gt; r !== undefined)
+          .reverse(); // top segment first
+        const outline = enclose(
+          { padding: 2, fill: "none", stroke: "#111827", strokeWidth: 1.5 },
+          s
+        ).zOrder(1); // a relational mark paints under its operands
+        return beside(
+          outline,
+          box(
+            table(
+              [
+                ...bySpecies.map((r) =&gt; [r.species, thousands(r.count)]),
+                ["total", thousands(total)],
+              ],
+              { title: rows[0].lake }
+            )
+          )
+        );
+      })
+  );</code></pre>
+          </div>
+        </details>
+      </div>
+      <div class="fork">
+        <h3>Fork: which form the docs lead with</h3>
+        <p class="muted">
+          Both forms are kept, and they have the same expansion.
+        </p>
+        <div class="opts">
+          <div class="opt">
+            <span class="tag pick">Pick</span>
+            <pre><code class="language-javascript">spread({ by: "lake", dir: "x" }).tooltip();</code></pre>
+            <p>On the operator. It names a group that already exists.</p>
+          </div>
+          <div class="opt">
+            <span class="tag">Alternative</span>
+            <pre><code class="language-javascript">rect({ h: "count", fill: "species" }).tooltip({ by: "lake" });</code></pre>
+            <p><code>by</code> on the mark. It works without #802.</p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
+        <h3>Several lines, one shared tooltip</h3>
+        <p>
+          Other libraries need a chart-wide mode for this because their tooltip
+          belongs to one mark, and the points of every series at one year are
+          many marks. Here <code>by: "year"</code> groups them, and the group is
+          the focus. The rule and the dots are not tooltip options. They are two
+          more ordinary layers over the same focus. A line is one mark per
+          series, so there is nothing per year to group. The proposed code adds
+          an invisible point per row for the tooltip to group, which is the
+          weakest part of this example and needs a cleaner spelling.
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/lines-shared.png"
+              alt="Four unemployment lines with a gray rule at 2003, a dot on each line, and one box listing all four series"
+            />
+          </div>
+          <figcaption>
+            Prototype, 2003. Story: Proposals/Tooltips/Shared Line Tooltip.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">chart(yearly)
+  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
+  .mark(line({ stroke: "series" }))
+  .layer(
+    chart(yearly)
+      .flow(scatter({ x: "year", y: "count" }))
+      .mark(circle({ r: 3, opacity: 0 }).name("pts").tooltip({ by: "year" }))
+  );</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, with the rule and the dots</span>
+          <pre><code class="language-javascript">// The focus the tooltip uses, bound to a constant and reused.
+// The rule and the dots are a sketch: two ordinary layers over it.
+const hover = pointer().snap(selectAll("pts"), { by: "year" });
+
+chart(yearly)
+  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
+  .mark(line({ stroke: "series" }))
+  .layer(
+    chart(yearly)
+      .flow(scatter({ x: "year", y: "count" }))
+      .mark(circle({ r: 3, opacity: 0 }).name("pts").tooltip({ by: "year" }))
+  )
+  // the rule
+  .layer(
+    chart(hover)
+      .flow(scatter({ by: "year", x: "year" }))
+      .mark(rect({ w: 1, fill: "gray" }))
+  )
+  // the dots
+  .layer(chart(hover).mark(circle({ r: 4, fill: "series", stroke: "white" })));</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, Python</span>
+          <pre><code class="language-python">circle(r=3).tooltip(by="year")</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">chart(yearly, { w: 520, h: 300 })
+  .flow(group({ by: "series" }), scatter({ by: "year", x: "year", y: "count" }))
+  .mark(line({ stroke: "series", strokeWidth: 2 }))
+  // the rule: one 1 px rect, kept only for the focused year
+  .layer(
+    chart(
+      YEARS.filter((y) =&gt; y === focus()).map((year) =&gt; ({ year, top: TOP }))
+    )
+      .flow(scatter({ by: "year", x: "year" }))
+      .mark(rect({ w: 1, h: "top", fill: "#9ca3af" }))
+  )
+  // a point per row, drawn only at the focused year
+  .layer(
+    chart(yearly)
+      .flow(scatter({ x: "year", y: "count" }))
+      .mark(
+        circle({
+          r: 4,
+          fill: "series",
+          stroke: "white",
+          opacity: (d) =&gt; (d.year === focus() ? 1 : 0),
+        }).name("pts")
+      )
+  )
+  // the box: the points at the focused year, as one group
+  .layer(
+    chart(selectAll("pts"))
+      .flow(
+        filter((pt) =&gt; pt.datum[0].year === focus()),
+        group({ by: "year" })
+      )
+      .mark((pts) =&gt; {
+        const rows = pts
+          .map((pt) =&gt; pt.datum[0])
+          .sort((a, b) =&gt; b.count - a.count);
+        const anchor = enclose(
+          { padding: 6, fill: "none", stroke: "none" },
+          pts
+        ).zOrder(1);
+        return beside(
+          anchor,
+          box(
+            table(
+              rows.map((r) =&gt; [r.series, thousands(r.count)]),
+              { title: String(rows[0].year) }
+            )
+          ),
+          { side: rows[0].year &gt; 2005 ? "left" : "right" } // picked by hand
+        );
+      })
+  );</code></pre>
+          </div>
+        </details>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
+        <h3>Scatterplot, the nearest point</h3>
+        <p>
+          The red cross is the pinned pointer. It is on no point, so the point
+          nearest it within 30 pixels is the focus. The ring is one more layer
+          over the focus.
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/scatter-nearest.png"
+              alt="Penguin scatterplot with a red cross near an Adelie point, which is ringed and has a tooltip"
+            />
+          </div>
+          <figcaption>
+            Prototype. Story: Proposals/Tooltips/Scatter Nearest.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">const X = "Flipper Length (mm)";
+const Y = "Body Mass (g)";
+const fields = ["Species", "Island", "Sex", X, Y, "Beak Length (mm)"];
+
+chart(penguins)
+  .flow(scatter({ x: X, y: Y }))
+  .mark(circle({ r: 3, fill: "Species" }).tooltip(fields, { radius: 30 }));</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">// WALL (#849): the pointer has no data-to-pixel map, so pixel distance is
+// estimated from the chart size over the data extent.
+function nearest(at) {
+  if (at?.x === undefined || at?.y === undefined) return undefined;
+  let best;
+  let bestD = Infinity;
+  for (const r of rows) {
+    const dx = ((r[X] - at.x) / (x1 - x0)) * W;
+    const dy = ((r[Y] - at.y) / (y1 - y0)) * H;
+    const d = Math.hypot(dx, dy);
+    if (d &lt; bestD) [best, bestD] = [r, d];
+  }
+  return bestD &lt;= 30 ? best.id : undefined;
+}
+
+chart(rows, { w: 440, h: 360 })
+  .flow(scatter({ x: X, y: Y }))
+  .mark(circle({ r: 3, fill: "Species", opacity: 0.75 }).name("pts"))
+  .layer(
+    chart(selectAll("pts"))
+      .flow(
+        filter((pt) =&gt; pt.datum[0].id === focus()),
+        group({ by: "id" })
+      )
+      .mark((pt) =&gt; {
+        const ring = enclose(
+          { shape: Shape.oval(), padding: 3, fill: "none", stroke: "#111827" },
+          pt
+        ).zOrder(1);
+        return beside(ring, rowTooltip(pt[0].datum[0], { fields }), {
+          side: pt[0].datum[0][X] &gt; 215 ? "left" : "right", // picked by hand
+        });
+      })
+  );</code></pre>
+          </div>
+        </details>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
+        <h3>A chart in a tooltip</h3>
+        <p>
+          The content can be a function from the rows to any mark. A chart is a
+          mark, so a chart in a tooltip needs nothing new. This form is
+          JavaScript only at first.
+        </p>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/chart-in-tooltip.png"
+              alt="Stacked bars with Lake B outlined and a tooltip holding a small bar chart of Lake B's species"
+            />
+          </div>
+          <figcaption>
+            Prototype, Lake B. Story: Proposals/Tooltips/Chart In Tooltip.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }).tooltip((rows) =&gt;
+      spread({ dir: "y", spacing: 6, alignment: "start" }, [
+        text({ text: rows[0].lake, fontWeight: 700 }),
+        chart(rows, { w: 200, h: 70 })
+          .flow(spread({ by: "species", dir: "x", spacing: 6 }))
+          .mark(rect({ h: "count", fill: "species" }).label("count")),
+      ])
+    ),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "species" }));</code></pre>
+        </div>
+        <details>
+          <summary>Runs today (prototype)</summary>
+          <div class="inner">
+            <pre><code class="language-javascript">chart(seafood, { w: 420, h: 320 })
+  .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
+  .mark(rect({ h: "count", fill: "species" }).name("segments"))
+  .layer(
+    chart(selectAll("segments"))
+      .flow(
+        filter((s) =&gt; s.datum[0].lake === focus()),
+        group({ by: "lake" })
+      )
+      .mark((s) =&gt; {
+        const rows = s.map((r) =&gt; r.datum[0]);
+        const anchor = enclose(
+          { padding: 2, fill: "none", stroke: "#111827", strokeWidth: 1.5 },
+          s
+        ).zOrder(1);
+        return beside(
+          anchor,
+          box(
+            spread({ dir: "y", spacing: 6, alignment: "start" }, [
+              text({ text: rows[0].lake, fontSize: 12, fontWeight: 700 }),
+              // the field is renamed to n: a nested chart shares the outer
+              // chart's scale for a field of the same name
+              chart(
+                rows.map((r) =&gt; ({ species: r.species, n: r.count })),
+                { w: 200, h: 70, axes: { x: { title: false } } }
+              )
+                .flow(spread({ by: "species", dir: "x", spacing: 6 }))
+                .mark(rect({ h: "n", fill: "species" }).label("n")),
+            ])
+          )
+        );
+      })
+  );</code></pre>
+          </div>
+        </details>
+      </div>
+    </article>
+
+    <div class="section">
+      <h2>The chart does not move</h2>
+      <p>
+        Two boxes are open at once here only to show both edges in one picture.
+        On the left the boxes float. On the right they take room like any layer:
+        the canvas grows from 471×353 to 497×437 and the plot moves down 84 px.
+        With floating boxes, 0 of 45 elements move.
+      </p>
+      <div class="pair">
+        <figure>
+          <div class="frame">
+            <img
+              src="img/edge-flip.png"
+              alt="Bar chart with two floating tooltips kept inside the plot"
+            />
+          </div>
+          <figcaption>
+            Floating. Story: Proposals/Tooltips/Edge Cases, Flipped.
+          </figcaption>
+        </figure>
+        <figure>
+          <div class="frame">
+            <img
+              src="img/edge-naive.png"
+              alt="The same bar chart pushed down by a tooltip that takes room above it"
+            />
+          </div>
+          <figcaption>
+            Takes room. Story: Proposals/Tooltips/Edge Cases, Naive.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+
+    <div class="appendix">
+      <h2>Does an open tooltip move anything?</h2>
+      <p>
+        The normalized drawing of each pinned story was compared with its closed
+        story.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Story</th>
+              <th class="num">Elements moved</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Issue bar</td>
+              <td class="num">0 / 60</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Stack segment</td>
+              <td class="num">0 / 79</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Whole stack</td>
+              <td class="num">0 / 79</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Chart in tooltip</td>
+              <td class="num">0 / 79</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Scatter</td>
+              <td class="num">0 / 398</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Shared lines</td>
+              <td class="num">85 / 95</td>
+              <td>
+                A 0.75 px shift caused by an empty layer in the closed render.
+                It is a library bug of its own, listed under Findings.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Edge story</th>
+              <th>Render size</th>
+              <th class="num">Moved</th>
+              <th>Canvas</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Takes room</td>
+              <td>none</td>
+              <td class="num">45 / 45</td>
+              <td>grows</td>
+            </tr>
+            <tr>
+              <td>Floating, side picked by hand</td>
+              <td>none</td>
+              <td class="num">0 / 45</td>
+              <td>0.5 px wider (stroke)</td>
+            </tr>
+            <tr>
+              <td>Takes room, fixed canvas</td>
+              <td>480×360</td>
+              <td class="num">45 / 45</td>
+              <td>same, plot squeezed</td>
+            </tr>
+            <tr>
+              <td>Floating, fixed canvas, box past the edge</td>
+              <td>480×360</td>
+              <td class="num">0 / 45</td>
+              <td>same, box drawn past the canvas</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== REWRITE ============================== -->
+  <section
+    class="panel"
+    id="rewrite"
+    role="tabpanel"
+    aria-labelledby="tab-rewrite"
+    hidden
+  >
+    <ul class="rules">
+      <li>
+        A modifier is sugar for one more layer over the thing it is attached to.
+      </li>
+      <li>
+        <code>.label()</code> and <code>.tooltip()</code> are the same
+        construct.
+      </li>
+      <li>
+        A tooltip differs from a label in exactly three ways: it is drawn only
+        for the focus, its box is floating, and its default content is a table
+        of fields instead of one text.
+      </li>
+    </ul>
+
+    <article class="card">
+      <div class="head">
+        <h3>What <code>.tooltip()</code> means</h3>
+        <p>
+          The focus is a dataset of zero or one bar.
+          <code>pointer().snap(selectAll(...))</code> is the spelling already
+          chosen in #849 (hover that picks the nearest mark within a radius).
+          Treating an input as a dataset is the direction of #830 (an
+          interaction grammar).
+        </p>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">chart(pathTypes)
+  .flow(spread({ by: "path", dir: "y" }))
+  .mark(rect({ w: "share" }).tooltip());</code></pre>
+        </div>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed, what it means</span>
+          <pre><code class="language-javascript">// Sketch of the expansion. pointer().snap(...) is the spelling from #849.
+chart(pathTypes)
+  .flow(spread({ by: "path", dir: "y" }))
+  .mark(rect({ w: "share" }).name("bars"))
+  .layer(
+    // the focus: zero or one bar
+    chart(pointer().snap(selectAll("bars"))).mark((bar) =&gt;
+      label(table(bar.datum), { of: bar, position: Place.around() }).floating()
+    )
+  );</code></pre>
+        </div>
+      </div>
+    </article>
+
+    <div class="section">
+      <h2>Signature</h2>
+      <p>
+        <code>.tooltip(content?, options?)</code> on any mark and on any
+        operator. The content is a list or a function, so an object in first
+        place is the options.
+      </p>
+      <ul>
+        <li>
+          <strong>No argument:</strong> one row per field with a single value on
+          this mark. That is every field that is constant across the mark's
+          rows, plus each field the mark draws, shown with its drawn value (a
+          stacked segment's summed count). This joins Vega-Lite's "data" and
+          "encoding" contents.
+        </li>
+        <li>
+          <strong>A list of fields:</strong> order is row order. This form is
+          plain data, so it serializes and works in Python and in the notebook
+          widget with no Python callback.
+        </li>
+        <li>
+          <strong>A function from the rows to any mark:</strong> the content is
+          ordinary GoFish. JavaScript only at first.
+        </li>
+        <li>
+          <strong>Options:</strong> <code>by</code> groups the marks by a field
+          and makes the group the focus. <code>radius</code> is how near counts,
+          in pixels. <code>position</code> takes the same
+          <code>Place</code> family and the same chooser that labels use, so the
+          box stays inside the chart and flips sides.
+        </li>
+      </ul>
+      <div class="pair">
+        <div style="min-width: 0">
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">// no argument: every field with a single value on this mark
+rect({ w: "share" }).tooltip();
+
+// a list of fields, in row order
+rect({ w: "share" }).tooltip(["path", "n", field("share").format(percent)]);
+
+// a function from the rows to any mark
+rect({ w: "share" }).tooltip((rows) =&gt;
+  chart(rows).mark(text({ text: "path" }))
+);
+
+// options only
+circle({ r: 3 }).tooltip({ by: "year", radius: 20, position: Place.around() });
+
+// on an operator
+spread({ by: "lake", dir: "x" }).tooltip();</code></pre>
+        </div>
+        <div style="min-width: 0">
+          <span class="label">Proposed, Python</span>
+          <pre><code class="language-python">chart(path_types).flow(spread(by="path", dir="y")).mark(rect(w="share").tooltip())
+rect(w="share").tooltip(["path", "n", field("share").format(percent)])
+circle(r=3).tooltip(by="year")</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>The focus</h2>
+      <p>
+        One rule: the mark whose outline is nearest the pointer within
+        <code>radius</code> pixels, where being inside a mark is distance zero.
+        A bar is picked when the pointer is on it. A small point or a thin line
+        is picked when the pointer is near it. There is no mode to switch. #849
+        sketches a rule per kind of space (distance to a point, distance to a
+        polyline, membership in a band). This single rule is close to that one,
+        and the two need to be reconciled. Compare Plot's
+        <code>pointer</code> (a 40 px <code>maxRadius</code>), Vega-Lite's
+        <code>nearest: true</code> (which does not work on lines), and Plotly's
+        <code>hoverdistance</code>.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Groups</h2>
+      <p>
+        A tooltip for a group comes from structure. There is no chart-wide mode.
+      </p>
+      <ul>
+        <li>
+          <strong>On an operator:</strong>
+          <code>spread({ by: "lake", dir: "x" }).tooltip()</code> is a tooltip
+          for each lake's whole stack. It needs operators to be nameable (#802).
+        </li>
+        <li>
+          <strong>With <code>by</code> on a mark:</strong>
+          <code>circle(...).tooltip({ by: "year" })</code> groups marks that are
+          not one node in the tree, such as the points of every series at one
+          year. This is the shared tooltip that Plotly calls
+          <code>hovermode: "x unified"</code>, ECharts
+          <code>trigger: "axis"</code>, and Highcharts <code>shared</code>.
+          Observable Plot does not have it (its issue 2003 is open).
+        </li>
+        <li>
+          The rule and the dots in the line example are two more layers over the
+          same focus. They are not tooltip options.
+        </li>
+      </ul>
+    </div>
+
+    <div class="section">
+      <h2>Floating</h2>
+      <p>
+        The box is drawn, takes no room, and is not a pointer target.
+        <code>.hidden()</code> already means "takes room, not drawn".
+        <code>.floating()</code> is its counterpart. The engine has this today
+        as a private flag, which the prototype sets by hand, so this names
+        something that exists.
+      </p>
+      <div class="pair">
+        <div style="min-width: 0">
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">mark.hidden(); // takes room, not drawn
+mark.floating(); // drawn, takes no room, not a pointer target</code></pre>
+        </div>
+        <div style="min-width: 0">
+          <span class="label">Runs today (prototype)</span>
+          <pre><code class="language-javascript">// helpers.ts, beside(): the private flag that .floating() would name
+node.inkOn = [true, true];</code></pre>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Speed</h2>
+      <p>
+        The tooltip is an ordinary subtree. Later, incremental layout (#674)
+        re-lays-out only that subtree, and floating is what makes it a boundary,
+        because its size never feeds back to its parent. Until then the pointer
+        is split in two. Which mark is the focus re-runs layout. Where the
+        pointer is does not. The default position is anchored to the mark, so
+        nothing has to move between focus changes. Following the cursor would be
+        one more <code>Place</code> strategy later.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Sweep</th>
+              <th class="num">Pointer moves</th>
+              <th class="num">Pointer read in the spec</th>
+              <th class="num">Focus split</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Issue bars, 3 bars</td>
+              <td class="num">30</td>
+              <td class="num">30 re-runs</td>
+              <td class="num">3 re-runs</td>
+            </tr>
+            <tr>
+              <td>Lines, left to right</td>
+              <td class="num">40</td>
+              <td class="num">40 re-runs</td>
+              <td class="num">10 re-runs, one per year</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>One re-run, tooltip open</th>
+              <th class="num">ms</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Issue bar chart</td>
+              <td class="num">8.0</td>
+            </tr>
+            <tr>
+              <td>Stacked bars, whole stack</td>
+              <td class="num">10.9</td>
+            </tr>
+            <tr>
+              <td>Shared lines, 4 series by 10 years</td>
+              <td class="num">12.2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">
+        Median of 15 full renders after 2 warm-ups, headless Chromium on an
+        M-series Mac. The closed issue bar chart takes 4.6 ms.
+      </p>
+      <details>
+        <summary>Runs today (prototype): the focus split</summary>
+        <div class="inner">
+          <pre><code class="language-javascript">// helpers.ts: map the pointer to a key outside the spec, and write a
+// signal only when the key changes. The spec reads only the signal.
+export function focusFrom(read, init) {
+  const focus = signal(init);
+  let last = init;
+  createRoot(() =&gt;
+    createEffect(() =&gt; {
+      const k = read();
+      if (k !== last) {
+        last = k;
+        focus.set(k);
+      }
+    })
+  );
+  return focus;
+}
+
+const p = pointer();
+const focus = focusFrom(() =&gt; hitRow(p)?.path);</code></pre>
+        </div>
+      </details>
+    </div>
+
+    <div class="section">
+      <h2>Static files and screen readers</h2>
+      <p>
+        The same content is also written as an SVG <code>&lt;title&gt;</code> on
+        the mark. A saved SVG and a static Python export still show the
+        browser's own tooltip, and screen readers announce it. Vega-Lite does
+        the same with its ARIA description. Keyboard focus and touch are not
+        designed here. An anchored box is what makes them possible later.
+      </p>
+      <div>
+        <span class="label">Proposed, in the drawn SVG</span>
+        <pre><code class="language-xml">&lt;rect x="0" y="0" width="520" height="22"&gt;
+  &lt;title&gt;path: VO→VO
+length: 2
+n: 11,902
+n_articles: 195
+share: 13.0%&lt;/title&gt;
+&lt;/rect&gt;</code></pre>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Number formats</h2>
+      <p>
+        The issue's screenshot shows <code>11,902</code> and <code>13.0%</code>.
+        GoFish formats nothing today beyond <code>String()</code>. A tooltip
+        value uses the same formatter as that field's axis ticks, and
+        <code>field("share").format(...)</code> overrides it. Formatting needs
+        its own short design, built on <code>Intl.NumberFormat</code>. This
+        proposal only depends on it. The prototype carries its own formatters.
+      </p>
+    </div>
+
+    <div class="appendix">
+      <h2>Approaches compared</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Approach</th>
+              <th style="min-width: 240px">Code</th>
+              <th>Makes easy</th>
+              <th>Makes awkward</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <strong>A, recommended.</strong> A
+                <code>.tooltip()</code> modifier defined by rewrite into a layer
+                over the focus.
+              </td>
+              <td>
+                <pre><code class="language-javascript">rect({ w: "share" }).tooltip();</code></pre>
+              </td>
+              <td>
+                One call for the common case. The long form is ordinary layers
+                anyone can edit.
+              </td>
+              <td>
+                It needs <code>.layer(fn)</code> on marks, nameable operators
+                and <code>.floating()</code>, none of which exist yet.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>B, runner-up.</strong> Hover as an option of
+                <code>.label()</code>.
+              </td>
+              <td>
+                <pre><code class="language-javascript">rect({ w: "share" }).label(content, { on: pointer() });</code></pre>
+              </td>
+              <td>One construct fewer. It reuses label placement as it is.</td>
+              <td>
+                One option flips three defaults at once: content, room, and
+                which marks.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>C.</strong> No sugar, only the explicit layers. Plot's
+                explicit form and Swift Charts' selection plus annotation work
+                this way.
+              </td>
+              <td>
+                <pre><code class="language-javascript">// Observable Plot's explicit form
+Plot.plot({
+  marks: [
+    Plot.lineY(aapl, { x: "Date", y: "Close" }),
+    Plot.tip(aapl, Plot.pointerX({ x: "Date", y: "Close" })),
+  ],
+});</code></pre>
+              </td>
+              <td>Nothing new to learn. It is A's expansion.</td>
+              <td>
+                Too long for exploration. Altair's multi-series tooltip is five
+                layers.
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <strong>D, a foil.</strong> A chart-level option with a trigger
+                mode: ECharts <code>trigger</code>, Plotly
+                <code>hovermode</code>, Highcharts <code>shared</code>.
+              </td>
+              <td>
+                <pre><code class="language-javascript">// ECharts
+option = {
+  tooltip: { trigger: "axis", formatter: "{b0}: {c0}&lt;br /&gt;{b1}: {c1}" },
+};</code></pre>
+              </td>
+              <td>A shared tooltip across series in one word.</td>
+              <td>
+                It lists modes instead of composing them, and its content is a
+                string template.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        What would change the pick: if <code>.layer(fn)</code> on marks turns
+        out not to be buildable on the label machinery, B becomes more
+        attractive, because it reuses <code>.label()</code> as it is.
+      </p>
+      <h2>How a tooltip differs from a label</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th><code>.label()</code></th>
+              <th><code>.tooltip()</code></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Which marks</td>
+              <td>every mark</td>
+              <td>only the focus</td>
+            </tr>
+            <tr>
+              <td>Room</td>
+              <td>takes room</td>
+              <td>floating</td>
+            </tr>
+            <tr>
+              <td>Default content</td>
+              <td>one text</td>
+              <td>a table of fields</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== EXTENDING ============================== -->
+  <section
+    class="panel"
+    id="extending"
+    role="tabpanel"
+    aria-labelledby="tab-extending"
+    hidden
+  >
+    <ul class="rules">
+      <li>
+        The question: "I've heard that if we do method chaining and a third
+        party is extending the methods then it will be a runtime error vs if we
+        have a function people have to import then it will be a static error,
+        but I'm not sure."
+      </li>
+      <li>
+        Partly right. The runtime errors come from patching a method onto marks
+        after the fact. Chaining by itself is safe.
+      </li>
+      <li>
+        GoFish marks cannot be patched at all today. A mark is a function, and
+        each call re-attaches a fixed private list of methods.
+      </li>
+      <li>
+        The extension point is a method that already exists by name:
+        <code>.layer(fn)</code> on marks and operators, where
+        <code>fn</code> takes the selection of that mark and returns a chart.
+      </li>
+    </ul>
+
+    <div class="section">
+      <h2>What was run</h2>
+      <p>
+        Small test projects with TypeScript 5.7, Node, Vite, mypy and pyright.
+        The full output is in <code>research/extensible-modifiers.md</code>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Setup</th>
+              <th>Type check</th>
+              <th>When it runs</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Patched method, plugin imported in the same file</td>
+              <td>passes</td>
+              <td>works</td>
+            </tr>
+            <tr>
+              <td>
+                Patched method whose types reach the program while its code does
+                not run first. Seven setups: another file imports it but the
+                entry never does; it is imported after the call runs; it is
+                listed only in tsconfig <code>types</code>;
+                <code>import type</code>; a dependency's types import it but its
+                code does not; the plugin bundles its own copy of the library;
+                the bundler drops it because the plugin says
+                <code>"sideEffects": false</code>.
+              </td>
+              <td>passes</td>
+              <td>
+                <code>TypeError: rect(...).tooltip is not a function</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Two plugins with the same method name</td>
+              <td>passes, the two merge into overloads</td>
+              <td>the last loaded wins, silently</td>
+            </tr>
+            <tr>
+              <td>A plugin, then the library adds a method of the same name</td>
+              <td>passes</td>
+              <td>the plugin takes over the library's method, silently</td>
+            </tr>
+            <tr>
+              <td>Imported function, import missing</td>
+              <td><code>TS2304: Cannot find name 'tooltip'</code></td>
+              <td><code>ReferenceError</code> at the call</td>
+            </tr>
+            <tr>
+              <td>Imported function, typo in the import, plain JavaScript</td>
+              <td>no checker</td>
+              <td>
+                <code>SyntaxError</code> at link time, before any line runs
+              </td>
+            </tr>
+            <tr>
+              <td>Python, patched method</td>
+              <td>mypy and pyright reject it</td>
+              <td>works</td>
+            </tr>
+            <tr>
+              <td>Python, imported function</td>
+              <td>checked, keeps the precise type</td>
+              <td>works</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <article class="card">
+      <div class="head">
+        <h3>
+          Recommended: a modifier is an imported function passed to
+          <code>.layer</code>
+        </h3>
+        <p>
+          This is the rewrite rule made public. It adds no new word:
+          <code>layer</code> already means this on a chart.
+        </p>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed</span>
+          <pre><code class="language-javascript">import { sparkTip } from "gofish-sparktip";
+
+rect({ h: "count" }).layer(sparkTip({ field: "count" }));
+
+// the built-ins are sugar over the same thing
+rect({ h: "count" }).tooltip(); // ≡ .layer(tooltip())
+rect({ h: "count" }).label("count"); // ≡ .layer(label("count"))</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, Python</span>
+          <pre><code class="language-python">from gofish_sparktip import spark_tip
+
+rect(h="count").layer(spark_tip(field="count"))</code></pre>
+        </div>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Proposed, inside the package</span>
+          <pre><code class="language-javascript">// Sketch of the package. A modifier is a function from the mark's
+// selection to a chart. sparkline() stands for the package's own drawing.
+export const sparkTip =
+  ({ field }) =&gt;
+  (sel) =&gt;
+    chart(pointer().snap(sel)).mark((m) =&gt;
+      label(sparkline(m.datum, field), { of: m }).floating()
+    );</code></pre>
+        </div>
+        <ul>
+          <li>A missing import or a typo is a static error.</li>
+          <li>Two packages cannot collide.</li>
+          <li>Unused modifiers drop out of a bundle.</li>
+          <li>
+            A modifier that is a rewrite into existing constructs crosses to
+            Python with no new serialized format. The research checked this:
+            such a modifier serializes as its layer.
+          </li>
+        </ul>
+      </div>
+      <div class="fork">
+        <h3>Fork: <code>.layer(fn)</code> or <code>.pipe(fn)</code></h3>
+        <div class="opts">
+          <div class="opt">
+            <span class="tag pick">Pick</span>
+            <pre><code class="language-javascript">rect({ h: "count" }).layer(sparkTip({ field: "count" }));</code></pre>
+            <p>
+              A method that already exists. It covers every modifier that is a
+              layer.
+            </p>
+          </div>
+          <div class="opt">
+            <span class="tag">Alternative</span>
+            <pre><code class="language-javascript">rect({ h: "count" }).pipe(sparkTip({ field: "count" }));</code></pre>
+            <p>
+              Any function from mark to mark, as in RxJS, Effect, pandas and
+              polars. It also covers modifiers that are not layers, at the cost
+              of a new method.
+            </p>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="head">
+        <h3>Rejected: patching a method onto marks</h3>
+        <p>
+          It fails at runtime in the seven setups above, collides silently, and
+          is rejected by Python's type checkers even when it runs.
+        </p>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label">Rejected</span>
+          <pre><code class="language-javascript">import "gofish-sparktip"; // adds .sparkTip to every mark by patching
+
+rect({ h: "count" }).sparkTip({ field: "count" });</code></pre>
+        </div>
+      </div>
+      <div class="codes">
+        <div>
+          <span class="label"
+            >Output, plugin types present, code not loaded</span
+          >
+          <pre><code class="language-plaintext">tsc exit=0
+TypeError: rect(...).tooltip is not a function</code></pre>
+        </div>
+      </div>
+    </article>
+
+    <div class="section">
+      <h2>What this changes</h2>
+      <ul>
+        <li>
+          <code>api-design.md</code> says a method that reaches outward from a
+          node, like <code>.label</code>, has no function twin. This
+          recommendation gives <code>label</code> and
+          <code>tooltip</code> function forms, so that rule would be restated.
+        </li>
+        <li>
+          #615 (an internal API for registering modifiers) and #1291 (one table
+          that drives every node modifier) ask for one internal table that
+          defines each modifier once. That table is where the rewrite would
+          live. It has no user-facing spelling.
+        </li>
+        <li>
+          #803 (make <code>.label()</code> build the public layered form instead
+          of a private one) is the label half of the rewrite rule. It must keep
+          every label render unchanged.
+        </li>
+        <li>
+          Not prototyped: <code>.layer(fn)</code> on a mark, operator
+          <code>.name()</code>, <code>.floating()</code>, and
+          <code>pointer().snap()</code>.
+        </li>
+      </ul>
+    </div>
+
+    <div class="appendix">
+      <h2>Compiler output</h2>
+      <div>
+        <span class="label"
+          >Imported function: missing import, then a typo in plain
+          JavaScript</span
+        >
+        <pre><code class="language-plaintext">missing.ts(3,31): error TS2304: Cannot find name 'tooltip'.
+SyntaxError: The requested module 'fn-tooltip' does not provide an export named 'toolTip'</code></pre>
+      </div>
+      <div>
+        <span class="label"
+          >Python, a patched method that runs: mypy, then pyright</span
+        >
+        <pre><code class="language-plaintext">user.py:6: error: "Rect" has no attribute "tooltip"  [attr-defined]
+user.py:6:17 - error: Cannot access attribute "tooltip" for class "Rect"</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================== PRIOR WORK ============================== -->
+  <section
+    class="panel"
+    id="prior-work"
+    role="tabpanel"
+    aria-labelledby="tab-prior-work"
+    hidden
+  >
+    <ul class="rules">
+      <li>
+        Most systems attach the tooltip to one mark, or set one mode for the
+        whole chart.
+      </li>
+      <li>
+        Observable Plot's <code>tip: true</code> is sugar for a tip mark plus a
+        pointer transform. That is the closest precedent for the rewrite rule.
+      </li>
+      <li>
+        The sources and quotes are in <code>research/prior-work.md</code>.
+      </li>
+    </ul>
+
+    <div class="grid-pw" style="margin-top: 22px">
+      <article class="card">
+        <div class="head">
+          <h3>Vega-Lite and Altair</h3>
+          <p>
+            A channel on the mark. <code>tooltip: true</code> shows the encoded
+            fields. Nearest is a separate selection with
+            <code>nearest: true</code>, which does not work on lines or areas.
+          </p>
+        </div>
+        <figure>
+          <div class="frame">
+            <img
+              src="img/issue-vega-lite.png"
+              alt="Vega-Lite bar chart with a tooltip, from the issue"
+            />
+          </div>
+          <figcaption>From the issue.</figcaption>
+        </figure>
+        <div class="codes">
+          <pre><code class="language-json">{ "mark": { "type": "bar", "tooltip": true } }</code></pre>
+          <pre><code class="language-python">alt.Chart(source).mark_circle(size=60).encode(
+    x="Horsepower",
+    y="Miles_per_Gallon",
+    color="Origin",
+    tooltip=["Name", "Origin", "Horsepower", "Miles_per_Gallon"],
+)</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>Observable Plot</h3>
+          <p>
+            <code>tip: true</code> derives a tip mark wrapped in a pointer
+            transform. The pointer picks the nearest point within 40 px and
+            understands only points.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-javascript">Plot.lineY(aapl, { x: "Date", y: "Close", tip: true });
+
+// the same, written out
+Plot.tip(aapl, Plot.pointerX({ x: "Date", y: "Close" }));</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>Plotly</h3>
+          <p>
+            Columns go in <code>hover_data</code>. A chart-level
+            <code>hovermode</code> picks closest, x, or x unified.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-python">fig = px.scatter(
+    df,
+    x="gdpPercap",
+    y="lifeExp",
+    hover_name="country",
+    hover_data=["continent", "pop"],
+)
+fig.update_layout(hovermode="x unified")</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>ECharts</h3>
+          <p>
+            A chart-level component. <code>trigger: "axis"</code> shows every
+            series at one x. Content is a string template or a callback.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-javascript">option = {
+  tooltip: { trigger: "axis" },
+  xAxis: { type: "category" },
+  series: [{ type: "line" }, { type: "line" }],
+};</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>Bokeh</h3>
+          <p>
+            A tool added to the figure. <code>mode</code> is mouse, vline or
+            hline. Fields go in a list of templates.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-python">p.add_tools(
+    HoverTool(
+        tooltips=[("date", "@date{%F}"), ("volume", "@volume{0.00 a}")],
+        formatters={"@date": "datetime"},
+        mode="vline",
+    )
+)</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>ggiraph</h3>
+          <p>
+            Each geom has an interactive twin with a
+            <code>tooltip</code> aesthetic. <code>hover_nearest</code> picks the
+            nearest element.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-r">gg &lt;- ggplot(mtcars, aes(x = disp, y = qsec, tooltip = carname, data_id = carname)) +
+  geom_point_interactive(size = 3, hover_nearest = TRUE)
+girafe(ggobj = gg)</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>Swift Charts</h3>
+          <p>
+            A selection modifier writes a data value. The popover is an
+            annotation on an ordinary mark drawn only for that value.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-swift">Chart {
+  ForEach(data) { LineMark(x: .value("Date", $0.date), y: .value("Sales", $0.sales)) }
+  if let selectedDate {
+    RuleMark(x: .value("Selected", selectedDate, unit: .day))
+      .annotation(position: .top) { valueSelectionPopover }
+  }
+}
+.chartXSelection(value: $rawSelectedDate)</code></pre>
+        </div>
+      </article>
+      <article class="card">
+        <div class="head">
+          <h3>Plain SVG <code>&lt;title&gt;</code></h3>
+          <p>
+            A child of the target. It costs nothing, survives static export, and
+            screen readers announce it. It has no styling, no placement, and
+            does not show on touch.
+          </p>
+        </div>
+        <div class="codes">
+          <pre><code class="language-xml">&lt;circle cx="5" cy="5" r="4"&gt;&lt;title&gt;I'm a circle&lt;/title&gt;&lt;/circle&gt;</code></pre>
+        </div>
+      </article>
+    </div>
+
+    <div class="section">
+      <h2>What every system leaves open</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Gap</th>
+              <th>Where it shows</th>
+              <th>This proposal</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Shared across series</td>
+              <td>
+                Plot has none (its issue 2003 is open). Vega-Lite needs a pivot
+                and a rule layer.
+              </td>
+              <td><code>.tooltip({ by: "year" })</code></td>
+            </tr>
+            <tr>
+              <td>Group totals</td>
+              <td>
+                In Plot the total of a stack is not reachable (its issue 1975).
+              </td>
+              <td>A tooltip on the operator, with a total row</td>
+            </tr>
+            <tr>
+              <td>Geometry that is not a point</td>
+              <td>
+                Plot's pointer understands only points, and its map tooltips use
+                centroids.
+              </td>
+              <td>Distance to the outline, zero inside</td>
+            </tr>
+            <tr>
+              <td>A chart in a tooltip</td>
+              <td>Plot and Plotly have none. Tableau shows a static image.</td>
+              <td>Function content is any mark, a chart included</td>
+            </tr>
+            <tr>
+              <td>Keyboard and touch</td>
+              <td>
+                Tableau tooltips are hover only. React Aria shows none on touch.
+              </td>
+              <td>
+                Not designed here. The anchored box makes it possible later.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="appendix">
+      <h2>Names</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>System</th>
+              <th>The thing</th>
+              <th>Content</th>
+              <th>Which mark</th>
+              <th>Placement</th>
+              <th>Shared across series</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Vega-Lite, Altair</td>
+              <td>tooltip</td>
+              <td>field defs, <code>content</code></td>
+              <td>
+                selection <code>nearest</code>, <code>on: pointerover</code>
+              </td>
+              <td>vega-tooltip <code>offsetX</code>/<code>offsetY</code></td>
+              <td>pivot plus rule layer</td>
+            </tr>
+            <tr>
+              <td>Observable Plot</td>
+              <td>tip, title</td>
+              <td>channels, title, format</td>
+              <td>
+                <code>pointer</code>, <code>pointerX</code>,
+                <code>pointerY</code>
+              </td>
+              <td>
+                <code>anchor</code>, <code>preferredAnchor</code>,
+                <code>frameAnchor</code>
+              </td>
+              <td>none</td>
+            </tr>
+            <tr>
+              <td>Plotly</td>
+              <td>hover label</td>
+              <td><code>hovertemplate</code>, <code>hover_data</code></td>
+              <td><code>hovermode</code> closest, x, y</td>
+              <td><code>hoverlabel.align</code></td>
+              <td><code>x unified</code></td>
+            </tr>
+            <tr>
+              <td>ECharts</td>
+              <td>tooltip</td>
+              <td><code>formatter</code>, <code>valueFormatter</code></td>
+              <td><code>trigger</code> item, axis</td>
+              <td><code>position</code>, <code>confine</code></td>
+              <td><code>trigger: "axis"</code></td>
+            </tr>
+            <tr>
+              <td>Highcharts</td>
+              <td>tooltip</td>
+              <td><code>pointFormat</code>, <code>formatter</code></td>
+              <td>default or <code>shared</code></td>
+              <td><code>positioner</code></td>
+              <td><code>shared</code></td>
+            </tr>
+            <tr>
+              <td>Bokeh</td>
+              <td>HoverTool, tooltips</td>
+              <td>tooltips with <code>@field</code></td>
+              <td><code>mode</code> mouse, vline, hline</td>
+              <td></td>
+              <td><code>vline</code></td>
+            </tr>
+            <tr>
+              <td>ggiraph</td>
+              <td>tooltip</td>
+              <td><code>tooltip</code> aesthetic</td>
+              <td><code>hover_nearest</code></td>
+              <td>
+                <code>offx</code>, <code>offy</code>,
+                <code>use_cursor_pos</code>
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Recharts, visx, Nivo</td>
+              <td>Tooltip</td>
+              <td><code>content</code>, <code>renderTooltip</code></td>
+              <td><code>shared</code>, <code>useMesh</code></td>
+              <td><code>position</code>, <code>offset</code></td>
+              <td><code>shared</code>, <code>enableSlices</code></td>
+            </tr>
+            <tr>
+              <td>Swift Charts</td>
+              <td>annotation, popover</td>
+              <td>annotation content</td>
+              <td><code>chartXSelection</code></td>
+              <td>
+                annotation <code>position</code>,
+                <code>overflowResolution</code>
+              </td>
+              <td>a RuleMark annotation</td>
+            </tr>
+            <tr>
+              <td>UI frameworks</td>
+              <td>tooltip, popover hint, help</td>
+              <td>Content</td>
+              <td>Trigger, <code>interestfor</code></td>
+              <td>
+                <code>side</code>, <code>align</code>, <code>offset</code>,
+                <code>flip</code>
+              </td>
+              <td></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted">
+        The most common name is tooltip. Plot is the outlier with tip. For the
+        multi-series case the common names are shared and axis.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============================== FINDINGS ============================== -->
+  <section
+    class="panel"
+    id="findings"
+    role="tabpanel"
+    aria-labelledby="tab-findings"
+    hidden
+  >
+    <ul class="rules">
+      <li>
+        The prototype is six stories and one helper file. It edits no library
+        code.
+      </li>
+      <li>
+        It reaches past the public API in two places: the private flag that
+        would become <code>.floating()</code>, and CSS that stops the box from
+        catching the pointer.
+      </li>
+    </ul>
+
+    <div class="section">
+      <h2>What the prototype found</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Finding</th>
+              <th>What it means</th>
+              <th>Issue</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>There is no way to name an operator's group.</td>
+              <td>
+                The whole-stack tooltip uses an outline of the segments as a
+                stand-in.
+              </td>
+              <td>#802, operators cannot be named</td>
+            </tr>
+            <tr>
+              <td>
+                Nearest within a radius needs a data-to-pixel map on the
+                pointer.
+              </td>
+              <td>
+                The prototype estimates pixel distance from the chart size.
+              </td>
+              <td>#849, nearest-mark hover</td>
+            </tr>
+            <tr>
+              <td>An input cannot be a chart's dataset yet.</td>
+              <td>The focus is computed outside the spec.</td>
+              <td>#830, an input is a dataset</td>
+            </tr>
+            <tr>
+              <td>Node ids change on every re-run.</td>
+              <td>The focus is compared by key.</td>
+              <td>#673, stable identity</td>
+            </tr>
+            <tr>
+              <td>Every pointer move re-runs layout unless split by hand.</td>
+              <td>The prototype splits focus from position by hand.</td>
+              <td>#674, incremental layout, is the long-term fix</td>
+            </tr>
+            <tr>
+              <td>Hover cannot be captured for visual tests.</td>
+              <td>The pictures pin the focus.</td>
+              <td>#672, scripted interaction in captures</td>
+            </tr>
+            <tr>
+              <td>
+                <code>pointer().dataPos()</code> is undefined when the chart
+                sets its own <code>w</code>/<code>h</code>.
+              </td>
+              <td>
+                The interactive line and scatter stories size the render
+                instead.
+              </td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>A layer with no marks moves the plot.</td>
+              <td>
+                0.75 px in the closed line story. In a render-sized chart it
+                moved the x axis by 46 px, which is why the interactive line and
+                scatter stories have clipped axes.
+              </td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>Nothing sets <code>pointer-events</code>.</td>
+              <td>
+                A box under the cursor steals the hit and flickers. The
+                prototype fixes it with story CSS.
+              </td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>
+                A chart nested in a tooltip shares the outer chart's scale for a
+                field of the same name.
+              </td>
+              <td>
+                The nested chart renames <code>count</code> to <code>n</code>.
+              </td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>A relational mark paints under the marks it references.</td>
+              <td>The box needed <code>.zOrder(1)</code>.</td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>
+                <code>filter</code> with no match still calls the mark with an
+                empty list.
+              </td>
+              <td>Each story adds a <code>group</code> after the filter.</td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>There is no number formatting.</td>
+              <td>The helpers carry their own formatters.</td>
+              <td>unfiled</td>
+            </tr>
+            <tr>
+              <td>The box's side is picked by hand.</td>
+              <td>
+                The label chooser should pick it. This is a declared shortcut in
+                the prototype.
+              </td>
+              <td>unfiled</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Not prototyped</h2>
+      <ul>
+        <li><code>.layer(fn)</code> on a mark</li>
+        <li><code>.name()</code> on an operator</li>
+        <li><code>.floating()</code></li>
+        <li><code>pointer().snap()</code></li>
+      </ul>
+    </div>
+
+    <div class="appendix">
+      <h2>Related issues</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Issue</th>
+              <th>Gist</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>#1395</td>
+              <td>The request for tooltips.</td>
+            </tr>
+            <tr>
+              <td>#802</td>
+              <td>
+                Operators cannot take <code>.name()</code>, which blocks
+                selecting a group.
+              </td>
+            </tr>
+            <tr>
+              <td>#803</td>
+              <td>
+                Build <code>.label()</code> from the public selection machinery
+                instead of a private layer.
+              </td>
+            </tr>
+            <tr>
+              <td>#830</td>
+              <td>An interaction grammar where an input is a dataset.</td>
+            </tr>
+            <tr>
+              <td>#849</td>
+              <td>
+                Hover on thin marks needs nearest-within-radius picking, spelled
+                <code>pointer().snap(...)</code>.
+              </td>
+            </tr>
+            <tr>
+              <td>#673</td>
+              <td>Stable identity for scopes and marks across re-runs.</td>
+            </tr>
+            <tr>
+              <td>#674</td>
+              <td>Incremental layout: re-run only what changed.</td>
+            </tr>
+            <tr>
+              <td>#672</td>
+              <td>Scripted interaction states in the capture harness.</td>
+            </tr>
+            <tr>
+              <td>#615</td>
+              <td>An internal API for registering chained modifiers.</td>
+            </tr>
+            <tr>
+              <td>#1291</td>
+              <td>
+                One table of node modifiers drives the builder, serialization
+                and types.
+              </td>
+            </tr>
+            <tr>
+              <td>#641</td>
+              <td>Emphasis and highlight on hover from one declaration.</td>
+            </tr>
+            <tr>
+              <td>#1294</td>
+              <td>Declarative dragging derived from the layout's structure.</td>
+            </tr>
+            <tr>
+              <td>#1101</td>
+              <td>
+                One extensibility model for strategy families such as custom
+                curves.
+              </td>
+            </tr>
+            <tr>
+              <td>#649</td>
+              <td>Axes and legends as modifiers.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  (function () {
+    var names = ["examples", "rewrite", "extending", "prior-work", "findings"];
+    function show() {
+      var h = (location.hash || "").slice(1);
+      var cur = names.indexOf(h) >= 0 ? h : "examples";
+      names.forEach(function (n) {
+        document.getElementById(n).hidden = n !== cur;
+        var b = document.getElementById("tab-" + n);
+        b.setAttribute("aria-selected", n === cur ? "true" : "false");
+        b.tabIndex = n === cur ? 0 : -1;
+      });
+    }
+    document.querySelectorAll("nav.tabs button").forEach(function (b, i, all) {
+      b.addEventListener("click", function () {
+        var n = b.getAttribute("data-tab");
+        if (location.hash !== "#" + n) location.hash = n;
+        else show();
+      });
+      b.addEventListener("keydown", function (e) {
+        var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!d) return;
+        var next = all[(i + d + all.length) % all.length];
+        next.focus();
+        next.click();
+      });
+    });
+    window.addEventListener("hashchange", show);
+    show();
+    if (window.hljs) {
+      document.querySelectorAll("pre code").forEach(function (el) {
+        try {
+          window.hljs.highlightElement(el);
+        } catch (e) {}
+      });
+    }
+  })();
+</script>

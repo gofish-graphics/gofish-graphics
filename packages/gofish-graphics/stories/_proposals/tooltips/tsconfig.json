@@ -1,0 +1,7 @@
+{
+  "//": "PROTOTYPE(#1395): the package tsconfig covers src/ only; this checks these stories with the same options.",
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["./*.ts", "./*.tsx", "../../../src/**/*.d.ts"],
+  "exclude": []
+}

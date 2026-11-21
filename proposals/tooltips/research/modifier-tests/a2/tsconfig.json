@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "declaration": true,
+    "outDir": "out",
+    "types": []
+  },
+  "files": [
+    "main.ts",
+    "node_modules/lib/index.ts",
+    "node_modules/gofish-tooltip/index.ts"
+  ]
+}
