@@ -2,20 +2,22 @@
  * Drive the `Interaction/Tooltip` stories with a real mouse in Chromium
  * (#1395). For each story: hover marks, a gap and a point off the chart,
  * and check the box's content, that nothing else moved, that the box does
- * not flicker while the pointer is over it, and that the page logged no
- * error. Screenshots go to tests/tmp/tooltip-live/.
+ * not flicker while the pointer is over it, how near a mark the pointer
+ * must be for a box (a donut's hole, a gap between bars far apart), and
+ * that the page logged no error. Screenshots go to tests/tmp/tooltip-live/.
  *
  * Usage: `pnpm --filter @gofish/tests tooltip-live` (needs
  * `pnpm --filter gofish-graphics build` once, like capture-one).
  */
-import { mkdirSync } from "fs";
-import { join } from "path";
+import { mkdirSync, realpathSync } from "fs";
+import { join, resolve } from "path";
 import type { Page } from "playwright";
 import { HARNESS_DIR, withHarness, type StoryInfo } from "./capture-core.js";
 
 const PORT = Number(process.env.TOOLTIP_LIVE_PORT) || 3005;
 const OUT = join(import.meta.dirname, "../tmp/tooltip-live");
 const BOX_STROKE = "#c9ced6";
+const REPO_ROOT = realpathSync(resolve(HARNESS_DIR, "../.."));
 
 const failures: string[] = [];
 const check = (label: string, ok: boolean, detail?: unknown) => {
@@ -147,6 +149,80 @@ async function main() {
         right.box
       );
       await shot("bar-chart-short");
+      // Level with the shortest bar, a px at a time to the right of its end:
+      // its box all the way, though a longer bar is just above. The box
+      // sits right of the bar, over the row, so the pointer is soon over
+      // the open box, which holds it: it closes as the pointer leaves the
+      // box, not at the reach. Coming back from the right with no box open,
+      // the box opens at the reach (16 px).
+      {
+        const y = short.y + short.h / 2;
+        const end = short.x + short.w;
+        const right = closed.svg[0] + closed.svg[2] - 2;
+        await hover(page, end - 2, y);
+        let closedAt: number | undefined;
+        let boxRight: number | undefined;
+        let other = false;
+        for (let d = 0; end + d <= right && closedAt === undefined; d++) {
+          await page.mouse.move(end + d, y);
+          await page.waitForTimeout(40);
+          const s = await snap(page);
+          if (s.box === null) closedAt = d;
+          else {
+            if (!s.box.includes("VO→INF→VO")) other = true;
+            boxRight = s.boxClient![0] + s.boxClient![2] - end;
+          }
+        }
+        console.log(
+          `  level with the shortest bar: its box out to ${closedAt} px past its end; the box's right edge is ${boxRight?.toFixed(1)} px past it`
+        );
+        check(
+          "level with the shortest bar: its box until the pointer leaves the box",
+          !other &&
+            closedAt !== undefined &&
+            boxRight !== undefined &&
+            closedAt >= Math.max(20, boxRight) &&
+            closedAt <= Math.max(22, boxRight + 2),
+          [closedAt, boxRight, other]
+        );
+        await hover(page, 2, 2);
+        let openAt: number | undefined;
+        for (let d = 60; d >= 0 && openAt === undefined; d--) {
+          await page.mouse.move(end + d, y);
+          await page.waitForTimeout(40);
+          const s = await snap(page);
+          if (s.box !== null) openAt = s.box.includes("VO→INF→VO") ? d : -1;
+        }
+        check(
+          `level with the shortest bar, coming back: its box opens ${openAt} px past its end`,
+          openAt !== undefined && openAt >= 15 && openAt <= 17,
+          openAt
+        );
+      }
+      // Down across all fifteen bars, near their start: a box on every
+      // frame, each bar's in turn (the 4 px gaps are within reach).
+      {
+        const all = [...closed.targets].sort((a, b) => a.y - b.y);
+        const last = all[all.length - 1];
+        const x = all[0].x + 5;
+        const closedAt: number[] = [];
+        let shown = 0;
+        let prev = "";
+        for (let y = all[0].y + 1; y < last.y + last.h - 1; y += 2) {
+          await page.mouse.move(x, y);
+          await page.waitForTimeout(40);
+          const s = await snap(page);
+          if (s.box === null) closedAt.push(Math.round(y));
+          const k = JSON.stringify(s.box);
+          if (s.box !== null && k !== prev) shown++;
+          prev = k;
+        }
+        check(
+          `down across all ${all.length} bars: ${shown} boxes in turn, never closed`,
+          all.length === 15 && shown === 15 && closedAt.length === 0,
+          [shown, closedAt]
+        );
+      }
       // The gap between bars 1 and 2.
       const gap = await hover(
         page,
@@ -218,8 +294,14 @@ async function main() {
         );
       } else
         console.log("  (the first bar's box does not reach the second bar)");
-      // At rest over a box for a second: the same box, in place.
-      const rest = await hover(page, bx + bw / 2, by + bh / 2);
+      // At rest over a box for a second: the same box, in place. The first
+      // bar's box is opened again, and the pointer jumps onto it: a pointer
+      // that comes from the bottom of the sweep passes bars whose boxes are
+      // elsewhere, and below the reach of every bar nothing holds it open.
+      await hover(page, bars[0].x + bars[0].w - 10, bars[0].y + bars[0].h / 2);
+      await page.mouse.move(bx + bw / 2, by + bh / 2);
+      await page.waitForTimeout(250);
+      const rest = await snap(page);
       let steady = rest.box !== null;
       for (let k = 0; k < 5; k++) {
         await page.waitForTimeout(200);
@@ -275,6 +357,58 @@ async function main() {
         if (held === undefined)
           console.log("  (no spot over a box 60 px from every dot)");
         else check("over the box, no dot near: the box holds", held);
+        // Within 16 px of a dot's edge, its box; 18 px off, none (no other
+        // dot is that near). Then how much of the plot opens a box.
+        for (const d of closed.targets.slice(0, 3)) {
+          const [cx, cy, r] = [d.x + d.w / 2, d.y + d.h / 2, d.w / 2];
+          await hover(page, 2, 2);
+          const on = await hover(page, cx, cy);
+          const near = await hover(page, cx, cy + r + 15);
+          await hover(page, 2, 2);
+          const far = await hover(page, cx, cy + r + 18);
+          check(
+            `dot at ${Math.round(cx)},${Math.round(cy)}: 15 px off, its box; 18 px off, none`,
+            on.box !== null &&
+              JSON.stringify(near.box) === JSON.stringify(on.box) &&
+              far.box === null,
+            [on.box, near.box, far.box]
+          );
+        }
+        const [sx, sy, sw, sh] = closed.svg;
+        let open = 0;
+        let all = 0;
+        for (let i = 1; i < 20; i++)
+          for (let j = 1; j < 20; j++) {
+            await page.mouse.move(2, 2);
+            await page.mouse.move(sx + (sw * i) / 20, sy + (sh * j) / 20);
+            await page.waitForTimeout(30);
+            all++;
+            if ((await snap(page)).box !== null) open++;
+          }
+        console.log(
+          `  a 19 by 19 grid over the scatter: ${open} of ${all} points open a box`
+        );
+      }
+      if (name === "StackedBars") {
+        // Across every lake near the bottom, where every bar is: a box on
+        // every frame (the 8 px gaps are within reach).
+        // The bars stand on one baseline; the legend's swatches do not.
+        const base = Math.max(...closed.targets.map((t) => t.y + t.h));
+        const ts = closed.targets.filter((t) => Math.abs(t.y + t.h - base) < 1);
+        const x0 = Math.min(...ts.map((t) => t.x));
+        const x1 = Math.max(...ts.map((t) => t.x + t.w));
+        const y = Math.max(...ts.map((t) => t.y + t.h)) - 3;
+        const closedAt: number[] = [];
+        for (let x = x0 + 1; x < x1 - 1; x += 2) {
+          await page.mouse.move(x, y);
+          await page.waitForTimeout(40);
+          if ((await snap(page)).box === null) closedAt.push(Math.round(x));
+        }
+        check(
+          "across every lake: never closed",
+          closedAt.length === 0,
+          closedAt
+        );
       }
       const out = await hover(page, 2, 2);
       check("away: closed", out.box === null);
@@ -335,6 +469,99 @@ async function main() {
       }
       check("each wedge its own species", named.size === 5, [...named]);
       await shot("donut");
+      // Along a ray from the center of the hole through the first wedge, a
+      // px at a time: no box in the hole until 16 px before the inner edge,
+      // the wedge's box across it, and closed 20 px past the outer edge;
+      // coming back in, it opens 16 px past the outer edge.
+      {
+        const RING = `(() => {
+          let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+          for (const e of document.querySelectorAll('#stories-root svg ${WEDGE}')) {
+            if (e.closest('[pointer-events="none"]')) continue;
+            const b = e.getBoundingClientRect();
+            x0 = Math.min(x0, b.x); y0 = Math.min(y0, b.y);
+            x1 = Math.max(x1, b.x + b.width); y1 = Math.max(y1, b.y + b.height);
+          }
+          return [(x0 + x1) / 2, (y0 + y1) / 2, (x1 - x0) / 2];
+        })()`;
+        const [cx, cy, R] = (await page.evaluate(RING)) as number[];
+        await hover(page, 2, 2);
+        const hole = await hover(page, cx, cy);
+        check("the center of the hole: no box", hole.box === null, hole.box);
+        await shot("donut-hole");
+        const nameOf = (s: Snap) =>
+          s.box === null
+            ? "none"
+            : (species.find((n) => s.box!.includes(n)) ?? "?");
+        let pt = (r: number): [number, number] => [cx + r, cy];
+        let rIn = 0;
+        for (const [fill, wx, wy] of wedges) {
+          const len = Math.hypot(wx - cx, wy - cy);
+          const [ux, uy] = [(wx - cx) / len, (wy - cy) / len];
+          const along = (r: number): [number, number] => [
+            cx + ux * r,
+            cy + uy * r,
+          ];
+          const rs = Array.from({ length: Math.ceil(R) + 40 }, (_, r) => r);
+          // Which radii are inside this wedge, by what the page hit-tests.
+          const inside = (await page.evaluate(
+            `${JSON.stringify(rs.map(along))}.map(([x, y]) => {
+              const e = document.elementFromPoint(x, y);
+              return e !== null && e.matches('${WEDGE}') && e.getAttribute("fill") === ${JSON.stringify(fill)};
+            })`
+          )) as boolean[];
+          const wIn = inside.indexOf(true);
+          const wOut = inside.lastIndexOf(true);
+          await hover(page, 2, 2);
+          const states: string[] = [];
+          for (const r of rs) {
+            await page.mouse.move(...along(r));
+            await page.waitForTimeout(30);
+            states.push(nameOf(await snap(page)));
+          }
+          const own = states[Math.round((wIn + wOut) / 2)];
+          const rOpen = states.indexOf(own);
+          const rClose = states.findIndex((n, r) => r > wOut && n !== own);
+          let rBack = -1;
+          await hover(page, 2, 2);
+          for (let r = rs.length - 1; r >= wOut; r--) {
+            await page.mouse.move(...along(r));
+            await page.waitForTimeout(30);
+            if ((await snap(page)).box !== null) {
+              rBack = r;
+              break;
+            }
+          }
+          const seq: string[] = [];
+          states.forEach((n, r) => {
+            if (seq.length === 0 || !seq[seq.length - 1].startsWith(n + "@"))
+              seq.push(`${n}@${r}`);
+          });
+          console.log(
+            `  ray through ${own}: ring ${wIn}-${wOut} px; outward ${seq.join(" ")}; inward from ${rBack}`
+          );
+          check(
+            `${own}: no box in the hole, its box from ${wIn - rOpen} px before the inner edge`,
+            states[0] === "none" && Math.abs(wIn - rOpen - 16) <= 1.5,
+            seq
+          );
+          check(
+            `${own}: its box across the wedge`,
+            states.slice(wIn, wOut + 1).every((n) => n === own),
+            seq
+          );
+          console.log(
+            `    past the outer edge: ${own}'s box until ${rClose - wOut} px, then ${states[rClose]}; inward, a box from ${rBack - wOut} px`
+          );
+          if (fill === wedges[0][0]) {
+            pt = along;
+            rIn = wIn;
+          }
+        }
+        await hover(page, 2, 2);
+        await hover(page, ...pt(rIn - 6));
+        await shot("donut-inner-edge");
+      }
       const out = await hover(page, 2, 2);
       check("away: closed", out.box === null);
     }
@@ -506,6 +733,61 @@ async function main() {
         await page.waitForTimeout(200);
         check("moving about one row: no re-run", !(await reran()));
       }
+      // 10 px below Revenue (above it leaves the chart at 2022), from its
+      // first row to its last: a box on every
+      // frame, though the rows are far apart (the reach is to the path).
+      {
+        const pts = rows.Revenue;
+        const closedAt: number[] = [];
+        for (let k = 0; k <= 80; k++) {
+          const t = (k / 80) * 4;
+          const seg = Math.min(3, Math.floor(t));
+          const f = t - seg;
+          const [ax, ay] = pts[seg];
+          const [bx, by] = pts[seg + 1];
+          await page.mouse.move(ax + f * (bx - ax), ay + f * (by - ay) + 10);
+          await page.waitForTimeout(40);
+          if ((await snap(page)).box === null) closedAt.push(k);
+        }
+        check(
+          "10 px below Revenue, along it: never closed",
+          closedAt.length === 0,
+          closedAt
+        );
+      }
+      // Straight down from each Revenue row to the Cost row under it: where
+      // the lines are more than 40 px apart there is a dead band between
+      // them; where they are less than 32 px apart there is none.
+      for (const i of [0, 1, 2, 3, 4]) {
+        const [x, ry] = rows.Revenue[i];
+        const cy = rows.Cost[i][1];
+        const gap = cy - ry;
+        await hover(page, x, ry);
+        const seq: string[] = [];
+        let dead = 0;
+        for (let y = ry; y <= cy; y++) {
+          await page.mouse.move(x, y);
+          await page.waitForTimeout(30);
+          const s = await snap(page);
+          const k =
+            s.box === null
+              ? "none"
+              : s.box.includes("Revenue")
+                ? "Revenue"
+                : "Cost";
+          if (k === "none") dead++;
+          if (seq[seq.length - 1] !== k) seq.push(k);
+        }
+        check(
+          `${years[i]}: lines ${Math.round(gap)} px apart, down from Revenue to Cost: ${seq.join(", ")} (${dead} px dead)`,
+          gap > 40
+            ? seq.join() === "Revenue,none,Cost"
+            : gap < 32
+              ? seq.join() === "Revenue,Cost"
+              : seq[0] === "Revenue" && seq[seq.length - 1] === "Cost",
+          seq
+        );
+      }
       // With the Revenue 2020 box open, a Cost row under it is reached.
       {
         const rs = await hover(page, rows.Revenue[2][0], rows.Revenue[2][1]);
@@ -543,6 +825,99 @@ async function main() {
       check("away: closed", out.box === null);
       check("away: no marker", (await marker()).length === 0);
       check("closed again: as before", same(out.marks, closed.marks));
+    }
+
+    console.log("# Bars far apart (built here, not a story)");
+    {
+      // Three bars 20 px wide with 60 px between them.
+      marksSelector = 'rect[fill="#4c78a8"]';
+      await page.mouse.move(1, 1);
+      await page.evaluate(`(async () => {
+        const L = await import(${JSON.stringify(`/@fs${REPO_ROOT}/packages/gofish-graphics/src/lib.ts`)});
+        const root = document.querySelector("#stories-root");
+        root.innerHTML = "";
+        const el = document.createElement("div");
+        root.appendChild(el);
+        await L.chart([{ k: "a", n: 3 }, { k: "b", n: 5 }, { k: "c", n: 4 }], { w: 220, h: 200 })
+          .flow(L.spread({ by: "k", dir: "x", spacing: 60 }))
+          .mark(L.rect({ h: "n", w: 20, fill: "#4c78a8" }).tooltip())
+          .render(el);
+      })()`);
+      await page.waitForTimeout(300);
+      const closed = await snap(page);
+      const [a, b] = [...closed.targets].sort((p, q) => p.x - q.x);
+      const y = b.y + b.h - 10;
+      const aEnd = a.x + a.w;
+      check(
+        `a gap of ${Math.round(b.x - aEnd)} px`,
+        Math.abs(b.x - aEnd - 60) < 1
+      );
+      const mid = await hover(page, (aEnd + b.x) / 2, y);
+      check("midway in the gap: no box", mid.box === null, mid.box);
+      await shot("far-bars-gap");
+      const near = await hover(page, aEnd + 12, y);
+      check(
+        "12 px right of bar a: its box",
+        near.box?.includes("a") === true,
+        near.box
+      );
+      await shot("far-bars-near");
+      // From a's middle to b's, a px at a time.
+      await hover(page, a.x + 10, y);
+      const seq: string[] = [];
+      const at: number[] = [];
+      for (let x = Math.round(a.x + 10); x <= b.x + 10; x++) {
+        await page.mouse.move(x, y);
+        await page.waitForTimeout(30);
+        const s = await snap(page);
+        const k =
+          s.box === null
+            ? "none"
+            : s.box.includes("a")
+              ? "a"
+              : s.box.includes("b")
+                ? "b"
+                : "?";
+        if (seq[seq.length - 1] !== k) {
+          seq.push(k);
+          at.push(x);
+        }
+      }
+      check(
+        `across the gap: ${seq.join(", ")}; closed ${Math.round(at[1] - aEnd)} px past a, opened ${Math.round(b.x - at[2])} px before b`,
+        seq.join() === "a,none,b" &&
+          Math.abs(at[1] - aEnd - 21) <= 1.5 &&
+          Math.abs(b.x - at[2] - 16) <= 1.5,
+        [seq, at, aEnd, b.x]
+      );
+      // The same crossing at the height of a's open box: the box sits in
+      // the gap, and a pointer over it holds it, so the box stays open
+      // until the pointer leaves it.
+      {
+        const opened = await hover(page, a.x + 10, a.y + a.h / 2);
+        const [bx, by, bw, bh] = opened.boxClient!;
+        const y2 = by + bh / 2;
+        await hover(page, a.x + 10, y2);
+        const seq2: string[] = [];
+        for (let x = Math.round(a.x + 10); x <= b.x + 10; x++) {
+          await page.mouse.move(x, y2);
+          await page.waitForTimeout(30);
+          const s = await snap(page);
+          const k = s.box === null ? "none" : s.box.includes("a") ? "a" : "b";
+          if (!seq2.length || !seq2[seq2.length - 1].startsWith(k + "@"))
+            seq2.push(`${k}@${Math.round(x - aEnd)}`);
+        }
+        console.log(
+          `  across the gap at the height of a's box (its right edge ${Math.round(bx + bw - aEnd)} px past a; b at ${Math.round(b.x - aEnd)}): ${seq2.join(" ")} (px past a)`
+        );
+        check(
+          "across the gap at the box's height: a, then b, never both",
+          seq2[0].startsWith("a@") && seq2[seq2.length - 1].startsWith("b@"),
+          seq2
+        );
+      }
+      const out = await hover(page, 2, 2);
+      check("away: closed", out.box === null);
     }
 
     // No two-state loop anywhere: at each point of a grid over each story,

@@ -362,8 +362,9 @@ walks the display items once (`walkItems`), for the open box's extent and for
 one candidate per key: the
 union of the boxes the mark's subtree drew, an outline (boxes, circles, the
 segments of a stroked path's `d`, `pathSegments`, and regions), and the mark's
-placed position. A path that is closed and filled (its fill is not `none`,
-`transparent` or of zero opacity) is a region, read from the display item
+placed position. A path that is filled (its fill is not `none`,
+`transparent` or of zero opacity; SVG fills it closed or not, and a wedge in
+a coordinate space ends on its start with no `Z`) is a region, read from the display item
 alone: a pointer inside it, by the nonzero rule, is on the mark, so a wedge
 or an area is hit anywhere inside, not only near its edge. A position counts
 only on an axis the layout placed the mark along: an ancestor up to the
@@ -377,18 +378,32 @@ last item each drew in the frame, which the bake has already sorted by
 `zOrder`: where marks overlap, `Focus.hit` takes the last one the pointer is
 inside, the one on top.
 On each pointer event it runs the focus behavior (`focus.ts`, by default
-`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).snap(4).within(8)`; `within`
-measures the pointer against the hull of the marks first, so a pointer far
-from every mark runs nothing else), and it invalidates its readers only when
+`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(16).snap(4)`),
+and it invalidates its readers only when
 the focused key, or the focused point, changes. Thirty moves across
 three bars re-run the chart twice. A key is the JSON of the mark's
 `.tooltip()` call (the wire of the mark it is chained on and its field list)
 and of the mark's rows (a ref or node by its rows, a date by its instant), so
 two marks of one call drawn from equal rows are one candidate, and the marks
-of two calls are not. The open box (the box the layer drew in the last frame) is
+of two calls are not.
+
+`within` is Dragology's `closest(...).whenFar(...)`: a behavior's result
+carries its `gap`, the pointer's distance to the drawn outline of the mark
+it chose (0 inside it), and `within(reach)` keeps the choice only while the
+gap is at most `reach` px, or `reach + 4` when the choice is the current
+focus. The limit is on the chosen mark, not on the marks as a whole, so the
+hole of a donut and a wide gap between bars, which are near no mark, show no
+box. `within` comes before `snap`, so it measures a line by its path, and
+sliding along a line between rows far apart keeps the box. The reach,
+`TOOLTIP_REACH`, is 16 px: more than half an ordinary gap between bars, so
+crossing a gap never closes the box, and less than the hole of a donut.
+Observable Plot's pointer uses 40 px to a point's center, Plotly's
+`hoverdistance` 20 px.
+
+The open box (the box the layer drew in the last frame) is
 no pointer target: the behavior runs as if it were not there, so a mark or a
 row under it is reached. Only where the behavior picks nothing (the box
-reaches past the marks' hull limit) does a pointer over the box keep the
+reaches farther from the marks than the reach) does a pointer over the box keep the
 focus; otherwise the box would close under the pointer and might reopen, a
 flicker. The current mark's head start still applies, so a pointer at rest on
 a boundary under the box does not flip. A touch tap holds its point through the `pointerleave` that ends it,

@@ -71,27 +71,35 @@ check("inside the long bar", pick(frame(100, 12)) === "long");
 check("inside the short bar", pick(frame(20, 40)) === "short");
 
 console.log("# focus: the row decides, right of a short bar");
-// Right of the short bar, in its row: its row (y) is the nearest position,
-// though the long bar's box is nearer.
-check("right of the short bar", pick(frame(200, 40)) === "short");
+// Right of the short bar (it ends at x 40), in its row: its row (y) is the
+// nearest position, though the long bar's box is nearer; it is kept while
+// the pointer is within 16 px of the short bar, 20 once it is the focus,
+// then closed, though the long bar is just above.
+check("16 px right of the short bar: it", pick(frame(56, 40)) === "short");
+check("17 px right of the short bar: none", pick(frame(57, 40)) === undefined);
+check("the short bar the focus, 20 px: it", pick(frame(60, 40, bars[1])) === "short");
+check("the short bar the focus, 21 px: none", pick(frame(61, 40, bars[1])) === undefined);
+check("far right of the short bar: none", pick(frame(200, 40)) === undefined);
 check("Focus.closest alone ignores x", Focus.closest()(frame(250, 69)).choice?.key === "mid");
 
 console.log("# focus: stickiness");
 // Halfway between two rows, 1 px nearer the long bar: a fresh pointer takes
 // the long one, the current (short) one keeps it with its 4 px head start.
-check("fresh: the nearer row", pick(frame(200, 24)) === "long");
-check("current: the 4 px head start", pick(frame(200, 24, bars[1])) === "short");
+check("fresh: the nearer row", pick(frame(20, 24)) === "long");
+check("current: the 4 px head start", pick(frame(20, 24, bars[1])) === "short");
 check(
   "more than 4 px nearer another row moves it",
   pick(frame(200, 18, bars[1])) === "long"
 );
 
-console.log("# focus: the hull limit and its hysteresis");
-// The hull of the bars spans x 0..300, y 0..80.
-check("8 px past the hull: a choice", pick(frame(308, 10)) === "long");
-check("9 px past the hull: none", pick(frame(309, 10)) === undefined);
-check("with a focus, 12 px: still a choice", pick(frame(312, 10, bars[0])) === "long");
-check("with a focus, 13 px: none", pick(frame(313, 10, bars[0])) === undefined);
+console.log("# focus: the reach to the chosen mark, and its hysteresis");
+// The long bar ends at x 300.
+check("16 px past the long bar: it", pick(frame(316, 10)) === "long");
+check("17 px past it: none", pick(frame(317, 10)) === undefined);
+check("it the focus, 20 px: still it", pick(frame(320, 10, bars[0])) === "long");
+check("it the focus, 21 px: none", pick(frame(321, 10, bars[0])) === undefined);
+// The head start is the current focus's: another focus does not lend it.
+check("another the focus, 18 px: none", pick(frame(318, 10, bars[1])) === undefined);
 check("no pointer: none", defaultFocus({ ...frame(0, 0), pointer: undefined }).choice === undefined);
 
 console.log("# focus: a mark placed on no axis is as near as its outline");
@@ -103,7 +111,8 @@ console.log("# focus: a mark placed on no axis is as near as its outline");
     return { key, datum: [], box, position: {}, outline: [{ box, round: false, segment: [a, b] }] };
   };
   const lines = [seg("top", 0), seg("bottom", 50)];
-  check("nearest line", pick(frame(50, 30, undefined, lines)) === "bottom");
+  check("nearest line", pick(frame(50, 36, undefined, lines)) === "bottom");
+  check("midway, 25 px from both: none", pick(frame(50, 25, undefined, lines)) === undefined);
   check("pathSegments: M L L", JSON.stringify(pathSegments("M0,0L10,0L10,5")) ===
     JSON.stringify([[{ x: 0, y: 0 }, { x: 10, y: 0 }], [{ x: 10, y: 0 }, { x: 10, y: 5 }]]),
     pathSegments("M0,0L10,0L10,5"));
@@ -216,12 +225,34 @@ console.log("# focus: on a line drawn through rows, the nearest row");
   // The current point keeps a 4 px head start over its neighbor.
   check("by the middle, the current row stays", at(152, 40, pointOf("high#1")) === "high#1");
   check("past the head start, the next row", at(155, 40, pointOf("high#1")) === "high#2");
-  // The current point counts as its line when the lines are chosen.
+  // Midway between the lines, 30 px from each, is past the reach of both,
+  // the current one's too.
   check(
-    "between the lines, the current line stays",
-    at(100, 71, pointOf("high#1")) === "high#1" &&
-      at(100, 71, pointOf("low#1")) === "low#1"
+    "midway between lines 60 px apart: none",
+    at(100, 71, pointOf("high#1")) === undefined &&
+      at(100, 71, pointOf("low#1")) === undefined &&
+      at(100, 70) === undefined
   );
+  // The current point counts as its line when the lines are chosen: between
+  // lines 30 px apart, near the middle, the current line stays.
+  {
+    const mid = through("mid", xs.map((x) => [x, 70] as [number, number]));
+    const near = [high, mid];
+    const atNear = (x: number, y: number, current?: string) =>
+      defaultFocus(
+        frame(x, y, near.flatMap((l) => l.points!).find((p) => p.key === current), near)
+      ).choice?.key;
+    check(
+      "between lines 30 px apart, the current line stays",
+      atNear(100, 56, "high#1") === "high#1" &&
+        atNear(100, 54, "mid#1") === "mid#1" &&
+        atNear(100, 56) === "mid#1"
+    );
+  }
+  // The reach is to the line's path, not to its row's point: 12 px off the
+  // line, midway between two rows 100 px apart, is still the line.
+  check("12 px off the line, between rows: its row", at(148, 52) === "high#1");
+  check("17 px off the line: none", at(148, 57) === undefined);
   // A sweep along a line: the focus changes exactly when the nearest row
   // does, once per row.
   let current: Candidate | undefined;
@@ -365,6 +396,88 @@ console.log("# a filled path is a region");
     stroked.outline.every((p) => p.segment !== undefined)
   );
   check("under a stroked line: not on it", hit(100, 100, [stroked]) === undefined);
+  // A wedge in a coordinate space ends on its start with no `Z`: SVG fills
+  // it all the same.
+  const [open] = candidatesOf(
+    [path("open", wedge.replace(/ Z$/, ` L100 100`), "#4190c5")],
+    [{ key: "open", node: fakeNode("open"), rows: [] }]
+  );
+  check("a filled path with no Z: a region", hit(140, 140, [open]) === "open");
+}
+
+console.log("# focus: a donut's hole is dead");
+{
+  const fakeNode = (uid: string) =>
+    ({
+      uid,
+      children: [],
+      parent: undefined,
+      yFrame: { direction: 1, inCoord: false },
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+    }) as unknown as FocusMark["node"];
+  /** The points of an arc around (100, 100) of radius `r`, from angle `a0`
+   *  to `a1` (radians, 0 at 3 o'clock, y down), in 32 steps. */
+  const arc = (r: number, a0: number, a1: number): [number, number][] =>
+    Array.from({ length: 33 }, (_, i) => {
+      const a = a0 + ((a1 - a0) * i) / 32;
+      return [100 + r * Math.cos(a), 100 + r * Math.sin(a)];
+    });
+  // Four quarter wedges, radii 40 to 80. In a coordinate space a wedge is
+  // placed at its drawn center (`positionAxes`).
+  const q = Math.PI / 2;
+  const ring = [0, 1, 2, 3].map((k) => {
+    const pts = [...arc(80, k * q, (k + 1) * q), ...arc(40, (k + 1) * q, k * q)];
+    const d = pts.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ") + " Z";
+    return { kind: "path", id: `w${k}`, d, style: { fill: "#4190c5" } } as any;
+  });
+  const wedges = candidatesOf(
+    ring,
+    ring.map((it) => ({ key: it.id, node: fakeNode(it.id), rows: [] }))
+  ).map((c) => ({
+    ...c,
+    position: { x: (c.box.x0 + c.box.x1) / 2, y: (c.box.y0 + c.box.y1) / 2 },
+  }));
+  /** The focus at radius `r` along 45 degrees, into the first wedge. */
+  const atR = (r: number, current?: Candidate) =>
+    pick(
+      frame(100 + r * Math.SQRT1_2, 100 + r * Math.SQRT1_2, current, wedges)
+    );
+  check("the center of the hole: none", atR(0) === undefined && pick(frame(100, 100, wedges[0], wedges)) === undefined);
+  check("23 px from the center, 17 px from the inner edge: none", atR(23) === undefined);
+  check("25 px from the center, 15 px from the inner edge: the wedge", atR(25) === "w0");
+  check("inside the wedge: it", atR(60) === "w0");
+  check("15 px past the outer edge: the wedge", atR(95) === "w0");
+  check("17 px past the outer edge: none", atR(97) === undefined);
+  check("it the focus, 19 px past the outer edge: still it", atR(99, wedges[0]) === "w0");
+  check("it the focus, 21 px past: none", atR(101, wedges[0]) === undefined);
+}
+
+console.log("# focus: bars far apart, a dead gap");
+{
+  // Bars 20 px wide, 60 px apart (x 0-20, 80-100, 160-180), 100 px tall
+  // from a baseline at y 100: placed on x only.
+  const col = (key: string, x0: number): Candidate => {
+    const box = { x0, y0: 0, x1: x0 + 20, y1: 100 };
+    return { key, datum: [], box, position: { x: x0 + 10 }, outline: [{ box, round: false }] };
+  };
+  const cols = [col("a", 0), col("b", 80), col("c", 160)];
+  const at = (x: number, current?: Candidate) => pick(frame(x, 50, current, cols));
+  check("on a bar: it", at(10) === "a");
+  check("16 px right of a: a", at(36) === "a");
+  check("17 px right of a: none", at(37) === undefined);
+  check("midway in the gap: none", at(50) === undefined && at(50, cols[0]) === undefined);
+  check("16 px left of b: b", at(64) === "b");
+  check("a the focus, 20 px right of it: a", at(40, cols[0]) === "a");
+  // Crossing from a to b: a, then none, then b.
+  const seen: string[] = [];
+  let current: Candidate | undefined;
+  for (let x = 10; x <= 90; x += 1) {
+    const choice = defaultFocus(frame(x, 50, current, cols)).choice;
+    const k = choice?.key ?? "none";
+    if (seen[seen.length - 1] !== k) seen.push(k as string);
+    current = choice;
+  }
+  check(`crossing a to b: a, none, b (${seen.join(", ")})`, seen.join() === "a,none,b", seen);
 }
 
 console.log("# positions in a coordinate space");

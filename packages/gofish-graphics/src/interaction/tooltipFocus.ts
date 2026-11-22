@@ -204,9 +204,10 @@ export class TooltipFocus implements InputPrimitive {
   private choose(): void {
     // The box is no pointer target: the behavior runs as if it were not
     // there, so a mark or a row under the open box is reachable. Only
-    // where the behavior picks nothing (the box reaches past the marks'
-    // hull limit) does a pointer over the box keep the focus; else the box
-    // would close under the pointer, and might reopen: a flicker.
+    // where the behavior picks nothing (the box reaches farther from the
+    // marks than the focus's reach) does a pointer over the box keep the
+    // focus; else the box would close under the pointer, and might reopen:
+    // a flicker.
     const p = this.pointer;
     const choice = this.behavior({
       pointer: p,
@@ -467,13 +468,16 @@ function outlineOf(item: DisplayList.DisplayItem, at: Affine): Outline {
       ];
     }
     case "path": {
-      const filled = isFilled(item.style) && /z/i.test(item.d);
+      // SVG fills every subpath of a path with a painted fill, closed by a
+      // `Z` or not (a wedge in a coordinate space ends on its start point
+      // with no `Z`), so a painted fill makes a region.
+      const filled = isFilled(item.style);
       const edge = pathSegments(item.d, filled).map(([a, b]) => [
         { x: at.tx + at.sx * a.x, y: at.ty + at.sy * a.y },
         { x: at.tx + at.sx * b.x, y: at.ty + at.sy * b.y },
       ]) as [Point, Point][];
       if (filled) {
-        // A filled closed path is a region: the pointer inside it is on
+        // A filled path is a region: the pointer inside it is on
         // the mark (a wedge, an area), not only near its edge.
         const drawn = emptyDrawn();
         for (const [p, q] of edge) {

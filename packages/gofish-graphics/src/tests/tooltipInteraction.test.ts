@@ -102,9 +102,10 @@ console.log("# over the box, a mark under it is reached");
 {
   // The first bar is full width, so its box hangs under its end, over the
   // second bar's row (x 366.8-472, y 72-132; the second bar ends at 401).
-  // The box is no pointer target: the second bar's row decides there.
+  // The box is no pointer target: 9 px past the second bar's end, within
+  // its reach, the second bar decides there.
   const runs = resolves;
-  send("pointermove", 450, 100);
+  send("pointermove", 410, 100);
   await settle();
   check("the second bar's box", texts().includes("9811"), texts());
   check("one re-run", resolves === runs + 1, resolves - runs);
@@ -112,14 +113,14 @@ console.log("# over the box, a mark under it is reached");
   const still = resolves;
   const t0 = performance.now();
   while (performance.now() - t0 < 1000) {
-    send("pointermove", 450, 100);
+    send("pointermove", 410, 100);
     await settle(1);
   }
   check("at rest over a box for 1 s: no re-run", resolves === still, resolves - still);
   check("at rest over a box for 1 s: the same box", texts().includes("9811"), texts());
   // Down through the first bar's box (x 366.8-472, y 72-132) at x 395,
   // over the second bar's end (401): bar 1, then bar 2, and a box on every
-  // frame. The third bar ends at 250, past the hull limit from here.
+  // frame. The third bar ends at 250, past its reach from here.
   send("pointermove", 395, 30);
   await settle();
   const seen: string[] = [];
@@ -498,7 +499,8 @@ console.log("# a line drawn through rows: the box describes its nearest row");
 console.log("# over the box, no mark near: the box holds");
 {
   const { scatter, circle } = GoFish as any;
-  // Three dots in a corner: a box beside one reaches past their hull.
+  // Three dots in a corner: a box beside one reaches farther from them
+  // than the focus reaches.
   const dots = [
     { name: "a", x: 0, y: 0 },
     { name: "b", x: 10, y: 0 },
@@ -1067,6 +1069,131 @@ console.log("# the widget path: an IR document rendered by renderIR");
       JSON.stringify(["path", "n", "INF→INF", "9811"]),
     shown
   );
+}
+
+/** A chart rendered into a fresh container, a pointer move on it, and the
+ *  texts of its open box (undefined when none is open). */
+async function mounted(c: any) {
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  await c.render(el, {});
+  await settle();
+  const move = async (x: number, y: number) => {
+    el.querySelector("svg")!.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: x,
+        clientY: y,
+        bubbles: true,
+        pointerType: "mouse",
+      })
+    );
+    await settle();
+  };
+  const boxTexts = () => {
+    const r = [...el.querySelectorAll("rect")].find(
+      (r) => r.getAttribute("stroke") === "#c9ced6"
+    );
+    return r
+      ? [...el.querySelectorAll("text")]
+          .filter((t) => t.closest('[pointer-events="none"]') !== null)
+          .map((t) => t.textContent!)
+      : undefined;
+  };
+  return { el, move, boxTexts };
+}
+
+console.log("# bars far apart: the middle of a gap is dead");
+{
+  // Bars 20 px wide with 60 px between them.
+  const far = [
+    { k: "a", n: 3 },
+    { k: "b", n: 5 },
+    { k: "c", n: 4 },
+  ];
+  const { el, move, boxTexts } = await mounted(
+    chart(far, { w: 220, h: 200 })
+      .flow(spread({ by: "k", dir: "x", spacing: 60 }))
+      .mark(rect({ h: "n", w: 20, fill: "#4c78a8" }).tooltip(["k"]))
+  );
+  const [a, b] = [...el.querySelectorAll('rect[fill="#4c78a8"]')]
+    .filter((r) => r.closest('[pointer-events="none"]') === null)
+    .map((r) => ["x", "y", "width", "height"].map((k) => Number(r.getAttribute(k))))
+    .sort((p, q) => p[0] - q[0]);
+  const y = b[1] + b[3] - 10;
+  const aEnd = a[0] + a[2];
+  check("the gap is 60 px", Math.abs(b[0] - aEnd - 60) < 0.5, [a, b]);
+  await move(a[0] + 10, y);
+  check("on bar a: its box", boxTexts()?.includes("a") === true, boxTexts());
+  await move(aEnd + 20, y);
+  check("a the focus, 20 px right of it: still its box", boxTexts()?.includes("a") === true, boxTexts());
+  await move(aEnd + 30, y);
+  check("midway in the gap: no box", boxTexts() === undefined, boxTexts());
+  await move(b[0] - 16, y);
+  check("16 px left of bar b: its box", boxTexts()?.includes("b") === true, boxTexts());
+  // Crossing from a to b, a px at a time: a, closed, b. The box closes
+  // past a's reach with its head start (20 px), and b's opens at its reach
+  // (16 px).
+  const seen: string[] = [];
+  const at: number[] = [];
+  for (let x = a[0] + 10; x <= b[0] + 10; x++) {
+    await move(x, y);
+    const t = boxTexts();
+    const k = t === undefined ? "none" : t.includes("a") ? "a" : t.includes("b") ? "b" : "?";
+    if (seen[seen.length - 1] !== k) {
+      seen.push(k);
+      at.push(x);
+    }
+  }
+  check(`crossing a to b: a, none, b (${seen.join(", ")})`, seen.join() === "a,none,b", seen);
+  check(
+    `crossing a to b: closed ${at[1] - aEnd} px past a, open ${b[0] - at[2]} px before b`,
+    at[1] - aEnd === 21 && b[0] - at[2] === 16,
+    [at, aEnd, b[0]]
+  );
+}
+
+console.log("# a donut: its hole is dead");
+{
+  const { Coord, stack } = GoFish as any;
+  const slices = [
+    { s: "p", n: 1 },
+    { s: "q", n: 1 },
+    { s: "r", n: 1 },
+    { s: "t", n: 1 },
+  ];
+  const { el, move, boxTexts } = await mounted(
+    chart(slices, { coord: Coord.clock(), w: 300, h: 300 })
+      .flow(stack({ by: "s", dir: "x", y: 50, h: 50 }))
+      .mark(rect({ w: "n", fill: "s" }).tooltip(["s"]))
+  );
+  const wedges = [...el.querySelectorAll("path")].filter(
+    (p) => p.closest('[pointer-events="none"]') === null && p.getAttribute("fill") !== "none"
+  );
+  check("four wedges", wedges.length === 4, wedges.length);
+  // The ring's center and radii, from the points of the wedges' paths.
+  const nums = wedges.flatMap((p) =>
+    (p.getAttribute("d")!.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g) ?? []).map(Number)
+  );
+  const pts = nums.flatMap((v, i) => (i % 2 === 0 ? [[v, nums[i + 1]]] : []));
+  const cx = (Math.min(...pts.map((p) => p[0])) + Math.max(...pts.map((p) => p[0]))) / 2;
+  const cy = (Math.min(...pts.map((p) => p[1])) + Math.max(...pts.map((p) => p[1]))) / 2;
+  const radii = pts.map(([x, y]) => Math.hypot(x - cx, y - cy));
+  const [inner, outer] = [Math.min(...radii), Math.max(...radii)];
+  check("a ring of radii 50 to 100", Math.abs(inner - 50) < 1 && Math.abs(outer - 100) < 1, [cx, cy, inner, outer]);
+  /** The box at radius `r` toward 1:30 on the clock, into the first wedge. */
+  const atR = async (r: number) => {
+    await move(cx + r * Math.SQRT1_2, cy - r * Math.SQRT1_2);
+    return boxTexts();
+  };
+  check("the center of the hole: no box", (await atR(0)) === undefined);
+  check("18 px inside the inner edge: no box", (await atR(inner - 18)) === undefined);
+  check("14 px inside the inner edge: the wedge's box", (await atR(inner - 14))?.includes("p") === true);
+  check("back to the center: closed", (await atR(0)) === undefined);
+  check("in the wedge: its box", (await atR(75))?.includes("p") === true);
+  check("the wedge the focus, 19 px past its outer edge: its box", (await atR(outer + 19))?.includes("p") === true);
+  check("22 px past: closed", (await atR(outer + 22)) === undefined);
+  check("coming back, 18 px past: still closed", (await atR(outer + 18)) === undefined);
+  check("14 px past: the wedge's box", (await atR(outer + 14))?.includes("p") === true);
 }
 
 report();

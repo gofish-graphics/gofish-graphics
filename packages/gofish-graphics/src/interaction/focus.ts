@@ -15,7 +15,7 @@
  *
  * The runtime that hands a behavior its frames is `tooltipFocus.ts`.
  */
-import { convexHull, segDist, type PlanePoint } from "../ast/geometry/plane";
+import { segDist } from "../ast/geometry/plane";
 
 /* -------------------------------- types --------------------------------- */
 
@@ -25,7 +25,7 @@ export type Box = { x0: number; y0: number; x1: number; y1: number };
 /**
  * A drawn outline: the boxes, circles, line segments and regions a mark is
  * drawn as. A part is a box, a circle (a `round` box), a segment of a
- * stroked path (a line's), or a `region`, a filled closed path (an area, a
+ * stroked path (a line's), or a `region`, a filled path (an area, a
  * wedge) given by the segments of its edge; its box bounds it.
  */
 export type Outline = {
@@ -65,17 +65,19 @@ export type Frame = {
   clicked: boolean;
 };
 
-/** `gap`: the pointer's distance to the choice, in px, as the behavior
- *  measures it (Dragology's `gap`). */
+/** `gap`: the pointer's distance to the choice's drawn outline, in px, 0
+ *  inside it (Dragology's `gap`, the distance to the chosen target). */
 export type Result = { choice: Candidate | undefined; gap: number };
 export type FocusBehavior = (frame: Frame) => Result;
 
 /** A behavior with the chained steps. A plain `FocusBehavior` is accepted
  *  wherever a behavior is an argument. */
 export type Chain = FocusBehavior & {
-  /** Drop the choice when the pointer is more than `gap` px from the hull
-   *  of the drawn marks; once there is a focus, `out` px. */
-  within(gap: number, out?: number): Chain;
+  /** Keep the choice only while the pointer is within `reach` px of its
+   *  drawn outline (its `gap`); the current focus is kept out to `out` px.
+   *  This is Dragology's `closest(...).whenFar(...)`: the limit is on the
+   *  distance to the chosen mark, not to all of them. */
+  within(reach: number, out?: number): Chain;
   /** Run this behavior only on a click; between clicks the focus stays. */
   onClick(): Chain;
   /** Then, when the choice is drawn through rows (it has `points`), choose
@@ -92,14 +94,11 @@ const NONE: Result = { choice: undefined, gap: Infinity };
 /** Lift a plain behavior so it can be chained. */
 function from(run: FocusBehavior): Chain {
   const chain = ((frame: Frame) => run(frame)) as Chain;
-  // The hull is measured first: a pointer far from every mark (most of a
-  // sparse chart) runs no inner behavior.
-  chain.within = (gap, out = gap + 4) =>
+  chain.within = (reach, out = reach + 4) =>
     from((f) => {
-      const limit = f.current ? out : gap;
-      if (f.pointer && hullDistance(f.pointer, hullOf(f.candidates)) > limit)
-        return NONE;
-      return run(f);
+      const r = run(f);
+      const kept = r.choice !== undefined && r.choice.key === f.current?.key;
+      return r.gap <= (kept ? out : reach) ? r : NONE;
     });
   chain.onClick = () =>
     from((f) => (f.clicked ? run(f) : { choice: f.current, gap: 0 }));
@@ -134,8 +133,9 @@ function hit(): Chain {
  * The nearest candidate. `to` is what distance is measured to: the placed
  * `position` (absent axes drop out; a mark with none is measured to its
  * outline), the box `center`, or the `outline`. The current focus gets a
- * head start of `stickiness` px. A candidate more than `radius` px away is
- * not picked.
+ * head start of `stickiness` px. A candidate more than `radius` px away,
+ * so measured, is not picked. The result's `gap` is the distance to the
+ * chosen candidate's outline, whatever `to` chose it by.
  */
 function closest({
   to = "position",
@@ -148,14 +148,16 @@ function closest({
 } = {}): Chain {
   return from(({ pointer, candidates, current }) => {
     if (!pointer) return NONE;
-    let best = NONE;
+    let best: Candidate | undefined;
+    let bestD = Infinity;
     let bestScore = Infinity;
     for (const c of candidates) {
       const d = distance(pointer, c, to);
       const score = d - (c.key === current?.key ? stickiness : 0);
-      if (score < bestScore) [best, bestScore] = [{ choice: c, gap: d }, score];
+      if (score < bestScore) [best, bestD, bestScore] = [c, d, score];
     }
-    return best.gap <= radius ? best : NONE;
+    if (best === undefined || bestD > radius) return NONE;
+    return { choice: best, gap: outlineDistance(pointer, best.outline) };
   });
 }
 
@@ -172,19 +174,31 @@ function first(behaviors: FocusBehavior[]): Chain {
 
 export const Focus = { hit, closest, first, from };
 
+/**
+ * How near the pointer must be to a mark's drawn outline for the tooltip to
+ * describe it, in px. It must be more than half an ordinary gap between bars
+ * (4 to 12 px), so that crossing a gap never closes the box, and small
+ * enough that the hole of a donut and a wide gap between far-apart bars are
+ * dead. Observable Plot's pointer uses 40 px to a point's center, Plotly's
+ * `hoverdistance` 20 px.
+ */
+export const TOOLTIP_REACH = 16;
+
 /** The default tooltip focus: the mark under the pointer, else the nearest
- *  by placed position with a 4 px head start for the current one; on a mark
- *  drawn through rows (a line), its row nearest the pointer, with the same
- *  head start; while the pointer is within 8 px of the drawn marks (12 px
- *  once there is a focus). As a spec this would read
+ *  by placed position with a 4 px head start for the current one, kept only
+ *  while the pointer is within {@link TOOLTIP_REACH} px of that mark's drawn
+ *  outline (4 px more for the current one); on a mark drawn through rows (a
+ *  line), its row nearest the pointer, with the same head start. The reach
+ *  is measured to the line's path, not the row's point, so sliding along a
+ *  line keeps the box. As a spec this would read
  *  `pointer().snap(selectAll("lines"), { by: ... })`: the marks are the
  *  candidates, and each step here is one pure behavior over them. */
 export const defaultFocus: Chain = Focus.first([
   Focus.hit(),
   Focus.closest({ stickiness: 4 }),
 ])
-  .snap(4)
-  .within(8);
+  .within(TOOLTIP_REACH)
+  .snap(4);
 
 /* -------------------------------- geometry -------------------------------- */
 
@@ -250,35 +264,4 @@ function distance(
   if (to === "outline" || (at.x === undefined && at.y === undefined))
     return outlineDistance(p, c.outline);
   return Math.hypot(p.x - (at.x ?? p.x), p.y - (at.y ?? p.y));
-}
-
-/** The convex hull of the candidates' outline corners (`convexHull`),
- *  kept per candidate list. */
-const hulls = new WeakMap<Candidate[], PlanePoint[]>();
-function hullOf(candidates: Candidate[]): PlanePoint[] {
-  const known = hulls.get(candidates);
-  if (known) return known;
-  const pts: PlanePoint[] = [];
-  for (const c of candidates)
-    for (const { box: b } of c.outline)
-      pts.push([b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]);
-  const hull = convexHull(pts);
-  hulls.set(candidates, hull);
-  return hull;
-}
-
-/** Distance from a point to a convex polygon that winds positive (as
- *  `convexHull` makes it), zero inside it. A hull of fewer than three
- *  corners (one mark of no width) has no inside. */
-function hullDistance(p: Point, hull: PlanePoint[]): number {
-  if (hull.length === 1) return Math.hypot(p.x - hull[0][0], p.y - hull[0][1]);
-  let isInside = hull.length >= 3;
-  let d = Infinity;
-  for (let i = 0; i < hull.length; i++) {
-    const [ax, ay] = hull[i];
-    const [bx, by] = hull[(i + 1) % hull.length];
-    if ((bx - ax) * (p.y - ay) - (by - ay) * (p.x - ax) < 0) isInside = false;
-    d = Math.min(d, segDist(p.x, p.y, ax, ay, bx, by));
-  }
-  return isInside ? 0 : d;
 }

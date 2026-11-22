@@ -55,9 +55,11 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   it describes the nearest one by where the layout placed it: a bar by its
   row, a dot by its center. A line is as near as its path. On a `line`
   drawn through rows, the box describes the row whose point is nearest the
-  pointer, and it keeps that row until another is 4 px nearer. The box closes
-  when the pointer is more than 8 px from the marks, or 12 px once a box is
-  open. The open box keeps its mark until another one is 4 px nearer. The
+  pointer, and it keeps that row until another is 4 px nearer. The box opens
+  only while the pointer is within 16 px of the drawn outline of the mark it
+  describes (of a line's path, for a row of a line), and an open box stays
+  open out to 20 px, so the hole of a donut and a wide gap between bars show
+  no box. The open box keeps its mark until another one is 4 px nearer. The
   box takes no pointer events, so a mark under it is reached as if it were
   not there; where no mark is near, a pointer over the box keeps it open. On a touch screen, a tap opens the box
   and it stays open. A chart opens one box at a time: the marks of every
