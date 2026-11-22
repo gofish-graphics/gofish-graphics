@@ -110,6 +110,16 @@ const drawn = (
   return getValue(v as any);
 };
 
+/**
+ * The marks whose position and size channels read each row, not one value
+ * for the mark: a `line` and a `ribbon` in shape form draw a path through
+ * their rows (their descriptors: "each row's x"). On them only the color
+ * channels draw one value. TODO(#1395): this is a list here because the
+ * descriptor table does not say it; the right fix is a channel `infer` kind
+ * for a per-row position, which `MARK_CHANNELS` would carry.
+ */
+const PER_ROW_MARKS = new Set(["line", "ribbon"]);
+
 /** The fields a mark draws through a channel, each with its channel kind:
  *  the channel options of its wire whose value is a field name. */
 const channelFields = (
@@ -127,6 +137,7 @@ const channelFields = (
     if (
       kind !== undefined &&
       kind !== "dims" &&
+      !(PER_ROW_MARKS.has(wire.type!) && kind !== "color") &&
       typeof value === "string" &&
       columns.has(value) &&
       !out.has(value)

@@ -9,6 +9,7 @@
 import {
   chart,
   circle,
+  group,
   line,
   rect,
   scatter,
@@ -213,6 +214,15 @@ console.log("# a scatter and a line");
     .layer(chart(series).mark(line({ x: "t", y: "v" }).tooltip(["s"])))
     .toDisplayList({});
   check("the line's own title", titles(lineDl).includes("s: A"), titles(lineDl));
+  const grouped = await chart([...series, { t: 1, v: 1, s: "B" }, { t: 2, v: 4, s: "B" }])
+    .flow(group({ by: "s" }))
+    .mark(line({ x: "t", y: "v", stroke: "s" }).tooltip())
+    .toDisplayList({});
+  check(
+    "a line's x and y read each row: not averaged into its box",
+    JSON.stringify(titles(grouped)) === JSON.stringify(["s: A", "s: B"]),
+    titles(grouped)
+  );
 }
 
 /* ---------------------------- static rendering ---------------------------- */
