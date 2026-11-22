@@ -60,7 +60,8 @@ const styleAttrs = (style: Style | undefined): string => {
  *  filter def. */
 const itemToSVG = (item: DisplayItem, filterId: string): string => {
   const s = styleAttrs(item.style);
-  // A primitive's `title` is its first child, an SVG `<title>`.
+  // An item's `title` is its first child, an SVG `<title>` (a composite's
+  // is its group's, `compositeToSVG`).
   const title =
     item.title !== undefined ? `<title>${esc(item.title)}</title>` : "";
   // A primitive with no children closes itself.
@@ -181,9 +182,12 @@ const compositeToSVG = (item: CompositeItem, filterId: string): string => {
       ? `<g style="mix-blend-mode:${esc(l.blendMode)}">${out}</g>`
       : out;
   });
+  // Its title is the group's first child, as a primitive's is its element's.
+  const title =
+    item.title !== undefined ? `<title>${esc(item.title)}</title>` : "";
   return (
     `<g style="isolation:isolate"${item.style?.opacity !== undefined ? ` opacity="${item.style.opacity}"` : ""}>` +
-    `<defs>${defs}</defs>${drawn.join("")}</g>`
+    `${title}<defs>${defs}</defs>${drawn.join("")}</g>`
   );
 };
 

@@ -973,6 +973,37 @@ console.log("# .translate() and .tooltip() in either order, and through the IR")
     }
 }
 
+console.log("# a composite's title, in both painters");
+{
+  // A region composite (`intersect`) is one item: its title is its group's
+  // first child, as a primitive's is the first child of its element.
+  const { intersect, circle } = GoFish as any;
+  const lens = () =>
+    chart([{ k: "lens", n: 3 }], { w: 200, h: 200 })
+      .flow(spread({ by: "k", dir: "x" }))
+      .mark(
+        intersect([
+          circle({ r: 50, fill: "#4c78a8" }),
+          circle({ r: 50, fill: "#4c78a8" }).translate({ x: 40 }),
+        ]).tooltip(["k", "n"])
+      );
+  const at = (svg: string) => svg.match(/<g style="isolation:isolate".{0,120}/s)?.[0];
+  const titled = (svg: string) =>
+    /<g style="isolation:isolate"[^>]*><title>k: lens\nn: 3<\/title><defs>/.test(svg);
+  const js = await lens().toSVG({});
+  // Both a primitive's title and a composite's are SVG elements, which a
+  // browser shows on hover; an HTML <title> inside an svg it does not.
+  const rectSvg = await chart([{ k: "a", n: 1 }])
+    .flow(spread({ by: "k", dir: "x" }))
+    .mark(rect({ h: "n" }).tooltip())
+    .toSVG({});
+  check("a primitive's title is an SVG <title>", /<rect[^>]*><title>/.test(rectSvg), rectSvg.match(/<title[^>]*>/)?.[0]);
+  check("the JS painter writes it first in the group", titled(js), at(js));
+  const { displayListToSVG } = (await import("gofish-ir")).DisplayList;
+  const ir = displayListToSVG(await lens().toDisplayList({}));
+  check("the IR painter writes it first in the group", titled(ir), at(ir));
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

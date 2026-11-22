@@ -233,8 +233,10 @@ label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
 both backends write as SVG attributes; a tooltip's box and marker set
 `pointerEvents: "none"`, written as `pointer-events`, so it is no pointer
 target). Any item may carry a `title`, a mark's `.tooltip()` text, which a
-static drawing writes as the item's SVG `<title>` child; a live chart, which
-draws its tooltip as marks, writes none. The last two carry structure the
+static drawing writes as the item's SVG `<title>` child (a composite's, as the
+first child of its group), made in the SVG namespace, since a browser shows
+no HTML `<title>` inside an svg; a live chart, which draws its tooltip as
+marks, writes none. The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat

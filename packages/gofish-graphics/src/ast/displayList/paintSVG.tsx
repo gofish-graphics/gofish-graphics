@@ -51,6 +51,13 @@ const mergedStyle = (item: DisplayList.DisplayItem, live: LiveSlots): Style => {
   return (merged as Style) ?? item.style;
 };
 
+/** An SVG `<title>` element with `text`. */
+const svgTitle = (text: string): Element => {
+  const t = document.createElementNS("http://www.w3.org/2000/svg", "title");
+  t.textContent = text;
+  return t;
+};
+
 /** Deterministic id counter for composite defs and the filter def — same
  *  scheme as gofish-ir's string backend so the two backends agree on id
  *  shape. A module-level counter (Math.random is non-reproducible), never
@@ -129,13 +136,13 @@ function paintSVG(
   const live = getLiveSlots(item);
   // `data-gf-id` is the hit-testing hook, emitted only when a runtime is active.
   const gfId = interactive ? item.id : undefined;
-  // A primitive's `title` (a mark's `.tooltip()` text) is its `<title>`
+  // An item's `title` (a mark's `.tooltip()` text) is its `<title>`
   // child, the tooltip of a static drawing. A live chart draws its tooltip
   // as marks, so it writes no `<title>` the browser would show beside them.
+  // It is made in the SVG namespace: Solid compiles a lone `<title>` as the
+  // HTML element, which a browser does not show as an SVG tooltip.
   const title =
-    item.title !== undefined && !interactive ? (
-      <title>{item.title}</title>
-    ) : undefined;
+    item.title !== undefined && !interactive ? svgTitle(item.title) : undefined;
   switch (item.kind) {
     case "rect":
       return (
@@ -262,7 +269,8 @@ function paintSVG(
       // everywhere else: drawing an image under a fractional translate that
       // its own fractional x cancels makes the browser resample it. A shape
       // is referenced by each mask that reads it, so it rasterizes once per
-      // mask: the price of SVG's mask model.
+      // mask: the price of SVG's mask model. Its title is the group's first
+      // child, as a primitive's is its element's.
       // gofish-ir's `render.ts` draws the same SVG.
       const { x, y, w, h } = item.bbox;
       const plan = DisplayList.compositePlan(
@@ -285,6 +293,7 @@ function paintSVG(
           opacity={item.style?.opacity}
           data-gf-id={gfId}
         >
+          {title}
           <defs>
             {plan.defs.map((d) => (
               <g id={d.id}>

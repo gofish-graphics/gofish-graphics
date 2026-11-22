@@ -213,6 +213,38 @@ async function run(harnessDir: string, label: string): Promise<void> {
       );
     }
 
+    console.log(
+      "# Static titles: SVG <title> elements, on a primitive and a composite"
+    );
+    {
+      const ns = (await page.evaluate(`(async () => {
+        const L = await import(${JSON.stringify(`/@fs${repoRoot}/packages/gofish-graphics/src/lib.ts`)});
+        const bar = await L.chart([{ k: "a", n: 1 }])
+          .flow(L.spread({ by: "k", dir: "x" }))
+          .mark(L.rect({ h: "n" }).tooltip())
+          .toSVGElement({});
+        const lens = await L.chart([{ k: "lens", n: 3 }], { w: 200, h: 200 })
+          .flow(L.spread({ by: "k", dir: "x" }))
+          .mark(L.intersect([L.circle({ r: 50 }), L.circle({ r: 50 }).translate({ x: 40 })]).tooltip())
+          .toSVGElement({});
+        const first = (svg, sel) => svg.querySelector(sel)?.firstElementChild;
+        return [first(bar, "rect"), first(lens, 'g[style*="isolation"]')].map(
+          (t) => t ? [t.tagName, t.namespaceURI] : null
+        );
+      })()`)) as ([string, string] | null)[];
+      const svgNs = "http://www.w3.org/2000/svg";
+      check(
+        "a bar's first child is an SVG <title>",
+        ns[0]?.[0] === "title" && ns[0]?.[1] === svgNs,
+        ns[0]
+      );
+      check(
+        "a composite's first child is an SVG <title>",
+        ns[1]?.[0] === "title" && ns[1]?.[1] === svgNs,
+        ns[1]
+      );
+    }
+
     // The rule reads `drag().currentData()`, which is undefined on every
     // chart (#1403, on main too), so it does not move yet.
     console.log("# Draggable Threshold: drag the rule");
