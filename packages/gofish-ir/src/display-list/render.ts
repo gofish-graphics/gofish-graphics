@@ -51,6 +51,8 @@ const styleAttrs = (style: Style | undefined): string => {
     parts.push(`paint-order="${esc(style.paintOrder)}"`);
   if (style.strokeLinejoin !== undefined)
     parts.push(`stroke-linejoin="${esc(style.strokeLinejoin)}"`);
+  if (style.pointerEvents !== undefined)
+    parts.push(`pointer-events="${esc(style.pointerEvents)}"`);
   return parts.length ? " " + parts.join(" ") : "";
 };
 
@@ -58,17 +60,22 @@ const styleAttrs = (style: Style | undefined): string => {
  *  filter def. */
 const itemToSVG = (item: DisplayItem, filterId: string): string => {
   const s = styleAttrs(item.style);
+  // A primitive's `title` is its first child, an SVG `<title>`.
+  const title =
+    item.title !== undefined ? `<title>${esc(item.title)}</title>` : "";
+  // A primitive with no children closes itself.
+  const close = (tag: string) => (title ? `>${title}</${tag}>` : "/>");
   switch (item.kind) {
     case "rect": {
       const r =
         (item.rx !== undefined ? ` rx="${item.rx}"` : "") +
         (item.ry !== undefined ? ` ry="${item.ry}"` : "");
-      return `<rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}"${r}${s}/>`;
+      return `<rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}"${r}${s}${close("rect")}`;
     }
     case "ellipse":
-      return `<ellipse cx="${item.cx}" cy="${item.cy}" rx="${item.rx}" ry="${item.ry}"${s}/>`;
+      return `<ellipse cx="${item.cx}" cy="${item.cy}" rx="${item.rx}" ry="${item.ry}"${s}${close("ellipse")}`;
     case "path":
-      return `<path d="${esc(item.d)}"${s}/>`;
+      return `<path d="${esc(item.d)}"${s}${close("path")}`;
     case "text": {
       const fs =
         item.fontSize !== undefined ? ` font-size="${item.fontSize}px"` : "";
@@ -96,14 +103,14 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
         item.rotate !== undefined
           ? ` transform="rotate(${item.rotate} ${item.x} ${item.y})"`
           : "";
-      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${fst}${fw}${ta}${db}${rot}${s}>${esc(item.text)}</text>`;
+      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${fst}${fw}${ta}${db}${rot}${s}>${title}${esc(item.text)}</text>`;
     }
     case "image": {
       const par =
         item.preserveAspectRatio !== undefined
           ? ` preserveAspectRatio="${esc(item.preserveAspectRatio)}"`
           : "";
-      return `<image x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" href="${esc(item.href)}"${par}${s}/>`;
+      return `<image x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" href="${esc(item.href)}"${par}${s}${close("image")}`;
     }
     case "group": {
       const t = item.transform;
@@ -119,7 +126,7 @@ const itemToSVG = (item: DisplayItem, filterId: string): string => {
           : f?.kind === "luminanceToAlpha"
             ? ` filter="url(#${filterId})"`
             : "";
-      return `<g${tr}${fa}${s}>${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
+      return `<g${tr}${fa}${s}>${title}${item.children.map((c) => itemToSVG(c, filterId)).join("")}</g>`;
     }
     case "composite":
       return compositeToSVG(item, filterId);

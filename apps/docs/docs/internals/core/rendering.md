@@ -226,7 +226,11 @@ The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group` and
 `composite`. The first five are leaf primitives in absolute pixels with resolved
 `style` (fill/stroke/opacity/…, already mapped through the color scales; a
 label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
-both backends write as SVG attributes). The last two carry structure the
+both backends write as SVG attributes; a tooltip's box sets
+`pointerEvents: "none"`, written as `pointer-events`, so it is no pointer
+target). Any item may carry a `title`, a mark's `.tooltip()` text, which a
+static drawing writes as the item's SVG `<title>` child; a live chart, which
+draws its tooltip as marks, writes none. The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat

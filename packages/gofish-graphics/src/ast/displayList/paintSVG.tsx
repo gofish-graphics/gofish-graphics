@@ -99,6 +99,7 @@ const styleProps = (style: Style) =>
     "stroke-linejoin": style?.strokeLinejoin as
       | JSX.PathSVGAttributes<SVGPathElement>["stroke-linejoin"]
       | undefined,
+    "pointer-events": style?.pointerEvents,
     style: cssStyle(style),
   }) as const;
 
@@ -118,6 +119,13 @@ function paintSVG(
   const live = getLiveSlots(item);
   // `data-gf-id` is the hit-testing hook, emitted only when a runtime is active.
   const gfId = interactive ? item.id : undefined;
+  // A primitive's `title` (a mark's `.tooltip()` text) is its `<title>`
+  // child, the tooltip of a static drawing. A live chart draws its tooltip
+  // as marks, so it writes no `<title>` the browser would show beside them.
+  const title =
+    item.title !== undefined && !interactive ? (
+      <title>{item.title}</title>
+    ) : undefined;
   switch (item.kind) {
     case "rect":
       return (
@@ -130,7 +138,9 @@ function paintSVG(
           ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </rect>
       );
     case "ellipse":
       return (
@@ -141,7 +151,9 @@ function paintSVG(
           ry={patched(live, "ry", item.ry)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </ellipse>
       );
     case "path":
       return (
@@ -149,7 +161,9 @@ function paintSVG(
           d={patched(live, "d", item.d)}
           data-gf-id={gfId}
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </path>
       );
     case "text":
       return (
@@ -178,6 +192,7 @@ function paintSVG(
           }
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
         >
+          {title}
           {
             // Live text: the "text" slot overrides CONTENT reactively (the box
             // keeps its resolve-time measure).
@@ -198,7 +213,9 @@ function paintSVG(
             item.preserveAspectRatio as JSX.ImageSVGAttributes<SVGImageElement>["preserveAspectRatio"]
           }
           {...styleProps(live ? mergedStyle(item, live) : item.style)}
-        />
+        >
+          {title}
+        </image>
       );
     case "group": {
       const t = item.transform;
@@ -217,6 +234,7 @@ function paintSVG(
         f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
       return (
         <g transform={transform} filter={filter}>
+          {title}
           {children}
         </g>
       );

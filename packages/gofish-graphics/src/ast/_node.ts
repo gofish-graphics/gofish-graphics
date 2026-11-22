@@ -587,6 +587,17 @@ export const placedByOwnData = (
   originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
   originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
 
+/** Make every item in `items`, the items of groups and of composites'
+ *  operands included, no pointer target (`GoFishNode.noPointerTarget`). */
+function noPointerTarget(items: DisplayList.DisplayItem[]): void {
+  for (const item of items) {
+    item.style = { ...item.style, pointerEvents: "none" };
+    if (item.kind === "group") noPointerTarget(item.children);
+    if (item.kind === "composite")
+      for (const o of item.operands) noPointerTarget(o.paint);
+  }
+}
+
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
  * whose type is not continuous). It runs in its own walk, after every type is
@@ -963,6 +974,14 @@ export class GoFishNode {
    *  Layout size is separate from drawn size (#493), as a CSS box's ink
    *  overflow or a Typst box's `outset` is. */
   public inkOn?: [boolean, boolean];
+  /** Text that describes this node, written as the `title` of the items it
+   *  draws itself (a mark's `.tooltip()` content), or of all its items when
+   *  it draws none itself. A static drawing shows it on hover. */
+  public title?: string;
+  /** Set when nothing this node draws is a pointer target (a tooltip's
+   *  box, drawn over the marks it describes): its items paint with
+   *  `pointerEvents: "none"`. */
+  public noPointerTarget?: true;
   /** The box its own options give it (`elaborateOwnDims`), for a construct
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */
@@ -2133,6 +2152,14 @@ export class GoFishNode {
       this.type === "layer" &&
       this.children.every((c) => c instanceof GoFishNode && c.isEmptyLayer())
     );
+  }
+
+  /** Whether this node or an ancestor is no pointer target
+   *  ({@link noPointerTarget}). */
+  public underNoPointerTarget(): boolean {
+    for (let n: unknown = this; n instanceof GoFishNode; n = n.parent)
+      if (n.noPointerTarget) return true;
+    return false;
   }
 
   /**
@@ -3396,6 +3423,13 @@ export class GoFishNode {
         this.paintedStyle ??= style;
       }
     }
+    if (this.title !== undefined) {
+      const own = items.filter((item) => item.id === this.uid);
+      for (const item of own.length > 0 ? own : items) item.title = this.title;
+    }
+    // A container lowers its leaves through their own `lowerWith`, so each
+    // node looks up its ancestors for the flag, as for visibility.
+    if (items.length > 0 && this.underNoPointerTarget()) noPointerTarget(items);
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure

@@ -63,6 +63,9 @@ export interface BaseDisplayItem {
   role?: "node" | "overlay";
   /** Optional stable id (e.g. for keyed transitions in a host runtime). */
   id?: string;
+  /** Text that describes the primitive, as a static backend shows it on
+   *  hover (an SVG `<title>` child): a mark's `.tooltip()` content. */
+  title?: string;
 }
 
 export interface RectItem extends BaseDisplayItem {
@@ -200,6 +203,9 @@ export interface Style {
   paintOrder?: string;
   /** SVG `stroke-linejoin`. */
   strokeLinejoin?: string;
+  /** SVG `pointer-events`: `"none"` makes the primitive no pointer target
+   *  (a tooltip's box, drawn over the marks it describes). */
+  pointerEvents?: "none";
 }
 
 export const DISPLAY_ITEM_KINDS = [
