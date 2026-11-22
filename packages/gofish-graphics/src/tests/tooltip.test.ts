@@ -105,6 +105,13 @@ console.log("# format");
 check("grouping", formatValue(11902) === "11,902", formatValue(11902));
 check("two fraction digits", formatValue(0.1300001) === "0.13", formatValue(0.1300001));
 check("an integer stays bare", formatValue(5) === "5");
+check(
+  "a small number keeps three significant digits",
+  formatValue(0.0119056) === "0.0119",
+  formatValue(0.0119056)
+);
+check("zero", formatValue(0) === "0", formatValue(0));
+check("a negative small number", formatValue(-0.004567) === "-0.00457", formatValue(-0.004567));
 check("a string", formatValue("VO→VO") === "VO→VO");
 check(
   "a date",
@@ -144,7 +151,7 @@ console.log("# content: one row per field with one value");
   check(
     "every field, formatted",
     JSON.stringify(titles(dl)) ===
-      JSON.stringify(["path: VO→VO\nn: 11,902\nshare: 0.13", "path: INF→INF\nn: 9,811\nshare: 0.11"]),
+      JSON.stringify(["path: VO→VO\nn: 11,902\nshare: 0.13", "path: INF→INF\nn: 9,811\nshare: 0.107"]),
     titles(dl)
   );
 }
@@ -174,7 +181,7 @@ console.log("# content: a field list, in order");
   check(
     "exactly those fields",
     JSON.stringify(titles(dl)) ===
-      JSON.stringify(["share: 0.13\npath: VO→VO", "share: 0.11\npath: INF→INF"]),
+      JSON.stringify(["share: 0.13\npath: VO→VO", "share: 0.107\npath: INF→INF"]),
     titles(dl)
   );
 }

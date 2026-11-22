@@ -48,7 +48,8 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   while the pointer is over the box. On a touch screen, a tap opens the box
   and it stays open.
 - **Values.** Numbers show digit grouping and at most two fraction digits
-  (`11,902`, `0.13`). Dates show as a date, with the time when it is not
+  (`11,902`, `2.35`). A number below 1 shows three significant digits
+  (`0.13`, `0.0119`). Dates show as a date, with the time when it is not
   midnight. A `line`'s or `ribbon`'s position fields read each row, so they
   show only when every row agrees.
 - **Placement.** The box sits right of the mark, else left of it, centered

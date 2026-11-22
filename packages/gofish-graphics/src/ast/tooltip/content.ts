@@ -26,6 +26,11 @@ export type TooltipMark = {
 const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
+// Below 1, two fraction digits lose the value (0.0119 would read "0.01"),
+// so a small number keeps three significant digits instead.
+const smallNumberFormat = new Intl.NumberFormat("en-US", {
+  maximumSignificantDigits: 3,
+});
 const dateFormat = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
   timeZone: "UTC",
@@ -38,13 +43,16 @@ const dateTimeFormat = new Intl.DateTimeFormat("en-US", {
 
 /**
  * A value as a tooltip shows it: a number with digit grouping and at most
- * two fraction digits (11902 is "11,902", 0.1300001 is "0.13"), a date by
+ * two fraction digits (11902 is "11,902"), or three significant digits when
+ * it is below 1 (0.1300001 is "0.13", 0.0119 is "0.0119"), a date by
  * its day, and its time when it has one (in UTC, as GoFish reads times by
  * default), anything else by `String`.
  */
 export function formatValue(v: unknown): string {
   if (typeof v === "number")
-    return Number.isFinite(v) ? numberFormat.format(v) : String(v);
+    return !Number.isFinite(v)
+      ? String(v)
+      : (Math.abs(v) < 1 ? smallNumberFormat : numberFormat).format(v);
   if (v instanceof Date) {
     if (Number.isNaN(v.getTime())) return String(v);
     const midnight =
