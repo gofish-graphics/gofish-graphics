@@ -14,6 +14,8 @@ covers:
   - packages/gofish-graphics/src/interaction/runtime.ts
   - packages/gofish-graphics/src/interaction/renderTerminal.ts
   - packages/gofish-graphics/src/interaction/widgets.ts
+  - packages/gofish-graphics/src/interaction/focus.ts
+  - packages/gofish-graphics/src/interaction/tooltipFocus.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -320,6 +322,32 @@ is **attached** to a chart, which happens when the input is `registerInput`-ed â
 i.e. when it is read during that chart's resolve. An input read only from outside
 code (a bare `createEffect`) never attaches, so `dataPos()`/`currentData()` return
 `undefined`.
+
+## A tooltip's focus is an input
+
+A mark's `.tooltip()` (#1395) needs to know which of its marks the pointer is
+on. That is an input like the others, `TooltipFocus` (`tooltipFocus.ts`), and
+nothing about the runtime is special to it. The chart's tooltip layer
+(`ast/tooltip/tooltip.ts`) calls `focus.use(registrar, marks)` on each resolve:
+the input registers itself, since no spec code reads it, and the chart becomes
+a reader of its key. One focus lives per chart and per `.tooltip()` call
+(`focusOf`), so it outlives the resolves that make every node anew.
+
+The focus reads geometry the way `nodeBox` does. On each published frame it
+walks the display items (`walkItems`) and builds one candidate per key: the
+union of the boxes the mark's subtree drew, an outline (boxes, circles, and the
+segments of a path's `d`, `pathSegments`), and the mark's placed position. A
+position counts only on an axis the layout placed the mark along: an ancestor
+up to the chart's box arranges along that axis, or the mark is a point in a
+space an ancestor pins (a dot in a scatter). A bar's length axis does not
+count, so the row decides which bar a pointer right of a short bar describes.
+On each pointer event it runs the focus behavior (`focus.ts`, by default
+`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(8)`), and it
+invalidates its readers only when the focused key changes. Thirty moves across
+three bars re-run the chart twice. A key is the JSON of the mark's rows (a ref
+or node by its rows, a date by its instant), so two marks drawn from equal rows
+are one candidate. A touch tap holds its point through the `pointerleave` that
+ends it, until the next tap or a mouse move.
 
 ## The timer is a scale, not a tick counter
 

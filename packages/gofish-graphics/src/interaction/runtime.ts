@@ -44,7 +44,7 @@ function sameSet<T>(a: Set<T>, b: Set<T>): boolean {
 /** The accumulated affine of the `group` items enclosing a display item. Display
  *  items are absolute pixels EXCEPT inside a `group`, whose children are in its
  *  local space, so a walk that reports boxes has to carry the fold. */
-interface Affine {
+export interface Affine {
   tx: number;
   ty: number;
   sx: number;
@@ -57,7 +57,7 @@ const IDENTITY: Affine = { tx: 0, ty: 0, sx: 1, sy: 1 };
  *  handing each item to `visit` with the transform that maps it to svg px.
  *  A visitor rather than a generator: the one caller wants every item, and a
  *  generator allocated a `{ item, at }` wrapper per item to say so. */
-function walkItems(
+export function walkItems(
   items: DisplayList.DisplayItem[],
   visit: (item: DisplayList.DisplayItem, at: Affine) => void,
   at: Affine = IDENTITY
