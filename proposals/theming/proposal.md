@@ -108,6 +108,29 @@ Every member also takes `color` (default `Color.ink`; it may be a field, like an
 
 `Pattern.tile` is the general member and the other three are named cases of it: `Pattern.lines()` is a tile holding one `line`. A pattern fill itself is sugar for something the core already draws. The tile is repeated across the mark's box and kept only where the mark is, which is what `atop` does with a mark and a layer of tiles. So patterns add no new kind of drawing.
 
+**How a pattern is built.** It is sugar over the core, plus one new primitive.
+
+```js
+// What the user writes
+rect({ h: "count", fill: Pattern.lines({ gap: 6 }) });
+
+// What it means, in three steps of sugar
+rect({
+  h: "count",
+  fill: Pattern.tile(line({ w: 6, stroke: Color.ink }), { angle: 45 }),
+});
+atop([
+  rect({ h: "count" }),
+  tile(line({ w: 6, stroke: Color.ink }), { angle: 45 }),
+]);
+```
+
+- `lines`, `cross`, `dots` and `solid` are plain functions that return `Pattern.tile(...)` of ordinary marks. They have no code of their own in the engine.
+- A pattern fill is `atop` of the mark and a tiling. `atop` exists.
+- The one new thing is the tiling: one node repeated across a box. It cannot be sugar, because writing it out as thousands of copies would put every copy through layout. The colorbar legend shows the cost: with no gradient primitive it draws 40 stacked rects. So the display list gets one item, "repeat this group across this box", which the SVG painter writes as a `<pattern>`. The tile itself is laid out and lowered once, by the normal engine.
+
+So there is no pattern code path. Whether the tiling is also a public operator is a separate choice; a pictogram bar has the same shape, but its repeat is counted in data, so the tiling stays internal until an example asks for it. Not yet checked by prototype: that `atop` over a tiling lowers to one pattern-filled shape and not a mask per mark.
+
 **A palette may hold patterns.** This is what makes the Cogra bar chart work.
 
 ![Three bars, white, hatched and stippled](img/cogra-bars.png)

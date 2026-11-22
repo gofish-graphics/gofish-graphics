@@ -772,6 +772,61 @@ rect(
     </article>
 
     <article class="card">
+      <h3>
+        How a pattern is built: sugar over the core, plus one new primitive
+      </h3>
+      <pre><code class="language-javascript">// What the user writes
+rect({ h: "count", fill: Pattern.lines({ gap: 6 }) });
+
+// What it means, in three steps of sugar
+rect({ h: "count", fill: Pattern.tile(line({ w: 6, stroke: Color.ink }), { angle: 45 }) });
+atop([rect({ h: "count" }), tile(line({ w: 6, stroke: Color.ink }), { angle: 45 })]);</code></pre>
+      <ul>
+        <li>
+          <strong
+            ><code>lines</code>, <code>cross</code>, <code>dots</code> and
+            <code>solid</code> are plain functions</strong
+          >
+          that return <code>Pattern.tile(...)</code> of ordinary marks. They
+          have no code of their own in the engine.
+        </li>
+        <li>
+          <strong
+            >A pattern fill is <code>atop</code> of the mark and a
+            tiling.</strong
+          >
+          <code>atop</code> exists and already keeps the second child only where
+          the first is.
+        </li>
+        <li>
+          <strong
+            >The one new thing is the tiling: one node repeated across a
+            box.</strong
+          >
+          It cannot be sugar, because writing it out as thousands of copies
+          would put every copy through layout. The colorbar legend shows what
+          that costs: with no gradient primitive it draws 40 stacked rects. So
+          the display list gets one item, "repeat this group across this box",
+          which the SVG painter writes as a <code>&lt;pattern&gt;</code>. The
+          tile itself is laid out and lowered once, by the normal engine.
+        </li>
+      </ul>
+      <p>
+        So there is no pattern code path. The engine learns to repeat a group,
+        and a pattern is a name for <code>atop</code> plus that. Whether the
+        tiling is also a public operator is a separate choice. It is the same
+        shape as a pictogram bar, where a unit picture repeats inside a bar, but
+        there the repeat is counted in data and here it is spaced in pixels, so
+        I would keep it internal until an example asks for it.
+      </p>
+      <p class="note">
+        Not yet checked by prototype: that <code>atop</code> over a tiling
+        lowers to one pattern-filled shape and not a mask per mark, which
+        matters for a chart with hundreds of bars.
+      </p>
+    </article>
+
+    <article class="card">
       <h3>The name</h3>
       <p>
         <code>Pattern</code> is Figma's fill type, SVG's element and TikZ's key.
