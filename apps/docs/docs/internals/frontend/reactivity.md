@@ -361,6 +361,20 @@ under it. A touch tap holds its point through the `pointerleave` that ends it,
 until the next tap or a mouse move. A tap outside the chart does not close
 it: the runtime hears only events in the chart's container.
 
+A line is one candidate for its whole path: it has no placed position, so it
+is as near as its path, and where the pointer is along it is no change of
+focus. Its box follows the pointer at paint instead. A candidate drawn as a
+path (`isPath`: no position on either axis, an outline of segments only) gets
+a box the lowering moves with `INTERNAL_moveWhile`: the box's items are drawn
+in one group whose `transform` is a live slot reading `focus.offset()`. The
+offset reads two signals, the pointer and the frame's candidates, and is the
+box's seat beside the point of the path nearest the pointer
+(`nearestOnPath`) less the seat the layout gave it; `tooltipPlace` hands the
+focus both seats (`focus.seated`). So moving along a line patches one
+attribute and re-runs nothing, and moving to the other line re-runs the chart
+once. The frame has the box where the layout put it, so the focus moves its
+record of the box by the same offset to tell when the pointer is over it.
+
 ## The timer is a scale, not a tick counter
 
 `timer()` is the odd input: nothing outside it writes it, so it is the one input

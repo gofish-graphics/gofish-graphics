@@ -408,7 +408,9 @@ methods:
   pointer. A post-solve constraint, `tooltipPlace` (`place.ts`, run after
   `labelPlace`), seats it: right of the mark, else left, centered on its
   row; else under or over it, flush with its end; else moved into the
-  graphic's box. The row values come from `content.ts`:
+  graphic's box. It also tells the focus the box's seat beside any point,
+  which is how a line's box follows the pointer at paint (see
+  [Reactivity](/internals/frontend/reactivity)). The row values come from `content.ts`:
   with no list, every field with one value on the mark's rows, and a size
   or position channel's field with the value it draws, inferred as the
   channel infers it (a sum for a size).

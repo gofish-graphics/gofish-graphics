@@ -398,8 +398,8 @@ signal during resolve), three things change; when it is absent — the common ca
   patches only that attribute — no re-lower, no re-layout. A `"text"` slot
   overrides text content while the box keeps its measured size, and a slot named
   after one of the item's own geometry fields (`x`, `y`, `w`, `h`, `cx`, `cy`,
-  `rx`, `ry`, `d`) overrides that field, which is how a mark moves without being
-  laid out again — see [Reactivity](/internals/frontend/reactivity). What the
+  `rx`, `ry`, `d`, a group's `transform`) overrides that field, which is how a
+  mark moves without being laid out again — see [Reactivity](/internals/frontend/reactivity). What the
   item carries statically is what serialization and hit-testing see.
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales` (data → layout pixels, read off the placed root

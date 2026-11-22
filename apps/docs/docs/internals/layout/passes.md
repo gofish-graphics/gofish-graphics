@@ -1631,6 +1631,12 @@ label pass sets with `INTERNAL_attach` (the inverse of `_attachments`), so the
 order in which a mark and its label lower does not matter. A taken-over drawing
 skips the rule, as it skips visibility.
 
+A fourth hook, `INTERNAL_moveWhile(by)`, moves a node's whole drawing at paint:
+the node lowers where the layout put it, its items in one group (as a `filter`
+puts them), and the group's `transform` is a live slot reading `by()`. It is
+for a node that takes no room, so nothing above it sees it move: a line's
+tooltip box follows the pointer this way.
+
 ### Render Pass 5: Per-Shape Lowering and Painting
 
 Each shape/operator owns a `lower(ctx) → DisplayItem[]` — the extension point that
