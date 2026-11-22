@@ -22,6 +22,7 @@
  */
 
 import { build } from "vite";
+import { realpathSync } from "fs";
 import { join } from "path";
 import type { StorySpec } from "./story-specs.js";
 
@@ -37,9 +38,13 @@ export const LIVE_MAX_OPEN = 4;
  * relative, so it works under any directory of a site. Takes a few seconds.
  */
 export async function buildLiveHarness(
-  harnessDir: string,
+  harnessDirPath: string,
   outDir: string
 ): Promise<void> {
+  // The real path: the harness config roots Vite at its own `__dirname`,
+  // which is real, and the input must be under that root (a base-ref
+  // worktree under /tmp is /private/tmp on macOS).
+  const harnessDir = realpathSync(harnessDirPath);
   await build({
     configFile: join(harnessDir, "vite.config.ts"),
     root: harnessDir,
