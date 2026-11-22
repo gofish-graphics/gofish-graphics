@@ -973,6 +973,37 @@ console.log("# .translate() and .tooltip() in either order, and through the IR")
     }
 }
 
+console.log("# overlapping marks: the box describes the one on top");
+{
+  const { scatter, circle } = GoFish as any;
+  // Two circles that overlap, in both data orders. The one painted last is
+  // on top; the pointer is inside both and nearer the one underneath.
+  const a = { k: "a", x: 0, y: 0 };
+  const b = { k: "b", x: 1, y: 0 };
+  for (const pair of [[a, b], [b, a]]) {
+    const el = freshEl();
+    await chart(pair, { w: 200, h: 200 })
+      .flow(scatter({ by: "k", x: "x", y: "y" }))
+      .mark(circle({ r: 60, fill: "#4c78a8" }).tooltip(["k"]))
+      .render(el, {});
+    await settle();
+    const drawn = [...el.querySelectorAll('ellipse[fill="#4c78a8"]')].map((e) => [
+      Number(e.getAttribute("cx")),
+      Number(e.getAttribute("cy")),
+    ]);
+    const [under, top] = drawn;
+    // "a" is at x = 0, on the left.
+    const topK = top[0] < under[0] ? "a" : "b";
+    moveOver(el, under[0] + (top[0] - under[0]) * 0.4, under[1]);
+    await settle();
+    check(
+      `data ${pair.map((p) => p.k).join(", ")}: the box describes ${topK}, painted last`,
+      JSON.stringify(boxTexts(el).slice(-2)) === JSON.stringify(["k", topK]),
+      boxTexts(el).slice(-2)
+    );
+  }
+}
+
 console.log("# a composite's title, in both painters");
 {
   // A region composite (`intersect`) is one item: its title is its group's

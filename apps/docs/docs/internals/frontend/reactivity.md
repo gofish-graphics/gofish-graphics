@@ -372,7 +372,10 @@ that data places in an ancestor's frame (`placedByOwnData`, a dot in a
 scatter). A bar's length axis does not count, so the row decides which bar a
 pointer right of a short bar describes. Inside a coordinate space
 (`inCoordinateSpace`), a mark's drawn box is not its data box, so its drawn
-center counts on both screen axes.
+center counts on both screen axes. The candidates are in paint order, by the
+last item each drew in the frame, which the bake has already sorted by
+`zOrder`: where marks overlap, `Focus.hit` takes the last one the pointer is
+inside, the one on top.
 On each pointer event it runs the focus behavior (`focus.ts`, by default
 `Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).snap(4).within(8)`; `within`
 measures the pointer against the hull of the marks first, so a pointer far

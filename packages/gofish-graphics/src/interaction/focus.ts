@@ -57,6 +57,7 @@ export type Candidate = {
 export type Frame = {
   /** Undefined when the pointer is off the chart. */
   pointer: Point | undefined;
+  /** In paint order: a candidate is drawn over the ones before it. */
   candidates: Candidate[];
   /** The focus the last frame chose. */
   current: Candidate | undefined;
@@ -120,10 +121,11 @@ function from(run: FocusBehavior): Chain {
   return chain;
 }
 
-/** The mark the pointer is inside. */
+/** The mark the pointer is inside; where marks overlap, the one on top,
+ *  the last in the candidates' paint order. */
 function hit(): Chain {
   return from(({ pointer, candidates }) => {
-    const c = pointer && candidates.find((c) => inside(pointer, c.outline));
+    const c = pointer && candidates.findLast((c) => inside(pointer, c.outline));
     return c ? { choice: c, gap: 0 } : NONE;
   });
 }

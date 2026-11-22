@@ -55,7 +55,8 @@ chart(pathTypes)
 
 ## Behavior
 
-- **Focus.** The box describes the mark under the pointer. Off every mark,
+- **Focus.** The box describes the mark under the pointer, the one on top
+  where marks overlap. Off every mark,
   it describes the nearest one by where the layout placed it: a bar by its
   row, a dot by its center. A line is as near as its path. On a `line`
   drawn through rows, the box describes the row whose point is nearest the

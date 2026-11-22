@@ -274,7 +274,8 @@ export function focusOf(registrar: Registrar): TooltipFocus {
 
 /** The candidates the drawn `items` make of `marks`: per key, the outline
  *  of every item the key's marks drew, their box, and where the layout
- *  placed them. A mark that drew nothing with a box is no candidate. */
+ *  placed them, in paint order (the last is on top). A mark that drew
+ *  nothing with a box is no candidate. */
 export function candidatesOf(
   items: DisplayList.DisplayItem[],
   marks: FocusMark[]
@@ -301,11 +302,14 @@ function scan(
     for (const n of breadthFirst(cover))
       if (!owner.has(n.uid)) owner.set(n.uid, COVER);
   const parts = new Map<FocusMark | typeof COVER, Drawn>();
+  let painted = 0;
   walkItems(items, (item, at) => {
+    const order = painted++;
     const m = item.id !== undefined ? owner.get(item.id) : undefined;
     if (m === undefined) return;
     let drawn = parts.get(m);
     if (drawn === undefined) parts.set(m, (drawn = emptyDrawn()));
+    drawn.top = order;
     addParts(drawn, outlineOf(item, at));
     const color = item.style?.stroke;
     for (const { row, x, y } of drawnRowPoints(item) ?? [])
@@ -319,7 +323,7 @@ function scan(
   const covered = parts.get(COVER);
   const byKey = new Map<
     string,
-    Candidate & { marks: FocusMark[]; drawnPoints: DrawnPoint[] }
+    Candidate & { marks: FocusMark[]; drawnPoints: DrawnPoint[]; top: number }
   >();
   for (const m of marks) {
     const drawn = parts.get(m);
@@ -334,6 +338,7 @@ function scan(
         outline: drawn.outline,
         marks: [m],
         drawnPoints: drawn.points,
+        top: drawn.top,
       });
     else {
       // Marks that share a key are one candidate: the union of their parts,
@@ -347,10 +352,14 @@ function scan(
       c.box = merged.box;
       for (const p of drawn.points) c.drawnPoints.push(p);
       c.marks.push(m);
+      c.top = Math.max(c.top, drawn.top);
     }
   }
-  const candidates = [...byKey.values()].map(
-    ({ marks: ms, drawnPoints, ...c }): Candidate => {
+  // In paint order, by the last item each candidate painted: a candidate
+  // after another is drawn over it where they overlap (`Focus.hit`).
+  const candidates = [...byKey.values()]
+    .sort((a, b) => a.top - b.top)
+    .map(({ marks: ms, drawnPoints, top: _top, ...c }): Candidate => {
       const [px, py] = positionAxes(ms[0].node);
       return {
         ...c,
@@ -362,8 +371,7 @@ function scan(
           points: pointsOf(c.key, c.datum, drawnPoints),
         }),
       };
-    }
-  );
+    });
   return {
     candidates,
     cover: covered && covered.outline.length > 0 ? covered.box : undefined,
@@ -411,9 +419,12 @@ function pointsOf(
 
 /** An outline being collected, the box of its parts so far, and the
  *  points of the rows it is drawn through. */
-type Drawn = { outline: Outline; box: Box; points: DrawnPoint[] };
+/** What one owner drew: its outline, its box, its row points, and the paint
+ *  place of its last item (`top`). */
+type Drawn = { outline: Outline; box: Box; points: DrawnPoint[]; top: number };
 
 const emptyDrawn = (): Drawn => ({
+  top: -1,
   outline: [],
   box: { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity },
   points: [],
@@ -422,7 +433,7 @@ const emptyDrawn = (): Drawn => ({
 /** Add `parts` to `drawn`, growing its box by each. A loop, not a spread
  *  into `push` or `Math.min`: a long path has more parts than a call takes
  *  arguments. */
-function addParts(drawn: Drawn, parts: Outline): void {
+function addParts(drawn: Pick<Drawn, "outline" | "box">, parts: Outline): void {
   const { outline, box } = drawn;
   for (const p of parts) {
     outline.push(p);
