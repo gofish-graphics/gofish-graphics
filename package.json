@@ -15,7 +15,6 @@
     "docs:preview": "pnpm --filter docs docs:preview",
     "storybook": "pnpm --filter gofish-graphics storybook",
     "build-storybook": "pnpm --filter gofish-graphics build-storybook",
-    "chromatic": "pnpm exec chromatic",
     "test": "pnpm --filter gofish-graphics test",
     "test:path": "pnpm --filter gofish-graphics test:path",
     "test:font": "pnpm --filter gofish-graphics test:font",
@@ -41,7 +40,6 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.3",
-    "chromatic": "^13.3.5",
     "eslint": "^9.39.3",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^16.5.0",

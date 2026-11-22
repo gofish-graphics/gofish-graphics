@@ -312,7 +312,8 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
       // frame's recorded conversions are in SVG user units, and a plain
       // bounding-rect subtraction diverges from them the moment the svg is
       // visually scaled (a CSS transform — e.g. Storybook's preview zoom — or
-      // a future viewBox). Fall back to the subtraction where the CTM isn't
+      // CSS shrinking the svg through its viewBox to fit a narrow column,
+      // #1330). Fall back to the subtraction where the CTM isn't
       // available (headless DOMs).
       const ctm = svg.getScreenCTM?.();
       if (ctm && typeof DOMPoint !== "undefined") {

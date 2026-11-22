@@ -7,7 +7,9 @@
  */
 
 import type { DisplayItem, DisplayListDocument, Style } from "./schema.js";
-import { DISPLAY_ITEM_KINDS } from "./schema.js";
+import { DISPLAY_ITEM_KINDS, MATRIX_VALUES_PATTERN } from "./schema.js";
+
+const MATRIX_VALUES = new RegExp(MATRIX_VALUES_PATTERN);
 
 export interface ValidationError {
   /** JSON-pointer-ish path to the offending value. */
@@ -209,13 +211,18 @@ function checkItem(
       f !== undefined &&
       !(
         isObject(f) &&
-        ((f.kind === "css" && isStr(f.value)) || f.kind === "luminanceToAlpha")
+        ((f.kind === "css" && isStr(f.value)) ||
+          (f.kind === "colorMatrix" &&
+            ((f.type === "matrix" &&
+              isStr(f.values) &&
+              MATRIX_VALUES.test(f.values)) ||
+              (f.type === "luminanceToAlpha" && !("values" in f)))))
       )
     )
       errors.push({
         path: `${path}.filter`,
         message:
-          'filter must be { kind: "css", value: string } or { kind: "luminanceToAlpha" }',
+          'filter must be { kind: "css", value: string }, { kind: "colorMatrix", type: "matrix", values: string } with 20 numbers in values, or { kind: "colorMatrix", type: "luminanceToAlpha" }',
       });
     if (!Array.isArray(item.children))
       errors.push({

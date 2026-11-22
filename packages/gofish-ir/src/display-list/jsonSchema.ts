@@ -6,6 +6,8 @@
  * external tooling / language servers / cross-runtime hosts.
  */
 
+import { MATRIX_VALUES_PATTERN } from "./schema.js";
+
 const STYLE = {
   type: "object",
   additionalProperties: false,
@@ -104,9 +106,22 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
             },
             {
               type: "object",
-              required: ["kind"],
+              required: ["kind", "type", "values"],
               additionalProperties: false,
-              properties: { kind: { const: "luminanceToAlpha" } },
+              properties: {
+                kind: { const: "colorMatrix" },
+                type: { const: "matrix" },
+                values: { type: "string", pattern: MATRIX_VALUES_PATTERN },
+              },
+            },
+            {
+              type: "object",
+              required: ["kind", "type"],
+              additionalProperties: false,
+              properties: {
+                kind: { const: "colorMatrix" },
+                type: { const: "luminanceToAlpha" },
+              },
             },
           ],
         },
