@@ -4,7 +4,7 @@
 
 **Recommendation.** Build all three, in that order. None needs a new operator. The Cogra look from #1396 is then one theme: a palette of patterns, a black `ink` and white `paper`, and a few defaults for `rect` and `axis`. An existing chart that says `fill: "species"` turns black and white without any change to its own code.
 
-**Status.** Proposal for review. Nothing is implemented. Decided so far: a pattern is a paint, not a second option beside `fill` (Josh, 2026-11-22). Every picture here was rendered by GoFish with a workaround that exists today (hand-written SVG `<pattern>` and `<filter>` defs, and in some pictures edits to the rendered SVG). The prototype sources are in `prototypes/`.
+**Status.** Proposal for review. Nothing is implemented. Decided so far: a pattern is a paint, not a second option beside `fill`; a theme is a keyed object for now, with the door left open to selector rules later (Josh, 2026-11-22). Every picture here was rendered by GoFish with a workaround that exists today (hand-written SVG `<pattern>` and `<filter>` defs, and in some pictures edits to the rendered SVG). The prototype sources are in `prototypes/`.
 
 ## Terms
 
@@ -381,7 +381,7 @@ chart(seafood, {
 
 It looks like the recommended form, and for the four themes above it is about as short. The difference is where the keys come from. Here they are a second vocabulary, chosen by the library one at a time (`domainColor`, `labelFontSize`), that sits beside the mark options and has to grow each time someone wants to style something new. It also applies only at the root. Vega-Lite's config has about 150 axis keys for this reason.
 
-### Considered: rules with selectors and replacement
+### Later, not now: rules with selectors and replacement
 
 This is Typst's `show`, CSS, and Penrose.
 
@@ -398,7 +398,13 @@ chart(seafood, {
 
 This is the most open form: a rule can target named marks, and a `show` rule can replace how something is drawn. It is also the most machinery. Selector matching, rule order and specificity are a small language that users must learn and the wire format must carry, and `set` is a builtin in Python. Most of its reach is already available another way: a named mark can be given its options where it is written, and a mark that should look different everywhere is a `createMark` component.
 
-I recommend the keyed object now, and keeping this door open in one specific way: later, a key's value may be a function from the options to a node (`axis: (a) => myAxis(a)`), which is the `show` rule without the selector language. That needs the axis and legend interfaces from #1279 first.
+Decided: the keyed object ships first, and the door to a selector syntax stays open. A keyed theme is the simplest rule list: each key is a rule that selects by kind and sets options. The first version keeps three things true so that selectors can be added without a break.
+
+- `theme` already takes a list, and later entries win. A rule can later be one more kind of entry in that list, beside keyed objects, with the same order rule.
+- A key means "every mark of this kind in scope" and nothing more. No key gets a special meaning that a selector would later have to work around, and no selector-like strings (`"rect.bars"`, `"axis > label"`) are accepted as keys.
+- A value is options only. A function as a value is reserved for replacing how a part is drawn (`axis: (a) => myAxis(a)`), which is Typst's `show`. It needs the axis and legend interfaces from #1279 first.
+
+What a selector would match on is already in the language: a mark's kind, its name (`selectAll("bars")`), and its data. So a later rule can reuse `selectAll` and does not need a selector language of its own.
 
 ### What stays in user space: components
 

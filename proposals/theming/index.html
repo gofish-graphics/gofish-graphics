@@ -508,9 +508,10 @@ chart(seafood, { theme: cogra })
       </div>
       <p class="note">
         No new operator. Decided so far: a pattern is a paint, not a second
-        option beside <code>fill</code> (Nov 22). Two places where I think the
-        choice is close are marked with an orange edge on the Themes tab, each
-        beside its example: keyed object or rule list, and the role colors.
+        option beside <code>fill</code> (Nov 22). A theme is a keyed object for
+        now, with the door left open to selector rules later (Nov 22). One place
+        where I think the choice is close is marked with an orange edge on the
+        Themes tab: the role colors.
       </p>
     </article>
   </section>
@@ -1192,7 +1193,7 @@ chart(seafood, {
       </p>
     </article>
 
-    <article class="card fork">
+    <article class="card">
       <h3>The other shapes a theme could take</h3>
       <div class="codes">
         <div>
@@ -1216,7 +1217,8 @@ chart(seafood, {
         </div>
         <div>
           <div class="label alt">
-            A rule list with selectors (Typst show, CSS, Penrose)
+            Later, not now: a rule list with selectors (Typst show, CSS,
+            Penrose)
           </div>
           <pre><code class="language-javascript">chart(seafood, {
   theme: [
@@ -1246,11 +1248,42 @@ chart(seafood, {
         </li>
       </ul>
       <p>
-        The recommended form keeps one door open toward the rule list. Later, a
-        key's value may be a function from the options to a node, such as
-        <code>axis: (a) =&gt; myAxis(a)</code>. That is Typst's
-        <code>show</code> without a selector language. It needs the axis and
-        legend interfaces from #1279 first.
+        <strong
+          >Decided Nov 22: the keyed object ships first, and the door to a
+          selector syntax stays open.</strong
+        >
+        A keyed theme is the simplest rule list: each key is a rule that selects
+        by kind and sets options. The first version keeps three things true so
+        that selectors can be added without a break.
+      </p>
+      <ul>
+        <li>
+          <strong><code>theme</code> already takes a list</strong>, and later
+          entries win. A rule can later be one more kind of entry in that list,
+          beside keyed objects, with the same order rule.
+        </li>
+        <li>
+          <strong
+            >A key means "every mark of this kind in scope" and nothing
+            more.</strong
+          >
+          No key gets a special meaning that a selector would later have to work
+          around, and no selector-like strings (<code>"rect.bars"</code>,
+          <code>"axis &gt; label"</code>) are accepted as keys.
+        </li>
+        <li>
+          <strong>A value is options only.</strong> A function as a value is
+          reserved for replacing how a part is drawn, such as
+          <code>axis: (a) =&gt; myAxis(a)</code>, which is Typst's
+          <code>show</code>. It needs the axis and legend interfaces from #1279
+          first.
+        </li>
+      </ul>
+      <p>
+        What a selector would match on is already in the language: a mark's
+        kind, its name (<code>selectAll("bars")</code>), and its data. So a
+        later rule can reuse <code>selectAll</code> and does not need a selector
+        language of its own.
       </p>
       <details>
         <summary>What stays in user space: a component</summary>
