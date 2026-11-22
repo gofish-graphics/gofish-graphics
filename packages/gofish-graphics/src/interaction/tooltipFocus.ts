@@ -65,6 +65,22 @@ export type FocusMark = {
   rows: unknown[];
 };
 
+/**
+ * The focused row of a mark drawn through rows: its point's key, its place
+ * among the mark's rows, and the color of the line that drew it. The place,
+ * not the row: the focus is chosen on one resolve's nodes and read on the
+ * next one's, whose rows are new objects when the flow makes them anew (a
+ * `derive` that copies its rows, any Python `derive`), so the row is found
+ * by its place in the new mark's rows (`rowAt`).
+ */
+export type FocusPoint = { key: unknown; index: number; color?: string };
+
+/** The row of `rows` at a focused point's place. Marks with one key are
+ *  one candidate, whose rows are theirs one after another (equal rows, as
+ *  equal keys say), so the place is read modulo the mark's own rows. */
+export const rowAt = (rows: readonly unknown[], point: FocusPoint): unknown =>
+  rows[point.index % rows.length];
+
 const POINTER_EVENTS: InteractionEventType[] = [
   "pointermove",
   "pointerdown",
@@ -81,9 +97,9 @@ export class TooltipFocus implements InputPrimitive {
   readonly needsFrame = true;
   /** The focused mark's key, or undefined with no focus. */
   key: string | undefined;
-  /** On a mark drawn through rows, the focused row (`Candidate.points`),
-   *  and its point's key; undefined on any other mark. */
-  point: { key: unknown; row: unknown; color?: string } | undefined;
+  /** On a mark drawn through rows, the focused row (`Candidate.points`);
+   *  undefined on any other mark. */
+  point: FocusPoint | undefined;
   private marks: FocusMark[] = [];
   /** The candidates of the last frame, and, by key, each candidate and
    *  each point of one, with the mark it belongs to. */
@@ -204,7 +220,7 @@ export class TooltipFocus implements InputPrimitive {
       found && found.choice !== found.mark
         ? {
             key: found.choice.key,
-            row: found.choice.datum[0],
+            index: (found.choice as PointCandidate).index!,
             color: (found.choice as PointCandidate).color,
           }
         : undefined;
@@ -348,8 +364,9 @@ const COVER = Symbol("cover");
  *  it (the marker on a focused point takes it). */
 type DrawnPoint = DrawnRowPoint & { color: string | undefined };
 
-/** A point candidate, with the color its line is drawn in. */
-type PointCandidate = Candidate & { color?: string };
+/** A point candidate, with its row's place among its mark's rows and the
+ *  color its line is drawn in. */
+type PointCandidate = Candidate & { index?: number; color?: string };
 
 /** A mark's drawn row points as candidates. A point's key is its row's
  *  place among the mark's rows, after the mark's key: the mark's key comes
@@ -372,6 +389,7 @@ function pointsOf(
       box,
       position: { x, y },
       outline: [{ box, round: true }],
+      index: i,
       color,
     });
   }

@@ -738,6 +738,52 @@ console.log("# a .tooltip() rebuilt on every resolve keeps one focus");
   }
 }
 
+console.log("# a line whose flow makes new rows on every run: the box is at the row");
+{
+  const { group, line } = GoFish as any;
+  const series = [2018, 2019, 2020, 2021, 2022].map((year, i) => ({
+    s: "A",
+    year,
+    value: [1, 3, 2, 5, 4][i],
+  }));
+  const el = freshEl();
+  await chart(series, { w: 400, h: 260 })
+    .flow(
+      // A copy of every row, as any Python derive makes.
+      derive((rs: any[]) => rs.map((r) => ({ ...r }))),
+      group({ by: "s" })
+    )
+    .mark(line({ x: "year", y: "value" }).tooltip())
+    .render(el, {});
+  await settle();
+  const path = [...el.querySelectorAll("path")].find((p) => p.getAttribute("fill") === "none")!;
+  const pts = (path.getAttribute("d") ?? "")
+    .split(/[A-Za-z]/)
+    .map((c) => c.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)?.map(Number) ?? [])
+    .filter((n) => n.length >= 2)
+    .map((n) => [n[n.length - 2], n[n.length - 1]] as [number, number]);
+  const marker = () =>
+    [...el.querySelectorAll("ellipse")].find((e) => e.closest('[pointer-events="none"]') !== null);
+  for (const i of [1, 2]) {
+    const [x, y] = pts[i];
+    moveOver(el, x + 3, y);
+    await settle();
+    const m = marker();
+    check(
+      `row ${2018 + i}: the box shows the row`,
+      boxTexts(el).includes(String(2018 + i)),
+      boxTexts(el)
+    );
+    check(
+      `row ${2018 + i}: the marker is on the row's point, not the line's end`,
+      m !== undefined &&
+        Math.abs(Number(m.getAttribute("cx")) - x) < 0.5 &&
+        Math.abs(Number(m.getAttribute("cy")) - y) < 0.5,
+      [m?.getAttribute("cx"), m?.getAttribute("cy"), x, y]
+    );
+  }
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

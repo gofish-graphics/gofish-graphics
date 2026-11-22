@@ -401,7 +401,11 @@ the item's `d`. `.snap(stickiness)` runs the inner behavior to pick a line,
 then picks that line's nearest point, with the current point's head start.
 The focused key is the line's key and the point's key (the line's key and
 the row's index), so moving along a line re-runs the chart once per row
-crossed, and not while the nearest row stays the same. The box shows that
+crossed, and not while the nearest row stays the same. The focus keeps the
+row's index, not the row: the next resolve makes the tree the box is drawn
+in, and a flow that makes its rows anew (a `derive` that copies them, any
+Python `derive`) gives it new row objects, so the lowering reads the row at
+that index in the new mark's rows (`rowAt`). The box shows that
 row (`tooltipContent(request, point)`), and `tooltipPlace` seats it beside
 the row's point, read from the line's geometry (`rowPoints`), with a marker
 on the point, a white circle in the line's stroke (each drawn point keeps

@@ -36,7 +36,11 @@ import { circle, enclose } from "../marks/chart";
 import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import type { SelectionLayer } from "../selectionLayer";
 import { selectNode } from "../marks/resolveRefData";
-import type { FocusMark, TooltipFocus } from "../../interaction/tooltipFocus";
+import {
+  rowAt,
+  type FocusMark,
+  type TooltipFocus,
+} from "../../interaction/tooltipFocus";
 import { createTooltipPlaceConstraint } from "./place";
 import type { TooltipRow } from "./content";
 import { takeTooltips, tooltipContent } from "./request";
@@ -109,11 +113,16 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
       marks.push({ key: request.key, node, rows: request.rows });
       if (request.key === focus.key && !found.has(focus)) {
         found.add(focus);
+        // The focused row of this tree, by its place (`FocusPoint`).
+        const point = focus.point && {
+          row: rowAt(request.rows, focus.point),
+          color: focus.point.color,
+        };
         entries.push({
           node,
-          rows: tooltipContent(request, focus.point),
+          rows: tooltipContent(request, point),
           focus,
-          point: focus.point,
+          point,
         });
       }
     }
