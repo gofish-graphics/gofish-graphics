@@ -83,8 +83,27 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 | `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents                |
 | `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM and warnings against `<ref>` — no baselines, any OS |
 | `pnpm test:visual:review`     | Serve the CI review site for the local capture (see below)                   |
+| `pnpm capture-diff:serve`     | Serve the `capture-diff` report, so its stories can run live                 |
 
 `pnpm test:visual:review` (`scripts/review-server.ts`) builds the same review site CI deploys, from `tmp/js/` and `__snapshots__/`, and serves it at `http://localhost:3005`. Its Commit Accepted button copies the accepted stories into `__snapshots__/` and commits them to `snapshots/<branch>`. Pass `--dry-run` to build that commit without pushing it, and `--no-open` to skip opening a browser.
+
+## Live stories
+
+A capture is a still picture, so a review cannot show what a story does under the pointer, or how it animates. Live fills that gap: it runs the real story in the review page, so you can hover, click, drag, move a slider and watch an animation.
+
+The story runs in the harness page the captures use (`harness/stories-runner.html`), built once as static files by `buildLiveHarness` (`scripts/live-view.ts`). The harness renders the story its query names, `stories-runner.html?file=<story file>&story=<export>`, on the real clock instead of the fake one. Each story module is its own chunk of that build, so a frame loads only the library and its one story. A capture loads the page with no query, so Live changes nothing about the captures or the comparison.
+
+Nothing runs until you ask for it, and a page runs at most four frames at once: opening one more closes the oldest. Each frame has an "Open in new tab" link, and the frame shows the story at the scale it was captured at, cut to what it draws.
+
+- **Review site** (CI's and `pnpm test:visual:review`): choose the Live view, beside Strobe, Side by Side and Pixel Diff. The story runs live on top, and the baseline screenshot sits below it, static. Live shows only the "after" side: the build is made from the commit the run captured (in CI, the PR's merge commit), and there is no live build of the baselines, which come from `snapshots/<branch>` and are not one commit. Locally, Live runs your working tree, which may be newer than the capture in `tmp/js/`. A removed story has no Live view.
+- **`capture-diff` report**: each card has a Run live button that runs the story on both sides, the base ref beside HEAD, since capture-diff checks out the base ref anyway. A story runs on the base side only when its file is there, and a removed story does not run live. A page opened from disk cannot load the harness, so serve the report first:
+
+  ```bash
+  pnpm capture-diff main tooltip
+  pnpm capture-diff:serve        # then open http://localhost:3006/report.html
+  ```
+
+The harness build is about 4.6 MB in about 250 files, the largest under 1 MB. It goes into the review site as `live/head/` and into `tmp/capture-diff/live/{head,base}/`, and takes a few seconds per build.
 
 ## Local regression signal: `capture-diff`
 
@@ -122,6 +141,7 @@ tests/tmp/capture-diff/head/<path>.html           normalized DOM at HEAD
 tests/tmp/capture-diff/head/<path>.warnings.txt   its warnings
 tests/tmp/capture-diff/base/...                   the same at <ref>
 tests/tmp/capture-diff/report.html                DOM diff and warnings diff (changed stories)
+tests/tmp/capture-diff/live/{head,base}/          each side's harness, for Run live (see Live stories)
 ```
 
 It prints the changed/added/removed stories, with the warnings lines each one
@@ -232,6 +252,8 @@ tests/
     capture-core.ts            # Shared headless-capture engine (Vite + Playwright)
     capture-js-dom.ts          # Batch capture via Vite + Playwright
     capture-diff.ts            # Diff HEAD's DOM vs a base ref (local regression signal)
+    live-view.ts               # Live stories: the static harness build and the page side
+    static-server.ts           # Serve a directory (capture-diff:serve, and the review server's files)
     capture-one.ts             # Capture one story (or a filter) to tmp/iterate/ for the iterate-example loop
     capture-python-dom.ts      # Python story capture via harness
     compare.ts                 # Compare JS vs baselines (+ Python vs JS unless --js-only)
