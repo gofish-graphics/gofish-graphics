@@ -159,25 +159,78 @@ async function main() {
           (gap.box.includes(expect[0]) || gap.box.includes(expect[1])),
         gap.box
       );
-      // Over the box itself: it stays, in place, on every sample.
+      // The box is no pointer target: moving down through the first bar's
+      // box, over the bars under it, reaches them in turn, with a box open
+      // on every sample.
       const open1 = await hover(
         page,
-        bars[0].x + 10,
+        bars[0].x + bars[0].w - 10,
         bars[0].y + bars[0].h / 2
       );
       const [bx, by, bw, bh] = open1.boxClient!;
-      let steady = true;
-      for (let k = 0; k < 8; k++) {
-        await page.mouse.move(bx + 6 + (k * (bw - 12)) / 8, by + bh / 2);
-        await page.waitForTimeout(60);
+      // A column of the box over the second bar, if the box reaches it.
+      const colX = Math.min(bx + bw - 4, bars[1].x + bars[1].w - 3);
+      if (colX > bx + 2) {
+        const seen: string[] = [];
+        let closedFrames = 0;
+        const closedAt: number[] = [];
+        let prev: Snap | undefined = open1;
+        for (let y = bars[0].y + bars[0].h / 2; y < by + bh - 2; y += 4) {
+          await page.mouse.move(colX, y);
+          await page.waitForTimeout(60);
+          const s = await snap(page);
+          // Closed under the box that was open: the hold rule broke. (Below
+          // the last box, past the bars' hull, closing is right.)
+          const p = prev?.boxClient;
+          if (
+            s.box === null &&
+            p &&
+            colX >= p[0] &&
+            colX <= p[0] + p[2] &&
+            y >= p[1] &&
+            y <= p[1] + p[3]
+          ) {
+            closedFrames++;
+            closedAt.push(Math.round(y));
+          }
+          prev = s;
+          const n = expect.find((e) => s.box?.includes(e));
+          if (n !== undefined && seen[seen.length - 1] !== n) seen.push(n);
+        }
+        check(
+          `down through bar 1's box at x ${Math.round(colX)}: bars in order (${seen.join(", ")})`,
+          seen.length >= 2 && seen.every((n, i) => expect.indexOf(n) === i),
+          seen
+        );
+        check(
+          "down through bar 1's box: never closed under an open box",
+          closedFrames === 0,
+          [
+            closedAt,
+            bars.map((b) => [
+              Math.round(b.x),
+              Math.round(b.y),
+              Math.round(b.w),
+              Math.round(b.h),
+            ]),
+            open1.boxClient,
+          ]
+        );
+      } else
+        console.log("  (the first bar's box does not reach the second bar)");
+      // At rest over a box for a second: the same box, in place.
+      const rest = await hover(page, bx + bw / 2, by + bh / 2);
+      let steady = rest.box !== null;
+      for (let k = 0; k < 5; k++) {
+        await page.waitForTimeout(200);
         const s = await snap(page);
         if (
-          s.box === null ||
-          JSON.stringify(s.boxClient) !== JSON.stringify(open1.boxClient)
+          JSON.stringify(s.box) !== JSON.stringify(rest.box) ||
+          JSON.stringify(s.boxClient) !== JSON.stringify(rest.boxClient)
         )
           steady = false;
       }
-      check("over the box: no flicker", steady);
+      check("at rest over a box for 1 s: no change", steady);
       const out = await hover(page, 5, closed.svg[1] + closed.svg[3] + 60);
       check("off the chart: closed", out.box === null, [out.box, closed.svg]);
       check("closed again: as before", same(out.marks, closed.marks));
@@ -198,6 +251,31 @@ async function main() {
       );
       check("nothing else moved", same(at.marks, closed.marks));
       await shot(name);
+      // Over the open box where no mark is near: the box holds.
+      if (name === "Scatter") {
+        let held: boolean | undefined;
+        for (const d of closed.targets) {
+          const s = await hover(page, d.x + d.w / 2, d.y + d.h / 2);
+          if (!s.boxClient) continue;
+          const [x, y, w, h] = s.boxClient;
+          const spot = [0.2, 0.5, 0.8]
+            .flatMap((i) => [0.2, 0.5, 0.8].map((j) => [x + w * i, y + h * j]))
+            .find(([px, py]) =>
+              closed.targets.every(
+                (q) => Math.hypot(q.x + q.w / 2 - px, q.y + q.h / 2 - py) > 60
+              )
+            );
+          if (!spot) continue;
+          const t = await hover(page, spot[0], spot[1]);
+          held =
+            JSON.stringify(t.box) === JSON.stringify(s.box) &&
+            JSON.stringify(t.boxClient) === JSON.stringify(s.boxClient);
+          break;
+        }
+        if (held === undefined)
+          console.log("  (no spot over a box 60 px from every dot)");
+        else check("over the box, no dot near: the box holds", held);
+      }
       const out = await hover(page, 2, 2);
       check("away: closed", out.box === null);
     }
@@ -381,11 +459,6 @@ async function main() {
           ["line-cost-end", c[4][0], c[4][1]],
         ];
         for (const [file, x, y] of views) {
-          // From the line's own side, away from the other line: an open
-          // box keeps its line while the pointer is over it, and the
-          // Revenue box can cover a Cost point (see the report).
-          await hover(page, 2, 2);
-          await hover(page, x, y + (file.includes("cost") ? 40 : -40));
           const s = await hover(page, x, y);
           const want = file.includes("revenue") ? "Revenue" : "Cost";
           check(
@@ -433,6 +506,27 @@ async function main() {
         await page.waitForTimeout(200);
         check("moving about one row: no re-run", !(await reran()));
       }
+      // With the Revenue 2020 box open, a Cost row under it is reached.
+      {
+        const rs = await hover(page, rows.Revenue[2][0], rows.Revenue[2][1]);
+        const [x, y, w, h] = rs.boxClient!;
+        const i = rows.Cost.findIndex(
+          ([cx, cy]) => cx >= x && cx <= x + w && cy >= y && cy <= y + h
+        );
+        if (i < 0) console.log("  (no Cost row under the Revenue 2020 box)");
+        else {
+          const cs = await hover(
+            page,
+            rows.Cost[i][0] - 3,
+            rows.Cost[i][1] + 1
+          );
+          check(
+            `under the Revenue box: the Cost ${years[i]} box`,
+            cs.box?.includes("Cost") === true && cs.box.includes(years[i]),
+            cs.box
+          );
+        }
+      }
       // At the same year, the Cost box sits below the Revenue box.
       for (const i of [1, 2, 3]) {
         const rs = await hover(page, rows.Revenue[i][0], rows.Revenue[i][1]);
@@ -449,6 +543,37 @@ async function main() {
       check("away: closed", out.box === null);
       check("away: no marker", (await marker()).length === 0);
       check("closed again: as before", same(out.marks, closed.marks));
+    }
+
+    // No two-state loop anywhere: at each point of a grid over each story,
+    // the box after a rest is the box a moment later.
+    for (const [name, marks] of [
+      ["BarChart", 'rect[fill="#4c78a8"]'],
+      ["StackedBars", "rect[data-gf-id][fill]:not([fill=none])"],
+      ["Scatter", "ellipse"],
+      ["Donut", "path[data-gf-id][fill]:not([fill=none])"],
+      ["LineChart", 'path[stroke-width="2"]'],
+    ] as const) {
+      const closed = await render(page, story(name), marks);
+      const [sx, sy, sw, sh] = closed.svg;
+      const unstable: string[] = [];
+      for (let i = 1; i < 10; i++)
+        for (let j = 1; j < 8; j++) {
+          const [x, y] = [sx + (sw * i) / 10, sy + (sh * j) / 8];
+          const a = await hover(page, x, y);
+          await page.waitForTimeout(200);
+          const b = await snap(page);
+          if (
+            JSON.stringify([a.box, a.boxClient]) !==
+            JSON.stringify([b.box, b.boxClient])
+          )
+            unstable.push(`${Math.round(x)},${Math.round(y)}`);
+        }
+      check(
+        `${name}: at rest, every grid point stable`,
+        unstable.length === 0,
+        unstable
+      );
     }
 
     const errors = warnings.filter((w) => /error/i.test(w));

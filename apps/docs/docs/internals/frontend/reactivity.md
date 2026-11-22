@@ -366,10 +366,13 @@ from every mark runs nothing else), and it invalidates its readers only when
 the focused key, or the focused point, changes. Thirty moves across
 three bars re-run the chart twice. A key is the JSON of the mark's rows (a ref
 or node by its rows, a date by its instant), so two marks drawn from equal rows
-are one candidate. While the pointer is over the open box (the box the layer
-drew in the last frame), the focus does not move: the box covers the marks
-under it. On a line, it keeps the line and picks among its rows, since the
-box covers the line's next rows. A touch tap holds its point through the `pointerleave` that ends it,
+are one candidate. The open box (the box the layer drew in the last frame) is
+no pointer target: the behavior runs as if it were not there, so a mark or a
+row under it is reached. Only where the behavior picks nothing (the box
+reaches past the marks' hull limit) does a pointer over the box keep the
+focus; otherwise the box would close under the pointer and might reopen, a
+flicker. The current mark's head start still applies, so a pointer at rest on
+a boundary under the box does not flip. A touch tap holds its point through the `pointerleave` that ends it,
 until the next tap or a mouse move. A tap outside the chart does not close
 it: the runtime hears only events in the chart's container. When the chart is
 disposed, the runtime calls each input's `detach`, and the focus drops its

@@ -54,8 +54,9 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   drawn through rows, the box describes the row whose point is nearest the
   pointer, and it keeps that row until another is 4 px nearer. The box closes
   when the pointer is more than 8 px from the marks, or 12 px once a box is
-  open. The open box keeps its mark until another one is 4 px nearer, and
-  while the pointer is over the box. On a touch screen, a tap opens the box
+  open. The open box keeps its mark until another one is 4 px nearer. The
+  box takes no pointer events, so a mark under it is reached as if it were
+  not there; where no mark is near, a pointer over the box keeps it open. On a touch screen, a tap opens the box
   and it stays open.
 - **Values.** Numbers show digit grouping from five digits on and at most
   two fraction digits (`11,902`, `2018`, `2.35`). A number below 1 shows three significant digits

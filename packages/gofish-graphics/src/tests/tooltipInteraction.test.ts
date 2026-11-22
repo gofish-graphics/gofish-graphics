@@ -98,15 +98,48 @@ check(
   );
 }
 
-console.log("# over the box, the focus stays");
+console.log("# over the box, a mark under it is reached");
 {
   // The first bar is full width, so its box hangs under its end, over the
   // second bar's row (x 366.8-472, y 72-132; the second bar ends at 401).
+  // The box is no pointer target: the second bar's row decides there.
   const runs = resolves;
   send("pointermove", 450, 100);
   await settle();
-  check("still the first bar's box", texts().includes("11,902"), texts());
-  check("no re-run", resolves === runs, resolves - runs);
+  check("the second bar's box", texts().includes("9811"), texts());
+  check("one re-run", resolves === runs + 1, resolves - runs);
+  // At rest there for a second: the focus holds, nothing re-runs.
+  const still = resolves;
+  const t0 = performance.now();
+  while (performance.now() - t0 < 1000) {
+    send("pointermove", 450, 100);
+    await settle(1);
+  }
+  check("at rest over a box for 1 s: no re-run", resolves === still, resolves - still);
+  check("at rest over a box for 1 s: the same box", texts().includes("9811"), texts());
+  // Down through the first bar's box (x 366.8-472, y 72-132) at x 395,
+  // over the second bar's end (401): bar 1, then bar 2, and a box on every
+  // frame. The third bar ends at 250, past the hull limit from here.
+  send("pointermove", 395, 30);
+  await settle();
+  const seen: string[] = [];
+  let closed = 0;
+  for (let y = 30; y <= 128; y += 2) {
+    send("pointermove", 395, y);
+    await settle();
+    if (boxOf() === undefined) closed++;
+    const n = ["11,902", "9811", "5310"].find((v) => texts().includes(v));
+    if (n !== undefined && seen[seen.length - 1] !== n) seen.push(n);
+  }
+  check(
+    "down through bar 1's box: bar 1, then bar 2",
+    JSON.stringify(seen) === JSON.stringify(["11,902", "9811"]),
+    seen
+  );
+  check("down through bar 1's box: never closed", closed === 0, closed);
+  // Back on the first bar for what follows.
+  send("pointermove", 100, 30);
+  await settle();
 }
 
 console.log("# 30 moves across 3 bars");
@@ -423,6 +456,31 @@ console.log("# a line drawn through rows: the box describes its nearest row");
       text
     );
   }
+  console.log("# under the Revenue box: the Cost row nearest the pointer");
+  {
+    // Revenue 2020's box sits right of its point and below it, over the
+    // Cost line between 2020 and 2021.
+    const [rx, ry] = rowsOf("Revenue")[2];
+    move(rx, ry - 1);
+    await settle();
+    const b = boxAt()!;
+    const cost = rowsOf("Cost");
+    const under = cost.find(
+      ([x, y]) => x >= b[0] && x <= b[0] + b[2] && y >= b[1] && y <= b[1] + b[3]
+    );
+    check("a Cost row under the Revenue box", under !== undefined, [b, cost]);
+    if (under) {
+      move(under[0] - 3, under[1] + 1);
+      await settle();
+      const text = shown();
+      const i = cost.indexOf(under);
+      check(
+        "the Cost row's box",
+        text.includes("Cost") && text.includes(years[i]),
+        text
+      );
+    }
+  }
   console.log("# the same x: the Cost box sits below the Revenue box");
   {
     const [rx, ry] = rowsOf("Revenue")[2];
@@ -434,6 +492,78 @@ console.log("# a line drawn through rows: the box describes its nearest row");
     await settle();
     const cost = boxAt()!;
     check("the Cost box is below the Revenue box", cost[1] > rev[1], [rev, cost]);
+  }
+}
+
+console.log("# over the box, no mark near: the box holds");
+{
+  const { scatter, circle } = GoFish as any;
+  // Three dots in a corner: a box beside one reaches past their hull.
+  const dots = [
+    { name: "a", x: 0, y: 0 },
+    { name: "b", x: 10, y: 0 },
+    { name: "c", x: 0, y: 10 },
+  ];
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  let runs = 0;
+  await chart(dots, { w: 300, h: 300 })
+    .flow(
+      derive((r: any) => (runs++, r)),
+      scatter({ by: "name", x: "x", y: "y" })
+    )
+    .mark(circle({ r: 5 }).tooltip(["name"]))
+    .render(el, {});
+  await settle();
+  const svgEl = el.querySelector("svg")!;
+  const moveTo = (x: number, y: number) =>
+    svgEl.ownerDocument === document &&
+    el.querySelector("svg")!.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: x,
+        clientY: y,
+        bubbles: true,
+        pointerType: "mouse",
+      })
+    );
+  const centers = [...el.querySelectorAll("ellipse")]
+    .filter((e) => e.closest('[pointer-events="none"]') === null)
+    .map((e) => [Number(e.getAttribute("cx")), Number(e.getAttribute("cy"))]);
+  const boxRect = () =>
+    [...el.querySelectorAll("rect")].find((r) => r.getAttribute("stroke") === "#c9ced6");
+  const name = () =>
+    [...el.querySelectorAll("text")]
+      .filter((t) => t.closest('[pointer-events="none"]') !== null)
+      .map((t) => t.textContent)
+      .join(" ");
+  // Open each dot's box until one reaches 20 px past every dot.
+  let spot: [number, number] | undefined;
+  let opened = "";
+  for (const [cx, cy] of centers) {
+    moveTo(cx, cy);
+    await settle();
+    const r = boxRect()!;
+    const [x, y, w, h] = ["x", "y", "width", "height"].map((a) => Number(r.getAttribute(a)));
+    for (let i = 1; i < 10 && !spot; i++)
+      for (let j = 1; j < 10 && !spot; j++) {
+        const p: [number, number] = [x + (w * i) / 10, y + (h * j) / 10];
+        if (centers.every(([qx, qy]) => Math.hypot(qx - p[0], qy - p[1]) > 5 + 40))
+          spot = p;
+      }
+    if (spot) {
+      opened = name();
+      break;
+    }
+  }
+  check("a spot over a box with no mark near", spot !== undefined);
+  if (spot) {
+    const before = runs;
+    for (let k = 0; k < 5; k++) {
+      moveTo(spot[0] + k, spot[1]);
+      await settle();
+    }
+    check("the box holds", boxRect() !== undefined && name() === opened, [name(), opened]);
+    check("no re-run", runs === before, runs - before);
   }
 }
 

@@ -173,29 +173,30 @@ export class TooltipFocus implements InputPrimitive {
   /** Run the behavior on the current pointer and candidates, and invalidate
    *  the readers when the focused mark or point changes. */
   private choose(): void {
-    // The open box covers the marks under it: a pointer over it reads the
-    // box, so the focus stays on the mark it describes. On a mark drawn
-    // through rows, the box covers the line's next rows, so there the
-    // pointer still picks among the mark's own rows.
+    // The box is no pointer target: the behavior runs as if it were not
+    // there, so a mark or a row under the open box is reachable. Only
+    // where the behavior picks nothing (the box reaches past the marks'
+    // hull limit) does a pointer over the box keep the focus; else the box
+    // would close under the pointer, and might reopen: a flicker.
     const p = this.pointer;
+    const choice = this.behavior({
+      pointer: p,
+      candidates: this.candidates,
+      current: this.focused(),
+      clicked: false,
+    }).choice;
     const c = this.cover;
-    const covered =
+    if (
+      choice === undefined &&
       this.key !== undefined &&
       p !== undefined &&
       c !== undefined &&
       p.x >= c.x0 &&
       p.x <= c.x1 &&
       p.y >= c.y0 &&
-      p.y <= c.y1;
-    const mark = covered ? this.byKey.get(this.key!)?.mark : undefined;
-    if (covered && !mark?.points) return;
-    const choice = this.behavior({
-      pointer: p,
-      candidates: mark ? [mark] : this.candidates,
-      current: this.focused(),
-      clicked: false,
-    }).choice;
-    if (covered && choice === undefined) return;
+      p.y <= c.y1
+    )
+      return;
     const found = choice && this.byKey.get(choice.key);
     const key = found?.mark.key as string | undefined;
     const point =
