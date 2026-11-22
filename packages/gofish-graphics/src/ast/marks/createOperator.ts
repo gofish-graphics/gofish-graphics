@@ -232,6 +232,14 @@ export type ModifierConfig<Args extends any[] = any[]> = {
   ) => ((inputs: readonly unknown[]) => Promise<Args>) | undefined;
 };
 
+/** One modifier call chained on an operator: the mark modifier it is, and
+ *  the arguments its `bind` gave it. The operator applies it to each of its
+ *  group nodes, as the mark modifier applies to a mark's node. */
+export type GroupModifierCall = {
+  modifier: Pick<ModifierConfig, "apply">;
+  args: any[];
+};
+
 /** A paint-order hint: a constant, or a callback resolved per-instance against
  *  the datum the mark is bound to. */
 export type ZOrderValue<T = any> = number | ((datum: T) => number);
@@ -931,7 +939,7 @@ function attachTranslateOption<T extends object>(
 /**
  * Attach `.label(accessor, options?)` to an operator (traversal form).
  * `setLabel` is the mutation the executing operator's closure consults —
- * see `dual`'s operator branch, where a `let labelState` (read at execution
+ * see `dual`'s operator branch, where a `let groupModifiers` (read at execution
  * time, once per `.flow()` run) is stamped onto each per-leaf node alongside
  * `node.datum ??= leaf`. Returns `target` so the call chains like `.translate`.
  */
@@ -1327,20 +1335,17 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       return combinator;
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
-    // `.label(accessor, options?)` is chained AFTER `dual(opts)` returns, so
-    // the pending state lives in this closed-over array and is read fresh
-    // each time the operator executes (once per `.flow()` run) — see the
-    // per-leaf stamp below and `attachLabelOption` at the bottom. Repeated
-    // `.label()` calls append, so every leaf's produced node(s) get one
-    // deferred label per call.
-    let labelState: Array<{
-      accessor: LabelAccessor;
-      options?: LabelOptions;
-      /** The call, one per `.label()`, shared by every node it labels. */
-      call: object;
-    }> = [];
+    // A modifier chained on the operator (`.label(accessor, options?)`) is
+    // the mark modifier of the same name applied to each GROUP node: the
+    // node(s) one leaf produced, which carry the leaf's rows as their datum.
+    // It is chained AFTER `dual(opts)` returns, so the pending calls live in
+    // this closed-over array and are read fresh each time the operator
+    // executes (once per `.flow()` run) — see the per-leaf stamp below and
+    // `attachLabelOption` at the bottom. Repeated calls append, so every
+    // group gets one application per call.
+    let groupModifiers: GroupModifierCall[] = [];
     // `.transition(spec)` chained after `dual(opts)`: read at execution time
-    // like `labelState`, and recorded on the node `layout` builds.
+    // like `groupModifiers`, and recorded on the node `layout` builds.
     let transitionState: OperatorTransition | undefined;
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
@@ -1443,27 +1448,32 @@ export function createOperator<Datum, Options extends Record<string, any>>(
                 }
               }
             }
-            // `.label(accessor, options)` chained on this operator (possibly
-            // more than once — each call appends to `labelState`): stamp
-            // every node this leaf produced with the leaf's own subdata (so
-            // `resolveLabelTargets`'s "a node with datum keeps its own label"
-            // gate fires — mirrors the manual LabelOnSpread workaround) and
-            // defer placement via `node.label`, once per accumulated call. A
-            // string accessor must be constant across the group's rows (true
-            // by construction for a `by`-field — `resolveLabelText` throws
-            // otherwise); a `field(...)` aggregate accessor (e.g.
-            // `field("count").sum()`) folds the group's rows to one value; a
-            // function accessor receives the whole leaf, enabling arbitrary
-            // aggregate labels (e.g. `(rows) => rows.length`).
-            if (labelState.length > 0) {
+            // The modifiers chained on this operator (`groupModifiers`, one
+            // entry per call): stamp every node this leaf produced with the
+            // leaf's own subdata, so the group node's datum is its rows (a
+            // ref to it reads them, and `resolveLabelTargets`'s "a node
+            // with datum keeps its own label" gate fires), then apply each
+            // call to it as its mark modifier applies to a mark's node. For
+            // `.label()`: a string accessor must be constant across the
+            // group's rows (true by construction for a `by`-field —
+            // `resolveLabelText` throws otherwise); a `field(...)` aggregate
+            // accessor (e.g. `field("count").sum()`) folds the group's rows
+            // to one value; a function accessor receives the whole leaf,
+            // enabling arbitrary aggregate labels (e.g. `(rows) =>
+            // rows.length`).
+            if (groupModifiers.length > 0) {
               for (const node of leafNodes) {
                 if (node.datum === undefined) node.datum = leaf;
-                for (const { accessor, options, call } of labelState) {
-                  node.label(
-                    accessor,
-                    labelOptionsIn(options, layerContext),
-                    call
+                for (const { modifier, args } of groupModifiers) {
+                  // Awaited only when it is async, so a sync modifier adds no
+                  // step between this group and the next.
+                  const applied = modifier.apply(
+                    node,
+                    layerContext,
+                    leaf,
+                    ...args
                   );
+                  if (applied) await applied;
                 }
               }
             }
@@ -1529,7 +1539,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
     attachLabelOption(withTranslate, (accessor, options) => {
-      labelState = [...labelState, { accessor, options, call: {} }];
+      groupModifiers = [
+        ...groupModifiers,
+        {
+          modifier: labelModifier,
+          args: labelModifier.bind(accessor, options),
+        },
+      ];
       const tag = wireOf(operator);
       if (tag) {
         pushLabelField(tag, labelIRField(accessor, options));

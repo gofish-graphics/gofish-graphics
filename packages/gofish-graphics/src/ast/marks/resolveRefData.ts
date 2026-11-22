@@ -2,6 +2,11 @@ import type { GoFishRef } from "../_ref";
 import { isToken } from "../createName";
 import { ref } from "../shapes/ref";
 import { layerKey, type LayerContext } from "./markResult";
+import type { GoFishNode } from "../_node";
+
+/** A node, read through a ref the way a selection reads it: the ref a
+ *  `selectAll` over a layer holding `node` yields for it. */
+export const selectNode = (node: GoFishNode): GoFishRef => ref({ __ref: node });
 
 /**
  * Resolve a `GoFishRef` used as chart data against the layer registry, the
@@ -45,7 +50,7 @@ export function resolveRefData(
     );
   }
 
-  const refs = layer.nodes.map((node) => ref({ __ref: node }));
+  const refs = layer.nodes.map(selectNode);
 
   if (plural) return refs;
 
