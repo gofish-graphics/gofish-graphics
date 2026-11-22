@@ -244,6 +244,25 @@ export function tooltipRows(
   });
 }
 
+/**
+ * The tooltip rows of one row of a mark drawn through its rows (the
+ * focused row of a line), `mark.rows` being that one row: as
+ * {@link tooltipRows}, less the listed fields the row lacks. A listed name
+ * need only be a column of some row of the mark, which the render checked,
+ * so a row without it leaves it out of its box.
+ */
+export function rowTooltipRows(
+  mark: TooltipMark,
+  fields?: readonly string[]
+): TooltipRow[] {
+  if (fields === undefined) return tooltipRows(mark);
+  const rows = rowsOf(mark.rows);
+  return tooltipRows(
+    mark,
+    fields.filter((f) => rows.some((r) => f in r))
+  );
+}
+
 /** The rows as the text of an SVG `<title>`: one `name: value` line each. */
 export const tooltipText = (rows: readonly TooltipRow[]): string =>
   rows.map(([k, v]) => `${k}: ${v}`).join("\n");

@@ -422,8 +422,9 @@ methods:
   channel infers it (a sum for a size). On a node drawn through its rows
   (`GoFishNode.throughRows`, which `Band` sets on a line built from rows),
   a list names the rows' fields: a name need only be a column, the box
-  shows the focused row's values, and the title keeps only the listed
-  fields with one value on the whole line (none: no title).
+  shows the focused row's values, less the listed fields that row lacks
+  (`rowTooltipRows`), and the title keeps only the listed fields with one
+  value on the whole line (none: no title).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the

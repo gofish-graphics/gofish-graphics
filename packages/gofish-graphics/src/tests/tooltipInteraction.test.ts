@@ -825,6 +825,59 @@ console.log("# a time column in a zone: a line's row reads as a bar does");
   }
 }
 
+console.log("# a listed field one row of a line lacks: left out of that row's box");
+{
+  const { line, group } = GoFish as any;
+  const data = [
+    { s: "A", year: 2018, value: 1, note: "x" },
+    { s: "A", year: 2019, value: 2 },
+  ];
+  const el = freshEl();
+  const errors: unknown[] = [];
+  const onError = (e: any) => errors.push(e?.reason ?? e?.error ?? e);
+  process.on("unhandledRejection", onError);
+  await chart(data, { w: 400, h: 200 })
+    .flow(group({ by: "s" }))
+    .mark(line({ x: "year", y: "value" }).tooltip(["year", "note"]))
+    .render(el, {});
+  await settle();
+  const path = [...el.querySelectorAll("path")].find((p) => p.getAttribute("fill") === "none")!;
+  const nums = (path.getAttribute("d") ?? "").match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+  const [x1, y1] = nums.slice(-2);
+  moveOver(el, x1 - 2, y1);
+  await settle();
+  check("hovering the row without it throws nothing", errors.length === 0, String(errors[0]));
+  const shown = boxTexts(el).slice(-2);
+  check(
+    "its box shows the year alone",
+    JSON.stringify(shown) === JSON.stringify(["year", "2019"]),
+    boxTexts(el)
+  );
+  moveOver(el, nums[0] + 2, nums[1]);
+  await settle();
+  check(
+    "the row with it shows both",
+    JSON.stringify(boxTexts(el).slice(-4)) === JSON.stringify(["year", "note", "2018", "x"]),
+    boxTexts(el)
+  );
+  process.off("unhandledRejection", onError);
+  // A name in no row is still an error, at render.
+  let threw: unknown;
+  try {
+    await chart(data, { w: 400, h: 200 })
+      .flow(group({ by: "s" }))
+      .mark(line({ x: "year", y: "value" }).tooltip(["year", "nope"]))
+      .render(freshEl(), {});
+  } catch (e) {
+    threw = e;
+  }
+  check(
+    "a listed field in no row fails the render",
+    String(threw).includes('"nope" is not a field'),
+    String(threw)
+  );
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

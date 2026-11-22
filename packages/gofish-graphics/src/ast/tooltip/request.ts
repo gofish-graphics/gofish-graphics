@@ -15,6 +15,7 @@ import type { Registrar } from "../../interaction/resolveContext";
 import { focusOf, type TooltipFocus } from "../../interaction/tooltipFocus";
 import {
   rowsOfDatum,
+  rowTooltipRows,
   tooltipRows,
   tooltipText,
   type TooltipMark,
@@ -50,13 +51,14 @@ export type TooltipRequest = {
 /** The rows the box of `request` shows: of its focused `row`, when its
  *  mark is drawn through rows and the focus is on one of them, else of the
  *  whole mark. The row is read as a list of one that carries the column
- *  types of the mark's rows, so a time column reads in its zone. */
+ *  types of the mark's rows, so a time column reads in its zone, and a
+ *  listed field the row lacks is left out (`rowTooltipRows`). */
 export const tooltipContent = (
   request: TooltipRequest,
   point?: { row: unknown }
 ): TooltipRow[] =>
   point !== undefined
-    ? tooltipRows(
+    ? rowTooltipRows(
         {
           rows: copyColumnTypes([point.row], request.rows),
           wire: request.wire,
