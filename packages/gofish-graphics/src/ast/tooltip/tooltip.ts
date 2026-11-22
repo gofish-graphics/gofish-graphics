@@ -87,7 +87,10 @@ type TooltipEntry = {
  * selection is the first mark with the focused key (marks with one key are
  * one candidate). Its home is the render root. The tier over it is, per
  * entry, a ref to the mark and its box, seated after the solve beside the
- * mark and inside the graphic (`tooltipPlace`).
+ * mark and inside the graphic (`tooltipPlace`). The box of a mark drawn as a
+ * path (a line) is then moved at paint, to sit beside the point of the path
+ * nearest the pointer (`TooltipFocus.offset`): which mark is the focus is
+ * layout, where the pointer is along it is paint.
  */
 export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
   take(root) {
@@ -113,7 +116,7 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
   home: (_target, root) => root,
   async draw(entries, { select }) {
     const nodes: GoFishNode[] = [];
-    const seats: [GoFishNode, GoFishNode][] = [];
+    const seats: [GoFishNode, GoFishNode, TooltipFocus][] = [];
     for (const { node, request, focus } of entries) {
       const stand = select(node) as unknown as GoFishNode;
       const shown = await resolveMarkResult(
@@ -124,15 +127,20 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
       shown.inkOn = [true, true];
       shown.noPointerTarget = true;
       focus.drew(shown);
+      // A line's box follows the pointer along it, as a paint patch.
+      if (focus.follows()) shown.INTERNAL_moveWhile(() => focus.offset());
       nodes.push(stand, shown);
-      seats.push([stand, shown]);
+      seats.push([stand, shown, focus]);
     }
     return {
       drawn: null,
       nodes,
       constraints: (at, inner) =>
-        seats.map(([stand, shown]) =>
-          createTooltipPlaceConstraint([at(stand), inner, at(shown)])
+        seats.map(([stand, shown, focus]) =>
+          createTooltipPlaceConstraint(
+            [at(stand), inner, at(shown)],
+            focus.seated
+          )
         ),
     };
   },

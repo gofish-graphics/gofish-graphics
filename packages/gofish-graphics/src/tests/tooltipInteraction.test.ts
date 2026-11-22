@@ -230,6 +230,113 @@ console.log("# a chart nested per group: one box, in any group");
   }
 }
 
+console.log("# a line: the box follows the pointer along it, with no re-run");
+{
+  const { group, line } = GoFish as any;
+  const budget = [
+    { series: "Revenue", year: 2018, value: 1.6 },
+    { series: "Revenue", year: 2019, value: 1.9 },
+    { series: "Revenue", year: 2020, value: 1.7 },
+    { series: "Revenue", year: 2021, value: 2.3 },
+    { series: "Revenue", year: 2022, value: 2.6 },
+    { series: "Cost", year: 2018, value: 1.2 },
+    { series: "Cost", year: 2019, value: 1.3 },
+    { series: "Cost", year: 2020, value: 1.5 },
+    { series: "Cost", year: 2021, value: 1.6 },
+    { series: "Cost", year: 2022, value: 2.0 },
+  ];
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  let runs = 0;
+  await chart(budget, { w: 400, h: 260 })
+    .flow(
+      derive((r: any) => {
+        runs++;
+        return r;
+      }),
+      group({ by: "series" })
+    )
+    .mark(line({ x: "year", y: "value", stroke: "series" }).tooltip())
+    .render(el, {});
+  await settle();
+  const at = (path: Element, t: number) => {
+    // Points on the line: the end of each command of its `d` (a curve's
+    // control points are off it).
+    const pts = (path.getAttribute("d") ?? "")
+      .split(/[A-Za-z]/)
+      .map((c) => c.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)?.map(Number) ?? [])
+      .filter((n) => n.length >= 2)
+      .map((n) => [n[n.length - 2], n[n.length - 1]] as [number, number]);
+    return pts[Math.round(t * (pts.length - 1))];
+  };
+  const paths = () =>
+    [...el.querySelectorAll("path")].filter((p) => p.getAttribute("stroke-width") !== null || p.getAttribute("fill") === "none");
+  const lineOf = (series: string) =>
+    paths().find((p) => p.getAttribute("stroke") === (series === "Revenue" ? "#4190c5" : "#f2cf57"))!;
+  const boxRect = () =>
+    [...el.querySelectorAll("rect")].find((r) => r.getAttribute("stroke") === "#c9ced6");
+  /** The box's drawn top-left: its rect under its group's translate. */
+  const boxAt = () => {
+    const r = boxRect();
+    if (!r) return undefined;
+    const g = r.closest("g[transform]");
+    const m = /translate\(([-\d.e]+) ([-\d.e]+)\)/.exec(g?.getAttribute("transform") ?? "");
+    const [dx, dy] = m ? [Number(m[1]), Number(m[2])] : [0, 0];
+    return [Number(r.getAttribute("x")) + dx, Number(r.getAttribute("y")) + dy];
+  };
+  const shown = () => [...el.querySelectorAll("text")].map((t) => t.textContent);
+  const move = (x: number, y: number) =>
+    el.querySelector("svg")!.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: x,
+        clientY: y,
+        bubbles: true,
+        pointerType: "mouse",
+      })
+    );
+  const revenue = lineOf("Revenue");
+  const [x0, y0] = at(revenue, 0);
+  move(x0 + 20, y0 + 20);
+  await settle();
+  check("on Revenue: its box", shown().includes("Revenue") && boxRect() !== undefined, shown());
+  const opened = runs;
+  const svgBefore = el.querySelector("svg");
+  const seen: number[][] = [];
+  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+    const [x, y] = at(revenue, t);
+    move(x, y + 1);
+    await settle(2);
+    const b = boxAt()!;
+    seen.push(b);
+    check(
+      `t=${t}: the box is beside the pointer`,
+      // Right of it by the gap, or, at the right edge, left of it.
+      b !== undefined && (Math.abs(b[0] - (x + 8)) < 2.5 || b[0] + 60 < x),
+      [b, x, y]
+    );
+  }
+  await settle();
+  check("moving along the line: no re-run", runs === opened, runs - opened);
+  check("the same svg (paint patches only)", el.querySelector("svg") === svgBefore);
+  check(
+    "the box moved with the pointer",
+    new Set(seen.map((b) => b.join())).size === seen.length,
+    seen
+  );
+  const cost = lineOf("Cost");
+  const [cx, cy] = at(cost, 0.5);
+  move(cx, cy - 1);
+  await settle();
+  check("on Cost: its box", shown().includes("Cost"), shown());
+  check("one re-run for the change of line", runs === opened + 1, runs - opened);
+  const costBox = boxAt()!;
+  const [rx, ry] = at(revenue, 0.5);
+  move(rx, ry + 1);
+  await settle();
+  const revBox = boxAt()!;
+  check("at the same x, the Cost box is below the Revenue box", costBox[1] > revBox[1], [costBox, revBox]);
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

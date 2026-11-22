@@ -103,6 +103,16 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
+/** A group's transform as an SVG `transform` attribute. */
+const transformAttr = (
+  t: DisplayList.GroupItem["transform"]
+): string | undefined => {
+  const parts: string[] = [];
+  if (t.translate) parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
+  if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
+  return parts.length ? parts.join(" ") : undefined;
+};
+
 /** `item` painted. `filterId` is the id of its render's `luminanceToAlpha`
  *  filter def ({@link paintDocument}). */
 function paintSVG(
@@ -218,12 +228,6 @@ function paintSVG(
         </image>
       );
     case "group": {
-      const t = item.transform;
-      const parts: string[] = [];
-      if (t.translate)
-        parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
-      if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
-      const transform = parts.length ? parts.join(" ") : undefined;
       const children = item.children.map((c) =>
         paintSVG(c, filterId, interactive)
       );
@@ -233,7 +237,10 @@ function paintSVG(
       const filter =
         f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
       return (
-        <g transform={transform} filter={filter}>
+        <g
+          transform={transformAttr(patched(live, "transform", item.transform))}
+          filter={filter}
+        >
           {title}
           {children}
         </g>

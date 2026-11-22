@@ -16,8 +16,15 @@
  * runs the focus behavior (`focus.ts`), and only when the focused key
  * changes does it invalidate the charts that read it, so a chart re-runs its
  * layout once per change of focus, not once per pointer move.
+ *
+ * A mark drawn as a path across its data (a line, `isPath`) is one
+ * candidate for its whole path, so where the pointer is along it is not a
+ * change of focus. Its box follows the pointer as a paint patch: the box is
+ * drawn moved by {@link TooltipFocus.offset}, which reads the pointer, to
+ * sit beside the point of the path nearest the pointer (`tooltip.ts`).
  */
 import type { DisplayList } from "gofish-ir";
+import { createSignal } from "solid-js";
 import type {
   InputPrimitive,
   InteractionEventType,
@@ -29,12 +36,15 @@ import type { Registrar } from "./resolveContext";
 import { walkItems, type Affine } from "./runtime";
 import {
   defaultFocus,
+  isPath,
+  nearestOnPath,
   type Box,
   type Candidate,
   type FocusBehavior,
   type Outline,
   type Point,
 } from "./focus";
+import type { Seated } from "../ast/tooltip/place";
 import { GoFishNode } from "../ast/_node";
 import {
   continuousInterval,
@@ -69,12 +79,24 @@ export class TooltipFocus implements InputPrimitive {
   /** The focused mark's key, or undefined with no focus. */
   key: string | undefined;
   private marks: FocusMark[] = [];
-  private candidates: Candidate[] = [];
+  /** The candidates of the last frame, and the pointer of the last event (a
+   *  tap holds it, see `onEvent`). Signals, so the paint patch that moves a
+   *  path's box ({@link offset}) re-reads them; nothing in layout does. */
+  private readonly candidates = createSignal<Candidate[]>([]);
+  private readonly pointer = createSignal<Point | undefined>(undefined);
   /** The box the last lowering drew, and where it was drawn. */
   private box: GoFishNode | undefined;
   private cover: Box | undefined;
-  /** The pointer of the last event; a tap holds it (see `onEvent`). */
-  private pointerAt: Point | undefined;
+  /** Where the layout seated a path's box, and where it would seat it
+   *  beside a point (`tooltipPlace`), in the layout's px; and, once a frame
+   *  has the box, where the layout's origin is in the pointer's px. */
+  private seat:
+    | {
+        at: [number, number];
+        seatAt: (p: Point) => [number, number];
+        origin?: Point;
+      }
+    | undefined;
   private touch = false;
 
   constructor(private readonly behavior: FocusBehavior = defaultFocus) {}
@@ -95,6 +117,7 @@ export class TooltipFocus implements InputPrimitive {
   use(marks: FocusMark[]): void {
     this.marks = marks;
     this.box = undefined;
+    this.seat = undefined;
   }
 
   /** The box the lowering drew for the focused mark. */
@@ -102,10 +125,49 @@ export class TooltipFocus implements InputPrimitive {
     this.box = box;
   }
 
+  /** Whether the focused mark is drawn as a path (`isPath`), so its box
+   *  follows the pointer along it. Read from the candidates of the last
+   *  frame: a change of focus moves no mark. */
+  follows(): boolean {
+    const c = this.focused();
+    return c !== undefined && isPath(c);
+  }
+
+  /** Where the layout seated the box of a path (`tooltipPlace`). */
+  readonly seated: Seated = (at, seatAt) => {
+    this.seat = { at, seatAt };
+  };
+
+  /**
+   * How far a path's box moves at paint from where the layout seated it: to
+   * its seat beside the point of the path nearest the pointer, kept inside
+   * the chart as the layout keeps it. A paint-time value: it reads the
+   * pointer and the frame, so the box moves as they change, with no layout.
+   */
+  offset(): [number, number] {
+    const c = this.focused();
+    const p = this.pointer[0]();
+    const seat = this.seat;
+    const q = c && p && nearestOnPath(p, c.outline);
+    const o = seat?.origin;
+    if (!q || !o) return [0, 0];
+    const [x, y] = seat!.seatAt({ x: q.x - o.x, y: q.y - o.y });
+    return [x - seat!.at[0], y - seat!.at[1]];
+  }
+
+  private focused(): Candidate | undefined {
+    return this.candidates[0]().find((c) => c.key === this.key);
+  }
+
   onFrame(frame: InteractionFrame): void {
-    this.candidates = candidatesOf(frame.items, this.marks);
     this.cover =
       this.box === undefined ? undefined : drawnBox(frame.items, this.box);
+    if (this.seat && this.cover)
+      this.seat.origin = {
+        x: this.cover.x0 - this.seat.at[0],
+        y: this.cover.y0 - this.seat.at[1],
+      };
+    this.candidates[1](candidatesOf(frame.items, this.marks));
   }
 
   onEvent(
@@ -122,8 +184,9 @@ export class TooltipFocus implements InputPrimitive {
       this.touch = kind !== undefined && kind !== "" && kind !== "mouse";
     else if (type === "pointermove" && kind === "mouse") this.touch = false;
     if (type === "pointerleave") {
-      if (!this.touch) this.pointerAt = undefined;
-    } else if (type !== "pointerup") this.pointerAt = pt;
+      if (!this.touch) this.pointer[1](undefined);
+    } else if (type !== "pointerup")
+      this.pointer[1](pt && { x: pt.x, y: pt.y });
     this.choose();
   }
 
@@ -131,24 +194,26 @@ export class TooltipFocus implements InputPrimitive {
    *  the readers when the focused key changes. */
   private choose(): void {
     // The open box covers the marks under it: a pointer over it reads the
-    // box, so the focus stays on the mark it describes.
-    const p = this.pointerAt;
+    // box, so the focus stays on the mark it describes. The frame has the
+    // box where the layout put it, and a path's box is drawn moved.
+    const p = this.pointer[0]();
     const c = this.cover;
+    const [dx, dy] = this.offset();
     if (
       this.key !== undefined &&
       p !== undefined &&
       c !== undefined &&
-      p.x >= c.x0 &&
-      p.x <= c.x1 &&
-      p.y >= c.y0 &&
-      p.y <= c.y1
+      p.x >= c.x0 + dx &&
+      p.x <= c.x1 + dx &&
+      p.y >= c.y0 + dy &&
+      p.y <= c.y1 + dy
     )
       return;
-    const current = this.candidates.find((c) => c.key === this.key);
+    const candidates = this.candidates[0]();
     const key = this.behavior({
-      pointer: this.pointerAt,
-      candidates: this.candidates,
-      current,
+      pointer: p,
+      candidates,
+      current: this.focused(),
       clicked: false,
     }).choice?.key as string | undefined;
     if (key === this.key) return;

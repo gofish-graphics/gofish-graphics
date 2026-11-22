@@ -29,12 +29,24 @@ export interface TooltipPlaceConstraint {
   children: [target: ConstraintRef, frame: ConstraintRef, box: ConstraintRef];
   /** The gap between the mark and the box, in px. */
   gap: number;
+  /** Told, after the box is seated at `at`, where the box would sit beside
+   *  a point instead, so a box can follow a point of its mark at paint (a
+   *  line's box follows the pointer along the line, `tooltipFocus.ts`). */
+  seated?: Seated;
 }
+
+/** A box's seat `at`, and its seat beside a point (`seatAt`), both in the
+ *  layout's px. */
+export type Seated = (
+  at: [number, number],
+  seatAt: (point: { x: number; y: number }) => [number, number]
+) => void;
 
 export const createTooltipPlaceConstraint = (
   children: TooltipPlaceConstraint["children"],
+  seated?: Seated,
   gap = 8
-): TooltipPlaceConstraint => ({ type: "tooltipPlace", children, gap });
+): TooltipPlaceConstraint => ({ type: "tooltipPlace", children, gap, seated });
 
 export const isTooltipPlaceConstraint = (
   c: { type: string } | undefined
@@ -92,12 +104,24 @@ export function applyTooltipPlacement(
     max: p.dims[axis].max ?? 0,
   });
   const size: [number, number] = [box.dims[0].size ?? 0, box.dims[1].size ?? 0];
+  const area: [Span, Span] = [span(frame, 0), span(frame, 1)];
   const [x, y] = tooltipSeat(
     [span(target, 0), span(target, 1)],
-    [span(frame, 0), span(frame, 1)],
+    area,
     size,
     constraint.gap
   );
   box.setExtent!("x", { min: x, size: size[0] });
   box.setExtent!("y", { min: y, size: size[1] });
+  constraint.seated?.([x, y], (p) =>
+    tooltipSeat(
+      [
+        { min: p.x, max: p.x },
+        { min: p.y, max: p.y },
+      ],
+      area,
+      size,
+      constraint.gap
+    )
+  );
 }

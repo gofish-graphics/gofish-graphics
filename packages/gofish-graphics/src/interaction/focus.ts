@@ -163,16 +163,46 @@ export const boxDistance = (p: Point, b: Box): number =>
     Math.max(b.y0 - p.y, 0, p.y - b.y1)
   );
 
-/** Distance from a point to the segment `a`–`b`. */
-const segmentDistance = (p: Point, a: Point, b: Point): number => {
+/** The point of the segment `a`–`b` nearest `p`. */
+const segmentNearest = (p: Point, a: Point, b: Point): Point => {
   const [vx, vy] = [b.x - a.x, b.y - a.y];
   const len2 = vx * vx + vy * vy;
   const t =
     len2 === 0
       ? 0
       : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
-  return Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy);
+  return { x: a.x + t * vx, y: a.y + t * vy };
 };
+
+/** Distance from a point to the segment `a`–`b`. */
+const segmentDistance = (p: Point, a: Point, b: Point): number => {
+  const q = segmentNearest(p, a, b);
+  return Math.hypot(p.x - q.x, p.y - q.y);
+};
+
+/** The point of a drawn path (the segments of an outline) nearest `p`;
+ *  undefined when the outline has no segment. */
+export function nearestOnPath(p: Point, outline: Outline): Point | undefined {
+  let best: Point | undefined;
+  let d = Infinity;
+  for (const { segment } of outline) {
+    if (!segment) continue;
+    const q = segmentNearest(p, segment[0], segment[1]);
+    const dq = Math.hypot(p.x - q.x, p.y - q.y);
+    if (dq < d) [best, d] = [q, dq];
+  }
+  return best;
+}
+
+/** Whether a candidate is drawn as a path across its data (a line): it has
+ *  no placed position on either axis, and its outline is segments only. Such
+ *  a mark is as near as its path, and its tooltip sits beside the point of
+ *  the path nearest the pointer. */
+export const isPath = (c: Candidate): boolean =>
+  c.position.x === undefined &&
+  c.position.y === undefined &&
+  c.outline.length > 0 &&
+  c.outline.every((part) => part.segment !== undefined);
 
 function outlineDistance(p: Point, outline: Outline): number {
   let d = Infinity;

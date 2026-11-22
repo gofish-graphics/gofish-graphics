@@ -21,6 +21,8 @@ import { Frontend } from "gofish-ir";
 import {
   defaultFocus,
   Focus,
+  isPath,
+  nearestOnPath,
   type Candidate,
   type Frame,
 } from "../interaction/focus";
@@ -97,6 +99,68 @@ console.log("# focus: a mark placed on no axis is as near as its outline");
   check("pathSegments: relative and h/v", JSON.stringify(pathSegments("m1 1 h4 v2 z").map(([, b]) => b)) ===
     JSON.stringify([{ x: 5, y: 1 }, { x: 5, y: 3 }, { x: 1, y: 1 }]),
     pathSegments("m1 1 h4 v2 z"));
+}
+
+console.log("# focus: a line is as near as its drawn path");
+{
+  /** A polyline through `pts`, drawn across its data: no position. */
+  const poly = (key: string, pts: [number, number][]): Candidate => {
+    const outline = pts.slice(1).map(([x, y], i) => {
+      const a = { x: pts[i][0], y: pts[i][1] };
+      const b = { x, y };
+      const box = {
+        x0: Math.min(a.x, b.x),
+        y0: Math.min(a.y, b.y),
+        x1: Math.max(a.x, b.x),
+        y1: Math.max(a.y, b.y),
+      };
+      return { box, round: false, segment: [a, b] as const };
+    });
+    const box = {
+      x0: Math.min(...outline.map((p) => p.box.x0)),
+      y0: Math.min(...outline.map((p) => p.box.y0)),
+      x1: Math.max(...outline.map((p) => p.box.x1)),
+      y1: Math.max(...outline.map((p) => p.box.y1)),
+    };
+    return { key, datum: [], box, position: {}, outline };
+  };
+  // Two rising lines, `upper` 40 px above `lower` at every x.
+  const upper = poly("upper", [[0, 60], [100, 20], [200, 0]]);
+  const lower = poly("lower", [[0, 100], [100, 60], [200, 40]]);
+  const two = [upper, lower];
+  check("between them, nearer the upper", pick(frame(50, 45, undefined, two)) === "upper");
+  check("between them, nearer the lower", pick(frame(50, 75, undefined, two)) === "lower");
+  check("on the lower line", pick(frame(150, 50, undefined, two)) === "lower");
+  // Their boxes overlap (y 20-60 is in both), so a box measure could not
+  // tell them apart there; the path can.
+  check("where the boxes overlap: upper", pick(frame(150, 25, undefined, two)) === "upper");
+  check("where the boxes overlap: lower", pick(frame(150, 45, undefined, two)) === "lower");
+  // A crossing: `rise` and `fall` meet at (100, 50).
+  const rise = poly("rise", [[0, 100], [200, 0]]);
+  const fall = poly("fall", [[0, 0], [200, 100]]);
+  const cross = [rise, fall];
+  check("left of the crossing, above: fall", pick(frame(40, 25, undefined, cross)) === "fall");
+  check("left of the crossing, below: rise", pick(frame(40, 75, undefined, cross)) === "rise");
+  check("right of the crossing, above: rise", pick(frame(160, 25, undefined, cross)) === "rise");
+  // 1 px below the crossing both are as near: the current one stays.
+  check("by the crossing, current fall stays", pick(frame(100, 51, fall, cross)) === "fall");
+  check("by the crossing, current rise stays", pick(frame(100, 51, rise, cross)) === "rise");
+  // One line's box holds the other line: a flat line inside a tall zigzag's
+  // box is still picked near it.
+  const zig = poly("zig", [[0, 0], [50, 100], [100, 0], [150, 100], [200, 0]]);
+  const flat = poly("flat", [[60, 50], [90, 50]]);
+  check("inside another line's box: the nearer path", pick(frame(65, 54, undefined, [zig, flat])) === "flat");
+  // A thin line needs no exact aim: 3 px off its stroke is the line.
+  check("3 px off the stroke", pick(frame(100, 23, undefined, two)) === "upper");
+  check("isPath: a line", isPath(upper));
+  check("isPath: not a bar", !isPath(bars[0]));
+  const q = nearestOnPath({ x: 100, y: 0 }, upper.outline)!;
+  check(
+    "nearestOnPath: the foot on the nearer segment",
+    Math.abs(q.x - (100 + 100 / 26)) < 1e-9 &&
+      Math.abs(q.y - (20 - 20 / 26)) < 1e-9,
+    q
+  );
 }
 
 /* -------------------------------- format --------------------------------- */

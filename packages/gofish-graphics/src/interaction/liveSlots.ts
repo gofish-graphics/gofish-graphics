@@ -15,8 +15,9 @@
  *
  * A channel named "text" overrides the text CONTENT (the box keeps its
  * resolve-time measure); a channel named after one of the item's own geometry
- * fields (`x`, `y`, `w`, `h`, `cx`, `cy`, `rx`, `ry`, `d`) overrides that
- * field; every other channel is a `DisplayList.Style` key.
+ * fields (`x`, `y`, `w`, `h`, `cx`, `cy`, `rx`, `ry`, `d`, and a group's
+ * `transform`) overrides that field; every other channel is a
+ * `DisplayList.Style` key.
  */
 import type { DisplayList } from "gofish-ir";
 import { runInLiveEval } from "./resolveContext";
@@ -27,7 +28,8 @@ export type LiveSlots = Record<string, () => unknown>;
  * The live-slot names that override an item's GEOMETRY rather than its style —
  * the display item's own field names, so one rule covers every primitive: a
  * slot called `cx` overrides `cx` on an ellipse, `x` overrides `x` on a rect or
- * a text anchor, `d` overrides the path string.
+ * a text anchor, `d` overrides the path string, `transform` moves a group's
+ * whole drawing (`GoFishNode.INTERNAL_moveWhile`).
  *
  * Geometry is live for the same reason paint is: the value is a paint-time
  * fact, the box it sits in is a layout-time one. A mark whose POSITION moves
@@ -48,6 +50,7 @@ export const GEOMETRY_CHANNELS = new Set([
   "rx",
   "ry",
   "d",
+  "transform",
 ]);
 
 const slots = new WeakMap<DisplayList.DisplayItem, LiveSlots>();
