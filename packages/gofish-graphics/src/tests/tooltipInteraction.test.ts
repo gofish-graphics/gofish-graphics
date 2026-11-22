@@ -136,4 +136,37 @@ send("pointermove", 1000, 1000, "mouse");
 await settle();
 check("a mouse move off the chart closes it", boxOf() === undefined);
 
+console.log("# the widget path: an IR document rendered by renderIR");
+{
+  // What the Python widget does with `rect(w="share").tooltip()`: the
+  // document crosses as IR and `Serialize.renderIR` renders it.
+  const { Serialize } = GoFish as any;
+  const doc = await Serialize.toJSON(
+    chart(rows, { w: 400, h: 200 })
+      .flow(spread({ by: "path", dir: "y", spacing: 4 }))
+      .mark(rect({ w: "share" }).tooltip(["path", "n"]))
+  );
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  await Serialize.renderIR(doc, el, {});
+  await settle();
+  el.querySelector("svg")!.dispatchEvent(
+    new (globalThis as any).PointerEvent("pointermove", {
+      clientX: 100,
+      clientY: 100,
+      bubbles: true,
+      pointerType: "mouse",
+    })
+  );
+  await settle();
+  const shown = [...el.querySelectorAll("text")].map((t) => t.textContent);
+  check(
+    "hover opens the box with the listed fields",
+    // The box's texts come first: its names column, then its values.
+    JSON.stringify(shown.slice(0, 4)) ===
+      JSON.stringify(["path", "n", "INF→INF", "9,811"]),
+    shown
+  );
+}
+
 report();
