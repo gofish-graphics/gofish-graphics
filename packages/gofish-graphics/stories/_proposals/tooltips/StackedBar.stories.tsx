@@ -17,25 +17,10 @@ import {
   group,
   enclose,
   live,
-  pointer,
 } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import {
-  rowTooltip,
-  box,
-  table,
-  beside,
-  focusFrom,
-  hitRow,
-  noPointer,
-  thousands,
-  heldOnTouch,
-  rowOf,
-  snapToNearest,
-  drawnMarks,
-  column,
-  BARS,
-} from "./helpers";
+import { rowTooltip, box, table, beside, thousands, rowOf, BARS } from "./helpers";
+import { snap } from "./focusRuntime";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Stacked Bar", excludeStories: /^[a-z]/ };
@@ -147,12 +132,14 @@ export const Closed: StoryObj = {
  *  Interactive stories and the proposal page's demo bundle
  *  (proposals/tooltips/demo). */
 export function mountInteractiveSegment(container: HTMLElement) {
-  noPointer(container);
-  // A segment's position is its `spread` slot in x and its `stack` place in y.
-  snapToNearest(container, drawnMarks(BARS, seafood.length, { position: ["x", "y"] }), { radius: 8 });
-  const p = pointer();
   const key = (r: any) => (r ? `${r.lake}|${r.species}` : undefined);
-  const focusKey = focusFrom(heldOnTouch(container, () => key(hitRow(p))));
+  const { focus: focusKey, ping } = snap(container, {
+    selector: BARS,
+    count: seafood.length,
+    // A segment's position is its `spread` slot in x and its `stack` place in y.
+    position: ["x", "y"],
+    key,
+  });
   return segmentTooltip(
     () => {
       const k = focusKey();
@@ -160,7 +147,7 @@ export function mountInteractiveSegment(container: HTMLElement) {
       const [lake, species] = k.split("|");
       return { lake, species };
     },
-    live((d: any) => (p.pos(), focusKey() === undefined || key(rowOf(d)) === focusKey() ? 1 : 0.55))
+    live((d: any) => (ping(), focusKey() === undefined || key(rowOf(d)) === focusKey() ? 1 : 0.55))
   ).render(container);
 }
 
@@ -174,17 +161,18 @@ export const InteractiveSegment: StoryObj = {
 
 /** Live: hover any segment for its whole stack. */
 export function mountInteractiveWholeStack(container: HTMLElement) {
-  noPointer(container);
-  // A stack's position is its `spread` slot in x; in y it only has a height.
-  snapToNearest(container, drawnMarks(BARS, seafood.length, { position: ["x"], groupBy: column }), {
-    radius: 8,
+  const { focus: lake, ping } = snap(container, {
+    selector: BARS,
+    count: seafood.length,
+    // A stack's position is its `spread` slot in x; in y it only has a height.
+    // Its segments share the key `lake`, so the stack is one candidate.
+    position: ["x"],
+    key: (r) => r?.lake,
   });
-  const p = pointer();
-  const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
   return stackTooltip(
     () => (lake() ? { lake: lake()! } : undefined),
     live((d: any) => {
-      p.pos();
+      ping();
       const l = lake();
       return l === undefined || rowOf<any>(d)?.lake === l ? 1 : 0.55;
     })

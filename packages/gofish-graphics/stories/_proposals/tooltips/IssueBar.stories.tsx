@@ -12,23 +12,11 @@ import {
   filter,
   group,
   live,
-  pointer,
 } from "../../../src/lib";
 import { pathTypes } from "./data";
-import {
-  rowTooltip,
-  beside,
-  percent1,
-  thousands,
-  focusFrom,
-  hitRow,
-  noPointer,
-  heldOnTouch,
-  rowOf,
-  snapToNearest,
-  drawnMarks,
-  BARS,
-} from "./helpers";
+import { rowTooltip, beside, percent1, thousands, rowOf, BARS } from "./helpers";
+import { defaultFocus, type FocusBehavior } from "./focus";
+import { snap } from "./focusRuntime";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Issue Bar Chart", excludeStories: /^[a-z]/ };
@@ -87,19 +75,21 @@ export const Closed: StoryObj = {
   },
 };
 
-/** Live: hover a bar. The pointer is read in the bars' `live()` fill (paint
- *  only, which also registers it), and mapped to a focus key outside the
- *  spec; the spec reads only the key. Shared by the Interactive story and
- *  the proposal page's demo bundle (proposals/tooltips/demo). */
-export function mountInteractive(container: HTMLElement) {
-  noPointer(container);
-  // A bar's position is its `spread` slot in y; in x it only has a length.
-  snapToNearest(container, drawnMarks(BARS, pathTypes.length, { position: ["y"] }), { radius: 8 });
-  const p = pointer();
-  const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.path));
+/** Live: hover a bar. `snap` (focusRuntime.ts) runs the focus behavior and
+ *  writes the focused bar's `path` only when it changes; the spec reads only
+ *  that key. The bars' `live()` fill reads `ping`, which registers the
+ *  pointer. Shared by the Interactive story, the proposal page's demo bundle
+ *  (proposals/tooltips/demo) and the focus switcher, which passes `focus`. */
+export function mountInteractive(container: HTMLElement, focus: FocusBehavior = defaultFocus) {
+  const { focus: path, ping } = snap(
+    container,
+    // A bar's position is its `spread` slot in y; in x it only has a length.
+    { selector: BARS, count: pathTypes.length, position: ["y"], key: (r) => r?.path },
+    focus
+  );
   return issueBar(
-    focus,
-    live((d: any) => (p.pos(), rowOf<any>(d)?.path === focus() ? "#2f5d8a" : "#4c78a8"))
+    path,
+    live((d: any) => (ping(), rowOf<any>(d)?.path === path() ? "#2f5d8a" : "#4c78a8"))
   ).render(container);
 }
 

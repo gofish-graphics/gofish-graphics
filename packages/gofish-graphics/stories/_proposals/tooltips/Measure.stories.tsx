@@ -11,7 +11,7 @@
  *     pointer read IN the spec (naive) and with the focus split (only the
  *     focused key is read in the spec);
  *  3. whether a box drawn under a still pointer steals the hit-test
- *     (flicker), with and without the `noPointer` CSS.
+ *     (flicker), with and without the `floatingOutOfTheWay` CSS (focusRuntime.ts).
  *
  * The capture harness runs stories on a fake clock, so its numbers are
  * meaningless; `measure.ts` opens the harness page without one.
@@ -21,7 +21,8 @@ import { pointer, live, chart, scatter, circle, line, group } from "../../../src
 import { issueBar } from "./IssueBar.stories";
 import { stackTooltip } from "./StackedBar.stories";
 import { sharedLines, yearly, CANVAS as LINES_CANVAS } from "./SharedLines.stories";
-import { focusFrom, hitRow, noPointer } from "./helpers";
+import { focusFrom, hitRow } from "./helpers";
+import { floatingOutOfTheWay } from "./focusRuntime";
 
 const meta: Meta = { title: "Proposals/Tooltips/Measure" };
 export default meta;
@@ -232,7 +233,7 @@ async function measure() {
   // (which hangs over the bars below it), and send the same move 8 times.
   for (const css of [false, true]) {
     const c = host();
-    if (css) noPointer(c);
+    if (css) floatingOutOfTheWay(c);
     const p = pointer();
     const seen: (string | undefined)[] = [];
     const focus = focusFrom(() => hitRow<any>(p)?.path);

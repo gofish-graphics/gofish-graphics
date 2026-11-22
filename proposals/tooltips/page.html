@@ -470,6 +470,56 @@
     align-content: start;
   }
 
+  /* Background tab: two parts, prior work then findings. */
+  h2.part {
+    font-size: 1.6rem;
+  }
+  h2.part + .rules {
+    margin-top: 14px;
+  }
+  #findings {
+    margin-top: 56px;
+    padding-top: 24px;
+    border-top: 1px solid var(--line);
+  }
+
+  /* Focus tab: the behavior switcher. */
+  .switch {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .switch button {
+    appearance: none;
+    font: 500 13.5px var(--font-text);
+    color: var(--fg);
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 12px;
+    cursor: pointer;
+  }
+  .switch button:hover {
+    border-color: var(--accent);
+  }
+  .switch button[aria-pressed="true"] {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: var(--accent-weak);
+  }
+  .switch button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .behavior {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .behavior[hidden] {
+    display: none;
+  }
+
   /* highlight.js tokens, from the theme tokens above */
   .hljs-keyword,
   .hljs-literal,
@@ -563,7 +613,8 @@
       <code>pnpm storybook</code> and open the stories under
       "Proposals/Tooltips/". The Interactive variants respond to the mouse. The
       live line and scatter charts find the year or point under the pointer from
-      where the marks were drawn, a prototype workaround listed under Findings.
+      where the marks were drawn, a prototype workaround listed on the Focus
+      tab.
     </p>
   </header>
 
@@ -584,6 +635,9 @@
     >
       The rewrite
     </button>
+    <button role="tab" id="tab-focus" aria-controls="focus" data-tab="focus">
+      Focus
+    </button>
     <button
       role="tab"
       id="tab-extending"
@@ -594,19 +648,11 @@
     </button>
     <button
       role="tab"
-      id="tab-prior-work"
-      aria-controls="prior-work"
-      data-tab="prior-work"
+      id="tab-background"
+      aria-controls="background"
+      data-tab="background"
     >
-      Prior work
-    </button>
-    <button
-      role="tab"
-      id="tab-findings"
-      aria-controls="findings"
-      data-tab="findings"
-    >
-      Findings
+      Background
     </button>
   </nav>
 
@@ -1438,27 +1484,8 @@ circle(r=3).tooltip(by="year")</code></pre>
     <div class="section">
       <h2>The focus</h2>
       <p>
-        One rule, among the marks the tooltip is on. A pointer inside a mark
-        picks that mark. Otherwise the focus is the mark nearest by position. A
-        mark's position is where the layout put it, and its size does not count.
-        So bars in a column are told apart by row, and a gap between two bars
-        picks the nearer one. The current focus has a small head start, so it
-        does not flip back and forth at a boundary. All this applies while the
-        pointer is within <code>radius</code> pixels of the convex hull of the
-        drawn marks. Farther out there is no focus. There is no mode to switch.
-      </p>
-      <p>
-        In Declarative Dragging (#1294) each reachable state is one point. The
-        drag follows the nearest point, with a head start for the current one,
-        and it falls back when the pointer is far from the points' convex hull.
-        This rule is that one, with a mark's placed position as its point, plus
-        the direct hit, which dragging does not need. #849 sketches a rule per
-        kind of space (distance to a point, distance to a polyline, membership
-        in a band). This single rule is close to that one, and the two need to
-        be reconciled. Compare Plot's
-        <code>pointer</code> (a 40 px <code>maxRadius</code>), Vega-Lite's
-        <code>nearest: true</code> (which does not work on lines), and Plotly's
-        <code>hoverdistance</code>.
+        The focus is one rule, a focus behavior written in user code, and the
+        <a href="#focus">Focus tab</a> states it and lets you try others.
       </p>
     </div>
 
@@ -1580,6 +1607,11 @@ node.inkOn = [true, true];</code></pre>
       <details>
         <summary>Runs today (prototype): the focus split</summary>
         <div class="inner">
+          <p>
+            This is the split as measured above. The live demos now do the same
+            inside <code>snap</code> in <code>focusRuntime.ts</code>, which sets
+            the signal from the focus behavior's choice.
+          </p>
           <pre><code class="language-javascript">// helpers.ts: map the pointer to a key outside the spec, and write a
 // signal only when the key changes. The spec reads only the signal.
 export function focusFrom(read, init) {
@@ -1757,6 +1789,583 @@ option = {
           </tbody>
         </table>
       </div>
+    </div>
+  </section>
+
+  <!-- ============================== FOCUS ============================== -->
+  <section
+    class="panel"
+    id="focus"
+    role="tabpanel"
+    aria-labelledby="tab-focus"
+    hidden
+  >
+    <ul class="rules">
+      <li>
+        A focus behavior is a plain function. It gets a frame and returns a
+        choice and a gap, as a Dragology drag behavior does.
+      </li>
+      <li>
+        The <code>Focus</code> family holds the built-in behaviors. A user
+        function works anywhere a behavior is an argument.
+      </li>
+      <li>
+        The same value plugs into <code>.tooltip({ focus })</code> and into
+        <code>pointer().snap(selection, { focus })</code>.
+      </li>
+    </ul>
+
+    <article class="card">
+      <div class="head">
+        <h3>Focus behaviors, live</h3>
+        <p>
+          One chart, seven behaviors. Pick one, then move the pointer over the
+          bars, into the gaps between them, and to the right of the short ones.
+          Each behavior is a few lines of user code against
+          <code>focus.ts</code>.
+        </p>
+        <div class="switch" role="group" aria-label="Focus behavior">
+          <button type="button" data-behavior="default" aria-pressed="true">
+            Default
+          </button>
+          <button type="button" data-behavior="hit" aria-pressed="false">
+            Hit only
+          </button>
+          <button type="button" data-behavior="center" aria-pressed="false">
+            Closest center, 40 px
+          </button>
+          <button type="button" data-behavior="outline" aria-pressed="false">
+            Closest outline
+          </button>
+          <button type="button" data-behavior="unlimited" aria-pressed="false">
+            No hull limit
+          </button>
+          <button type="button" data-behavior="pin" aria-pressed="false">
+            Click to pin
+          </button>
+          <button type="button" data-behavior="custom" aria-pressed="false">
+            A plain function
+          </button>
+        </div>
+      </div>
+      <div class="figs">
+        <figure>
+          <div class="frame" data-demo="focus-bars">
+            <img
+              src="img/issue-bar.png"
+              alt="GoFish bar chart of the top 15 path types with a tooltip box on the top bar"
+            />
+          </div>
+          <figcaption>
+            <span class="static-note"
+              >Prototype picture. The switcher needs the live demo, which did
+              not load, so this is the default behavior on the top bar.</span
+            >
+            <span class="live-note"
+              >Live. The buttons switch the focus behavior.</span
+            >
+            Story: Proposals/Tooltips/Focus Behaviors.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="codes">
+        <div class="behavior" data-behavior="default">
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+          <p>
+            In the gap under INF→VO the box stays on INF→VO. Level with INF→PK,
+            20 px right of its end, it picks INF→PK, and 70 px right it closes,
+            because that is outside the hull. A slow sweep down across four bars
+            never closes the box.
+          </p>
+        </div>
+        <div class="behavior" data-behavior="hit" hidden>
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">// What Vega-Lite and plain SVG do.
+Focus.hit();</code></pre>
+          <p>
+            The box closes in every gap between bars and anywhere past a bar's
+            end. A slow sweep down across four bars closed it three times. This
+            is the flicker reported on the first prototype.
+          </p>
+        </div>
+        <div class="behavior" data-behavior="center" hidden>
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">// Observable Plot's pointer: the nearest center within 40 px.
+Focus.closest({ to: "center", radius: 40 });</code></pre>
+          <p>
+            The pointer must be within 40 px of a bar's center. In the gap under
+            INF→VO, 10 px from the bars' start, the box closes, because a long
+            bar's center is far away. Yet 20 px under the shortest bar it opens
+            on VO→INF→VO, whose center is near.
+          </p>
+        </div>
+        <div class="behavior" data-behavior="outline" hidden>
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">// The prototype's first rule: distance to each bar's box.
+Focus.closest({ to: "outline" }).within(8);</code></pre>
+          <p>
+            Level with other→other, 30 px right of its end, it picks INF→INF,
+            the longer bar above, whose box is nearer. Level with INF→PK, 20 px
+            right, it picks PK→INF, again the bar above. This is the rule that
+            picked the wrong bar.
+          </p>
+        </div>
+        <div class="behavior" data-behavior="unlimited" hidden>
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">// The default without .within(8).
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]);</code></pre>
+          <p>
+            The box never closes while the pointer is on the chart. Level with
+            INF→PK it stays on INF→PK out to the right edge of the plot, and 20
+            px under the last bar it still shows VO→INF→VO.
+          </p>
+        </div>
+        <div class="behavior" data-behavior="pin" hidden>
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">// The default, run only on a click. Between clicks the focus stays.
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })])
+  .within(8)
+  .onClick();</code></pre>
+          <p>
+            Moving over a bar opens nothing. A click on INF→VO pins it, and it
+            stays while the pointer moves to other bars, leaves the chart, or
+            moves onto the box. A click right of INF→PK moves the pin there. A
+            click far right, outside the hull, clears it.
+          </p>
+        </div>
+        <div class="behavior" data-behavior="custom" hidden>
+          <span class="label">Runs today (prototype), and proposed</span>
+          <pre><code class="language-javascript">// A plain function: the bar with the largest share within 60 px.
+const largestNear = ({ pointer, candidates }) =&gt; {
+  if (!pointer) return { choice: undefined, gap: Infinity };
+  const near = candidates.filter((c) =&gt; boxDistance(pointer, c.box) &lt;= 60);
+  const choice = near.sort((a, b) =&gt; b.datum[0].share - a.datum[0].share)[0];
+  return { choice, gap: choice ? boxDistance(pointer, choice.box) : Infinity };
+};
+
+rect({ w: "share" }).tooltip({ focus: largestNear });
+
+// As an argument to a call:
+Focus.first([Focus.hit(), largestNear]);
+// Lifted, so it can be chained:
+Focus.from(largestNear).within(8);</code></pre>
+          <p>
+            Inside INF→VO it picks PK→PK, two rows up, the largest share within
+            60 px. Level with INF→PK, 20 px right, it picks VO→other. At 70 px
+            right no bar is within 60 px, so the box closes.
+          </p>
+        </div>
+      </div>
+    </article>
+
+    <div class="section">
+      <h2>The default, written out</h2>
+      <p>
+        A pointer inside a mark picks that mark. Otherwise the focus is the mark
+        nearest by position. A mark's position is where the layout put it, and
+        its size does not count. So bars in a column are told apart by row, and
+        a gap between two bars picks the nearer one. The current focus has a 4
+        px head start, so it does not flip back and forth at a boundary. All
+        this applies while the pointer is within 8 px of the convex hull of the
+        drawn marks, and 12 px once there is a focus. Farther out there is no
+        focus.
+      </p>
+      <pre><code class="language-javascript">rect({ w: "share" }).tooltip({
+  focus: Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8),
+});</code></pre>
+      <p>
+        With no <code>focus</code> option, a tooltip uses this one. The
+        <code>radius</code> option is short for the same behavior with another
+        number, so the scatter's <code>radius: 30</code> on the Examples tab is
+        <code>.within(30)</code>.
+      </p>
+      <p class="muted">
+        Another name for the last step is <code>.near(8)</code>, if
+        <code>.within</code> stays the region clamp of #830.
+      </p>
+      <div class="fork">
+        <h3>Fork: how to say "try these in order"</h3>
+        <div class="opts">
+          <div class="opt">
+            <span class="tag pick">Pick</span>
+            <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+            <p>It depends on no proposal that is not signed off.</p>
+          </div>
+          <div class="opt">
+            <span class="tag">Option</span>
+            <pre><code class="language-javascript">choose([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+            <p>
+              The choice and cost proposal (#486) makes
+              <code>choose</code> take the first fit in list order by default,
+              which is this rule. If it lands, one operator says "try these in
+              order" in layout, in placement and in focus.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>The types</h2>
+      <p>
+        What the runtime hands a behavior, and what a behavior returns. All
+        coordinates are the pointer's, in pixels.
+      </p>
+      <span class="label">Proposed</span>
+      <pre><code class="language-typescript">type Candidate = {
+  key: unknown; // stable across re-runs (#673)
+  datum: unknown[]; // the mark's rows
+  box: Box; // the drawn box
+  position: { x?: number; y?: number }; // where the layout placed it
+  outline: Outline; // the drawn boxes and circles
+};
+
+type Frame = {
+  pointer: Point | undefined; // undefined off the chart
+  candidates: Candidate[];
+  current: Candidate | undefined; // what the last frame chose
+  clicked: boolean; // true on the frame of a click
+};
+
+type FocusBehavior = (frame: Frame) =&gt; {
+  choice: Candidate | undefined;
+  gap: number; // the pointer's distance to the choice, in px
+};</code></pre>
+      <p>
+        <code>position</code> leaves out an axis where the mark only has a size.
+        A bar in a <code>spread</code> by row has a <code>y</code> and no
+        <code>x</code>, so the distance to it is the distance in y. That is how
+        the rule dispatches on the kind of space, as #849 asks.
+      </p>
+      <p>
+        A behavior keeps no memory of its own. The runtime remembers the last
+        choice and passes it as <code>current</code>. The head start and the
+        hysteresis both read it, so a behavior value can be shared by any number
+        of charts.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>The family</h2>
+      <p>
+        A call starts a behavior or joins several independent ones, and a
+        chained method transforms the one behavior it is called on. Third
+        parties add behaviors as functions that a user imports and passes as an
+        argument, never as new methods, so the patching problem from the
+        <a href="#extending">Extending tab</a> does not come back.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Member</th>
+              <th>What it picks</th>
+              <th>Dragology</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>Focus.hit()</code></td>
+              <td>The mark the pointer is inside. Gap 0.</td>
+              <td>None. A drag has no direct hit.</td>
+            </tr>
+            <tr>
+              <td>
+                <code>Focus.closest({ to, stickiness, radius })</code>
+              </td>
+              <td>
+                The nearest candidate, measured to its
+                <code>position</code> (the default), its <code>center</code> or
+                its <code>outline</code>. The current focus gets
+                <code>stickiness</code> px of head start. Nothing past
+                <code>radius</code> px.
+              </td>
+              <td>
+                <code>d.closest(states, { stickiness })</code> over
+                <code>d.fixed</code> states
+              </td>
+            </tr>
+            <tr>
+              <td><code>Focus.first([a, b, ...])</code></td>
+              <td>What the first behavior that makes a choice picks.</td>
+              <td>
+                None. <code>d.closest</code> over behaviors picks the lowest gap
+                instead.
+              </td>
+            </tr>
+            <tr>
+              <td><code>.within(gap)</code></td>
+              <td>
+                The same, but nothing when the pointer is more than
+                <code>gap</code> px from the hull of the drawn marks, or
+                <code>gap + 4</code> once there is a focus.
+              </td>
+              <td>
+                <code>.whenFar(other, { gapIn, gapOut })</code> on the gap of
+                <code>d.between</code>, which is the distance to the hull
+              </td>
+            </tr>
+            <tr>
+              <td><code>.onClick()</code></td>
+              <td>
+                The same, but only on a click. Between clicks the focus stays.
+              </td>
+              <td>None.</td>
+            </tr>
+            <tr>
+              <td><code>Focus.from(fn)</code></td>
+              <td>What <code>fn</code> picks, with the chained methods.</td>
+              <td><code>d.custom(fn)</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Two places, one value</h2>
+      <p>
+        The tooltip option is sugar. The explicit form is a snap of the pointer
+        onto a selection, a dataset of zero or one mark that any layer can read.
+        It changes only when the chosen key changes, so layout re-runs once per
+        new focus and not once per pointer move. In the shared-lines example the
+        box, the rule and the dots all read the same focus.
+      </p>
+      <span class="label">Proposed (sketch)</span>
+      <pre><code class="language-javascript">const focus = Focus.first([
+  Focus.hit(),
+  Focus.closest({ stickiness: 4 }),
+]).within(8);
+
+// The sugar.
+line({ x: "year", y: "count", stroke: "series" }).tooltip({
+  by: "year",
+  focus,
+});
+
+// The explicit form: the rule and the dots read the same focus.
+const hover = pointer().snap(selectAll("lines"), { by: "year", focus });
+chart(yearly)
+  .flow(group({ by: "series" }))
+  .mark(line({ x: "year", y: "count", stroke: "series" }).name("lines"))
+  .layer(
+    chart(hover)
+      .flow(scatter({ by: "year", x: "year" }))
+      .mark(rect({ w: 1, fill: "gray" }))
+  )
+  .layer(chart(hover).mark(circle({ r: 4, fill: "series", stroke: "white" })));</code></pre>
+    </div>
+
+    <div class="section">
+      <h2>What the runtime must provide</h2>
+      <p>
+        The behaviors are user code today. What is not is the runtime around
+        them. The prototype does each piece by hand in
+        <code>focusRuntime.ts</code>, and each piece names the public API that
+        would replace it. With these public, <code>focusRuntime.ts</code> is one
+        call to <code>pointer().snap</code>.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Piece</th>
+              <th>The prototype, by hand</th>
+              <th>Public API that replaces it</th>
+              <th>Issue</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Candidates</td>
+              <td>
+                Picks the drawn SVG elements with a CSS selector and a count,
+                measures their boxes, and reads their rows from the chart's
+                private id-to-item map.
+              </td>
+              <td>
+                <code>snap(selectAll(name))</code> builds candidates from the
+                layout frame, which already records each node's box.
+              </td>
+              <td>#830</td>
+            </tr>
+            <tr>
+              <td>Placed position</td>
+              <td>
+                Each story passes the axes that place its marks, such as
+                <code>position: ["y"]</code> for bars in rows.
+              </td>
+              <td>
+                The layout reports where it placed each mark and on which axes.
+              </td>
+              <td>#849</td>
+            </tr>
+            <tr>
+              <td>Stable key</td>
+              <td>
+                Each story passes a key function, such as
+                <code>(row) =&gt; row.path</code>. Marks with one key are one
+                candidate (a stack, a year).
+              </td>
+              <td>Keys from spec position and data key.</td>
+              <td>#673</td>
+            </tr>
+            <tr>
+              <td>The current focus, and re-running on a new key</td>
+              <td>
+                Keeps the chosen key in a <code>signal</code>, set only when it
+                changes, and finds <code>current</code> by key in each new
+                frame.
+              </td>
+              <td>
+                The result of <code>snap</code> changes only when its key
+                changes.
+              </td>
+              <td>#830</td>
+            </tr>
+            <tr>
+              <td>The pointer</td>
+              <td>
+                Listens on the container and converts to SVG pixels. A tap holds
+                the pointer until the next tap, since every tap ends with a
+                <code>pointerleave</code>.
+              </td>
+              <td>
+                <code>pointer()</code> as the frame's pointer, holding a tap on
+                touch.
+              </td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>The click</td>
+              <td>
+                A DOM <code>click</code> listener sets <code>clicked</code>.
+              </td>
+              <td>
+                A click in the frame. <code>click()</code> today counts only a
+                press and release on one mark, so a click in a gap is lost.
+              </td>
+              <td>#830</td>
+            </tr>
+            <tr>
+              <td>The box out of the pointer's way</td>
+              <td>
+                CSS that finds the box by its stroke color and sets
+                <code>pointer-events: none</code> on it and on what is painted
+                after it.
+              </td>
+              <td>A floating layer is never a pointer target.</td>
+              <td></td>
+            </tr>
+            <tr>
+              <td>Registering the pointer</td>
+              <td>
+                A <code>live()</code> channel reads <code>ping()</code>, so the
+                chart builds its id-to-item map.
+              </td>
+              <td><code>snap</code> registers its input itself.</td>
+              <td>#830</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>
+        One hook of the first prototype is gone. It re-targeted each pointer
+        event to the focused mark's element so that
+        <code>pointer().datum()</code> read the focus. The adapter now writes
+        the focus directly, so nothing reads the DOM hit.
+      </p>
+    </div>
+
+    <div class="section">
+      <h2>Compared with Dragology</h2>
+      <p>
+        Dragology (#1294) builds a drag from behaviors. A behavior is a function
+        from a frame to a result, in <code>src/DragBehavior.tsx</code>. Focus
+        behaviors keep that shape.
+      </p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th></th>
+              <th>Dragology</th>
+              <th>Focus</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Behavior</td>
+              <td>
+                <code>(frame: DragFrame) =&gt; DragResult</code>, where the
+                frame is only <code>{ pointer }</code>
+              </td>
+              <td>
+                <code>(frame: Frame) =&gt; { choice, gap }</code>, where the
+                frame also has the candidates, <code>current</code> and
+                <code>clicked</code>
+              </td>
+            </tr>
+            <tr>
+              <td>Gap</td>
+              <td>
+                The pointer's distance to where the behavior puts the grab point
+              </td>
+              <td>The pointer's distance to the choice</td>
+            </tr>
+            <tr>
+              <td>Memory</td>
+              <td>
+                Fields of an operator object, built fresh for each drag (<code
+                  >closest</code
+                >
+                keeps <code>lastBest</code>, <code>whenFar</code> keeps
+                <code>inForeground</code>)
+              </td>
+              <td>
+                None. The runtime passes <code>current</code>, since a hover has
+                no start and end to build a fresh object for.
+              </td>
+            </tr>
+            <tr>
+              <td>What a target contributes</td>
+              <td>The grab point's position in a rendered state</td>
+              <td>
+                The mark's placed position, since a hover has no grab point, and
+                its outline, since a direct hit exists
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="pair">
+        <div>
+          <span class="label">Dragology, a drag</span>
+          <pre><code class="language-javascript">d.closest(states, { stickiness: 4 }).whenFar(d.fixed(start), {
+  gapIn: 8,
+  gapOut: 12,
+});</code></pre>
+        </div>
+        <div>
+          <span class="label">Proposed, a focus</span>
+          <pre><code class="language-javascript">Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);</code></pre>
+        </div>
+      </div>
+      <p>
+        Dragology already spells it this way. A combinator over several
+        behaviors is a call over a list (<code>d.closest([...])</code>), and a
+        step that transforms one behavior is a chained method
+        (<code>.whenFar()</code>, <code>.withFloating()</code>), so the rule
+        reads in the order it is said. The focus family keeps that rule.
+      </p>
+      <p>
+        The same frame could later serve dragging. There the candidates are the
+        reachable states, each with the position the layout gives the dragged
+        mark in that state, and <code>gap</code> means what it means in
+        Dragology. A drag also needs a preview and a drop state, which a hover
+        does not.
+      </p>
     </div>
   </section>
 
@@ -2015,14 +2624,15 @@ user.py:6:17 - error: Cannot access attribute "tooltip" for class "Rect"</code><
     </div>
   </section>
 
-  <!-- ============================== PRIOR WORK ============================== -->
+  <!-- ============================== BACKGROUND ============================== -->
   <section
     class="panel"
-    id="prior-work"
+    id="background"
     role="tabpanel"
-    aria-labelledby="tab-prior-work"
+    aria-labelledby="tab-background"
     hidden
   >
+    <h2 id="prior-work" class="part">Prior work</h2>
     <ul class="rules">
       <li>
         Most systems attach the tooltip to one mark, or set one mode for the
@@ -2358,25 +2968,23 @@ girafe(ggobj = gg)</code></pre>
         multi-series case the common names are shared and axis.
       </p>
     </div>
-  </section>
 
-  <!-- ============================== FINDINGS ============================== -->
-  <section
-    class="panel"
-    id="findings"
-    role="tabpanel"
-    aria-labelledby="tab-findings"
-    hidden
-  >
+    <h2 id="findings" class="part">Findings</h2>
     <ul class="rules">
       <li>
-        The prototype is six stories and one helper file. It edits no library
-        code.
+        The bugs below get fixed as part of implementing this, not filed
+        separately.
       </li>
       <li>
-        It reaches past the public API in two places: the private flag that
-        would become <code>.floating()</code>, and CSS that stops the box from
-        catching the pointer.
+        The prototype is seven stories, one helper file, the focus family in
+        <code>focus.ts</code> and the runtime stand-ins in
+        <code>focusRuntime.ts</code>. It edits no library code.
+      </li>
+      <li>
+        It reaches past the public API in the private flag that would become
+        <code>.floating()</code>, and in every piece of
+        <code>focusRuntime.ts</code>, listed on the
+        <a href="#focus">Focus tab</a>.
       </li>
     </ul>
 
@@ -2585,6 +3193,14 @@ girafe(ggobj = gg)</code></pre>
               <td>Declarative dragging derived from the layout's structure.</td>
             </tr>
             <tr>
+              <td>#486</td>
+              <td>
+                A choice operator. The choice and cost proposal answers it with
+                <code>choose</code>, which by default takes the first fit in
+                list order.
+              </td>
+            </tr>
+            <tr>
               <td>#1101</td>
               <td>
                 One extensibility model for strategy families such as custom
@@ -2605,9 +3221,13 @@ girafe(ggobj = gg)</code></pre>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
   (function () {
-    var names = ["examples", "rewrite", "extending", "prior-work", "findings"];
+    var names = ["examples", "rewrite", "focus", "extending", "background"];
+    // Old links: the two parts of Background were tabs of their own.
+    var parts = { "prior-work": "background", findings: "background" };
     function show() {
       var h = (location.hash || "").slice(1);
+      var part = parts[h];
+      if (part) h = part;
       var cur = names.indexOf(h) >= 0 ? h : "examples";
       names.forEach(function (n) {
         document.getElementById(n).hidden = n !== cur;
@@ -2632,6 +3252,21 @@ girafe(ggobj = gg)</code></pre>
     });
     window.addEventListener("hashchange", show);
     show();
+    // The focus switcher: show the selected behavior's code, and tell the
+    // live demo, when it loaded, which behavior to run.
+    document.querySelectorAll(".switch button").forEach(function (b, _, all) {
+      b.addEventListener("click", function () {
+        var name = b.getAttribute("data-behavior");
+        all.forEach(function (o) {
+          o.setAttribute("aria-pressed", o === b ? "true" : "false");
+        });
+        document.querySelectorAll(".behavior").forEach(function (c) {
+          c.hidden = c.getAttribute("data-behavior") !== name;
+        });
+        var api = window.TooltipDemos;
+        if (api && api.focus) api.focus.select(name);
+      });
+    });
     if (window.hljs) {
       document.querySelectorAll("pre code").forEach(function (el) {
         try {

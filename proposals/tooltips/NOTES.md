@@ -33,9 +33,10 @@ Story-side fixes made for the live demos:
   own `w`/`h` (a library bug), and render sizing clipped the axes. The line
   and scatter charts keep their own size, and the focus is read off the drawn
   marks (below). The axes are no longer clipped.
-- `heldOnTouch`: a tap ends with `pointerleave`, which clears the pointer. So
-  after a touch the last mark stays focused until the next tap.
-- `noPointer` also turns off hits for everything painted after the box, so a
+- Touch (now `touchHold` in `focusRuntime.ts`): a tap ends with
+  `pointerleave`, which clears the pointer. So after a touch the pointer is
+  held where it tapped until the next tap.
+- `noPointer` (now `floatingOutOfTheWay` in `focusRuntime.ts`) also turns off hits for everything painted after the box, so a
   chart inside a tooltip does not take the hit and flicker.
 - The line rule is always drawn and hidden with no focus, so the y axis keeps
   0 whether the box is open or not.
@@ -47,7 +48,9 @@ Story-side fixes made for the live demos:
 
 ## The focus: direct hit, then nearest by position
 
-Every live demo picks its focus with one rule (`focusAt` in `helpers.ts`):
+Every live demo picks its focus with one rule. It was `focusAt` in
+`helpers.ts`. It is now `defaultFocus` in `focus.ts`, written as user code
+(see "Focus behaviors in user space" below):
 
 1. A pointer inside a mark's drawn box (inside a scatter dot's circle) picks
    that mark.
@@ -71,9 +74,11 @@ state with a stickiness bonus, and `whenFar` with in and out thresholds. Here a
 mark's placed position is its point, and the direct hit is added, which
 dragging does not need.
 
-PRIVATE HOOK (3): `snapToNearest` re-targets each real `pointermove` and
-`pointerdown` to the element of the focused mark, so `pointer().datum()` is
-that mark's datum. In the library this would be the runtime's hit-test.
+PRIVATE HOOK (3), removed: `snapToNearest` re-targeted each real
+`pointermove` and `pointerdown` to the element of the focused mark, so
+`pointer().datum()` was that mark's datum. `snap` in `focusRuntime.ts` now
+writes the focus key directly, so nothing reads the DOM hit. The lines'
+hull is now over the year dots alone, which cover the lines.
 
 Measured in the headless browser with the real mouse (probe page, client px):
 
@@ -145,9 +150,9 @@ Measured in the headless browser with the real mouse, with the old rule (distanc
 - `beside(anchor, content, {side, align, gap, ink})`: one `spread` of the
   anchor and the box. With `ink` on (the default) the box is marked ink (private
   hook 1), so it takes no room.
-- `focusFrom(read)`: the focus split. A Solid effect outside the spec maps the
+- `focusFrom(read)` (kept for the Measure stories only): the focus split. A Solid effect outside the spec maps the
   pointer to a key and writes a `signal` only when the key changes.
-- `noPointer(container)`: private hook 2, CSS that takes the box out of the
+- `floatingOutOfTheWay(container)` (in `focusRuntime.ts`, was `noPointer`): private hook 2, CSS that takes the box out of the
   hit test.
 
 ## 1. Issue bar chart
@@ -481,3 +486,103 @@ Workarounds that use public API:
 - A dummy `live()` read to register the pointer.
 - The side chosen from the datum, the keep-inside shortcut.
 - The field renamed to `n` in the nested chart.
+
+3. `focusRuntime.ts`: every piece the runtime would have to provide for a
+   focus behavior (candidates read off the drawn DOM with rows from the
+   chart's private id-to-item map, the pointer, `current`, the click, the
+   re-run on a new key, the touch hold). Listed in "What the runtime must
+   provide" below.
+
+## Focus behaviors in user space
+
+The focus rule is now user code: `focus.ts` holds the types and the `Focus`
+family as pure functions (no DOM, no Solid, no GoFish internals), and
+`focusRuntime.ts` holds everything the runtime would have to provide. Every
+interactive story mounts through `snap(container, marks, focus)` in
+`focusRuntime.ts`. The default:
+
+```js
+Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(8);
+```
+
+A call (`Focus.hit`, `Focus.closest`, `Focus.first`, `Focus.from`) starts a
+behavior or joins several; a chained method (`.within`, `.onClick`)
+transforms one.
+
+### Line counts
+
+Prettier-formatted, code lines only (no blank or comment lines).
+
+| What                                                                   | Lines |
+| ---------------------------------------------------------------------- | ----: |
+| `focus.ts`, all of it (types, family, geometry)                        |   137 |
+| of which the types                                                     |    23 |
+| of which the family (`from`, `hit`, `closest`, `first`, the default)   |    54 |
+| of which the geometry (box, outline and hull distances, the hull)      |    60 |
+| `focusRuntime.ts`, the missing runtime API                             |   101 |
+| Default behavior                                                       |     1 |
+| Hit only                                                               |     1 |
+| Closest center within 40 px                                            |     1 |
+| Closest outline, no stickiness                                         |     1 |
+| No hull limit                                                          |     1 |
+| Click to pin                                                           |     3 |
+| A plain function (largest share within 60 px), plus one line to use it |     6 |
+
+### What each behavior did under the mouse
+
+The switcher on the page (story "Proposals/Tooltips/Focus Behaviors",
+`FocusSwitcher.stories.tsx`), the issue bar chart, driven with the real mouse
+in headless Chromium at 1280 px (`focus.mjs` in the live-check folder). Each
+point was approached from inside INF→VO, so stickiness had a current focus.
+
+| Pointer                                      | Default     | Hit only | Center 40 px | Outline | No hull limit | Plain function |
+| -------------------------------------------- | ----------- | -------- | ------------ | ------- | ------------- | -------------- |
+| Inside INF→VO (bar 6)                        | INF→VO      | INF→VO   | INF→VO       | INF→VO  | INF→VO        | PK→PK          |
+| Gap under INF→VO, 10 px from the bars' start | INF→VO      | closed   | closed       | INF→VO  | INF→VO        | PK→PK          |
+| Level with INF→PK, 20 px right of its end    | INF→PK      | closed   | closed       | PK→INF  | INF→PK        | VO→other       |
+| Level with INF→PK, 70 px right               | closed      | closed   | closed       | closed  | INF→PK        | closed         |
+| Level with INF→PK, far right of the plot     | closed      | closed   | closed       | closed  | INF→PK        | closed         |
+| Level with other→other, 30 px right          | other→other | closed   | closed       | INF→INF | other→other   | VO→VO          |
+| 20 px under the last bar                     | closed      | closed   | VO→INF→VO    | closed  | VO→INF→VO     | INF→PK         |
+
+- A slow sweep down across bars 5 to 8 at 10 px from their start: hit only
+  went VO→VO→VO, closed, INF→VO, closed, PK→VO, closed, VO→PK (three
+  closes, the flicker). The default went VO→VO→VO, INF→VO, PK→VO, VO→PK.
+- Outline picks the bar above when level with a short bar and right of it
+  (PK→INF for INF→PK, INF→INF for other→other): the box-distance rule that
+  picked the wrong bar.
+- Center within 40 px: on a long bar only the middle counts, and a short
+  bar's center is reachable from 20 px under it.
+- Click to pin: moving over a bar opened nothing. A click on INF→VO pinned
+  it; it stayed while the pointer moved to bar 2, left the chart, and moved
+  onto the box. A click right of INF→PK moved the pin there. A click far
+  right, outside the hull, cleared it. A click outside the chart's `<svg>`
+  is not seen, because the listener is on the chart.
+- Every one of them is the same `snap` call with a different behavior value;
+  the switcher itself is one more user function, `(f) => behaviors[name](f)`.
+
+### Against the old prototype
+
+`compare.mjs` runs the same pointer paths on the bundle at HEAD and on the
+new one and prints the focus at each step. Issue bar (four offsets right of
+bar 6, bar 10, bar 13; a slow sweep; leaving down and coming back),
+stacked segments (three gap sweeps), stacks, scatter (leaving down; a
+diagonal sweep), edge and chart-in-tooltip: identical. The shared lines
+differ, by design: the old hull was over the year dots plus the lines'
+bounding boxes; the new hull is over the year dots only, which is the convex
+hull of the drawn lines. A sweep across opens 8 px later at the left end
+(x 96 against 88), and a sweep down at 2006 opens 32 px lower (y 376.5
+against 344.5) and closes 3 px sooner.
+
+### What the runtime must provide
+
+| Piece                                          | The prototype, by hand                                                                                  | Public API that replaces it                                  | Issue |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----- |
+| Candidates                                     | CSS selector and count over the drawn SVG; boxes measured; rows from the chart's private id-to-item map | `snap(selectAll(name))` builds them from the layout frame    | #830  |
+| Placed position                                | Each story passes the placing axes                                                                      | The layout reports them (the kind of space)                  | #849  |
+| Stable key                                     | Each story passes a key function; marks with one key are one candidate                                  | Keys from spec position and data key                         | #673  |
+| The current focus, and re-running on a new key | The chosen key in a `signal`, set only on change; `current` found by key in each new frame              | `snap`'s result changes only when its key changes            | #830  |
+| The pointer                                    | Container listeners and the screen CTM; a tap holds the pointer until the next tap                      | `pointer()` as the frame's pointer, holding a tap on touch   |       |
+| The click                                      | A DOM `click` listener                                                                                  | A click in the frame; `click()` counts only clicks on a mark | #830  |
+| The box out of the pointer's way               | CSS found by the box's stroke                                                                           | A floating layer is never a pointer target                   |       |
+| Registering the pointer                        | `ping()` read in a `live()` channel                                                                     | `snap` registers its input                                   | #830  |

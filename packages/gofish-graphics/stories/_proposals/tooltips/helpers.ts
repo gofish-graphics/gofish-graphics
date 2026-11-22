@@ -11,7 +11,7 @@
  * one more `spread`. The two places it reaches past the public API are marked
  * PRIVATE HOOK below and listed in NOTES.md.
  */
-import { createRoot, createEffect, createSignal } from "solid-js";
+import { createRoot, createEffect } from "solid-js";
 import {
   enclose,
   spread,
@@ -109,8 +109,8 @@ export function box(content: any, padding = 8) {
   );
 }
 
-/** The stroke of the tooltip box. Distinctive on purpose: `noPointer` finds
- *  the box's SVG element by it (see there). */
+/** The stroke of the tooltip box. Distinctive on purpose:
+ *  `floatingOutOfTheWay` (focusRuntime.ts) finds the box's SVG element by it. */
 export const TOOLTIP_STROKE = "#c9ced6";
 
 /** The default tooltip body for one row: all its fields, in a box. */
@@ -173,8 +173,14 @@ export function beside(
 
 /* -------------------------------- focus --------------------------------- */
 
+/*
+ * The focus rule itself is `defaultFocus` in focus.ts, and everything the
+ * runtime would have to provide for it is in focusRuntime.ts. `focusFrom` is
+ * kept only for the Measure stories, which measure the first prototype.
+ */
+
 /**
- * The focus split. The pointer is read OUTSIDE the chart's resolve, in a
+ * The first prototype's focus split. The pointer is read OUTSIDE the chart's resolve, in a
  * Solid effect, which maps it to a KEY (which mark) and writes that key to a
  * `signal` only when the key changes. The spec reads only the signal, so
  * layout re-runs once per change of focused mark, not once per pointermove.
@@ -203,300 +209,8 @@ export function focusFrom<K>(
   return focus;
 }
 
-/**
- * Touch, story-side. The runtime listens to pointer events, so a tap is a
- * `pointerdown` that sets the pointer, but the browser ends every tap with a
- * `pointerleave`, which clears it, and the box would close at once. So after
- * a touch the last key is HELD until the next tap: a tap on a mark focuses
- * it, a tap on empty chart clears it. A mouse move drops back to plain hover.
- * The container's capture listener runs before the chart's own `<svg>`
- * listener, so `held` is reset before the pointer's signals change, and the
- * `taps` signal re-runs the read even when the pointer's signals do not
- * change (a tap on empty chart leaves `datum()` undefined, as it was).
- */
-export function heldOnTouch<K>(container: HTMLElement, read: () => K | undefined) {
-  let touch = false;
-  let held: K | undefined;
-  const [taps, setTaps] = createSignal(0);
-  container.addEventListener(
-    "pointerdown",
-    (e) => {
-      touch = e.pointerType !== "mouse";
-      held = undefined;
-      setTaps((n) => n + 1);
-    },
-    true
-  );
-  container.addEventListener(
-    "pointermove",
-    (e) => {
-      if (e.pointerType === "mouse") touch = false;
-    },
-    true
-  );
-  return (): K | undefined => {
-    taps();
-    const k = read();
-    if (k !== undefined) held = k;
-    return touch ? held : k;
-  };
-}
-
-/**
- * PRIVATE HOOK (2), story-side CSS, no library edit: stop the tooltip from
- * taking the pointer's hit-test. GoFish sets no `pointer-events`, so a box
- * drawn under the cursor becomes the hit, `pointer().datum()` turns
- * undefined, the focus clears, the box goes, the bar is hit again: flicker.
- * The tooltip's SVG elements are found by their paint: the box's stroke, and
- * every element painted AFTER the box (paint is a flat list and the tooltip
- * layer is the last one, so that is the box's content, such as the bars of a
- * chart in a tooltip, then the anchors and the axes, none of which needs a
- * hit), and every `text`, since the stories' other texts are axis labels.
- */
-export function noPointer(container: HTMLElement) {
-  const style = document.createElement("style");
-  style.textContent = `
-    [data-tooltip-host] text,
-    [data-tooltip-host] [stroke="${TOOLTIP_STROKE}"],
-    [data-tooltip-host] [stroke="${TOOLTIP_STROKE}"] ~ * { pointer-events: none; }`;
-  container.setAttribute("data-tooltip-host", "");
-  // In <head>: a render replaces the container's children.
-  if (!document.getElementById("tooltip-no-pointer")) {
-    style.id = "tooltip-no-pointer";
-    document.head.appendChild(style);
-  }
-}
-
-/* ------------------------------ the focus -------------------------------- */
-
-/** A box in svg px, the space of `pointer().pos()`. */
-export type Box = { x0: number; y0: number; x1: number; y1: number };
-type Pt = { x: number; y: number };
-/** One SVG element of a mark: its drawn box, and whether it is a dot (an
- *  ellipse, hit within its circle) or a box. */
-export type Part = { el: Element; box: Box; dot: boolean };
-/**
- * A mark, or a group of marks (a stack), the focus can land on: the elements
- * it is drawn as, and its placed POSITION, one point. Along an axis that
- * places the mark (a `spread` slot, a `stack` place, a scatter's `x`/`y`) the
- * point is the mark's center. An axis where the mark only has a size from
- * a shared baseline (a bar's length) is left out, so it drops out of the
- * distance.
- */
-export type Item = { parts: Part[]; at: { x?: number; y?: number } };
-export type Axis = "x" | "y";
-
-const center = (b: Box): Pt => ({ x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 });
-const contains = (p: Pt, { box: b, dot }: Part) => {
-  if (!dot) return p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1;
-  const c = center(b);
-  return Math.hypot(p.x - c.x, p.y - c.y) <= (b.x1 - b.x0) / 2;
-};
-
-/** The convex hull of the boxes' corners (Andrew's monotone chain). */
-function hullOf(boxes: Box[]): Pt[] {
-  const pts = boxes
-    .flatMap((b) => [
-      { x: b.x0, y: b.y0 },
-      { x: b.x1, y: b.y0 },
-      { x: b.x0, y: b.y1 },
-      { x: b.x1, y: b.y1 },
-    ])
-    .sort((a, b) => a.x - b.x || a.y - b.y);
-  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const half = (ps: Pt[]) => {
-    const h: Pt[] = [];
-    for (const p of ps) {
-      while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop();
-      h.push(p);
-    }
-    h.pop();
-    return h;
-  };
-  return [...half(pts), ...half([...pts].reverse())];
-}
-
-/** Distance from a point to a convex polygon, zero inside it. */
-export function hullDistance(p: Pt, hull: Pt[]) {
-  let inside = hull.length >= 3;
-  let d = Infinity;
-  for (let i = 0; i < hull.length; i++) {
-    const a = hull[i];
-    const b = hull[(i + 1) % hull.length];
-    const [vx, vy] = [b.x - a.x, b.y - a.y];
-    if (vx * (p.y - a.y) - vy * (p.x - a.x) < 0) inside = false;
-    const len2 = vx * vx + vy * vy;
-    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
-    d = Math.min(d, Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy));
-  }
-  return inside ? 0 : d;
-}
-
-export type FocusOptions = {
-  /** How far outside the drawn marks' hull a focus starts, in px. It is kept
-   *  out to `radius + 4` (hysteresis, Dragology's `whenFar`). */
-  radius: number;
-  /** The current focus's head start when comparing positions, in px
-   *  (Dragology's `closest` stickiness). */
-  stickiness?: number;
-};
-
-/**
- * The focus rule. Returns the index of the focused item, or undefined.
- *
- *  1. A pointer inside a mark's drawn box (inside a dot's circle) picks it.
- *  2. Otherwise the focus is the item nearest BY POSITION (`Item.at`), its
- *     size ignored, the current focus with a head start of `stickiness` px.
- *  3. Rule 2 applies while the pointer is within `radius` px of the convex
- *     hull of the drawn marks, and once there is a focus, within
- *     `radius + 4` px. Farther out there is no focus.
- *
- * This is Declarative Dragging's (#1294) `closest` over one point per state,
- * with a mark's placed position as its point, `whenFar` for the hull, and
- * the direct hit, which dragging does not need.
- */
-export function focusAt(
-  p: Pt,
-  items: Item[],
-  hull: Pt[],
-  current: number | undefined,
-  { radius, stickiness = 4 }: FocusOptions
-): number | undefined {
-  const hit = items.findIndex((it) => it.parts.some((part) => contains(p, part)));
-  if (hit >= 0) return hit;
-  if (hullDistance(p, hull) > radius + (current === undefined ? 0 : 4)) return undefined;
-  let best: number | undefined;
-  let bestD = Infinity;
-  items.forEach((it, i) => {
-    const d = Math.hypot(p.x - (it.at.x ?? p.x), p.y - (it.at.y ?? p.y)) - (i === current ? stickiness : 0);
-    if (d < bestD) [best, bestD] = [i, d];
-  });
-  return best;
-}
-
-/** An element's drawn box in svg px. */
-function drawnBox(el: Element, inv: DOMMatrix): Box {
-  const r = el.getBoundingClientRect();
-  const a = new DOMPoint(r.left, r.top).matrixTransform(inv);
-  const b = new DOMPoint(r.right, r.bottom).matrixTransform(inv);
-  return { x0: Math.min(a.x, b.x), y0: Math.min(a.y, b.y), x1: Math.max(a.x, b.x), y1: Math.max(a.y, b.y) };
-}
-
-export type Drawn = { items: Item[]; hull: Pt[] };
-
-/**
- * The items, read off the drawn chart: the first `count` elements `selector`
- * picks (the marks are painted first, before the tooltip layer, the axes and
- * the legend), one item each, or grouped by `groupBy` of their box into one
- * item per group. `position` names the axes that place the mark (see
- * `Item`); a group's point is the center of its union box on those axes.
- * The hull is over the parts' boxes, plus the first `hull.count` elements
- * `hull.selector` picks, for marks drawn but not focusable (the lines).
- */
-export function drawnMarks(
-  selector: string,
-  count: number,
-  {
-    position,
-    groupBy,
-    hull,
-  }: {
-    position: Axis[];
-    groupBy?: (b: Box) => number;
-    hull?: { selector: string; count: number };
-  }
-) {
-  return (svg: SVGSVGElement, inv: DOMMatrix): Drawn => {
-    const parts: Part[] = [...svg.querySelectorAll(selector)]
-      .slice(0, count)
-      .map((el) => ({ el, box: drawnBox(el, inv), dot: el.tagName === "ellipse" }));
-    const groups = new Map<number, Part[]>();
-    parts.forEach((part, i) => {
-      const k = groupBy ? groupBy(part.box) : i;
-      groups.set(k, [...(groups.get(k) ?? []), part]);
-    });
-    const items = [...groups.values()].map((ps): Item => {
-      const c = center({
-        x0: Math.min(...ps.map((q) => q.box.x0)),
-        y0: Math.min(...ps.map((q) => q.box.y0)),
-        x1: Math.max(...ps.map((q) => q.box.x1)),
-        y1: Math.max(...ps.map((q) => q.box.y1)),
-      });
-      return {
-        parts: ps,
-        at: { x: position.includes("x") ? c.x : undefined, y: position.includes("y") ? c.y : undefined },
-      };
-    });
-    const extra = hull
-      ? [...svg.querySelectorAll(hull.selector)].slice(0, hull.count).map((el) => drawnBox(el, inv))
-      : [];
-    return { items, hull: hullOf([...parts.map((q) => q.box), ...extra]) };
-  };
-}
-
 /** The drawn bars of the stories: interactive rects that are not axis ticks. */
 export const BARS = 'rect[data-gf-id]:not([fill="gray"])';
-
-/** Group key: marks in the same column (a stack, a year). */
-export const column = (b: Box) => Math.round((b.x0 + b.x1) / 2);
-
-/**
- * PRIVATE HOOK (3), story-side: the runtime's hit-test is "the mark under
- * the pointer". This re-targets each real `pointermove` and `pointerdown`
- * on the chart to the item `focusAt` picks (to the `<svg>` itself when it
- * picks nothing), by stopping the event and dispatching a copy at the same
- * client position on that item's element. So `pointer().datum()` is the
- * focused mark's datum and `pointer().pos()` is still the real position, and
- * nothing else in the stories changes. In the library this rule is the
- * runtime's hit-test. Items are read once per drawn `<svg>`; the current
- * focus is kept by index, since every re-render draws the marks in the same
- * order.
- */
-export function snapToNearest(
-  container: HTMLElement,
-  read: (svg: SVGSVGElement, inv: DOMMatrix) => Drawn,
-  opts: FocusOptions
-) {
-  let drawn: (Drawn & { svg: SVGSVGElement }) | undefined;
-  let current: number | undefined;
-  const retarget = (e: PointerEvent) => {
-    if (!e.isTrusted) return;
-    const svg = container.querySelector("svg");
-    const ctm = svg?.getScreenCTM();
-    if (!svg || !ctm || !svg.contains(e.target as Node)) return;
-    const inv = ctm.inverse();
-    if (drawn?.svg !== svg) drawn = { svg, ...read(svg, inv) };
-    const p = new DOMPoint(e.clientX, e.clientY).matrixTransform(inv);
-    current = focusAt(p, drawn.items, drawn.hull, current, opts);
-    const item = current === undefined ? undefined : drawn.items[current];
-    const target: Element = item ? (item.parts.find((q) => contains(p, q)) ?? item.parts[0]).el : svg;
-    const hit = (e.target as Element).closest("[data-gf-id]");
-    if (hit === target || (!item && !hit)) return;
-    e.stopPropagation();
-    target.dispatchEvent(
-      new PointerEvent(e.type, {
-        bubbles: true,
-        cancelable: true,
-        composed: true,
-        clientX: e.clientX,
-        clientY: e.clientY,
-        screenX: e.screenX,
-        screenY: e.screenY,
-        pointerId: e.pointerId,
-        pointerType: e.pointerType,
-        isPrimary: e.isPrimary,
-        button: e.button,
-        buttons: e.buttons,
-      })
-    );
-  };
-  container.addEventListener("pointermove", retarget, true);
-  container.addEventListener("pointerdown", retarget, true);
-  // The runtime clears the pointer when it leaves the chart; so does this.
-  container.addEventListener("pointerleave", (e) => {
-    if (e.target === container) current = undefined;
-  });
-}
 
 /** A mark's datum is its row, or (for a mark drawn per group) its rows. */
 export const rowOf = <T>(d: unknown): T | undefined =>

@@ -16,23 +16,11 @@ import {
   filter,
   group,
   enclose,
-  pointer,
   live,
 } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import {
-  box,
-  beside,
-  focusFrom,
-  hitRow,
-  noPointer,
-  heldOnTouch,
-  rowOf,
-  snapToNearest,
-  drawnMarks,
-  column,
-  BARS,
-} from "./helpers";
+import { box, beside, rowOf, BARS } from "./helpers";
+import { snap } from "./focusRuntime";
 import { sideOf } from "./StackedBar.stories";
 
 // The lowercase exports are builders and mounts, not stories.
@@ -84,17 +72,17 @@ export const Pinned: StoryObj = {
 /** Live: hover a lake's stack. Shared by the Interactive story and the
  *  proposal page's demo bundle (proposals/tooltips/demo). */
 export function mountInteractive(container: HTMLElement) {
-  noPointer(container);
-  // A stack's position is its `spread` slot in x; in y it only has a height.
-  snapToNearest(container, drawnMarks(BARS, seafood.length, { position: ["x"], groupBy: column }), {
-    radius: 8,
+  const { focus: lake, ping } = snap(container, {
+    selector: BARS,
+    count: seafood.length,
+    // A stack's position is its `spread` slot in x; in y it only has a height.
+    position: ["x"],
+    key: (r) => r?.lake,
   });
-  const p = pointer();
-  const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
   return chartInTooltip(
     lake,
     live((d: any) => {
-      p.pos();
+      ping();
       const l = lake();
       return l === undefined || rowOf<any>(d)?.lake === l ? 1 : 0.55;
     })

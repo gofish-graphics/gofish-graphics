@@ -16,20 +16,12 @@ import {
   group,
   enclose,
   Shape,
-  pointer,
   live,
 } from "../../../src/lib";
 import { penguins } from "../../../src/data/penguins";
-import {
-  rowTooltip,
-  beside,
-  focusFrom,
-  heldOnTouch,
-  hitRow,
-  noPointer,
-  snapToNearest,
-  drawnMarks,
-} from "./helpers";
+import { rowTooltip, beside } from "./helpers";
+import { Focus, type FocusBehavior } from "./focus";
+import { snap } from "./focusRuntime";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Scatter Nearest", excludeStories: /^[a-z]/ };
@@ -126,27 +118,27 @@ export const Closed: StoryObj = {
   },
 };
 
+/** The scatter's default focus: the tooltip default with a wider reach. */
+export const scatterFocus = Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]).within(RADIUS);
+
 /**
  * Live. The focus is the nearest point inside the points' hull, and the
- * nearest within RADIUS px outside it (`snapToNearest`), read in true pixels
- * off the drawn points. The pointer is registered by a `live()` read of it in
- * the opacity (paint only); the nearest point is mapped to the focus outside
- * the spec, so the spec re-runs only when the nearest point changes. Shared by
- * the Interactive story and the proposal page's demo bundle
- * (proposals/tooltips/demo).
+ * nearest within RADIUS px outside it, read in true pixels off the drawn
+ * points (`snap`, focusRuntime.ts). The spec re-runs only when the focused
+ * point changes. Shared by the Interactive story, the proposal page's demo
+ * bundle (proposals/tooltips/demo) and the focus switcher.
  */
-export function mountInteractive(container: HTMLElement) {
-  noPointer(container);
-  // A point's position is its `scatter` x and y.
-  snapToNearest(container, drawnMarks('ellipse[rx="3"]', rows.length, { position: ["x", "y"] }), {
-    radius: RADIUS,
-  });
-  const p = pointer();
-  const focus = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.id));
-  // `live(() => 0.75)` that reads the pointer: a paint-only read whose only
-  // job is to register the pointer with the chart. It is on the opacity, not
-  // the fill, so the fill keeps its color scale and legend.
-  return scatterNearest(focus, undefined, live(() => (p.pos(), 0.75))).render(container);
+export function mountInteractive(container: HTMLElement, focus: FocusBehavior = scatterFocus) {
+  const { focus: id, ping } = snap(
+    container,
+    // A point's position is its `scatter` x and y.
+    { selector: 'ellipse[rx="3"]', count: rows.length, position: ["x", "y"], key: (r) => r?.id },
+    focus
+  );
+  // `live(() => 0.75)` that reads `ping`: a paint-only read whose only job is
+  // to register the pointer. It is on the opacity, not the fill, so the fill
+  // keeps its color scale and legend.
+  return scatterNearest(id, undefined, live(() => (ping(), 0.75))).render(container);
 }
 
 export const Interactive: StoryObj = {

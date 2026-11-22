@@ -16,6 +16,11 @@ import { mountInteractive as linesShared } from "../../../../packages/gofish-gra
 import { mountInteractive as scatterNearest } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/ScatterNearest.stories";
 import { mountInteractive as chartInTooltip } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/ChartInTooltip.stories";
 import { mountInteractiveFlipped as edgeFlip } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/EdgeCases.stories";
+import {
+  mountBars as focusBars,
+  select as selectFocus,
+  behaviors as focusBehaviors,
+} from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/FocusSwitcher.stories";
 
 const demos: Record<string, (el: HTMLElement) => unknown> = {
   "issue-bar": issueBar,
@@ -25,10 +30,13 @@ const demos: Record<string, (el: HTMLElement) => unknown> = {
   "scatter-nearest": scatterNearest,
   "chart-in-tooltip": chartInTooltip,
   "edge-flip": edgeFlip,
+  "focus-bars": focusBars,
 };
 
 (window as any).TooltipDemos = {
   names: Object.keys(demos),
+  /** The focus switcher: the behaviors' names, and the one to use. */
+  focus: { names: Object.keys(focusBehaviors), select: selectFocus },
   /** Render demo `name` into `element`. Resolves when its `<svg>` is in the
    *  DOM; rejects if the demo throws or draws nothing within 10 s. */
   async mount(name: string, element: HTMLElement): Promise<SVGSVGElement> {

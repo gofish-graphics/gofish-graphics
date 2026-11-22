@@ -17,23 +17,11 @@ import {
   selectAll,
   filter,
   enclose,
-  pointer,
   live,
 } from "../../../src/lib";
 import { unemployment } from "../../../src/data/unemployment";
-import {
-  box,
-  table,
-  beside,
-  focusFrom,
-  thousands,
-  heldOnTouch,
-  hitRow,
-  noPointer,
-  snapToNearest,
-  drawnMarks,
-  column,
-} from "./helpers";
+import { box, table, beside, thousands } from "./helpers";
+import { snap } from "./focusRuntime";
 
 // The lowercase and all-caps exports are builders, data and mounts, not stories.
 const meta: Meta = {
@@ -173,26 +161,23 @@ export const Closed: StoryObj = {
 };
 
 /**
- * Live. The focus is the year nearest the pointer, by the same rule as every
- * other story: a year's item is its column of dots (`r: 4`, invisible except
- * at the focused year), and the hull is over the dots and the drawn lines.
- * So the pointer never has to be on a line, and a box under the cursor cannot
- * steal the focus. The pointer is registered by `ping`. Shared by the
+ * Live. The focus is the year nearest the pointer, by the same default rule
+ * as every other story: a year's candidate is its column of dots (`r: 4`,
+ * invisible except at the focused year; the dots share the key `year`), and
+ * the hull is over the dots, which cover the lines. So the pointer never has
+ * to be on a line. The pointer is registered by `ping`. Shared by the
  * Interactive story and the proposal page's demo bundle
  * (proposals/tooltips/demo).
  */
 export function mountInteractive(container: HTMLElement) {
-  noPointer(container);
-  // A year's position is the `x` channel; its dots differ in y, so y drops out.
-  const years = drawnMarks('ellipse[rx="4"]', yearly.length, {
+  const { focus: year, ping } = snap(container, {
+    selector: 'ellipse[rx="4"]',
+    count: yearly.length,
+    // A year's position is the `x` channel; its dots differ in y, so y drops out.
     position: ["x"],
-    groupBy: column,
-    hull: { selector: 'path[data-gf-id][fill="none"]', count: SERIES.length },
+    key: (r) => r?.year,
   });
-  snapToNearest(container, years, { radius: 8 });
-  const p = pointer();
-  const year = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.year));
-  return sharedLines(year, () => p.pos()).render(container);
+  return sharedLines(year, ping).render(container);
 }
 
 export const Interactive: StoryObj = {

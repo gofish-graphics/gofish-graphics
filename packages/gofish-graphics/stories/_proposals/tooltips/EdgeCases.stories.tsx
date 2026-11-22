@@ -15,21 +15,10 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, rect, selectAll, filter, group, live, pointer } from "../../../src/lib";
+import { chart, spread, rect, selectAll, filter, group, live } from "../../../src/lib";
 import { seafood } from "../../../src/data/catch";
-import {
-  rowTooltip,
-  beside,
-  focusFrom,
-  hitRow,
-  noPointer,
-  type Side,
-  heldOnTouch,
-  rowOf,
-  snapToNearest,
-  drawnMarks,
-  BARS,
-} from "./helpers";
+import { rowTooltip, beside, type Side, rowOf, BARS } from "./helpers";
+import { snap } from "./focusRuntime";
 
 // The lowercase exports are builders and mounts, not stories.
 const meta: Meta = { title: "Proposals/Tooltips/Edge Cases", excludeStories: /^[a-z]/ };
@@ -140,15 +129,17 @@ export const Flipped: StoryObj = {
  *  InteractiveFlipped story and the proposal page's demo bundle
  *  (proposals/tooltips/demo). */
 export function mountInteractiveFlipped(container: HTMLElement) {
-  noPointer(container);
-  // A bar's position is its `spread` slot in x; in y it only has a height.
-  snapToNearest(container, drawnMarks(BARS, totals.length, { position: ["x"] }), { radius: 8 });
-  const p = pointer();
-  const lake = focusFrom(heldOnTouch(container, () => hitRow<any>(p)?.lake));
+  const { focus: lake, ping } = snap(container, {
+    selector: BARS,
+    count: totals.length,
+    // A bar's position is its `spread` slot in x; in y it only has a height.
+    position: ["x"],
+    key: (r) => r?.lake,
+  });
   return edgeChart(
     () => (lake() ? [lake()!] : []),
     flipped,
-    live((d: any) => (p.pos(), rowOf<any>(d)?.lake === lake() ? "#2f5d8a" : "#4c78a8"))
+    live((d: any) => (ping(), rowOf<any>(d)?.lake === lake() ? "#2f5d8a" : "#4c78a8"))
   ).render(container);
 }
 
