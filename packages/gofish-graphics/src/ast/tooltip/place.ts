@@ -42,11 +42,18 @@ export type Seated = (
   seatAt: (point: { x: number; y: number }) => [number, number]
 ) => void;
 
+/** The gap between a mark and its tooltip's box, in px. */
+const TOOLTIP_GAP = 8;
+
 export const createTooltipPlaceConstraint = (
   children: TooltipPlaceConstraint["children"],
-  seated?: Seated,
-  gap = 8
-): TooltipPlaceConstraint => ({ type: "tooltipPlace", children, gap, seated });
+  seated?: Seated
+): TooltipPlaceConstraint => ({
+  type: "tooltipPlace",
+  children,
+  gap: TOOLTIP_GAP,
+  seated,
+});
 
 export const isTooltipPlaceConstraint = (
   c: { type: string } | undefined

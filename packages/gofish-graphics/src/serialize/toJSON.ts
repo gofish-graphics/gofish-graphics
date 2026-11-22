@@ -393,7 +393,8 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   // `.label(accessor, options)` / `.translate({x, y})` chained on the
   // operator (traversal) form land in `tag.label` / `tag.translate`,
   // mirroring how a chained mark `.label()` surfaces as a top-level field in
-  // `markToIR` — see createOperator.ts's `attachLabelOption` /
+  // `markToIR` — see createOperator.ts's `attachChainedMethod` calls (its
+  // `groupModifiers` list holds the `.name()` and `.label()` calls) and
   // `translateOperator`.
   return {
     type: tag.type,

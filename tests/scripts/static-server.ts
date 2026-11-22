@@ -15,13 +15,17 @@ import { existsSync, readFileSync, statSync } from "fs";
 import { join, normalize, extname, sep, resolve } from "path";
 import { pathToFileURL } from "url";
 
-const CONTENT_TYPES: Record<string, string> = {
+/** The content type of a served file, by its extension. The one table the
+ *  local servers share (this one and ruler.ts's). */
+export const CONTENT_TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
-  ".json": "application/json",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".svg": "image/svg+xml",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".csv": "text/csv; charset=utf-8",
   ".woff2": "font/woff2",

@@ -65,16 +65,18 @@ export function formatValue(v: unknown): string {
   return String(v);
 }
 
-/** The rows a mark was drawn from. A mark over marks (a line through refs)
- *  reads each ref's rows; a single row is a list of one. */
+/** The rows a datum stands for, as a list: the datum itself when it is a
+ *  list, none for no datum, else a list of one. A mark's key, its box and
+ *  its focus candidate all read a mark's rows this way. */
+export const rowsOfDatum = (datum: unknown): unknown[] =>
+  Array.isArray(datum) ? datum : datum === undefined ? [] : [datum];
+
+/** The records a mark was drawn from. A mark over marks (a line through
+ *  refs) reads each ref's rows. */
 const rowsOf = (rows: readonly unknown[]): Record<string, unknown>[] =>
   rows.flatMap((r) =>
     r instanceof GoFishRef || r instanceof GoFishNode
-      ? rowsOf(
-          Array.isArray((r as { datum?: unknown }).datum)
-            ? (r as { datum: unknown[] }).datum
-            : [(r as { datum?: unknown }).datum]
-        )
+      ? rowsOf(rowsOfDatum((r as { datum?: unknown }).datum))
       : r !== null && typeof r === "object"
         ? [r as Record<string, unknown>]
         : []

@@ -19,11 +19,8 @@ import {
 } from "./placeStep";
 import { avoidedRefs } from "../nodeRefs";
 import type { Place } from "../../families/place";
-import {
-  lowerSelectionLayers,
-  type DrawnTier,
-  type SelectionLayer,
-} from "../selectionLayer";
+import type { DrawnTier, SelectionLayer } from "../selectionLayer";
+import { selectNode } from "../marks/resolveRefData";
 import { Frontend } from "gofish-ir";
 import {
   orientSide,
@@ -335,7 +332,7 @@ const isChosen = (p: TargetPosition): p is Place | "outline" =>
 
 /**
  * The label tier over one home (`labelLayer`'s `draw`): per label pair, a
- * ref to its target, made as a selection makes one (`select`), and a label,
+ * ref to its target, made as a selection makes one (`selectNode`), and a label,
  * in order, beside the home's content. A label's text is its accessor over
  * the target's rows, the ref's `datum`. A label at a position string is
  * placed by the solve, by the constraints `buildLabelConstraints` derives
@@ -347,15 +344,7 @@ const isChosen = (p: TargetPosition): p is Place | "outline" =>
  */
 function drawLabels(
   pairs: LabelPair[],
-  {
-    home,
-    select,
-    inside,
-  }: {
-    home: GoFishNode;
-    select: (node: GoFishNode) => GoFishRef;
-    inside: LabelNode[][];
-  }
+  { home, inside }: { home: GoFishNode; inside: LabelNode[][] }
 ): DrawnTier<LabelNode[]> {
   // The label constraints run in the wrapper's axis order, which is the
   // wrapped node's: the wrapper's spaces are the node's.
@@ -389,7 +378,7 @@ function drawLabels(
     const text = resolveLabelText(spec.accessor, target.datum);
     if (!text) continue; // empty/null accessor result: skip this spec
 
-    const stand = select(target);
+    const stand = selectNode(target);
     refs.push(stand);
 
     const label = LabelText({
@@ -450,7 +439,7 @@ function drawLabels(
     placed.length === 0
       ? []
       : inside.flat().map((t) => {
-          const stand = select(t.node);
+          const stand = selectNode(t.node);
           refs.push(stand);
           return { node: stand as GoFishAST, label: t };
         });
@@ -516,7 +505,12 @@ function takeLabels(target: GoFishNode, out: LabelPair[]): void {
  * `.label()` as a layer over its selection (`selectionLayer.ts`). Its stamps
  * are the label specs on the nodes, relayed from a group to the nodes that
  * carry them (`resolveLabelTargets`), and taken off in `holdLabels`'s order;
- * the tier over each home is `drawLabels`.
+ * the tier over each home is `drawLabels`. The pipeline lowers it after
+ * chrome (`gofish.tsx`). A label is a text in one layer on its chart
+ * (`homeOf` in `selectionLayer.ts`): each chart's content is wrapped once,
+ * with every label of the chart, so a chart's labels take room in the
+ * chart, the chooser places them all in one run, and a label never moves
+ * the marks it describes.
  */
 export const labelLayer: SelectionLayer<LabelPair, LabelNode[]> = {
   take(root) {
@@ -529,17 +523,3 @@ export const labelLayer: SelectionLayer<LabelPair, LabelNode[]> = {
   target: (pair) => pair.target,
   draw: drawLabels,
 };
-
-/**
- * Elaborate every `.label()` in `node`'s subtree into real label nodes and
- * constraints. Entry point for the pipeline (see `gofish.tsx`). A label is a
- * text in one layer on its chart (`homeOf` in `selectionLayer.ts`): each
- * chart's content is wrapped once, with every label of the chart, so a
- * chart's labels take room in the chart, the chooser places them all in one
- * run, and a label never moves the marks it describes.
- */
-export function elaborateLabels(
-  node: GoFishNode
-): Promise<{ node: GoFishNode; changed: boolean }> {
-  return lowerSelectionLayers(node, labelLayer);
-}

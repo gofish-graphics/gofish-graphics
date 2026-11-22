@@ -89,7 +89,7 @@ import {
   type OperatorTransition,
 } from "../../animation/transition";
 import { withWire, wireOf } from "../wire";
-import { recordTooltip, recordTooltipWire } from "../tooltip/request";
+import { recordTooltip, type TooltipCall } from "../tooltip/request";
 import { isFlowStep, withFlowStep } from "./compose";
 import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
@@ -237,7 +237,7 @@ export type ModifierConfig<Args extends any[] = any[]> = {
 /** One modifier call chained on an operator: the mark modifier it is, and
  *  the arguments its `bind` gave it. The operator applies it to each of its
  *  group nodes, as the mark modifier applies to a mark's node. */
-export type GroupModifierCall = {
+type GroupModifierCall = {
   modifier: Pick<ModifierConfig, "apply">;
   args: any[];
 };
@@ -483,7 +483,7 @@ export const nameModifier = {
 
 /** The names the chart's registration walk files a node under
  *  (`registerLayerNode` in chartBuilder.ts). */
-type RegistrationTag = { __layerRegistration?: (string | symbol)[] };
+export type RegistrationTag = { __layerRegistration?: (string | symbol)[] };
 
 /**
  * `.name(layerName)` on an operator, applied to each of its group nodes
@@ -495,7 +495,7 @@ type RegistrationTag = { __layerRegistration?: (string | symbol)[] };
  * in the tree (`_name`, which `ref(name)` in a layer and `.relate()` read):
  * the operator names the node in the tree only when nothing else did.
  */
-export const groupNameModifier = {
+const groupNameModifier = {
   apply: (node, layerContext, _datum, layerName) => {
     if (node._name === undefined) node.name(layerName as any);
     const key = layerKey(layerName);
@@ -708,17 +708,18 @@ export const transitionModifier = {
  */
 export const tooltipModifier = {
   name: "tooltip",
-  bind: (fields, call = {}) => [fields, call],
+  bind: (fields, call: TooltipCall = {}) => [fields, call],
   apply: (node, layerContext, datum, fields, call) => {
     recordTooltip(node, datum, fields, call!, layerContext?.registrar);
   },
   tag: (wrapped, base, fields, call) => {
-    recordTooltipWire(call!, wireOf(base));
+    // `tag` runs when the method is called, before the mark makes a node.
+    call!.wire = wireOf(base);
     propagateSerialize(base, wrapped, (tag) => {
       tag.tooltip = fields === undefined ? true : [...fields];
     });
   },
-} satisfies ModifierConfig<[fields?: readonly string[], call?: object]>;
+} satisfies ModifierConfig<[fields?: readonly string[], call?: TooltipCall]>;
 
 /**
  * Attach chainable .name(), .label(), .zOrder() and .hidden() to a mark, registering it
@@ -1381,14 +1382,16 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       return combinator;
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
-    // A modifier chained on the operator (`.label(accessor, options?)`) is
-    // the mark modifier of the same name applied to each GROUP node: the
+    // A modifier chained on the operator (`.name(layerName)`,
+    // `.label(accessor, options?)`) is applied to each GROUP node: the
     // node(s) one leaf produced, which carry the leaf's rows as their datum.
     // It is chained AFTER `dual(opts)` returns, so the pending calls live in
-    // this closed-over array and are read fresh each time the operator
-    // executes (once per `.flow()` run) — see the per-leaf stamp below and
-    // `attachLabelOption` at the bottom. Repeated calls append, so every
-    // group gets one application per call.
+    // this closed-over list, which holds the `.name()` and `.label()` calls,
+    // and are read fresh each time the operator executes (once per `.flow()`
+    // run) — see the per-leaf stamp below and the `attachChainedMethod`
+    // calls at the bottom. Repeated calls append, so every group gets one
+    // application per call: an operator's `.name()` adds a name on each
+    // call, while a mark's `.name()` replaces the one it has.
     let groupModifiers: GroupModifierCall[] = [];
     // `.transition(spec)` chained after `dual(opts)`: read at execution time
     // like `groupModifiers`, and recorded on the node `layout` builds.

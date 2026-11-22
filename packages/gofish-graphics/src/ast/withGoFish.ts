@@ -9,7 +9,7 @@ import { checkLengths } from "./length";
 import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
-import { GoFishNode } from "./_node";
+import { breadthFirst, GoFishNode } from "./_node";
 import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
@@ -50,7 +50,6 @@ import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
-import { breadthFirst } from "./elaborationUtils";
 import { withKindValues } from "./strategyKind";
 import { functionInChannelError, groupFun } from "./groupExpr";
 

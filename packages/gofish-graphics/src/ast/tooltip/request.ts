@@ -13,29 +13,30 @@ import { GoFishRef } from "../_ref";
 import type { Registrar } from "../../interaction/resolveContext";
 import { focusOf, type TooltipFocus } from "../../interaction/tooltipFocus";
 import {
+  rowsOfDatum,
   tooltipRows,
   tooltipText,
   type TooltipMark,
   type TooltipRow,
 } from "./content";
 
-/** What one node's `.tooltip()` call recorded: the call it belongs to, the
- *  rows the box shows, the node's key, and the focus of the call in the
- *  live chart that resolved it (none in a static drawing). */
+/** One `.tooltip()` call, shared by every node its mark makes: the wire of
+ *  the mark it is chained on, whose channel options name the fields the mark
+ *  draws (`tooltipRows`). The modifier's `tag` sets it, before any node is
+ *  made. */
+export type TooltipCall = { wire?: TooltipMark["wire"] };
+
+/** What one node's `.tooltip()` call recorded: the rows the node was drawn
+ *  from, the rows its box shows, the node's key, and the focus of the call
+ *  in the live chart that resolved it (none in a static drawing). */
 export type TooltipRequest = {
-  call: object;
-  rows: TooltipRow[];
+  rows: unknown[];
+  content: TooltipRow[];
   key: string;
   focus: TooltipFocus | undefined;
 };
 
 const requests = new WeakMap<GoFishNode, TooltipRequest>();
-/** Each call's mark wire, which names the fields its channels draw. */
-const wires = new WeakMap<object, TooltipMark["wire"]>();
-
-/** The request `node` carries, if its mark has a tooltip. */
-export const tooltipRequest = (node: GoFishNode): TooltipRequest | undefined =>
-  requests.get(node);
 
 /** Every node under `root` (itself included) with a request, in tree
  *  order, each with its request, which is taken off it: a later lowering
@@ -60,6 +61,11 @@ export function takeTooltips(
  * The key of a mark, from its rows: equal rows, equal keys, across the
  * re-runs that make every node anew (#673). A ref or node in the rows (a
  * mark over marks) stands for its rows; a date for its instant.
+ *
+ * TODO(#1395): a shortcut. Marks with equal rows are one candidate: their
+ * outlines are merged, and the box is seated beside the first of them, so
+ * hovering the second opens a box beside the first. The right fix is a node
+ * identity that is stable across re-runs (#673), to key a mark by.
  */
 export function rowsKey(rows: readonly unknown[]): string {
   const seen = new WeakSet<object>();
@@ -78,36 +84,25 @@ export function rowsKey(rows: readonly unknown[]): string {
   });
 }
 
-/** Remember the wire of the mark one `.tooltip()` call is chained on: its
- *  channel options name the fields the mark draws (`tooltipRows`). */
-export const recordTooltipWire = (
-  call: object,
-  wire: TooltipMark["wire"]
-): void => void wires.set(call, wire);
-
 /**
  * Record, on a node the mark of a `.tooltip(fields)` call made from `datum`,
- * the rows its box shows (checked here, so a field that is not there fails
- * the render, not a hover) and its key, and write them as its `title` for a
- * static drawing. In a live chart (`registrar`) the mark reads its call's
- * focus there, as a spec reads an input, so a change of focus re-runs the
- * chart.
+ * its rows, the rows its box shows (checked here, so a field that is not
+ * there fails the render, not a hover) and its key, and write them as its
+ * `title` for a static drawing. In a live chart (`registrar`) the mark reads
+ * its call's focus there, as a spec reads an input, so a change of focus
+ * re-runs the chart.
  */
 export function recordTooltip(
   node: GoFishNode,
   datum: unknown,
   fields: readonly string[] | undefined,
-  call: object,
+  call: TooltipCall,
   registrar: Registrar | undefined
 ): void {
-  const rows = Array.isArray(datum)
-    ? datum
-    : datum === undefined
-      ? []
-      : [datum];
-  const content = tooltipRows({ rows, wire: wires.get(call) }, fields);
+  const rows = rowsOfDatum(datum);
+  const content = tooltipRows({ rows, wire: call.wire }, fields);
   node.title = tooltipText(content);
   const focus = registrar ? focusOf(registrar, call) : undefined;
   focus?.read(registrar!);
-  requests.set(node, { call, rows: content, key: rowsKey(rows), focus });
+  requests.set(node, { rows, content, key: rowsKey(rows), focus });
 }

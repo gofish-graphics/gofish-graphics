@@ -35,6 +35,7 @@ import { execSync } from "node:child_process";
 import { join, resolve as resolvePath, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { performance } from "node:perf_hooks";
+import { CONTENT_TYPES } from "./static-server.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 
@@ -78,16 +79,6 @@ const median = (xs: number[]): number => {
   return s[Math.floor(s.length / 2)];
 };
 
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".mjs": "text/javascript; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".map": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-};
-
 export type StaticServer = {
   server: Server;
   port: number;
@@ -110,7 +101,8 @@ export function serveStatic(dir: string, port = 0): Promise<StaticServer> {
       }
       const body = await readFile(file);
       res.writeHead(200, {
-        "Content-Type": MIME[extname(file)] ?? "application/octet-stream",
+        "Content-Type":
+          CONTENT_TYPES[extname(file)] ?? "application/octet-stream",
         "Cross-Origin-Opener-Policy": "same-origin",
         "Cross-Origin-Embedder-Policy": "require-corp",
       });

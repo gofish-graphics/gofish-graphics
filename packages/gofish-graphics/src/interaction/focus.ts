@@ -15,6 +15,7 @@
  *
  * The runtime that hands a behavior its frames is `tooltipFocus.ts`.
  */
+import { convexHull, segDist, type PlanePoint } from "../ast/geometry/plane";
 
 /* -------------------------------- types --------------------------------- */
 
@@ -157,7 +158,7 @@ const center = (b: Box): Point => ({
 });
 
 /** Distance from a point to a box, zero inside it. */
-export const boxDistance = (p: Point, b: Box): number =>
+const boxDistance = (p: Point, b: Box): number =>
   Math.hypot(
     Math.max(b.x0 - p.x, 0, p.x - b.x1),
     Math.max(b.y0 - p.y, 0, p.y - b.y1)
@@ -172,12 +173,6 @@ const segmentNearest = (p: Point, a: Point, b: Point): Point => {
       ? 0
       : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
   return { x: a.x + t * vx, y: a.y + t * vy };
-};
-
-/** Distance from a point to the segment `a`–`b`. */
-const segmentDistance = (p: Point, a: Point, b: Point): number => {
-  const q = segmentNearest(p, a, b);
-  return Math.hypot(p.x - q.x, p.y - q.y);
 };
 
 /** The point of a drawn path (the segments of an outline) nearest `p`;
@@ -207,8 +202,10 @@ export const isPath = (c: Candidate): boolean =>
 function outlineDistance(p: Point, outline: Outline): number {
   let d = Infinity;
   for (const { box, round, segment } of outline) {
-    if (segment) d = Math.min(d, segmentDistance(p, segment[0], segment[1]));
-    else if (!round) d = Math.min(d, boxDistance(p, box));
+    if (segment) {
+      const [a, b] = segment;
+      d = Math.min(d, segDist(p.x, p.y, a.x, a.y, b.x, b.y));
+    } else if (!round) d = Math.min(d, boxDistance(p, box));
     else {
       const c = center(box);
       d = Math.min(
@@ -234,50 +231,33 @@ function distance(
   return Math.hypot(p.x - (at.x ?? p.x), p.y - (at.y ?? p.y));
 }
 
-/** The convex hull of the candidates' outline corners (monotone chain),
+/** The convex hull of the candidates' outline corners (`convexHull`),
  *  kept per candidate list. */
-const hulls = new WeakMap<Candidate[], Point[]>();
-function hullOf(candidates: Candidate[]): Point[] {
+const hulls = new WeakMap<Candidate[], PlanePoint[]>();
+function hullOf(candidates: Candidate[]): PlanePoint[] {
   const known = hulls.get(candidates);
   if (known) return known;
-  const pts = candidates
-    .flatMap((c) => c.outline)
-    .flatMap(({ box: b }) => [
-      { x: b.x0, y: b.y0 },
-      { x: b.x1, y: b.y0 },
-      { x: b.x0, y: b.y1 },
-      { x: b.x1, y: b.y1 },
-    ])
-    .sort((a, b) => a.x - b.x || a.y - b.y);
-  const cross = (o: Point, a: Point, b: Point) =>
-    (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-  const half = (ps: Point[]) => {
-    const h: Point[] = [];
-    for (const p of ps) {
-      while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0)
-        h.pop();
-      h.push(p);
-    }
-    h.pop();
-    return h;
-  };
-  const hull = [...half(pts), ...half([...pts].reverse())];
+  const pts: PlanePoint[] = [];
+  for (const c of candidates)
+    for (const { box: b } of c.outline)
+      pts.push([b.x0, b.y0], [b.x1, b.y0], [b.x0, b.y1], [b.x1, b.y1]);
+  const hull = convexHull(pts);
   hulls.set(candidates, hull);
   return hull;
 }
 
-/** Distance from a point to a convex polygon, zero inside it. A hull of
- *  fewer than three corners (one mark of no width) has no inside. */
-function hullDistance(p: Point, hull: Point[]): number {
-  if (hull.length === 1) return Math.hypot(p.x - hull[0].x, p.y - hull[0].y);
+/** Distance from a point to a convex polygon that winds positive (as
+ *  `convexHull` makes it), zero inside it. A hull of fewer than three
+ *  corners (one mark of no width) has no inside. */
+function hullDistance(p: Point, hull: PlanePoint[]): number {
+  if (hull.length === 1) return Math.hypot(p.x - hull[0][0], p.y - hull[0][1]);
   let isInside = hull.length >= 3;
   let d = Infinity;
   for (let i = 0; i < hull.length; i++) {
-    const a = hull[i];
-    const b = hull[(i + 1) % hull.length];
-    const [vx, vy] = [b.x - a.x, b.y - a.y];
-    if (vx * (p.y - a.y) - vy * (p.x - a.x) < 0) isInside = false;
-    d = Math.min(d, segmentDistance(p, a, b));
+    const [ax, ay] = hull[i];
+    const [bx, by] = hull[(i + 1) % hull.length];
+    if ((bx - ax) * (p.y - ay) - (by - ay) * (p.x - ax) < 0) isInside = false;
+    d = Math.min(d, segDist(p.x, p.y, ax, ay, bx, by));
   }
   return isInside ? 0 : d;
 }

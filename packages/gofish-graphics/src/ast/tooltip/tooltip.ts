@@ -33,10 +33,11 @@ import { spread } from "../graphicalOperators/spread";
 import { enclose } from "../marks/chart";
 import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import type { SelectionLayer } from "../selectionLayer";
+import { selectNode } from "../marks/resolveRefData";
 import type { FocusMark, TooltipFocus } from "../../interaction/tooltipFocus";
 import { createTooltipPlaceConstraint } from "./place";
 import type { TooltipRow } from "./content";
-import { takeTooltips, type TooltipRequest } from "./request";
+import { takeTooltips } from "./request";
 
 /** The box: a column of muted, right-aligned names beside a column of
  *  left-aligned values, in a white rounded rect. */
@@ -73,10 +74,11 @@ function box(rows: readonly TooltipRow[]) {
   );
 }
 
-/** One focused mark: the node, its request, and its call's focus. */
+/** One focused mark: the node, the rows its box shows, and its call's
+ *  focus. */
 type TooltipEntry = {
   node: GoFishNode;
-  request: TooltipRequest;
+  rows: TooltipRow[];
   focus: TooltipFocus;
 };
 
@@ -96,31 +98,31 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
   take(root) {
     const byFocus = new Map<TooltipFocus, FocusMark[]>();
     const entries: TooltipEntry[] = [];
+    // The focuses that have their entry: the first mark with the key wins.
+    const found = new Set<TooltipFocus>();
     for (const { node, request } of takeTooltips(root)) {
       const focus = request.focus;
       if (focus === undefined) continue;
       const marks = byFocus.get(focus) ?? [];
       byFocus.set(focus, marks);
-      marks.push({
-        key: request.key,
-        node,
-        rows: Array.isArray(node.datum) ? node.datum : [node.datum],
-      });
-      if (request.key === focus.key && !entries.some((e) => e.focus === focus))
-        entries.push({ node, request, focus });
+      marks.push({ key: request.key, node, rows: request.rows });
+      if (request.key === focus.key && !found.has(focus)) {
+        found.add(focus);
+        entries.push({ node, rows: request.content, focus });
+      }
     }
     for (const [focus, marks] of byFocus) focus.use(marks);
     return entries;
   },
   target: (entry) => entry.node,
   home: (_target, root) => root,
-  async draw(entries, { select }) {
+  async draw(entries) {
     const nodes: GoFishNode[] = [];
     const seats: [GoFishNode, GoFishNode, TooltipFocus][] = [];
-    for (const { node, request, focus } of entries) {
-      const stand = select(node) as unknown as GoFishNode;
+    for (const { node, rows, focus } of entries) {
+      const stand = selectNode(node) as unknown as GoFishNode;
       const shown = await resolveMarkResult(
-        box(request.rows) as any,
+        box(rows) as any,
         new LayerContext()
       );
       // It takes no room, and no pointer lands on it.

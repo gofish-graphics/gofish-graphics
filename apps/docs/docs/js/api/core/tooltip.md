@@ -24,6 +24,12 @@ mark.tooltip(fields?)
 
 ## Parameters
 
+<!-- TODO(#1395): this table is handwritten because `gofish-ref` renders a
+construct's own fields, and `tooltip` is a base field of every mark
+(`MARK_BASE_FIELDS` in descriptors.ts), not one construct's. The right fix is
+a `gofish-ref` form that renders one base field, so this table comes from the
+field's `doc` like every other options table. -->
+
 | Parameter | Type       | Description                                                                                                                                                                                                     |
 | --------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `fields`  | `string[]` | The fields the box shows, in order. Omitted, the box shows every field with one value on the mark, and each field a size or position channel draws, with the value it draws (a stacked segment's summed count). |

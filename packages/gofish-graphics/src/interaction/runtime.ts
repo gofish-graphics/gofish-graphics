@@ -57,7 +57,7 @@ const IDENTITY: Affine = { tx: 0, ty: 0, sx: 1, sy: 1 };
 
 /** Walk a display list depth-first, including composite/group/mask innards,
  *  handing each item to `visit` with the transform that maps it to svg px.
- *  A visitor rather than a generator: the one caller wants every item, and a
+ *  A visitor rather than a generator: every caller wants every item, and a
  *  generator allocated a `{ item, at }` wrapper per item to say so. */
 export function walkItems(
   items: DisplayList.DisplayItem[],
@@ -92,7 +92,7 @@ export function walkItems(
  *  `text` carry no box in the display list (a path is an SVG `d` string, a text
  *  item only its anchor), and a `group` has no box of its own, so those come
  *  back `undefined` rather than being guessed at. */
-function itemBox(
+export function itemBox(
   item: DisplayList.DisplayItem,
   at: Affine
 ): SvgBox | undefined {

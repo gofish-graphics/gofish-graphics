@@ -91,7 +91,7 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 
 A capture is a still picture, so a review cannot show what a story does under the pointer, or how it animates. Live fills that gap: it runs the real story in the review page, so you can hover, click, drag, move a slider and watch an animation.
 
-The story runs in the harness page the captures use (`harness/stories-runner.html`), built once as static files by `buildLiveHarness` (`scripts/live-view.ts`). The harness renders the story its query names, `stories-runner.html?file=<story file>&story=<export>`, on the real clock instead of the fake one. Each story module is its own chunk of that build, so a frame loads only the library and its one story. A capture loads the page with no query, so Live changes nothing about the captures or the comparison.
+The story runs in the harness page the captures use (`harness/stories-runner.html`), built once as static files by `buildLiveHarness` (`scripts/live-view.ts`). The harness renders the story its query names, `stories-runner.html?file=<story file>&story=<export>`, on the real clock instead of the fake one. Each story module is its own chunk of that build, so a frame loads only the library and its one story. A capture loads the page with no query, so Live changes nothing about the captures or the comparison. Captures run the harness on the Vite dev server, and Live serves a production build of the same harness.
 
 Nothing runs until you ask for it, and a page runs at most four frames at once: opening one more closes the oldest. Each frame has an "Open in new tab" link, and the frame shows the story at the scale it was captured at, cut to what it draws.
 

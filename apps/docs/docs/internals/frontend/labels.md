@@ -62,9 +62,9 @@ per-instance and per-group labeling; see `resolveLabelTargets` below.
 
 ## The elaboration pass
 
-`elaborateLabels` (`src/ast/labels/elaborate.tsx`) runs inside `gofish.tsx`'s
-`layout()`, immediately after chrome elaboration, so a label may target a node
-the chrome pass just wrapped. A label inside a node's content is inside that
+`labelLayer` (`src/ast/labels/elaborate.tsx`) is lowered inside `gofish.tsx`'s
+`layout()` (`lowerSelectionLayers`), immediately after chrome elaboration, so a
+label may target a node the chrome pass just wrapped. A label inside a node's content is inside that
 node's chrome rings, so at layout time the rings seat their axes, titles, and
 legend past it.
 

@@ -25,7 +25,7 @@ import {
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
 import { resolveRefData } from "./resolveRefData";
-import { nameableMark } from "./createOperator";
+import { nameableMark, type RegistrationTag } from "./createOperator";
 import type { RelationalMark } from "./chart";
 import {
   layerKey,
@@ -131,7 +131,7 @@ export type ChartOptions = {
  * produced by createMark, can itself carry a name).
  */
 function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
-  const tagged = node as { __layerRegistration?: (string | symbol)[] };
+  const tagged = node as RegistrationTag;
   const keys = tagged.__layerRegistration;
   if (keys) {
     // A node is filed under each name it was given: a mark's own, and the

@@ -58,6 +58,7 @@ import {
 } from "./coordinateTransforms/bake";
 import type { DisplayList } from "gofish-ir";
 import { setLiveSlots } from "../interaction/liveSlots";
+import { walkItems } from "../interaction/runtime";
 import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
@@ -587,16 +588,25 @@ export const placedByOwnData = (
   originIs(parent.resolveUnderlyingSpace()[axis], "pinned") &&
   originIs(parent.children[i].resolveUnderlyingSpace()[axis], "pinned");
 
-/** Make every item in `items`, the items of groups and of composites'
- *  operands included, no pointer target (`GoFishNode.noPointerTarget`). */
-function noPointerTarget(items: DisplayList.DisplayItem[]): void {
-  for (const item of items) {
-    item.style = { ...item.style, pointerEvents: "none" };
-    if (item.kind === "group") noPointerTarget(item.children);
-    if (item.kind === "composite")
-      for (const o of item.operands) noPointerTarget(o.paint);
+/** `root` and the nodes below it, breadth first (a leaf of the module
+ *  graph, so the interaction runtime can walk a tree without importing the
+ *  operators): every node at one depth
+ *  before any deeper one. */
+export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
+  const queue: GoFishNode[] = [root];
+  for (let i = 0; i < queue.length; i++) {
+    const n = queue[i];
+    yield n;
+    for (const c of n.children) if (c instanceof GoFishNode) queue.push(c);
   }
 }
+
+/** Make every item in `items`, the items of groups and of composites'
+ *  operands included, no pointer target (`GoFishNode.noPointerTarget`). */
+const clearPointerEvents = (items: DisplayList.DisplayItem[]): void =>
+  walkItems(items, (item) => {
+    item.style = { ...item.style, pointerEvents: "none" };
+  });
 
 /**
  * A node's size-claim hook: its per-axis {@link Extent} (undefined on an axis
@@ -908,7 +918,7 @@ export class GoFishNode {
    *  apart from the transitions it draws over them, and the layer its frame
    *  holds, every tier of a `.layer()` chain included (`frameChart`). A
    *  label is a layer of text on the nearest one around its mark
-   *  (`elaborateLabels`). */
+   *  (`labelLayer`). */
   public _chartContent?: true;
   /** Set by chrome elaboration on the box a node's axes are seated beside,
    *  continuous axes and category label rows alike, the content of its
@@ -2148,7 +2158,7 @@ export class GoFishNode {
    * Whether this node or an ancestor is no pointer target
    * ({@link noPointerTarget}).
    */
-  public underNoPointerTarget(): boolean {
+  private underNoPointerTarget(): boolean {
     for (let n: unknown = this; n instanceof GoFishNode; n = n.parent)
       if (n.noPointerTarget) return true;
     return false;
@@ -3446,7 +3456,8 @@ export class GoFishNode {
     }
     // A container lowers its leaves through their own `lowerWith`, so each
     // node looks up its ancestors for the flag, as for visibility.
-    if (items.length > 0 && this.underNoPointerTarget()) noPointerTarget(items);
+    if (items.length > 0 && this.underNoPointerTarget())
+      clearPointerEvents(items);
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure

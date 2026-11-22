@@ -10,6 +10,7 @@ import { render as solidRender } from "solid-js/web";
 import {
   debugInputSceneGraph,
   debugNodeTree,
+  breadthFirst,
   debugUnderlyingSpaceTree,
   GoFishNode,
   type RenderSession,
@@ -60,7 +61,7 @@ import {
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
-import { breadthFirst, fmtNum } from "./elaborationUtils";
+import { fmtNum } from "./elaborationUtils";
 import { width as intervalWidth } from "../util/interval";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
@@ -81,8 +82,8 @@ import {
   type ScopeSolution,
 } from "./solver/scopes";
 import { entryAmount, legendRing } from "./legends/elaborate";
-import { elaborateLabels } from "./labels/elaborate";
-import { lowerSelectionLayers } from "./selectionLayer";
+import { labelLayer } from "./labels/elaborate";
+import { lowerSelectionLayers, type SelectionLayer } from "./selectionLayer";
 import { tooltipLayer } from "./tooltip/tooltip";
 import { reportHiddenLabels } from "./labels/placeStep";
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
@@ -599,22 +600,21 @@ export async function layout(
     await reresolve(child);
   }
 
-  // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
-  // constraints (src/ast/labels/elaborate.tsx), the same technique the chrome
-  // pass above uses. Runs after chrome elaboration (a label may target a node
-  // the chrome pass just wrapped).
-  const labelRes = await elaborateLabels(child);
-  if (labelRes.changed) {
-    child = labelRes.node;
-    await reresolve(child);
-  }
-  // Tooltip lowering: the box of the focused mark of each `.tooltip()`, as
-  // a layer over the whole graphic (src/ast/tooltip/tooltip.ts), after the
+  // The modifiers lowered as layers over their selections
+  // (src/ast/selectionLayer.ts), after chrome elaboration (a label may target
+  // a node the chrome pass just wrapped). Labels turn every `.label(...)` spec
+  // into a real `Text` node + constraints (src/ast/labels/elaborate.tsx).
+  // Tooltips draw the box of the focused mark of each `.tooltip()`, as a
+  // layer over the whole graphic (src/ast/tooltip/tooltip.ts), after the
   // labels, so it paints over them and the chrome.
-  const tooltipRes = await lowerSelectionLayers(child, tooltipLayer);
-  if (tooltipRes.changed) {
-    child = tooltipRes.node;
-    await reresolve(child);
+  const layers: SelectionLayer<any, any>[] = [labelLayer, tooltipLayer];
+  for (const modifier of layers) {
+    const lowered: { node: GoFishNode; changed: boolean } =
+      await lowerSelectionLayers(child, modifier);
+    if (lowered.changed) {
+      child = lowered.node;
+      await reresolve(child);
+    }
   }
   perfAdd("axes", perfNow() - __tAxes);
 

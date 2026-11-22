@@ -24,10 +24,10 @@
  * constraints the tier returns. Homes are drawn deepest first, so a tier
  * reads what the tiers of the charts inside it drew, already placed.
  *
- * Each selected node is read through a ref made the way `selectAll` makes
- * one ({@link selectNode}), so a tier sees what a hand-written
- * `chart(selectAll(...))` tier sees: one ref per node, whose `datum` is the
- * node's rows.
+ * A tier reads each selected node through a ref made the way `selectAll`
+ * makes one (`selectNode` in `marks/resolveRefData.ts`), so it sees what a
+ * hand-written `chart(selectAll(...))` tier sees: one ref per node, whose
+ * `datum` is the node's rows.
  *
  * It is not `.layer()` itself. A `.layer()` tier is resolved with its chart,
  * before chrome, and framed as a chart of its own; a modifier's tier is drawn
@@ -38,15 +38,11 @@
  */
 
 import { GoFishNode } from "./_node";
-import type { GoFishRef } from "./_ref";
-import { selectNode } from "./marks/resolveRefData";
 import {
   wrapPreservingIdentity,
   wrapRing,
   type ChromeRing,
 } from "./elaborationUtils";
-
-export { selectNode };
 
 /** One tier over one home, as a {@link SelectionLayer} draws it: the ring's
  *  shapes and constraints (`ChromeRing`), and what it drew, which the tiers
@@ -71,17 +67,13 @@ export type SelectionLayer<E, D> = {
   home?(target: GoFishNode, root: GoFishNode): GoFishNode;
   /**
    * The tier over one home: `entries` are the home's stamps, in order;
-   * `select` reads a node through a ref, as `selectAll` does; `inside` is
-   * what the tiers of the homes inside this one drew. Called once per home,
-   * when its content is about to be wrapped.
+   * `inside` is what the tiers of the homes inside this one drew. Called
+   * once per home, when its content is about to be wrapped. A tier reads a
+   * node through a ref made as `selectAll` makes one (`selectNode`).
    */
   draw(
     entries: E[],
-    env: {
-      home: GoFishNode;
-      select: (node: GoFishNode) => GoFishRef;
-      inside: D[];
-    }
+    env: { home: GoFishNode; inside: D[] }
   ): Promise<DrawnTier<D>> | DrawnTier<D>;
 };
 
@@ -131,15 +123,11 @@ export async function lowerSelectionLayers<E, D>(
   for (const [home, here] of order) {
     const parent = home.parent;
     const inside = done
-      .filter((d) => isInside(d.node, home))
+      .filter((d) => isBelow(d.node, home))
       .map((d) => d.drawn);
     let drawn!: D;
     const wrapped = await wrapPreservingIdentity(home, async (content) => {
-      const tier = await modifier.draw(here, {
-        home: content,
-        select: selectNode,
-        inside,
-      });
+      const tier = await modifier.draw(here, { home: content, inside });
       drawn = tier.drawn;
       return wrapRing(content, tier);
     });
@@ -150,8 +138,8 @@ export async function lowerSelectionLayers<E, D>(
   return { node: out, changed: true };
 }
 
-/** Whether `n` is in `home`'s subtree, below it. */
-function isInside(n: GoFishNode, home: GoFishNode): boolean {
+/** Whether `n` is in `home`'s subtree, below it (not `home` itself). */
+function isBelow(n: GoFishNode, home: GoFishNode): boolean {
   for (let p = n.parent; p; p = p.parent) if (p === home) return true;
   return false;
 }

@@ -33,7 +33,7 @@ import type {
   SvgPoint,
 } from "./types";
 import type { Registrar } from "./resolveContext";
-import { walkItems, type Affine } from "./runtime";
+import { itemBox, walkItems, type Affine } from "./runtime";
 import {
   defaultFocus,
   isPath,
@@ -45,7 +45,7 @@ import {
   type Point,
 } from "./focus";
 import type { Seated } from "../ast/tooltip/place";
-import { GoFishNode } from "../ast/_node";
+import { breadthFirst, GoFishNode } from "../ast/_node";
 import {
   continuousInterval,
   isORDINAL,
@@ -248,7 +248,8 @@ export function candidatesOf(
   // The node uids each mark drew under, itself included.
   const owner = new Map<string, FocusMark>();
   for (const m of marks)
-    for (const n of subtree(m.node)) if (!owner.has(n.uid)) owner.set(n.uid, m);
+    for (const n of breadthFirst(m.node))
+      if (!owner.has(n.uid)) owner.set(n.uid, m);
   const parts = new Map<FocusMark, Outline>();
   walkItems(items, (item, at) => {
     const m = item.id !== undefined ? owner.get(item.id) : undefined;
@@ -296,18 +297,13 @@ function drawnBox(
   items: DisplayList.DisplayItem[],
   node: GoFishNode
 ): Box | undefined {
-  const uids = new Set([...subtree(node)].map((n) => n.uid));
+  const uids = new Set([...breadthFirst(node)].map((n) => n.uid));
   const outline: Outline = [];
   walkItems(items, (item, at) => {
     if (item.id !== undefined && uids.has(item.id))
       outline.push(...outlineOf(item, at));
   });
   return outline.length > 0 ? hullBox(outline) : undefined;
-}
-
-function* subtree(n: GoFishNode): Generator<GoFishNode> {
-  yield n;
-  for (const c of n.children) if (c instanceof GoFishNode) yield* subtree(c);
 }
 
 const hullBox = (outline: Outline): Box => ({
@@ -317,44 +313,28 @@ const hullBox = (outline: Outline): Box => ({
   y1: Math.max(...outline.map((p) => p.box.y1)),
 });
 
-const boxAt = (at: Affine, x: number, y: number, w: number, h: number): Box => {
-  const [ax, bx] = [at.tx + at.sx * x, at.tx + at.sx * (x + w)];
-  const [ay, by] = [at.ty + at.sy * y, at.ty + at.sy * (y + h)];
-  return {
-    x0: Math.min(ax, bx),
-    x1: Math.max(ax, bx),
-    y0: Math.min(ay, by),
-    y1: Math.max(ay, by),
-  };
-};
-
 /** The outline parts one drawn item adds, in svg px. A text item carries
- *  no box, so it adds none. */
+ *  no box, so it adds none. A box is the item's box (`itemBox`) with its
+ *  corners in order, under a negative scale too. */
 function outlineOf(item: DisplayList.DisplayItem, at: Affine): Outline {
   switch (item.kind) {
     case "rect":
     case "image":
-      return [{ box: boxAt(at, item.x, item.y, item.w, item.h), round: false }];
     case "ellipse":
+    case "composite": {
+      const { x, y, w, h } = itemBox(item, at)!;
       return [
         {
-          box: boxAt(
-            at,
-            item.cx - item.rx,
-            item.cy - item.ry,
-            2 * item.rx,
-            2 * item.ry
-          ),
-          round: Math.abs(item.rx - item.ry) < 1e-9,
+          box: {
+            x0: Math.min(x, x + w),
+            x1: Math.max(x, x + w),
+            y0: Math.min(y, y + h),
+            y1: Math.max(y, y + h),
+          },
+          round: item.kind === "ellipse" && Math.abs(item.rx - item.ry) < 1e-9,
         },
       ];
-    case "composite":
-      return [
-        {
-          box: boxAt(at, item.bbox.x, item.bbox.y, item.bbox.w, item.bbox.h),
-          round: false,
-        },
-      ];
+    }
     case "path":
       return pathSegments(item.d).map(([a, b]) => {
         const p = { x: at.tx + at.sx * a.x, y: at.ty + at.sy * a.y };
