@@ -29,6 +29,7 @@ import { formatValue } from "../ast/tooltip/content";
 import { tooltipSeat } from "../ast/tooltip/place";
 import { rowsKey } from "../ast/tooltip/request";
 import { check, items, report } from "./testHelpers";
+import { catchLocationsArray, seafood } from "../data/catch";
 
 /* --------------------------------- focus --------------------------------- */
 
@@ -229,11 +230,60 @@ console.log("# a scatter and a line");
 
 console.log("# with no focus, nothing but the titles changes");
 {
+  // Requirement 8: a chart with `.tooltip()` and no focus draws exactly the
+  // chart without it, apart from the marks' `title`s. An item's `id` is its
+  // node's uid, minted fresh by each build, so it differs between any two
+  // builds and is left out.
   const strip = (dl: any) =>
     JSON.stringify(dl, (k, v) => (k === "title" || k === "id" ? undefined : v));
-  const plain = await barChart(rect({ w: "share" })).toDisplayList({ w: 300, h: 200 });
-  const tipped = await barChart(rect({ w: "share" }).tooltip()).toDisplayList({ w: 300, h: 200 });
-  check("the same display list", strip(plain) === strip(tipped));
+  const tip = (m: any, on: boolean, fields?: string[]) =>
+    on ? m.tooltip(fields) : m;
+  const budget = [2018, 2019, 2020].flatMap((year, i) => [
+    { series: "Revenue", year, value: 1.6 + i * 0.3 },
+    { series: "Cost", year, value: 1.2 + i * 0.2 },
+  ]);
+  const specs: [string, (on: boolean) => any][] = [
+    ["the bar chart story", (on) =>
+      chart(paths, { w: 520, h: 400 })
+        .flow(spread({ by: "path", dir: "y", spacing: 4 }))
+        .mark(tip(rect({ w: "share", fill: "#4c78a8" }), on))],
+    ["the stacked bars story, with a legend", (on) =>
+      chart(seafood, { w: 400, h: 300 })
+        .flow(spread({ by: "lake", dir: "x", spacing: 8 }), stack({ by: "species", dir: "y" }))
+        .mark(tip(rect({ h: "count", fill: "species" }), on))],
+    ["the scatter story", (on) =>
+      chart(catchLocationsArray, { w: 400, h: 400 })
+        .flow(scatter({ by: "lake", x: "x", y: "y" }))
+        .mark(tip(circle({ r: 6, fill: "#4c78a8" }), on, ["lake", "x", "y"]))],
+    ["the line chart story", (on) =>
+      chart(budget, { w: 400, h: 260 })
+        .flow(group({ by: "series" }))
+        .mark(tip(line({ x: "year", y: "value", stroke: "series", strokeWidth: 2 }), on))],
+    ["labeled bars", (on) =>
+      chart(paths, { w: 300, h: 200 })
+        .flow(spread({ by: "path", dir: "y", spacing: 4 }))
+        .mark(tip(rect({ w: "share" }).label("n"), on))],
+    ["a chart nested per group, with labels and a legend", (on) =>
+      chart(seafood, { w: 500, h: 300 })
+        .flow(spread({ by: "lake", dir: "x", spacing: 12 }))
+        .mark((rows: any[]) =>
+          chart(rows)
+            .flow(stack({ by: "species", dir: "y" }))
+            .mark(tip(rect({ h: "count", fill: "species" }).label("count"), on))
+        )],
+  ];
+  for (const [name, spec] of specs) {
+    const plain = await spec(false).toDisplayList({});
+    const tipped = await spec(true).toDisplayList({});
+    const [a, b] = [strip(plain), strip(tipped)];
+    let at = 0;
+    while (at < a.length && a[at] === b[at]) at++;
+    check(
+      `${name}: the same display list`,
+      a === b && titles(tipped).length > 0,
+      a === b ? "no titles" : [a.slice(at - 80, at + 80), b.slice(at - 80, at + 80)]
+    );
+  }
 }
 
 /* --------------------------------- keys ---------------------------------- */
