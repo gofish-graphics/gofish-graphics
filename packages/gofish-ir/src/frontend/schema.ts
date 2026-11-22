@@ -864,6 +864,8 @@ export interface LeafMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   hidden?: boolean | BridgeLambdaSentinel;
+  /** `.tooltip()` (`true`) or `.tooltip(fields)`. */
+  tooltip?: true | string[];
   translate?: TranslateIR;
   [key: string]: unknown;
 }
@@ -883,6 +885,8 @@ export interface CombinatorMarkIR extends BaseIRNode, MarkBridgeFieldsIR {
   relate?: RelateIR;
   zOrder?: number | BridgeLambdaSentinel;
   hidden?: boolean | BridgeLambdaSentinel;
+  /** `.tooltip()` (`true`) or `.tooltip(fields)`. */
+  tooltip?: true | string[];
   translate?: TranslateIR;
 }
 

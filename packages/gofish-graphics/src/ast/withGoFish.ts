@@ -381,6 +381,9 @@ export type NameableMark<T> = Mark<T> & {
   /** How the mark looks in each phase of an animation: `Animation.grow()`,
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition): NameableMark<T>;
+  /** A box that describes the mark under the pointer: every field with one
+   *  value on the mark, or `fields`, in order. */
+  tooltip(fields?: readonly string[]): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],

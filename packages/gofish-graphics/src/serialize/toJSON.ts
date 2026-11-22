@@ -63,6 +63,8 @@ interface SerializeTag {
   translate?: { x?: number; y?: number };
   /** Set when a constant `.hidden(value)` is chained on a mark. */
   hidden?: boolean;
+  /** Set when `.tooltip(fields?)` is chained on a mark. */
+  tooltip?: true | string[];
 }
 
 /**
@@ -455,6 +457,7 @@ async function markToIR(
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = wireLabels(tag.label);
   if (tag.hidden !== undefined) chained.hidden = tag.hidden;
+  if (tag.tooltip !== undefined) chained.tooltip = tag.tooltip;
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

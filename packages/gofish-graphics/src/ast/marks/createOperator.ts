@@ -89,6 +89,7 @@ import {
   type OperatorTransition,
 } from "../../animation/transition";
 import { withWire, wireOf } from "../wire";
+import { recordTooltip, recordTooltipWire } from "../tooltip/request";
 import { isFlowStep, withFlowStep } from "./compose";
 import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
@@ -665,6 +666,28 @@ export const transitionModifier = {
 } satisfies ModifierConfig<[spec: MarkTransition]>;
 
 /**
+ * `.tooltip(fields?)` — a box that describes the mark under the pointer:
+ * every field with one value on the mark, or `fields`, in order. It records
+ * the request on each produced node (`recordTooltip`); the chart draws the
+ * boxes as one more layer over its marks (`tooltip/tooltip.ts`). One call
+ * covers every node the mark makes (`call`, made once per `.tooltip()` by
+ * `bind`). The IR field is `tooltip`: `true`, or the list of fields.
+ */
+export const tooltipModifier = {
+  name: "tooltip",
+  bind: (fields, call = {}) => [fields, call],
+  apply: (node, _layerContext, datum, fields, call) => {
+    recordTooltip(node, datum, fields, call!);
+  },
+  tag: (wrapped, base, fields, call) => {
+    recordTooltipWire(call!, wireOf(base));
+    propagateSerialize(base, wrapped, (tag) => {
+      tag.tooltip = fields === undefined ? true : [...fields];
+    });
+  },
+} satisfies ModifierConfig<[fields?: readonly string[], call?: object]>;
+
+/**
  * Attach chainable .name(), .label(), .zOrder() and .hidden() to a mark, registering it
  * into the layer context when named so that ref(...)/selectAll(...) can find
  * it back.
@@ -676,6 +699,7 @@ const NAMEABLE_MODIFIERS = [
   zOrderModifier,
   hiddenModifier,
   transitionModifier,
+  tooltipModifier,
 ];
 
 /** Their method names: a wrapper around a mark forwards these. */

@@ -9,6 +9,10 @@ covers:
   - packages/gofish-graphics/src/ast/marks/chart.ts
   - packages/gofish-graphics/src/ast/marks/markResult.ts
   - packages/gofish-graphics/src/ast/constraints/relationalPaint.ts
+  - packages/gofish-graphics/src/ast/tooltip/tooltip.ts
+  - packages/gofish-graphics/src/ast/tooltip/request.ts
+  - packages/gofish-graphics/src/ast/tooltip/content.ts
+  - packages/gofish-graphics/src/ast/tooltip/place.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -389,6 +393,20 @@ methods:
   input an operator applies the mark to, also when the mark sits inside a
   `layer([...])` or a compositing mark, which forward their children's batch
   form (see [The Operator Factory](/internals/frontend/operator-factory)).
+- `mark.tooltip(fields?)` records, on every produced node, the rows a box
+  describing it shows and a key from its data, and writes the rows as the
+  node's `title`. The chart builder draws the boxes as one more tier over its
+  marks (`tooltipLayers` in `ast/tooltip/tooltip.ts`): it selects the nodes
+  of one call, keeps the focused key, and places a box beside it. With no
+  focus the tier is empty and takes no room. The box is ordinary marks
+  (an `enclose` of two `spread` columns of `text`), and the tier is ink
+  (`inkOn`) that takes no pointer. A post-solve constraint, `tooltipPlace`
+  (`place.ts`, run after `labelPlace`), seats it: right of the mark, else
+  left, centered on its row; else under or over it, flush with its end;
+  else moved into the chart's box. The row values come from `content.ts`:
+  with no list, every field with one value on the mark's rows, and a size
+  or position channel's field with the value it draws, inferred as the
+  channel infers it (a sum for a size).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the

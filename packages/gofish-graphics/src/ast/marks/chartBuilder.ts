@@ -42,6 +42,7 @@ import {
 } from "../../animation/install";
 import { wireOf } from "../wire";
 import { createName } from "../createName";
+import { tooltipLayers } from "../tooltip/tooltip";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -1040,7 +1041,10 @@ export class ChartBuilder<TInput, TOutput = TInput> extends RenderableBuilder {
       );
     }
 
-    const nodes = [content, ...transitions];
+    // The layers its marks' tooltips add, over its marks and transitions.
+    const tooltips = await tooltipLayers(content, this.state.layerContext);
+
+    const nodes = [content, ...transitions, ...tooltips];
     // A flow with a `time.sequence` plays DATA time: its marks enter and
     // leave with the data, so the build-in only checks this tier's
     // transitions against that clock (`src/animation/install.ts`).

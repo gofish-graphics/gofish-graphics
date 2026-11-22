@@ -518,7 +518,7 @@ export function mapMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
 /**
  * `mark` with the modifiers its IR carries, chained in the order a JS
  * author writes them: `.translate(...)`, `.name(...)`, `.zOrder(...)`,
- * `.hidden(...)`. A `zOrder` or `hidden` is a constant, or a Python function
+ * `.hidden(...)`, `.tooltip(...)`. A `zOrder` or `hidden` is a constant, or a Python function
  * (`{__gofish_lambda}`), which the mark resolves over the inputs it is
  * applied to (`inputsResolver`), as it calls a JS `.zOrder((d) => ...)` per
  * input.
@@ -530,6 +530,7 @@ function withMarkMeta<M>(
     name?: unknown;
     zOrder?: unknown;
     hidden?: unknown;
+    tooltip?: unknown;
   },
   ctx: IRContext
 ): M {
@@ -544,6 +545,9 @@ function withMarkMeta<M>(
   }
   if (spec.hidden != null && typeof out.hidden === "function") {
     out = out.hidden(unwrapOpts(spec.hidden, ctx.bridge));
+  }
+  if (spec.tooltip != null && typeof out.tooltip === "function") {
+    out = out.tooltip(spec.tooltip === true ? undefined : spec.tooltip);
   }
   return out;
 }
@@ -706,13 +710,14 @@ function buildMark(markSpec: MarkSpec, ctx: IRContext): Mark<any> {
     return withMarkMeta(mark, spec, ctx);
   }
 
-  // `name`, `zOrder` and `hidden` are not factory options: `withMarkMeta`
+  // `name`, `zOrder`, `hidden` and `tooltip` are not factory options: `withMarkMeta`
   // applies them below.
   const {
     type,
     name: _name,
     zOrder: _zOrder,
     hidden: _hidden,
+    tooltip: _tooltip,
     ...rest
   } = spec as any;
   // Label is an array of `{accessor, ...opts}` specs — pull out and call the

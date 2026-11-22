@@ -357,6 +357,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
     type: t.union(t.boolean, t.ref("BridgeLambdaSentinel")),
     doc: "From `.hidden(value)`: the mark is laid out and feeds scales, axes, legends and refs, and paints nothing. A boolean, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to. An ancestor's `hidden` wins over a descendant's `false`.",
   },
+  tooltip: {
+    type: t.union(t.literal(true), t.array(t.string)),
+    doc: "From `.tooltip(fields?)`: a box that describes the mark under the pointer, beside it. `true` shows every field with one value on the mark, a size or position channel's field with the value it draws (a stacked segment's summed count); a list shows exactly those fields, in order. Numbers show digit grouping and at most two fraction digits. A static drawing writes the same rows as the mark's SVG `<title>`.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,

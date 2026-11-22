@@ -518,9 +518,13 @@ works the same way: `value` is a boolean or a callback on the datum, resolved
 per instance and through `resolveArgs`, and only a constant crosses the IR.
 The two are made by one maker, `datumValueModifier(name, set, isConstant)`.
 `.hidden()` sets the node's hidden flag and nothing else, so it has no
-function form.
+function form. `tooltipModifier` (`.tooltip(fields?)`, #1395) binds one
+`call` object per chained call, so the chart can find every node one call
+made; its `apply` records the box's rows and the node's key on each node
+(`ast/tooltip/request.ts`), and its `tag` remembers the mark's wire, whose
+channel options name the fields the mark draws.
 `nameableMark` attaches one list of modifiers, `NAMEABLE_MODIFIERS` (`name`,
-`label`, `zOrder`, `hidden`, `transition`), and exports their method names as
+`label`, `zOrder`, `hidden`, `transition`, `tooltip`), and exports their method names as
 `NAMEABLE_METHODS`, so a wrapper around a mark that must forward its chain
 (the `image` mark's dimension-awaiting wrapper) forwards every one of them
 from the same list. A mark that wraps marks forwards the same form by
