@@ -878,6 +878,34 @@ console.log("# a listed field one row of a line lacks: left out of that row's bo
   );
 }
 
+console.log('# label.angle: "auto" paints an earlier run than the last: the box opens');
+{
+  // A crowded y axis of long numbers: no angle fits it, and upright
+  // overlaps least, so the choice paints the first run (0) after laying the
+  // chart out at 45 and 90 too. The x row fits upright, so 0 is chosen for
+  // every row and the first run is reused as it was laid out.
+  const { scatter, circle } = GoFish as any;
+  const data = Array.from({ length: 5 }, (_, i) => ({ x: i, y: i * 1e6 + 0.5 }));
+  const el = freshEl();
+  await chart(data, {
+    w: 300,
+    h: 30,
+    axes: { x: { label: { angle: "auto" } }, y: { label: { angle: "auto" } } },
+  })
+    .flow(scatter({ by: "x", x: "x", y: "y" }))
+    .mark(circle({ r: 4, fill: "#4c78a8" }).tooltip())
+    .render(el, {});
+  await settle();
+  const c = el.querySelectorAll('ellipse[fill="#4c78a8"]')[2];
+  moveOver(el, Number(c.getAttribute("cx")), Number(c.getAttribute("cy")));
+  await settle();
+  check(
+    "hover opens the point's box",
+    boxTexts(el).includes("2,000,000.5"),
+    boxTexts(el).slice(-4)
+  );
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

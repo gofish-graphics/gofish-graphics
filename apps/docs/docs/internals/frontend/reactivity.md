@@ -346,7 +346,11 @@ its chart's focus as it resolves (`focus.read(registrar)` in `recordTooltip`):
 the input registers itself, since no spec code reads it, and the chart becomes
 a reader of its key. The tooltip's lowering (`ast/tooltip/tooltip.ts`) hands
 the focus the marks with a tooltip in the whole render (`focus.use(marks)`)
-and the box it drew (`focus.drew(box)`). One focus lives per chart
+and the box it drew (`focus.drew(box)`). A resolve can lay its chart out
+more than once and paint an earlier run than the last (`label.angle:
+"auto"` tries an angle per run), so the focus keeps the marks and boxes of
+every lowering since the last frame, and the next frame reads them all: only
+the painted run's nodes have items in it. One focus lives per chart
 (`focusOf`), for every `.tooltip()` in it, so one pointer opens one box, and
 the focus outlives the resolves that make every node anew. It is not one per
 `.tooltip()` call because a call is not stable across resolves: a call

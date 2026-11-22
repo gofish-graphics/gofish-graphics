@@ -101,14 +101,20 @@ export class TooltipFocus implements InputPrimitive {
    *  undefined on any other mark. */
   point: FocusPoint | undefined;
   private marks: FocusMark[] = [];
+  /** The marks and boxes of the lowerings since the last frame. A resolve
+   *  can lay its chart out more than once (`label.angle: "auto"` tries an
+   *  angle per run) and paint any one of the runs, not always the last, so
+   *  the next frame reads them all: only the painted run's nodes have items
+   *  in it (`scan`). */
+  private lowered: { marks: FocusMark[]; boxes: GoFishNode[] } | undefined;
   /** The candidates of the last frame, and, by key, each candidate and
    *  each point of one, with the mark it belongs to. */
   private candidates: Candidate[] = [];
   private byKey = new Map<unknown, { choice: Candidate; mark: Candidate }>();
   /** The pointer of the last event (a tap holds it, see `onEvent`). */
   private pointer: Point | undefined;
-  /** The box the last lowering drew, and where it was drawn. */
-  private box: GoFishNode | undefined;
+  /** The boxes the painted lowering may have drawn, and where one was. */
+  private boxes: GoFishNode[] = [];
   private cover: Box | undefined;
   private touch = false;
 
@@ -128,13 +134,14 @@ export class TooltipFocus implements InputPrimitive {
   /** Called by each lowering of the tooltip (`tooltip.ts`) with the marks
    *  with a tooltip in the whole render, before it draws the box. */
   use(marks: FocusMark[]): void {
-    this.marks = marks;
-    this.box = undefined;
+    this.lowered ??= { marks: [], boxes: [] };
+    this.lowered.marks.push(...marks);
   }
 
   /** The box the lowering drew for the focused mark. */
   drew(box: GoFishNode): void {
-    this.box = box;
+    this.lowered ??= { marks: [], boxes: [] };
+    this.lowered.boxes.push(box);
   }
 
   /** The focused candidate: the focused point, or the focused mark. */
@@ -144,7 +151,11 @@ export class TooltipFocus implements InputPrimitive {
   }
 
   onFrame(frame: InteractionFrame): void {
-    const { candidates, cover } = scan(frame.items, this.marks, this.box);
+    if (this.lowered !== undefined) {
+      ({ marks: this.marks, boxes: this.boxes } = this.lowered);
+      this.lowered = undefined;
+    }
+    const { candidates, cover } = scan(frame.items, this.marks, this.boxes);
     this.cover = cover;
     this.candidates = candidates;
     this.byKey = new Map();
@@ -160,7 +171,8 @@ export class TooltipFocus implements InputPrimitive {
     this.key = undefined;
     this.point = undefined;
     this.marks = [];
-    this.box = undefined;
+    this.lowered = undefined;
+    this.boxes = [];
     this.cover = undefined;
     this.candidates = [];
     this.byKey = new Map();
@@ -271,20 +283,21 @@ export function candidatesOf(
 }
 
 /** The candidates of `marks` among `items` ({@link candidatesOf}), and the
- *  box of everything `cover` (the open tooltip box) drew there, in svg px
+ *  box of everything `covers` (the open tooltip box, as each lowering since
+ *  the last frame drew it) drew there, in svg px
  *  (undefined when it drew nothing with a box), from one walk of the
  *  items. */
 function scan(
   items: DisplayList.DisplayItem[],
   marks: FocusMark[],
-  cover?: GoFishNode
+  covers: readonly GoFishNode[] = []
 ): { candidates: Candidate[]; cover: Box | undefined } {
   // The node uids each mark drew under, itself included, and the box's.
   const owner = new Map<string, FocusMark | typeof COVER>();
   for (const m of marks)
     for (const n of breadthFirst(m.node))
       if (!owner.has(n.uid)) owner.set(n.uid, m);
-  if (cover)
+  for (const cover of covers)
     for (const n of breadthFirst(cover))
       if (!owner.has(n.uid)) owner.set(n.uid, COVER);
   const parts = new Map<FocusMark | typeof COVER, Drawn>();
