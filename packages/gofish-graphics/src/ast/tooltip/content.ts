@@ -12,6 +12,8 @@ import { inferColor, inferPos, inferRaw, inferSize } from "../channels";
 import { getValue } from "../data";
 import { GoFishNode } from "../_node";
 import { GoFishRef } from "../_ref";
+import { formatter } from "../calendar";
+import { columnType } from "../schema";
 
 /** One row of a tooltip: the field's name and its formatted value. */
 export type TooltipRow = readonly [name: string, value: string];
@@ -31,36 +33,48 @@ const numberFormat = new Intl.NumberFormat("en-US", {
 const smallNumberFormat = new Intl.NumberFormat("en-US", {
   maximumSignificantDigits: 3,
 });
-const dateFormat = new Intl.DateTimeFormat("en-US", {
-  dateStyle: "medium",
-  timeZone: "UTC",
-});
-const dateTimeFormat = new Intl.DateTimeFormat("en-US", {
+const DATE: Intl.DateTimeFormatOptions = { dateStyle: "medium" };
+const DATE_TIME: Intl.DateTimeFormatOptions = {
   dateStyle: "medium",
   timeStyle: "short",
-  timeZone: "UTC",
-});
+};
+const CLOCK: Intl.DateTimeFormatOptions = {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+};
+
+/** Whether `v` is midnight on the calendar of `zone`. */
+const isMidnight = (v: Date, zone: string): boolean =>
+  v.getUTCMilliseconds() === 0 &&
+  formatter("tooltipClock", CLOCK, zone)
+    .formatToParts(v)
+    .every((p) => p.type === "literal" || Number(p.value) === 0);
 
 /**
  * A value as a tooltip shows it: a number with digit grouping and at most
  * two fraction digits (11902 is "11,902"), or three significant digits when
  * it is below 1 (0.1300001 is "0.13", 0.0119 is "0.0119"), a date by
- * its day, and its time when it has one (in UTC, as GoFish reads times by
- * default), anything else by `String`.
+ * its day, and its time when it has one, on the calendar of `zone`, the
+ * zone of its column's `Unit.time` (UTC when the column has none), as an
+ * axis reads it; a number in a column with a zone is an instant, epoch
+ * milliseconds; anything else by `String`.
  */
-export function formatValue(v: unknown): string {
+export function formatValue(v: unknown, zone?: string): string {
+  // A number in a column of instants (one with a zone) is epoch ms.
+  if (typeof v === "number" && zone !== undefined && Number.isFinite(v))
+    v = new Date(v);
   if (typeof v === "number")
     return !Number.isFinite(v)
       ? String(v)
       : (Math.abs(v) < 1 ? smallNumberFormat : numberFormat).format(v);
   if (v instanceof Date) {
     if (Number.isNaN(v.getTime())) return String(v);
-    const midnight =
-      v.getUTCHours() === 0 &&
-      v.getUTCMinutes() === 0 &&
-      v.getUTCSeconds() === 0 &&
-      v.getUTCMilliseconds() === 0;
-    return (midnight ? dateFormat : dateTimeFormat).format(v);
+    const on = zone ?? "UTC";
+    return isMidnight(v, on)
+      ? formatter("tooltipDate", DATE, on).format(v)
+      : formatter("tooltipDateTime", DATE_TIME, on).format(v);
   }
   return String(v);
 }
@@ -179,6 +193,9 @@ export function tooltipRows(
         columns.push(k);
       }
   const channels = channelFields(mark.wire, seen);
+  // A time column's zone is on the rows' column types (`Unit.time`).
+  const zoneOf = (field: string): string | undefined =>
+    columnType(mark.rows, field)?.HasUnit?.zone;
   const valueOf = (field: string): unknown => {
     const kind = channels.get(field);
     return kind !== undefined
@@ -190,7 +207,7 @@ export function tooltipRows(
       const v = valueOf(f);
       return v === NONE || v === undefined
         ? []
-        : [[f, formatValue(v)] as const];
+        : [[f, formatValue(v, zoneOf(f))] as const];
     });
   return fields.map((f) => {
     if (!seen.has(f))
@@ -211,7 +228,7 @@ export function tooltipRows(
               .join(", ") || "none"
           }.`
       );
-    return [f, formatValue(v)] as const;
+    return [f, formatValue(v, zoneOf(f))] as const;
   });
 }
 

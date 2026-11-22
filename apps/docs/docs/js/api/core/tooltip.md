@@ -60,8 +60,9 @@ chart(pathTypes)
   and it stays open.
 - **Values.** Numbers show digit grouping and at most two fraction digits
   (`11,902`, `2.35`). A number below 1 shows three significant digits
-  (`0.13`, `0.0119`). Dates show as a date, with the time when it is not
-  midnight. A `line`'s or `ribbon`'s position fields read each row, so they
+  (`0.13`, `0.0119`). Dates, and the values of a time column, show as a
+  date, with the time when it is not midnight, in the time zone of the
+  column's `Unit.time` (UTC when it has none), as its axis reads them. A `line`'s or `ribbon`'s position fields read each row, so they
   show only when every row agrees.
 - **Placement.** The box sits right of the mark, else left of it, centered
   on its row; else under or over it, flush with its end; else it is moved

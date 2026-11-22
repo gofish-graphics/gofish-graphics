@@ -250,32 +250,36 @@ export function candidatesOf(
   for (const m of marks)
     for (const n of breadthFirst(m.node))
       if (!owner.has(n.uid)) owner.set(n.uid, m);
-  const parts = new Map<FocusMark, Outline>();
+  const parts = new Map<FocusMark, Drawn>();
   walkItems(items, (item, at) => {
     const m = item.id !== undefined ? owner.get(item.id) : undefined;
     if (m === undefined) return;
-    const outline = parts.get(m) ?? [];
-    parts.set(m, outline);
-    outline.push(...outlineOf(item, at));
+    let drawn = parts.get(m);
+    if (drawn === undefined) parts.set(m, (drawn = emptyDrawn()));
+    addParts(drawn, outlineOf(item, at));
   });
   const byKey = new Map<string, Candidate & { marks: FocusMark[] }>();
   for (const m of marks) {
-    const outline = parts.get(m);
-    if (outline === undefined || outline.length === 0) continue;
+    const drawn = parts.get(m);
+    if (drawn === undefined || drawn.outline.length === 0) continue;
     const c = byKey.get(m.key);
     if (c === undefined)
       byKey.set(m.key, {
         key: m.key,
         datum: [...m.rows],
-        box: hullBox(outline),
+        box: drawn.box,
         position: {},
-        outline: [...outline],
+        outline: drawn.outline,
         marks: [m],
       });
     else {
-      c.datum.push(...m.rows);
-      c.outline.push(...outline);
-      c.box = hullBox(c.outline);
+      // Marks that share a key are one candidate: the union of their parts,
+      // grown part by part (rebuilding the box from the merged outline on
+      // each merge is quadratic in the number of marks).
+      for (const r of m.rows) c.datum.push(r);
+      const merged = { outline: c.outline, box: c.box };
+      addParts(merged, drawn.outline);
+      c.box = merged.box;
       c.marks.push(m);
     }
   }
@@ -298,20 +302,35 @@ function drawnBox(
   node: GoFishNode
 ): Box | undefined {
   const uids = new Set([...breadthFirst(node)].map((n) => n.uid));
-  const outline: Outline = [];
+  const drawn = emptyDrawn();
   walkItems(items, (item, at) => {
     if (item.id !== undefined && uids.has(item.id))
-      outline.push(...outlineOf(item, at));
+      addParts(drawn, outlineOf(item, at));
   });
-  return outline.length > 0 ? hullBox(outline) : undefined;
+  return drawn.outline.length > 0 ? drawn.box : undefined;
 }
 
-const hullBox = (outline: Outline): Box => ({
-  x0: Math.min(...outline.map((p) => p.box.x0)),
-  y0: Math.min(...outline.map((p) => p.box.y0)),
-  x1: Math.max(...outline.map((p) => p.box.x1)),
-  y1: Math.max(...outline.map((p) => p.box.y1)),
+/** An outline being collected, and the box of its parts so far. */
+type Drawn = { outline: Outline; box: Box };
+
+const emptyDrawn = (): Drawn => ({
+  outline: [],
+  box: { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity },
 });
+
+/** Add `parts` to `drawn`, growing its box by each. A loop, not a spread
+ *  into `push` or `Math.min`: a long path has more parts than a call takes
+ *  arguments. */
+function addParts(drawn: Drawn, parts: Outline): void {
+  const { outline, box } = drawn;
+  for (const p of parts) {
+    outline.push(p);
+    if (p.box.x0 < box.x0) box.x0 = p.box.x0;
+    if (p.box.y0 < box.y0) box.y0 = p.box.y0;
+    if (p.box.x1 > box.x1) box.x1 = p.box.x1;
+    if (p.box.y1 > box.y1) box.y1 = p.box.y1;
+  }
+}
 
 /** The outline parts one drawn item adds, in svg px. A text item carries
  *  no box, so it adds none. A box is the item's box (`itemBox`) with its

@@ -176,7 +176,16 @@ console.log("# a re-run replaced the svg: the container hears the leave");
 console.log("# touch: a tap focuses and holds");
 send("pointerdown", 100, 100, "touch");
 send("pointerup", 100, 100, "touch");
-send("pointerleave", 100, 100, "touch");
+// A lifted finger leaves every element under it; the container hears its
+// own `pointerleave`, which does not bubble.
+container.dispatchEvent(
+  new (globalThis as any).PointerEvent("pointerleave", {
+    clientX: 100,
+    clientY: 100,
+    bubbles: false,
+    pointerType: "touch",
+  })
+);
 await settle();
 check("the tapped bar's box", texts().includes("9,811"), texts());
 send("pointermove", 1000, 1000, "mouse");

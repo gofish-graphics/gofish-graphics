@@ -16,6 +16,7 @@ import {
   spread,
   stack,
   Serialize,
+  Unit,
 } from "../lib";
 import { Frontend } from "gofish-ir";
 import {
@@ -26,7 +27,12 @@ import {
   type Candidate,
   type Frame,
 } from "../interaction/focus";
-import { pathSegments } from "../interaction/tooltipFocus";
+import {
+  candidatesOf,
+  pathSegments,
+  type FocusMark,
+} from "../interaction/tooltipFocus";
+import { UNDEFINED } from "../ast/underlyingSpace";
 import { formatValue } from "../ast/tooltip/content";
 import { tooltipSeat } from "../ast/tooltip/place";
 import { rowsKey } from "../ast/tooltip/request";
@@ -163,6 +169,68 @@ console.log("# focus: a line is as near as its drawn path");
   );
 }
 
+console.log("# candidates: long paths and many marks");
+{
+  /** A stand-in for a mark's node: its uid, no children, no parent, no
+   *  data extent on either axis. */
+  const fakeNode = (uid: string) =>
+    ({
+      uid,
+      children: [],
+      parent: undefined,
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+    }) as unknown as FocusMark["node"];
+  // One line of 150,000 segments: more parts than a call takes arguments.
+  const n = 150_000;
+  let d = "M0 0";
+  for (let i = 1; i <= n; i++) d += ` L${i / 100} ${i % 2}`;
+  const long = { kind: "path", id: "long", d, style: { fill: "none" } } as any;
+  let threw: unknown;
+  let got: ReturnType<typeof candidatesOf> = [];
+  try {
+    got = candidatesOf([long], [{ key: "k", node: fakeNode("long"), rows: [] }]);
+  } catch (e) {
+    threw = e;
+  }
+  check("150,000 segments: no stack overflow", threw === undefined, String(threw));
+  check(
+    "150,000 segments: one candidate, its box",
+    got.length === 1 &&
+      got[0].outline.length === n &&
+      got[0].box.x1 === n / 100 &&
+      got[0].box.y1 === 1,
+    got[0]?.box
+  );
+  // 5,000 marks with one key: one candidate, its box the union, in time
+  // linear in the marks.
+  const k = 5_000;
+  const items = Array.from({ length: k }, (_, i) => ({
+    kind: "rect",
+    id: `m${i}`,
+    x: i,
+    y: 0,
+    w: 1,
+    h: 1 + (i % 3),
+  })) as any[];
+  const marks = items.map((it) => ({
+    key: "same",
+    node: fakeNode(it.id),
+    rows: [{ i: it.x }],
+  }));
+  const t0 = performance.now();
+  const one = candidatesOf(items, marks);
+  const ms = performance.now() - t0;
+  check(
+    "5,000 marks, one key: one candidate, the union box",
+    one.length === 1 &&
+      one[0].outline.length === k &&
+      JSON.stringify(one[0].box) === JSON.stringify({ x0: 0, y0: 0, x1: k, y1: 3 }) &&
+      one[0].datum.length === k,
+    one[0]?.box
+  );
+  check(`5,000 marks, one key: fast (${ms.toFixed(0)} ms)`, ms < 200, ms);
+}
+
 /* -------------------------------- format --------------------------------- */
 
 console.log("# format");
@@ -182,6 +250,40 @@ check(
   formatValue(new Date(Date.UTC(2024, 0, 15))) === "Jan 15, 2024",
   formatValue(new Date(Date.UTC(2024, 0, 15)))
 );
+{
+  // 2024-01-15 03:00 UTC is still the 14th in New York, as its axis reads it.
+  const t = Date.UTC(2024, 0, 15, 3);
+  const ny = "America/New_York";
+  check(
+    "a date in a zone: that zone's day and time",
+    formatValue(new Date(t), ny) === "Jan 14, 2024, 10:00 PM",
+    formatValue(new Date(t), ny)
+  );
+  check(
+    "midnight in the zone: its day alone",
+    formatValue(new Date(Date.UTC(2024, 0, 15, 5)), ny) === "Jan 15, 2024",
+    formatValue(new Date(Date.UTC(2024, 0, 15, 5)), ny)
+  );
+  check(
+    "epoch ms in a column with a zone: an instant",
+    formatValue(t, ny) === "Jan 14, 2024, 10:00 PM",
+    formatValue(t, ny)
+  );
+  // Through a chart: the column's Unit.time({ zone }) decides the zone.
+  const dl = await chart([{ day: t, n: 1 }], {
+    w: 100,
+    h: 100,
+    schema: { day: Unit.time({ zone: ny }) },
+  })
+    .flow(spread({ by: "day", dir: "x" }))
+    .mark(rect({ h: "n" }).tooltip(["day", "n"]))
+    .toDisplayList({});
+  check(
+    "a chart's time column in New York: the tooltip reads New York's day",
+    items(dl).some((i: any) => i.title === "day: Jan 14, 2024, 10:00 PM\nn: 1"),
+    items(dl).map((i: any) => i.title).filter(Boolean)
+  );
+}
 
 /* --------------------------------- seat ---------------------------------- */
 

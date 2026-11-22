@@ -365,12 +365,11 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
 
     // Where the pointer is, by an event's target: over the svg, off it, or
     // unknown while a re-run has the svg out of the page. A `pointerleave`
-    // the host hears is its own (it does not bubble), or a leave of the svg
-    // dispatched to bubble: either way the pointer left the chart.
+    // does not bubble, so the one the host hears is its own: the pointer
+    // left the chart.
     const where = (type: InteractionEventType, event: Event) => {
       const target = event.target as Node | null;
-      if (type === "pointerleave" && (target === host || target === this.svg))
-        return "off";
+      if (type === "pointerleave" && target === host) return "off";
       const svg = this.svg;
       if (svg === undefined || !svg.isConnected) return "unknown";
       return target !== null && svg.contains(target) ? "over" : "off";
