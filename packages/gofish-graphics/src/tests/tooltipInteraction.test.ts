@@ -61,6 +61,7 @@ check("no box", boxOf() === undefined);
 check("no <title> while live", container.querySelectorAll("title").length === 0);
 const before = marks();
 const beforeTexts = texts();
+const beforePainted = svg().querySelectorAll("rect, text, line, path").length;
 
 console.log("# hover the first bar");
 // Bars sit at y 0-64, 68-132, 136-200; x from 72.
@@ -85,6 +86,17 @@ check(
   Number(box?.getAttribute("x")) + Number(box?.getAttribute("width")) <= 472 + 0.5,
   box?.outerHTML
 );
+{
+  // The box is the last thing painted: everything the drawing had before,
+  // the axes' ticks and labels too, paints under it.
+  const painted = [...svg().querySelectorAll("rect, text, line, path")];
+  const at = box === undefined ? -1 : painted.indexOf(box);
+  check(
+    "it paints over the axes",
+    beforePainted > 0 && at === beforePainted,
+    [at, beforePainted]
+  );
+}
 
 console.log("# over the box, the focus stays");
 {
@@ -209,8 +221,9 @@ console.log("# the widget path: an IR document rendered by renderIR");
   const shown = [...el.querySelectorAll("text")].map((t) => t.textContent);
   check(
     "hover opens the box with the listed fields",
-    // The box's texts come first: its names column, then its values.
-    JSON.stringify(shown.slice(0, 4)) ===
+    // The box paints last, over the chrome: its names column, then its
+    // values.
+    JSON.stringify(shown.slice(-4)) ===
       JSON.stringify(["path", "n", "INF→INF", "9,811"]),
     shown
   );

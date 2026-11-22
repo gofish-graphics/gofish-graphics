@@ -327,10 +327,12 @@ code (a bare `createEffect`) never attaches, so `dataPos()`/`currentData()` retu
 
 A mark's `.tooltip()` (#1395) needs to know which of its marks the pointer is
 on. That is an input like the others, `TooltipFocus` (`tooltipFocus.ts`), and
-nothing about the runtime is special to it. The chart's tooltip layer
-(`ast/tooltip/tooltip.ts`) calls `focus.use(registrar, marks)` on each resolve:
+nothing about the runtime is special to it. A mark with `.tooltip()` reads
+its call's focus as it resolves (`focus.read(registrar)` in `recordTooltip`):
 the input registers itself, since no spec code reads it, and the chart becomes
-a reader of its key. One focus lives per chart and per `.tooltip()` call
+a reader of its key. The tooltip's lowering (`ast/tooltip/tooltip.ts`) hands
+the focus the call's marks in the whole render (`focus.use(marks)`) and the box
+it drew (`focus.drew(box)`). One focus lives per chart and per `.tooltip()` call
 (`focusOf`), so it outlives the resolves that make every node anew.
 
 The focus reads geometry the way `nodeBox` does. On each published frame it

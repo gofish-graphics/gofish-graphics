@@ -6,6 +6,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/labels/elaborate.tsx
   - packages/gofish-graphics/src/ast/selectionLayer.ts
+  - packages/gofish-graphics/src/ast/tooltip/tooltip.ts
   - packages/gofish-graphics/src/ast/labels/labelPlacement.ts
   - packages/gofish-graphics/src/ast/labels/autoLabelColor.ts
   - packages/gofish-graphics/src/ast/labels/labelNode.tsx
@@ -226,6 +227,16 @@ need constraints that reach from one tier into another, and a tier resolved
 after chrome. Until then the label tier is drawn by
 `lowerSelectionLayers`, the one lowering every modifier of this kind
 shares (#803).
+
+`.tooltip()` is its second user (`tooltipLayer` in `ast/tooltip/tooltip.ts`,
+lowered after the labels). Its stamps are the requests its marks recorded,
+and its selection is the mark the pointer focuses, so with no focus it takes
+nothing and lowers nothing. Its tier is a ref to that mark and the box beside
+it. It differs from a label in where the tier goes: a `SelectionLayer` may
+name its own `home`, and a tooltip's is the render root. Its box is ink and
+is drawn over the whole graphic, so it paints over the chrome and stays
+inside the graphic, not inside the mark's chart. A label keeps the default,
+`homeOf`, since a label takes room in its chart.
 
 ## Position vocabulary → constraints
 

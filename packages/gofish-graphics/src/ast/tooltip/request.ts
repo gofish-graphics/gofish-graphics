@@ -4,12 +4,14 @@
 
 /**
  * What a mark's `.tooltip()` records on the nodes it makes (#1395), for the
- * chart to draw the boxes from (`tooltip.ts`). INTERNAL. A leaf module, so
+ * render to draw the boxes from (`tooltip.ts`). INTERNAL. A leaf module, so
  * the modifier table (`createOperator.ts`) can call it without importing
  * the chart builder.
  */
 import { GoFishNode } from "../_node";
 import { GoFishRef } from "../_ref";
+import type { Registrar } from "../../interaction/resolveContext";
+import { focusOf, type TooltipFocus } from "../../interaction/tooltipFocus";
 import {
   tooltipRows,
   tooltipText,
@@ -18,8 +20,14 @@ import {
 } from "./content";
 
 /** What one node's `.tooltip()` call recorded: the call it belongs to, the
- *  rows the box shows, and the node's key. */
-export type TooltipRequest = { call: object; rows: TooltipRow[]; key: string };
+ *  rows the box shows, the node's key, and the focus of the call in the
+ *  live chart that resolved it (none in a static drawing). */
+export type TooltipRequest = {
+  call: object;
+  rows: TooltipRow[];
+  key: string;
+  focus: TooltipFocus | undefined;
+};
 
 const requests = new WeakMap<GoFishNode, TooltipRequest>();
 /** Each call's mark wire, which names the fields its channels draw. */
@@ -29,14 +37,23 @@ const wires = new WeakMap<object, TooltipMark["wire"]>();
 export const tooltipRequest = (node: GoFishNode): TooltipRequest | undefined =>
   requests.get(node);
 
-const drawn = new WeakSet<GoFishNode>();
-/** Whether `node`'s box is still to be drawn, and from now on it is not: of
- *  the charts a node sits in, the innermost one, which resolves first,
- *  draws its box. */
-export function claimTooltip(node: GoFishNode): boolean {
-  if (drawn.has(node)) return false;
-  drawn.add(node);
-  return true;
+/** Every node under `root` (itself included) with a request, in tree
+ *  order, each with its request, which is taken off it: a later lowering
+ *  of the same tree draws no second box. */
+export function takeTooltips(
+  root: GoFishNode
+): { node: GoFishNode; request: TooltipRequest }[] {
+  const out: { node: GoFishNode; request: TooltipRequest }[] = [];
+  const walk = (n: GoFishNode) => {
+    const request = requests.get(n);
+    if (request !== undefined) {
+      out.push({ node: n, request });
+      requests.delete(n);
+    }
+    for (const c of n.children) if (c instanceof GoFishNode) walk(c);
+  };
+  walk(root);
+  return out;
 }
 
 /**
@@ -72,13 +89,16 @@ export const recordTooltipWire = (
  * Record, on a node the mark of a `.tooltip(fields)` call made from `datum`,
  * the rows its box shows (checked here, so a field that is not there fails
  * the render, not a hover) and its key, and write them as its `title` for a
- * static drawing.
+ * static drawing. In a live chart (`registrar`) the mark reads its call's
+ * focus there, as a spec reads an input, so a change of focus re-runs the
+ * chart.
  */
 export function recordTooltip(
   node: GoFishNode,
   datum: unknown,
   fields: readonly string[] | undefined,
-  call: object
+  call: object,
+  registrar: Registrar | undefined
 ): void {
   const rows = Array.isArray(datum)
     ? datum
@@ -87,5 +107,7 @@ export function recordTooltip(
       : [datum];
   const content = tooltipRows({ rows, wire: wires.get(call) }, fields);
   node.title = tooltipText(content);
-  requests.set(node, { call, rows: content, key: rowsKey(rows) });
+  const focus = registrar ? focusOf(registrar, call) : undefined;
+  focus?.read(registrar!);
+  requests.set(node, { call, rows: content, key: rowsKey(rows), focus });
 }

@@ -395,15 +395,20 @@ methods:
   form (see [The Operator Factory](/internals/frontend/operator-factory)).
 - `mark.tooltip(fields?)` records, on every produced node, the rows a box
   describing it shows and a key from its data, and writes the rows as the
-  node's `title`. The chart builder draws the boxes as one more tier over its
-  marks (`tooltipLayers` in `ast/tooltip/tooltip.ts`): it selects the nodes
-  of one call, keeps the focused key, and places a box beside it. With no
-  focus the tier is empty and takes no room. The box is ordinary marks
-  (an `enclose` of two `spread` columns of `text`), and the tier is ink
-  (`inkOn`) that takes no pointer. A post-solve constraint, `tooltipPlace`
-  (`place.ts`, run after `labelPlace`), seats it: right of the mark, else
-  left, centered on its row; else under or over it, flush with its end;
-  else moved into the chart's box. The row values come from `content.ts`:
+  node's `title`. In a live chart the mark also reads its call's focus, so
+  a change of focus re-runs the chart. The render lowers the box after the
+  labels, as a layer over its selection (`tooltipLayer` in
+  `ast/tooltip/tooltip.ts`, through `lowerSelectionLayers`, see
+  [Labels](/internals/frontend/labels)): it takes the requests off the
+  tree, hands each call's focus the call's marks, selects the first mark
+  with the focused key, and draws a box beside it on the render root, so
+  the box paints over the marks, their labels and the chrome. With no focus
+  nothing is lowered. The box is ordinary marks (an `enclose` of two
+  `spread` columns of `text`), and it is ink (`inkOn`) that takes no
+  pointer. A post-solve constraint, `tooltipPlace` (`place.ts`, run after
+  `labelPlace`), seats it: right of the mark, else left, centered on its
+  row; else under or over it, flush with its end; else moved into the
+  graphic's box. The row values come from `content.ts`:
   with no list, every field with one value on the mark's rows, and a size
   or position channel's field with the value it draws, inferred as the
   channel infers it (a sum for a size).

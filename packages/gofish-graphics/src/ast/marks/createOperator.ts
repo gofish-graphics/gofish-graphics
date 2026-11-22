@@ -701,16 +701,16 @@ export const transitionModifier = {
 /**
  * `.tooltip(fields?)` — a box that describes the mark under the pointer:
  * every field with one value on the mark, or `fields`, in order. It records
- * the request on each produced node (`recordTooltip`); the chart draws the
- * boxes as one more layer over its marks (`tooltip/tooltip.ts`). One call
+ * the request on each produced node (`recordTooltip`); the render draws the
+ * box as a layer over its selection, after chrome (`tooltip/tooltip.ts`). One call
  * covers every node the mark makes (`call`, made once per `.tooltip()` by
  * `bind`). The IR field is `tooltip`: `true`, or the list of fields.
  */
 export const tooltipModifier = {
   name: "tooltip",
   bind: (fields, call = {}) => [fields, call],
-  apply: (node, _layerContext, datum, fields, call) => {
-    recordTooltip(node, datum, fields, call!);
+  apply: (node, layerContext, datum, fields, call) => {
+    recordTooltip(node, datum, fields, call!, layerContext?.registrar);
   },
   tag: (wrapped, base, fields, call) => {
     recordTooltipWire(call!, wireOf(base));

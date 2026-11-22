@@ -1,46 +1,42 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Labels — /internals/frontend/labels
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
 /**
  * `.tooltip()` (#1395): a box that describes the mark under the pointer.
  *
- * A tooltip is one more layer of the same chart. Written out, a mark's
- * `.tooltip()` is
+ * A tooltip is a layer over its selection, as a label is
+ * (`selectionLayer.ts`): written out, a mark's `.tooltip()` is
  *
  *     .layer(
  *       chart(selectAll(<the mark>))
- *         .flow(filter(<the focused one>), group(<by mark>))
+ *         .flow(filter(<the focused one>))
  *         .mark((it) => <a box beside it>)
  *     )
  *
  * where the focused mark is the one the pointer picks (`tooltipFocus.ts`)
  * and the box is ordinary marks: a rounded rect around a column of names
- * and a column of values. The layer is ink (it takes no room, so opening
- * the box moves nothing), it paints over the marks, and nothing it draws is
- * a pointer target. With no focus its filter keeps nothing, and an empty
- * layer draws nothing and takes no room, so the chart is the chart without
- * `.tooltip()`.
+ * and a column of values. The tier goes on the render root, over the whole
+ * graphic: its box paints over the marks, their labels and the chrome, and
+ * stays inside the graphic. The box is ink (it takes no room, so opening it
+ * moves nothing), and nothing it draws is a pointer target. With no focus
+ * the selection is empty and nothing is lowered, so the drawing is the
+ * drawing without `.tooltip()`.
  *
- * The one entry point is {@link tooltipLayers}: given a chart's resolved
- * marks, the layers their tooltips add. `ChartBuilder` calls it once per
- * resolve, beside the transitions it draws over its marks.
+ * The one entry point is {@link tooltipLayer}, which the render lowers
+ * after the labels (`gofish.tsx`).
  */
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
-import { ref } from "../shapes/ref";
 import { text } from "../shapes/text";
 import { spread } from "../graphicalOperators/spread";
-import { layer as Layer } from "../graphicalOperators/layer";
-import { chart } from "../marks/chartBuilder";
-import { enclose, filter } from "../marks/chart";
-import { group } from "../graphicalOperators/group";
+import { enclose } from "../marks/chart";
 import { LayerContext, resolveMarkResult } from "../marks/markResult";
-import { SlotOperand } from "../constraints/shared";
-import { focusOf, type FocusMark } from "../../interaction/tooltipFocus";
+import type { SelectionLayer } from "../selectionLayer";
+import type { FocusMark, TooltipFocus } from "../../interaction/tooltipFocus";
 import { createTooltipPlaceConstraint } from "./place";
 import type { TooltipRow } from "./content";
-import { claimTooltip, tooltipRequest } from "./request";
+import { takeTooltips, type TooltipRequest } from "./request";
 
 /** The box: a column of muted, right-aligned names beside a column of
  *  left-aligned values, in a white rounded rect. */
@@ -77,101 +73,67 @@ function box(rows: readonly TooltipRow[]) {
   );
 }
 
-/** The box of `rows` beside `mark`, kept inside `frame` (the chart's
- *  marks) by the placement that runs after the solve (`place.ts`). */
-async function beside(
-  mark: GoFishNode,
-  frame: GoFishNode,
-  rows: readonly TooltipRow[],
-  layerContext: LayerContext
-): Promise<GoFishNode> {
-  const node = (await (Layer as any)({}, [
-    ref({ __ref: mark } as any),
-    ref({ __ref: frame } as any),
-    await resolveMarkResult(box(rows) as any, layerContext),
-  ])) as GoFishNode;
-  await node.INTERNAL_relate([
-    createTooltipPlaceConstraint([
-      new SlotOperand(node, 0),
-      new SlotOperand(node, 1),
-      new SlotOperand(node, 2),
-    ]),
-  ]);
-  return node;
-}
+/** One focused mark: the node, its request, and its call's focus. */
+type TooltipEntry = {
+  node: GoFishNode;
+  request: TooltipRequest;
+  focus: TooltipFocus;
+};
 
 /**
- * The layers the tooltips of a chart's marks add, given its resolved marks
- * (`content`, which also bounds where a box may go): one per `.tooltip()`
- * call among them, over that call's marks. Empty when no mark has one. A
- * mark in a chart nested in this one was drawn by that chart, so its box
- * stays inside that chart (TODO(#1395): a box inside the outermost chart
- * would have more room; that needs a chart to know it is the outermost).
- *
- * In a live chart (`layerContext.registrar`) each layer reads its call's
- * focus, so a change of focus re-runs the chart. A static drawing has no
- * focus, and draws every layer empty: its tooltips are the marks' titles.
+ * `.tooltip()` as a layer over its selection (`selectionLayer.ts`). Its
+ * stamps are the requests the marks recorded (`takeTooltips`); each call's
+ * focus gets the call's marks in the whole render, as candidates, and the
+ * selection is the first mark with the focused key (marks with one key are
+ * one candidate). Its home is the render root. The tier over it is, per
+ * entry, a ref to the mark and its box, seated after the solve beside the
+ * mark and inside the graphic (`tooltipPlace`).
  */
-export async function tooltipLayers(
-  content: GoFishNode,
-  layerContext: LayerContext
-): Promise<GoFishNode[]> {
-  const byCall = new Map<object, GoFishNode[]>();
-  // A mark may resolve to a list of nodes (`cut` gives its slices), though
-  // `resolveMarkResult` types its result as one node, so `content` may be a
-  // list. TODO(#1395): a tooltip on such a mark finds no bounding box in
-  // `beside`; the right fix is `resolveMarkResult` typing its list result.
-  const walk = (n: GoFishNode | readonly GoFishNode[]) => {
-    if (Array.isArray(n)) {
-      for (const c of n) if (c instanceof GoFishNode) walk(c);
-      return;
-    }
-    const node = n as GoFishNode;
-    const r = tooltipRequest(node);
-    if (r !== undefined && claimTooltip(node)) {
-      const marks = byCall.get(r.call) ?? [];
-      byCall.set(r.call, marks);
-      marks.push(node);
-    }
-    for (const c of node.children) if (c instanceof GoFishNode) walk(c);
-  };
-  walk(content);
-
-  const layers: GoFishNode[] = [];
-  for (const [call, marks] of byCall) {
-    const registrar = layerContext.registrar;
-    const focus = registrar ? focusOf(registrar, call) : undefined;
-    const requestOf = (r: GoFishRef) =>
-      tooltipRequest((r as unknown as { directNode: GoFishNode }).directNode)!;
-    const tier = chart({ axes: false })
-      .flow(
-        filter((r: GoFishRef) => requestOf(r).key === focus?.key),
-        group({ by: (r: GoFishRef) => requestOf(r).key })
-      )
-      .mark(async (refs: GoFishRef[]) => {
-        const node = (refs[0] as unknown as { directNode: GoFishNode })
-          .directNode;
-        return beside(node, content, requestOf(refs[0]).rows, layerContext);
+export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
+  take(root) {
+    const byFocus = new Map<TooltipFocus, FocusMark[]>();
+    const entries: TooltipEntry[] = [];
+    for (const { node, request } of takeTooltips(root)) {
+      const focus = request.focus;
+      if (focus === undefined) continue;
+      const marks = byFocus.get(focus) ?? [];
+      byFocus.set(focus, marks);
+      marks.push({
+        key: request.key,
+        node,
+        rows: Array.isArray(node.datum) ? node.datum : [node.datum],
       });
-    const node = await tier
-      .withData(marks.map((n) => ref({ __ref: n } as any)))
-      .withLayerContext(layerContext)
-      .resolve();
-    // It takes no room, and no pointer lands on it.
-    node.inkOn = [true, true];
-    node.noPointerTarget = true;
-    focus?.use(
-      registrar!,
-      marks.map(
-        (n): FocusMark => ({
-          key: tooltipRequest(n)!.key,
-          node: n,
-          rows: Array.isArray(n.datum) ? n.datum : [n.datum],
-        })
-      ),
-      node
-    );
-    layers.push(node);
-  }
-  return layers;
-}
+      if (request.key === focus.key && !entries.some((e) => e.focus === focus))
+        entries.push({ node, request, focus });
+    }
+    for (const [focus, marks] of byFocus) focus.use(marks);
+    return entries;
+  },
+  target: (entry) => entry.node,
+  home: (_target, root) => root,
+  async draw(entries, { select }) {
+    const nodes: GoFishNode[] = [];
+    const seats: [GoFishNode, GoFishNode][] = [];
+    for (const { node, request, focus } of entries) {
+      const stand = select(node) as unknown as GoFishNode;
+      const shown = await resolveMarkResult(
+        box(request.rows) as any,
+        new LayerContext()
+      );
+      // It takes no room, and no pointer lands on it.
+      shown.inkOn = [true, true];
+      shown.noPointerTarget = true;
+      focus.drew(shown);
+      nodes.push(stand, shown);
+      seats.push([stand, shown]);
+    }
+    return {
+      drawn: null,
+      nodes,
+      constraints: (at, inner) =>
+        seats.map(([stand, shown]) =>
+          createTooltipPlaceConstraint([at(stand), inner, at(shown)])
+        ),
+    };
+  },
+};

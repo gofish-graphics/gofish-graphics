@@ -82,6 +82,8 @@ import {
 } from "./solver/scopes";
 import { entryAmount, legendRing } from "./legends/elaborate";
 import { elaborateLabels } from "./labels/elaborate";
+import { lowerSelectionLayers } from "./selectionLayer";
+import { tooltipLayer } from "./tooltip/tooltip";
 import { reportHiddenLabels } from "./labels/placeStep";
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
 // axis, which needs a concrete canvas to scale data into (see the per-axis
@@ -604,6 +606,14 @@ export async function layout(
   const labelRes = await elaborateLabels(child);
   if (labelRes.changed) {
     child = labelRes.node;
+    await reresolve(child);
+  }
+  // Tooltip lowering: the box of the focused mark of each `.tooltip()`, as
+  // a layer over the whole graphic (src/ast/tooltip/tooltip.ts), after the
+  // labels, so it paints over them and the chrome.
+  const tooltipRes = await lowerSelectionLayers(child, tooltipLayer);
+  if (tooltipRes.changed) {
+    child = tooltipRes.node;
     await reresolve(child);
   }
   perfAdd("axes", perfNow() - __tAxes);

@@ -70,12 +70,9 @@ export class TooltipFocus implements InputPrimitive {
   key: string | undefined;
   private marks: FocusMark[] = [];
   private candidates: Candidate[] = [];
-  /** The layers the box is drawn in (one per chart that draws this call's
-   *  marks: a chart nested per group draws its own), and the box they drew. */
-  private boxLayers: GoFishNode[] = [];
+  /** The box the last lowering drew, and where it was drawn. */
+  private box: GoFishNode | undefined;
   private cover: Box | undefined;
-  /** Set by a published frame: the next `use` starts a new run's marks. */
-  private fresh = true;
   /** The pointer of the last event; a tap holds it (see `onEvent`). */
   private pointerAt: Point | undefined;
   private touch = false;
@@ -83,25 +80,32 @@ export class TooltipFocus implements InputPrimitive {
   constructor(private readonly behavior: FocusBehavior = defaultFocus) {}
 
   /**
-   * Called by each resolve that draws the tooltip, with that resolve's
-   * marks: the input registers with `registrar` (so the chart publishes
-   * frames to it and wires its events), and the chart becomes a reader of
-   * its key (so a change of focus re-runs it). `boxLayer` is the layer the
-   * box is drawn in. A run calls it once per chart that draws the call's
-   * marks; the marks of one run add up.
+   * Called by each resolve of a mark with the tooltip: the input registers
+   * with `registrar` (so the chart publishes frames to it and wires its
+   * events), and the chart becomes a reader of its key (so a change of
+   * focus re-runs it).
    */
-  use(registrar: Registrar, marks: FocusMark[], boxLayer: GoFishNode): void {
-    if (this.fresh) [this.marks, this.boxLayers, this.fresh] = [[], [], false];
-    this.marks.push(...marks);
-    this.boxLayers.push(boxLayer);
+  read(registrar: Registrar): void {
     registrar.registerInput(this);
     this.readers.add(registrar);
   }
 
+  /** Called by each lowering of the tooltip (`tooltip.ts`) with the call's
+   *  marks in the whole render, before it draws the box. */
+  use(marks: FocusMark[]): void {
+    this.marks = marks;
+    this.box = undefined;
+  }
+
+  /** The box the lowering drew for the focused mark. */
+  drew(box: GoFishNode): void {
+    this.box = box;
+  }
+
   onFrame(frame: InteractionFrame): void {
     this.candidates = candidatesOf(frame.items, this.marks);
-    this.cover = drawnBox(frame.items, this.boxLayers);
-    this.fresh = true;
+    this.cover =
+      this.box === undefined ? undefined : drawnBox(frame.items, this.box);
   }
 
   onEvent(
@@ -221,15 +225,13 @@ export function candidatesOf(
   });
 }
 
-/** The box of everything `layers` drew among `items`, in svg px; undefined
- *  when they drew nothing with a box. */
+/** The box of everything `node` drew among `items`, in svg px; undefined
+ *  when it drew nothing with a box. */
 function drawnBox(
   items: DisplayList.DisplayItem[],
-  layers: GoFishNode[]
+  node: GoFishNode
 ): Box | undefined {
-  const uids = new Set(
-    layers.flatMap((l) => [...subtree(l)].map((n) => n.uid))
-  );
+  const uids = new Set([...subtree(node)].map((n) => n.uid));
   const outline: Outline = [];
   walkItems(items, (item, at) => {
     if (item.id !== undefined && uids.has(item.id))

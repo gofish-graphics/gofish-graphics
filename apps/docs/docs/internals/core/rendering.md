@@ -146,6 +146,9 @@ alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
 (`src/ast/labels/elaborate.tsx`, the same technique `elaborateChrome` uses for tick
 labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
+A tooltip's box is lowered the same way, after the labels
+(`src/ast/tooltip/tooltip.ts`): by the time the tree is lowered, it is an
+`enclose` of texts on the render root, painted last.
 
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches

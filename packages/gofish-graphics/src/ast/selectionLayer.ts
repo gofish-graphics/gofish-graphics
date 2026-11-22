@@ -63,6 +63,13 @@ export type SelectionLayer<E, D> = {
   /** The node a stamp is drawn over. */
   target(entry: E): GoFishNode;
   /**
+   * The node a target's tier goes on, `root` being the render root. By
+   * default the content of the target's chart ({@link homeOf}), so the tier
+   * takes room in that chart, as a label does. A tier that takes no room and
+   * is drawn over the whole graphic (a tooltip) goes on `root`.
+   */
+  home?(target: GoFishNode, root: GoFishNode): GoFishNode;
+  /**
    * The tier over one home: `entries` are the home's stamps, in order;
    * `select` reads a node through a ref, as `selectAll` does; `inside` is
    * what the tiers of the homes inside this one drew. Called once per home,
@@ -104,8 +111,9 @@ export async function lowerSelectionLayers<E, D>(
   const entries = modifier.take(root);
   if (entries.length === 0) return { node: root, changed: false };
   const homes = new Map<GoFishNode, E[]>();
+  const homeFor = modifier.home ?? homeOf;
   for (const e of entries) {
-    const home = homeOf(modifier.target(e), root);
+    const home = homeFor(modifier.target(e), root);
     const here = homes.get(home);
     if (here === undefined) homes.set(home, [e]);
     else here.push(e);
