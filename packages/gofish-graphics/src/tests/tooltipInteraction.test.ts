@@ -86,6 +86,17 @@ check(
   box?.outerHTML
 );
 
+console.log("# over the box, the focus stays");
+{
+  // The first bar is full width, so its box hangs under its end, over the
+  // second bar's row (x 366.8-472, y 72-132; the second bar ends at 401).
+  const runs = resolves;
+  send("pointermove", 450, 100);
+  await settle();
+  check("still the first bar's box", texts().includes("11,902"), texts());
+  check("no re-run", resolves === runs, resolves - runs);
+}
+
 console.log("# 30 moves across 3 bars");
 {
   const start = resolves;

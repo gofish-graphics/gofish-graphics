@@ -129,16 +129,6 @@ export async function tooltipLayers(
   for (const [call, marks] of byCall) {
     const registrar = layerContext.registrar;
     const focus = registrar ? focusOf(registrar, call) : undefined;
-    focus?.use(
-      registrar!,
-      marks.map(
-        (node): FocusMark => ({
-          key: tooltipRequest(node)!.key,
-          node,
-          rows: Array.isArray(node.datum) ? node.datum : [node.datum],
-        })
-      )
-    );
     const requestOf = (r: GoFishRef) =>
       tooltipRequest((r as unknown as { directNode: GoFishNode }).directNode)!;
     const tier = chart({ axes: false })
@@ -158,6 +148,17 @@ export async function tooltipLayers(
     // It takes no room, and no pointer lands on it.
     node.inkOn = [true, true];
     node.noPointerTarget = true;
+    focus?.use(
+      registrar!,
+      marks.map(
+        (n): FocusMark => ({
+          key: tooltipRequest(n)!.key,
+          node: n,
+          rows: Array.isArray(n.datum) ? n.datum : [n.datum],
+        })
+      ),
+      node
+    );
     layers.push(node);
   }
   return layers;

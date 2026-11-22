@@ -70,6 +70,9 @@ export class TooltipFocus implements InputPrimitive {
   key: string | undefined;
   private marks: FocusMark[] = [];
   private candidates: Candidate[] = [];
+  /** The layer the open box is drawn in, and the box it drew. */
+  private boxLayer: GoFishNode | undefined;
+  private cover: Box | undefined;
   /** The pointer of the last event; a tap holds it (see `onEvent`). */
   private pointerAt: Point | undefined;
   private touch = false;
@@ -80,16 +83,19 @@ export class TooltipFocus implements InputPrimitive {
    * Called by each resolve that draws the tooltip, with that resolve's
    * marks: the input registers with `registrar` (so the chart publishes
    * frames to it and wires its events), and the chart becomes a reader of
-   * its key (so a change of focus re-runs it).
+   * its key (so a change of focus re-runs it). `boxLayer` is the layer the
+   * box is drawn in.
    */
-  use(registrar: Registrar, marks: FocusMark[]): void {
+  use(registrar: Registrar, marks: FocusMark[], boxLayer: GoFishNode): void {
     this.marks = marks;
+    this.boxLayer = boxLayer;
     registrar.registerInput(this);
     this.readers.add(registrar);
   }
 
   onFrame(frame: InteractionFrame): void {
     this.candidates = candidatesOf(frame.items, this.marks);
+    this.cover = this.boxLayer && drawnBox(frame.items, this.boxLayer);
   }
 
   onEvent(
@@ -114,6 +120,20 @@ export class TooltipFocus implements InputPrimitive {
   /** Run the behavior on the current pointer and candidates, and invalidate
    *  the readers when the focused key changes. */
   private choose(): void {
+    // The open box covers the marks under it: a pointer over it reads the
+    // box, so the focus stays on the mark it describes.
+    const p = this.pointerAt;
+    const c = this.cover;
+    if (
+      this.key !== undefined &&
+      p !== undefined &&
+      c !== undefined &&
+      p.x >= c.x0 &&
+      p.x <= c.x1 &&
+      p.y >= c.y0 &&
+      p.y <= c.y1
+    )
+      return;
     const current = this.candidates.find((c) => c.key === this.key);
     const key = this.behavior({
       pointer: this.pointerAt,
@@ -193,6 +213,21 @@ export function candidatesOf(
       },
     };
   });
+}
+
+/** The box of everything `layer` drew among `items`, in svg px; undefined
+ *  when it drew nothing with a box. */
+function drawnBox(
+  items: DisplayList.DisplayItem[],
+  layer: GoFishNode
+): Box | undefined {
+  const uids = new Set([...subtree(layer)].map((n) => n.uid));
+  const outline: Outline = [];
+  walkItems(items, (item, at) => {
+    if (item.id !== undefined && uids.has(item.id))
+      outline.push(...outlineOf(item, at));
+  });
+  return outline.length > 0 ? hullBox(outline) : undefined;
 }
 
 function* subtree(n: GoFishNode): Generator<GoFishNode> {
