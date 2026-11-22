@@ -10,6 +10,7 @@
  */
 import { GoFishNode } from "../_node";
 import { GoFishRef } from "../_ref";
+import { copyColumnTypes } from "../schema";
 import type { Registrar } from "../../interaction/resolveContext";
 import { focusOf, type TooltipFocus } from "../../interaction/tooltipFocus";
 import {
@@ -48,13 +49,20 @@ export type TooltipRequest = {
 
 /** The rows the box of `request` shows: of its focused `row`, when its
  *  mark is drawn through rows and the focus is on one of them, else of the
- *  whole mark. */
+ *  whole mark. The row is read as a list of one that carries the column
+ *  types of the mark's rows, so a time column reads in its zone. */
 export const tooltipContent = (
   request: TooltipRequest,
   point?: { row: unknown }
 ): TooltipRow[] =>
   point !== undefined
-    ? tooltipRows({ rows: [point.row], wire: request.wire }, request.fields)
+    ? tooltipRows(
+        {
+          rows: copyColumnTypes([point.row], request.rows),
+          wire: request.wire,
+        },
+        request.fields
+      )
     : (request.content ??
       tooltipRows(
         { rows: request.rows, wire: request.wire },

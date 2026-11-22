@@ -784,6 +784,47 @@ console.log("# a line whose flow makes new rows on every run: the box is at the 
   }
 }
 
+console.log("# a time column in a zone: a line's row reads as a bar does");
+{
+  const { line, group, Unit } = GoFish as any;
+  const ny = "America/New_York";
+  // Midnight in New York, as epoch milliseconds: Jan 15 and Jan 16, 2024.
+  const days = [Date.UTC(2024, 0, 15, 5), Date.UTC(2024, 0, 16, 5)];
+  const data = days.map((day, i) => ({ s: "A", day, n: i + 1 }));
+  const opts = { w: 400, h: 200, schema: { day: Unit.time({ zone: ny }) } };
+  const bars = freshEl();
+  await chart(data, opts)
+    .flow(spread({ by: "day", dir: "x" }))
+    .mark(rect({ h: "n" }).tooltip(["day", "n"]))
+    .render(bars, {});
+  await settle();
+  const first = [...bars.querySelectorAll("rect")][0];
+  moveOver(
+    bars,
+    Number(first.getAttribute("x")) + 2,
+    Number(first.getAttribute("y")) + Number(first.getAttribute("height")) - 2
+  );
+  await settle();
+  check("a bar: New York's day", boxTexts(bars).includes("Jan 15, 2024"), boxTexts(bars));
+  for (const fields of [undefined, ["day", "n"]]) {
+    const el = freshEl();
+    await chart(data, opts)
+      .flow(group({ by: "s" }))
+      .mark(line({ x: "day", y: "n" }).tooltip(fields))
+      .render(el, {});
+    await settle();
+    const path = [...el.querySelectorAll("path")].find((p) => p.getAttribute("fill") === "none")!;
+    const [x, y] = (path.getAttribute("d") ?? "").match(/-?\d+(?:\.\d+)?/g)!.map(Number);
+    moveOver(el, x + 2, y);
+    await settle();
+    check(
+      `a line's row${fields ? ", listed fields" : ""}: New York's day`,
+      boxTexts(el).includes("Jan 15, 2024"),
+      boxTexts(el)
+    );
+  }
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the
