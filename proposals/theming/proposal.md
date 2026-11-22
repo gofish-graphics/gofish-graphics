@@ -4,7 +4,7 @@
 
 **Recommendation.** Build all three, in that order. None needs a new operator. The Cogra look from #1396 is then one theme: a palette of patterns, a black `ink` and white `paper`, and a few defaults for `rect` and `axis`. An existing chart that says `fill: "species"` turns black and white without any change to its own code.
 
-**Status.** Proposal for review. Nothing is implemented. Every picture here was rendered by GoFish with a workaround that exists today (hand-written SVG `<pattern>` and `<filter>` defs, and in some pictures edits to the rendered SVG). The prototype sources are in `prototypes/`.
+**Status.** Proposal for review. Nothing is implemented. Decided so far: a pattern is a paint, not a second option beside `fill` (Josh, 2026-11-22). Every picture here was rendered by GoFish with a workaround that exists today (hand-written SVG `<pattern>` and `<filter>` defs, and in some pictures edits to the rendered SVG). The prototype sources are in `prototypes/`.
 
 ## Terms
 
@@ -67,7 +67,7 @@ Two facts from this survey shape the proposal. In Typst and CeTZ the things a th
 
 ## Part 1. Patterns
 
-### Recommended: a pattern is a paint
+### Decided: a pattern is a paint
 
 `fill` and `stroke` accept a color, a field, or a `Pattern`.
 
@@ -140,7 +140,7 @@ The mark says `fill: "group"`, which means "tell the groups apart". The palette 
 
 ![Grouped bars: color by species, hatch for male](img/color-and-pattern.png)
 
-Recommended (pattern as paint). `fill` picks the paint by sex, and each paint takes its color from species:
+Decided (pattern as paint). `fill` picks the paint by sex, and each paint takes its color from species:
 
 ```js
 chart(penguinMeans, {
@@ -155,7 +155,7 @@ chart(penguinMeans, {
   .mark(rect({ h: "body mass (g)", fill: "sex" }));
 ```
 
-Alternative (pattern as a second option beside `fill`, the rough.js and ggpattern model):
+Not chosen (pattern as a second option beside `fill`, the rough.js and ggpattern model):
 
 ```js
 chart(penguinMeans, {
@@ -165,7 +165,7 @@ chart(penguinMeans, {
   .mark(rect({ h: "body mass (g)", fill: "species", pattern: "sex" }));
 ```
 
-The alternative reads better here, and this is the one case where it does. I still recommend the paint model, for three reasons:
+The second form reads better here, and this is the one case where it does. Josh chose the paint model, for three reasons:
 
 1. Gradients and images have to be paints anyway, since nobody wants a `gradient` option beside `fill`. A separate `pattern` option would then cover part of the same ground as paints by a different route, which is the large partial overlap `api-design.md` warns against.
 2. A second option needs its own ranges, its own legend and a rule for merging that legend with the color legend. ggpattern's fifteen aesthetics are where that road ends.

@@ -507,10 +507,10 @@ chart(seafood, { theme: cogra })
         </table>
       </div>
       <p class="note">
-        No new operator. Three places where I think the choice is close are
-        marked with an orange edge, each beside its example: on the Patterns tab
-        (pattern as paint or as a second option), and two on the Themes tab
-        (keyed object or rule list, and the role colors).
+        No new operator. Decided so far: a pattern is a paint, not a second
+        option beside <code>fill</code> (Nov 22). Two places where I think the
+        choice is close are marked with an orange edge on the Themes tab, each
+        beside its example: keyed object or rule list, and the role colors.
       </p>
     </article>
   </section>
@@ -648,7 +648,7 @@ rect(
       </details>
     </article>
 
-    <article class="card fork">
+    <article class="card">
       <h3>Hard example: color by one field, pattern by another</h3>
       <figure>
         <img
@@ -659,7 +659,7 @@ rect(
       </figure>
       <div class="codes">
         <div>
-          <div class="label pick">Recommended: the pattern is the paint</div>
+          <div class="label pick">Decided Nov 22: the pattern is the paint</div>
           <pre><code class="language-javascript">chart(penguinMeans, {
   color: {
     Sex: Color.palette({
@@ -672,7 +672,7 @@ rect(
   .mark(rect({ h: "body mass (g)", fill: "sex" }));</code></pre>
         </div>
         <div>
-          <div class="label alt">Alternative: a second option beside fill</div>
+          <div class="label alt">Not chosen: a second option beside fill</div>
           <pre><code class="language-javascript">chart(penguinMeans, {
   pattern: { Sex: [Pattern.none, Pattern.lines] },
 })
@@ -681,8 +681,9 @@ rect(
         </div>
       </div>
       <p>
-        The alternative is the rough.js and ggpattern model, and it reads better
-        on this one chart. I still recommend the paint model:
+        The second form is the rough.js and ggpattern model, and it reads better
+        on this one chart. Josh chose the paint model on Nov 22, for these
+        reasons:
       </p>
       <ul>
         <li>
@@ -703,11 +704,6 @@ rect(
           and the case of readers who cannot tell the hues apart.
         </li>
       </ul>
-      <p class="note">
-        If you would rather have
-        <code>rect({ fill: "species", pattern: "sex" })</code>, the family and
-        the tile model stay the same and only this page of the design changes.
-      </p>
     </article>
 
     <article class="card">
