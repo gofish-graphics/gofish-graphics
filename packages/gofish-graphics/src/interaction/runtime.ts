@@ -433,6 +433,7 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
     this.detach?.();
     // Remove ourselves as a dependency of any still-live shared input.
     this.dropSpecEdges();
+    for (const input of this.inputs) input.detach?.(this);
     this.rerenderFn = undefined;
     this.inputs = [];
     this.registered.clear();

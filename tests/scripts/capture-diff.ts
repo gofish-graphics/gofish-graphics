@@ -248,8 +248,6 @@ async function main() {
     outDir: HEAD_DIR,
     filter,
   });
-  // HEAD's harness as static files, for the report's live views.
-  await buildLiveHarness(HARNESS_DIR, join(OUT_DIR, LIVE_DIR, "head"));
 
   // 2. Capture <base-ref>'s stories, with this tree's harness, from a
   //    throwaway worktree.
@@ -259,6 +257,7 @@ async function main() {
   // The files the base ref has: a story runs live on the base side only
   // when its file is there.
   let baseFiles = new Set<string>();
+  let changes: ReturnType<typeof diffSnapshotDirs> = [];
   const baseResult = await withBaseRefHarness(baseSha, async (harnessDir) => {
     console.log(`\n=== Capturing ${baseRef} (${baseShort}) ===\n`);
     const result = await captureStories({
@@ -267,18 +266,24 @@ async function main() {
       outDir: BASE_DIR,
       filter,
     });
-    // The base ref's harness as static files, while its worktree exists.
-    await buildLiveHarness(harnessDir, join(OUT_DIR, LIVE_DIR, "base"));
-    baseFiles = new Set(
-      git("git ls-files", { cwd: join(harnessDir, "../..") }).split("\n")
-    );
+    // 3. Diff per story: the same snapshot diff as the CI compare
+    //    (`diffSnapshotDirs`), with the base capture as the baseline. Both
+    //    sides come from this tree's capture, so both have warnings files.
+    //    It runs while the base worktree exists, so the base ref's live
+    //    harness is built only when a story changed on both sides.
+    changes = diffSnapshotDirs(BASE_DIR, HEAD_DIR);
+    if (changes.some((c) => c.kind === "changed")) {
+      await buildLiveHarness(harnessDir, join(OUT_DIR, LIVE_DIR, "base"));
+      baseFiles = new Set(
+        git("git ls-files", { cwd: join(harnessDir, "../..") }).split("\n")
+      );
+    }
     return result;
   });
-
-  // 3. Diff per story: the same snapshot diff as the CI compare
-  //    (`diffSnapshotDirs`), with the base capture as the baseline. Both
-  //    sides come from this tree's capture, so both have warnings files.
-  const changes = diffSnapshotDirs(BASE_DIR, HEAD_DIR);
+  // HEAD's harness as static files, for the report's live views: only a
+  // changed or added story runs live.
+  if (changes.some((c) => c.kind !== "removed"))
+    await buildLiveHarness(HARNESS_DIR, join(OUT_DIR, LIVE_DIR, "head"));
 
   // 4. Report.
   console.log(`\n=== Result: HEAD vs ${baseRef} (${baseShort}) ===\n`);

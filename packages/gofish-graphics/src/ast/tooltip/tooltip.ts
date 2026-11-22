@@ -37,7 +37,7 @@ import { selectNode } from "../marks/resolveRefData";
 import type { FocusMark, TooltipFocus } from "../../interaction/tooltipFocus";
 import { createTooltipPlaceConstraint } from "./place";
 import type { TooltipRow } from "./content";
-import { takeTooltips } from "./request";
+import { takeTooltips, tooltipContent } from "./request";
 
 /** The box: a column of muted, right-aligned names beside a column of
  *  left-aligned values, in a white rounded rect. */
@@ -102,13 +102,12 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
     const found = new Set<TooltipFocus>();
     for (const { node, request } of takeTooltips(root)) {
       const focus = request.focus;
-      if (focus === undefined) continue;
       const marks = byFocus.get(focus) ?? [];
       byFocus.set(focus, marks);
       marks.push({ key: request.key, node, rows: request.rows });
       if (request.key === focus.key && !found.has(focus)) {
         found.add(focus);
-        entries.push({ node, rows: request.content, focus });
+        entries.push({ node, rows: tooltipContent(request), focus });
       }
     }
     for (const [focus, marks] of byFocus) focus.use(marks);

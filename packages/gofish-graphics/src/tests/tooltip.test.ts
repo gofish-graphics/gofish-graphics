@@ -30,8 +30,10 @@ import {
 import {
   candidatesOf,
   pathSegments,
+  TooltipFocus,
   type FocusMark,
 } from "../interaction/tooltipFocus";
+import { InteractionRuntime } from "../interaction/runtime";
 import { UNDEFINED } from "../ast/underlyingSpace";
 import { formatValue } from "../ast/tooltip/content";
 import { tooltipSeat } from "../ast/tooltip/place";
@@ -229,6 +231,22 @@ console.log("# candidates: long paths and many marks");
     one[0]?.box
   );
   check(`5,000 marks, one key: fast (${ms.toFixed(0)} ms)`, ms < 200, ms);
+}
+
+console.log("# a disposed chart's focus lets go");
+{
+  const runtime = new InteractionRuntime();
+  const focus = new TooltipFocus();
+  focus.read(runtime);
+  focus.use([{ key: "k", node: { uid: "a", children: [] } as any, rows: [] }]);
+  focus.key = "k";
+  runtime.dispose();
+  check(
+    "dispose: no key, no marks, no reader",
+    focus.key === undefined &&
+      (focus as any).marks.length === 0 &&
+      focus.specReaders[0].size === 0
+  );
 }
 
 /* -------------------------------- format --------------------------------- */

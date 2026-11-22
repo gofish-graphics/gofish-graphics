@@ -343,7 +343,8 @@ it drew (`focus.drew(box)`). One focus lives per chart and per `.tooltip()` call
 (`focusOf`), so it outlives the resolves that make every node anew.
 
 The focus reads geometry the way `nodeBox` does. On each published frame it
-walks the display items (`walkItems`) and builds one candidate per key: the
+walks the display items once (`walkItems`), for the open box's extent and for
+one candidate per key: the
 union of the boxes the mark's subtree drew, an outline (boxes, circles, and the
 segments of a path's `d`, `pathSegments`), and the mark's placed position. A
 position counts only on an axis the layout placed the mark along: an ancestor
@@ -351,15 +352,19 @@ up to the chart's box arranges along that axis, or the mark is a point in a
 space an ancestor pins (a dot in a scatter). A bar's length axis does not
 count, so the row decides which bar a pointer right of a short bar describes.
 On each pointer event it runs the focus behavior (`focus.ts`, by default
-`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(8)`), and it
-invalidates its readers only when the focused key changes. Thirty moves across
+`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(8)`; `within`
+measures the pointer against the hull of the marks first, so a pointer far
+from every mark runs nothing else), and it invalidates its readers only when
+the focused key changes. Thirty moves across
 three bars re-run the chart twice. A key is the JSON of the mark's rows (a ref
 or node by its rows, a date by its instant), so two marks drawn from equal rows
 are one candidate. While the pointer is over the open box (the box the layer
 drew in the last frame), the focus does not move: the box covers the marks
 under it. A touch tap holds its point through the `pointerleave` that ends it,
 until the next tap or a mouse move. A tap outside the chart does not close
-it: the runtime hears only events in the chart's container.
+it: the runtime hears only events in the chart's container. When the chart is
+disposed, the runtime calls each input's `detach`, and the focus drops its
+marks, its box and its candidates.
 
 A line is one candidate for its whole path: it has no placed position, so it
 is as near as its path, and where the pointer is along it is no change of

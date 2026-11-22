@@ -393,11 +393,15 @@ methods:
   input an operator applies the mark to, also when the mark sits inside a
   `layer([...])` or a compositing mark, which forward their children's batch
   form (see [The Operator Factory](/internals/frontend/operator-factory)).
-- `mark.tooltip(fields?)` records, on every produced node, the rows a box
-  describing it shows and a key from its data, and writes the rows as the
-  node's `title`. In a live chart the mark also reads its call's focus, so
-  a change of focus re-runs the chart. The render lowers the box after the
-  labels, as a layer over its selection (`tooltipLayer` in
+- `mark.tooltip(fields?)`, in a static drawing, writes on every produced
+  node the rows a box describing it would show, as the node's `title`. In
+  a live chart, which paints no titles, it records on every node a request:
+  its rows, a key from its data, and the rows its box shows when the call
+  names its fields (checked there, so a missing field fails the render);
+  without a list, the rows are made only for the focused node. The mark
+  also reads its call's focus, so a change of focus re-runs the chart, and
+  a chart whose resolve read no focus lowers no tooltip layer
+  (`hasTooltips`). The render lowers the box after the labels, as a layer over its selection (`tooltipLayer` in
   `ast/tooltip/tooltip.ts`, through `lowerSelectionLayers`, see
   [Labels](/internals/frontend/labels)): it takes the requests off the
   tree, hands each call's focus the call's marks, selects the first mark

@@ -80,12 +80,14 @@ const NONE: Result = { choice: undefined, gap: Infinity };
 /** Lift a plain behavior so it can be chained. */
 function from(run: FocusBehavior): Chain {
   const chain = ((frame: Frame) => run(frame)) as Chain;
+  // The hull is measured first: a pointer far from every mark (most of a
+  // sparse chart) runs no inner behavior.
   chain.within = (gap, out = gap + 4) =>
     from((f) => {
-      const r = run(f);
-      if (!r.choice || !f.pointer) return r;
       const limit = f.current ? out : gap;
-      return hullDistance(f.pointer, hullOf(f.candidates)) > limit ? NONE : r;
+      if (f.pointer && hullDistance(f.pointer, hullOf(f.candidates)) > limit)
+        return NONE;
+      return run(f);
     });
   chain.onClick = () =>
     from((f) => (f.clicked ? run(f) : { choice: f.current, gap: 0 }));

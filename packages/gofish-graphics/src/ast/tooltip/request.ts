@@ -26,15 +26,24 @@ import {
  *  made. */
 export type TooltipCall = { wire?: TooltipMark["wire"] };
 
-/** What one node's `.tooltip()` call recorded: the rows the node was drawn
- *  from, the rows its box shows, the node's key, and the focus of the call
- *  in the live chart that resolved it (none in a static drawing). */
+/** What one node's `.tooltip()` call recorded in a live chart: the rows
+ *  the node was drawn from, the call's fields and wire, the rows its box
+ *  shows when the call names its fields (otherwise they are made only for
+ *  the focused node, {@link tooltipContent}), the node's key, and the focus
+ *  of the call in the chart that resolved it. */
 export type TooltipRequest = {
   rows: unknown[];
-  content: TooltipRow[];
+  fields: readonly string[] | undefined;
+  wire: TooltipCall["wire"];
+  content: TooltipRow[] | undefined;
   key: string;
-  focus: TooltipFocus | undefined;
+  focus: TooltipFocus;
 };
+
+/** The rows the box of `request` shows. */
+export const tooltipContent = (request: TooltipRequest): TooltipRow[] =>
+  request.content ??
+  tooltipRows({ rows: request.rows, wire: request.wire }, request.fields);
 
 const requests = new WeakMap<GoFishNode, TooltipRequest>();
 
@@ -85,12 +94,14 @@ export function rowsKey(rows: readonly unknown[]): string {
 }
 
 /**
- * Record, on a node the mark of a `.tooltip(fields)` call made from `datum`,
- * its rows, the rows its box shows (checked here, so a field that is not
- * there fails the render, not a hover) and its key, and write them as its
- * `title` for a static drawing. In a live chart (`registrar`) the mark reads
- * its call's focus there, as a spec reads an input, so a change of focus
- * re-runs the chart.
+ * Record a node the mark of a `.tooltip(fields)` call made from `datum`.
+ * In a static drawing, the rows its box would show are its `title`. In a
+ * live chart (`registrar`), which paints no titles, the node's request is
+ * recorded for the tooltip layer, and the mark reads its call's focus
+ * there, as a spec reads an input, so a change of focus re-runs the chart.
+ * A field list is checked here either way, so a field that is not there
+ * fails the render, not a hover; without one the rows are made only for
+ * the focused node.
  */
 export function recordTooltip(
   node: GoFishNode,
@@ -100,9 +111,19 @@ export function recordTooltip(
   registrar: Registrar | undefined
 ): void {
   const rows = rowsOfDatum(datum);
-  const content = tooltipRows({ rows, wire: call.wire }, fields);
-  node.title = tooltipText(content);
-  const focus = registrar ? focusOf(registrar, call) : undefined;
-  focus?.read(registrar!);
-  requests.set(node, { rows, content, key: rowsKey(rows), focus });
+  if (registrar === undefined) {
+    node.title = tooltipText(tooltipRows({ rows, wire: call.wire }, fields));
+    return;
+  }
+  const content = fields && tooltipRows({ rows, wire: call.wire }, fields);
+  const focus = focusOf(registrar, call);
+  focus.read(registrar);
+  requests.set(node, {
+    rows,
+    fields,
+    wire: call.wire,
+    content,
+    key: rowsKey(rows),
+    focus,
+  });
 }

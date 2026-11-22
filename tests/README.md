@@ -103,7 +103,7 @@ Nothing runs until you ask for it, and a page runs at most four frames at once: 
   pnpm capture-diff:serve        # then open http://localhost:3006/report.html
   ```
 
-The harness build is about 4.6 MB in about 250 files, the largest under 1 MB. It goes into the review site as `live/head/` and into `tmp/capture-diff/live/{head,base}/`, and takes a few seconds per build.
+The harness build is about 4.6 MB in about 250 files, the largest under 1 MB. It goes into the review site as `live/head/` and into `tmp/capture-diff/live/{head,base}/`, and takes a few seconds per build. capture-diff builds a side only when the report offers it: HEAD's when a story changed or was added, the base ref's when a story changed.
 
 ## Local regression signal: `capture-diff`
 

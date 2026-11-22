@@ -85,6 +85,7 @@ import { entryAmount, legendRing } from "./legends/elaborate";
 import { labelLayer } from "./labels/elaborate";
 import { lowerSelectionLayers, type SelectionLayer } from "./selectionLayer";
 import { tooltipLayer } from "./tooltip/tooltip";
+import { hasTooltips } from "../interaction/tooltipFocus";
 import { reportHiddenLabels } from "./labels/placeStep";
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
 // axis, which needs a concrete canvas to scale data into (see the per-axis
@@ -414,6 +415,7 @@ export async function layout(
     axes,
     legend,
     labelRowSettings,
+    interaction,
   }: {
     w?: number;
     h?: number;
@@ -426,6 +428,9 @@ export async function layout(
     /** Internal: how each axis label row is drawn, as chosen by
      *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
+    /** The chart's interaction runtime: the registrar its resolve read
+     *  inputs through, so a tooltip in it has a focus. */
+    interaction?: InteractionRuntime;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts: {
@@ -607,7 +612,10 @@ export async function layout(
   // Tooltips draw the box of the focused mark of each `.tooltip()`, as a
   // layer over the whole graphic (src/ast/tooltip/tooltip.ts), after the
   // labels, so it paints over them and the chrome.
-  const layers: SelectionLayer<any, any>[] = [labelLayer, tooltipLayer];
+  // A chart with no `.tooltip()` mark in its resolve has no tooltip layer.
+  const layers: SelectionLayer<any, any>[] = hasTooltips(interaction)
+    ? [labelLayer, tooltipLayer]
+    : [labelLayer];
   for (const modifier of layers) {
     const lowered: { node: GoFishNode; changed: boolean } =
       await lowerSelectionLayers(child, modifier);
@@ -1287,6 +1295,7 @@ async function layoutOnce(
         axes,
         legend,
         labelRowSettings,
+        interaction: options.interaction,
       },
       child,
       contexts

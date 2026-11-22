@@ -83,6 +83,8 @@ export class TooltipFocus implements InputPrimitive {
    *  tap holds it, see `onEvent`). Signals, so the paint patch that moves a
    *  path's box ({@link offset}) re-reads them; nothing in layout does. */
   private readonly candidates = createSignal<Candidate[]>([]);
+  /** The candidates of the last frame by key. */
+  private byKey = new Map<unknown, Candidate>();
   private readonly pointer = createSignal<Point | undefined>(undefined);
   /** The box the last lowering drew, and where it was drawn. */
   private box: GoFishNode | undefined;
@@ -156,18 +158,33 @@ export class TooltipFocus implements InputPrimitive {
   }
 
   private focused(): Candidate | undefined {
-    return this.candidates[0]().find((c) => c.key === this.key);
+    this.candidates[0]();
+    return this.key === undefined ? undefined : this.byKey.get(this.key);
   }
 
   onFrame(frame: InteractionFrame): void {
-    this.cover =
-      this.box === undefined ? undefined : drawnBox(frame.items, this.box);
+    const { candidates, cover } = scan(frame.items, this.marks, this.box);
+    this.cover = cover;
     if (this.seat && this.cover)
       this.seat.origin = {
         x: this.cover.x0 - this.seat.at[0],
         y: this.cover.y0 - this.seat.at[1],
       };
-    this.candidates[1](candidatesOf(frame.items, this.marks));
+    this.byKey = new Map(candidates.map((c) => [c.key, c]));
+    this.candidates[1](candidates);
+  }
+
+  /** The chart is gone: drop its marks, its box and its candidates. */
+  detach(): void {
+    this.key = undefined;
+    this.marks = [];
+    this.box = undefined;
+    this.cover = undefined;
+    this.seat = undefined;
+    this.byKey = new Map();
+    this.candidates[1]([]);
+    this.pointer[1](undefined);
+    this.readers.clear();
   }
 
   onEvent(
@@ -226,6 +243,11 @@ export class TooltipFocus implements InputPrimitive {
  *  resolves of one chart, and two charts drawing one spec focus apart. */
 const focuses = new WeakMap<Registrar, WeakMap<object, TooltipFocus>>();
 
+/** Whether the chart `registrar` renders resolved a mark with a tooltip:
+ *  a chart without one lowers no tooltip layer. */
+export const hasTooltips = (registrar: Registrar | undefined): boolean =>
+  registrar !== undefined && focuses.has(registrar);
+
 /** The focus `call` (one `.tooltip()` call) has in the chart `registrar`
  *  renders, made on its first resolve. */
 export function focusOf(registrar: Registrar, call: object): TooltipFocus {
@@ -245,12 +267,27 @@ export function candidatesOf(
   items: DisplayList.DisplayItem[],
   marks: FocusMark[]
 ): Candidate[] {
-  // The node uids each mark drew under, itself included.
-  const owner = new Map<string, FocusMark>();
+  return scan(items, marks).candidates;
+}
+
+/** The candidates of `marks` among `items` ({@link candidatesOf}), and the
+ *  box of everything `cover` (the open tooltip box) drew there, in svg px
+ *  (undefined when it drew nothing with a box), from one walk of the
+ *  items. */
+function scan(
+  items: DisplayList.DisplayItem[],
+  marks: FocusMark[],
+  cover?: GoFishNode
+): { candidates: Candidate[]; cover: Box | undefined } {
+  // The node uids each mark drew under, itself included, and the box's.
+  const owner = new Map<string, FocusMark | typeof COVER>();
   for (const m of marks)
     for (const n of breadthFirst(m.node))
       if (!owner.has(n.uid)) owner.set(n.uid, m);
-  const parts = new Map<FocusMark, Drawn>();
+  if (cover)
+    for (const n of breadthFirst(cover))
+      if (!owner.has(n.uid)) owner.set(n.uid, COVER);
+  const parts = new Map<FocusMark | typeof COVER, Drawn>();
   walkItems(items, (item, at) => {
     const m = item.id !== undefined ? owner.get(item.id) : undefined;
     if (m === undefined) return;
@@ -258,6 +295,7 @@ export function candidatesOf(
     if (drawn === undefined) parts.set(m, (drawn = emptyDrawn()));
     addParts(drawn, outlineOf(item, at));
   });
+  const covered = parts.get(COVER);
   const byKey = new Map<string, Candidate & { marks: FocusMark[] }>();
   for (const m of marks) {
     const drawn = parts.get(m);
@@ -266,7 +304,7 @@ export function candidatesOf(
     if (c === undefined)
       byKey.set(m.key, {
         key: m.key,
-        datum: [...m.rows],
+        datum: m.rows,
         box: drawn.box,
         position: {},
         outline: drawn.outline,
@@ -276,6 +314,8 @@ export function candidatesOf(
       // Marks that share a key are one candidate: the union of their parts,
       // grown part by part (rebuilding the box from the merged outline on
       // each merge is quadratic in the number of marks).
+      // The first mark's rows are its own: copy them before adding to them.
+      if (c.marks.length === 1) c.datum = [...c.datum];
       for (const r of m.rows) c.datum.push(r);
       const merged = { outline: c.outline, box: c.box };
       addParts(merged, drawn.outline);
@@ -283,7 +323,7 @@ export function candidatesOf(
       c.marks.push(m);
     }
   }
-  return [...byKey.values()].map(({ marks: ms, ...c }) => {
+  const candidates = [...byKey.values()].map(({ marks: ms, ...c }) => {
     const [px, py] = positionAxes(ms[0].node);
     return {
       ...c,
@@ -293,22 +333,14 @@ export function candidatesOf(
       },
     };
   });
+  return {
+    candidates,
+    cover: covered && covered.outline.length > 0 ? covered.box : undefined,
+  };
 }
 
-/** The box of everything `node` drew among `items`, in svg px; undefined
- *  when it drew nothing with a box. */
-function drawnBox(
-  items: DisplayList.DisplayItem[],
-  node: GoFishNode
-): Box | undefined {
-  const uids = new Set([...breadthFirst(node)].map((n) => n.uid));
-  const drawn = emptyDrawn();
-  walkItems(items, (item, at) => {
-    if (item.id !== undefined && uids.has(item.id))
-      addParts(drawn, outlineOf(item, at));
-  });
-  return drawn.outline.length > 0 ? drawn.box : undefined;
-}
+/** The owner of the open box's items in {@link scan}. */
+const COVER = Symbol("cover");
 
 /** An outline being collected, and the box of its parts so far. */
 type Drawn = { outline: Outline; box: Box };
