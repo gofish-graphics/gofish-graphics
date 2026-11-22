@@ -29,6 +29,16 @@ const wires = new WeakMap<object, TooltipMark["wire"]>();
 export const tooltipRequest = (node: GoFishNode): TooltipRequest | undefined =>
   requests.get(node);
 
+const drawn = new WeakSet<GoFishNode>();
+/** Whether `node`'s box is still to be drawn, and from now on it is not: of
+ *  the charts a node sits in, the innermost one, which resolves first,
+ *  draws its box. */
+export function claimTooltip(node: GoFishNode): boolean {
+  if (drawn.has(node)) return false;
+  drawn.add(node);
+  return true;
+}
+
 /**
  * The key of a mark, from its rows: equal rows, equal keys, across the
  * re-runs that make every node anew (#673). A ref or node in the rows (a

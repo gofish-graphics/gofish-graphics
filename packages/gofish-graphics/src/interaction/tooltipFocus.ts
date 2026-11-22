@@ -70,9 +70,12 @@ export class TooltipFocus implements InputPrimitive {
   key: string | undefined;
   private marks: FocusMark[] = [];
   private candidates: Candidate[] = [];
-  /** The layer the open box is drawn in, and the box it drew. */
-  private boxLayer: GoFishNode | undefined;
+  /** The layers the box is drawn in (one per chart that draws this call's
+   *  marks: a chart nested per group draws its own), and the box they drew. */
+  private boxLayers: GoFishNode[] = [];
   private cover: Box | undefined;
+  /** Set by a published frame: the next `use` starts a new run's marks. */
+  private fresh = true;
   /** The pointer of the last event; a tap holds it (see `onEvent`). */
   private pointerAt: Point | undefined;
   private touch = false;
@@ -84,18 +87,21 @@ export class TooltipFocus implements InputPrimitive {
    * marks: the input registers with `registrar` (so the chart publishes
    * frames to it and wires its events), and the chart becomes a reader of
    * its key (so a change of focus re-runs it). `boxLayer` is the layer the
-   * box is drawn in.
+   * box is drawn in. A run calls it once per chart that draws the call's
+   * marks; the marks of one run add up.
    */
   use(registrar: Registrar, marks: FocusMark[], boxLayer: GoFishNode): void {
-    this.marks = marks;
-    this.boxLayer = boxLayer;
+    if (this.fresh) [this.marks, this.boxLayers, this.fresh] = [[], [], false];
+    this.marks.push(...marks);
+    this.boxLayers.push(boxLayer);
     registrar.registerInput(this);
     this.readers.add(registrar);
   }
 
   onFrame(frame: InteractionFrame): void {
     this.candidates = candidatesOf(frame.items, this.marks);
-    this.cover = this.boxLayer && drawnBox(frame.items, this.boxLayer);
+    this.cover = drawnBox(frame.items, this.boxLayers);
+    this.fresh = true;
   }
 
   onEvent(
@@ -215,13 +221,13 @@ export function candidatesOf(
   });
 }
 
-/** The box of everything `layer` drew among `items`, in svg px; undefined
- *  when it drew nothing with a box. */
+/** The box of everything `layers` drew among `items`, in svg px; undefined
+ *  when they drew nothing with a box. */
 function drawnBox(
   items: DisplayList.DisplayItem[],
-  layer: GoFishNode
+  layers: GoFishNode[]
 ): Box | undefined {
-  const uids = new Set([...subtree(layer)].map((n) => n.uid));
+  const uids = new Set(layers.flatMap((l) => [...subtree(l)].map((n) => n.uid)));
   const outline: Outline = [];
   walkItems(items, (item, at) => {
     if (item.id !== undefined && uids.has(item.id))

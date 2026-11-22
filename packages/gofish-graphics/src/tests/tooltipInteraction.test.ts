@@ -136,6 +136,53 @@ send("pointermove", 1000, 1000, "mouse");
 await settle();
 check("a mouse move off the chart closes it", boxOf() === undefined);
 
+console.log("# a chart nested per group: one box, in any group");
+{
+  const { stack } = GoFish as any;
+  const catches = [
+    { lake: "A", species: "s1", count: 3 },
+    { lake: "A", species: "s2", count: 4 },
+    { lake: "B", species: "s1", count: 5 },
+  ];
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  await chart(catches, { w: 300, h: 200 })
+    .flow(spread({ by: "lake", dir: "x", spacing: 40 }))
+    .mark(
+      chart()
+        .flow(stack({ by: "species", dir: "y" }))
+        .mark(rect({ h: "count", fill: "#4c78a8" }).tooltip())
+    )
+    .render(el, {});
+  await settle();
+  const segments = [...el.querySelectorAll('rect[fill="#4c78a8"]')];
+  const boxes = () =>
+    [...el.querySelectorAll("rect")].filter(
+      (r) => r.getAttribute("stroke") === "#c9ced6"
+    );
+  for (const [i, lake] of ["A", "B"].entries()) {
+    // The first segment of each lake, in drawing order: A's first, then B's.
+    const seg = i === 0 ? segments[0] : segments[segments.length - 1];
+    const x = Number(seg.getAttribute("x")) + 2;
+    const y = Number(seg.getAttribute("y")) + 2;
+    el.querySelector("svg")!.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: x,
+        clientY: y,
+        bubbles: true,
+        pointerType: "mouse",
+      })
+    );
+    await settle();
+    const shown = [...el.querySelectorAll("text")].map((t) => t.textContent);
+    check(
+      `lake ${lake}: one box, with its lake`,
+      boxes().length === 1 && shown.includes(lake),
+      [boxes().length, shown.slice(0, 6)]
+    );
+  }
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

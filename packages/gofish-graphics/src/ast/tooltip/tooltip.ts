@@ -40,7 +40,7 @@ import { SlotOperand } from "../constraints/shared";
 import { focusOf, type FocusMark } from "../../interaction/tooltipFocus";
 import { createTooltipPlaceConstraint } from "./place";
 import type { TooltipRow } from "./content";
-import { tooltipRequest } from "./request";
+import { claimTooltip, tooltipRequest } from "./request";
 
 /** The box: a column of muted, right-aligned names beside a column of
  *  left-aligned values, in a white rounded rect. */
@@ -103,7 +103,10 @@ async function beside(
 /**
  * The layers the tooltips of a chart's marks add, given its resolved marks
  * (`content`, which also bounds where a box may go): one per `.tooltip()`
- * call among them, over that call's marks. Empty when no mark has one.
+ * call among them, over that call's marks. Empty when no mark has one. A
+ * mark in a chart nested in this one was drawn by that chart, so its box
+ * stays inside that chart (TODO(#1395): a box inside the outermost chart
+ * would have more room; that needs a chart to know it is the outermost).
  *
  * In a live chart (`layerContext.registrar`) each layer reads its call's
  * focus, so a change of focus re-runs the chart. A static drawing has no
@@ -116,7 +119,7 @@ export async function tooltipLayers(
   const byCall = new Map<object, GoFishNode[]>();
   const walk = (n: GoFishNode) => {
     const r = tooltipRequest(n);
-    if (r !== undefined) {
+    if (r !== undefined && claimTooltip(n)) {
       const marks = byCall.get(r.call) ?? [];
       byCall.set(r.call, marks);
       marks.push(n);
