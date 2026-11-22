@@ -442,7 +442,11 @@ methods:
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`
-  domain-specific channel meanings.
+  domain-specific channel meanings. The wrapper carries the base mark's wire
+  with the translate (the IR's mark `translate`), and a `.tooltip()` chained
+  after it goes on the base mark, which the tooltip describes, so the two
+  chain in either order. `.name()` and `.zOrder()` stay on the wrapper: they
+  act on the placed node.
 
 These methods wrap or rebuild the base mark rather than mutating it, so naming,
 labeling, or positioning one mark never affects another.

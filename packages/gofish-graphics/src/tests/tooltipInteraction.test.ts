@@ -906,6 +906,73 @@ console.log('# label.angle: "auto" paints an earlier run than the last: the box 
   );
 }
 
+console.log("# .translate() and .tooltip() in either order, and through the IR");
+{
+  const { line, group, Serialize } = GoFish as any;
+  // Two rows per bar: the box shows the summed count, which only the
+  // mark's wire (its `h: "n"` channel) says.
+  const counts = [
+    { k: "a", n: 2 },
+    { k: "a", n: 3 },
+    { k: "b", n: 1 },
+    { k: "b", n: 1 },
+  ];
+  const yearly = [2018, 2019, 2020].map((year, i) => ({ s: "A", year, v: [1, 3, 2][i] }));
+  const ways = {
+    "translate, then tooltip": (m: any, f?: string[]) => m.translate({ y: 5 }).tooltip(f),
+    "tooltip, then translate": (m: any, f?: string[]) => m.tooltip(f).translate({ y: 5 }),
+  };
+  const renders = {
+    JS: (c: any, el: Element) => c.render(el, {}),
+    IR: async (c: any, el: Element) => Serialize.renderIR(await Serialize.toJSON(c), el, {}),
+  };
+  for (const [way, chain] of Object.entries(ways))
+    for (const [via, draw] of Object.entries(renders)) {
+      const bars = freshEl();
+      await draw(
+        chart(counts, { w: 300, h: 200 })
+          .flow(spread({ by: "k", dir: "x" }))
+          .mark(chain(rect({ h: "n", fill: "#4c78a8" }))),
+        bars
+      );
+      await settle();
+      const a = bars.querySelector('rect[fill="#4c78a8"]')!;
+      moveOver(
+        bars,
+        Number(a.getAttribute("x")) + 2,
+        Number(a.getAttribute("y")) + Number(a.getAttribute("height")) - 2
+      );
+      await settle();
+      check(
+        `${way} (${via}): a bar's box shows the count it draws`,
+        JSON.stringify(boxTexts(bars).slice(-4)) === JSON.stringify(["k", "n", "a", "5"]),
+        boxTexts(bars).slice(-4)
+      );
+      const el = freshEl();
+      await draw(
+        chart(yearly, { w: 300, h: 200 })
+          .flow(group({ by: "s" }))
+          .mark(chain(line({ x: "year", y: "v" }), ["year", "v"])),
+        el
+      );
+      await settle();
+      const path = [...el.querySelectorAll("path")].find((p) => p.getAttribute("fill") === "none")!;
+      // Each segment ends at a row's point: 2019 ends the first curve.
+      const [x, y] = (path.getAttribute("d") ?? "")
+        .split("C")[1]
+        .match(/-?\d+(?:\.\d+)?/g)!
+        .map(Number)
+        .slice(-2);
+      moveOver(el, x + 2, y + 5);
+      await settle();
+      check(
+        `${way} (${via}): a line's box shows the hovered row`,
+        JSON.stringify(boxTexts(el).slice(-4)) === JSON.stringify(["year", "v", "2019", "3"]),
+        boxTexts(el).slice(-4)
+      );
+    }
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

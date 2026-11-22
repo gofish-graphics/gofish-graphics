@@ -410,7 +410,36 @@ export function translateMark<T>(
   forwardInputsResolver(wrapped, [base], ([m]) =>
     translateMark(m as Mark<T>, opts)
   );
-  return nameableMark(wrapped) as Mark<T>;
+  // The base mark's wire, with the translate (the IR's mark `translate`),
+  // as `translateOperator` does for an operator. Two translates add up.
+  const baseTag = wireOf(base);
+  if (baseTag) {
+    const prior = baseTag.translate;
+    withWire(wrapped, {
+      ...baseTag,
+      translate: prior
+        ? {
+            x: (prior.x ?? 0) + (opts.x ?? 0),
+            y: (prior.y ?? 0) + (opts.y ?? 0),
+          }
+        : opts,
+    });
+  }
+  const out = nameableMark(wrapped) as Mark<T>;
+  // A tooltip describes the mark drawn, not where it is placed: it goes on
+  // the base mark, which carries the wire (its channels) and draws the node
+  // a line's rows are read from (`throughRows`), so `.translate().tooltip()`
+  // is `.tooltip().translate()`. The modifiers that act on the placed node
+  // (`.name()` names it for a ref, `.zOrder()` orders it among its
+  // siblings) stay on the wrapper.
+  if (typeof (base as any).tooltip === "function")
+    Object.defineProperty(out, "tooltip", {
+      value: (...args: unknown[]) =>
+        translateMark((base as any).tooltip(...args), opts),
+      writable: true,
+      configurable: true,
+    });
+  return out;
 }
 
 /**

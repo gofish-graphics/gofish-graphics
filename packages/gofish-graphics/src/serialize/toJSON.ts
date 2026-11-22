@@ -56,8 +56,8 @@ interface SerializeTag {
    *  `field(...)` aggregate's serialized `FieldExprWire` (`{type: "field",
    *  ...}`) — see `labelIRField` in createOperator.ts. */
   label?: Array<{ accessor: string | AnyObject; [k: string]: unknown }>;
-  /** Set when `.translate({x, y})` is chained on an operator (traversal
-   *  form) — `translateOperator` copies the base operator's tag forward onto
+  /** Set when `.translate({x, y})` is chained on a mark (`translateMark`)
+   *  or an operator (traversal form) — `translateOperator` copies the base operator's tag forward onto
    *  its wrapper and stamps this field so the structural pixel offset
    *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
   translate?: { x?: number; y?: number };
@@ -460,6 +460,7 @@ async function markToIR(
   if (tag.label !== undefined) chained.label = wireLabels(tag.label);
   if (tag.hidden !== undefined) chained.hidden = tag.hidden;
   if (tag.tooltip !== undefined) chained.tooltip = tag.tooltip;
+  if (tag.translate !== undefined) chained.translate = tag.translate;
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

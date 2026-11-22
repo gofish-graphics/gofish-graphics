@@ -345,6 +345,14 @@ class TestMarkTooltip:
         node = ir(m)
         assert node["tooltip"] == ["n"] and node["name"] == "bars"
 
+    def test_translate_in_either_order(self):
+        # The IR carries both, whichever comes first; the JS side chains
+        # them in one order and `.translate()` keeps the tooltip on the mark.
+        a = ir(line(x="year", y="v").translate(y=5).tooltip(["year"]))
+        b = ir(line(x="year", y="v").tooltip(["year"]).translate(y=5))
+        assert a == b
+        assert a["tooltip"] == ["year"] and a["translate"] == {"y": 5}
+
     def test_in_a_chart(self):
         from gofish import chart, spread
 

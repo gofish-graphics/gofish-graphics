@@ -438,7 +438,9 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it),
   base operator's wire tag (`wireOf`) onto the wrapper and stamps
   `tag.translate` — without that copy, a translated operator would silently
   serialize as the opaque `{type: "derive"}` fallback, losing both
-  `translate` and any chained `.label()`.
+  `translate` and any chained `.label()`. `translateMark` does the same for a
+  mark (two translates add up), so a translated mark reaches the IR as its
+  base mark's node with a `translate`.
 
 `.transition(spec)` on the operator form (the build-in prototype, see
 `src/animation/`) is built the same way. `dual` closes over a
