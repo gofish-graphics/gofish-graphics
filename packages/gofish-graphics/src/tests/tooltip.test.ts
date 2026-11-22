@@ -590,6 +590,23 @@ console.log("# content: a field list on a line drawn through rows");
   );
 }
 
+console.log("# a bare string for the fields is an error");
+{
+  // As in Python: a string is a list of its letters, not the list of one
+  // field, so it is a TypeError that shows the list, at the call.
+  let error: unknown;
+  try {
+    (rect({ w: "share" }) as any).tooltip("path");
+  } catch (e) {
+    error = e;
+  }
+  check(
+    "a TypeError that shows the list of one",
+    error instanceof TypeError && error.message.includes('["path"]'),
+    String(error)
+  );
+}
+
 console.log("# content: an unknown field is an error");
 {
   let message = "";

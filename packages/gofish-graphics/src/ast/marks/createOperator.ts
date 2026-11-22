@@ -737,7 +737,16 @@ export const transitionModifier = {
  */
 export const tooltipModifier = {
   name: "tooltip",
-  bind: (fields, call: TooltipCall = {}) => [fields, call],
+  bind: (fields, call: TooltipCall = {}) => {
+    // A string reads as the list of its letters. The fields are a list, as
+    // Python's `.tooltip()` says too, so one field is a list of one.
+    if (typeof fields === "string")
+      throw new TypeError(
+        `.tooltip() takes a list of field names, not a string: ` +
+          `write .tooltip(["${fields}"]) for one field.`
+      );
+    return [fields, call];
+  },
   apply: (node, layerContext, datum, fields, call) => {
     recordTooltip(node, datum, fields, call!, layerContext?.registrar);
   },

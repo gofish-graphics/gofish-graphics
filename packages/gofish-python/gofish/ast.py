@@ -770,7 +770,16 @@ class Mark(_Root):
 
         Returns:
             New Mark (same subclass as self) with the tooltip set.
+
+        Raises:
+            TypeError: ``fields`` is a ``str``, which would read as a list of
+                its letters; one field is a list of one, ``["lake"]``.
         """
+        if isinstance(fields, str):
+            raise TypeError(
+                f".tooltip() takes a list of field names, not a str: "
+                f'write .tooltip(["{fields}"]) for one field.'
+            )
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
         )

@@ -36,7 +36,8 @@ rows is an error that names the fields there are. So is a listed field with
 more than one value that no channel draws. On a `line` drawn through rows, the listed
 fields are the rows' fields: the box shows them for the row it describes,
 leaving out any that row lacks, and the line's `<title>` shows only those
-with one value on the whole line. A name that no row has is an error. A `ref(...)` has no tooltip: call
+with one value on the whole line. A name that no row has is an error. A bare
+string is a `TypeError`: one field is a list of one, `["lake"]`. A `ref(...)` has no tooltip: call
 `.tooltip()` on the mark that draws the node.
 
 ## Example

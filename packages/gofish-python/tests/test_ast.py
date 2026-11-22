@@ -345,6 +345,11 @@ class TestMarkTooltip:
         node = ir(m)
         assert node["tooltip"] == ["n"] and node["name"] == "bars"
 
+    def test_a_bare_string_is_an_error(self):
+        # A str is a sequence of letters, not the list of one field.
+        with pytest.raises(TypeError, match=r'\["lake"\]'):
+            rect(w="share").tooltip("lake")
+
     def test_translate_in_either_order(self):
         # The IR carries both, whichever comes first; the JS side chains
         # them in one order and `.translate()` keeps the tooltip on the mark.
