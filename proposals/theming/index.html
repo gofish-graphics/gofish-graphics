@@ -347,7 +347,7 @@
       <p>
         <strong>An effect is a <code>Filter</code>.</strong> The family that
         exists gains <code>shadow</code>, <code>blur</code>,
-        <code>roughen</code> and <code>grain</code>, and
+        <code>roughen</code>, <code>grain</code> and <code>threshold</code>, and
         <code>filter</code> takes a list.
       </p>
       <p>
@@ -482,8 +482,9 @@ chart(seafood, { theme: cogra })
             <td>Effects</td>
             <td>
               <code>Filter.shadow</code>, <code>Filter.blur</code>,
-              <code>Filter.roughen</code>, <code>Filter.grain</code>.
-              <code>filter</code> takes a list.
+              <code>Filter.roughen</code>, <code>Filter.grain</code>,
+              <code>Filter.threshold</code>. <code>filter</code> takes a list.
+              Later, <code>Filter.scan</code>, which needs pixels.
             </td>
             <td>
               The <code>filter</code> option that every mark and
@@ -509,9 +510,9 @@ chart(seafood, { theme: cogra })
       <p class="note">
         No new operator. Decided so far: a pattern is a paint, not a second
         option beside <code>fill</code> (Nov 22). A theme is a keyed object for
-        now, with the door left open to selector rules later (Nov 22). One place
-        where I think the choice is close is marked with an orange edge on the
-        Themes tab: the role colors.
+        now, with the door left open to selector rules later (Nov 22). Two
+        places where I think the choice is close are marked with an orange edge:
+        the scan look on the Effects tab, and the role colors on the Themes tab.
       </p>
     </article>
   </section>
@@ -791,7 +792,7 @@ rect(
   <!-- ============================ EFFECTS ============================ -->
   <section class="tab" id="tab-effects" hidden>
     <article class="card">
-      <h3>Four new members of the family that exists</h3>
+      <h3>New members of the family that exists</h3>
       <figure>
         <img
           src="img/effects-grid.png"
@@ -848,6 +849,15 @@ rect(h="value", filter=[Filter.roughen(), Filter.shadow()])</code></pre>
             <td>paper grain inside the shape</td>
           </tr>
           <tr>
+            <td><code>Filter.threshold</code></td>
+            <td>
+              <code>spread</code>, <code>level</code>, <code>jitter</code>
+            </td>
+            <td>
+              spreads the ink and cuts it to ink or paper, with nothing between
+            </td>
+          </tr>
+          <tr>
             <td>
               <code>Filter.grayscale</code>,
               <code>Filter.luminanceToAlpha</code>
@@ -861,6 +871,120 @@ rect(h="value", filter=[Filter.roughen(), Filter.shadow()])</code></pre>
         A list applies its members in order. The names are Figma's (Drop shadow,
         Layer blur, Noise) and Illustrator's (Roughen). If #1385 renames the
         family to <code>Effect</code>, these members move with it.
+      </p>
+    </article>
+
+    <article class="card fork">
+      <h3>The rough Cogra look</h3>
+      <div class="pics">
+        <figure>
+          <img
+            src="ref/issue-1396-cogra.png"
+            alt="The six Cogra panels from the issue"
+          />
+          <figcaption>
+            The reference from #1396, made by Cogra's Python package.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="pics">
+        <figure>
+          <img
+            src="img/cogra-six-scan-raster.png"
+            alt="Five black and white GoFish panels with stair-stepped 1-bit edges: bars, histograms, a scatter with a band, two densities, two lines"
+          />
+          <figcaption>
+            GoFish, with a port of Cogra's scan steps run on the rendered
+            figure. Not drawn: error bars, significance brackets, the box plot.
+          </figcaption>
+        </figure>
+      </div>
+      <figure>
+        <img
+          src="img/cogra-wear-steps.png"
+          alt="The Cogra-themed stacked bar four times: clean, wobbled, wobbled and thresholded, and as a 1-bit low-resolution scan"
+        />
+      </figure>
+      <div class="codes">
+        <div>
+          <div class="label">Proposed, JavaScript</div>
+          <pre><code class="language-javascript">// Stays vector: wobble, then ink spread cut to pure black and white.
+chart(seafood, { theme: cogra, filter: [Filter.roughen(), Filter.threshold()] });
+
+// Cogra's own scan look: the figure is drawn to pixels and sampled at 200 dpi, 1 bit.
+chart(seafood, { theme: cogra, filter: Filter.scan() });
+chart(seafood, { theme: cogra, filter: Filter.scan({ dpi: 150, weight: 1.5, specks: true }) });</code></pre>
+        </div>
+        <div>
+          <div class="label">Proposed, Python</div>
+          <pre><code class="language-python">chart(seafood, theme=cogra, filter=[Filter.roughen(), Filter.threshold()])
+
+chart(seafood, theme=cogra, filter=Filter.scan())
+chart(seafood, theme=cogra, filter=Filter.scan(dpi=150, weight=1.5, specks=True))</code></pre>
+        </div>
+      </div>
+      <p>
+        <strong>What Cogra does.</strong> Its scan look is not a wobble. It
+        works on the finished figure as pixels: render at 600 dpi, displace by
+        less than one output pixel, blur slightly, then threshold with a level
+        that varies over space, so some letters and strokes come out heavier
+        than their neighbors. Last, it averages down to 200 dpi and cuts to 1
+        bit. That last step makes the stair-stepped edges, which are most of the
+        look.
+      </p>
+      <div class="pics">
+        <figure>
+          <img
+            src="img/cogra-scan-large.png"
+            alt="The stacked bar after roughen and threshold: hard black and white edges, still smooth"
+          />
+          <figcaption>
+            <code>[Filter.roughen(), Filter.threshold()]</code>. An SVG filter.
+            Hard edges and uneven weight, but no stair steps, and its grain
+            changes with the screen's pixel density.
+          </figcaption>
+        </figure>
+        <figure>
+          <img
+            src="img/cogra-scan-raster-large.png"
+            alt="The stacked bar as a 1-bit low-resolution scan with stair-stepped edges"
+          />
+          <figcaption>
+            <code>Filter.scan()</code>. The same steps as Cogra, on pixels. The
+            figure becomes an image.
+          </figcaption>
+        </figure>
+      </div>
+      <ul>
+        <li>
+          <strong
+            ><code>Filter.threshold({ spread, level, jitter })</code></strong
+          >
+          blurs the ink by <code>spread</code>, shifts the cut by slow noise
+          scaled by <code>jitter</code>, and cuts to two levels:
+          <code>Color.ink</code> on <code>Color.paper</code>. It works on ink
+          coverage (how dark and how opaque), not on alpha alone, since a white
+          bar is opaque. It throws color away, so it belongs on a whole figure
+          in a one-ink theme.
+        </li>
+        <li>
+          <strong
+            ><code>Filter.scan({ dpi, weight, specks, seed })</code></strong
+          >
+          cannot be an SVG filter, because it has to average over a sampling
+          grid coarser than the screen. It would be the first effect that draws
+          its layer to an image. The text inside stops being text, and a
+          headless or Python export needs a rasterizer. An SVG pixelate trick
+          was tried and loses thin lines.
+        </li>
+      </ul>
+      <p>
+        I would ship <code>roughen</code> and <code>threshold</code> with the
+        first effects, and treat <code>scan</code> as the first of the effects
+        that need pixels, together with the watercolor in #1196. They share one
+        question, which is whether a layer may be drawn as an image. Cogra's
+        other two looks, <code>xerox</code> and <code>aged</code>, are the same
+        kind and would follow it.
       </p>
     </article>
 

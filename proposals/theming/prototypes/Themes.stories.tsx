@@ -50,7 +50,10 @@ const cograDefs = [
 ];
 
 /** One themed chart, with its caption under it, in its own page-colored box. */
-export async function themed(theme: Theme): Promise<HTMLElement> {
+export async function themed(
+  theme: Theme,
+  size: { w: number; h: number } = { w: 300, h: 230 }
+): Promise<HTMLElement> {
   const panel = document.createElement("div");
   panel.style.cssText = `background:${PAGE[theme]};padding:14px 16px 10px;display:inline-block;`;
   const host = document.createElement("div");
@@ -60,8 +63,7 @@ export async function themed(theme: Theme): Promise<HTMLElement> {
   const cogra = theme === "cogra";
   const print = theme === "print";
   await chart(seafood, {
-    w: 300,
-    h: 230,
+    ...size,
     ...(theme === "default"
       ? {}
       : {

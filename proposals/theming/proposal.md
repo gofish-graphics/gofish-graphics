@@ -199,13 +199,14 @@ rect(h="value", filter=Filter.shadow(y=2, blur=6, color="#0004"))
 rect(h="value", filter=[Filter.roughen(), Filter.shadow()])
 ```
 
-| Member                                        | Options                               | Does                                            |
-| --------------------------------------------- | ------------------------------------- | ----------------------------------------------- |
-| `Filter.shadow`                               | `x` (0), `y` (2), `blur` (4), `color` | drop shadow that follows the shape              |
-| `Filter.blur(radius)`                         |                                       | Gaussian blur                                   |
-| `Filter.roughen`                              | `amount` (2), `scale`, `seed`         | wobbles edges, as a hand or a photocopier would |
-| `Filter.grain`                                | `amount`, `scale`, `seed`             | paper grain inside the shape                    |
-| `Filter.grayscale`, `Filter.luminanceToAlpha` |                                       | exist today                                     |
+| Member                                        | Options                               | Does                                                              |
+| --------------------------------------------- | ------------------------------------- | ----------------------------------------------------------------- |
+| `Filter.shadow`                               | `x` (0), `y` (2), `blur` (4), `color` | drop shadow that follows the shape                                |
+| `Filter.blur(radius)`                         |                                       | Gaussian blur                                                     |
+| `Filter.roughen`                              | `amount` (2), `scale`, `seed`         | wobbles edges, as a hand or a photocopier would                   |
+| `Filter.grain`                                | `amount`, `scale`, `seed`             | paper grain inside the shape                                      |
+| `Filter.threshold`                            | `spread`, `level`, `jitter`           | spreads the ink and cuts it to ink or paper, with nothing between |
+| `Filter.grayscale`, `Filter.luminanceToAlpha` |                                       | exist today                                                       |
 
 A list applies its members in order. These four answer #1338 (they replace raw CSS strings, which Safari ignores) and most of #1196:
 
@@ -228,6 +229,36 @@ layer({ theme: sketch }, [pulley()]);
 ```
 
 The pulley is built from `createMark` components. The theme reaches the `circle`, `polygon` and `line` marks inside them.
+
+### The rough Cogra look
+
+![The Cogra-themed chart: clean, wobbled, thresholded, and as a 1-bit scan](img/cogra-wear-steps.png)
+
+![Five GoFish panels in the scan look](img/cogra-six-scan-raster.png)
+
+```js
+// Stays vector: wobble, then ink spread cut to pure black and white.
+chart(seafood, {
+  theme: cogra,
+  filter: [Filter.roughen(), Filter.threshold()],
+});
+
+// Cogra's own scan look: the figure is drawn to pixels and sampled at 200 dpi, 1 bit.
+chart(seafood, { theme: cogra, filter: Filter.scan() });
+chart(seafood, {
+  theme: cogra,
+  filter: Filter.scan({ dpi: 150, weight: 1.5, specks: true }),
+});
+```
+
+Cogra's scan look (`wear.py`, `scan`) is not a wobble. It works on the finished figure as pixels: render at 600 dpi, displace by less than one output pixel, blur slightly, then threshold with a level that varies over space, so some letters and strokes come out heavier than their neighbors. Last, it averages down to 200 dpi and cuts to 1 bit. That last step makes the stair-stepped edges, which are most of the look. Cogra's web version is an SVG filter that does the same without the last step.
+
+- `Filter.threshold({ spread, level, jitter })` blurs the ink by `spread`, shifts the cut by slow noise scaled by `jitter`, and cuts to two levels: `Color.ink` on `Color.paper`. It works on ink coverage (how dark and how opaque), not on alpha alone, since a white bar is opaque. It throws color away, so it belongs on a whole figure in a one-ink theme. It is an SVG filter (`img/cogra-scan-large.png`).
+- `Filter.scan({ dpi, weight, specks, seed })` cannot be an SVG filter, because it has to average over a sampling grid coarser than the screen. It would be the first effect that draws its layer to an image (`img/cogra-scan-raster-large.png`). The text inside stops being text, and a headless or Python export needs a rasterizer. An SVG pixelate trick was tried and loses thin lines (`img/cogra-scan-svg-pixelate.png`).
+
+I would ship `roughen` and `threshold` with the first effects, and treat `scan` as the first of the effects that need pixels, together with the watercolor in #1196. They share one question: whether a layer may be drawn as an image. Cogra's other looks, `xerox` and `aged`, are the same kind.
+
+Found while prototyping: a whole-figure filter region must follow the SVG's viewBox; pattern ids must be unique per chart, or removing one chart breaks the others on the page; roughen at too high a frequency tears 10 pixel text; stipple dots closer than about 5 pixels fill in to a mesh after the threshold.
 
 What this does not cover is the rough.js kind of hand-drawn look, where each path is redrawn as two wobbly strokes and filled with uneven hachure lines. That is a rewrite of the geometry, not a change to pixels. It can come later as one more member (`Filter.sketch()`), lowered as a rewrite of the display list instead of an SVG filter, with the same option and the same rule that the layout does not move. Watercolor with real pigment mixing (#1196) needs a canvas renderer and is outside this proposal.
 
