@@ -23,14 +23,16 @@ export type Point = { x: number; y: number };
 /** A box in the pointer's coordinates. */
 export type Box = { x0: number; y0: number; x1: number; y1: number };
 /**
- * A drawn outline: the boxes, circles and line segments a mark is drawn as.
- * A part is a box, a circle (a `round` box), or a segment of a path (a
- * line's), whose box bounds it.
+ * A drawn outline: the boxes, circles, line segments and regions a mark is
+ * drawn as. A part is a box, a circle (a `round` box), a segment of a
+ * stroked path (a line's), or a `region`, a filled closed path (an area, a
+ * wedge) given by the segments of its edge; its box bounds it.
  */
 export type Outline = {
   box: Box;
   round: boolean;
   segment?: readonly [Point, Point];
+  region?: readonly (readonly [Point, Point])[];
 }[];
 
 /** A mark the focus can land on. */
@@ -191,22 +193,43 @@ export function nearestOnPath(p: Point, outline: Outline): Point | undefined {
   return best;
 }
 
-/** Whether a candidate is drawn as a path across its data (a line): it has
- *  no placed position on either axis, and its outline is segments only. Such
- *  a mark is as near as its path, and its tooltip sits beside the point of
- *  the path nearest the pointer. */
+/** Whether a candidate is drawn as a stroked path across its data (a
+ *  line): it has no placed position on either axis, and its outline is
+ *  segments only (a filled path is a region, not segments). Such a mark is
+ *  as near as its path, and its tooltip sits beside the point of the path
+ *  nearest the pointer. */
 export const isPath = (c: Candidate): boolean =>
   c.position.x === undefined &&
   c.position.y === undefined &&
   c.outline.length > 0 &&
   c.outline.every((part) => part.segment !== undefined);
 
+/** Distance from a point to a region (its edge segments), zero inside it.
+ *  Inside is the nonzero rule, as SVG fills a path by default. */
+function regionDistance(
+  p: Point,
+  edge: readonly (readonly [Point, Point])[]
+): number {
+  let winding = 0;
+  let d = Infinity;
+  for (const [a, b] of edge) {
+    d = Math.min(d, segDist(p.x, p.y, a.x, a.y, b.x, b.y));
+    const cross = (b.x - a.x) * (p.y - a.y) - (p.x - a.x) * (b.y - a.y);
+    if (a.y <= p.y) {
+      if (b.y > p.y && cross > 0) winding++;
+    } else if (b.y <= p.y && cross < 0) winding--;
+  }
+  return winding !== 0 ? 0 : d;
+}
+
 function outlineDistance(p: Point, outline: Outline): number {
   let d = Infinity;
-  for (const { box, round, segment } of outline) {
+  for (const { box, round, segment, region } of outline) {
     if (segment) {
       const [a, b] = segment;
       d = Math.min(d, segDist(p.x, p.y, a.x, a.y, b.x, b.y));
+    } else if (region) {
+      if (boxDistance(p, box) < d) d = Math.min(d, regionDistance(p, region));
     } else if (!round) d = Math.min(d, boxDistance(p, box));
     else {
       const c = center(box);

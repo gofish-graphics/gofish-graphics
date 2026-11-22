@@ -1,6 +1,6 @@
 """Equivalent of interaction/Tooltip.stories.tsx — Interaction/Tooltip (#1395)."""
 
-from gofish import chart, circle, group, line, rect, scatter, spread, stack
+from gofish import Coord, chart, circle, group, line, rect, scatter, spread, stack
 from python_stories.data import CATCH_LOCATIONS_ARRAY, SEAFOOD
 
 # The top 15 path types of the issue's screenshot. Only the first row is
@@ -69,5 +69,14 @@ def story_line_chart():
         chart(BUDGET, w=400, h=260)
         .flow(group(by="series"))
         .mark(line(x="year", y="value", stroke="series", stroke_width=2).tooltip()),
+        {},
+    )
+
+
+def story_donut():
+    return (
+        chart(SEAFOOD, coord=Coord.clock(), w=300, h=300)
+        .flow(stack(by="species", dir="x", y=50, h=50))
+        .mark(rect(w="count", fill="species").tooltip()),
         {},
     )

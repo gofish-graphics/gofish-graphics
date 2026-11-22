@@ -45,12 +45,12 @@ import {
   type Point,
 } from "./focus";
 import type { Seated } from "../ast/tooltip/place";
-import { breadthFirst, GoFishNode } from "../ast/_node";
+import { breadthFirst, GoFishNode, placedByOwnData } from "../ast/_node";
+import { chainOn } from "../ast/layoutWarnings";
+import { inCoordinateSpace } from "../ast/axisDirection";
 import {
   continuousInterval,
-  isORDINAL,
   isUNDEFINED,
-  originIs,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
 
@@ -386,10 +386,27 @@ function outlineOf(item: DisplayList.DisplayItem, at: Affine): Outline {
         },
       ];
     }
-    case "path":
-      return pathSegments(item.d).map(([a, b]) => {
-        const p = { x: at.tx + at.sx * a.x, y: at.ty + at.sy * a.y };
-        const q = { x: at.tx + at.sx * b.x, y: at.ty + at.sy * b.y };
+    case "path": {
+      const filled = isFilled(item.style) && /z/i.test(item.d);
+      const edge = pathSegments(item.d, filled).map(([a, b]) => [
+        { x: at.tx + at.sx * a.x, y: at.ty + at.sy * a.y },
+        { x: at.tx + at.sx * b.x, y: at.ty + at.sy * b.y },
+      ]) as [Point, Point][];
+      if (filled) {
+        // A filled closed path is a region: the pointer inside it is on
+        // the mark (a wedge, an area), not only near its edge.
+        const drawn = emptyDrawn();
+        for (const [p, q] of edge) {
+          drawn.box.x0 = Math.min(drawn.box.x0, p.x, q.x);
+          drawn.box.x1 = Math.max(drawn.box.x1, p.x, q.x);
+          drawn.box.y0 = Math.min(drawn.box.y0, p.y, q.y);
+          drawn.box.y1 = Math.max(drawn.box.y1, p.y, q.y);
+        }
+        return edge.length > 0
+          ? [{ box: drawn.box, round: false, region: edge }]
+          : [];
+      }
+      return edge.map(([p, q]) => {
         return {
           box: {
             x0: Math.min(p.x, q.x),
@@ -401,18 +418,28 @@ function outlineOf(item: DisplayList.DisplayItem, at: Affine): Outline {
           segment: [p, q] as const,
         };
       });
+    }
     default:
       return [];
   }
 }
 
+/** Whether a style paints a fill: SVG fills a path black unless told
+ *  otherwise, so only `none`, `transparent` and a zero opacity do not. */
+const isFilled = (style: DisplayList.Style | undefined): boolean =>
+  style?.fill !== "none" &&
+  style?.fill !== "transparent" &&
+  style?.fillOpacity !== 0 &&
+  style?.opacity !== 0;
+
 /**
  * The segments of a path's `d`, from point to point of each command. A
  * curve is read as the chord from its start to its end: near enough to
  * measure a pointer's distance to a line mark, which is what it is for.
- * Commands are read in absolute and relative form.
+ * Commands are read in absolute and relative form. With `close`, every
+ * subpath is closed, as a fill closes it.
  */
-export function pathSegments(d: string): [Point, Point][] {
+export function pathSegments(d: string, close = false): [Point, Point][] {
   const tokens = d.match(/[a-zA-Z]|-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?/g) ?? [];
   const out: [Point, Point][] = [];
   let cur: Point = { x: 0, y: 0 };
@@ -456,11 +483,13 @@ export function pathSegments(d: string): [Point, Point][] {
     else if (lower === "v") end = { x: cur.x, y: base.y + args[0] };
     else end = { x: base.x + args[arity - 2], y: base.y + args[arity - 1] };
     if (lower === "m") {
+      if (close && (cur.x !== start.x || cur.y !== start.y)) lineTo(start);
       cur = start = end;
       // Further pairs after a moveto are linetos.
       cmd = rel ? "l" : "L";
     } else lineTo(end);
   }
+  if (close && (cur.x !== start.x || cur.y !== start.y)) lineTo(start);
   return out;
 }
 
@@ -469,29 +498,27 @@ export function pathSegments(d: string): [Point, Point][] {
 /**
  * Per axis, whether the layout places `mark` at a point there, so its box
  * center there is its position. It does when a chain along the axis (a
- * `spread` slot, a `stack` place) lays it out between it and its chart, and
- * when the mark is a point there (its own space has no data extent, as a
- * circle's) that its parent's data places (a `scatter`'s `x`/`y`). A mark
- * with only a size there (a bar's length from a baseline) or drawn across
- * its data (a line) has no position there.
+ * `spread` slot, a `stack` place, `chainOn`) lays it out between it and its
+ * chart, and when the mark is a point there (its own space has no data
+ * extent, as a circle's) that data places in an ancestor's frame
+ * (`placedByOwnData`: a `scatter`'s `x`/`y`). A mark with only a size there
+ * (a bar's length from a baseline) or drawn across its data (a line) has no
+ * position there. Inside a coordinate space (`Coord.polar()`), a mark's
+ * drawn box is not its data box, so its drawn center is its position on
+ * both screen axes: a wedge is as near as its center, as a dot is.
  */
 export function positionAxes(mark: GoFishNode): [boolean, boolean] {
-  return [0, 1].map((axis) => {
+  if (inCoordinateSpace(mark)) return [true, true];
+  return ([0, 1] as const).map((axis) => {
+    let byData = false;
     for (let n = mark; n.parent instanceof GoFishNode && !n._chartBox; ) {
       const parent: GoFishNode = n.parent;
-      if (parent.axisDir === axis) return true;
+      if (chainOn(parent, axis) !== undefined) return true;
+      if (placedByOwnData(parent, parent.indexOfChild(n) ?? -1, axis))
+        byData = true;
       n = parent;
     }
-    if (!isPoint(mark.resolveUnderlyingSpace()[axis])) return false;
-    for (
-      let n: unknown = mark.parent;
-      n instanceof GoFishNode && !n._chartBox;
-      n = n.parent
-    ) {
-      const space = n.resolveUnderlyingSpace()[axis];
-      if (isORDINAL(space) || originIs(space, "pinned")) return true;
-    }
-    return false;
+    return byData && isPoint(mark.resolveUnderlyingSpace()[axis]);
   }) as [boolean, boolean];
 }
 

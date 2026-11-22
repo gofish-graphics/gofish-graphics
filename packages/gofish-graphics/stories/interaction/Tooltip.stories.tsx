@@ -10,6 +10,7 @@ import { catchLocationsArray, seafood } from "../../src/data/catch";
 import {
   chart,
   circle,
+  Coord,
   group,
   line,
   rect,
@@ -113,6 +114,19 @@ export const LineChart: StoryObj = {
       .mark(
         line({ x: "year", y: "value", stroke: "series", strokeWidth: 2 }).tooltip()
       )
+      .render(container);
+
+    return container;
+  },
+};
+
+export const Donut: StoryObj = {
+  render: () => {
+    const container = initializeContainer();
+
+    chart(seafood, { coord: Coord.clock(), w: 300, h: 300 })
+      .flow(stack({ by: "species", dir: "x", y: 50, h: 50 }))
+      .mark(rect({ w: "count", fill: "species" }).tooltip())
       .render(container);
 
     return container;

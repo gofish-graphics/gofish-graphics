@@ -202,6 +202,65 @@ async function main() {
       check("away: closed", out.box === null);
     }
 
+    console.log("# Donut");
+    {
+      // Each wedge is a filled path in a polar coordinate space: a pointer
+      // anywhere inside it is on it.
+      const WEDGE = "path[data-gf-id][fill]:not([fill=none])";
+      const closed = await render(page, story("Donut"), WEDGE);
+      /** In the page: per wedge, its fill and a point inside it, in client
+       *  px, the in-fill sample nearest the mean of its in-fill samples. */
+      const INSIDE = `(() => {
+        const out = [];
+        for (const e of document.querySelectorAll('#stories-root svg ${WEDGE}')) {
+          if (e.closest('[pointer-events="none"]')) continue;
+          const b = e.getBBox(), m = e.getScreenCTM(), pts = [];
+          for (let i = 1; i < 30; i++)
+            for (let j = 1; j < 30; j++) {
+              const p = new DOMPoint(b.x + (b.width * i) / 30, b.y + (b.height * j) / 30);
+              if (e.isPointInFill(p)) pts.push(p);
+            }
+          const cx = pts.reduce((a, p) => a + p.x, 0) / pts.length;
+          const cy = pts.reduce((a, p) => a + p.y, 0) / pts.length;
+          let best = pts[0], d = Infinity;
+          for (const p of pts) {
+            const dp = Math.hypot(p.x - cx, p.y - cy);
+            if (dp < d) [best, d] = [p, dp];
+          }
+          const q = best.matrixTransform(m);
+          out.push([e.getAttribute("fill"), q.x, q.y]);
+        }
+        return out;
+      })()`;
+      const wedges = (await page.evaluate(INSIDE)) as [
+        string,
+        number,
+        number,
+      ][];
+      check("five wedges", wedges.length === 5, wedges);
+      // The legend names each wedge's species by its fill.
+      const species = ["Bass", "Trout", "Catfish", "Perch", "Salmon"];
+      const named = new Set<string>();
+      for (const [fill, x, y] of wedges) {
+        const s = await hover(page, x, y);
+        const name = species.find((n) => s.box?.includes(n));
+        if (name) named.add(name);
+        check(
+          `inside the ${fill} wedge: a box naming one species`,
+          name !== undefined,
+          s.box
+        );
+        check(
+          `inside the ${fill} wedge: nothing else moved`,
+          same(s.marks, closed.marks)
+        );
+      }
+      check("each wedge its own species", named.size === 5, [...named]);
+      await shot("donut");
+      const out = await hover(page, 2, 2);
+      check("away: closed", out.box === null);
+    }
+
     console.log("# LineChart");
     {
       const LINE = 'path[stroke-width="2"]';

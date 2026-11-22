@@ -345,12 +345,19 @@ it drew (`focus.drew(box)`). One focus lives per chart and per `.tooltip()` call
 The focus reads geometry the way `nodeBox` does. On each published frame it
 walks the display items once (`walkItems`), for the open box's extent and for
 one candidate per key: the
-union of the boxes the mark's subtree drew, an outline (boxes, circles, and the
-segments of a path's `d`, `pathSegments`), and the mark's placed position. A
-position counts only on an axis the layout placed the mark along: an ancestor
-up to the chart's box arranges along that axis, or the mark is a point in a
-space an ancestor pins (a dot in a scatter). A bar's length axis does not
-count, so the row decides which bar a pointer right of a short bar describes.
+union of the boxes the mark's subtree drew, an outline (boxes, circles, the
+segments of a stroked path's `d`, `pathSegments`, and regions), and the mark's
+placed position. A path that is closed and filled (its fill is not `none`,
+`transparent` or of zero opacity) is a region, read from the display item
+alone: a pointer inside it, by the nonzero rule, is on the mark, so a wedge
+or an area is hit anywhere inside, not only near its edge. A position counts
+only on an axis the layout placed the mark along: an ancestor up to the
+chart's box is a chain along that axis (`chainOn`), or the mark is a point
+that data places in an ancestor's frame (`placedByOwnData`, a dot in a
+scatter). A bar's length axis does not count, so the row decides which bar a
+pointer right of a short bar describes. Inside a coordinate space
+(`inCoordinateSpace`), a mark's drawn box is not its data box, so its drawn
+center counts on both screen axes.
 On each pointer event it runs the focus behavior (`focus.ts`, by default
 `Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(8)`; `within`
 measures the pointer against the hull of the marks first, so a pointer far

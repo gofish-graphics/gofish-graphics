@@ -9,6 +9,7 @@
 import {
   chart,
   circle,
+  Coord,
   group,
   line,
   rect,
@@ -30,9 +31,12 @@ import {
 import {
   candidatesOf,
   pathSegments,
+  positionAxes,
   TooltipFocus,
   type FocusMark,
 } from "../interaction/tooltipFocus";
+import { runLayout } from "../ast/gofish";
+import { breadthFirst } from "../ast/_node";
 import { InteractionRuntime } from "../interaction/runtime";
 import { UNDEFINED } from "../ast/underlyingSpace";
 import { formatValue } from "../ast/tooltip/content";
@@ -180,6 +184,7 @@ console.log("# candidates: long paths and many marks");
       uid,
       children: [],
       parent: undefined,
+      yFrame: { direction: 1, inCoord: false },
       resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
     }) as unknown as FocusMark["node"];
   // One line of 150,000 segments: more parts than a call takes arguments.
@@ -231,6 +236,101 @@ console.log("# candidates: long paths and many marks");
     one[0]?.box
   );
   check(`5,000 marks, one key: fast (${ms.toFixed(0)} ms)`, ms < 200, ms);
+}
+
+console.log("# a filled path is a region");
+{
+  const fakeNode = (uid: string) =>
+    ({
+      uid,
+      children: [],
+      parent: undefined,
+      yFrame: { direction: 1, inCoord: false },
+      resolveUnderlyingSpace: () => [UNDEFINED, UNDEFINED],
+    }) as unknown as FocusMark["node"];
+  /** The closed polyline through `pts`. */
+  const closedPath = (pts: [number, number][]) =>
+    pts.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ") + " Z";
+  /** The points of an arc around (100, 100) of radius `r`, from angle `a0`
+   *  to `a1` (radians, 0 at 3 o'clock, y down), in 16 steps. */
+  const arc = (r: number, a0: number, a1: number): [number, number][] =>
+    Array.from({ length: 17 }, (_, i) => {
+      const a = a0 + ((a1 - a0) * i) / 16;
+      return [100 + r * Math.cos(a), 100 + r * Math.sin(a)];
+    });
+  const q = Math.PI / 2;
+  // A pie wedge, the quarter from 3 to 6 o'clock.
+  const wedge = closedPath([[100, 100], ...arc(80, 0, q)]);
+  // A donut wedge, the quarter from 6 to 9 o'clock, radii 40 to 80.
+  const donut = closedPath([...arc(80, q, 2 * q), ...arc(40, 2 * q, q)]);
+  // An area under a top line from (0, 50) to (200, 20), down to y 190.
+  const areaD = closedPath([[0, 50], [100, 30], [200, 20], [200, 190], [0, 190]]);
+  // The same top line, stroked only: a line.
+  const lineD = "M0 50 L100 30 L200 20";
+  const path = (id: string, d: string, fill: string) =>
+    ({ kind: "path", id, d, style: { fill } }) as any;
+  const regions = candidatesOf(
+    [path("wedge", wedge, "#4190c5"), path("donut", donut, "#f2cf57")],
+    [
+      { key: "wedge", node: fakeNode("wedge"), rows: [] },
+      { key: "donut", node: fakeNode("donut"), rows: [] },
+    ]
+  );
+  const [area] = candidatesOf(
+    [path("area", areaD, "#4190c5")],
+    [{ key: "area", node: fakeNode("area"), rows: [] }]
+  );
+  const [stroked] = candidatesOf(
+    [path("line", lineD, "none")],
+    [{ key: "line", node: fakeNode("line"), rows: [] }]
+  );
+  const hit = (x: number, y: number, cs: Candidate[]) =>
+    Focus.hit()(frame(x, y, undefined, cs)).choice?.key;
+  check("inside the wedge, by its center", hit(140, 140, regions) === "wedge");
+  check("inside the wedge, near its tip", hit(105, 104, regions) === "wedge");
+  check("outside the wedge, past its arc", hit(165, 165, regions) === undefined);
+  check("inside the donut wedge", hit(60, 140, regions) === "donut");
+  check("in the donut's hole: not the donut wedge", hit(80, 110, regions) === undefined);
+  check("outside the donut wedge", hit(30, 175, regions) === undefined);
+  check("inside the area, under its top line", hit(100, 100, [area]) === "area");
+  check("inside the area, just under its top line", hit(150, 28, [area]) === "area");
+  check("above the area's top line: outside", hit(100, 20, [area]) === undefined);
+  check("below the area: outside", hit(100, 195, [area]) === undefined);
+  check("a region is not a path", !isPath(area) && !isPath(regions[0]));
+  check("a stroked path is a path", isPath(stroked));
+  check("under a stroked line: not on it", hit(100, 100, [stroked]) === undefined);
+}
+
+console.log("# positions in a coordinate space");
+{
+  /** The marks of a rose (bars of `count` per species, around a circle),
+   *  or of the same bars, laid out. */
+  const wedges = async (coord: boolean) => {
+    const node = await chart(seafood, {
+      w: 200,
+      h: 200,
+      ...(coord ? { coord: Coord.polar() } : {}),
+    })
+      .flow(spread({ by: "species", dir: "x" }))
+      .mark(rect({ h: "count", fill: "species" }))
+      .resolve();
+    // The marks, not the legend's swatches the layout adds.
+    const marks = [...breadthFirst(node)].filter((n) => n.type === "rect");
+    await runLayout({ w: 200, h: 200, axes: false }, node);
+    return marks;
+  };
+  const rose = await wedges(true);
+  check(
+    "a rose's wedges: positioned on both screen axes",
+    rose.length === 5 && rose.every((n) => positionAxes(n).join() === "true,true"),
+    [rose.length, rose.map((n) => positionAxes(n))]
+  );
+  const bars = await wedges(false);
+  check(
+    "the same bars: positioned along the spread only",
+    bars.length === 5 && bars.every((n) => positionAxes(n).join() === "true,false"),
+    [bars.length, bars.map((n) => positionAxes(n))]
+  );
 }
 
 console.log("# a disposed chart's focus lets go");
