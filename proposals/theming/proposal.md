@@ -404,7 +404,7 @@ Decided: the keyed object ships first, and the door to a selector syntax stays o
 - A key means "every mark of this kind in scope" and nothing more. No key gets a special meaning that a selector would later have to work around, and no selector-like strings (`"rect.bars"`, `"axis > label"`) are accepted as keys.
 - A value is options only. A function as a value is reserved for replacing how a part is drawn (`axis: (a) => myAxis(a)`), which is Typst's `show`. It needs the axis and legend interfaces from #1279 first.
 
-What a selector would match on is already in the language: a mark's kind, its name (`selectAll("bars")`), and its data. So a later rule can reuse `selectAll` and does not need a selector language of its own.
+What a selector would match on is already in the language: a mark's kind, its name (`selectAll("bars")`), and its data. Decided (Josh, 2026-11-22): a later rule matches with `selectAll`, the selection GoFish already has, and gets no selector language of its own.
 
 ### What stays in user space: components
 
