@@ -42,7 +42,7 @@ const boxAndWhisker = ({
         names[maxName],
       ]),
     ]),
-    rect({ w: 8, y: v(q1), h: v(q3 - q1), fill: v(gender) }),
+    rect({ w: 8, y: v(q1), y2: v(q3), fill: v(gender) }),
     rect({ w: 8, h: 1, y: v(median), fill: "white" }),
   ]);
 };

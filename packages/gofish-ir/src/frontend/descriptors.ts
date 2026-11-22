@@ -1527,16 +1527,16 @@ const axisDims = (doc: string): FieldSpec => ({
  *  circle, which hands them to its ellipse. Marks that destructure a fixed
  *  subset (blank) declare their own fields instead of including this group. */
 export const boxDims: FieldGroup = group({
-  x: ch.pos("Left edge position."),
+  x: ch.pos("Start edge on x."),
   cx: ch.pos("Center x."),
-  x2: ch.pos("Right edge position."),
+  x2: ch.pos("The other end on x from `x`. Only `rect` reads it."),
   w: ch.size("Width."),
   emX: { type: t.boolean, doc: "Embed x in the parent's x space." },
   y: ch.pos(
     "Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward."
   ),
   cy: ch.pos("Center y."),
-  y2: ch.pos("Other y edge position."),
+  y2: ch.pos("The other end on y from `y`. Only `rect` reads it."),
   h: ch.size("Height."),
   emY: { type: t.boolean, doc: "Embed y in the parent's y space." },
   dims: axisDims(
@@ -2048,7 +2048,7 @@ const COMPOSITE_PAINT = {
 
 export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   rect: leafMark("rect", {
-    doc: "A rectangle. Box geometry via the shared dims channels.",
+    doc: "A rectangle. Box geometry via the shared dims channels; it spans from `x` to `x2` (`y` to `y2`) when both ends are data values.",
     include: [lengthBoxDims, paint, filtered],
     fields: {
       key: { type: t.string, doc: "Internal per-node key override." },

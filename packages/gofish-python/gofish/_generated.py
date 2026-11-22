@@ -138,18 +138,18 @@ def _to_wire(shape: Any, value: Any, path: str) -> Any:
 # --- Leaf marks -------------------------------------------------------------
 
 def rect(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None, cx: Optional[int | float | str] = None, x2: Optional[int | float | str] = None, w: Optional[int | float | str | LengthValue] = None, em_x: Optional[bool] = None, y: Optional[int | float | str] = None, cy: Optional[int | float | str] = None, y2: Optional[int | float | str] = None, h: Optional[int | float | str | LengthValue] = None, em_y: Optional[bool] = None, dims: Optional[dict] = None, fill: Optional[str] = None, stroke: Optional[str] = None, stroke_width: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[dict | str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspect_ratio: Optional[float] = None, inset: Optional[float | LengthValue] = None) -> Mark:
-    """A rectangle. Box geometry via the shared dims channels.
+    """A rectangle. Box geometry via the shared dims channels; it spans from `x` to `x2` (`y` to `y2`) when both ends are data values.
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -198,14 +198,14 @@ def circle(*, debug: Optional[bool] = None, x: Optional[int | float | str] = Non
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -250,14 +250,14 @@ def ellipse(*, debug: Optional[bool] = None, x: Optional[int | float | str] = No
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -300,14 +300,14 @@ def petal(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -344,14 +344,14 @@ def text(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None,
 
     Args:
         debug: Dev-only flag: on the shape marks (rect, circle, ellipse, petal, text, image, polygon, blank) it logs the mark's key and datum to the console as the mark is built. It changes nothing about what is drawn; the connector marks accept it and ignore it.
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -406,14 +406,14 @@ def image(*, debug: Optional[bool] = None, x: Optional[int | float | str] = None
 
     Args:
         debug: Dev-only flag: logs this mark's key and datum to the console as it is built. It changes nothing about what is drawn.
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -968,12 +968,12 @@ def _spread_combinator_opts(*, x: Optional[int | float | str] = None, cx: Option
     Args:
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -1023,12 +1023,12 @@ def _stack_combinator_opts(*, x: Optional[int | float | str] = None, cx: Optiona
     Args:
         x: Left edge of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y (top where y reads top-down, bottom where it grows upward) of this operator's box, in the parent's space (pixels). Omitted, the parent places it.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height of this operator's box: pixels, or a field name sizing it from data. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.
@@ -1245,14 +1245,14 @@ def _layer_opts(*, x: Optional[int | float | str] = None, cx: Optional[int | flo
     """Compose children on the same canvas at (0, 0) unless placed by constraints. Also accepts explicit box dims when given a self-scaling size.
 
     Args:
-        x: Left edge position.
+        x: Start edge on x.
         cx: Center x.
-        x2: Right edge position.
+        x2: The other end on x from `x`. Only `rect` reads it.
         w: Width. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_x: Embed x in the parent's x space.
         y: Start edge on y: the top edge where y reads top-down, the bottom edge where it grows upward.
         cy: Center y.
-        y2: Other y edge position.
+        y2: The other end on y from `y`. Only `rect` reads it.
         h: Height. Also `percent(n)`, n percent of the room it is laid out in (its parent's, or the canvas), or `fr(k)`, k shares of the room its nearest scope divides.
         em_y: Embed y in the parent's y space.
         dims: Box dimensions by axis name: x/y, or a name the enclosing coordinate space declares (polar theta/r, geo lon/lat). Each value is a position (like x) or an interval {min, center, max, size, embedded}.

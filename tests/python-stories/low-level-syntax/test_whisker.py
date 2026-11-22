@@ -42,7 +42,7 @@ def _box_and_whisker(d, tag):
                     )
                 ]
             ),
-            rect(w=8, y=datum(q1), h=datum(q3 - q1), fill=fill),
+            rect(w=8, y=datum(q1), y2=datum(q3), fill=fill),
             rect(w=8, h=1, y=datum(median), fill="white"),
         ]
     )
