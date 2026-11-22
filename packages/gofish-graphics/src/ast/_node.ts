@@ -2142,20 +2142,9 @@ export class GoFishNode {
   }
 
   /**
-   * True when this node is a layer that holds nothing to draw: no child, or
-   * only layers that hold nothing (a `.layer(...)` tier whose filter kept no
-   * mark). It has no box, so it takes no room in its parent: the claim walk
-   * reads it as ink (`ClaimChild.inkOn`), and the parent's box leaves it out.
+   * Whether this node or an ancestor is no pointer target
+   * ({@link noPointerTarget}).
    */
-  public isEmptyLayer(): boolean {
-    return (
-      this.type === "layer" &&
-      this.children.every((c) => c instanceof GoFishNode && c.isEmptyLayer())
-    );
-  }
-
-  /** Whether this node or an ancestor is no pointer target
-   *  ({@link noPointerTarget}). */
   public underNoPointerTarget(): boolean {
     for (let n: unknown = this; n instanceof GoFishNode; n = n.parent)
       if (n.noPointerTarget) return true;

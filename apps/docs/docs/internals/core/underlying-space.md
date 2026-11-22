@@ -2028,10 +2028,7 @@ placed beside a node inside another child (a label on its mark's ref) takes
 room where the claim walk knows that node lands (`planPlacement`), a band of
 a category axis included (a share is a claim), and is ink where it does not
 (inside a coordinate space, or beside a band in a scope that mixes data and
-bands): left out of its layer's claim and box. An empty layer
-(`isEmptyLayer`: no child, or only empty layers, as a `.layer(...)` tier whose
-filter kept no mark) is ink too: it has no box, and a box at its origin
-would stretch a chart whose data 0 is off its domain. A pinned child a layer pins at a literal pixel (a ring's
+bands): left out of its layer's claim and box. A pinned child a layer pins at a literal pixel (a ring's
 content, seated at the ring's origin, `wrapRing`) shares the layer's frame from
 that pixel (`childPosScalesFor`): its map's `originPx` is the frame's less
 the pin. The axes drawn over each domain are recorded once `resolveAxes` has

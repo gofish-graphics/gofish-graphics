@@ -18,10 +18,6 @@ import {
   value,
   percent,
   Spacing,
-  scatter,
-  circle,
-  filter,
-  group,
 } from "../lib";
 import { runLayout } from "../ast/gofish";
 import * as Pwl from "../ast/solver/pwl";
@@ -495,38 +491,6 @@ async function main() {
         ),
       same.map((w) => w.message)
     );
-  }
-
-  console.log("\n# an empty layer takes no room (#1395)");
-  {
-    // A scatter's data 0 is outside its domain, so a box at the layer's
-    // origin, an empty layer's, would stretch the chart past the canvas.
-    const rows = [2000, 2001, 2002].map((year, i) => ({ year, count: 10 + i }));
-    const dots = () =>
-      chart(rows)
-        .flow(scatter({ x: "year", y: "count" }))
-        .mark(circle({ r: 3 }).name("dots"));
-    const geometry = (dl: any) =>
-      JSON.stringify(items(dl).map((i) => [i.kind, i.x, i.y, i.w, i.h, i.cx, i.cy]));
-    const alone = geometry(await dots().toDisplayList({ w: 300, h: 200 }));
-    const withEmptyTier = geometry(
-      await dots()
-        .layer(
-          chart(selectAll("dots"))
-            // A group splits the kept marks, so the mark is called once
-            // per kept mark: never.
-            .flow(filter(() => false), group({ by: (r: any) => r.datum[0].year }))
-            .mark(() => text({ text: "never" }))
-        )
-        .toDisplayList({ w: 300, h: 200 })
-    );
-    const withEmptyLayer = geometry(
-      await dots()
-        .layer(layerOf([]))
-        .toDisplayList({ w: 300, h: 200 })
-    );
-    check("a tier whose filter keeps nothing moves nothing", alone === withEmptyTier);
-    check("an empty layer moves nothing", alone === withEmptyLayer);
   }
 
   report();
