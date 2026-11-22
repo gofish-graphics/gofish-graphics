@@ -1,0 +1,1406 @@
+<title>Folded Bars</title>
+<meta name="claude:viewport-fit-sides" content="cover" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link
+  rel="stylesheet"
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap"
+/>
+<style>
+  :root {
+    --bg: #f5f5f4;
+    --surface: #ffffff;
+    --ink: #1c1d20;
+    --muted: #5b5e66;
+    --line: #d9dade;
+    --line-strong: #b9bbc1;
+    --accent: #b0102e;
+    --accent-ink: #ffffff;
+    --accent-soft: #f6e3e6;
+    --paper: #fcfbf8;
+    --paper-line: #d8d5ce;
+    --code-bg: #f0f1f3;
+    --code-ink: #1f2328;
+    --focus: #1a5fd0;
+    --hl-keyword: #a0123a;
+    --hl-string: #1d6b40;
+    --hl-number: #965400;
+    --hl-title: #2450a6;
+    --hl-attr: #6a3d9a;
+    --hl-comment: #6c727b;
+    --hl-builtin: #0f6b7a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #131417;
+      --surface: #1b1d21;
+      --ink: #e7e8eb;
+      --muted: #a3a7af;
+      --line: #30333a;
+      --line-strong: #4a4e57;
+      --accent: #ff6b80;
+      --accent-ink: #1b0a0e;
+      --accent-soft: #3a1b22;
+      --paper: #f3f1ec;
+      --paper-line: #4a4d55;
+      --code-bg: #191b1f;
+      --code-ink: #e2e4e8;
+      --focus: #7fb0ff;
+      --hl-keyword: #ff8fa6;
+      --hl-string: #8fd6a4;
+      --hl-number: #f0b866;
+      --hl-title: #8db6ff;
+      --hl-attr: #c8a8ff;
+      --hl-comment: #8a919b;
+      --hl-builtin: #6fd0de;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #131417;
+    --surface: #1b1d21;
+    --ink: #e7e8eb;
+    --muted: #a3a7af;
+    --line: #30333a;
+    --line-strong: #4a4e57;
+    --accent: #ff6b80;
+    --accent-ink: #1b0a0e;
+    --accent-soft: #3a1b22;
+    --paper: #f3f1ec;
+    --paper-line: #4a4d55;
+    --code-bg: #191b1f;
+    --code-ink: #e2e4e8;
+    --focus: #7fb0ff;
+    --hl-keyword: #ff8fa6;
+    --hl-string: #8fd6a4;
+    --hl-number: #f0b866;
+    --hl-title: #8db6ff;
+    --hl-attr: #c8a8ff;
+    --hl-comment: #8a919b;
+    --hl-builtin: #6fd0de;
+    color-scheme: dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font:
+      16px/1.55 "IBM Plex Sans",
+      system-ui,
+      -apple-system,
+      "Segoe UI",
+      Roboto,
+      sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding-top: 40px;
+    padding-bottom: 96px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .prose,
+  .lede,
+  .wrap > p,
+  .panel > p,
+  .panel > ul,
+  .panel > ol {
+    max-width: 68ch;
+  }
+  h1 {
+    font-size: 2.25rem;
+    line-height: 1.15;
+    font-weight: 700;
+    letter-spacing: -0.015em;
+    margin: 0 0 14px;
+  }
+  h2 {
+    font-size: 1.35rem;
+    line-height: 1.25;
+    font-weight: 600;
+    margin: 44px 0 12px;
+  }
+  h3 {
+    font-size: 1.15rem;
+    line-height: 1.3;
+    font-weight: 600;
+    margin: 0 0 14px;
+  }
+  h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    margin: 0 0 10px;
+  }
+  p {
+    margin: 0 0 12px;
+  }
+  a {
+    color: var(--accent);
+  }
+  code {
+    font-family:
+      "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.9em;
+  }
+  :not(pre) > code {
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 0 4px;
+    overflow-wrap: anywhere;
+  }
+  .lede {
+    font-size: 1.1rem;
+    color: var(--ink);
+  }
+  .rec {
+    border-left: 3px solid var(--accent);
+    padding: 2px 0 2px 14px;
+    margin: 18px 0;
+  }
+  .note {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+  }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--line-strong);
+    margin: 28px 0 28px;
+    overflow-x: auto;
+  }
+  .tabs button {
+    font: inherit;
+    font-weight: 500;
+    color: var(--muted);
+    background: none;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    padding: 8px 14px 9px;
+    margin-bottom: -1px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .tabs button:hover {
+    color: var(--ink);
+  }
+  .tabs button[aria-selected="true"] {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Terms and rules */
+  .basics {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 32px;
+    margin: 8px 0 8px;
+  }
+  .basics h2 {
+    margin-top: 0;
+  }
+  dl.terms {
+    margin: 0;
+  }
+  dl.terms dt {
+    font-weight: 600;
+  }
+  dl.terms dd {
+    margin: 0 0 10px;
+    color: var(--muted);
+  }
+  ol.rules {
+    margin: 0;
+    padding-left: 1.3em;
+  }
+  ol.rules li {
+    margin-bottom: 8px;
+  }
+  ol.rules li::marker {
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* Examples */
+  .example {
+    border-top: 1px solid var(--line-strong);
+    padding-top: 28px;
+    margin-top: 40px;
+  }
+  .example h3 .num {
+    color: var(--accent);
+    margin-right: 6px;
+  }
+  .pics {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 20px;
+    align-items: start;
+    margin-bottom: 18px;
+  }
+  .pics.solo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pair {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 12px;
+  }
+  figure {
+    margin: 0;
+    min-width: 0;
+  }
+  .paper {
+    background: var(--paper);
+    border: 1px solid var(--paper-line);
+    padding: 8px;
+    display: inline-block;
+    max-width: 100%;
+  }
+  .paper img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  .ref .paper img {
+    max-height: 460px;
+    width: auto;
+  }
+  figcaption {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-top: 6px;
+    max-width: 60ch;
+  }
+  figcaption b {
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .code {
+    overflow-x: auto;
+    background: var(--code-bg);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    margin: 0 0 14px;
+    min-width: 0;
+  }
+  .code pre {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--code-ink);
+  }
+  .code code {
+    font-size: inherit;
+  }
+  .langs {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--muted);
+    margin: 0 0 6px;
+  }
+  .fork {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    padding: 16px 18px 6px;
+    margin: 20px 0;
+  }
+  .fork p {
+    max-width: 68ch;
+  }
+  .choice {
+    font-weight: 600;
+  }
+  details {
+    border: 1px solid var(--line);
+    background: var(--surface);
+    margin: 18px 0 0;
+  }
+  details > summary {
+    cursor: pointer;
+    padding: 10px 14px;
+    font-weight: 500;
+    color: var(--muted);
+  }
+  details > summary:hover {
+    color: var(--ink);
+  }
+  details[open] > summary {
+    border-bottom: 1px solid var(--line);
+  }
+  details .inner {
+    padding: 14px;
+  }
+  details .inner > figure {
+    margin-bottom: 14px;
+  }
+  details .inner > p {
+    max-width: 68ch;
+  }
+
+  /* Precedent */
+  .tablewrap {
+    overflow-x: auto;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    margin: 0 0 20px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+    font-size: 0.92rem;
+  }
+  th,
+  td {
+    text-align: left;
+    vertical-align: top;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-weight: 600;
+    background: var(--code-bg);
+  }
+  tr:last-child td {
+    border-bottom: 0;
+  }
+  td:first-child {
+    font-weight: 500;
+  }
+  .refs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+    gap: 24px 20px;
+    align-items: start;
+  }
+  .refs .paper img {
+    max-height: 380px;
+    width: auto;
+  }
+
+  /* Approaches */
+  .approach {
+    border-top: 1px solid var(--line);
+    padding-top: 18px;
+    margin-top: 22px;
+    max-width: 68ch;
+  }
+  .approach h3 {
+    margin-bottom: 8px;
+  }
+  .pick {
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--accent);
+    color: var(--accent-ink);
+    padding: 1px 7px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: 2px;
+  }
+  ul.issues {
+    list-style: none;
+    padding: 0;
+  }
+  ul.issues li {
+    display: grid;
+    grid-template-columns: 4.2em minmax(0, 1fr);
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  ul.issues li b {
+    font-family: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    font-weight: 500;
+    color: var(--accent);
+  }
+  ul.plain li {
+    margin-bottom: 8px;
+  }
+
+  /* highlight.js tokens */
+  .hljs-keyword,
+  .hljs-selector-tag,
+  .hljs-meta .hljs-keyword {
+    color: var(--hl-keyword);
+  }
+  .hljs-string,
+  .hljs-regexp,
+  .hljs-template-string {
+    color: var(--hl-string);
+  }
+  .hljs-number,
+  .hljs-literal {
+    color: var(--hl-number);
+  }
+  .hljs-title,
+  .hljs-title.function_,
+  .hljs-title.class_ {
+    color: var(--hl-title);
+  }
+  .hljs-attr,
+  .hljs-property,
+  .hljs-params {
+    color: var(--hl-attr);
+  }
+  .hljs-built_in,
+  .hljs-type {
+    color: var(--hl-builtin);
+  }
+  .hljs-comment {
+    color: var(--hl-comment);
+    font-style: italic;
+  }
+
+  @media (max-width: 760px) {
+    h1 {
+      font-size: 1.8rem;
+    }
+    .basics,
+    .pics,
+    .pair {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .code pre {
+      font-size: 12px;
+    }
+  }
+</style>
+
+<div class="wrap">
+  <h1>Folded bars</h1>
+  <p class="lede">
+    A bar that is too long for its plot can fold back on itself, as in W. E. B.
+    Du Bois's 1900 plates, or leave the plot and run around the page. These are
+    two different pictures. In the first, each bar turns about its own row and
+    the row grows, so it is a layout question. In the second, the whole value
+    axis follows one path, so it is a coordinate transform.
+  </p>
+  <p class="rec">
+    <strong>Recommendation.</strong> Add nothing that is only for folded bars.
+    The Du Bois fold is the <code>wrap</code> option already proposed for
+    <code>stack</code> (#122), with one new rule. The around-the-page bar and Du
+    Bois's spirals are a plain bar chart under <code>Coord.along(path)</code>,
+    already proposed for the spiral periodic tables (#1347). No
+    <code>Coord.fold</code>.
+  </p>
+  <p class="note">
+    All pictures are prototypes rendered by story-level helpers, and neither
+    <code>wrap</code> nor <code>Coord.along</code> exists on main.
+  </p>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button
+      role="tab"
+      id="tab-proposal"
+      aria-controls="panel-proposal"
+      aria-selected="true"
+      data-tab="proposal"
+    >
+      Proposal
+    </button>
+    <button
+      role="tab"
+      id="tab-precedent"
+      aria-controls="panel-precedent"
+      aria-selected="false"
+      data-tab="precedent"
+      tabindex="-1"
+    >
+      Precedent
+    </button>
+    <button
+      role="tab"
+      id="tab-approaches"
+      aria-controls="panel-approaches"
+      aria-selected="false"
+      data-tab="approaches"
+      tabindex="-1"
+    >
+      Approaches
+    </button>
+  </nav>
+
+  <!-- ============================== PROPOSAL ============================== -->
+  <section
+    class="panel"
+    id="panel-proposal"
+    role="tabpanel"
+    aria-labelledby="tab-proposal"
+  >
+    <div class="basics">
+      <div>
+        <h2>Terms</h2>
+        <dl class="terms">
+          <dt>Fold</dt>
+          <dd>
+            A bar runs to a limit, turns 180 degrees, and continues the other
+            way beside itself. Karduni et al. call the chart a "Du Bois wrapped
+            bar chart".
+          </dd>
+          <dt>Lane</dt>
+          <dd>One straight run of a folded bar. Two turns make three lanes.</dd>
+          <dt>Turn</dt>
+          <dd>The half ring that joins two lanes.</dd>
+          <dt>Wrap</dt>
+          <dd>
+            A layout breaks one long row into several rows that fit the room, as
+            text wraps into lines.
+          </dd>
+          <dt>Path coordinate</dt>
+          <dd>
+            x runs along a given path by arc length, and y is the distance to
+            the side of it. This is <code>Coord.along(path)</code> from #1347.
+          </dd>
+        </dl>
+      </div>
+      <div>
+        <h2>The rules</h2>
+        <ol class="rules">
+          <li>
+            <code>stack({ dir, wrap: { at } })</code> folds the stack's axis
+            every <code>at</code> data units. The first lane is the ordinary
+            bar, so the axis runs from 0 to <code>at</code> and every lane reads
+            on it.
+          </li>
+          <li>
+            A wrapped <code>stack</code> is still one space. The fold falls
+            wherever the axis reaches <code>at</code>, also inside a part, and
+            turns join the lanes. A wrapped <code>spread</code> keeps its
+            children whole and its rows separate.
+          </li>
+          <li>
+            A row with a folded stack is as tall as its lanes, so its neighbors
+            move down, as a paragraph grows when its text wraps.
+          </li>
+          <li>
+            Turns are drawn and do not count toward length. The value is the sum
+            of the lanes.
+          </li>
+          <li>
+            A bar that follows one path around the page, or a spiral, is not a
+            wrap. It is a bar chart with <code>coord: Coord.along(path)</code>.
+          </li>
+        </ol>
+      </div>
+    </div>
+
+    <!-- 1 -->
+    <article class="example" id="ex-occupations">
+      <h3>
+        <span class="num">1</span>Occupations (Du Bois): one bar folds once
+      </h3>
+      <div class="pics">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/coord-occupations.png"
+              alt="Horizontal crimson bars for 22 occupations. The longest, agricultural laborers, folds back once at the value of the second bar."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>Prototype.</figcaption>
+        </figure>
+        <figure class="ref">
+          <div class="paper">
+            <img
+              src="img/ref-dubois-occupations.png"
+              alt="Du Bois's plate of occupations of Georgia Negroes, with the longest bar folded."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            <b>Reference.</b> Du Bois, "Occupations of Georgia Negroes", 1900.
+            Library of Congress, item 2013650447.
+          </figcaption>
+        </figure>
+      </div>
+      <p class="langs">JavaScript</p>
+      {{code:ex1}}
+      <p class="langs">Python</p>
+      {{code:ex1-py}}
+      <details>
+        <summary>Today's code (public API only)</summary>
+        <div class="inner">
+          <p>
+            Every bar becomes a table of path vertices, drawn as a thick
+            <code>line</code>. Turns are square because <code>line</code> has no
+            join option.
+          </p>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/today-occupations.png"
+                alt="The occupations chart drawn today, with a square turn."
+                loading="lazy"
+              />
+            </div>
+          </figure>
+          {{code:today1}}
+        </div>
+      </details>
+    </article>
+
+    <!-- 2 -->
+    <article class="example" id="ex-courses">
+      <h3><span class="num">2</span>Courses of study (Du Bois): three lanes</h3>
+      <div class="pics">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/coord-courses.png"
+              alt="Six brown bars. Industrial, 2,252, folds twice into lanes of 900, 900 and 452."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Prototype. Industrial's lanes are 900, 900 and 452.
+          </figcaption>
+        </figure>
+        <figure class="ref">
+          <div class="paper">
+            <img
+              src="img/ref-dubois-courses.png"
+              alt="Du Bois's plate of courses of study, with the industrial bar folded."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            <b>Reference.</b> Du Bois, courses of study in Georgia schools,
+            1900. Library of Congress, item 2013650436.
+          </figcaption>
+        </figure>
+      </div>
+      {{code:ex2}}
+      <p>
+        <code>spacing</code> is the gap between lanes, the same word
+        <code>spread</code> uses for the gap between children.
+      </p>
+
+      <div class="fork">
+        <h4>Fork: are a wrapped stack's lanes joined?</h4>
+        <div class="pair">
+          <figure>
+            <div class="paper">
+              <img
+                src="img/coord-courses.png"
+                alt="Industrial as one bar joined by turns."
+                loading="lazy"
+              />
+            </div>
+            <figcaption><b>Joined.</b> One bar with turns.</figcaption>
+          </figure>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/wrap-courses.png"
+                alt="Industrial as three separate lanes that all start at the left."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <b>Separate.</b> Every lane starts at the left.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          Separate lanes read as three bars, not one. If that picture is wanted,
+          it is a <code>spread</code> of pieces, which is how it was drawn here.
+        </p>
+        <p class="choice">Chosen: joined, with no option, by rule 2.</p>
+      </div>
+
+      <div class="fork">
+        <h4>Fork: does a turn count toward length?</h4>
+        <div class="pair">
+          <figure>
+            <div class="paper">
+              <img
+                src="img/turns-free.png"
+                alt="Turns do not count: the last lane is 452."
+                loading="lazy"
+              />
+            </div>
+            <figcaption><b>Turns free.</b> Lanes 900, 900 and 452.</figcaption>
+          </figure>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/turns-count.png"
+                alt="Turns count: the last lane is about 196."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <b>Turns count.</b> Lanes 900, 900 and about 196.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          With free turns, every lane reads on the axis and the lanes add up to
+          the value. Du Bois's own plates are not exact enough to tell which he
+          meant.
+        </p>
+        <p class="choice">
+          Chosen: turns do not count (rule 4, as in Karduni et al.).
+        </p>
+      </div>
+
+      <details>
+        <summary>Today's code (public API only)</summary>
+        <div class="inner">
+          <p>The same <code>foldTable</code> as in example 1.</p>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/today-courses.png"
+                alt="The courses chart drawn today, with square turns."
+                loading="lazy"
+              />
+            </div>
+          </figure>
+          {{code:today2}}
+        </div>
+      </details>
+    </article>
+
+    <!-- 3 -->
+    <article class="example" id="ex-two-long">
+      <h3><span class="num">3</span>Two bars fold in neighboring rows</h3>
+      <div class="pics solo">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/coord-two-long-per-row.png"
+              alt="Five red bars. Beta and Gamma both fold, and their rows grow to hold the lanes."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Prototype. Beta is 230 and Gamma 170, with lanes of 100.
+          </figcaption>
+        </figure>
+      </div>
+      {{code:ex3}}
+
+      <div class="fork">
+        <h4>Fork: wrap or coordinate transform?</h4>
+        <div class="pair">
+          <figure>
+            <div class="paper">
+              <img
+                src="img/coord-two-long-per-row.png"
+                alt="Wrap: the rows make room for the lanes."
+                loading="lazy"
+              />
+            </div>
+            <figcaption><b>Wrap.</b> Rows make room.</figcaption>
+          </figure>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/coord-two-long.png"
+                alt="One coordinate transform: Beta's lanes cover Gamma."
+                loading="lazy"
+              />
+            </div>
+            <figcaption>
+              <b>One coordinate transform.</b> Beta's lanes cover Gamma.
+            </figcaption>
+          </figure>
+        </div>
+        <p>
+          A coordinate transform bends the picture after layout, so it cannot
+          ask a row for room. With one folding bar the two draw the same picture
+          (example 1), and the coordinate version is one option on
+          <code>chart</code>.
+        </p>
+        <p class="choice">
+          Chosen: wrap, because the form in the literature (example 5) has many
+          bars folding.
+        </p>
+      </div>
+    </article>
+
+    <!-- 4 -->
+    <article class="example" id="ex-stacked">
+      <h3><span class="num">4</span>A stacked bar folds</h3>
+      <div class="pics solo">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/coord-stacked-per-row.png"
+              alt="Four stacked bars of three parts. Row C folds twice, and its second part runs through the turn."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Prototype. Row C is 250 with lanes of 100. Its second part runs from
+            96 to 206, through the first turn.
+          </figcaption>
+        </figure>
+      </div>
+      {{code:ex4}}
+      <p>
+        The fold is on the stack, so a part can straddle a turn. Part boundaries
+        are cut square to the bar.
+      </p>
+    </article>
+
+    <!-- 5 -->
+    <article class="example" id="ex-karduni">
+      <h3><span class="num">5</span>The wrapped bar chart of Karduni et al.</h3>
+      <div class="pics">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/wrap-karduni.png"
+              alt="Eleven bars A to K with lanes of 1000. A folds into nine lanes, F and K into four."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Prototype, drawn sideways. Lanes of 1000. A (8,500) has nine lanes,
+            F (3,250) and K (3,700) have four.
+          </figcaption>
+        </figure>
+        <figure class="ref">
+          <div class="paper">
+            <img
+              src="img/ref-karduni-fig3.png"
+              alt="Karduni et al. figure 3: a standard bar chart above a Du Bois wrapped bar chart of the same data."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            <b>Reference.</b> Karduni, Wesslen, Cho and Dou, CHI 2020, figure 3.
+            The bars are vertical there.
+          </figcaption>
+        </figure>
+      </div>
+      {{code:ex5}}
+    </article>
+
+    <!-- 6 -->
+    <article class="example" id="ex-air">
+      <h3>
+        <span class="num">6</span>Air conditioners: the bar runs around the page
+      </h3>
+      <div class="pics">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/coord-air-conditioners.png"
+              alt="Blue bars by country. China's bar runs right off the plot and around the frame twice."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>Prototype.</figcaption>
+        </figure>
+        <figure class="ref">
+          <div class="paper">
+            <img
+              src="img/ref-air-conditioners.png"
+              alt="A chart of air conditioner production where China's bar wraps around the page."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            <b>Reference.</b> Air conditioner production, 2025. Source not
+            found.
+          </figcaption>
+        </figure>
+      </div>
+      {{code:ex6}}
+      <p>
+        <code>aroundTheFrame</code> is a list of points: the top row's baseline,
+        then a rounded rectangle that spirals outward. <code>at: 22</code> says
+        that 22 data units reach the end of the path's first straight run, so
+        the other bars are an ordinary bar chart. The option name is a
+        placeholder. A path that names the chart's own frame is the missing
+        piece, and it belongs in #1347.
+      </p>
+      <details>
+        <summary>Today's code (public API only)</summary>
+        <div class="inner">
+          <p>
+            China's bar is a list of corners in data units. A step in y counts
+            as some number of x units, which is guessed from the chart's size.
+          </p>
+          <figure>
+            <div class="paper">
+              <img
+                src="img/today-air-conditioners.png"
+                alt="The air conditioner chart drawn today, with square corners."
+                loading="lazy"
+              />
+            </div>
+          </figure>
+          {{code:today6}}
+        </div>
+      </details>
+    </article>
+
+    <!-- 7 -->
+    <article class="example" id="ex-furniture">
+      <h3>
+        <span class="num">7</span>Furniture (Du Bois): bars wound into a spiral
+      </h3>
+      <div class="pics">
+        <figure>
+          <div class="paper">
+            <img
+              src="img/coord-furniture-spiral.png"
+              alt="Six colored bars, one per year, wound into an inward spiral."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            Prototype. Each year is a lane beside one inward spiral.
+          </figcaption>
+        </figure>
+        <figure class="ref">
+          <div class="paper">
+            <img
+              src="img/ref-dubois-furniture.jpg"
+              alt="Du Bois's plate of the assessed value of household furniture, drawn as a spiral."
+              loading="lazy"
+            />
+          </div>
+          <figcaption>
+            <b>Reference.</b> Du Bois, assessed value of household and kitchen
+            furniture, 1900. Library of Congress, item 2013650445.
+          </figcaption>
+        </figure>
+      </div>
+      {{code:ex7}}
+      <p>
+        <code>Coord.spiral</code> from #1347 should say the same without a
+        hand-made path. That was not checked here.
+      </p>
+      <p class="note">
+        Not rendered: Du Bois's "City and rural population" plate (Precedent
+        tab), one path with a sharp corner at each category and a spiral at the
+        end. Here it would be a <code>stack({ by: "category" })</code> under
+        <code>Coord.along</code> of that zigzag path.
+      </p>
+    </article>
+  </section>
+
+  <!-- ============================== PRECEDENT ============================= -->
+  <section
+    class="panel"
+    id="panel-precedent"
+    role="tabpanel"
+    aria-labelledby="tab-precedent"
+    hidden
+  >
+    <h2 style="margin-top: 0">Systems</h2>
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr>
+            <th>System</th>
+            <th>What the user writes</th>
+            <th>What the system decides</th>
+            <th>Names</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Karduni et al., CHI 2020</td>
+            <td>A threshold <code>t1</code> on the value axis</td>
+            <td>
+              Lanes, turns, and that a wrapped bar takes several category slots
+            </td>
+            <td>wrap, number of wraps</td>
+          </tr>
+          <tr>
+            <td>ggdubois (R, unfinished)</td>
+            <td><code>geom_wrappedbar(max_height)</code></td>
+            <td>Default threshold 1.1 times the second largest value</td>
+            <td>wrapped bar</td>
+          </tr>
+          <tr>
+            <td>#DuBoisChallenge recreations (decksh, ggplot2, D3)</td>
+            <td>
+              Hand-placed lines and arcs, or a hand-computed path stroked thick
+            </td>
+            <td>Nothing</td>
+            <td></td>
+          </tr>
+          <tr>
+            <td>ggbreak <code>scale_wrap(n)</code></td>
+            <td>A row count</td>
+            <td>Cuts the whole axis into n stacked panels</td>
+            <td>wrap</td>
+          </tr>
+          <tr>
+            <td>Horizon charts (Heer et al., CHI 2009)</td>
+            <td><code>bands</code>, <code>mode</code>: offset or mirror</td>
+            <td>
+              Folds the value axis into bands that overlap, with the band shown
+              by color
+            </td>
+            <td>band, step</td>
+          </tr>
+          <tr>
+            <td>CSS flex and fragmentation</td>
+            <td>
+              <code>flex-wrap: wrap</code>, <code>box-decoration-break</code>:
+              slice or clone
+            </td>
+            <td>Line breaks, and whether each fragment gets its own caps</td>
+            <td>fragment, wrap</td>
+          </tr>
+          <tr>
+            <td>Office SmartArt snake layout</td>
+            <td>
+              <code>contDir</code>: sameDir or revDir, <code>bkpt</code>,
+              <code>sp</code>
+            </td>
+            <td>Rows that alternate direction</td>
+            <td>snake</td>
+          </tr>
+          <tr>
+            <td>D3 spiral histogram (condegram)</td>
+            <td>
+              A scale whose range is the path's length,
+              <code>getPointAtLength</code>
+            </td>
+            <td>Nothing</td>
+            <td>along the path</td>
+          </tr>
+          <tr>
+            <td>Illustrator art brush</td>
+            <td>A straight artwork and a path</td>
+            <td>Stretches the artwork along the path</td>
+            <td>brush</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>
+      No grammar has a fold. Every recreation computes the path by hand. The
+      other answers to "one value is far too big" are a log scale, an axis break
+      (ggbreak, matplotlib <code>brokenaxes</code>), a clipped bar with a label,
+      and two charts.
+    </p>
+    <p>
+      Karduni et al. found the fold more accurate than a plain bar chart for
+      reading small values and ratios, slower by a few seconds, and tiring past
+      a few wraps. They did not compare against log scales or axis breaks.
+    </p>
+
+    <h2>Reference images</h2>
+    <div class="refs">
+      <figure>
+        <div class="paper">
+          <img
+            src="img/ref-dubois-occupations.png"
+            alt="Du Bois, occupations plate."
+            loading="lazy"
+          />
+        </div>
+        <figcaption>
+          <b>Du Bois, "Occupations of Georgia Negroes".</b> One bar folds once.
+          Library of Congress, item 2013650447.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="paper">
+          <img
+            src="img/ref-dubois-courses.png"
+            alt="Du Bois, courses of study plate."
+            loading="lazy"
+          />
+        </div>
+        <figcaption>
+          <b>Du Bois, courses of study.</b> One bar folds twice. Library of
+          Congress, item 2013650436.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="paper">
+          <img
+            src="img/ref-dubois-furniture.jpg"
+            alt="Du Bois, furniture plate."
+            loading="lazy"
+          />
+        </div>
+        <figcaption>
+          <b>Du Bois, household and kitchen furniture.</b> Bars wound into a
+          spiral. Library of Congress, item 2013650445.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="paper">
+          <img
+            src="img/ref-dubois-city-rural.jpg"
+            alt="Du Bois, city and rural population plate."
+            loading="lazy"
+          />
+        </div>
+        <figcaption>
+          <b>Du Bois, "City and rural population".</b> One path with a corner at
+          each category and a spiral at the end. Library of Congress.
+        </figcaption>
+      </figure>
+      <figure>
+        <div class="paper">
+          <img
+            src="img/ref-karduni-fig3.png"
+            alt="Karduni et al. figure 3."
+            loading="lazy"
+          />
+        </div>
+        <figcaption>
+          <b>Karduni, Wesslen, Cho and Dou, CHI 2020, figure 3.</b> A standard
+          bar chart and the wrapped bar chart of the same data, wrapped at
+          <code>t1</code>.
+        </figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <!-- ============================= APPROACHES ============================= -->
+  <section
+    class="panel"
+    id="panel-approaches"
+    role="tabpanel"
+    aria-labelledby="tab-approaches"
+    hidden
+  >
+    <div class="approach" style="border-top: 0; padding-top: 0; margin-top: 0">
+      <h3>
+        A. The fold is a coordinate transform (<code
+          >Coord.fold({ at, pitch })</code
+        >)
+      </h3>
+      <p>
+        One option on the chart, and the best-reading spec for the three
+        reference images. It fails when two rows fold (example 3), and it cannot
+        make room: a coordinate transform starts its own space, so it cannot
+        share a value axis with bars outside it, and it has no axes or labels
+        inside. One coordinate per row fixes the room but needs a mark function
+        and a hand-passed bar length for each row.
+      </p>
+      <p>
+        Overlap: <code>Coord.fold</code> would be <code>Coord.along</code> of a
+        zigzag path, an exact composition, and a large partial overlap with
+        <code>wrap</code>. That is why it is not proposed.
+      </p>
+    </div>
+    <div class="approach">
+      <h3>
+        B. The fold is a wrap on <code>stack</code
+        ><span class="pick">Recommended</span>
+      </h3>
+      <p>
+        Rows grow, the value axis is shared, and stacked bars work. It needs the
+        <code>wrap</code> option, which is proposed (#122, #486) and not built,
+        plus the new cut-and-join rule for stacks.
+      </p>
+      <p>
+        Overlap: a wrapped stack of one bar under one fold equals approach A's
+        picture, a small degenerate case. A wrapped <code>spread</code> of unit
+        squares is a waffle chart, the same option on the sibling operator.
+      </p>
+    </div>
+    <div class="approach">
+      <h3>C. Today's API</h3>
+      <p>
+        Works now for every picture, as hand-built geometry. The user computes
+        vertices, guesses the aspect ratio for vertical runs, and gets square
+        corners. A <code>join</code> option on <code>line</code> would round the
+        corners and is worth adding on its own.
+      </p>
+    </div>
+    <div class="approach">
+      <h3>What would change the pick</h3>
+      <p>
+        If only one bar ever folds in the charts we care about,
+        <code>Coord.along</code> with a zigzag path draws the Du Bois plates
+        without <code>wrap</code>. It is the smaller step, since #1347 needs
+        <code>Coord.along</code> anyway.
+      </p>
+    </div>
+
+    <h2>What the prototypes found</h2>
+    <ul class="plain">
+      <li>
+        A bar in a bent space is drawn as its midline stroked at the bar's
+        thickness (<code>rect.tsx</code>), so a turn is a true half ring. This
+        only holds when <code>h</code> is a literal number.
+      </li>
+      <li>
+        A coordinate transform is one continuous map, so it cannot draw a turn
+        that takes no length. The prototype gives each free turn half a pixel,
+        which shortens the later lanes by half a pixel per turn. A layout
+        <code>wrap</code> draws lanes and turns as pieces and has no such
+        sliver.
+      </li>
+      <li>
+        A fitted coordinate transform rejects ordinal content, culls marks that
+        start outside its window, and draws labels unbent (#952) or drops them.
+        The prototypes draw labels as a second chart beside the bars.
+      </li>
+      <li>
+        There is no way to set an axis domain, so a bar cannot be longer than
+        its plot today.
+      </li>
+      <li>
+        <code>line</code> has no join or cap option, and its <code>x</code>,
+        <code>y</code> form sorts by x, so a U-turn needs the
+        <code>scatter</code> and <code>.layer(line())</code> form.
+      </li>
+      <li>
+        The choice proposal's <code>wrap</code> moves every mark to the next row
+        whole. Rule 2 changes that for <code>stack</code> only.
+      </li>
+    </ul>
+
+    <h2>Related issues</h2>
+    <ul class="issues">
+      <li>
+        <b>#122</b
+        ><span
+          >A wrap operator for facets, waffles and text. This proposal uses its
+          <code>wrap</code> option.</span
+        >
+      </li>
+      <li>
+        <b>#486</b
+        ><span
+          >The choice operator, whose proposal moved <code>wrap</code> onto
+          <code>stack</code> and <code>spread</code>.</span
+        >
+      </li>
+      <li>
+        <b>#1347</b
+        ><span
+          >Spiral and snail periodic tables. Proposed
+          <code>Coord.along</code> and <code>Coord.spiral</code>.</span
+        >
+      </li>
+      <li>
+        <b>#1284</b
+        ><span
+          >Bend and envelope coordinates, where the path coordinate
+          started.</span
+        >
+      </li>
+      <li>
+        <b>#1078</b
+        ><span
+          >Du Bois data portraits. Lists the furniture and city and rural
+          spirals as targets.</span
+        >
+      </li>
+      <li>
+        <b>#952</b><span>Text and labels ignore the coordinate transform.</span>
+      </li>
+      <li>
+        <b>#1158</b
+        ><span
+          >Bring back the arc-length polar coordinate, removed for drawing NaN
+          paths.</span
+        >
+      </li>
+      <li>
+        <b>#1101</b
+        ><span
+          >One model for custom strategies, needed before a user-defined path
+          family.</span
+        >
+      </li>
+    </ul>
+
+    <h2>Smaller choices</h2>
+    <ul class="plain">
+      <li>
+        <code>at</code> is in data units, after Karduni's "where on the axis to
+        wrap". No default: ggdubois's 1.1 times the second largest value is a
+        heuristic a user would have to model.
+      </li>
+      <li>
+        A wrapped stack always alternates direction. Same-direction lanes are a
+        <code>spread</code> of pieces.
+      </li>
+      <li>Karduni's second threshold (shorter return lanes) is left out.</li>
+      <li>
+        Horizon charts fold the same axis by overlap. They are not part of this
+        proposal.
+      </li>
+      <li>
+        Python: <code>stack(dir="x", wrap={"at": 63012})</code>, the same shape
+        as <code>axes={"x": {...}}</code>.
+      </li>
+    </ul>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+  (function () {
+    if (window.hljs) {
+      document.querySelectorAll("pre code").forEach(function (el) {
+        window.hljs.highlightElement(el);
+      });
+    }
+    var names = ["proposal", "precedent", "approaches"];
+    var buttons = Array.prototype.slice.call(
+      document.querySelectorAll(".tabs [role=tab]")
+    );
+    function show(name, focus) {
+      if (names.indexOf(name) < 0) name = "proposal";
+      names.forEach(function (n) {
+        document.getElementById("panel-" + n).hidden = n !== name;
+      });
+      buttons.forEach(function (b) {
+        var on = b.dataset.tab === name;
+        b.setAttribute("aria-selected", on ? "true" : "false");
+        b.tabIndex = on ? 0 : -1;
+        if (on && focus) b.focus();
+      });
+    }
+    function fromHash() {
+      show(location.hash.replace(/^#/, ""));
+    }
+    buttons.forEach(function (b, i) {
+      b.addEventListener("click", function () {
+        if (location.hash !== "#" + b.dataset.tab) {
+          history.replaceState(null, "", "#" + b.dataset.tab);
+        }
+        show(b.dataset.tab);
+      });
+      b.addEventListener("keydown", function (e) {
+        var d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+        if (!d) return;
+        e.preventDefault();
+        var next = buttons[(i + d + buttons.length) % buttons.length];
+        history.replaceState(null, "", "#" + next.dataset.tab);
+        show(next.dataset.tab, true);
+      });
+    });
+    window.addEventListener("hashchange", fromHash);
+    fromHash();
+  })();
+</script>
