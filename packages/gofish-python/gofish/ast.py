@@ -583,12 +583,14 @@ class Mark(_Root):
         # Set by `.hidden()`: laid out, paints nothing. Mirrors JS
         # `node._hidden` (`.hidden(value)`).
         self._hidden: Any = None
+        # Set by `.tooltip()`: True, or the list of fields the box shows.
+        self._tooltip: Union[None, bool, List[str]] = None
         self._translate: Optional[dict] = None
 
     def _write_meta(self, d: dict, payload: "_Payload") -> dict:
         """Write the modifiers every mark IR carries into ``d``: its
         ``name``, ``zOrder`` and ``hidden`` (a function crosses as an
-        accessor) and ``translate``. The JS side applies them after building the mark
+        accessor), ``tooltip`` and ``translate``. The JS side applies them after building the mark
         (``withMarkMeta`` in fromJSON.ts). Parallel to ``_copy_meta``."""
         if self._name is not None:
             d["name"] = (
@@ -598,6 +600,8 @@ class Mark(_Root):
             d["zOrder"] = _wire_accessors(self._z_order, payload)
         if self._hidden is not None:
             d["hidden"] = _wire_accessors(self._hidden, payload)
+        if self._tooltip is not None:
+            d["tooltip"] = self._tooltip
         if self._translate:
             d["translate"] = self._translate
         return d
@@ -612,6 +616,7 @@ class Mark(_Root):
         target._key = self._key
         target._z_order = self._z_order
         target._hidden = self._hidden
+        target._tooltip = self._tooltip
         target._translate = self._translate
         return target
 
@@ -716,6 +721,26 @@ class Mark(_Root):
         )
         self._copy_meta(new_mark)
         new_mark._hidden = _PendingAccessor(value) if _is_function(value) else value
+        return new_mark
+
+    def tooltip(self, fields: Optional[List[str]] = None) -> "Mark":
+        """Show a box that describes the mark under the pointer. Mirrors JS
+        ``mark.tooltip(fields)``.
+
+        With no ``fields``, the box shows every field with one value on the
+        mark, and a size or position channel's field with the value it
+        draws. With ``fields``, it shows exactly those, in order::
+
+            rect(w="share").tooltip(["path", "n", "share"])
+
+        Returns:
+            New Mark (same subclass as self) with the tooltip set.
+        """
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._tooltip = True if fields is None else list(fields)
         return new_mark
 
     def translate(
@@ -884,6 +909,10 @@ _REF_HAS_NO_HIDDEN = (
     "A ref names a node that another mark drew, so it cannot hide it: call "
     ".hidden() on the mark that draws the node."
 )
+_REF_HAS_NO_TOOLTIP = (
+    "A ref names a node that another mark drew: call .tooltip() on the mark "
+    "that draws the node."
+)
 
 
 class _InputRef(Mark):
@@ -940,6 +969,9 @@ class _InputRef(Mark):
 
     def hidden(self, value: Any = True) -> "Mark":
         raise TypeError(_REF_HAS_NO_HIDDEN)
+
+    def tooltip(self, fields: Any = None) -> "Mark":
+        raise TypeError(_REF_HAS_NO_TOOLTIP)
 
     def to_dict(self, payload: "_Payload") -> dict:
         d: dict = {"type": "ref", "__inputRef": self.index}
@@ -1924,6 +1956,9 @@ class _RefProxy(Mark):
 
     def hidden(self, value: Any = True) -> "Mark":
         raise TypeError(_REF_HAS_NO_HIDDEN)
+
+    def tooltip(self, fields: Any = None) -> "Mark":
+        raise TypeError(_REF_HAS_NO_TOOLTIP)
 
     def to_dict(self, payload: "_Payload") -> dict:
         # `select_all(...)` is a plural chart-data selector, so it has no

@@ -326,6 +326,43 @@ class TestMarkZOrder:
         assert call(m, lambda_id, [[BridgeRef(0), BridgeRef(1)]], refs) == [1]
 
 
+class TestMarkTooltip:
+    """`.tooltip(fields=None)`: `True`, or the list of fields, on the mark's IR
+    (#1395)."""
+
+    def test_no_fields(self):
+        assert ir(rect(w="share").tooltip())["tooltip"] is True
+
+    def test_fields_in_order(self):
+        m = rect(w="share").tooltip(["share", "path"])
+        assert ir(m)["tooltip"] == ["share", "path"]
+
+    def test_absent_by_default(self):
+        assert "tooltip" not in ir(rect(w="share"))
+
+    def test_kept_through_other_modifiers(self):
+        m = rect(w="share").tooltip(["n"]).name("bars").z_order(1)
+        node = ir(m)
+        assert node["tooltip"] == ["n"] and node["name"] == "bars"
+
+    def test_in_a_chart(self):
+        from gofish import chart, spread
+
+        doc = (
+            chart([{"path": "a", "share": 0.1}])
+            .flow(spread(by="path", dir="y"))
+            .mark(rect(w="share").tooltip())
+            .to_ir()
+        )
+        assert doc["root"]["mark"]["tooltip"] is True
+
+    def test_a_ref_has_no_tooltip(self):
+        from gofish import ref
+
+        with pytest.raises(TypeError, match="tooltip"):
+            ref("bars").tooltip()
+
+
 class TestMarkName:
     """Test Mark.name() method."""
 
