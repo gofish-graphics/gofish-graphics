@@ -510,9 +510,11 @@ chart(seafood, { theme: cogra })
       <p class="note">
         No new operator. Decided so far: a pattern is a paint, not a second
         option beside <code>fill</code> (Nov 22). A theme is a keyed object for
-        now, with the door left open to selector rules later (Nov 22). Two
-        places where I think the choice is close are marked with an orange edge:
-        the scan look on the Effects tab, and the role colors on the Themes tab.
+        now, with the door left open to selector rules later (Nov 22). The first
+        round of effects stops at <code>Filter.threshold</code>;
+        <code>Filter.scan</code> waits (Nov 22). One place where I think the
+        choice is close is marked with an orange edge on the Themes tab: the
+        role colors.
       </p>
     </article>
   </section>
@@ -874,7 +876,7 @@ rect(h="value", filter=[Filter.roughen(), Filter.shadow()])</code></pre>
       </p>
     </article>
 
-    <article class="card fork">
+    <article class="card">
       <h3>The rough Cogra look</h3>
       <div class="pics">
         <figure>
@@ -979,8 +981,9 @@ chart(seafood, theme=cogra, filter=Filter.scan(dpi=150, weight=1.5, specks=True)
         </li>
       </ul>
       <p>
-        I would ship <code>roughen</code> and <code>threshold</code> with the
-        first effects, and treat <code>scan</code> as the first of the effects
+        <strong>Decided Nov 22: the first round stops at the threshold.</strong>
+        <code>roughen</code> and <code>threshold</code> ship with the first
+        effects. <code>scan</code> waits for a separate design of the effects
         that need pixels, together with the watercolor in #1196. They share one
         question, which is whether a layer may be drawn as an image. Cogra's
         other two looks, <code>xerox</code> and <code>aged</code>, are the same
