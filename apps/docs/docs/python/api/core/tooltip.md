@@ -61,7 +61,7 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   open out to 20 px, so the hole of a donut and a wide gap between bars show
   no box. The open box keeps its mark until another one is 4 px nearer. The
   box takes no pointer events, so a mark under it is reached as if it were
-  not there; where no mark is near, a pointer over the box keeps it open. On a touch screen, a tap opens the box
+  not there, and over the box with no mark within reach it closes. On a touch screen, a tap opens the box
   and it stays open. A chart opens one box at a time: the marks of every
   `.tooltip()` in it are candidates together.
 - **Values.** Numbers show digit grouping from five digits on and at most

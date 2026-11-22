@@ -85,6 +85,41 @@ async function hover(page: Page, x: number, y: number): Promise<Snap> {
   return snap(page);
 }
 
+/** The pointer at rest at (x, y) for 1 s, after passing through `via`
+ *  (one move each): the box when it got there, whether the box changed
+ *  while it rested, and whether the chart re-ran (a re-run paints new mark
+ *  elements, so a tag on one is gone). */
+async function rest(
+  page: Page,
+  x: number,
+  y: number,
+  via: [number, number][] = []
+): Promise<{ box: string[] | null; changed: boolean; reran: boolean }> {
+  for (const [vx, vy] of via) {
+    await page.mouse.move(vx, vy);
+    await page.waitForTimeout(60);
+  }
+  await page.mouse.move(x, y);
+  await page.waitForTimeout(250);
+  const first = await snap(page);
+  const key = (s: Snap) => JSON.stringify([s.box, s.boxClient]);
+  await page.evaluate(`(() => {
+    const e = [...document.querySelectorAll('#stories-root svg ${marksSelector}')]
+      .find((m) => m.closest('[pointer-events="none"]') === null);
+    if (e) e.__rest = true;
+  })()`);
+  let changed = false;
+  for (let k = 0; k < 10; k++) {
+    await page.mouse.move(x, y);
+    await page.waitForTimeout(100);
+    if (key(await snap(page)) !== key(first)) changed = true;
+  }
+  const tagged =
+    (await page.evaluate(`[...document.querySelectorAll('#stories-root svg ${marksSelector}')]
+    .some((m) => m.__rest === true)`)) as boolean;
+  return { box: first.box, changed, reran: !tagged };
+}
+
 async function render(
   page: Page,
   story: StoryInfo,
@@ -150,42 +185,22 @@ async function main() {
       );
       await shot("bar-chart-short");
       // Level with the shortest bar, a px at a time to the right of its end:
-      // its box all the way, though a longer bar is just above. The box
-      // sits right of the bar, over the row, so the pointer is soon over
-      // the open box, which holds it: it closes as the pointer leaves the
-      // box, not at the reach. Coming back from the right with no box open,
-      // the box opens at the reach (16 px).
+      // its box, though a longer bar is just above, until the reach with
+      // the focus's head start (20 px), then closed; coming back from the
+      // right, the box opens at the reach (16 px).
       {
         const y = short.y + short.h / 2;
         const end = short.x + short.w;
-        const right = closed.svg[0] + closed.svg[2] - 2;
         await hover(page, end - 2, y);
         let closedAt: number | undefined;
-        let boxRight: number | undefined;
         let other = false;
-        for (let d = 0; end + d <= right && closedAt === undefined; d++) {
+        for (let d = 0; d <= 60 && closedAt === undefined; d++) {
           await page.mouse.move(end + d, y);
           await page.waitForTimeout(40);
           const s = await snap(page);
           if (s.box === null) closedAt = d;
-          else {
-            if (!s.box.includes("VO→INF→VO")) other = true;
-            boxRight = s.boxClient![0] + s.boxClient![2] - end;
-          }
+          else if (!s.box.includes("VO→INF→VO")) other = true;
         }
-        console.log(
-          `  level with the shortest bar: its box out to ${closedAt} px past its end; the box's right edge is ${boxRight?.toFixed(1)} px past it`
-        );
-        check(
-          "level with the shortest bar: its box until the pointer leaves the box",
-          !other &&
-            closedAt !== undefined &&
-            boxRight !== undefined &&
-            closedAt >= Math.max(20, boxRight) &&
-            closedAt <= Math.max(22, boxRight + 2),
-          [closedAt, boxRight, other]
-        );
-        await hover(page, 2, 2);
         let openAt: number | undefined;
         for (let d = 60; d >= 0 && openAt === undefined; d--) {
           await page.mouse.move(end + d, y);
@@ -194,10 +209,48 @@ async function main() {
           if (s.box !== null) openAt = s.box.includes("VO→INF→VO") ? d : -1;
         }
         check(
+          `level with the shortest bar: its box, closed ${closedAt} px past its end`,
+          !other && closedAt !== undefined && closedAt >= 20 && closedAt <= 22,
+          [closedAt, other]
+        );
+        check(
           `level with the shortest bar, coming back: its box opens ${openAt} px past its end`,
           openAt !== undefined && openAt >= 15 && openAt <= 17,
           openAt
         );
+        // At rest for 1 s at the reach's two edges, from inside and from
+        // outside: the box the approach left, and no change, no re-run.
+        for (const [d, from, want] of [
+          [16, "inside", true],
+          [16, "outside", true],
+          [20, "inside", true],
+          [20, "outside", false],
+          [24, "inside", false],
+        ] as const) {
+          await hover(page, 2, 2);
+          const via: [number, number][] =
+            from === "inside"
+              ? [
+                  [end - 4, y],
+                  ...Array.from({ length: d }, (_, k): [number, number] => [
+                    end + k,
+                    y,
+                  ]),
+                ]
+              : [
+                  [end + 60, y],
+                  ...Array.from(
+                    { length: 60 - d },
+                    (_, k): [number, number] => [end + 60 - k, y]
+                  ),
+                ];
+          const r = await rest(page, end + d, y, via);
+          check(
+            `at rest ${d} px past the shortest bar, from ${from}: ${r.box === null ? "closed" : "its box"}, no change, no re-run`,
+            (r.box !== null) === want && !r.changed && !r.reran,
+            r
+          );
+        }
       }
       // Down across all fifteen bars, near their start: a box on every
       // frame, each bar's in turn (the 4 px gaps are within reach).
@@ -250,26 +303,31 @@ async function main() {
         const seen: string[] = [];
         let closedFrames = 0;
         const closedAt: number[] = [];
-        let prev: Snap | undefined = open1;
         for (let y = bars[0].y + bars[0].h / 2; y < by + bh - 2; y += 4) {
           await page.mouse.move(colX, y);
           await page.waitForTimeout(60);
           const s = await snap(page);
-          // Closed under the box that was open: the hold rule broke. (Below
-          // the last box, past the bars' hull, closing is right.)
-          const p = prev?.boxClient;
-          if (
-            s.box === null &&
-            p &&
-            colX >= p[0] &&
-            colX <= p[0] + p[2] &&
-            y >= p[1] &&
-            y <= p[1] + p[3]
-          ) {
+          // Closed though the bar the focus chooses (the nearest by row) is
+          // within reach: the reach broke. Where that bar is out of reach,
+          // closing is the rule, under the box or not, even when another
+          // bar's outline is nearer (logged below).
+          const gapTo = (b: Snap["targets"][number]) =>
+            Math.hypot(
+              Math.max(b.x - colX, 0, colX - (b.x + b.w)),
+              Math.max(b.y - y, 0, y - (b.y + b.h))
+            );
+          const row = [...closed.targets].sort(
+            (p, q) => Math.abs(p.y + p.h / 2 - y) - Math.abs(q.y + q.h / 2 - y)
+          )[0];
+          const nearest = Math.min(...closed.targets.map(gapTo));
+          if (s.box === null && nearest <= 16)
+            console.log(
+              `    closed at x ${Math.round(colX)}, y ${Math.round(y)}: the row's bar is ${Math.round(gapTo(row))} px away, another bar ${Math.round(nearest)} px`
+            );
+          if (s.box === null && gapTo(row) <= 16) {
             closedFrames++;
             closedAt.push(Math.round(y));
           }
-          prev = s;
           const n = expect.find((e) => s.box?.includes(e));
           if (n !== undefined && seen[seen.length - 1] !== n) seen.push(n);
         }
@@ -279,7 +337,7 @@ async function main() {
           seen
         );
         check(
-          "down through bar 1's box: never closed under an open box",
+          "down through bar 1's box: never closed with the row's bar within reach",
           closedFrames === 0,
           [
             closedAt,
@@ -294,25 +352,110 @@ async function main() {
         );
       } else
         console.log("  (the first bar's box does not reach the second bar)");
-      // At rest over a box for a second: the same box, in place. The first
-      // bar's box is opened again, and the pointer jumps onto it: a pointer
-      // that comes from the bottom of the sweep passes bars whose boxes are
-      // elsewhere, and below the reach of every bar nothing holds it open.
-      await hover(page, bars[0].x + bars[0].w - 10, bars[0].y + bars[0].h / 2);
-      await page.mouse.move(bx + bw / 2, by + bh / 2);
-      await page.waitForTimeout(250);
-      const rest = await snap(page);
-      let steady = rest.box !== null;
-      for (let k = 0; k < 5; k++) {
-        await page.waitForTimeout(200);
-        const s = await snap(page);
-        if (
-          JSON.stringify(s.box) !== JSON.stringify(rest.box) ||
-          JSON.stringify(s.boxClient) !== JSON.stringify(rest.boxClient)
-        )
-          steady = false;
+      // At rest for 1 s: on a mark, in a 4 px gap, over the open box where
+      // a mark is under it, and over the open box where no mark is within
+      // reach (there the box closes, and stays closed).
+      {
+        const onMark = await rest(
+          page,
+          bars[0].x + 10,
+          bars[0].y + bars[0].h / 2
+        );
+        check(
+          "at rest on a bar: its box, no change, no re-run",
+          onMark.box?.includes(expect[0]) === true &&
+            !onMark.changed &&
+            !onMark.reran,
+          onMark
+        );
+        const inGap = await rest(
+          page,
+          bars[0].x + 10,
+          (bars[0].y + bars[0].h + bars[1].y) / 2
+        );
+        check(
+          "at rest in a 4 px gap: a box, no change, no re-run",
+          inGap.box !== null && !inGap.changed && !inGap.reran,
+          inGap
+        );
+        // Bar 1's box hangs over bar 2's row near its end.
+        await hover(
+          page,
+          bars[0].x + bars[0].w - 10,
+          bars[0].y + bars[0].h / 2
+        );
+        const under = await rest(
+          page,
+          Math.min(bx + bw - 4, bars[1].x + bars[1].w - 3),
+          bars[1].y + bars[1].h / 2
+        );
+        check(
+          "at rest over bar 1's box, bar 2 under it: bar 2's box, no change, no re-run",
+          under.box?.includes(expect[1]) === true &&
+            !under.changed &&
+            !under.reran,
+          under
+        );
+        // The shortest bar's box sits right of it; its right part is far
+        // from every bar.
+        const sy = short.y + short.h / 2;
+        const sOpen = await hover(page, short.x + short.w - 2, sy);
+        const [ox, oy, ow, oh] = sOpen.boxClient!;
+        const fx = ox + ow - 6;
+        const farFromBars = closed.targets.every(
+          (b) =>
+            Math.hypot(
+              Math.max(b.x - fx, 0, fx - (b.x + b.w)),
+              Math.max(b.y - sy, 0, sy - (b.y + b.h))
+            ) > 20
+        );
+        const overBox = await rest(
+          page,
+          fx,
+          Math.min(oy + oh - 4, Math.max(oy + 4, sy))
+        );
+        check(
+          `at rest over the shortest bar's box, ${Math.round(fx - short.x - short.w)} px past the bar, no bar within reach: closed, no change`,
+          farFromBars && overBox.box === null && !overBox.changed,
+          [overBox, farFromBars]
+        );
       }
-      check("at rest over a box for 1 s: no change", steady);
+      // A real touch tap on bar 2 (Chromium's touch emulation): the tap
+      // ends with a pointerleave, and the box stays open for 1 s; a mouse
+      // move then goes back to hover.
+      {
+        await hover(page, 2, 2);
+        const cdp = await page.context().newCDPSession(page);
+        await cdp.send("Emulation.setTouchEmulationEnabled", {
+          enabled: true,
+          maxTouchPoints: 1,
+        });
+        const [tx, ty] = [bars[1].x + 10, bars[1].y + bars[1].h / 2];
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchStart",
+          touchPoints: [{ x: tx, y: ty }],
+        });
+        await cdp.send("Input.dispatchTouchEvent", {
+          type: "touchEnd",
+          touchPoints: [],
+        });
+        await page.waitForTimeout(250);
+        const tapped = await snap(page);
+        let held = tapped.box?.includes(expect[1]) === true;
+        for (let k = 0; k < 5; k++) {
+          await page.waitForTimeout(200);
+          const s = await snap(page);
+          if (JSON.stringify(s.box) !== JSON.stringify(tapped.box))
+            held = false;
+        }
+        await cdp.send("Emulation.setTouchEmulationEnabled", {
+          enabled: false,
+        });
+        await cdp.detach();
+        check("a tap on bar 2: its box, held for 1 s", held, tapped.box);
+        // A mouse move over the chart goes back to hover.
+        await hover(page, bars[0].x + 10, bars[0].y + bars[0].h / 2);
+      }
       const out = await hover(page, 5, closed.svg[1] + closed.svg[3] + 60);
       check("off the chart: closed", out.box === null, [out.box, closed.svg]);
       check("closed again: as before", same(out.marks, closed.marks));
@@ -333,7 +476,8 @@ async function main() {
       );
       check("nothing else moved", same(at.marks, closed.marks));
       await shot(name);
-      // Over the open box where no mark is near: the box holds.
+      // Over the open box where no mark is near: the box closes, and stays
+      // closed.
       if (name === "Scatter") {
         let held: boolean | undefined;
         for (const d of closed.targets) {
@@ -348,15 +492,14 @@ async function main() {
               )
             );
           if (!spot) continue;
-          const t = await hover(page, spot[0], spot[1]);
-          held =
-            JSON.stringify(t.box) === JSON.stringify(s.box) &&
-            JSON.stringify(t.boxClient) === JSON.stringify(s.boxClient);
+          const t = await rest(page, spot[0], spot[1]);
+          held = t.box === null && !t.changed;
           break;
         }
         if (held === undefined)
           console.log("  (no spot over a box 60 px from every dot)");
-        else check("over the box, no dot near: the box holds", held);
+        else
+          check("over the box, no dot near: closed, and it stays closed", held);
         // Within 16 px of a dot's edge, its box; 18 px off, none (no other
         // dot is that near). Then how much of the plot opens a box.
         for (const d of closed.targets.slice(0, 3)) {
@@ -891,8 +1034,7 @@ async function main() {
         [seq, at, aEnd, b.x]
       );
       // The same crossing at the height of a's open box: the box sits in
-      // the gap, and a pointer over it holds it, so the box stays open
-      // until the pointer leaves it.
+      // the gap, but it is no pointer target, so the gap is dead there too.
       {
         const opened = await hover(page, a.x + 10, a.y + a.h / 2);
         const [bx, by, bw, bh] = opened.boxClient!;
@@ -911,8 +1053,8 @@ async function main() {
           `  across the gap at the height of a's box (its right edge ${Math.round(bx + bw - aEnd)} px past a; b at ${Math.round(b.x - aEnd)}): ${seq2.join(" ")} (px past a)`
         );
         check(
-          "across the gap at the box's height: a, then b, never both",
-          seq2[0].startsWith("a@") && seq2[seq2.length - 1].startsWith("b@"),
+          "across the gap at the box's height: a, none, b",
+          seq2.map((t) => t.split("@")[0]).join() === "a,none,b",
           seq2
         );
       }

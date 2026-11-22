@@ -101,21 +101,18 @@ export class TooltipFocus implements InputPrimitive {
    *  undefined on any other mark. */
   point: FocusPoint | undefined;
   private marks: FocusMark[] = [];
-  /** The marks and boxes of the lowerings since the last frame. A resolve
-   *  can lay its chart out more than once (`label.angle: "auto"` tries an
-   *  angle per run) and paint any one of the runs, not always the last, so
-   *  the next frame reads them all: only the painted run's nodes have items
-   *  in it (`scan`). */
-  private lowered: { marks: FocusMark[]; boxes: GoFishNode[] } | undefined;
+  /** The marks of the lowerings since the last frame. A resolve can lay
+   *  its chart out more than once (`label.angle: "auto"` tries an angle per
+   *  run) and paint any one of the runs, not always the last, so the next
+   *  frame reads them all: only the painted run's nodes have items in it
+   *  (`candidatesOf`). */
+  private lowered: FocusMark[] | undefined;
   /** The candidates of the last frame, and, by key, each candidate and
    *  each point of one, with the mark it belongs to. */
   private candidates: Candidate[] = [];
   private byKey = new Map<unknown, { choice: Candidate; mark: Candidate }>();
   /** The pointer of the last event (a tap holds it, see `onEvent`). */
   private pointer: Point | undefined;
-  /** The boxes the painted lowering may have drawn, and where one was. */
-  private boxes: GoFishNode[] = [];
-  private cover: Box | undefined;
   private touch = false;
 
   constructor(private readonly behavior: FocusBehavior = defaultFocus) {}
@@ -134,14 +131,8 @@ export class TooltipFocus implements InputPrimitive {
   /** Called by each lowering of the tooltip (`tooltip.ts`) with the marks
    *  with a tooltip in the whole render, before it draws the box. */
   use(marks: FocusMark[]): void {
-    this.lowered ??= { marks: [], boxes: [] };
-    this.lowered.marks.push(...marks);
-  }
-
-  /** The box the lowering drew for the focused mark. */
-  drew(box: GoFishNode): void {
-    this.lowered ??= { marks: [], boxes: [] };
-    this.lowered.boxes.push(box);
+    this.lowered ??= [];
+    this.lowered.push(...marks);
   }
 
   /** The focused candidate: the focused point, or the focused mark. */
@@ -152,11 +143,10 @@ export class TooltipFocus implements InputPrimitive {
 
   onFrame(frame: InteractionFrame): void {
     if (this.lowered !== undefined) {
-      ({ marks: this.marks, boxes: this.boxes } = this.lowered);
+      this.marks = this.lowered;
       this.lowered = undefined;
     }
-    const { candidates, cover } = scan(frame.items, this.marks, this.boxes);
-    this.cover = cover;
+    const candidates = candidatesOf(frame.items, this.marks);
     this.candidates = candidates;
     this.byKey = new Map();
     for (const c of candidates) {
@@ -166,14 +156,12 @@ export class TooltipFocus implements InputPrimitive {
     }
   }
 
-  /** The chart is gone: drop its marks, its box and its candidates. */
+  /** The chart is gone: drop its marks and its candidates. */
   detach(): void {
     this.key = undefined;
     this.point = undefined;
     this.marks = [];
     this.lowered = undefined;
-    this.boxes = [];
-    this.cover = undefined;
     this.candidates = [];
     this.byKey = new Map();
     this.pointer = undefined;
@@ -202,31 +190,16 @@ export class TooltipFocus implements InputPrimitive {
   /** Run the behavior on the current pointer and candidates, and invalidate
    *  the readers when the focused mark or point changes. */
   private choose(): void {
-    // The box is no pointer target: the behavior runs as if it were not
-    // there, so a mark or a row under the open box is reachable. Only
-    // where the behavior picks nothing (the box reaches farther from the
-    // marks than the focus's reach) does a pointer over the box keep the
-    // focus; else the box would close under the pointer, and might reopen:
-    // a flicker.
-    const p = this.pointer;
+    // The box is no pointer target: the behavior runs on the frame's
+    // geometry, as if the box were not there, so a mark or a row under the
+    // open box is reachable, and the box is open exactly when the behavior
+    // chooses a mark.
     const choice = this.behavior({
-      pointer: p,
+      pointer: this.pointer,
       candidates: this.candidates,
       current: this.focused(),
       clicked: false,
     }).choice;
-    const c = this.cover;
-    if (
-      choice === undefined &&
-      this.key !== undefined &&
-      p !== undefined &&
-      c !== undefined &&
-      p.x >= c.x0 &&
-      p.x <= c.x1 &&
-      p.y >= c.y0 &&
-      p.y <= c.y1
-    )
-      return;
     const found = choice && this.byKey.get(choice.key);
     const key = found?.mark.key as string | undefined;
     const point =
@@ -281,28 +254,12 @@ export function candidatesOf(
   items: DisplayList.DisplayItem[],
   marks: FocusMark[]
 ): Candidate[] {
-  return scan(items, marks).candidates;
-}
-
-/** The candidates of `marks` among `items` ({@link candidatesOf}), and the
- *  box of everything `covers` (the open tooltip box, as each lowering since
- *  the last frame drew it) drew there, in svg px
- *  (undefined when it drew nothing with a box), from one walk of the
- *  items. */
-function scan(
-  items: DisplayList.DisplayItem[],
-  marks: FocusMark[],
-  covers: readonly GoFishNode[] = []
-): { candidates: Candidate[]; cover: Box | undefined } {
-  // The node uids each mark drew under, itself included, and the box's.
-  const owner = new Map<string, FocusMark | typeof COVER>();
+  // The node uids each mark drew under, itself included.
+  const owner = new Map<string, FocusMark>();
   for (const m of marks)
     for (const n of breadthFirst(m.node))
       if (!owner.has(n.uid)) owner.set(n.uid, m);
-  for (const cover of covers)
-    for (const n of breadthFirst(cover))
-      if (!owner.has(n.uid)) owner.set(n.uid, COVER);
-  const parts = new Map<FocusMark | typeof COVER, Drawn>();
+  const parts = new Map<FocusMark, Drawn>();
   let painted = 0;
   walkItems(items, (item, at) => {
     const order = painted++;
@@ -321,7 +278,6 @@ function scan(
         color: typeof color === "string" ? color : undefined,
       });
   });
-  const covered = parts.get(COVER);
   const byKey = new Map<
     string,
     Candidate & { marks: FocusMark[]; drawnPoints: DrawnPoint[]; top: number }
@@ -358,7 +314,7 @@ function scan(
   }
   // In paint order, by the last item each candidate painted: a candidate
   // after another is drawn over it where they overlap (`Focus.hit`).
-  const candidates = [...byKey.values()]
+  return [...byKey.values()]
     .sort((a, b) => a.top - b.top)
     .map(({ marks: ms, drawnPoints, top: _top, ...c }): Candidate => {
       const [px, py] = positionAxes(ms[0].node);
@@ -373,14 +329,7 @@ function scan(
         }),
       };
     });
-  return {
-    candidates,
-    cover: covered && covered.outline.length > 0 ? covered.box : undefined,
-  };
 }
-
-/** The owner of the open box's items in {@link scan}. */
-const COVER = Symbol("cover");
 
 /** A row point as drawn, in svg px, with the stroke of the item that drew
  *  it (the marker on a focused point takes it). */

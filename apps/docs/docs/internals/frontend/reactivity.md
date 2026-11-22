@@ -345,10 +345,10 @@ nothing about the runtime is special to it. A mark with `.tooltip()` reads
 its chart's focus as it resolves (`focus.read(registrar)` in `recordTooltip`):
 the input registers itself, since no spec code reads it, and the chart becomes
 a reader of its key. The tooltip's lowering (`ast/tooltip/tooltip.ts`) hands
-the focus the marks with a tooltip in the whole render (`focus.use(marks)`)
-and the box it drew (`focus.drew(box)`). A resolve can lay its chart out
+the focus the marks with a tooltip in the whole render (`focus.use(marks)`).
+A resolve can lay its chart out
 more than once and paint an earlier run than the last (`label.angle:
-"auto"` tries an angle per run), so the focus keeps the marks and boxes of
+"auto"` tries an angle per run), so the focus keeps the marks of
 every lowering since the last frame, and the next frame reads them all: only
 the painted run's nodes have items in it. One focus lives per chart
 (`focusOf`), for every `.tooltip()` in it, so one pointer opens one box, and
@@ -358,8 +358,7 @@ written in a mark function, a component thunk or a Python lambda mark is made
 anew on each resolve, once per group the function is called for.
 
 The focus reads geometry the way `nodeBox` does. On each published frame it
-walks the display items once (`walkItems`), for the open box's extent and for
-one candidate per key: the
+walks the display items once (`walkItems`) for one candidate per key: the
 union of the boxes the mark's subtree drew, an outline (boxes, circles, the
 segments of a stroked path's `d`, `pathSegments`, and regions), and the mark's
 placed position. A path that is filled (its fill is not `none`,
@@ -401,16 +400,17 @@ Observable Plot's pointer uses 40 px to a point's center, Plotly's
 `hoverdistance` 20 px.
 
 The open box (the box the layer drew in the last frame) is
-no pointer target: the behavior runs as if it were not there, so a mark or a
-row under it is reached. Only where the behavior picks nothing (the box
-reaches farther from the marks than the reach) does a pointer over the box keep the
-focus; otherwise the box would close under the pointer and might reopen, a
-flicker. The current mark's head start still applies, so a pointer at rest on
-a boundary under the box does not flip. A touch tap holds its point through the `pointerleave` that ends it,
+no pointer target: the behavior runs on the frame's geometry as if the box
+were not there, so a mark or a row under it is reached, and the box is open
+exactly when the behavior chooses a mark. A pointer over the box with no
+mark within reach closes it, and it stays closed: the box's paint does not
+change what the behavior sees, so closing it cannot reopen it. The head
+start and the 4 px of `within` keep a pointer at rest on a boundary from
+flipping. A touch tap holds its point through the `pointerleave` that ends it,
 until the next tap or a mouse move. A tap outside the chart does not close
 it: the runtime hears only events in the chart's container. When the chart is
 disposed, the runtime calls each input's `detach`, and the focus drops its
-marks, its box and its candidates.
+marks and its candidates.
 
 A line is one candidate for its whole path: it has no placed position, so it
 is as near as its path. A line drawn through rows also has a point per row

@@ -81,12 +81,11 @@ function box(rows: readonly TooltipRow[]) {
   );
 }
 
-/** One focused mark: the node, the rows its box shows, its call's focus,
- *  and the focused row on a mark drawn through rows. */
+/** One focused mark: the node, the rows its box shows, and the focused
+ *  row on a mark drawn through rows. */
 type TooltipEntry = {
   node: GoFishNode;
   rows: TooltipRow[];
-  focus: TooltipFocus;
   point: { row: unknown; color?: string } | undefined;
 };
 
@@ -121,7 +120,6 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
         entries.push({
           node,
           rows: tooltipContent(request, point),
-          focus,
           point,
         });
       }
@@ -147,12 +145,11 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
       n.overlay = true;
       return n;
     };
-    for (const { node, rows, focus, point } of entries) {
+    for (const { node, rows, point } of entries) {
       const stand = selectNode(node) as unknown as GoFishNode;
       const shown = float(
         await resolveMarkResult(box(rows) as any, new LayerContext())
       );
-      focus.drew(shown);
       const marker =
         point &&
         float(

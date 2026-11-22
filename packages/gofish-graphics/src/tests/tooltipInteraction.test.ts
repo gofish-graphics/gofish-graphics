@@ -496,7 +496,7 @@ console.log("# a line drawn through rows: the box describes its nearest row");
   }
 }
 
-console.log("# over the box, no mark near: the box holds");
+console.log("# over the box, no mark near: the box closes and stays closed");
 {
   const { scatter, circle } = GoFish as any;
   // Three dots in a corner: a box beside one reaches farther from them
@@ -560,12 +560,16 @@ console.log("# over the box, no mark near: the box holds");
   check("a spot over a box with no mark near", spot !== undefined);
   if (spot) {
     const before = runs;
-    for (let k = 0; k < 5; k++) {
+    moveTo(spot[0], spot[1]);
+    await settle();
+    check("the box closes", boxRect() === undefined, [name(), opened]);
+    check("one re-run, to close it", runs === before + 1, runs - before);
+    for (let k = 1; k < 5; k++) {
       moveTo(spot[0] + k, spot[1]);
       await settle();
     }
-    check("the box holds", boxRect() !== undefined && name() === opened, [name(), opened]);
-    check("no re-run", runs === before, runs - before);
+    check("at rest where it was: it stays closed", boxRect() === undefined, name());
+    check("no re-run after", runs === before + 1, runs - before);
   }
 }
 
