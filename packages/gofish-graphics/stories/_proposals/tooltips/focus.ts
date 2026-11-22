@@ -43,9 +43,18 @@ export type Frame = {
 };
 
 /** `gap`: the pointer's distance to the choice, in px, as the behavior
- *  measures it (Dragology's `gap`). */
-export type Result = { choice: Candidate | undefined; gap: number };
+ *  measures it (Dragology's `gap`). `at`: the point it was measured to,
+ *  when the behavior says (Dragology's projected point). */
+export type Result = { choice: Candidate | undefined; gap: number; at?: Point };
 export type FocusBehavior = (frame: Frame) => Result;
+
+/** What a built-in behavior reads besides the candidates, as plain data, so
+ *  a tool such as the region overlay (focusDebug.ts) can draw it. It plays
+ *  the part of Dragology's per-operator `overlayVis`. A plain function
+ *  reads nothing that is declared, as Dragology's `custom` draws nothing. */
+export type Reads =
+  | { kind: "closest"; to: "position" | "center" | "outline"; stickiness: number; radius: number }
+  | { kind: "within"; gap: number; out: number };
 
 /** A behavior with the chained steps. A plain `FocusBehavior` is accepted
  *  wherever a behavior is an argument. */
@@ -55,24 +64,31 @@ export type Chain = FocusBehavior & {
   within(gap: number, out?: number): Chain;
   /** Run this behavior only on a click; between clicks the focus stays. */
   onClick(): Chain;
+  readonly reads: Reads[];
 };
 
 const NONE: Result = { choice: undefined, gap: Infinity };
 
+/** What a behavior declares it reads; nothing for a plain function. */
+export const readsOf = (b: FocusBehavior): Reads[] => (b as Partial<Chain>).reads ?? [];
+
 /* ------------------------------- the family ------------------------------ */
 
 /** Lift a plain behavior so it can be chained. */
-function from(run: FocusBehavior): Chain {
-  const chain = ((frame: Frame) => run(frame)) as Chain;
+function from(run: FocusBehavior, reads: Reads[] = readsOf(run)): Chain {
+  const chain = Object.assign((frame: Frame) => run(frame), { reads }) as Chain;
   chain.within = (gap, out = gap + 4) =>
-    from((f) => {
-      const r = run(f);
-      if (!r.choice || !f.pointer) return r;
-      const limit = f.current ? out : gap;
-      return hullDistance(f.pointer, hullOf(f.candidates)) > limit ? NONE : r;
-    });
+    from(
+      (f) => {
+        const r = run(f);
+        if (!r.choice || !f.pointer) return r;
+        const limit = f.current ? out : gap;
+        return hullDistance(f.pointer, hullOf(f.candidates)) > limit ? NONE : r;
+      },
+      [...reads, { kind: "within", gap, out }]
+    );
   chain.onClick = () =>
-    from((f) => (f.clicked ? run(f) : { choice: f.current, gap: 0 }));
+    from((f) => (f.clicked ? run(f) : { choice: f.current, gap: 0 }), reads);
   return chain;
 }
 
@@ -80,7 +96,7 @@ function from(run: FocusBehavior): Chain {
 function hit(): Chain {
   return from(({ pointer, candidates }) => {
     const c = pointer && candidates.find((c) => inside(pointer, c.outline));
-    return c ? { choice: c, gap: 0 } : NONE;
+    return c ? { choice: c, gap: 0, at: pointer } : NONE;
   });
 }
 
@@ -99,28 +115,35 @@ function closest({
   stickiness?: number;
   radius?: number;
 } = {}): Chain {
-  return from(({ pointer, candidates, current }) => {
-    if (!pointer) return NONE;
-    let best = NONE;
-    let bestScore = Infinity;
-    for (const c of candidates) {
-      const d = distance(pointer, c, to);
-      const score = d - (c.key === current?.key ? stickiness : 0);
-      if (score < bestScore) [best, bestScore] = [{ choice: c, gap: d }, score];
-    }
-    return best.gap <= radius ? best : NONE;
-  });
+  return from(
+    ({ pointer, candidates, current }) => {
+      if (!pointer) return NONE;
+      let best = NONE;
+      let bestScore = Infinity;
+      for (const c of candidates) {
+        const d = distance(pointer, c, to);
+        const score = d - (c.key === current?.key ? stickiness : 0);
+        if (score < bestScore) [best, bestScore] = [{ choice: c, gap: d }, score];
+      }
+      if (!best.choice || best.gap > radius) return NONE;
+      return { ...best, at: measuredPoint(pointer, best.choice, to) };
+    },
+    [{ kind: "closest", to, stickiness, radius }]
+  );
 }
 
 /** The first behavior in the list that makes a choice. */
 function first(behaviors: FocusBehavior[]): Chain {
-  return from((f) => {
-    for (const b of behaviors) {
-      const r = b(f);
-      if (r.choice) return r;
-    }
-    return NONE;
-  });
+  return from(
+    (f) => {
+      for (const b of behaviors) {
+        const r = b(f);
+        if (r.choice) return r;
+      }
+      return NONE;
+    },
+    behaviors.flatMap(readsOf)
+  );
 }
 
 export const Focus = { hit, closest, first, from };
@@ -134,19 +157,23 @@ export const defaultFocus = Focus.first([
 /* -------------------------------- geometry -------------------------------- */
 
 const center = (b: Box): Point => ({ x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2 });
+/** The length of (dx, dy). `Math.hypot` is several times slower, which
+ *  shows when the region overlay runs a behavior at every grid cell. */
+const len = (dx: number, dy: number) => Math.sqrt(dx * dx + dy * dy);
 
 /** Distance from a point to a box, zero inside it. */
 export const boxDistance = (p: Point, b: Box) =>
-  Math.hypot(Math.max(b.x0 - p.x, 0, p.x - b.x1), Math.max(b.y0 - p.y, 0, p.y - b.y1));
+  len(Math.max(b.x0 - p.x, 0, p.x - b.x1), Math.max(b.y0 - p.y, 0, p.y - b.y1));
 
 function outlineDistance(p: Point, outline: Outline) {
-  return Math.min(
-    ...outline.map(({ box, round }) => {
-      if (!round) return boxDistance(p, box);
-      const c = center(box);
-      return Math.max(0, Math.hypot(p.x - c.x, p.y - c.y) - (box.x1 - box.x0) / 2);
-    })
-  );
+  let d = Infinity;
+  for (const { box, round } of outline) {
+    const e = round
+      ? Math.max(0, len(p.x - (box.x0 + box.x1) / 2, p.y - (box.y0 + box.y1) / 2) - (box.x1 - box.x0) / 2)
+      : boxDistance(p, box);
+    if (e < d) d = e;
+  }
+  return d;
 }
 
 const inside = (p: Point, outline: Outline) => outlineDistance(p, outline) === 0;
@@ -154,13 +181,40 @@ const inside = (p: Point, outline: Outline) => outlineDistance(p, outline) === 0
 function distance(p: Point, c: Candidate, to: "position" | "center" | "outline") {
   if (to === "outline") return outlineDistance(p, c.outline);
   const at = to === "center" ? center(c.box) : c.position;
-  return Math.hypot(p.x - (at.x ?? p.x), p.y - (at.y ?? p.y));
+  return len(p.x - (at.x ?? p.x), p.y - (at.y ?? p.y));
 }
+
+/** The point `distance` measures to: a placed position (an absent axis
+ *  takes the pointer's value), a center, or the nearest point of the outline. */
+function measuredPoint(p: Point, c: Candidate, to: "position" | "center" | "outline"): Point {
+  if (to === "center") return center(c.box);
+  if (to === "position") return { x: c.position.x ?? p.x, y: c.position.y ?? p.y };
+  let best = p;
+  let bestD = Infinity;
+  for (const { box, round } of c.outline) {
+    let q: Point;
+    if (round) {
+      const m = center(box);
+      const r = (box.x1 - box.x0) / 2;
+      const d = len(p.x - m.x, p.y - m.y);
+      q = d <= r ? p : { x: m.x + ((p.x - m.x) * r) / d, y: m.y + ((p.y - m.y) * r) / d };
+    } else q = nearestInBox(p, box);
+    const d = len(p.x - q.x, p.y - q.y);
+    if (d < bestD) [best, bestD] = [q, d];
+  }
+  return best;
+}
+
+/** The point of a box nearest to `p` (`p` itself inside). */
+export const nearestInBox = (p: Point, b: Box): Point => ({
+  x: Math.min(Math.max(p.x, b.x0), b.x1),
+  y: Math.min(Math.max(p.y, b.y0), b.y1),
+});
 
 /** The convex hull of the candidates' outline corners (monotone chain),
  *  kept per candidate list. */
 const hulls = new WeakMap<Candidate[], Point[]>();
-function hullOf(candidates: Candidate[]): Point[] {
+export function hullOf(candidates: Candidate[]): Point[] {
   const known = hulls.get(candidates);
   if (known) return known;
   const pts = candidates
@@ -199,7 +253,7 @@ function hullDistance(p: Point, hull: Point[]) {
     if (vx * (p.y - a.y) - vy * (p.x - a.x) < 0) inside = false;
     const len2 = vx * vx + vy * vy;
     const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
-    d = Math.min(d, Math.hypot(p.x - a.x - t * vx, p.y - a.y - t * vy));
+    d = Math.min(d, len(p.x - a.x - t * vx, p.y - a.y - t * vy));
   }
   return inside ? 0 : d;
 }

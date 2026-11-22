@@ -22,6 +22,19 @@ import {
   behaviors as focusBehaviors,
 } from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/FocusSwitcher.stories";
 
+import {
+  regionsOverlay,
+  type RegionsOverlay,
+} from "../../../../packages/gofish-graphics/stories/_proposals/tooltips/focusDebug";
+
+/** The "Show regions" overlay of each mounted demo, made on first use. */
+const overlays = new Map<HTMLElement, RegionsOverlay>();
+const overlayOf = (el: HTMLElement) => {
+  let o = overlays.get(el);
+  if (!o) overlays.set(el, (o = regionsOverlay(el)));
+  return o;
+};
+
 const demos: Record<string, (el: HTMLElement) => unknown> = {
   "issue-bar": issueBar,
   "stack-segment": stackSegment,
@@ -36,7 +49,21 @@ const demos: Record<string, (el: HTMLElement) => unknown> = {
 (window as any).TooltipDemos = {
   names: Object.keys(demos),
   /** The focus switcher: the behaviors' names, and the one to use. */
-  focus: { names: Object.keys(focusBehaviors), select: selectFocus },
+  focus: {
+    names: Object.keys(focusBehaviors),
+    select(name: string) {
+      selectFocus(name);
+      overlays.forEach((o) => o.refresh());
+    },
+  },
+  /** "Show regions": turn the overlay of the demo in `element` on or off;
+   *  `stats` and `keyAt` are for tests. */
+  regions: {
+    set: (element: HTMLElement, on: boolean) => overlayOf(element).set(on),
+    stats: (element: HTMLElement) => overlayOf(element).stats(),
+    keyAt: (element: HTMLElement, x: number, y: number) =>
+      overlayOf(element).keyAt(x, y),
+  },
   /** Render demo `name` into `element`. Resolves when its `<svg>` is in the
    *  DOM; rejects if the demo throws or draws nothing within 10 s. */
   async mount(name: string, element: HTMLElement): Promise<SVGSVGElement> {

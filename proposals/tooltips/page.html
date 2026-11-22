@@ -516,6 +516,54 @@
     flex-direction: column;
     gap: 10px;
   }
+  /* "Show regions", added under every live demo. */
+  .regions {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .regions label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    width: fit-content;
+    cursor: pointer;
+    color: var(--fg);
+  }
+  .regions input {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    accent-color: var(--accent);
+  }
+  .regions input:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+  .regions ul {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .regions ul[hidden] {
+    display: none;
+  }
+  .regions li {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .regions li svg {
+    flex: none;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 3px;
+  }
   .behavior[hidden] {
     display: none;
   }
@@ -1960,6 +2008,37 @@ Focus.from(largestNear).within(8);</code></pre>
     </article>
 
     <div class="section">
+      <h2>Show regions</h2>
+      <p>
+        Every live chart on this page has a <b>Show regions</b> box under it. It
+        tints, for every place the pointer could be, the mark the current
+        behavior would pick there, with the current focus stronger and the
+        borders it would have with no focus dashed. It also draws what the
+        behavior measures to, the hull of the marks, the
+        <code>.within</code> limits, and a line from the pointer to the point
+        the gap was measured to. The regions are found by running the behavior
+        at every point of a 3 px grid, so they are right for any behavior, a
+        plain function included. The idea and the look are from Dragology's
+        overlay visualizer, which draws each drag operator's targets, hull and
+        gap over the running demo.
+      </p>
+      <figure>
+        <div class="frame">
+          <img
+            src="img/focus-regions.png"
+            alt="The issue bar chart with Show regions on: each bar has a tinted band around it, the focused bar's band is stronger, and magenta lines show the hull of the bars and the 8 and 12 px limits"
+          />
+        </div>
+        <figcaption>
+          The default behavior with INF→VO focused and the pointer in the gap
+          under it. Each bar's band ends 8 px past the hull of the bars (solid
+          magenta). The focused bar's band is stronger, reaches 2 px further
+          into each neighbor, and ends 12 px past the hull (dashed).
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="section">
       <h2>The default, written out</h2>
       <p>
         A pointer inside a mark picks that mark. Otherwise the focus is the mark
@@ -2265,6 +2344,18 @@ chart(yearly)
                 chart builds its id-to-item map.
               </td>
               <td><code>snap</code> registers its input itself.</td>
+              <td>#830</td>
+            </tr>
+            <tr>
+              <td>Reading the frame, for a tool</td>
+              <td>
+                <code>inspect(container)</code> hands Show regions the
+                candidates, the current focus, the last pointer and result, and
+                a call after each frame.
+              </td>
+              <td>
+                The input's frame and result are data that any code can read.
+              </td>
               <td>#830</td>
             </tr>
           </tbody>
@@ -3291,6 +3382,57 @@ girafe(ggobj = gg)</code></pre>
         "0 0 " + svg.getAttribute("width") + " " + svg.getAttribute("height");
       if (svg.getAttribute("viewBox") !== box) svg.setAttribute("viewBox", box);
     }
+    // "Show regions": a checkbox under a live demo, and a legend shown while
+    // it is on. The overlay itself is drawn by the demo (focusDebug.ts).
+    var swatch = {
+      region:
+        '<rect x="1" y="1" width="9" height="12" fill="#f59f00" fill-opacity=".3"/><rect x="10" y="1" width="9" height="12" fill="#0ca678" fill-opacity=".3"/><path d="M10 1V13" stroke="#1f2937"/>',
+      current:
+        '<rect x="1" y="1" width="18" height="12" fill="#f59f00" fill-opacity=".5"/><path d="M1 9H19" stroke="#1f2937" stroke-dasharray="3 2"/>',
+      position:
+        '<circle cx="10" cy="7" r="2.5" fill="#d100d1"/><path d="M3 7H7M13 7H17" stroke="#d100d1" stroke-width="2"/>',
+      hull: '<path d="M2 12L6 2H17L18 12Z" fill="none" stroke="#d100d1" stroke-width="1.25"/>',
+      limit:
+        '<path d="M2 11C2 4 6 2 10 2" fill="none" stroke="#d100d1"/><path d="M10 2C15 2 18 5 18 11" fill="none" stroke="#d100d1" stroke-dasharray="3 2"/>',
+      line: '<path d="M3 11L17 3" stroke="#fff" stroke-width="4"/><path d="M3 11L17 3" stroke="#d100d1" stroke-width="1.5" stroke-dasharray="3 2"/><circle cx="17" cy="3" r="2" fill="none" stroke="#d100d1"/>',
+    };
+    var legend = [
+      ["region", "a mark's region: where the pointer picks it"],
+      [
+        "current",
+        "the current focus, stronger; dashed: the borders with no focus",
+      ],
+      ["position", "what is measured to (a tick: one axis)"],
+      ["hull", "the hull of the marks"],
+      ["limit", "the within limit; dashed: once focused"],
+      ["line", "pointer to the measured point, with the gap"],
+    ];
+    function regionsControl(demo) {
+      var box = document.createElement("div");
+      box.className = "regions";
+      var label = document.createElement("label");
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      label.append(input, " Show regions");
+      var list = document.createElement("ul");
+      list.hidden = true;
+      list.setAttribute("aria-label", "Regions legend");
+      legend.forEach(function (row) {
+        var li = document.createElement("li");
+        li.innerHTML =
+          '<svg width="20" height="14" viewBox="0 0 20 14" aria-hidden="true">' +
+          swatch[row[0]] +
+          "</svg>";
+        li.append(row[1]);
+        list.appendChild(li);
+      });
+      input.addEventListener("change", function () {
+        list.hidden = !input.checked;
+        api.regions.set(demo, input.checked);
+      });
+      box.append(label, list);
+      return box;
+    }
     function mount(frame) {
       var demo = document.createElement("div");
       demo.className = "demo";
@@ -3305,6 +3447,7 @@ girafe(ggobj = gg)</code></pre>
           fit(demo);
           frame.classList.add("is-live");
           frame.parentElement.classList.add("is-live");
+          if (api.regions) frame.after(regionsControl(demo));
         })
         .catch(function (e) {
           demo.remove();

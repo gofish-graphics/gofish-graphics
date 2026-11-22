@@ -255,6 +255,12 @@ chart(yearly)
 
 The live switcher on the page runs seven behaviors on the issue's bar chart. Six are one or three lines. The seventh is a plain function of six lines, the bar with the largest share within 60 px, used as `.tooltip({ focus: largestNear })`, as an argument (`Focus.first([Focus.hit(), largestNear])`) or lifted to chain (`Focus.from(largestNear).within(8)`). What each did under the real mouse is in NOTES.md.
 
+### Show regions
+
+Every live chart on the page has a **Show regions** box under it. It tints, for every place the pointer could be, the mark the current behavior would pick there, with the current focus stronger and the borders it would have with no focus dashed. It also draws what the behavior measures to, the hull of the marks, the `.within` limits, and a line from the pointer to the point the gap was measured to. The regions are found by running the behavior at every point of a 3 px grid, so they are right for any behavior, a plain function included. The idea and the look are from Dragology's overlay visualizer, which draws each drag operator's targets, hull and gap over the running demo.
+
+![The issue bar chart with Show regions on](img/focus-regions.png)
+
 ### What the runtime must provide
 
 The behaviors are user code today. The runtime around them is not. The prototype does each piece by hand in `focusRuntime.ts`, and with these public that file is one call to `pointer().snap`.
@@ -269,6 +275,7 @@ The behaviors are user code today. The runtime around them is not. The prototype
 | The click                                      | A DOM `click` listener sets `clicked`.                                                                                                        | A click in the frame. `click()` today counts only a press and release on one mark.                      | #830  |
 | The box out of the pointer's way               | CSS that finds the box by its stroke color and sets `pointer-events: none`.                                                                   | A floating layer is never a pointer target.                                                             |       |
 | Registering the pointer                        | A `live()` channel reads `ping()`, so the chart builds its id-to-item map.                                                                    | `snap` registers its input itself.                                                                      | #830  |
+| Reading the frame, for a tool                  | `inspect(container)` hands Show regions the candidates, the current focus, the last pointer and result, and a call after each frame.          | The input's frame and result are data that any code can read.                                           | #830  |
 
 One hook of the first prototype is gone: re-targeting each pointer event to the focused mark's element. The adapter now writes the focus directly.
 

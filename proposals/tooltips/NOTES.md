@@ -576,13 +576,69 @@ against 344.5) and closes 3 px sooner.
 
 ### What the runtime must provide
 
-| Piece                                          | The prototype, by hand                                                                                  | Public API that replaces it                                  | Issue |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----- |
-| Candidates                                     | CSS selector and count over the drawn SVG; boxes measured; rows from the chart's private id-to-item map | `snap(selectAll(name))` builds them from the layout frame    | #830  |
-| Placed position                                | Each story passes the placing axes                                                                      | The layout reports them (the kind of space)                  | #849  |
-| Stable key                                     | Each story passes a key function; marks with one key are one candidate                                  | Keys from spec position and data key                         | #673  |
-| The current focus, and re-running on a new key | The chosen key in a `signal`, set only on change; `current` found by key in each new frame              | `snap`'s result changes only when its key changes            | #830  |
-| The pointer                                    | Container listeners and the screen CTM; a tap holds the pointer until the next tap                      | `pointer()` as the frame's pointer, holding a tap on touch   |       |
-| The click                                      | A DOM `click` listener                                                                                  | A click in the frame; `click()` counts only clicks on a mark | #830  |
-| The box out of the pointer's way               | CSS found by the box's stroke                                                                           | A floating layer is never a pointer target                   |       |
-| Registering the pointer                        | `ping()` read in a `live()` channel                                                                     | `snap` registers its input                                   | #830  |
+| Piece                                          | The prototype, by hand                                                                                                              | Public API that replaces it                                  | Issue |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----- |
+| Candidates                                     | CSS selector and count over the drawn SVG; boxes measured; rows from the chart's private id-to-item map                             | `snap(selectAll(name))` builds them from the layout frame    | #830  |
+| Placed position                                | Each story passes the placing axes                                                                                                  | The layout reports them (the kind of space)                  | #849  |
+| Stable key                                     | Each story passes a key function; marks with one key are one candidate                                                              | Keys from spec position and data key                         | #673  |
+| The current focus, and re-running on a new key | The chosen key in a `signal`, set only on change; `current` found by key in each new frame                                          | `snap`'s result changes only when its key changes            | #830  |
+| The pointer                                    | Container listeners and the screen CTM; a tap holds the pointer until the next tap                                                  | `pointer()` as the frame's pointer, holding a tap on touch   |       |
+| The click                                      | A DOM `click` listener                                                                                                              | A click in the frame; `click()` counts only clicks on a mark | #830  |
+| The box out of the pointer's way               | CSS found by the box's stroke                                                                                                       | A floating layer is never a pointer target                   |       |
+| Registering the pointer                        | `ping()` read in a `live()` channel                                                                                                 | `snap` registers its input                                   | #830  |
+| Reading the frame, for a tool                  | `inspect(container)` hands Show regions the candidates, the current focus, the last pointer and result, and a call after each frame | The input's frame and result are data that any code can read | #830  |
+
+## Show regions
+
+Every live chart on the page has a **Show regions** checkbox under it, made
+by the page script once the demo is live (the 7 Examples demos and the
+switcher). The overlay is `focusDebug.ts`, user code over `inspect` from
+`focusRuntime.ts` and the `reads` each behavior declares in `focus.ts`. It
+follows Dragology's overlay visualizer: each Dragology operator draws its
+targets, a magenta line from the pointer to the target labeled with the gap,
+and its active option stronger than the rest. Dragology does not sample
+regions; that part is new here.
+
+The regions come from running the behavior at the center of every 3 px cell
+of the chart, with `clicked: true` (so pin shows where a click would land),
+in slices of at most 8 ms. Borders are traced by marching squares between
+cell centers, so they can sit up to 1.5 px off the true border. A second
+pass with no current focus draws its borders dashed where they differ. A
+pass runs only when the focus or the drawing changes: a sweep of 201 moves
+over the bars made 16 focus changes and 16 recomputes.
+
+Cost of one pass (Chrome, M-series Mac):
+
+| Chart, behavior                       | Cells  | Work, ms       | Wall, ms       |
+| ------------------------------------- | ------ | -------------- | -------------- |
+| Bars: default (and the no-focus pass) | 30 247 | 9 (+9)         | 17             |
+| Bars: hit / center / outline / custom | 30 247 | 4 / 7 / 11 / 3 | 4 / 7 / 20 / 3 |
+| Stacked segments                      | 22 625 | 9              | 23             |
+| Shared lines                          | 27 972 | 12             | 28             |
+| Scatter, 342 points                   | 27 186 | 134            | 227            |
+
+The scatter adds long tasks of 50 to 59 ms while regions are on (it has one
+52 ms task with them off); the bars add none.
+
+Agreement: at 24 random points per behavior (7) and per Examples demo (7),
+the real mouse picked the mark the regions show at 336 of 336 points.
+`check.mjs` and `focus.mjs` pass with the boxes on and off, with the same
+focus sweeps. Turning a box off removes the layer. The layer has
+`pointer-events="none"` and sits under the tooltip box.
+
+What the screenshots show: default, row bands that end 8 px past the hull,
+the focused row stronger and 2 px wider into each neighbor; hit, outlines on
+the bars only; center, disks around the bar centers; outline, slanted bands
+toward the bar ends; scatter, Voronoi cells clipped by the grown hull;
+stacked segments, one band per segment in each column.
+
+Known faults: the dashed no-focus border zigzags along the hull's diagonal
+at 2x; the gap label can sit on its own line; a plain function declares no
+`reads`, so its line ends at the nearest point of the chosen box.
+
+While checking with the boxes on, `check.mjs` found a prototype bug that the
+boxes only exposed: the runtime cached the screen-to-svg matrix with the
+drawing, so after the page scrolled (checking a box scrolls it into view)
+the pointer was read hundreds of px off. `focusRuntime.ts` now reads the
+matrix on every event and waits until the chart has its id-to-item map
+before reading candidates.

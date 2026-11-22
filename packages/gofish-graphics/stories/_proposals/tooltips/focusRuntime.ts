@@ -10,9 +10,40 @@
  */
 import { signal, pointer, type Signal } from "../../../src/lib";
 import { TOOLTIP_STROKE } from "./helpers";
-import { defaultFocus, type Box, type Candidate, type FocusBehavior, type Frame, type Point } from "./focus";
+import {
+  defaultFocus,
+  type Box,
+  type Candidate,
+  type FocusBehavior,
+  type Frame,
+  type Point,
+  type Result,
+} from "./focus";
 
 export type Axis = "x" | "y";
+
+/** What a tool such as the region overlay can read about a snap input. */
+export type Inspector = {
+  /** The behavior the input runs. */
+  behavior: () => FocusBehavior;
+  /** The candidates of the drawn chart, the current focus, and the last
+   *  pointer and result (whose choice may belong to the drawing before;
+   *  match it by key). Coordinates are the drawn `<svg>`'s user units. */
+  frame: () =>
+    | {
+        svg: SVGSVGElement;
+        candidates: Candidate[];
+        current: Candidate | undefined;
+        pointer: Point | undefined;
+        result: Result | undefined;
+      }
+    | undefined;
+  /** Called after every frame the behavior runs on. Returns an unsubscribe. */
+  listen: (l: () => void) => () => void;
+};
+const inspectors = new WeakMap<HTMLElement, Inspector>();
+/** The snap input mounted in `container`, if any. */
+export const inspect = (container: HTMLElement) => inspectors.get(container);
 
 /** Which drawn marks are candidates, and the facts about them that the
  *  stories pass by hand. */
@@ -39,28 +70,59 @@ export function snap<K>(container: HTMLElement, marks: Marks<K>, focus: FocusBeh
   floatingOutOfTheWay(container);
   const ping = registerPointer();
   const chosen = signal<K | undefined>(undefined);
-  let drawn: { svg: SVGSVGElement; inv: DOMMatrix; candidates: Candidate[] } | undefined;
+  let drawn: { svg: SVGSVGElement; candidates: Candidate[] } | undefined;
   const held = touchHold();
 
-  const run = (e: PointerEvent | MouseEvent, clicked: boolean) => {
+  // STANDS IN FOR candidates published with the frame: re-read once per
+  // drawn <svg>, as every re-render draws a new one. They are in the svg's
+  // user units, so they hold when the page scrolls; the screen-to-svg
+  // matrix does not, so it is read again every time.
+  const read = () => {
     const svg = container.querySelector("svg");
     const ctm = svg?.getScreenCTM();
-    if (!svg || !ctm) return;
-    // STANDS IN FOR candidates published with the frame: re-read once per
-    // drawn <svg>, as every re-render draws a new one.
+    if (!svg || !ctm) return undefined;
+    const inv = ctm.inverse();
     if (drawn?.svg !== svg) {
-      const inv = ctm.inverse();
-      drawn = { svg, inv, candidates: candidatesOf(container, svg, inv, marks) };
+      const candidates = candidatesOf(container, svg, inv, marks);
+      // Not yet: the chart has not built its id-to-item map for this drawing.
+      if (!candidates) return undefined;
+      drawn = { svg, candidates };
     }
-    const pointerAt = held(e, svg, drawn.inv);
+    return { ...drawn, inv };
+  };
+  let last: { frame: Frame; result: Result } | undefined;
+  const run = (e: PointerEvent | MouseEvent, clicked: boolean) => {
+    const d = read();
+    if (!d) return;
+    const pointerAt = held(e, d.svg, d.inv);
     // STANDS IN FOR the runtime remembering `current` by key (#673).
-    const current = drawn.candidates.find((c) => c.key === chosen());
-    const frame: Frame = { pointer: pointerAt, candidates: drawn.candidates, current, clicked };
-    const key = focus(frame).choice?.key as K | undefined;
+    const current = d.candidates.find((c) => c.key === chosen());
+    const frame: Frame = { pointer: pointerAt, candidates: d.candidates, current, clicked };
+    const result = focus(frame);
+    last = { frame, result };
+    const key = result.choice?.key as K | undefined;
     // STANDS IN FOR snap's re-run rule: the spec re-runs only when the key
     // changes, not on every pointer move.
     if (key !== chosen()) chosen.set(key);
+    listeners.forEach((l) => l());
   };
+  const listeners = new Set<() => void>();
+  // STANDS IN FOR reading the snap input's frame as data: with `pointer().snap`
+  // public, its last frame and result (pointer, candidates, current, choice)
+  // would be readable like any other dataset, which is all focusDebug.ts needs.
+  inspectors.set(container, {
+    behavior: () => focus,
+    frame: () => {
+      const d = read();
+      if (!d) return undefined;
+      const current = d.candidates.find((c) => c.key === chosen());
+      return { svg: d.svg, candidates: d.candidates, current, pointer: last?.frame.pointer, result: last?.result };
+    },
+    listen: (l) => {
+      listeners.add(l);
+      return () => listeners.delete(l);
+    },
+  });
   container.addEventListener("pointermove", (e) => run(e, false));
   container.addEventListener("pointerdown", (e) => run(e, false));
   // STANDS IN FOR a click in the frame. `click()` today counts only clicks
@@ -79,11 +141,18 @@ export function snap<K>(container: HTMLElement, marks: Marks<K>, focus: FocusBeh
  * (its id-to-item map). The axes that place a mark are passed by hand; the
  * layout knows them (the kind of space, #849).
  */
-function candidatesOf<K>(container: HTMLElement, svg: SVGSVGElement, inv: DOMMatrix, marks: Marks<K>): Candidate[] {
+function candidatesOf<K>(
+  container: HTMLElement,
+  svg: SVGSVGElement,
+  inv: DOMMatrix,
+  marks: Marks<K>
+): Candidate[] | undefined {
   const items: Map<string, { datum: unknown }> | undefined = (container as any).__gofishState?.runtime?.itemsById;
+  const els = [...svg.querySelectorAll(marks.selector)].slice(0, marks.count);
+  if (!items || els.some((el) => !items.has(el.getAttribute("data-gf-id") ?? ""))) return undefined;
   const groups = new Map<unknown, Candidate>();
-  for (const el of [...svg.querySelectorAll(marks.selector)].slice(0, marks.count)) {
-    const d = items?.get(el.getAttribute("data-gf-id") ?? "")?.datum;
+  for (const el of els) {
+    const d = items.get(el.getAttribute("data-gf-id") ?? "")?.datum;
     const rows = Array.isArray(d) ? d : [d];
     const key = marks.key(rows[0]);
     const part = { box: drawnBox(el, inv), round: el.tagName === "ellipse" };

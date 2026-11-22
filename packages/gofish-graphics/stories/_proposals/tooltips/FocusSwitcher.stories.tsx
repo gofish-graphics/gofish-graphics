@@ -5,7 +5,7 @@
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Focus, boxDistance, defaultFocus, type FocusBehavior } from "./focus";
+import { Focus, boxDistance, defaultFocus, readsOf, type FocusBehavior, type Frame } from "./focus";
 import { mountInteractive as issueBar } from "./IssueBar.stories";
 
 // The lowercase exports are builders and mounts, not stories.
@@ -36,8 +36,13 @@ let selected = "default";
 export function select(name: string) {
   if (behaviors[name]) selected = name;
 }
-/** A behavior is a function, so switching is one more user function. */
-const switching: FocusBehavior = (frame) => behaviors[selected](frame);
+/** A behavior is a function, so switching is one more user function. It
+ *  passes on what the selected behavior reads, for the region overlay. */
+const switching: FocusBehavior = Object.defineProperty(
+  (frame: Frame) => behaviors[selected](frame),
+  "reads",
+  { get: () => readsOf(behaviors[selected]) }
+);
 
 export const mountBars = (container: HTMLElement) => issueBar(container, switching);
 
