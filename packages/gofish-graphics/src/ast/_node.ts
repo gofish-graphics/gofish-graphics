@@ -2123,6 +2123,19 @@ export class GoFishNode {
   }
 
   /**
+   * True when this node is a layer that holds nothing to draw: no child, or
+   * only layers that hold nothing (a `.layer(...)` tier whose filter kept no
+   * mark). It has no box, so it takes no room in its parent: the claim walk
+   * reads it as ink (`ClaimChild.inkOn`), and the parent's box leaves it out.
+   */
+  public isEmptyLayer(): boolean {
+    return (
+      this.type === "layer" &&
+      this.children.every((c) => c instanceof GoFishNode && c.isEmptyLayer())
+    );
+  }
+
+  /**
    * The box this node's rings of chrome dress: down its first child through
    * each ring to the node they wrap. This node itself when it is no ring.
    */

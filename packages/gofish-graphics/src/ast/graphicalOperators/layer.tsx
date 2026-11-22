@@ -312,6 +312,7 @@ export const layer = createNodeOperatorSequential(
         placed: placed[i],
         inkOn:
           (c as GoFishNode).inkOn?.[axis] === true ||
+          (c instanceof GoFishNode && c.isEmptyLayer()) ||
           (c instanceof GoFishNode &&
             c.placedFromRefs !== undefined &&
             placed[i] === undefined) ||
