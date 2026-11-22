@@ -55,7 +55,7 @@ const swatches: [string, any, string, string][] = [
         stroke-width={1.2}
       />,
     ]),
-    "Pattern.tile(",
+    "Pattern.repeat(",
     "[circle({ r: 3.5 })])",
   ],
   [
@@ -67,7 +67,7 @@ const swatches: [string, any, string, string][] = [
       <circle cx={0} cy={16} r={1.6} fill="#4e79a7" />,
       <circle cx={16} cy={16} r={1.6} fill="#4e79a7" />,
     ]),
-    "Pattern.tile(",
+    "Pattern.repeat(",
     "[triangle, dot])",
   ],
 ];

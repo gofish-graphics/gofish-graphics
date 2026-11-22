@@ -9,7 +9,7 @@
 ## Terms
 
 - **Paint.** What a shape is filled or stroked with. SVG's word. Today a GoFish paint is always one color.
-- **Pattern.** A paint made by repeating a small picture, the tile, across the shape. A hatch is a pattern whose tile is one line.
+- **Pattern.** A paint made by repeating a small picture, the unit, across the shape. A hatch is a pattern whose unit is one line.
 - **Effect.** A change applied to a mark after it has been drawn, such as a shadow or a blur. It never changes layout. GoFish already has two (`Filter.grayscale`, `Filter.luminanceToAlpha`).
 - **Theme.** A set of default option values. A default is what a mark uses for an option the user did not write.
 - **Chrome.** The parts of a chart that are not data marks: axes, legends, labels, titles. In GoFish these are ordinary nodes since #1293.
@@ -79,7 +79,7 @@ rect({
 });
 rect({
   h: "count",
-  fill: Pattern.tile(circle({ r: 3.5, fill: "none", stroke: Color.ink }), {
+  fill: Pattern.repeat(circle({ r: 3.5, fill: "none", stroke: Color.ink }), {
     spacing: 4,
   }),
 });
@@ -90,23 +90,23 @@ rect(h="count", fill=Pattern.lines())
 rect(h="count", fill=Pattern.lines(angle=0, gap=8, color="species"))
 rect(
     h="count",
-    fill=Pattern.tile(circle(r=3.5, fill="none", stroke=Color.ink), spacing=4),
+    fill=Pattern.repeat(circle(r=3.5, fill="none", stroke=Color.ink), spacing=4),
 )
 ```
 
 The family (see `img/pattern-grid.png`):
 
-| Member                            | Options                              | Draws                                                          |
-| --------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
-| `Pattern.lines`                   | `angle` (45), `gap` (6), `width` (1) | parallel lines                                                 |
-| `Pattern.cross`                   | `angle`, `gap`, `width`              | two sets of lines at right angles                              |
-| `Pattern.dots`                    | `gap` (6), `r` (1)                   | a grid of dots                                                 |
-| `Pattern.solid`                   |                                      | a flat fill, so a plain color can sit in a palette of patterns |
-| `Pattern.tile(node, { spacing })` | any GoFish node                      | that node, repeated                                            |
+| Member                              | Options                              | Draws                                                          |
+| ----------------------------------- | ------------------------------------ | -------------------------------------------------------------- |
+| `Pattern.lines`                     | `angle` (45), `gap` (6), `width` (1) | parallel lines                                                 |
+| `Pattern.cross`                     | `angle`, `gap`, `width`              | two sets of lines at right angles                              |
+| `Pattern.dots`                      | `gap` (6), `r` (1)                   | a grid of dots                                                 |
+| `Pattern.solid`                     |                                      | a flat fill, so a plain color can sit in a palette of patterns |
+| `Pattern.repeat(node, { spacing })` | any GoFish node                      | that node, repeated                                            |
 
 Every member also takes `color` (default `Color.ink`; it may be a field, like any color) and `background` (default none). `Pattern.lines` is `Pattern.lines()`, as in the other families.
 
-`Pattern.tile` is the general member and the other three are named cases of it: `Pattern.lines()` is a tile holding one `line`. A pattern fill itself is sugar for something the core already draws. The tile is repeated across the mark's box and kept only where the mark is, which is what `atop` does with a mark and a layer of tiles. So patterns add no new kind of drawing.
+`Pattern.repeat` is the general member and the other three are named cases of it: `Pattern.lines()` is a unit holding one `line`. A pattern fill itself is sugar for something the core already draws. The unit is repeated across the mark's box and kept only where the mark is, which is what `atop` does with a mark and a layer of units. So patterns add no new kind of drawing.
 
 **How a pattern is built.** It is sugar over the core, plus one new primitive.
 
@@ -117,19 +117,19 @@ rect({ h: "count", fill: Pattern.lines({ gap: 6 }) });
 // What it means, in three steps of sugar
 rect({
   h: "count",
-  fill: Pattern.tile(line({ w: 6, stroke: Color.ink }), { angle: 45 }),
+  fill: Pattern.repeat(line({ w: 6, stroke: Color.ink }), { angle: 45 }),
 });
 atop([
   rect({ h: "count" }),
-  tile(line({ w: 6, stroke: Color.ink }), { angle: 45 }),
+  repeat(line({ w: 6, stroke: Color.ink }), { angle: 45 }),
 ]);
 ```
 
-- `lines`, `cross`, `dots` and `solid` are plain functions that return `Pattern.tile(...)` of ordinary marks. They have no code of their own in the engine.
-- A pattern fill is `atop` of the mark and a tiling. `atop` exists.
-- The one new thing is the tiling: one node repeated across a box. It cannot be sugar, because writing it out as thousands of copies would put every copy through layout. The colorbar legend shows the cost: with no gradient primitive it draws 40 stacked rects. So the display list gets one item, "repeat this group across this box", which the SVG painter writes as a `<pattern>`. The tile itself is laid out and lowered once, by the normal engine.
+- `lines`, `cross`, `dots` and `solid` are plain functions that return `Pattern.repeat(...)` of ordinary marks. They have no code of their own in the engine.
+- A pattern fill is `atop` of the mark and a repeat. `atop` exists.
+- The one new thing is the repeat: one node repeated across a box. It cannot be sugar, because writing it out as thousands of copies would put every copy through layout. The colorbar legend shows the cost: with no gradient primitive it draws 40 stacked rects. So the display list gets one item, "repeat this group across this box", which the SVG painter writes as a `<pattern>`. The unit itself is laid out and lowered once, by the normal engine.
 
-So there is no pattern code path. Whether the tiling is also a public operator is a separate choice; a pictogram bar has the same shape, but its repeat is counted in data, so the tiling stays internal until an example asks for it. Not yet checked by prototype: that `atop` over a tiling lowers to one pattern-filled shape and not a mask per mark.
+So there is no pattern code path. Whether the repeat is also a public operator is a separate choice; a pictogram bar has the same shape, but its repeat is counted in data, so the repeat stays internal until an example asks for it. Not yet checked by prototype: that `atop` over a repeat lowers to one pattern-filled shape and not a mask per mark.
 
 **A palette may hold patterns.** This is what makes the Cogra bar chart work.
 
@@ -198,11 +198,11 @@ The cost is `Pattern.solid`, a member that exists so a solid fill can sit in a p
 
 ### Not recommended: composition only
 
-Write the desugared form by hand: `atop([rect(...), tiles])`. It needs no new API, and it stays available. But a pattern chosen by a data field then needs a `createMark` wrapper around every mark, and palettes, legends and themes cannot see it.
+Write the desugared form by hand: `atop([rect(...), units])`. It needs no new API, and it stays available. But a pattern chosen by a data field then needs a `createMark` wrapper around every mark, and palettes, legends and themes cannot see it.
 
 ### The name
 
-`Pattern` is Figma's fill type, SVG's element and TikZ's key. Typst renamed its `pattern` to `tiling` in 0.13. "Texture" is Bertin's word in English and the issue's word, but in Figma a Texture is an effect, and He et al. use "pattern" for the fill and "texture" for the surface look. `Hatch` covers only lines. PR #1366 adds a rule that the option taking a family member has the same name in lowercase. `fill: Pattern.lines()` departs from that rule in the way `spacing: 8` and `fill: "red"` already do: `fill` takes a paint, and a color and a pattern are both paints. If that rule should hold strictly, the family is `Fill` (`fill: Fill.lines()`), which reads worse on `stroke`.
+`Pattern` is Figma's fill type, SVG's element and TikZ's key. Typst renamed its `pattern` to `tiling` in 0.13. "Texture" is Bertin's word in English and the issue's word, but in Figma a Texture is an effect, and He et al. use "pattern" for the fill and "texture" for the surface look. `Hatch` covers only lines. The general member is `Pattern.repeat(node)`, not `tile`, because `tile` is becoming the operator that `treemap` is renamed to (#1355), with its `Tile` family. "Repeat" is the word CSS (`background-repeat`), canvas (`createPattern(image, "repeat")`) and Compose (`TileMode.Repeated`) use. GoFish has a `repeat` data helper inside `derive`, which repeats rows; the two never meet in one position. The runner-up is `Pattern.of(node)`. PR #1366 adds a rule that the option taking a family member has the same name in lowercase. `fill: Pattern.lines()` departs from that rule in the way `spacing: 8` and `fill: "red"` already do: `fill` takes a paint, and a color and a pattern are both paints. If that rule should hold strictly, the family is `Fill` (`fill: Fill.lines()`), which reads worse on `stroke`.
 
 ## Part 2. Effects
 
@@ -470,11 +470,11 @@ This is how the Bluefish stories keep a house style today (`stories/bluefish/Pyt
 
 ## Why this design
 
-- **It desugars into the core.** A pattern fill is `atop` over tiles. An effect is the `filter` that exists. A theme is the options the user did not write. (`principles.md`, "Desugaring over special-casing".)
+- **It desugars into the core.** A pattern fill is `atop` over a repeated node. An effect is the `filter` that exists. A theme is the options the user did not write. (`principles.md`, "Desugaring over special-casing".)
 - **A default is sugar.** `defaultTheme` gives every style default a spelling. (`api-design.md`, "A default is sugar, not a branch".)
 - **One concept, one mechanism.** Paints cover colors, patterns and later gradients and images, where a second channel would overlap them in the middle. (`api-design.md`, "Overlap is fine at the edges".)
 - **Almost no new words.** `Pattern`, `theme`, four role colors. Theme keys are existing mark and chrome names. The effect names are Figma's and Illustrator's.
-- **Closed kinds plus an open member.** `Pattern.lines`, `cross` and `dots` are presets of `Pattern.tile`, which takes any node. (`three-surfaces.md`; the memory rule "named presets are exact points in one tunable space".)
+- **Closed kinds plus an open member.** `Pattern.lines`, `cross` and `dots` are presets of `Pattern.repeat`, which takes any node. (`three-surfaces.md`; the memory rule "named presets are exact points in one tunable space".)
 - **The same in Python.** A theme is nested dicts of keyword names. Nothing in it is a function, so all of it crosses the wire.
 - **It is the context #222 asked for**, and the "theme supplies the ranges" layer #380 asked for, without the fixed record that `composition-not-enumeration.md` criticizes in the grammar of graphics.
 
@@ -502,7 +502,7 @@ One earlier decision needs a careful reading. In #1267 Josh ruled that an operat
 Kept for later sessions. Each is decided as stated unless Josh says otherwise.
 
 - Pattern lengths (`gap`, `width`, `r`) are in pixels.
-- `Pattern.tile` takes its tile size from the node's box, plus `spacing`.
+- `Pattern.repeat` takes its unit size from the node's box, plus `spacing`.
 - Type roles (title, label, caption sizes shared across chrome parts, as `graphic-design.md` asks) are left for a second round. In this round each chrome part has its own text options.
 - User-defined role colors beyond the four are not in this round.
 - A whole-figure effect is written on the chart or layer, not inside the theme, because `filter` is not inherited: a rule under `layer` would filter every nested layer again. A look that bundles a theme and an effect is a function that wraps a node.
@@ -512,7 +512,7 @@ Kept for later sessions. Each is decided as stated unless Josh says otherwise.
 - A `url(#...)` string already passes through `Color.palette`, and legend swatches and ribbons pick it up. So palettes of paints need little new plumbing.
 - Patterns line up across neighboring marks today because the rendered SVG is flat, with every mark in page pixels. That would break if marks were drawn inside transformed groups.
 - Automatic label color treats a `url(#...)` fill as no paint (`labels/autoLabelColor.ts`). A pattern needs a color to contrast against.
-- The 10 pixel legend swatch (`legends/elaborate.tsx`, `SWATCH_SIZE`) shows half a tile. Pattern swatches need to be larger and outlined, with the pattern anchored to the swatch.
+- The 10 pixel legend swatch (`legends/elaborate.tsx`, `SWATCH_SIZE`) shows half a unit. Pattern swatches need to be larger and outlined, with the pattern anchored to the swatch.
 - A default rect's stroke copies its fill, so a pattern fill becomes the stroke paint too. With a pattern fill the stroke should take the pattern's `color`.
 - Text is measured during layout, so a theme's font must be known when the tree is built. A theme cannot be a paint-time pass.
 - SVG filter regions default to the element's bounding box. A straight line's box has no width, so the line vanishes. Shadows clip unless the region is padded. `feDropShadow` trips SolidJS's template check. SVG has no filter lists, so a list becomes one chained filter.

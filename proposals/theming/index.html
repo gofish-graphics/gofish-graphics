@@ -470,11 +470,11 @@ chart(seafood, { theme: cogra })
             <td>
               The <code>Pattern</code> family: <code>lines</code>,
               <code>cross</code>, <code>dots</code>, <code>solid</code>,
-              <code>tile(node)</code>. <code>fill</code>,
+              <code>repeat(node)</code>. <code>fill</code>,
               <code>stroke</code> and palettes accept one.
             </td>
             <td>
-              A pattern fill is the tile repeated over the mark's box and kept
+              A pattern fill is one node repeated over the mark's box and kept
               where the mark is, which is <code>atop</code> today.
             </td>
           </tr>
@@ -526,13 +526,13 @@ chart(seafood, { theme: cogra })
       <figure>
         <img
           src="img/pattern-grid.png"
-          alt="Ten swatches: lines at four angles and two weights, cross hatch, two dot grids, a ring tile and a two-color tile"
+          alt="Ten swatches: lines at four angles and two weights, cross hatch, two dot grids, a repeated ring and a repeated two-color unit"
         />
         <figcaption>
           Each swatch is a <code>rect</code> with that fill.
-          <code>Pattern.tile</code> takes any GoFish node. The other members are
-          named cases of it: <code>Pattern.lines()</code> is a tile that holds
-          one line.
+          <code>Pattern.repeat</code> takes any GoFish node. The other members
+          are named cases of it: <code>Pattern.lines()</code> is a unit that
+          holds one line.
         </figcaption>
       </figure>
       <div class="codes">
@@ -542,7 +542,7 @@ chart(seafood, { theme: cogra })
 rect({ h: "count", fill: Pattern.lines({ angle: 0, gap: 8, color: "species" }) });
 rect({
   h: "count",
-  fill: Pattern.tile(circle({ r: 3.5, fill: "none", stroke: Color.ink }), {
+  fill: Pattern.repeat(circle({ r: 3.5, fill: "none", stroke: Color.ink }), {
     spacing: 4,
   }),
 });</code></pre>
@@ -553,7 +553,7 @@ rect({
 rect(h="count", fill=Pattern.lines(angle=0, gap=8, color="species"))
 rect(
     h="count",
-    fill=Pattern.tile(circle(r=3.5, fill="none", stroke=Color.ink), spacing=4),
+    fill=Pattern.repeat(circle(r=3.5, fill="none", stroke=Color.ink), spacing=4),
 )</code></pre>
         </div>
       </div>
@@ -589,7 +589,7 @@ rect(
             </td>
           </tr>
           <tr>
-            <td><code>Pattern.tile(node)</code></td>
+            <td><code>Pattern.repeat(node)</code></td>
             <td><code>spacing</code></td>
             <td>that node, repeated</td>
           </tr>
@@ -735,7 +735,7 @@ rect(
       </div>
       <pre><code class="language-javascript">chart(seafood, {
   color: Color.palette({
-    Bass: Pattern.tile(diamond, { color: "#2f77b4", background: "#e3eef8" }),
+    Bass: Pattern.repeat(diamond, { color: "#2f77b4", background: "#e3eef8" }),
     Trout: Pattern.lines({ color: "#c9a227", background: "#fbf3d5" }),
     Catfish: Pattern.dots({ color: "#7b5fb0", background: "#ece6f5" }),
     Perch: Pattern.cross({ color: "#f07a48", background: "#fde9df" }),
@@ -765,7 +765,7 @@ rect(
         </li>
         <li>
           <strong>Legend swatches need room.</strong> The 10 pixel swatch shows
-          half a tile. A swatch with a pattern is drawn larger, outlined, and
+          half a unit. A swatch with a pattern is drawn larger, outlined, and
           with the pattern anchored to the swatch.
         </li>
       </ul>
@@ -779,28 +779,28 @@ rect(
 rect({ h: "count", fill: Pattern.lines({ gap: 6 }) });
 
 // What it means, in three steps of sugar
-rect({ h: "count", fill: Pattern.tile(line({ w: 6, stroke: Color.ink }), { angle: 45 }) });
-atop([rect({ h: "count" }), tile(line({ w: 6, stroke: Color.ink }), { angle: 45 })]);</code></pre>
+rect({ h: "count", fill: Pattern.repeat(line({ w: 6, stroke: Color.ink }), { angle: 45 }) });
+atop([rect({ h: "count" }), repeat(line({ w: 6, stroke: Color.ink }), { angle: 45 })]);</code></pre>
       <ul>
         <li>
           <strong
             ><code>lines</code>, <code>cross</code>, <code>dots</code> and
             <code>solid</code> are plain functions</strong
           >
-          that return <code>Pattern.tile(...)</code> of ordinary marks. They
+          that return <code>Pattern.repeat(...)</code> of ordinary marks. They
           have no code of their own in the engine.
         </li>
         <li>
           <strong
             >A pattern fill is <code>atop</code> of the mark and a
-            tiling.</strong
+            repeat.</strong
           >
           <code>atop</code> exists and already keeps the second child only where
           the first is.
         </li>
         <li>
           <strong
-            >The one new thing is the tiling: one node repeated across a
+            >The one new thing is the repeat: one node repeated across a
             box.</strong
           >
           It cannot be sugar, because writing it out as thousands of copies
@@ -808,19 +808,19 @@ atop([rect({ h: "count" }), tile(line({ w: 6, stroke: Color.ink }), { angle: 45 
           that costs: with no gradient primitive it draws 40 stacked rects. So
           the display list gets one item, "repeat this group across this box",
           which the SVG painter writes as a <code>&lt;pattern&gt;</code>. The
-          tile itself is laid out and lowered once, by the normal engine.
+          unit itself is laid out and lowered once, by the normal engine.
         </li>
       </ul>
       <p>
         So there is no pattern code path. The engine learns to repeat a group,
         and a pattern is a name for <code>atop</code> plus that. Whether the
-        tiling is also a public operator is a separate choice. It is the same
+        repeat is also a public operator is a separate choice. It is the same
         shape as a pictogram bar, where a unit picture repeats inside a bar, but
         there the repeat is counted in data and here it is spaced in pixels, so
         I would keep it internal until an example asks for it.
       </p>
       <p class="note">
-        Not yet checked by prototype: that <code>atop</code> over a tiling
+        Not yet checked by prototype: that <code>atop</code> over a repeat
         lowers to one pattern-filled shape and not a mask per mark, which
         matters for a chart with hundreds of bars.
       </p>
@@ -834,6 +834,18 @@ atop([rect({ h: "count" }), tile(line({ w: 6, stroke: Color.ink }), { angle: 45 
         Figma a Texture is an effect, and the recent papers by He and others use
         "pattern" for the fill. <code>Hatch</code> covers only lines. Typst
         renamed its <code>pattern</code> to <code>tiling</code> in 0.13.
+      </p>
+      <p>
+        The general member is <code>Pattern.repeat(node)</code>, not
+        <code>tile</code>, because <code>tile</code> is becoming the operator
+        that <code>treemap</code> is renamed to (#1355), with its
+        <code>Tile</code> family. "Repeat" is the word CSS
+        (<code>background-repeat</code>), canvas (<code
+          >createPattern(image, "repeat")</code
+        >) and Compose (<code>TileMode.Repeated</code>) use, and designers call
+        the unit of a pattern its repeat. GoFish has a <code>repeat</code> data
+        helper inside <code>derive</code>, which repeats rows; the two never
+        meet in one position. The runner-up is <code>Pattern.of(node)</code>.
       </p>
       <p>
         PR #1366 adds a rule that the option taking a family member has the
@@ -1491,7 +1503,7 @@ chart(scores)
       <ul>
         <li>
           <strong>It desugars into the core.</strong> A pattern fill is
-          <code>atop</code> over tiles. An effect is the
+          <code>atop</code> over a repeated node. An effect is the
           <code>filter</code> that exists. A theme is the options the user did
           not write.
         </li>
@@ -1513,7 +1525,7 @@ chart(scores)
         <li>
           <strong>Named kinds plus an open member.</strong> <code>lines</code>,
           <code>cross</code> and <code>dots</code> are exact cases of
-          <code>Pattern.tile</code>.
+          <code>Pattern.repeat</code>.
         </li>
         <li>
           <strong>The same in Python.</strong> A theme is nested dicts with
