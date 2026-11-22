@@ -131,6 +131,16 @@ atop([
 
 So there is no pattern code path. Whether the repeat is also a public operator is a separate choice; a pictogram bar has the same shape, but its repeat is counted in data, so the repeat stays internal until an example asks for it. Not yet checked by prototype: that `atop` over a repeat lowers to one pattern-filled shape and not a mask per mark.
 
+**Where the repeat overlaps with other ideas: the waffle chart.** Observable Plot draws a waffle bar as a stepped outline filled with an SVG pattern of one cell. That is the same repeat, with three things set differently:
+
+|                    | Pattern fill                   | Waffle                                             |
+| ------------------ | ------------------------------ | -------------------------------------------------- |
+| Unit size          | pixels                         | data: one cell is a fixed count                    |
+| Anchored to        | the page, so neighbors line up | the bar, so cells start at its corner              |
+| The shape it fills | the mark as it is              | a bar folded into rows, with a part row at the end |
+
+So the overlap is the repeat primitive and nothing above it. The folded shape is layout, which the folded bars proposal already spells as `stack({ wrap: { at } })`. A waffle is also not always a repeat: when each cell is its own row of data, with its own color or tooltip, it is a `spread` of real marks. The repeat is the cheap form for cells that are all alike. This is a reason to give the internal primitive an anchor and a unit size from the start, and no reason yet to make it public.
+
 **A palette may hold patterns.** This is what makes the Cogra bar chart work.
 
 ![Three bars, white, hatched and stippled](img/cogra-bars.png)

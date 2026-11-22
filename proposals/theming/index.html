@@ -819,6 +819,48 @@ atop([rect({ h: "count" }), repeat(line({ w: 6, stroke: Color.ink }), { angle: 4
         there the repeat is counted in data and here it is spaced in pixels, so
         I would keep it internal until an example asks for it.
       </p>
+      <p>
+        <strong
+          >Where the repeat overlaps with other ideas: the waffle chart.</strong
+        >
+        Observable Plot draws a waffle bar as a stepped outline filled with an
+        SVG pattern of one cell. That is the same repeat, with three things set
+        differently:
+      </p>
+      <div class="tablewrap">
+        <table>
+          <tr>
+            <th></th>
+            <th>Pattern fill</th>
+            <th>Waffle</th>
+          </tr>
+          <tr>
+            <td>Unit size</td>
+            <td>pixels</td>
+            <td>data: one cell is a fixed count</td>
+          </tr>
+          <tr>
+            <td>Anchored to</td>
+            <td>the page, so neighbors line up</td>
+            <td>the bar, so cells start at its corner</td>
+          </tr>
+          <tr>
+            <td>The shape it fills</td>
+            <td>the mark as it is</td>
+            <td>a bar folded into rows, with a part row at the end</td>
+          </tr>
+        </table>
+      </div>
+      <p>
+        So the overlap is the repeat primitive and nothing above it. The folded
+        shape is layout, which the folded bars proposal already spells as
+        <code>stack({ wrap: { at } })</code>. A waffle is also not always a
+        repeat: when each cell is its own row of data, with its own color or
+        tooltip, it is a <code>spread</code> of real marks. The repeat is the
+        cheap form for cells that are all alike. This is a reason to give the
+        internal primitive an anchor and a unit size from the start, and no
+        reason yet to make it public.
+      </p>
       <p class="note">
         Not yet checked by prototype: that <code>atop</code> over a repeat
         lowers to one pattern-filled shape and not a mask per mark, which
