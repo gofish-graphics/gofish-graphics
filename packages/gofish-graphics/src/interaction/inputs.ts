@@ -249,13 +249,7 @@ export function drag(options: DragOptions = {}): Drag {
         setOrigin(pt);
         setCurrent(pt);
         // Keep receiving moves outside the svg while the button is held.
-        const svg = event.currentTarget as SVGSVGElement | null;
-        const pointerId = (event as PointerEvent).pointerId;
-        try {
-          svg?.setPointerCapture?.(pointerId);
-        } catch {
-          /* capture is best-effort (e.g. synthetic events in tests) */
-        }
+        runtime?.capturePointer((event as PointerEvent).pointerId);
         event.preventDefault();
       } else if (type === "pointermove") {
         if (!active()) return;

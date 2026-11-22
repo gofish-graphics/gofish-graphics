@@ -27,6 +27,7 @@
     "test:python": "tsx scripts/capture-python-dom.ts && tsx scripts/compare-python.ts",
     "validate-python-ir": "tsx scripts/validate-python-ir.ts",
     "tooltip-live": "tsx scripts/tooltip-live.ts",
+    "interaction-live": "tsx scripts/interaction-live.ts",
     "bench": "tsx scripts/bench.ts",
     "bench:quick": "tsx scripts/bench.ts all --quick",
     "bench:synthetic": "tsx scripts/bench.ts synthetic",

@@ -141,6 +141,10 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
   private attachedEvents?: Set<InteractionEventType>;
   /** Whether the pointer was over the svg at the last event. */
   private pointerInside = false;
+  /** Client px → svg px, read off the svg at the last event it was in the
+   *  page: its inverse screen CTM, or an offset where a headless DOM has no
+   *  CTM. */
+  private screenToSvg?: DOMMatrix | { dx: number; dy: number };
 
   /** Register an input (idempotent by identity: a re-resolve re-registers
    *  the same inputs). */
@@ -322,7 +326,7 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
     this.attachedEvents = needed;
 
     const hitFor = (event: Event): Hit | undefined => {
-      const target = event.target as Element | null;
+      const target = this.targetOf(event);
       const el = target?.closest?.("[data-gf-id]");
       if (!el) return undefined;
       const id = el.getAttribute("data-gf-id");
@@ -344,15 +348,26 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
       // visually scaled (a CSS transform — e.g. Storybook's preview zoom — or
       // a future viewBox). Fall back to the subtraction where the CTM isn't
       // available (headless DOMs).
-      const ctm = svg.getScreenCTM?.();
-      if (ctm && typeof DOMPoint !== "undefined") {
-        const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(
-          ctm.inverse()
-        );
-        return { x: p.x, y: p.y };
+      //
+      // A captured pointer is read even while a re-run has the svg out of
+      // the page. The new svg is painted where the old one was, so the last
+      // map read off a connected svg stands for it then.
+      if (svg.isConnected) {
+        const ctm = svg.getScreenCTM?.();
+        if (ctm && typeof DOMPoint !== "undefined") {
+          this.screenToSvg = ctm.inverse();
+        } else {
+          const box = svg.getBoundingClientRect();
+          this.screenToSvg = { dx: -box.left, dy: -box.top };
+        }
       }
-      const box = svg.getBoundingClientRect();
-      return { x: event.clientX - box.left, y: event.clientY - box.top };
+      const m = this.screenToSvg;
+      if (m === undefined) return undefined;
+      if ("dx" in m) {
+        return { x: event.clientX + m.dx, y: event.clientY + m.dy };
+      }
+      const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(m);
+      return { x: p.x, y: p.y };
     };
 
     const send = (type: InteractionEventType, event: Event) => {
@@ -366,8 +381,12 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
     // Where the pointer is, by an event's target: over the svg, off it, or
     // unknown while a re-run has the svg out of the page. A `pointerleave`
     // does not bubble, so the one the host hears is its own: the pointer
-    // left the chart.
+    // left the chart. A pointer the host holds captured (`capturePointer`)
+    // belongs to the chart until its release, wherever it is: the browser
+    // sends its events to the host itself, so their target says nothing
+    // about where the pointer is.
     const where = (type: InteractionEventType, event: Event) => {
+      if (this.isCaptured(event)) return "over";
       const target = event.target as Node | null;
       if (type === "pointerleave" && target === host) return "off";
       const svg = this.svg;
@@ -410,6 +429,42 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
       this.attachedEvents = undefined;
       this.pointerInside = false;
     };
+  }
+
+  /**
+   * Capture pointer `pointerId` on the host, for an input that follows a
+   * pressed pointer until its release (a `drag()`): the browser then sends
+   * every event of that pointer to the host, off the chart included, and
+   * `attachHost`'s dispatch reads them all as over the chart. The capture is
+   * on the host, not the svg, because a re-run replaces the svg, and taking a
+   * captured element out of the page ends its capture. The browser ends the
+   * capture at the release.
+   */
+  capturePointer(pointerId: number): void {
+    try {
+      this.host?.setPointerCapture?.(pointerId);
+    } catch {
+      /* capture is best-effort (an unknown pointer id, a synthetic event) */
+    }
+  }
+
+  /** Whether `event` is of a pointer the host holds captured. */
+  private isCaptured(event: Event): boolean {
+    return (
+      typeof PointerEvent !== "undefined" &&
+      event instanceof PointerEvent &&
+      this.host?.hasPointerCapture?.(event.pointerId) === true
+    );
+  }
+
+  /** The element an event is about. The browser makes the host the target
+   *  of a captured pointer's events, so the element under it is looked up. */
+  private targetOf(event: Event): Element | null {
+    const target = event.target as Element | null;
+    if (target !== this.host || !this.isCaptured(event)) return target;
+    const { clientX, clientY } = event as PointerEvent;
+    const under = document.elementFromPoint?.(clientX, clientY) ?? null;
+    return under !== null && this.svg?.contains(under) === true ? under : null;
   }
 
   private disposed = false;

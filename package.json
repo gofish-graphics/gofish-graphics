@@ -24,6 +24,7 @@
     "test:visual:js": "pnpm --filter @gofish/tests test:js",
     "capture-one": "pnpm --filter @gofish/tests capture-one",
     "tooltip-live": "pnpm --filter @gofish/tests tooltip-live",
+    "interaction-live": "pnpm --filter @gofish/tests interaction-live",
     "capture-diff": "pnpm --filter @gofish/tests capture-diff",
     "capture-diff:serve": "pnpm --filter @gofish/tests serve-capture-diff",
     "capture-sweep": "pnpm --filter @gofish/tests capture-sweep",

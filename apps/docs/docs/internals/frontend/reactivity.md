@@ -285,7 +285,13 @@ layout pipeline:
    fires `pointerleave` on the container only. A move into the container off
    the svg, or the container's own `pointerleave`, is a leave, and inputs
    that take `pointerleave` get one. While a re-run has the svg out of the
-   page, a move over the container is not read.
+   page, a move over the container is not read. A `drag()` captures its
+   pointer on the container (`capturePointer`), not on the svg, since taking
+   a captured element out of the page ends its capture. The browser then
+   sends that pointer's events to the container wherever it is, so until the
+   release they all count as over the chart: the hit is the element under
+   the pointer, and the point is mapped through the last svg that was in the
+   page.
 3. **Hit-testing + frame publication.** `publishFrame` rebuilds an id→item map
    and an id→box map (uids are minted fresh each resolve) and the data↔px
    conversions, then notifies inputs.
