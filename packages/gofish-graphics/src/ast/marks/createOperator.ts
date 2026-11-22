@@ -94,6 +94,7 @@ import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
 import { GoFishRef } from "../_ref";
+import type { Token } from "../createName";
 import {
   functionInChannelError,
   isFunValue,
@@ -463,10 +464,9 @@ export const nameModifier = {
   apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
     const key = layerKey(layerName);
-    if (layerContext && key !== undefined) {
-      (node as { __layerRegistration?: string | symbol }).__layerRegistration =
-        key;
-    }
+    // A mark has one name: a later `.name` on the same mark replaces it.
+    if (layerContext && key !== undefined)
+      (node as RegistrationTag).__layerRegistration = [key];
   },
   tag: (wrapped, base, layerName) => {
     // Propagate `__serialize` through the chain (so toJSON still emits this
@@ -479,6 +479,31 @@ export const nameModifier = {
     stashLayerName(wrapped, layerName);
   },
 } satisfies ModifierConfig<[layerName: string | symbol]>;
+
+/** The names the chart's registration walk files a node under
+ *  (`registerLayerNode` in chartBuilder.ts). */
+type RegistrationTag = { __layerRegistration?: (string | symbol)[] };
+
+/**
+ * `.name(layerName)` on an operator, applied to each of its group nodes
+ * (`groupModifiers`): the group is filed under the name for the chart's
+ * registration walk, as a named mark is, so `selectAll(layerName)` yields one
+ * ref per group, whose `datum` is the group's rows. A group node can be a
+ * mark's own node (a `spread` straight over a `rect`), so the name is added
+ * to the names the node already has, and a mark's own name stays its name
+ * in the tree (`_name`, which `ref(name)` in a layer and `.relate()` read):
+ * the operator names the node in the tree only when nothing else did.
+ */
+export const groupNameModifier = {
+  apply: (node, layerContext, _datum, layerName) => {
+    if (node._name === undefined) node.name(layerName as any);
+    const key = layerKey(layerName);
+    if (layerContext && key !== undefined) {
+      const tagged = node as RegistrationTag;
+      tagged.__layerRegistration = [...(tagged.__layerRegistration ?? []), key];
+    }
+  },
+} satisfies Pick<ModifierConfig<[layerName: string | symbol]>, "apply">;
 
 /**
  * Compute the IR-serializable form of a `.label(accessor, options)` call, or
@@ -915,6 +940,9 @@ export type DualModeOperator<Datum, Options> = {
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
   translate(opts: TranslateModifierOptions): TranslatableOperator<T, U>;
+  /** Name each group this operator makes, so `selectAll(name)` yields one
+   *  ref per group, whose `datum` is the group's rows. */
+  name(layerName: string | Token): TranslatableOperator<T, U>;
   label(
     accessor: LabelAccessor,
     options?: LabelOptions
@@ -937,40 +965,20 @@ function attachTranslateOption<T extends object>(
 }
 
 /**
- * Attach `.label(accessor, options?)` to an operator (traversal form).
- * `setLabel` is the mutation the executing operator's closure consults —
- * see `dual`'s operator branch, where a `let groupModifiers` (read at execution
- * time, once per `.flow()` run) is stamped onto each per-leaf node alongside
- * `node.datum ??= leaf`. Returns `target` so the call chains like `.translate`.
+ * Attach a chained method (`.name`, `.label`, `.transition`) to an operator
+ * (traversal form). `set` is the mutation the executing operator's closure
+ * consults: see `dual`'s operator branch, where `groupModifiers` and
+ * `transitionState` are read at execution time, once per `.flow()` run. The
+ * method returns `target`, so the calls chain in any order.
  */
-function attachLabelOption<T extends object>(
+function attachChainedMethod<T extends object, A extends unknown[]>(
   target: T,
-  setLabel: (accessor: LabelAccessor, options?: LabelOptions) => void
+  method: "name" | "label" | "transition",
+  set: (...args: A) => void
 ): T {
-  Object.defineProperty(target, "label", {
-    value: (accessor: LabelAccessor, options?: LabelOptions) => {
-      setLabel(accessor, options);
-      return target;
-    },
-    writable: true,
-    configurable: true,
-  });
-  return target;
-}
-
-/**
- * Attach `.transition(spec)` to an operator (traversal form). Like `.label()`,
- * the spec is closed-over state the executing operator reads (once per
- * `.flow()` run) and records on the node it builds. Returns `target` so the
- * call chains.
- */
-function attachTransitionOption<T extends object>(
-  target: T,
-  setTransition: (spec: OperatorTransition) => void
-): T {
-  Object.defineProperty(target, "transition", {
-    value: (spec: OperatorTransition) => {
-      setTransition(spec);
+  Object.defineProperty(target, method, {
+    value: (...args: A) => {
+      set(...args);
       return target;
     },
     writable: true,
@@ -1006,23 +1014,37 @@ function translateOperator<T, U>(
   const withTranslate = attachTranslateOption(translated, (next) =>
     translateOperator(translated, next)
   ) as TranslatableOperator<T, U>;
-  // Delegate `.label()` to the base operator's own setter so the pending-
-  // label state (closed over inside the base operator's execution closure)
-  // stays shared no matter which chain order produced this wrapper —
+  // Delegate `.label()` to the base operator's own setter so the pending
+  // calls (closed over inside the base operator's execution closure) stay
+  // shared no matter which chain order produced this wrapper —
   // `.translate().label()` and `.label().translate()` both land here.
   if (typeof (operator as any).label === "function") {
-    attachLabelOption(withTranslate, (accessor, options) => {
-      (operator as any).label(accessor, options);
-      const tag = wireOf(translated);
-      if (tag) {
-        pushLabelField(tag, labelIRField(accessor, options));
+    attachChainedMethod(
+      withTranslate,
+      "label",
+      (accessor: LabelAccessor, options?: LabelOptions) => {
+        (operator as any).label(accessor, options);
+        const tag = wireOf(translated);
+        if (tag) {
+          pushLabelField(tag, labelIRField(accessor, options));
+        }
       }
+    );
+  }
+  // `.name()` and `.transition()` delegate the same way, so either chain
+  // order works.
+  if (typeof (operator as any).name === "function") {
+    attachChainedMethod(withTranslate, "name", (layerName: string | Token) => {
+      (operator as any).name(layerName);
+      const tag = wireOf(translated);
+      if (tag && typeof layerName === "string") tag.name = layerName;
     });
   }
-  // `.transition()` delegates the same way, so either chain order works.
   if (typeof (operator as any).transition === "function") {
-    attachTransitionOption(withTranslate, (spec) =>
-      (operator as any).transition(spec)
+    attachChainedMethod(
+      withTranslate,
+      "transition",
+      (spec: OperatorTransition) => (operator as any).transition(spec)
     );
   }
   return withTranslate;
@@ -1538,22 +1560,38 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
-    attachLabelOption(withTranslate, (accessor, options) => {
+    attachChainedMethod(withTranslate, "name", (layerName: string | Token) => {
       groupModifiers = [
         ...groupModifiers,
-        {
-          modifier: labelModifier,
-          args: labelModifier.bind(accessor, options),
-        },
+        { modifier: groupNameModifier, args: [layerName] },
       ];
       const tag = wireOf(operator);
-      if (tag) {
-        pushLabelField(tag, labelIRField(accessor, options));
+      if (tag && typeof layerName === "string") tag.name = layerName;
+    });
+    attachChainedMethod(
+      withTranslate,
+      "label",
+      (accessor: LabelAccessor, options?: LabelOptions) => {
+        groupModifiers = [
+          ...groupModifiers,
+          {
+            modifier: labelModifier,
+            args: labelModifier.bind(accessor, options),
+          },
+        ];
+        const tag = wireOf(operator);
+        if (tag) {
+          pushLabelField(tag, labelIRField(accessor, options));
+        }
       }
-    });
-    attachTransitionOption(withTranslate, (spec) => {
-      transitionState = spec;
-    });
+    );
+    attachChainedMethod(
+      withTranslate,
+      "transition",
+      (spec: OperatorTransition) => {
+        transitionState = spec;
+      }
+    );
     return withTranslate;
   }
   return dual as DualModeOperator<Datum, Options>;

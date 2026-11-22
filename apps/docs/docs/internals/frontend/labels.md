@@ -192,7 +192,10 @@ draws what this draws, apart from where the tier sits:
 
 ```ts
 chart(data)
-  .flow(spread({ by: "site", dir: "x" }).name("sites"), spread({ by: "variety", dir: "x" }))
+  .flow(
+    spread({ by: "site", dir: "x" }).name("sites"),
+    spread({ by: "variety", dir: "x" })
+  )
   .mark(rect({ h: "yield" }))
   .layer(
     chart(selectAll("sites")).mark((groups) =>
@@ -205,7 +208,8 @@ and the mark form is the same with the mark's own nodes as the selection.
 Three parts of that are literally shared with the written form. The
 operator's `.label()` is applied to each group node as the mark's `.label()`
 is applied to a mark's node, after the group node is given its rows as its
-`datum` (see [Operator Factory](/internals/frontend/operator-factory)). Each
+`datum`, in the same list of group calls the written form's `.name("sites")`
+is applied from (see [Operator Factory](/internals/frontend/operator-factory)). Each
 labeled node is read through the ref `selectAll` makes for it
 (`selectNode`, in `resolveRefData.ts`), so `ref.datum` is the node's rows.
 And the text is the accessor over those rows.

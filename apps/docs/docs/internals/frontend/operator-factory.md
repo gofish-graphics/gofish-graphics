@@ -361,7 +361,7 @@ Operators created with `createOperator` automatically support
 composes the ordinary split/channel/combine pipeline with a structural
 translation wrapper around the produced node.
 
-## 7. `.label()` on the operator (traversal) form
+## 7. `.label()` and `.name()` on the operator (traversal) form
 
 `stack({ by: "class", dir: "y" }).label(accessor, options?)` labels each
 **group** the split produces, rather than each mark instance. It is the
@@ -371,7 +371,7 @@ mark is, because `.label()` has to affect the _execution_ of a
 still-being-called operator, after `.label()` has already returned. So:
 
 - `dual`'s operator branch closes over a `let groupModifiers` list that
-  starts empty. `.label()` (`attachLabelOption`) appends one call to it: the
+  starts empty. `.label()` (`attachChainedMethod`) appends one call to it: the
   modifier (`labelModifier`) and the arguments its `bind` gives (the
   accessor, the options, and the one call identity every group of the call
   shares). The operator's execution closure reads the current list each
@@ -392,6 +392,15 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it),
   it to children") fire at the group level — the same effect the pre-#702 manual workaround achieved
   by hand (see the "Label on Spread" story, which now uses the operator
   form instead).
+- `.name(layerName)` (#802) appends a call to the same list: the
+  `groupNameModifier`, whose `apply` gives the group node the name (its
+  `_name`, unless it already has one: a group node can be the mark's own
+  node, and the mark keeps its name) and adds the name to the node's
+  `__layerRegistration` keys. The chart's registration walk files a node
+  under each of its keys, so a node can be both a named mark and a named
+  operator's group, and `selectAll(layerName)` yields one ref per group whose
+  `datum` is the group's rows. A string name rides the wire as the
+  operator's `name` field (`OPERATOR_BASE_FIELDS`); a token does not.
 - `.translate()` wraps the operator in a _new_ function object (`translated`
   in `translateOperator`), so `.label()` needs to reach the SAME `groupModifiers`
   regardless of which wrapper the caller holds. `translateOperator` doesn't
@@ -399,6 +408,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it),
   calls the base operator's own `.label(...)`, which mutates the base
   operator's closed-over `groupModifiers`. That's what makes both
   `.translate().label()` and `.label().translate()` work identically.
+  `.name()` delegates the same way.
 - `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
   over the node's datum, which is always a list of rows, in one of three
   ways, depending on the accessor's shape:
@@ -432,7 +442,7 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it),
 
 `.transition(spec)` on the operator form (the build-in prototype, see
 `src/animation/`) is built the same way. `dual` closes over a
-`transitionState` that `.transition()` (`attachTransitionOption`) sets, and
+`transitionState` that `.transition()` (`attachChainedMethod`) sets, and
 the execution closure records it on the node `layout` builds
 (`recordOperatorTransition`), so the build-in can read the operator's
 arrangement of its children off the resolved tree. `translateOperator`
