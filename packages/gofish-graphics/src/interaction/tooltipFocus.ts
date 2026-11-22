@@ -227,7 +227,9 @@ function drawnBox(
   items: DisplayList.DisplayItem[],
   layers: GoFishNode[]
 ): Box | undefined {
-  const uids = new Set(layers.flatMap((l) => [...subtree(l)].map((n) => n.uid)));
+  const uids = new Set(
+    layers.flatMap((l) => [...subtree(l)].map((n) => n.uid))
+  );
   const outline: Outline = [];
   walkItems(items, (item, at) => {
     if (item.id !== undefined && uids.has(item.id))
