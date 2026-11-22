@@ -267,7 +267,7 @@ async function main() {
       const closed = await render(page, story("LineChart"), LINE);
       const lineStroke = { Revenue: "#4190c5", Cost: "#f2cf57" } as const;
       // The story's rows, as the box formats them.
-      const years = ["2,018", "2,019", "2,020", "2,021", "2,022"];
+      const years = ["2018", "2019", "2020", "2021", "2022"];
       const values = {
         Revenue: ["1.6", "1.9", "1.7", "2.3", "2.6"],
         Cost: ["1.2", "1.3", "1.5", "1.6", "2"],
@@ -287,16 +287,17 @@ async function main() {
       })()`;
       /** In the page: the marker's center, in client px. */
       const MARKER = `(() => {
-        const e = [...document.querySelectorAll('#stories-root svg ellipse[stroke="${BOX_STROKE}"]')];
+        const e = [...document.querySelectorAll('#stories-root svg ellipse')]
+          .filter((m) => m.closest('[pointer-events="none"]') !== null);
         return e.map((m) => {
           const b = m.getBoundingClientRect();
-          return [b.x + b.width / 2, b.y + b.height / 2, m.closest('[pointer-events="none"]') !== null];
+          return [b.x + b.width / 2, b.y + b.height / 2, m.getAttribute("stroke")];
         });
       })()`;
       const rowsOf = (stroke: string) =>
         page.evaluate(ROWS(stroke)) as Promise<[number, number][]>;
       const marker = () =>
-        page.evaluate(MARKER) as Promise<[number, number, boolean][]>;
+        page.evaluate(MARKER) as Promise<[number, number, string][]>;
       // A re-run paints new marks: tag the drawn line, and count a re-run
       // each time it is gone.
       const TAG = `(() => {
@@ -343,10 +344,10 @@ async function main() {
             );
             const m = await marker();
             check(
-              `${name} ${years[i]}: a marker on the point, no pointer target`,
+              `${name} ${years[i]}: a marker on the point, in the line's color, no pointer target`,
               m.length === 1 &&
                 Math.hypot(m[0][0] - x, m[0][1] - y) < 1 &&
-                m[0][2] === true,
+                m[0][2] === lineStroke[name],
               [m, x, y]
             );
             check(
@@ -380,8 +381,18 @@ async function main() {
           ["line-cost-end", c[4][0], c[4][1]],
         ];
         for (const [file, x, y] of views) {
+          // From the line's own side, away from the other line: an open
+          // box keeps its line while the pointer is over it, and the
+          // Revenue box can cover a Cost point (see the report).
+          await hover(page, 2, 2);
+          await hover(page, x, y + (file.includes("cost") ? 40 : -40));
           const s = await hover(page, x, y);
-          check(`${file}: a box`, s.box !== null, s.box);
+          const want = file.includes("revenue") ? "Revenue" : "Cost";
+          check(
+            `${file}: the ${want} box`,
+            s.box?.includes(want) === true,
+            s.box
+          );
           await shot(file);
         }
       }

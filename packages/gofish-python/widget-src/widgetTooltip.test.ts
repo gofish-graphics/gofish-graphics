@@ -112,7 +112,7 @@ check("a box", box() !== undefined);
 check(
   "with the listed fields, painted last",
   JSON.stringify(texts().slice(-4)) ===
-    JSON.stringify(["path", "n", "INF→INF", "9,811"]),
+    JSON.stringify(["path", "n", "INF→INF", "9811"]),
   texts()
 );
 

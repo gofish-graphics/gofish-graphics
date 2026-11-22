@@ -522,6 +522,7 @@ export const Band = ({
     },
     []
   );
+  if (!closed && rows !== undefined) node.throughRows = true;
   return node;
 };
 

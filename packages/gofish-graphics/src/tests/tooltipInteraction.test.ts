@@ -121,7 +121,7 @@ console.log("# 30 moves across 3 bars");
   // Already on bar 1, so the key changes twice (to bar 2, then bar 3).
   check("re-runs only when the key changes: 2", resolves - start === 2, resolves - start);
   console.log(`  30 moves, ${resolves - start} re-runs`);
-  check("now on the third bar", texts().includes("5,310"), texts());
+  check("now on the third bar", texts().includes("5310"), texts());
 }
 
 console.log("# the time of one re-run with the box open");
@@ -187,7 +187,7 @@ container.dispatchEvent(
   })
 );
 await settle();
-check("the tapped bar's box", texts().includes("9,811"), texts());
+check("the tapped bar's box", texts().includes("9811"), texts());
 send("pointermove", 1000, 1000, "mouse");
 await settle();
 check("a mouse move off the chart closes it", boxOf() === undefined);
@@ -288,8 +288,11 @@ console.log("# a line drawn through rows: the box describes its nearest row");
     const r = boxRect();
     return r && ["x", "y", "width", "height"].map((a) => Number(r.getAttribute(a)));
   };
+  /** The marker: a circle drawn over the chart, so no pointer target. */
   const markers = () =>
-    [...el.querySelectorAll("ellipse")].filter((e) => e.getAttribute("stroke") === "#c9ced6");
+    [...el.querySelectorAll("ellipse")].filter(
+      (e) => e.closest('[pointer-events="none"]') !== null
+    );
   const shown = () => {
     const r = boxRect();
     const g = r?.parentElement;
@@ -304,7 +307,7 @@ console.log("# a line drawn through rows: the box describes its nearest row");
         pointerType: "mouse",
       })
     );
-  const years = ["2,018", "2,019", "2,020", "2,021", "2,022"];
+  const years = ["2018", "2019", "2020", "2021", "2022"];
   const values = {
     Revenue: ["1.6", "1.9", "1.7", "2.3", "2.6"],
     Cost: ["1.2", "1.3", "1.5", "1.6", "2"],
@@ -329,6 +332,12 @@ console.log("# a line drawn through rows: the box describes its nearest row");
           Math.abs(Number(m[0].getAttribute("cx")) - x) < 0.5 &&
           Math.abs(Number(m[0].getAttribute("cy")) - y) < 0.5,
         [m.map((e) => [e.getAttribute("cx"), e.getAttribute("cy")]), x, y]
+      );
+      check(
+        `${series} ${years[i]}: the marker is drawn in the line's color`,
+        m[0]?.getAttribute("stroke") === stroke[series] &&
+          m[0]?.getAttribute("fill") === "white",
+        m[0] && [m[0].getAttribute("stroke"), m[0].getAttribute("fill")]
       );
       check(
         `${series} ${years[i]}: the marker is no pointer target`,
@@ -378,11 +387,14 @@ console.log("# a line drawn through rows: the box describes its nearest row");
     }
     check("moving about one row: no re-run", runs === still, runs - still);
   }
-  console.log("# a line's row: a field list");
-  {
+  for (const [fields, want] of [
+    [["year", "value"], ["year", "value", "2020", "1.5"]],
+    [["series", "value"], ["series", "value", "Cost", "1.5"]],
+  ] as const) {
+    console.log(`# a line's row: the field list ${JSON.stringify(fields)}`);
     const el2 = document.createElement("div");
     document.body.appendChild(el2);
-    await lineChart(["series"]).render(el2, {});
+    await lineChart([...fields]).render(el2, {});
     await settle();
     const path = [...el2.querySelectorAll("path")].find(
       (p) => p.getAttribute("stroke") === stroke.Cost
@@ -406,8 +418,8 @@ console.log("# a line drawn through rows: the box describes its nearest row");
       .filter((t) => t.closest('[pointer-events="none"]') !== null)
       .map((t) => t.textContent);
     check(
-      "a field list: those fields of the row",
-      JSON.stringify(text) === JSON.stringify(["series", "Cost"]),
+      "the listed fields of the focused row, in order",
+      JSON.stringify(text) === JSON.stringify(want),
       text
     );
   }
@@ -491,7 +503,7 @@ console.log("# a line drawn from a function, and a connector: one box, no snap")
     check(`${name}: a box`, boxIn(el) !== undefined, textIn(el));
     check(
       `${name}: no marker`,
-      [...el.querySelectorAll("ellipse")].every((e) => e.getAttribute("stroke") !== "#c9ced6")
+      [...el.querySelectorAll("ellipse")].every((e) => e.closest('[pointer-events="none"]') === null)
     );
     for (const t of [0.4, 0.6, 0.8]) {
       const [x, y] = pts[Math.floor(t * (pts.length - 1))];
@@ -532,7 +544,7 @@ console.log("# the widget path: an IR document rendered by renderIR");
     // The box paints last, over the chrome: its names column, then its
     // values.
     JSON.stringify(shown.slice(-4)) ===
-      JSON.stringify(["path", "n", "INF→INF", "9,811"]),
+      JSON.stringify(["path", "n", "INF→INF", "9811"]),
     shown
   );
 }

@@ -419,7 +419,11 @@ methods:
   is sized without them. The row values come from `content.ts`:
   with no list, every field with one value on the mark's rows, and a size
   or position channel's field with the value it draws, inferred as the
-  channel infers it (a sum for a size).
+  channel infers it (a sum for a size). On a node drawn through its rows
+  (`GoFishNode.throughRows`, which `Band` sets on a line built from rows),
+  a list names the rows' fields: a name need only be a column, the box
+  shows the focused row's values, and the title keeps only the listed
+  fields with one value on the whole line (none: no title).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
@@ -600,7 +604,8 @@ lines and Béziers, and resamples them only under a coordinate transform. Its
 geometry gives the box, the outline of the drawn path, and the exact
 cross-section along its value axis. A line built from rows also keeps each
 row's parameter (`rows`), and its geometry gives the point where it draws
-each row (`rowPoints`), which a tooltip seats a row's box beside.
+each row (`rowPoints`), which a tooltip seats a row's box beside. It marks
+itself `throughRows`, which the tooltip's content reads before layout.
 
 A band sets the node's `shearAxis` to its value axis, so a stack can move it
 by an offset that changes along the parameter (a stacked area, see

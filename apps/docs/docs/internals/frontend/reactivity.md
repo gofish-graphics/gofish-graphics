@@ -389,7 +389,8 @@ the row's index), so moving along a line re-runs the chart once per row
 crossed, and not while the nearest row stays the same. The box shows that
 row (`tooltipContent(request, point)`), and `tooltipPlace` seats it beside
 the row's point, read from the line's geometry (`rowPoints`), with a marker
-on the point. In a future API this would read
+on the point, a white circle in the line's stroke (each drawn point keeps
+the stroke of the item that drew it). In a future API this would read
 `pointer().snap(selectAll("lines"), { by: ... })`.
 
 A ribbon or area is a region and gives no points, and a line drawn from a

@@ -82,7 +82,7 @@ export class TooltipFocus implements InputPrimitive {
   key: string | undefined;
   /** On a mark drawn through rows, the focused row (`Candidate.points`),
    *  and its point's key; undefined on any other mark. */
-  point: { key: unknown; row: unknown } | undefined;
+  point: { key: unknown; row: unknown; color?: string } | undefined;
   private marks: FocusMark[] = [];
   /** The candidates of the last frame, and, by key, each candidate and
    *  each point of one, with the mark it belongs to. */
@@ -200,7 +200,11 @@ export class TooltipFocus implements InputPrimitive {
     const key = found?.mark.key as string | undefined;
     const point =
       found && found.choice !== found.mark
-        ? { key: found.choice.key, row: found.choice.datum[0] }
+        ? {
+            key: found.choice.key,
+            row: found.choice.datum[0],
+            color: (found.choice as PointCandidate).color,
+          }
         : undefined;
     if (key === this.key && point?.key === this.point?.key) return;
     this.key = key;
@@ -264,17 +268,19 @@ function scan(
     let drawn = parts.get(m);
     if (drawn === undefined) parts.set(m, (drawn = emptyDrawn()));
     addParts(drawn, outlineOf(item, at));
+    const color = item.style?.stroke;
     for (const { row, x, y } of drawnRowPoints(item) ?? [])
       drawn.points.push({
         row,
         x: at.tx + at.sx * x,
         y: at.ty + at.sy * y,
+        color: typeof color === "string" ? color : undefined,
       });
   });
   const covered = parts.get(COVER);
   const byKey = new Map<
     string,
-    Candidate & { marks: FocusMark[]; drawnPoints: DrawnRowPoint[] }
+    Candidate & { marks: FocusMark[]; drawnPoints: DrawnPoint[] }
   >();
   for (const m of marks) {
     const drawn = parts.get(m);
@@ -328,6 +334,13 @@ function scan(
 /** The owner of the open box's items in {@link scan}. */
 const COVER = Symbol("cover");
 
+/** A row point as drawn, in svg px, with the stroke of the item that drew
+ *  it (the marker on a focused point takes it). */
+type DrawnPoint = DrawnRowPoint & { color: string | undefined };
+
+/** A point candidate, with the color its line is drawn in. */
+type PointCandidate = Candidate & { color?: string };
+
 /** A mark's drawn row points as candidates. A point's key is its row's
  *  place among the mark's rows, after the mark's key: the mark's key is its
  *  rows (`rowsKey`), so the place is stable across re-runs too. A point
@@ -335,11 +348,11 @@ const COVER = Symbol("cover");
 function pointsOf(
   key: unknown,
   rows: readonly unknown[],
-  drawn: DrawnRowPoint[]
-): Candidate[] {
+  drawn: DrawnPoint[]
+): PointCandidate[] {
   const index = new Map(rows.map((r, i) => [r, i]));
-  const out: Candidate[] = [];
-  for (const { row, x, y } of drawn) {
+  const out: PointCandidate[] = [];
+  for (const { row, x, y, color } of drawn) {
     const i = index.get(row);
     if (i === undefined) continue;
     const box = { x0: x, y0: y, x1: x, y1: y };
@@ -349,6 +362,7 @@ function pointsOf(
       box,
       position: { x, y },
       outline: [{ box, round: true }],
+      color,
     });
   }
   return out;
@@ -356,7 +370,7 @@ function pointsOf(
 
 /** An outline being collected, the box of its parts so far, and the
  *  points of the rows it is drawn through. */
-type Drawn = { outline: Outline; box: Box; points: DrawnRowPoint[] };
+type Drawn = { outline: Outline; box: Box; points: DrawnPoint[] };
 
 const emptyDrawn = (): Drawn => ({
   outline: [],

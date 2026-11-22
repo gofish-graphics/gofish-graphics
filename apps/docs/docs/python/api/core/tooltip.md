@@ -33,7 +33,9 @@ field's `doc` like every other options table. -->
 
 Returns a new mark with the tooltip set. A field that is not in the mark's
 rows is an error that names the fields there are. So is a listed field with
-more than one value that no channel draws. A `ref(...)` has no tooltip: call
+more than one value that no channel draws. On a `line` drawn through rows, the listed
+fields are the rows' fields: the box shows them for the row it describes,
+and the line's `<title>` shows only those with one value on the whole line. A `ref(...)` has no tooltip: call
 `.tooltip()` on the mark that draws the node.
 
 ## Example
@@ -55,17 +57,17 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   open. The open box keeps its mark until another one is 4 px nearer, and
   while the pointer is over the box. On a touch screen, a tap opens the box
   and it stays open.
-- **Values.** Numbers show digit grouping and at most two fraction digits
-  (`11,902`, `2.35`). A number below 1 shows three significant digits
+- **Values.** Numbers show digit grouping from five digits on and at most
+  two fraction digits (`11,902`, `2018`, `2.35`). A number below 1 shows three significant digits
   (`0.13`, `0.0119`). Dates, and the values of a time column, show as a
   date, with the time when it is not midnight, in the time zone of the
   column's `Unit.time` (UTC when it has none), as its axis reads them. A `line`'s or `ribbon`'s position fields read each row, so they
   show only when every row agrees. A row of a `line` shows that row's
-  fields.
+  fields, or the listed ones.
 - **Placement.** The box sits right of the mark, else left of it, centered
   on its row; else under or over it, flush with its end; else it is moved
   inside the chart. A row's box sits the same way beside the row's point,
-  with a dot on the point. A line drawn from a function, or between marks,
+  with a dot in the line's color on the point. A line drawn from a function, or between marks,
   has no rows, and its box sits beside the end of the line. It paints over the marks, their labels and the axes. It
   takes no room, takes no pointer events, and moves nothing else.
 - **Static output.** A drawing with no pointer (an exported SVG) draws no box.

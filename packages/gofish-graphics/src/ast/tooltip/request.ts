@@ -27,12 +27,14 @@ import {
 export type TooltipCall = { wire?: TooltipMark["wire"] };
 
 /** What one node's `.tooltip()` call recorded in a live chart: the rows
- *  the node was drawn from, the call's fields and wire, the rows its box
+ *  the node was drawn from, whether it is drawn through them
+ *  (`GoFishNode.throughRows`), the call's fields and wire, the rows its box
  *  shows when the call names its fields (otherwise they are made only for
  *  the focused node, {@link tooltipContent}), the node's key, and the focus
  *  of the call in the chart that resolved it. */
 export type TooltipRequest = {
   rows: unknown[];
+  throughRows: boolean;
   fields: readonly string[] | undefined;
   wire: TooltipCall["wire"];
   content: TooltipRow[] | undefined;
@@ -50,7 +52,11 @@ export const tooltipContent = (
   point !== undefined
     ? tooltipRows({ rows: [point.row], wire: request.wire }, request.fields)
     : (request.content ??
-      tooltipRows({ rows: request.rows, wire: request.wire }, request.fields));
+      tooltipRows(
+        { rows: request.rows, wire: request.wire },
+        request.fields,
+        request.throughRows
+      ));
 
 const requests = new WeakMap<GoFishNode, TooltipRequest>();
 
@@ -108,7 +114,9 @@ export function rowsKey(rows: readonly unknown[]): string {
  * there, as a spec reads an input, so a change of focus re-runs the chart.
  * A field list is checked here either way, so a field that is not there
  * fails the render, not a hover; without one the rows are made only for
- * the focused node.
+ * the focused node. On a node drawn through its rows (a line), a field list
+ * names the rows' fields: the box shows them for one row, and the title
+ * only those with one value on the whole node, with no title when none has.
  */
 export function recordTooltip(
   node: GoFishNode,
@@ -118,15 +126,21 @@ export function recordTooltip(
   registrar: Registrar | undefined
 ): void {
   const rows = rowsOfDatum(datum);
+  const throughRows = node.throughRows === true;
   if (registrar === undefined) {
-    node.title = tooltipText(tooltipRows({ rows, wire: call.wire }, fields));
+    const shown = tooltipRows({ rows, wire: call.wire }, fields, throughRows);
+    // A line whose listed fields all vary along it has nothing to say as
+    // a whole: no title.
+    if (!(throughRows && shown.length === 0)) node.title = tooltipText(shown);
     return;
   }
-  const content = fields && tooltipRows({ rows, wire: call.wire }, fields);
+  const content =
+    fields && tooltipRows({ rows, wire: call.wire }, fields, throughRows);
   const focus = focusOf(registrar, call);
   focus.read(registrar);
   requests.set(node, {
     rows,
+    throughRows,
     fields,
     wire: call.wire,
     content,

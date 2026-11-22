@@ -83,7 +83,7 @@ type TooltipEntry = {
   node: GoFishNode;
   rows: TooltipRow[];
   focus: TooltipFocus;
-  point: { row: unknown } | undefined;
+  point: { row: unknown; color?: string } | undefined;
 };
 
 /**
@@ -128,7 +128,7 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
       stand: GoFishNode;
       shown: GoFishNode;
       marker: GoFishNode | undefined;
-      point: { row: unknown } | undefined;
+      point: { row: unknown; color?: string } | undefined;
     };
     const seats: Seat[] = [];
     // The box and the marker are drawn over the graphic: they take no
@@ -151,7 +151,8 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
             circle({
               r: MARKER_RADIUS,
               fill: "white",
-              stroke: STROKE,
+              // The line's own color: this point, on this line.
+              stroke: point.color ?? VALUE_FILL,
               strokeWidth: 2,
             }) as any,
             new LayerContext()

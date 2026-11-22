@@ -994,6 +994,11 @@ export class GoFishNode {
    *  sized without it (`drawnOverflow` in `gofish.tsx`), so opening it
    *  moves nothing else. */
   public overlay?: true;
+  /** Set on a node drawn as a path through its data rows, one point per
+   *  row (the shape form of `line` built from rows, `shapes/band.tsx`): a
+   *  tooltip focuses one of its rows, and a field list names the rows'
+   *  fields (`tooltip/request.ts`). */
+  public throughRows?: true;
   /** The box its own options give it (`elaborateOwnDims`), for a construct
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */

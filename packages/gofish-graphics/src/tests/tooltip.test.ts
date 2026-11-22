@@ -10,6 +10,7 @@ import {
   chart,
   circle,
   Coord,
+  fun,
   group,
   line,
   rect,
@@ -418,6 +419,10 @@ console.log("# a disposed chart's focus lets go");
 
 console.log("# format");
 check("grouping", formatValue(11902) === "11,902", formatValue(11902));
+check("four digits: no separator", formatValue(2018) === "2018", formatValue(2018));
+check("four digits and a fraction", formatValue(9811.25) === "9811.25", formatValue(9811.25));
+check("a negative four-digit number", formatValue(-4120) === "-4120", formatValue(-4120));
+check("seven digits", formatValue(1234567) === "1,234,567", formatValue(1234567));
 check("two fraction digits", formatValue(0.1300001) === "0.13", formatValue(0.1300001));
 check("an integer stays bare", formatValue(5) === "5");
 check(
@@ -500,7 +505,7 @@ console.log("# content: one row per field with one value");
   check(
     "every field, formatted",
     JSON.stringify(titles(dl)) ===
-      JSON.stringify(["path: VO→VO\nn: 11,902\nshare: 0.13", "path: INF→INF\nn: 9,811\nshare: 0.107"]),
+      JSON.stringify(["path: VO→VO\nn: 11,902\nshare: 0.13", "path: INF→INF\nn: 9811\nshare: 0.107"]),
     titles(dl)
   );
 }
@@ -532,6 +537,56 @@ console.log("# content: a field list, in order");
     JSON.stringify(titles(dl)) ===
       JSON.stringify(["share: 0.13\npath: VO→VO", "share: 0.107\npath: INF→INF"]),
     titles(dl)
+  );
+}
+
+console.log("# content: a field list on a line drawn through rows");
+{
+  const budget = [2018, 2019, 2020].flatMap((year, i) => [
+    { series: "Revenue", year, value: 1.6 + i * 0.3 },
+    { series: "Cost", year, value: 1.2 + i * 0.2 },
+  ]);
+  const lines = (fields: string[]) =>
+    chart(budget, { w: 400, h: 260 })
+      .flow(group({ by: "series" }))
+      .mark(line({ x: "year", y: "value", stroke: "series" }).tooltip(fields));
+  // The title describes the whole line: of the listed fields, those with
+  // one value on it.
+  const yv = await lines(["year", "value"]).toDisplayList({});
+  check("[year, value]: no title, since both vary along the line", titles(yv).length === 0, titles(yv));
+  const sv = await lines(["series", "value"]).toDisplayList({});
+  check(
+    "[series, value]: the title is the series",
+    JSON.stringify(titles(sv)) === JSON.stringify(["series: Revenue", "series: Cost"]),
+    titles(sv)
+  );
+  let message = "";
+  try {
+    await lines(["year", "price"]).toDisplayList({});
+  } catch (e) {
+    message = (e as Error).message;
+  }
+  check(
+    "an unknown field: the error names it and the rows' fields",
+    message.includes('"price" is not a field') &&
+      message.includes('"series", "year", "value"'),
+    message
+  );
+  // A line drawn from a function has no rows to show one of: the mark-level
+  // rule holds there.
+  const wave = fun((t: number) => 1 + Math.sin(t), { domain: [0, 3] });
+  let fnMessage = "";
+  try {
+    await chart([{ name: "w", k: 1 }, { name: "w", k: 2 }])
+      .mark(line({ x: wave.domain(), y: wave }).tooltip(["k"]))
+      .toDisplayList({});
+  } catch (e) {
+    fnMessage = (e as Error).message;
+  }
+  check(
+    "a line from a function: a field with more than one value is an error",
+    fnMessage.includes('"k" has more than one value'),
+    fnMessage
   );
 }
 
@@ -615,6 +670,10 @@ console.log("# with no focus, nothing but the titles changes");
       chart(budget, { w: 400, h: 260 })
         .flow(group({ by: "series" }))
         .mark(tip(line({ x: "year", y: "value", stroke: "series", strokeWidth: 2 }), on))],
+    ["the line chart story, [series, value]", (on) =>
+      chart(budget, { w: 400, h: 260 })
+        .flow(group({ by: "series" }))
+        .mark(tip(line({ x: "year", y: "value", stroke: "series", strokeWidth: 2 }), on, ["series", "value"]))],
     ["labeled bars", (on) =>
       chart(paths, { w: 300, h: 200 })
         .flow(spread({ by: "path", dir: "y", spacing: 4 }))
@@ -669,7 +728,7 @@ console.log("# the wire");
   const rebuilt = await Serialize.buildIR(some).toDisplayList({});
   check(
     "rebuilt, it writes the same titles",
-    JSON.stringify(titles(rebuilt)) === JSON.stringify(["n: 11,902", "n: 9,811"]),
+    JSON.stringify(titles(rebuilt)) === JSON.stringify(["n: 11,902", "n: 9811"]),
     titles(rebuilt)
   );
   const bad = { ...some, root: { ...(some.root as any), mark: { ...(some.root as any).mark, tooltip: 3 } } };

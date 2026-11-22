@@ -25,13 +25,17 @@ export type TooltipMark = {
   wire?: { type?: string; opts?: Record<string, unknown> };
 };
 
+// Digits are grouped from five on (`min2`): 11902 is "11,902", but a
+// four-digit number such as a year takes no separator (2018 is "2018").
 const numberFormat = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
+  useGrouping: "min2",
 });
 // Below 1, two fraction digits lose the value (0.0119 would read "0.01"),
 // so a small number keeps three significant digits instead.
 const smallNumberFormat = new Intl.NumberFormat("en-US", {
   maximumSignificantDigits: 3,
+  useGrouping: "min2",
 });
 const DATE: Intl.DateTimeFormatOptions = { dateStyle: "medium" };
 const DATE_TIME: Intl.DateTimeFormatOptions = {
@@ -53,8 +57,9 @@ const isMidnight = (v: Date, zone: string): boolean =>
     .every((p) => p.type === "literal" || Number(p.value) === 0);
 
 /**
- * A value as a tooltip shows it: a number with digit grouping and at most
- * two fraction digits (11902 is "11,902"), or three significant digits when
+ * A value as a tooltip shows it: a number with digit grouping from five
+ * digits on and at most two fraction digits (11902 is "11,902", 2018 is
+ * "2018"), or three significant digits when
  * it is below 1 (0.1300001 is "0.13", 0.0119 is "0.0119"), a date by
  * its day, and its time when it has one, on the calendar of `zone`, the
  * zone of its column's `Unit.time` (UTC when the column has none), as an
@@ -178,10 +183,16 @@ const channelFields = (
  * in the order of the data's columns. With `fields`, exactly those, in that
  * order. A field that is not a column of the mark's rows, or that has more
  * than one value and no channel draws it, is an error that names it.
+ *
+ * `perRow` is for a mark drawn through its rows (`GoFishNode.throughRows`),
+ * whose box shows one row: a listed field need only be a column of its
+ * rows, and the listed fields with more than one value on the whole mark
+ * are left out (its `<title>` describes the whole line).
  */
 export function tooltipRows(
   mark: TooltipMark,
-  fields?: readonly string[]
+  fields?: readonly string[],
+  perRow = false
 ): TooltipRow[] {
   const rows = rowsOf(mark.rows);
   const columns: string[] = [];
@@ -209,13 +220,14 @@ export function tooltipRows(
         ? []
         : [[f, formatValue(v, zoneOf(f))] as const];
     });
-  return fields.map((f) => {
+  return fields.flatMap((f) => {
     if (!seen.has(f))
       throw new Error(
         `[gofish] .tooltip(): "${f}" is not a field of this mark's rows. ` +
           `Its fields are ${columns.map((c) => `"${c}"`).join(", ") || "none"}.`
       );
     const v = valueOf(f);
+    if (v === NONE && perRow) return [];
     if (v === NONE)
       throw new Error(
         `[gofish] .tooltip(): "${f}" has more than one value on this mark, ` +
@@ -228,7 +240,7 @@ export function tooltipRows(
               .join(", ") || "none"
           }.`
       );
-    return [f, formatValue(v, zoneOf(f))] as const;
+    return [[f, formatValue(v, zoneOf(f))] as const];
   });
 }
 
