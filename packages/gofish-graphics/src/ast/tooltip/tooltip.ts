@@ -117,14 +117,23 @@ export async function tooltipLayers(
   layerContext: LayerContext
 ): Promise<GoFishNode[]> {
   const byCall = new Map<object, GoFishNode[]>();
-  const walk = (n: GoFishNode) => {
-    const r = tooltipRequest(n);
-    if (r !== undefined && claimTooltip(n)) {
+  // A mark may resolve to a list of nodes (`cut` gives its slices), though
+  // `resolveMarkResult` types its result as one node, so `content` may be a
+  // list. TODO(#1395): a tooltip on such a mark finds no bounding box in
+  // `beside`; the right fix is `resolveMarkResult` typing its list result.
+  const walk = (n: GoFishNode | readonly GoFishNode[]) => {
+    if (Array.isArray(n)) {
+      for (const c of n) if (c instanceof GoFishNode) walk(c);
+      return;
+    }
+    const node = n as GoFishNode;
+    const r = tooltipRequest(node);
+    if (r !== undefined && claimTooltip(node)) {
       const marks = byCall.get(r.call) ?? [];
       byCall.set(r.call, marks);
-      marks.push(n);
+      marks.push(node);
     }
-    for (const c of n.children) if (c instanceof GoFishNode) walk(c);
+    for (const c of node.children) if (c instanceof GoFishNode) walk(c);
   };
   walk(content);
 
