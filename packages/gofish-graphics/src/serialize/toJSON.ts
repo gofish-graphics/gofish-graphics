@@ -398,6 +398,7 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   return {
     type: tag.type,
     ...wireOpts("operator", tag.type, tag.opts),
+    ...(tag.name !== undefined ? { name: tag.name } : {}),
     ...(tag.label !== undefined ? { label: wireLabels(tag.label) } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;

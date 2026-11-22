@@ -5,6 +5,7 @@ order: 52
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/labels/elaborate.tsx
+  - packages/gofish-graphics/src/ast/selectionLayer.ts
   - packages/gofish-graphics/src/ast/labels/labelPlacement.ts
   - packages/gofish-graphics/src/ast/labels/autoLabelColor.ts
   - packages/gofish-graphics/src/ast/labels/labelNode.tsx
@@ -64,7 +65,14 @@ per-instance and per-group labeling; see `resolveLabelTargets` below.
 `layout()`, immediately after chrome elaboration, so a label may target a node
 the chrome pass just wrapped. A label inside a node's content is inside that
 node's chrome rings, so at layout time the rings seat their axes, titles, and
-legend past it. It has three phases:
+legend past it.
+
+The pass is `.label()` lowered as a **layer over its selection**, the rewrite
+`src/ast/selectionLayer.ts` holds for every modifier that draws over the
+nodes it is chained on. `lowerSelectionLayers` takes a `SelectionLayer`: how
+to take the modifier's stamps off the tree (`take`), the node each stamp is
+drawn over (`target`), and the tier to draw over one chart's selection
+(`draw`). For labels these are `labelLayer`'s, and it has three phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
@@ -87,16 +95,18 @@ legend past it. It has three phases:
    each spec resolved once to its position on its target (`positionOf`),
    into one list: a subtree's labels before those of the nodes that hold
    it, and siblings' in order. The target and the position travel with the
-   spec from then on.
-3. **The chart's layer** — each label goes to its home (`homeOf`): the
+   spec from then on. These two phases are `labelLayer.take`.
+3. **The chart's layer** — each label goes to its home (`homeOf`, in
+   `selectionLayer.ts`): the
    nearest node above its target, the target included, that holds a
    chart's marks (`_chartContent`), or the render root when no `chart()`
    holds it. `chartBuilder.ts` sets `_chartContent` on the node a chart's
    mark resolves to and on the layer its frame holds, so in a `.layer()`
    chain the home is the target's own tier, and the transitions a tier
    draws over its marks (`time.transition()`) are outside it. Each home is
-   wrapped once (`wrapWithLabels`) in a `Layer` holding its original
-   content plus one `ref()` + `label` pair per (target × spec), and the
+   wrapped once in a `Layer` holding its original
+   content plus one ref + `label` pair per (target × spec), drawn by
+   `drawLabels`, and the
    wrapper takes the home's place in its parent. A home is wrapped after
    the homes inside it, so its chooser reads their labels, already placed,
    through refs.
@@ -138,7 +148,8 @@ label lowers under its mark's build-in animation (`INTERNAL_animate`), which it
 finds through `_attachedTo`, so it follows its mark's timing
 (`src/animation/paint.ts`).
 
-Concretely, `wrapWithLabels` builds:
+Concretely, `lowerSelectionLayers` builds, with the refs and labels
+`drawLabels` makes:
 
 ```
 wrap = Layer([ content, ...refs, ...texts ])
@@ -163,6 +174,58 @@ placed):
 
 An `arrow` whose children carry labels is still labeled at its end: its
 own label keeps its target, the arrow, and is read through a `ref()` to it.
+
+## What `.label()` abbreviates
+
+A label tier has the shape of a tier a user can write. The operator form
+
+```ts
+chart(data)
+  .flow(
+    spread({ by: "site", dir: "x" }).label("site"),
+    spread({ by: "variety", dir: "x" })
+  )
+  .mark(rect({ h: "yield" }));
+```
+
+draws what this draws, apart from where the tier sits:
+
+```ts
+chart(data)
+  .flow(
+    spread({ by: "site", dir: "x" }).name("sites"),
+    spread({ by: "variety", dir: "x" })
+  )
+  .mark(rect({ h: "yield" }))
+  .layer(
+    chart(selectAll("sites")).mark((groups) =>
+      layer(groups.map((g) => /* a label of project(g.datum, "site"), placed beside g */))
+    )
+  );
+```
+
+and the mark form is the same with the mark's own nodes as the selection.
+Three parts of that are literally shared with the written form. The
+operator's `.label()` is applied to each group node as the mark's `.label()`
+is applied to a mark's node, after the group node is given its rows as its
+`datum`, in the same list of group calls the written form's `.name("sites")`
+is applied from (see [Operator Factory](/internals/frontend/operator-factory)). Each
+labeled node is read through the ref `selectAll` makes for it
+(`selectNode`, in `resolveRefData.ts`), so `ref.datum` is the node's rows.
+And the text is the accessor over those rows.
+
+Two parts are not. The label is a `label` node (`labelNode.tsx`), not a
+`text` mark, because a placement writes its angle and its visibility after
+layout. And the tier is not a `.layer()` tier: `LayerBuilder` resolves a
+tier with its chart, before chrome, and frames it as a chart of its own,
+while a label is lowered after chrome, as a sibling of its target's ref in
+one layer. Its constraints relate a label to that ref, and the chooser places
+every label of a chart in one run after the solve, which a tier framed
+apart from the refs it reads cannot do. Lowering through `.layer()` would
+need constraints that reach from one tier into another, and a tier resolved
+after chrome. Until then the label tier is drawn by
+`lowerSelectionLayers`, the one lowering every modifier of this kind
+shares (#803).
 
 ## Position vocabulary → constraints
 

@@ -31,8 +31,35 @@ class Operator:
         self._translate: Optional[dict] = None
         # One entry per `.label(accessor, options?)` call, in call order —
         # repeated calls append rather than overwrite. Mirrors JS
-        # createOperator.ts's `labelState` array.
+        # createOperator.ts's `groupModifiers` list.
         self._labels: List[dict] = []
+        # The layer name each group the operator makes is filed under
+        # (``.name()``), or None.
+        self._name: Optional[str] = None
+
+    def _copy(self) -> "Operator":
+        """A copy of this operator with the calls chained on it (its name,
+        labels and translate)."""
+        new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._labels = list(self._labels)
+        new_op._translate = self._translate
+        new_op._name = self._name
+        return new_op
+
+    def name(self, name: str) -> "Operator":
+        """Name each group this operator makes (traversal form).
+
+        Mirrors JS ``spread({ by: "site", dir: "x" }).name("sites")``: every
+        node a split leaf produces is filed under ``name``, so
+        ``chart(select_all("sites"))`` gets one ref per group, and a ref's
+        ``datum`` is that group's rows.
+
+        Returns:
+            New Operator (same subclass as self) with the name set.
+        """
+        new_op = self._copy()
+        new_op._name = name
+        return new_op
 
     def translate(
         self,
@@ -46,8 +73,7 @@ class Operator:
         it offsets the arranged result without merging ``x`` / ``y`` into the
         operator's own channel grammar.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._labels = list(self._labels)
+        new_op = self._copy()
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
@@ -81,8 +107,7 @@ class Operator:
         Returns:
             New Operator (same subclass as self) with the label appended.
         """
-        new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._translate = self._translate
+        new_op = self._copy()
         new_op._labels = [*self._labels, _label_spec(accessor, options)]
         return new_op
 
@@ -95,6 +120,8 @@ class Operator:
         }
         if self._translate:
             d["translate"] = self._translate
+        if self._name is not None:
+            d["name"] = self._name
         if self._labels:
             # A mark a label avoids (`avoiding=select_all(...)`) is its IR.
             d["label"] = [_marks_in_options(s, payload) for s in self._labels]
@@ -142,6 +169,14 @@ class DeriveOperator(Operator):
             "not a layout operator with per-group leaves to label. Chain "
             ".label() on the layout operator (stack/spread/group/scatter/"
             "table/treemap) instead."
+        )
+
+    def name(self, *args, **kwargs) -> "DeriveOperator":
+        """`derive(fn)` makes no groups to name (see :meth:`label`)."""
+        raise NotImplementedError(
+            "derive(fn) does not support .name() — it's a data transform "
+            "that makes no groups. Name the layout operator "
+            "(stack/spread/group/scatter/table/treemap), or the mark."
         )
 
     def to_dict(self, payload: "_Payload") -> dict:

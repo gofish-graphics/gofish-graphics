@@ -389,6 +389,43 @@ class TestMarkName:
         assert "name" not in d
 
 
+class TestOperatorName:
+    """`.name()` on an operator names each group it makes (#802)."""
+
+    def test_name_in_ir(self):
+        d = ir(spread(by="site", dir="x").name("sites"))
+        assert d["name"] == "sites"
+        assert d["type"] == "spread"
+        assert d["by"] == "site"
+
+    def test_no_name_not_in_ir(self):
+        assert "name" not in ir(spread(by="site", dir="x"))
+
+    def test_name_returns_new_operator(self):
+        op = spread(by="site", dir="x")
+        named = op.name("sites")
+        assert named is not op
+        assert op._name is None
+
+    @pytest.mark.parametrize(
+        "op",
+        [
+            spread(by="site", dir="x").name("sites").label("site"),
+            spread(by="site", dir="x").label("site").name("sites"),
+            spread(by="site", dir="x").name("sites").translate(y=5),
+            spread(by="site", dir="x").translate(y=5).name("sites"),
+        ],
+    )
+    def test_name_survives_chained_calls(self, op):
+        d = ir(op)
+        assert d["name"] == "sites"
+        assert "label" in d or "translate" in d
+
+    def test_derive_has_no_name(self):
+        with pytest.raises(NotImplementedError):
+            derive(lambda rows: rows).name("x")
+
+
 class TestRefData:
     """Test `ref(...)` / `select_all(...)` used as chart data."""
 

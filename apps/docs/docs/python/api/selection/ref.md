@@ -45,9 +45,9 @@ select_all(name: str) -> list[Ref]  # one ref per matching node
 
 ## Parameters
 
-| Parameter | Type  | Description                                                             |
-| --------- | ----- | ----------------------------------------------------------------------- |
-| `name`    | `str` | The name of the layer to reference (registered via `.name()` on a mark) |
+| Parameter | Type  | Description                                                                            |
+| --------- | ----- | -------------------------------------------------------------------------------------- |
+| `name`    | `str` | The name of the layer to reference (registered via `.name()` on a mark or an operator) |
 
 ## Singular as data: exactly one
 
@@ -76,6 +76,40 @@ bars[0].datum             # the raw row-bag behind the first bar
 
 The bag is a list of rows — a 1-row list for a fully-split leaf, all the
 partition's rows for an auto-summed aggregate.
+
+An operator can be named too. `spread(by="lake", dir="x").name("lakes")` files
+each group the spread makes under `"lakes"`, so `select_all("lakes")` is one ref
+per lake, and a ref's `datum` is that lake's rows. A callout on one group:
+
+```python
+(
+    chart(seafood)
+    .flow(
+        spread(by="lake", dir="x").name("lakes"),
+        stack(by="species", dir="y"),
+    )
+    .mark(rect(h="count", fill="species"))
+    .layer(
+        chart([{"ref": "Lake B", "note": "most fish"}])
+        .flow(resolve(["ref"], from_=select_all("lakes")))
+        .mark(
+            lambda rows: layer(
+                [
+                    spread(
+                        [text(text=r["note"]), r["ref"]],
+                        dir="y",
+                        spacing=4,
+                        alignment="middle",
+                    )
+                    for r in rows
+                ]
+            )
+        )
+    )
+)
+```
+
+See [`.name()` on operators](/python/api/core/mark#operator-name).
 
 ## Why a ref, not a "selection"?
 

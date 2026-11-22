@@ -401,11 +401,17 @@ function operatorFromIR(
   ctx: IRContext
 ): Operator<any, any> | null {
   const { bridge } = ctx;
-  const { type, translate, label, ...opts } = op as Record<string, any>;
+  const { type, translate, label, name, ...opts } = op as Record<string, any>;
   let operator = rebuild("operator", type as string, unwrapOpts(opts, bridge), {
     bridge,
   });
   if (operator === undefined) return null;
+  if (
+    operator &&
+    name !== undefined &&
+    typeof (operator as any).name === "function"
+  )
+    operator = (operator as any).name(name);
   if (
     operator &&
     label !== undefined &&

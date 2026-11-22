@@ -95,6 +95,7 @@ import { isThenable } from "../../util";
 import { withKindValues } from "../strategyKind";
 import { resolveRefData } from "./resolveRefData";
 import { GoFishRef } from "../_ref";
+import type { Token } from "../createName";
 import {
   functionInChannelError,
   isFunValue,
@@ -231,6 +232,14 @@ export type ModifierConfig<Args extends any[] = any[]> = {
   resolveArgs?: (
     ...args: Args
   ) => ((inputs: readonly unknown[]) => Promise<Args>) | undefined;
+};
+
+/** One modifier call chained on an operator: the mark modifier it is, and
+ *  the arguments its `bind` gave it. The operator applies it to each of its
+ *  group nodes, as the mark modifier applies to a mark's node. */
+export type GroupModifierCall = {
+  modifier: Pick<ModifierConfig, "apply">;
+  args: any[];
 };
 
 /** A paint-order hint: a constant, or a callback resolved per-instance against
@@ -456,10 +465,9 @@ export const nameModifier = {
   apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
     const key = layerKey(layerName);
-    if (layerContext && key !== undefined) {
-      (node as { __layerRegistration?: string | symbol }).__layerRegistration =
-        key;
-    }
+    // A mark has one name: a later `.name` on the same mark replaces it.
+    if (layerContext && key !== undefined)
+      (node as RegistrationTag).__layerRegistration = [key];
   },
   tag: (wrapped, base, layerName) => {
     // Propagate `__serialize` through the chain (so toJSON still emits this
@@ -472,6 +480,31 @@ export const nameModifier = {
     stashLayerName(wrapped, layerName);
   },
 } satisfies ModifierConfig<[layerName: string | symbol]>;
+
+/** The names the chart's registration walk files a node under
+ *  (`registerLayerNode` in chartBuilder.ts). */
+type RegistrationTag = { __layerRegistration?: (string | symbol)[] };
+
+/**
+ * `.name(layerName)` on an operator, applied to each of its group nodes
+ * (`groupModifiers`): the group is filed under the name for the chart's
+ * registration walk, as a named mark is, so `selectAll(layerName)` yields one
+ * ref per group, whose `datum` is the group's rows. A group node can be a
+ * mark's own node (a `spread` straight over a `rect`), so the name is added
+ * to the names the node already has, and a mark's own name stays its name
+ * in the tree (`_name`, which `ref(name)` in a layer and `.relate()` read):
+ * the operator names the node in the tree only when nothing else did.
+ */
+export const groupNameModifier = {
+  apply: (node, layerContext, _datum, layerName) => {
+    if (node._name === undefined) node.name(layerName as any);
+    const key = layerKey(layerName);
+    if (layerContext && key !== undefined) {
+      const tagged = node as RegistrationTag;
+      tagged.__layerRegistration = [...(tagged.__layerRegistration ?? []), key];
+    }
+  },
+} satisfies Pick<ModifierConfig<[layerName: string | symbol]>, "apply">;
 
 /**
  * Compute the IR-serializable form of a `.label(accessor, options)` call, or
@@ -931,6 +964,9 @@ export type DualModeOperator<Datum, Options> = {
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
   translate(opts: TranslateModifierOptions): TranslatableOperator<T, U>;
+  /** Name each group this operator makes, so `selectAll(name)` yields one
+   *  ref per group, whose `datum` is the group's rows. */
+  name(layerName: string | Token): TranslatableOperator<T, U>;
   label(
     accessor: LabelAccessor,
     options?: LabelOptions
@@ -953,40 +989,20 @@ function attachTranslateOption<T extends object>(
 }
 
 /**
- * Attach `.label(accessor, options?)` to an operator (traversal form).
- * `setLabel` is the mutation the executing operator's closure consults —
- * see `dual`'s operator branch, where a `let labelState` (read at execution
- * time, once per `.flow()` run) is stamped onto each per-leaf node alongside
- * `node.datum ??= leaf`. Returns `target` so the call chains like `.translate`.
+ * Attach a chained method (`.name`, `.label`, `.transition`) to an operator
+ * (traversal form). `set` is the mutation the executing operator's closure
+ * consults: see `dual`'s operator branch, where `groupModifiers` and
+ * `transitionState` are read at execution time, once per `.flow()` run. The
+ * method returns `target`, so the calls chain in any order.
  */
-function attachLabelOption<T extends object>(
+function attachChainedMethod<T extends object, A extends unknown[]>(
   target: T,
-  setLabel: (accessor: LabelAccessor, options?: LabelOptions) => void
+  method: "name" | "label" | "transition",
+  set: (...args: A) => void
 ): T {
-  Object.defineProperty(target, "label", {
-    value: (accessor: LabelAccessor, options?: LabelOptions) => {
-      setLabel(accessor, options);
-      return target;
-    },
-    writable: true,
-    configurable: true,
-  });
-  return target;
-}
-
-/**
- * Attach `.transition(spec)` to an operator (traversal form). Like `.label()`,
- * the spec is closed-over state the executing operator reads (once per
- * `.flow()` run) and records on the node it builds. Returns `target` so the
- * call chains.
- */
-function attachTransitionOption<T extends object>(
-  target: T,
-  setTransition: (spec: OperatorTransition) => void
-): T {
-  Object.defineProperty(target, "transition", {
-    value: (spec: OperatorTransition) => {
-      setTransition(spec);
+  Object.defineProperty(target, method, {
+    value: (...args: A) => {
+      set(...args);
       return target;
     },
     writable: true,
@@ -1022,23 +1038,37 @@ function translateOperator<T, U>(
   const withTranslate = attachTranslateOption(translated, (next) =>
     translateOperator(translated, next)
   ) as TranslatableOperator<T, U>;
-  // Delegate `.label()` to the base operator's own setter so the pending-
-  // label state (closed over inside the base operator's execution closure)
-  // stays shared no matter which chain order produced this wrapper —
+  // Delegate `.label()` to the base operator's own setter so the pending
+  // calls (closed over inside the base operator's execution closure) stay
+  // shared no matter which chain order produced this wrapper —
   // `.translate().label()` and `.label().translate()` both land here.
   if (typeof (operator as any).label === "function") {
-    attachLabelOption(withTranslate, (accessor, options) => {
-      (operator as any).label(accessor, options);
-      const tag = wireOf(translated);
-      if (tag) {
-        pushLabelField(tag, labelIRField(accessor, options));
+    attachChainedMethod(
+      withTranslate,
+      "label",
+      (accessor: LabelAccessor, options?: LabelOptions) => {
+        (operator as any).label(accessor, options);
+        const tag = wireOf(translated);
+        if (tag) {
+          pushLabelField(tag, labelIRField(accessor, options));
+        }
       }
+    );
+  }
+  // `.name()` and `.transition()` delegate the same way, so either chain
+  // order works.
+  if (typeof (operator as any).name === "function") {
+    attachChainedMethod(withTranslate, "name", (layerName: string | Token) => {
+      (operator as any).name(layerName);
+      const tag = wireOf(translated);
+      if (tag && typeof layerName === "string") tag.name = layerName;
     });
   }
-  // `.transition()` delegates the same way, so either chain order works.
   if (typeof (operator as any).transition === "function") {
-    attachTransitionOption(withTranslate, (spec) =>
-      (operator as any).transition(spec)
+    attachChainedMethod(
+      withTranslate,
+      "transition",
+      (spec: OperatorTransition) => (operator as any).transition(spec)
     );
   }
   return withTranslate;
@@ -1351,20 +1381,17 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       return combinator;
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
-    // `.label(accessor, options?)` is chained AFTER `dual(opts)` returns, so
-    // the pending state lives in this closed-over array and is read fresh
-    // each time the operator executes (once per `.flow()` run) — see the
-    // per-leaf stamp below and `attachLabelOption` at the bottom. Repeated
-    // `.label()` calls append, so every leaf's produced node(s) get one
-    // deferred label per call.
-    let labelState: Array<{
-      accessor: LabelAccessor;
-      options?: LabelOptions;
-      /** The call, one per `.label()`, shared by every node it labels. */
-      call: object;
-    }> = [];
+    // A modifier chained on the operator (`.label(accessor, options?)`) is
+    // the mark modifier of the same name applied to each GROUP node: the
+    // node(s) one leaf produced, which carry the leaf's rows as their datum.
+    // It is chained AFTER `dual(opts)` returns, so the pending calls live in
+    // this closed-over array and are read fresh each time the operator
+    // executes (once per `.flow()` run) — see the per-leaf stamp below and
+    // `attachLabelOption` at the bottom. Repeated calls append, so every
+    // group gets one application per call.
+    let groupModifiers: GroupModifierCall[] = [];
     // `.transition(spec)` chained after `dual(opts)`: read at execution time
-    // like `labelState`, and recorded on the node `layout` builds.
+    // like `groupModifiers`, and recorded on the node `layout` builds.
     let transitionState: OperatorTransition | undefined;
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
@@ -1467,27 +1494,32 @@ export function createOperator<Datum, Options extends Record<string, any>>(
                 }
               }
             }
-            // `.label(accessor, options)` chained on this operator (possibly
-            // more than once — each call appends to `labelState`): stamp
-            // every node this leaf produced with the leaf's own subdata (so
-            // `resolveLabelTargets`'s "a node with datum keeps its own label"
-            // gate fires — mirrors the manual LabelOnSpread workaround) and
-            // defer placement via `node.label`, once per accumulated call. A
-            // string accessor must be constant across the group's rows (true
-            // by construction for a `by`-field — `resolveLabelText` throws
-            // otherwise); a `field(...)` aggregate accessor (e.g.
-            // `field("count").sum()`) folds the group's rows to one value; a
-            // function accessor receives the whole leaf, enabling arbitrary
-            // aggregate labels (e.g. `(rows) => rows.length`).
-            if (labelState.length > 0) {
+            // The modifiers chained on this operator (`groupModifiers`, one
+            // entry per call): stamp every node this leaf produced with the
+            // leaf's own subdata, so the group node's datum is its rows (a
+            // ref to it reads them, and `resolveLabelTargets`'s "a node
+            // with datum keeps its own label" gate fires), then apply each
+            // call to it as its mark modifier applies to a mark's node. For
+            // `.label()`: a string accessor must be constant across the
+            // group's rows (true by construction for a `by`-field —
+            // `resolveLabelText` throws otherwise); a `field(...)` aggregate
+            // accessor (e.g. `field("count").sum()`) folds the group's rows
+            // to one value; a function accessor receives the whole leaf,
+            // enabling arbitrary aggregate labels (e.g. `(rows) =>
+            // rows.length`).
+            if (groupModifiers.length > 0) {
               for (const node of leafNodes) {
                 if (node.datum === undefined) node.datum = leaf;
-                for (const { accessor, options, call } of labelState) {
-                  node.label(
-                    accessor,
-                    labelOptionsIn(options, layerContext),
-                    call
+                for (const { modifier, args } of groupModifiers) {
+                  // Awaited only when it is async, so a sync modifier adds no
+                  // step between this group and the next.
+                  const applied = modifier.apply(
+                    node,
+                    layerContext,
+                    leaf,
+                    ...args
                   );
+                  if (applied) await applied;
                 }
               }
             }
@@ -1552,16 +1584,38 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
-    attachLabelOption(withTranslate, (accessor, options) => {
-      labelState = [...labelState, { accessor, options, call: {} }];
+    attachChainedMethod(withTranslate, "name", (layerName: string | Token) => {
+      groupModifiers = [
+        ...groupModifiers,
+        { modifier: groupNameModifier, args: [layerName] },
+      ];
       const tag = wireOf(operator);
-      if (tag) {
-        pushLabelField(tag, labelIRField(accessor, options));
+      if (tag && typeof layerName === "string") tag.name = layerName;
+    });
+    attachChainedMethod(
+      withTranslate,
+      "label",
+      (accessor: LabelAccessor, options?: LabelOptions) => {
+        groupModifiers = [
+          ...groupModifiers,
+          {
+            modifier: labelModifier,
+            args: labelModifier.bind(accessor, options),
+          },
+        ];
+        const tag = wireOf(operator);
+        if (tag) {
+          pushLabelField(tag, labelIRField(accessor, options));
+        }
       }
-    });
-    attachTransitionOption(withTranslate, (spec) => {
-      transitionState = spec;
-    });
+    );
+    attachChainedMethod(
+      withTranslate,
+      "transition",
+      (spec: OperatorTransition) => {
+        transitionState = spec;
+      }
+    );
     return withTranslate;
   }
   return dual as DualModeOperator<Datum, Options>;

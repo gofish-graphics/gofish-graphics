@@ -403,6 +403,10 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
  *  or it throws) or a `field(...)` aggregate (`.sum()`/`.mean()`/etc.) folding
  *  the group's rows to one value, e.g. `.label(field("count").sum())`. */
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
+  name: {
+    type: t.string,
+    doc: 'Layer name, from `.name("...")` on the operator: each group the operator makes is filed under it, so `selectAll(name)` yields one ref per group, whose `datum` is the group\'s rows.',
+  },
   label: { type: t.ref("LabelIR") },
   translate: { type: t.ref("TranslateIR") },
   debug: {
@@ -413,7 +417,7 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
 
 /** The base fields the Python generator exposes as kwargs on every operator
  *  core and dual-form combinator core (the rest of OPERATOR_BASE_FIELDS ride
- *  Operator methods: `.label()`, `.translate()`). */
+ *  Operator methods: `.name()`, `.label()`, `.translate()`). */
 export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
   debug: OPERATOR_BASE_FIELDS.debug,
 });

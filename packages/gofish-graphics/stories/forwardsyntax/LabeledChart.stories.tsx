@@ -9,7 +9,10 @@ import {
   layer,
   resolve,
   selectAll,
+  stack,
+  rect,
 } from "../../src/lib";
+import { seafood } from "../../src/data/catch";
 
 const meta: Meta = {
   title: "Forward Syntax/LabeledChart",
@@ -55,6 +58,42 @@ export const Basic: StoryObj<Args> = {
                 spread({ dir: "x", spacing: 6 }, [
                   r.ref,
                   text({ text: r.label }),
+                ])
+              )
+            )
+          )
+      )
+      .render(container);
+
+    return container;
+  },
+};
+
+// A callout on one group: the outer spread is named, so `selectAll("lakes")`
+// yields one ref per lake (its `datum` is that lake's rows), and the
+// annotation table joins its row to the lake it names through `resolve`.
+const callouts = [{ ref: "Lake B", note: "most fish" }];
+
+export const GroupCallout: StoryObj<Args> = {
+  args: { w: 500, h: 300 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(seafood, { w: args.w, h: args.h })
+      .flow(
+        spread({ by: "lake", dir: "x" }).name("lakes"),
+        stack({ by: "species", dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(
+        chart(callouts)
+          .flow(resolve(["ref"], { from: selectAll("lakes") }))
+          .mark((rows: any[]) =>
+            layer(
+              rows.map((r) =>
+                spread({ dir: "y", spacing: 4, alignment: "middle" }, [
+                  text({ text: r.note }),
+                  r.ref,
                 ])
               )
             )

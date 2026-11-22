@@ -286,7 +286,9 @@ story's combinator trees.
 Operators and marks may also carry `translate: {x?, y?}`. This is canonical
 frontend IR, not a Python-only bridge sentinel: it records the structural
 `.translate({x?, y?})` modifier and the JS deserializer reapplies it as a
-runtime chain.
+runtime chain. An operator may also carry `name`, from `.name("...")` on the
+operator (#802): the deserializer reapplies it before the operator's labels
+and translate, and each group the operator makes is filed under it.
 
 `offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
 child and shifts it by `(x, y)` render-pixels without moving the bounds it
