@@ -23,6 +23,7 @@
     "test:visual:update": "pnpm --filter @gofish/tests update",
     "test:visual:js": "pnpm --filter @gofish/tests test:js",
     "capture-one": "pnpm --filter @gofish/tests capture-one",
+    "tooltip-live": "pnpm --filter @gofish/tests tooltip-live",
     "capture-diff": "pnpm --filter @gofish/tests capture-diff",
     "capture-sweep": "pnpm --filter @gofish/tests capture-sweep",
     "test:visual:review": "pnpm --filter @gofish/tests review",
