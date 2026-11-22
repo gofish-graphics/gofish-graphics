@@ -1483,6 +1483,10 @@ export function gofish(
     };
   }
 
+  // The runtime listens on the container, which outlives the svg each
+  // re-render replaces (`InteractionRuntime.attachHost`).
+  options.interaction?.attachHost(container);
+
   const [layoutData] = createResource(() =>
     runLayout(options, child).then((data) => {
       state.warnings = data.warnings;

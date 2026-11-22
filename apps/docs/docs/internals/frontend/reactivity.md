@@ -274,10 +274,17 @@ layout pipeline:
    renders into the _same_ container — hence the container-dispose hook below.
    `dispose()` clears the thunk, so a run scheduled before the chart unmounted
    does nothing when it fires.
-2. **Delegated event dispatch.** `attachSVG` puts one listener per event type
-   (`pointermove/down/up/leave`, `wheel`) on the root `<svg>` and fans each event
-   out to every registered input, with a `data-gf-id` hit-test resolving the
-   display item (and thus datum) under the pointer.
+2. **Delegated event dispatch.** `attachHost` puts one listener per event type
+   (`pointermove/down/up/leave`, `wheel`) on the chart's container and fans
+   each event whose target is in the current `<svg>` (`attachSVG`) out to every
+   registered input, with a `data-gf-id` hit-test resolving the display item
+   (and thus datum) under the pointer. The listeners are on the container
+   because a re-run replaces the svg: a pointer over the old svg is over none
+   of the new one's elements until it moves, so a move straight off the chart
+   fires `pointerleave` on the container only. A move into the container off
+   the svg, or the container's own `pointerleave`, is a leave, and inputs
+   that take `pointerleave` get one. While a re-run has the svg out of the
+   page, a move over the container is not read.
 3. **Hit-testing + frame publication.** `publishFrame` rebuilds an id→item map
    and an id→box map (uids are minted fresh each resolve) and the data↔px
    conversions, then notifies inputs.
@@ -351,7 +358,8 @@ or node by its rows, a date by its instant), so two marks drawn from equal rows
 are one candidate. While the pointer is over the open box (the box the layer
 drew in the last frame), the focus does not move: the box covers the marks
 under it. A touch tap holds its point through the `pointerleave` that ends it,
-until the next tap or a mouse move.
+until the next tap or a mouse move. A tap outside the chart does not close
+it: the runtime hears only events in the chart's container.
 
 ## The timer is a scale, not a tick counter
 

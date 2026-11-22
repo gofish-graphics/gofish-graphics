@@ -138,6 +138,41 @@ await settle();
 check("the box closes", boxOf() === undefined);
 check("back to the first drawing", JSON.stringify(texts()) === JSON.stringify(beforeTexts));
 
+console.log("# a re-run replaced the svg: the container hears the leave");
+{
+  // Each re-run paints a new svg. In a browser the pointer that was over the
+  // old one is over none of the new one's elements until it moves, so a
+  // move straight off the chart fires `pointerleave` on the container (and
+  // its ancestors) only, which does not bubble.
+  send("pointermove", 100, 30);
+  await settle();
+  const first = svg();
+  check("open, in a new svg", boxOf() !== undefined && first.isConnected);
+  container.dispatchEvent(
+    new (globalThis as any).PointerEvent("pointerleave", {
+      clientX: 1000,
+      clientY: 1000,
+      bubbles: false,
+      pointerType: "mouse",
+    })
+  );
+  await settle();
+  check("the container's leave closes the box", boxOf() === undefined);
+  // A move that lands in the container, off the svg, is a leave too.
+  send("pointermove", 100, 30);
+  await settle();
+  container.dispatchEvent(
+    new (globalThis as any).PointerEvent("pointermove", {
+      clientX: 1000,
+      clientY: 30,
+      bubbles: true,
+      pointerType: "mouse",
+    })
+  );
+  await settle();
+  check("a move onto the container, off the svg, closes it", boxOf() === undefined);
+}
+
 console.log("# touch: a tap focuses and holds");
 send("pointerdown", 100, 100, "touch");
 send("pointerup", 100, 100, "touch");

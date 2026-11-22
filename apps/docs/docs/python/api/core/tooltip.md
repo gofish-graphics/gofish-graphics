@@ -53,8 +53,8 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   show only when every row agrees.
 - **Placement.** The box sits right of the mark, else left of it, centered
   on its row; else under or over it, flush with its end; else it is moved
-  inside the chart. It takes no room, takes no pointer events, and moves
-  nothing else.
+  inside the chart. It paints over the marks, their labels and the axes. It
+  takes no room, takes no pointer events, and moves nothing else.
 - **Static output.** A drawing with no pointer (an exported SVG) draws no box.
   Each mark carries the same rows as its SVG `<title>`.
 

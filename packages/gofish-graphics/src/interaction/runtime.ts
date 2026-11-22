@@ -9,8 +9,10 @@
  *   1. an rAF-coalesced, latest-wins re-render scheduler (`invalidate` /
  *      `runRerender`), with a hidden-tab timeout fallback so headless drivers
  *      and backgrounded tabs don't freeze;
- *   2. delegated DOM event dispatch on the root <svg>
- *      (pointermove/down/up/leave/wheel), routed to registered inputs;
+ *   2. delegated DOM event dispatch for the chart's <svg>
+ *      (pointermove/down/up/leave/wheel), routed to registered inputs. The
+ *      listeners sit on the chart's container, which outlives the re-runs
+ *      that replace the svg (see `attachHost`);
  *   3. hit-testing: `publishFrame` keeps an id → item map (for
  *      `pointer().datum()`), an id → on-screen box map (for `drag().nodeBox`),
  *      plus the frame's data-space conversions.
@@ -128,12 +130,17 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
    *  can map a pointer position onto a node layout placed. */
   private boxesById = new Map<string, SvgBox>();
   private conv?: FrameConversions;
+  /** The svg the current frame painted (`attachSVG`). */
   private svg?: SVGSVGElement;
+  /** The element the listeners sit on (`attachHost`). */
+  private host?: HTMLElement;
   private detach?: () => void;
-  /** The set of DOM event types currently attached to `svg` — the union of
+  /** The set of DOM event types currently attached to `host` — the union of
    *  registered inputs' `events` at attach time. Compared on re-attach so a
    *  later resolve that registered a new input kind grows the listener set. */
   private attachedEvents?: Set<InteractionEventType>;
+  /** Whether the pointer was over the svg at the last event. */
+  private pointerInside = false;
 
   /** Register an input (idempotent by identity: a re-resolve re-registers
    *  the same inputs). */
@@ -276,21 +283,42 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
     return set;
   }
 
-  /** Attach delegated listeners to the rendered <svg> for exactly the event
-   *  types the registered inputs consume. Idempotent per (svg, event-set): a
-   *  re-resolve into the same svg re-attaches only if the needed set grew (a new
-   *  input kind registered). */
+  /** The svg a render painted, which events are read against: its
+   *  elements are the hit targets, and its screen transform maps a pointer
+   *  into svg px. A re-run paints a new one. */
   attachSVG(svg: SVGSVGElement): void {
+    this.svg = svg;
+  }
+
+  /**
+   * Attach delegated listeners to `host`, the element the chart renders into,
+   * for exactly the event types the registered inputs consume. Idempotent per
+   * (host, event-set): a re-render into the same host re-attaches only if the
+   * needed set grew (a new input kind registered).
+   *
+   * The listeners are on the host, not the svg, because a re-run replaces the
+   * svg, and the browser tracks the pointer by element: a pointer that was
+   * over the old svg is over none of the new one's elements until it moves,
+   * so when it then leaves the chart the browser fires `pointerleave` on the
+   * host and its ancestors only. The host stays, so it hears every move and
+   * every leave. An event counts when its target is in the current svg; the
+   * pointer leaves the chart when a move lands in the host outside the svg
+   * or the host's own `pointerleave` fires, and inputs that take
+   * `pointerleave` get one then. While a re-run has taken the svg out of
+   * the page, a move over the host says nothing about the chart, so it is
+   * not read.
+   */
+  attachHost(host: HTMLElement): void {
     const needed = this.neededEvents();
     if (
-      this.svg === svg &&
+      this.host === host &&
       this.attachedEvents !== undefined &&
       sameSet(this.attachedEvents, needed)
     ) {
       return;
     }
     this.detach?.();
-    this.svg = svg;
+    this.host = host;
     this.attachedEvents = needed;
 
     const hitFor = (event: Event): Hit | undefined => {
@@ -305,6 +333,8 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
     };
 
     const localPoint = (event: Event): SvgPoint | undefined => {
+      const svg = this.svg;
+      if (svg === undefined) return undefined;
       if (!(event instanceof PointerEvent) && !(event instanceof WheelEvent)) {
         return undefined;
       }
@@ -325,7 +355,7 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
       return { x: event.clientX - box.left, y: event.clientY - box.top };
     };
 
-    const dispatch = (type: InteractionEventType) => (event: Event) => {
+    const send = (type: InteractionEventType, event: Event) => {
       const hit = hitFor(event);
       const pt = localPoint(event);
       for (const input of this.inputs) {
@@ -333,15 +363,42 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
       }
     };
 
+    // Where the pointer is, by an event's target: over the svg, off it, or
+    // unknown while a re-run has the svg out of the page. A `pointerleave`
+    // the host hears is its own (it does not bubble), or a leave of the svg
+    // dispatched to bubble: either way the pointer left the chart.
+    const where = (type: InteractionEventType, event: Event) => {
+      const target = event.target as Node | null;
+      if (type === "pointerleave" && (target === host || target === this.svg))
+        return "off";
+      const svg = this.svg;
+      if (svg === undefined || !svg.isConnected) return "unknown";
+      return target !== null && svg.contains(target) ? "over" : "off";
+    };
+
+    const leaves = needed.has("pointerleave");
+    const dispatch = (type: InteractionEventType) => (event: Event) => {
+      const at = where(type, event);
+      if (at === "unknown") return;
+      const inside = at === "over";
+      if (this.pointerInside && !inside && leaves) send("pointerleave", event);
+      this.pointerInside = inside;
+      if (inside && type !== "pointerleave" && needed.has(type))
+        send(type, event);
+    };
+
+    // A move off the svg inside the host is a leave, so leaving takes moves.
+    const types = new Set(needed);
+    if (leaves) types.add("pointermove");
     const listeners: [InteractionEventType, (e: Event) => void][] = [
-      ...needed,
+      ...types,
     ].map((type): [InteractionEventType, (e: Event) => void] => [
       type,
       dispatch(type),
     ]);
     for (const [type, fn] of listeners) {
       // Non-passive so wheel-bound inputs can preventDefault page scroll.
-      svg.addEventListener(
+      host.addEventListener(
         type,
         fn,
         type === "wheel" ? { passive: false } : undefined
@@ -349,9 +406,10 @@ export class InteractionRuntime implements Registrar, SpecInvalidator {
     }
 
     this.detach = () => {
-      for (const [type, fn] of listeners) svg.removeEventListener(type, fn);
-      this.svg = undefined;
+      for (const [type, fn] of listeners) host.removeEventListener(type, fn);
+      this.host = undefined;
       this.attachedEvents = undefined;
+      this.pointerInside = false;
     };
   }
 
