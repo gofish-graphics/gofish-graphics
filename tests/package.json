@@ -12,6 +12,7 @@
     "capture-one": "tsx scripts/capture-one.ts",
     "capture-docs-images": "tsx scripts/capture-docs-images.ts",
     "capture-diff": "tsx scripts/capture-diff.ts",
+    "serve-capture-diff": "tsx scripts/static-server.ts tmp/capture-diff 3006",
     "capture-pixels": "tsx scripts/capture-pixels.ts",
     "capture-sweep": "tsx scripts/capture-sweep.ts",
     "update-baselines": "tsx scripts/update-baselines.ts",
