@@ -645,6 +645,99 @@ console.log("# a line drawn from a function, and a connector: one box, no snap")
   }
 }
 
+/* Helpers for the blocks below: a chart rendered into an element of its
+ * own, the box in it, and a pointer move over it. */
+const freshEl = () => {
+  const el = document.createElement("div");
+  document.body.appendChild(el);
+  return el;
+};
+const boxOfEl = (el: Element) =>
+  [...el.querySelectorAll("rect")].find((r) => r.getAttribute("stroke") === "#c9ced6");
+const boxTexts = (el: Element) => {
+  const r = boxOfEl(el);
+  return r ? [...r.parentElement!.querySelectorAll("text")].map((t) => t.textContent) : [];
+};
+const moveOver = (el: Element, x: number, y: number) =>
+  el.querySelector("svg")!.dispatchEvent(
+    new (globalThis as any).PointerEvent("pointermove", {
+      clientX: x,
+      clientY: y,
+      bubbles: true,
+      pointerType: "mouse",
+    })
+  );
+/** The interaction runtime's registered inputs, read off the container. */
+const inputCount = (el: Element) => (el as any).__gofishState?.runtime?.inputs?.length;
+
+console.log("# a .tooltip() rebuilt on every resolve keeps one focus");
+{
+  const { gofish, Serialize } = GoFish as any;
+  // Bars sit at y 0-64, 68-132, 136-200 in a 400 x 200 chart.
+  const bars = (count: () => void) =>
+    chart(rows, { w: 400, h: 200 }).flow(
+      derive((r: any) => (count(), r)),
+      spread({ by: "path", dir: "y", spacing: 4 })
+    );
+  const shapes: [string, (el: HTMLElement, count: () => void) => Promise<unknown>][] = [
+    [
+      "a function mark",
+      (el, count) => bars(count).mark((d: any) => rect({ w: "share" }).tooltip()(d)).render(el, {}),
+    ],
+    [
+      "a component thunk",
+      (el, count) =>
+        gofish(el, {}, () => bars(count).mark(rect({ w: "share" }).tooltip())),
+    ],
+    [
+      "a Python lambda mark (an IR mark-fn)",
+      async (el, count) => {
+        const doc = await Serialize.toJSON(
+          chart(rows, { w: 400, h: 200 })
+            .flow(spread({ by: "path", dir: "y", spacing: 4 }))
+            .mark(rect({ w: "share" }).tooltip())
+        );
+        const markIR = doc.root.mark;
+        doc.root.mark = { type: "mark-fn", lambdaId: "m" };
+        // The mark function is called once per bar: a resolve is the call
+        // for the first one.
+        const bridge = {
+          call: async (_id: string, rows: any[]) => {
+            if (rows[0]?.path === "VO→VO") count();
+            // Python applies the mark to the rows it was called with, which
+            // cross as JSON: new row objects on every call.
+            return { root: { ...markIR, __datum: JSON.parse(JSON.stringify(rows)) }, tables: {} };
+          },
+        };
+        return Serialize.renderIR(doc, el, {}, bridge);
+      },
+    ],
+  ];
+  for (const [name, render] of shapes) {
+    const el = freshEl();
+    let runs = 0;
+    await render(el, () => runs++);
+    await settle();
+    const first = runs;
+    moveOver(el, 100, 30);
+    await settle();
+    check(`${name}: hover opens a box`, boxTexts(el).includes("VO→VO"), [boxTexts(el), el.querySelectorAll("title").length, inputCount(el)]);
+    const opened = runs;
+    check(`${name}: one re-run to open it`, opened - first === 1, opened - first);
+    const inputs = inputCount(el);
+    for (let i = 0; i < 20; i++) {
+      moveOver(el, 100 + (i % 3), i % 2 === 0 ? 100 : 30);
+      await settle();
+    }
+    check(`${name}: one re-run per change of focus`, runs - opened === 20, runs - opened);
+    check(
+      `${name}: the inputs do not grow with re-runs`,
+      inputCount(el) === inputs && inputs !== undefined,
+      [inputs, inputCount(el)]
+    );
+  }
+}
+
 console.log("# the widget path: an IR document rendered by renderIR");
 {
   // What the Python widget does with `rect(w="share").tooltip()`: the

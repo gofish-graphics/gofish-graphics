@@ -342,12 +342,16 @@ code (a bare `createEffect`) never attaches, so `dataPos()`/`currentData()` retu
 A mark's `.tooltip()` (#1395) needs to know which of its marks the pointer is
 on. That is an input like the others, `TooltipFocus` (`tooltipFocus.ts`), and
 nothing about the runtime is special to it. A mark with `.tooltip()` reads
-its call's focus as it resolves (`focus.read(registrar)` in `recordTooltip`):
+its chart's focus as it resolves (`focus.read(registrar)` in `recordTooltip`):
 the input registers itself, since no spec code reads it, and the chart becomes
 a reader of its key. The tooltip's lowering (`ast/tooltip/tooltip.ts`) hands
-the focus the call's marks in the whole render (`focus.use(marks)`) and the box
-it drew (`focus.drew(box)`). One focus lives per chart and per `.tooltip()` call
-(`focusOf`), so it outlives the resolves that make every node anew.
+the focus the marks with a tooltip in the whole render (`focus.use(marks)`)
+and the box it drew (`focus.drew(box)`). One focus lives per chart
+(`focusOf`), for every `.tooltip()` in it, so one pointer opens one box, and
+the focus outlives the resolves that make every node anew. It is not one per
+`.tooltip()` call because a call is not stable across resolves: a call
+written in a mark function, a component thunk or a Python lambda mark is made
+anew on each resolve, once per group the function is called for.
 
 The focus reads geometry the way `nodeBox` does. On each published frame it
 walks the display items once (`walkItems`), for the open box's extent and for
@@ -370,9 +374,11 @@ On each pointer event it runs the focus behavior (`focus.ts`, by default
 measures the pointer against the hull of the marks first, so a pointer far
 from every mark runs nothing else), and it invalidates its readers only when
 the focused key, or the focused point, changes. Thirty moves across
-three bars re-run the chart twice. A key is the JSON of the mark's rows (a ref
-or node by its rows, a date by its instant), so two marks drawn from equal rows
-are one candidate. The open box (the box the layer drew in the last frame) is
+three bars re-run the chart twice. A key is the JSON of the mark's
+`.tooltip()` call (the wire of the mark it is chained on and its field list)
+and of the mark's rows (a ref or node by its rows, a date by its instant), so
+two marks of one call drawn from equal rows are one candidate, and the marks
+of two calls are not. The open box (the box the layer drew in the last frame) is
 no pointer target: the behavior runs as if it were not there, so a mark or a
 row under it is reached. Only where the behavior picks nothing (the box
 reaches past the marks' hull limit) does a pointer over the box keep the

@@ -396,15 +396,15 @@ methods:
 - `mark.tooltip(fields?)`, in a static drawing, writes on every produced
   node the rows a box describing it would show, as the node's `title`. In
   a live chart, which paints no titles, it records on every node a request:
-  its rows, a key from its data, and the rows its box shows when the call
+  its rows, a key from its call and its data, and the rows its box shows when the call
   names its fields (checked there, so a missing field fails the render);
   without a list, the rows are made only for the focused node. The mark
-  also reads its call's focus, so a change of focus re-runs the chart, and
+  also reads its chart's focus, so a change of focus re-runs the chart, and
   a chart whose resolve read no focus lowers no tooltip layer
   (`hasTooltips`). The render lowers the box after the labels, as a layer over its selection (`tooltipLayer` in
   `ast/tooltip/tooltip.ts`, through `lowerSelectionLayers`, see
   [Labels](/internals/frontend/labels)): it takes the requests off the
-  tree, hands each call's focus the call's marks, selects the first mark
+  tree, hands the chart's focus every mark with a tooltip, selects the first mark
   with the focused key, and draws a box beside it on the render root, so
   the box paints over the marks, their labels and the chrome. With no focus
   nothing is lowered. The box is ordinary marks (an `enclose` of two

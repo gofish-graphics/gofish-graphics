@@ -57,7 +57,8 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   open. The open box keeps its mark until another one is 4 px nearer. The
   box takes no pointer events, so a mark under it is reached as if it were
   not there; where no mark is near, a pointer over the box keeps it open. On a touch screen, a tap opens the box
-  and it stays open.
+  and it stays open. A chart opens one box at a time: the marks of every
+  `.tooltip()` in it are candidates together.
 - **Values.** Numbers show digit grouping from five digits on and at most
   two fraction digits (`11,902`, `2018`, `2.35`). A number below 1 shows three significant digits
   (`0.13`, `0.0119`). Dates, and the values of a time column, show as a

@@ -24,14 +24,18 @@ import {
  *  the mark it is chained on, whose channel options name the fields the mark
  *  draws (`tooltipRows`). The modifier's `tag` sets it, before any node is
  *  made. */
-export type TooltipCall = { wire?: TooltipMark["wire"] };
+export type TooltipCall = {
+  wire?: TooltipMark["wire"];
+  /** The call's part of its marks' keys ({@link callKey}), made once. */
+  key?: string;
+};
 
 /** What one node's `.tooltip()` call recorded in a live chart: the rows
  *  the node was drawn from, whether it is drawn through them
  *  (`GoFishNode.throughRows`), the call's fields and wire, the rows its box
  *  shows when the call names its fields (otherwise they are made only for
  *  the focused node, {@link tooltipContent}), the node's key, and the focus
- *  of the call in the chart that resolved it. */
+ *  of the chart that resolved it. */
 export type TooltipRequest = {
   rows: unknown[];
   throughRows: boolean;
@@ -89,9 +93,23 @@ export function takeTooltips(
  * hovering the second opens a box beside the first. The right fix is a node
  * identity that is stable across re-runs (#673), to key a mark by.
  */
-export function rowsKey(rows: readonly unknown[]): string {
+export const rowsKey = (rows: readonly unknown[]): string => valueKey(rows);
+
+/**
+ * The part of a mark's key that comes from its `.tooltip()` call: the mark
+ * it is chained on (its wire) and the fields it lists. Two calls on marks
+ * that differ are told apart, though the chart has one focus for all of
+ * them, and a call made anew on each resolve (in a mark function) keys its
+ * marks as the last one did.
+ */
+const callKey = (call: TooltipCall, fields: readonly string[] | undefined) =>
+  (call.key ??= valueKey([call.wire ?? null, fields ?? null]));
+
+/** A JSON key of `value`: a ref or node stands for its rows, a date for
+ *  its instant, a function for nothing. */
+function valueKey(value: unknown): string {
   const seen = new WeakSet<object>();
-  return JSON.stringify(rows, function (this: unknown, k, v) {
+  return JSON.stringify(value, function (this: unknown, k, v) {
     if (v instanceof GoFishRef || v instanceof GoFishNode)
       return { rows: (v as { datum?: unknown }).datum };
     // A date is serialized before the replacer sees it; read it raw.
@@ -110,7 +128,7 @@ export function rowsKey(rows: readonly unknown[]): string {
  * Record a node the mark of a `.tooltip(fields)` call made from `datum`.
  * In a static drawing, the rows its box would show are its `title`. In a
  * live chart (`registrar`), which paints no titles, the node's request is
- * recorded for the tooltip layer, and the mark reads its call's focus
+ * recorded for the tooltip layer, and the mark reads its chart's focus
  * there, as a spec reads an input, so a change of focus re-runs the chart.
  * A field list is checked here either way, so a field that is not there
  * fails the render, not a hover; without one the rows are made only for
@@ -136,7 +154,7 @@ export function recordTooltip(
   }
   const content =
     fields && tooltipRows({ rows, wire: call.wire }, fields, throughRows);
-  const focus = focusOf(registrar, call);
+  const focus = focusOf(registrar);
   focus.read(registrar);
   requests.set(node, {
     rows,
@@ -144,7 +162,7 @@ export function recordTooltip(
     fields,
     wire: call.wire,
     content,
-    key: rowsKey(rows),
+    key: `${callKey(call, fields)}${rowsKey(rows)}`,
     focus,
   });
 }

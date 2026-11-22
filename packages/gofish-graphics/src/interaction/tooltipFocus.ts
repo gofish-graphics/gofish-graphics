@@ -57,8 +57,9 @@ import {
 
 /** A mark a tooltip may describe, as one resolve made it. */
 export type FocusMark = {
-  /** Derived from the mark's data, so it survives a re-run, which makes
-   *  every node anew (#673). Marks with one key are one candidate. */
+  /** Derived from the mark's `.tooltip()` call and data (`tooltipKey`), so
+   *  it survives a re-run, which makes every node anew (#673). Marks with
+   *  one key are one candidate. */
   key: string;
   node: GoFishNode;
   rows: unknown[];
@@ -71,8 +72,8 @@ const POINTER_EVENTS: InteractionEventType[] = [
   "pointerleave",
 ];
 
-/** One tooltip's focus: the focused mark's key and row, and the marks of
- *  the last resolve. */
+/** A chart's tooltip focus: the focused mark's key and row, and the marks
+ *  of the last resolve, of every `.tooltip()` in the chart. */
 export class TooltipFocus implements InputPrimitive {
   private readonly readers = new Set<SpecInvalidator>();
   readonly specReaders = [this.readers];
@@ -108,8 +109,8 @@ export class TooltipFocus implements InputPrimitive {
     this.readers.add(registrar);
   }
 
-  /** Called by each lowering of the tooltip (`tooltip.ts`) with the call's
-   *  marks in the whole render, before it draws the box. */
+  /** Called by each lowering of the tooltip (`tooltip.ts`) with the marks
+   *  with a tooltip in the whole render, before it draws the box. */
   use(marks: FocusMark[]): void {
     this.marks = marks;
     this.box = undefined;
@@ -214,22 +215,30 @@ export class TooltipFocus implements InputPrimitive {
   }
 }
 
-/** Each registrar's focus for each tooltip call: the focus outlives the
- *  resolves of one chart, and two charts drawing one spec focus apart. */
-const focuses = new WeakMap<Registrar, WeakMap<object, TooltipFocus>>();
+/**
+ * Each registrar's focus: one per chart, for every `.tooltip()` in it, so
+ * one pointer opens one box. It outlives the resolves of the chart, and two
+ * charts drawing one spec focus apart.
+ *
+ * The focus is the chart's, not a `.tooltip()` call's, because a call is
+ * not stable across resolves: a call written in a mark function, a
+ * component thunk or a Python lambda mark is made anew on every resolve,
+ * and once per group the function is called for. What tells its marks
+ * apart across re-runs is their key (`FocusMark.key`), which comes from the
+ * call's mark and fields and from the mark's rows.
+ */
+const focuses = new WeakMap<Registrar, TooltipFocus>();
 
 /** Whether the chart `registrar` renders resolved a mark with a tooltip:
  *  a chart without one lowers no tooltip layer. */
 export const hasTooltips = (registrar: Registrar | undefined): boolean =>
   registrar !== undefined && focuses.has(registrar);
 
-/** The focus `call` (one `.tooltip()` call) has in the chart `registrar`
- *  renders, made on its first resolve. */
-export function focusOf(registrar: Registrar, call: object): TooltipFocus {
-  let byCall = focuses.get(registrar);
-  if (byCall === undefined) focuses.set(registrar, (byCall = new WeakMap()));
-  let focus = byCall.get(call);
-  if (focus === undefined) byCall.set(call, (focus = new TooltipFocus()));
+/** The focus of the chart `registrar` renders, made on its first resolve
+ *  that met a `.tooltip()`. */
+export function focusOf(registrar: Registrar): TooltipFocus {
+  let focus = focuses.get(registrar);
+  if (focus === undefined) focuses.set(registrar, (focus = new TooltipFocus()));
   return focus;
 }
 
@@ -343,8 +352,8 @@ type DrawnPoint = DrawnRowPoint & { color: string | undefined };
 type PointCandidate = Candidate & { color?: string };
 
 /** A mark's drawn row points as candidates. A point's key is its row's
- *  place among the mark's rows, after the mark's key: the mark's key is its
- *  rows (`rowsKey`), so the place is stable across re-runs too. A point
+ *  place among the mark's rows, after the mark's key: the mark's key comes
+ *  from its rows (`rowsKey`), so the place is stable across re-runs too. A point
  *  whose row is not among the mark's rows is left out. */
 function pointsOf(
   key: unknown,
