@@ -153,6 +153,16 @@ An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`. A
 hidden child's region and draws none of its paint. `chart(...)` and
 `layer([...])` take `.hidden()` too.
 
+### `.tooltip(fields?)` — a box on hover {#tooltip}
+
+`.tooltip()` shows a box that describes the mark under the pointer: every
+field with one value on the mark, or `fields`, in order. See
+[tooltip](/js/api/core/tooltip).
+
+```ts
+rect({ w: "share" }).tooltip(["path", "n", "share"]);
+```
+
 ### `.translate({ x?, y? })` — pixel offset
 
 `.translate({ x?, y? })` applies a structural pixel translation around the

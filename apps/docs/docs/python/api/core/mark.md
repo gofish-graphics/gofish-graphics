@@ -324,6 +324,17 @@ An ancestor's `.hidden()` wins over a descendant's `.hidden(False)`. A
 a hidden child's region and draws none of its paint. `chart(...)` and
 `layer([...])` take `.hidden()` too.
 
+## Tooltips {#tooltip}
+
+`.tooltip(fields=None)` shows a box that describes the mark under the
+pointer, mirroring JS's [`.tooltip(fields)`](/js/api/core/mark#tooltip):
+every field with one value on the mark, or `fields`, in order. See
+[tooltip](/python/api/core/tooltip).
+
+```python
+rect(w="share").tooltip(["path", "n", "share"])
+```
+
 ## Paint order {#z-order}
 
 `.z_order(value)` sets the mark's paint-order hint, mirroring JS's

@@ -346,8 +346,10 @@ On each pointer event it runs the focus behavior (`focus.ts`, by default
 invalidates its readers only when the focused key changes. Thirty moves across
 three bars re-run the chart twice. A key is the JSON of the mark's rows (a ref
 or node by its rows, a date by its instant), so two marks drawn from equal rows
-are one candidate. A touch tap holds its point through the `pointerleave` that
-ends it, until the next tap or a mouse move.
+are one candidate. While the pointer is over the open box (the box the layer
+drew in the last frame), the focus does not move: the box covers the marks
+under it. A touch tap holds its point through the `pointerleave` that ends it,
+until the next tap or a mouse move.
 
 ## The timer is a scale, not a tick counter
 
