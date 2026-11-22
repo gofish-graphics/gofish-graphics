@@ -1050,7 +1050,8 @@ type Span = [number, number];
  * node grown by its outline. A coordinate space's interior is in its own
  * coordinates, and its box stands for it, outlines included (`coord`); a
  * node that clips its content to its box (`GoFishNode.clipsToBox`) draws
- * nothing past it.
+ * nothing past it, and an overlay (`GoFishNode.overlay`, a tooltip's box)
+ * is drawn over the graphic, so it is left out.
  *
  * `outline` is the part of it the root's claim holds: the outlines of the
  * nodes that take room, ink left out.
@@ -1132,7 +1133,7 @@ function drawnOverflow(root: GoFishNode): {
       offset[1] + (n.projectedTranslate(1) ?? 0),
     ];
     n.children.forEach((c, i) => {
-      if (!(c instanceof GoFishNode)) return;
+      if (!(c instanceof GoFishNode) || c.overlay) return;
       const isInk = ([0, 1] as const).map(
         (axis) => inkLayer && n.claimWalk?.ink[axis].has(i) === true
       ) as [boolean, boolean];

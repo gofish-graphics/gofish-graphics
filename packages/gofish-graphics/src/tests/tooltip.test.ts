@@ -23,8 +23,6 @@ import { Frontend } from "gofish-ir";
 import {
   defaultFocus,
   Focus,
-  isPath,
-  nearestOnPath,
   type Candidate,
   type Frame,
 } from "../interaction/focus";
@@ -164,15 +162,76 @@ console.log("# focus: a line is as near as its drawn path");
   check("inside another line's box: the nearer path", pick(frame(65, 54, undefined, [zig, flat])) === "flat");
   // A thin line needs no exact aim: 3 px off its stroke is the line.
   check("3 px off the stroke", pick(frame(100, 23, undefined, two)) === "upper");
-  check("isPath: a line", isPath(upper));
-  check("isPath: not a bar", !isPath(bars[0]));
-  const q = nearestOnPath({ x: 100, y: 0 }, upper.outline)!;
+}
+
+console.log("# focus: on a line drawn through rows, the nearest row");
+{
+  /** A line through rows at `pts`: its path, and a point per row. */
+  const through = (key: string, pts: [number, number][]): Candidate => {
+    const outline = pts.slice(1).map(([x, y], i) => {
+      const a = { x: pts[i][0], y: pts[i][1] };
+      const b = { x, y };
+      const box = {
+        x0: Math.min(a.x, b.x),
+        y0: Math.min(a.y, b.y),
+        x1: Math.max(a.x, b.x),
+        y1: Math.max(a.y, b.y),
+      };
+      return { box, round: false, segment: [a, b] as const };
+    });
+    const box = {
+      x0: Math.min(...pts.map((p) => p[0])),
+      y0: Math.min(...pts.map((p) => p[1])),
+      x1: Math.max(...pts.map((p) => p[0])),
+      y1: Math.max(...pts.map((p) => p[1])),
+    };
+    const points = pts.map(([x, y], i): Candidate => {
+      const b = { x0: x, y0: y, x1: x, y1: y };
+      return {
+        key: `${key}#${i}`,
+        datum: [{ i }],
+        box: b,
+        position: { x, y },
+        outline: [{ box: b, round: true }],
+      };
+    });
+    return { key, datum: [], box, position: {}, outline, points };
+  };
+  // Five rows 100 px apart; `low` runs 60 px under `high`.
+  const xs = [0, 100, 200, 300, 400];
+  const high = through("high", xs.map((x) => [x, 40] as [number, number]));
+  const low = through("low", xs.map((x) => [x, 100] as [number, number]));
+  const lines = [high, low];
+  const at = (x: number, y: number, current?: Candidate) =>
+    defaultFocus(frame(x, y, current, lines)).choice?.key;
+  const pointOf = (key: string | undefined) =>
+    lines.flatMap((l) => l.points!).find((p) => p.key === key);
+  check("on a row's point: that row", at(100, 40) === "high#1");
+  check("between two rows, nearer the second", at(160, 42) === "high#2");
+  check("between two rows, nearer the first", at(140, 42) === "high#1");
+  check("past the last row: the last row", at(405, 40) === "high#4");
+  check("before the first row: the first row", at(-5, 40) === "high#0");
+  check("nearer the low line: its row", at(210, 90) === "low#2");
+  // The current point keeps a 4 px head start over its neighbor.
+  check("by the middle, the current row stays", at(152, 40, pointOf("high#1")) === "high#1");
+  check("past the head start, the next row", at(155, 40, pointOf("high#1")) === "high#2");
+  // The current point counts as its line when the lines are chosen.
   check(
-    "nearestOnPath: the foot on the nearer segment",
-    Math.abs(q.x - (100 + 100 / 26)) < 1e-9 &&
-      Math.abs(q.y - (20 - 20 / 26)) < 1e-9,
-    q
+    "between the lines, the current line stays",
+    at(100, 71, pointOf("high#1")) === "high#1" &&
+      at(100, 71, pointOf("low#1")) === "low#1"
   );
+  // A sweep along a line: the focus changes exactly when the nearest row
+  // does, once per row.
+  let current: Candidate | undefined;
+  let changes = 0;
+  for (let x = 0; x <= 400; x += 5) {
+    const choice = defaultFocus(frame(x, 41, current, lines)).choice;
+    if (choice?.key !== current?.key) changes++;
+    current = choice;
+  }
+  check(`a sweep along five rows: five changes of focus (${changes})`, changes === 5, changes);
+  check("far from the lines: none", at(200, 300) === undefined);
 }
 
 console.log("# candidates: long paths and many marks");
@@ -296,8 +355,14 @@ console.log("# a filled path is a region");
   check("inside the area, just under its top line", hit(150, 28, [area]) === "area");
   check("above the area's top line: outside", hit(100, 20, [area]) === undefined);
   check("below the area: outside", hit(100, 195, [area]) === undefined);
-  check("a region is not a path", !isPath(area) && !isPath(regions[0]));
-  check("a stroked path is a path", isPath(stroked));
+  check(
+    "a region is one part, its edge",
+    area.outline.length === 1 && area.outline[0].region !== undefined
+  );
+  check(
+    "a stroked path is its segments",
+    stroked.outline.every((p) => p.segment !== undefined)
+  );
   check("under a stroked line: not on it", hit(100, 100, [stroked]) === undefined);
 }
 

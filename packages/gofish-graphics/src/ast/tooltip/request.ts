@@ -40,10 +40,17 @@ export type TooltipRequest = {
   focus: TooltipFocus;
 };
 
-/** The rows the box of `request` shows. */
-export const tooltipContent = (request: TooltipRequest): TooltipRow[] =>
-  request.content ??
-  tooltipRows({ rows: request.rows, wire: request.wire }, request.fields);
+/** The rows the box of `request` shows: of its focused `row`, when its
+ *  mark is drawn through rows and the focus is on one of them, else of the
+ *  whole mark. */
+export const tooltipContent = (
+  request: TooltipRequest,
+  point?: { row: unknown }
+): TooltipRow[] =>
+  point !== undefined
+    ? tooltipRows({ rows: [point.row], wire: request.wire }, request.fields)
+    : (request.content ??
+      tooltipRows({ rows: request.rows, wire: request.wire }, request.fields));
 
 const requests = new WeakMap<GoFishNode, TooltipRequest>();
 

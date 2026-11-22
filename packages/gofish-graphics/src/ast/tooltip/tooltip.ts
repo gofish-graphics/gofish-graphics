@@ -17,7 +17,9 @@
  *
  * where the focused mark is the one the pointer picks (`tooltipFocus.ts`)
  * and the box is ordinary marks: a rounded rect around a column of names
- * and a column of values. The tier goes on the render root, over the whole
+ * and a column of values. On a mark drawn through rows (a line), the focus
+ * is one row, and the box shows that row, beside its point, with a marker
+ * on the point. The tier goes on the render root, over the whole
  * graphic: its box paints over the marks, their labels and the chrome, and
  * stays inside the graphic. The box is ink (it takes no room, so opening it
  * moves nothing), and nothing it draws is a pointer target. With no focus
@@ -30,7 +32,7 @@
 import { GoFishNode } from "../_node";
 import { text } from "../shapes/text";
 import { spread } from "../graphicalOperators/spread";
-import { enclose } from "../marks/chart";
+import { circle, enclose } from "../marks/chart";
 import { LayerContext, resolveMarkResult } from "../marks/markResult";
 import type { SelectionLayer } from "../selectionLayer";
 import { selectNode } from "../marks/resolveRefData";
@@ -38,6 +40,7 @@ import type { FocusMark, TooltipFocus } from "../../interaction/tooltipFocus";
 import { createTooltipPlaceConstraint } from "./place";
 import type { TooltipRow } from "./content";
 import { takeTooltips, tooltipContent } from "./request";
+import { MARKER_RADIUS } from "./place";
 
 /** The box: a column of muted, right-aligned names beside a column of
  *  left-aligned values, in a white rounded rect. */
@@ -74,12 +77,13 @@ function box(rows: readonly TooltipRow[]) {
   );
 }
 
-/** One focused mark: the node, the rows its box shows, and its call's
- *  focus. */
+/** One focused mark: the node, the rows its box shows, its call's focus,
+ *  and the focused row on a mark drawn through rows. */
 type TooltipEntry = {
   node: GoFishNode;
   rows: TooltipRow[];
   focus: TooltipFocus;
+  point: { row: unknown } | undefined;
 };
 
 /**
@@ -88,11 +92,9 @@ type TooltipEntry = {
  * focus gets the call's marks in the whole render, as candidates, and the
  * selection is the first mark with the focused key (marks with one key are
  * one candidate). Its home is the render root. The tier over it is, per
- * entry, a ref to the mark and its box, seated after the solve beside the
- * mark and inside the graphic (`tooltipPlace`). The box of a mark drawn as a
- * path (a line) is then moved at paint, to sit beside the point of the path
- * nearest the pointer (`TooltipFocus.offset`): which mark is the focus is
- * layout, where the pointer is along it is paint.
+ * entry, a ref to the mark and its box (and, on a row of a line, the
+ * marker on its point), seated after the solve beside the mark, or the
+ * row's point, and inside the graphic (`tooltipPlace`).
  */
 export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
   take(root) {
@@ -107,7 +109,12 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
       marks.push({ key: request.key, node, rows: request.rows });
       if (request.key === focus.key && !found.has(focus)) {
         found.add(focus);
-        entries.push({ node, rows: tooltipContent(request), focus });
+        entries.push({
+          node,
+          rows: tooltipContent(request, focus.point),
+          focus,
+          point: focus.point,
+        });
       }
     }
     for (const [focus, marks] of byFocus) focus.use(marks);
@@ -117,30 +124,52 @@ export const tooltipLayer: SelectionLayer<TooltipEntry, null> = {
   home: (_target, root) => root,
   async draw(entries) {
     const nodes: GoFishNode[] = [];
-    const seats: [GoFishNode, GoFishNode, TooltipFocus][] = [];
-    for (const { node, rows, focus } of entries) {
+    type Seat = {
+      stand: GoFishNode;
+      shown: GoFishNode;
+      marker: GoFishNode | undefined;
+      point: { row: unknown } | undefined;
+    };
+    const seats: Seat[] = [];
+    // The box and the marker are drawn over the graphic: they take no
+    // room, no pointer lands on them, and they do not size the canvas.
+    const float = (n: GoFishNode) => {
+      n.inkOn = [true, true];
+      n.overlay = true;
+      return n;
+    };
+    for (const { node, rows, focus, point } of entries) {
       const stand = selectNode(node) as unknown as GoFishNode;
-      const shown = await resolveMarkResult(
-        box(rows) as any,
-        new LayerContext()
+      const shown = float(
+        await resolveMarkResult(box(rows) as any, new LayerContext())
       );
-      // It takes no room, and no pointer lands on it.
-      shown.inkOn = [true, true];
-      shown.noPointerTarget = true;
       focus.drew(shown);
-      // A line's box follows the pointer along it, as a paint patch.
-      if (focus.follows()) shown.INTERNAL_moveWhile(() => focus.offset());
-      nodes.push(stand, shown);
-      seats.push([stand, shown, focus]);
+      const marker =
+        point &&
+        float(
+          await resolveMarkResult(
+            circle({
+              r: MARKER_RADIUS,
+              fill: "white",
+              stroke: STROKE,
+              strokeWidth: 2,
+            }) as any,
+            new LayerContext()
+          )
+        );
+      nodes.push(stand, ...(marker ? [marker] : []), shown);
+      seats.push({ stand, shown, marker, point });
     }
     return {
       drawn: null,
       nodes,
       constraints: (at, inner) =>
-        seats.map(([stand, shown, focus]) =>
+        seats.map(({ stand, shown, marker, point }) =>
           createTooltipPlaceConstraint(
-            [at(stand), inner, at(shown)],
-            focus.seated
+            marker
+              ? [at(stand), inner, at(shown), at(marker)]
+              : [at(stand), inner, at(shown)],
+            point
           )
         ),
     };

@@ -148,7 +148,8 @@ labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
 A tooltip's box is lowered the same way, after the labels
 (`src/ast/tooltip/tooltip.ts`): by the time the tree is lowered, it is an
-`enclose` of texts on the render root, painted last.
+`enclose` of texts on the render root, painted last, with a circle on the
+point of a line's focused row.
 
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches
@@ -229,7 +230,7 @@ The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group` and
 `composite`. The first five are leaf primitives in absolute pixels with resolved
 `style` (fill/stroke/opacity/…, already mapped through the color scales; a
 label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
-both backends write as SVG attributes; a tooltip's box sets
+both backends write as SVG attributes; a tooltip's box and marker set
 `pointerEvents: "none"`, written as `pointer-events`, so it is no pointer
 target). Any item may carry a `title`, a mark's `.tooltip()` text, which a
 static drawing writes as the item's SVG `<title>` child; a live chart, which

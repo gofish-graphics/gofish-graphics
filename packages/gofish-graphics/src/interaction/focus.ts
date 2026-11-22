@@ -48,6 +48,10 @@ export type Candidate = {
    *  mark is as near as its outline. */
   position: { x?: number; y?: number };
   outline: Outline;
+  /** The points of the rows the mark is drawn through (a line's), each a
+   *  candidate of its own, placed at its point, with its row as its datum:
+   *  {@link Chain.snap} picks one. */
+  points?: Candidate[];
 };
 
 export type Frame = {
@@ -73,6 +77,11 @@ export type Chain = FocusBehavior & {
   within(gap: number, out?: number): Chain;
   /** Run this behavior only on a click; between clicks the focus stays. */
   onClick(): Chain;
+  /** Then, when the choice is drawn through rows (it has `points`), choose
+   *  its point nearest the pointer, the current point with a head start of
+   *  `stickiness` px. The behavior before it chooses among marks: the
+   *  current point counts as its mark there. */
+  snap(stickiness?: number): Chain;
 };
 
 const NONE: Result = { choice: undefined, gap: Infinity };
@@ -93,6 +102,21 @@ function from(run: FocusBehavior): Chain {
     });
   chain.onClick = () =>
     from((f) => (f.clicked ? run(f) : { choice: f.current, gap: 0 }));
+  chain.snap = (stickiness = 0) =>
+    from((f) => {
+      const current =
+        f.current &&
+        f.candidates.find(
+          (c) =>
+            c.key === f.current!.key ||
+            c.points?.some((p) => p.key === f.current!.key) === true
+        );
+      const r = run({ ...f, current });
+      const points = r.choice?.points;
+      if (!points || points.length === 0) return r;
+      const p = closest({ stickiness })({ ...f, candidates: points });
+      return p.choice ? { choice: p.choice, gap: r.gap } : r;
+    });
   return chain;
 }
 
@@ -147,12 +171,18 @@ function first(behaviors: FocusBehavior[]): Chain {
 export const Focus = { hit, closest, first, from };
 
 /** The default tooltip focus: the mark under the pointer, else the nearest
- *  by placed position with a 4 px head start for the current one, while the
- *  pointer is within 8 px of the drawn marks (12 px once there is a focus). */
+ *  by placed position with a 4 px head start for the current one; on a mark
+ *  drawn through rows (a line), its row nearest the pointer, with the same
+ *  head start; while the pointer is within 8 px of the drawn marks (12 px
+ *  once there is a focus). As a spec this would read
+ *  `pointer().snap(selectAll("lines"), { by: ... })`: the marks are the
+ *  candidates, and each step here is one pure behavior over them. */
 export const defaultFocus: Chain = Focus.first([
   Focus.hit(),
   Focus.closest({ stickiness: 4 }),
-]).within(8);
+])
+  .snap(4)
+  .within(8);
 
 /* -------------------------------- geometry -------------------------------- */
 
@@ -167,42 +197,6 @@ const boxDistance = (p: Point, b: Box): number =>
     Math.max(b.x0 - p.x, 0, p.x - b.x1),
     Math.max(b.y0 - p.y, 0, p.y - b.y1)
   );
-
-/** The point of the segment `a`–`b` nearest `p`. */
-const segmentNearest = (p: Point, a: Point, b: Point): Point => {
-  const [vx, vy] = [b.x - a.x, b.y - a.y];
-  const len2 = vx * vx + vy * vy;
-  const t =
-    len2 === 0
-      ? 0
-      : Math.max(0, Math.min(1, ((p.x - a.x) * vx + (p.y - a.y) * vy) / len2));
-  return { x: a.x + t * vx, y: a.y + t * vy };
-};
-
-/** The point of a drawn path (the segments of an outline) nearest `p`;
- *  undefined when the outline has no segment. */
-export function nearestOnPath(p: Point, outline: Outline): Point | undefined {
-  let best: Point | undefined;
-  let d = Infinity;
-  for (const { segment } of outline) {
-    if (!segment) continue;
-    const q = segmentNearest(p, segment[0], segment[1]);
-    const dq = Math.hypot(p.x - q.x, p.y - q.y);
-    if (dq < d) [best, d] = [q, dq];
-  }
-  return best;
-}
-
-/** Whether a candidate is drawn as a stroked path across its data (a
- *  line): it has no placed position on either axis, and its outline is
- *  segments only (a filled path is a region, not segments). Such a mark is
- *  as near as its path, and its tooltip sits beside the point of the path
- *  nearest the pointer. */
-export const isPath = (c: Candidate): boolean =>
-  c.position.x === undefined &&
-  c.position.y === undefined &&
-  c.outline.length > 0 &&
-  c.outline.every((part) => part.segment !== undefined);
 
 /** Distance from a point to a region (its edge segments), zero inside it.
  *  Inside is the nonzero rule, as SVG fills a path by default. */

@@ -239,7 +239,7 @@ console.log("# a chart nested per group: one box, in any group");
   }
 }
 
-console.log("# a line: the box follows the pointer along it, with no re-run");
+console.log("# a line drawn through rows: the box describes its nearest row");
 {
   const { group, line } = GoFish as any;
   const budget = [
@@ -257,43 +257,44 @@ console.log("# a line: the box follows the pointer along it, with no re-run");
   const el = document.createElement("div");
   document.body.appendChild(el);
   let runs = 0;
-  await chart(budget, { w: 400, h: 260 })
-    .flow(
-      derive((r: any) => {
-        runs++;
-        return r;
-      }),
-      group({ by: "series" })
-    )
-    .mark(line({ x: "year", y: "value", stroke: "series" }).tooltip())
-    .render(el, {});
+  const lineChart = (fields?: string[]) =>
+    chart(budget, { w: 400, h: 260 })
+      .flow(
+        derive((r: any) => {
+          runs++;
+          return r;
+        }),
+        group({ by: "series" })
+      )
+      .mark(line({ x: "year", y: "value", stroke: "series" }).tooltip(fields));
+  await lineChart().render(el, {});
   await settle();
-  const at = (path: Element, t: number) => {
-    // Points on the line: the end of each command of its `d` (a curve's
-    // control points are off it).
-    const pts = (path.getAttribute("d") ?? "")
+  const stroke = { Revenue: "#4190c5", Cost: "#f2cf57" } as const;
+  /** The points of a line's rows: the end of each command of its `d` (a
+   *  curve's control points are off it). */
+  const rowsOf = (series: keyof typeof stroke) => {
+    const path = [...el.querySelectorAll("path")].find(
+      (p) => p.getAttribute("stroke") === stroke[series]
+    )!;
+    return (path.getAttribute("d") ?? "")
       .split(/[A-Za-z]/)
       .map((c) => c.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)?.map(Number) ?? [])
       .filter((n) => n.length >= 2)
       .map((n) => [n[n.length - 2], n[n.length - 1]] as [number, number]);
-    return pts[Math.round(t * (pts.length - 1))];
   };
-  const paths = () =>
-    [...el.querySelectorAll("path")].filter((p) => p.getAttribute("stroke-width") !== null || p.getAttribute("fill") === "none");
-  const lineOf = (series: string) =>
-    paths().find((p) => p.getAttribute("stroke") === (series === "Revenue" ? "#4190c5" : "#f2cf57"))!;
   const boxRect = () =>
     [...el.querySelectorAll("rect")].find((r) => r.getAttribute("stroke") === "#c9ced6");
-  /** The box's drawn top-left: its rect under its group's translate. */
   const boxAt = () => {
     const r = boxRect();
-    if (!r) return undefined;
-    const g = r.closest("g[transform]");
-    const m = /translate\(([-\d.e]+) ([-\d.e]+)\)/.exec(g?.getAttribute("transform") ?? "");
-    const [dx, dy] = m ? [Number(m[1]), Number(m[2])] : [0, 0];
-    return [Number(r.getAttribute("x")) + dx, Number(r.getAttribute("y")) + dy];
+    return r && ["x", "y", "width", "height"].map((a) => Number(r.getAttribute(a)));
   };
-  const shown = () => [...el.querySelectorAll("text")].map((t) => t.textContent);
+  const markers = () =>
+    [...el.querySelectorAll("ellipse")].filter((e) => e.getAttribute("stroke") === "#c9ced6");
+  const shown = () => {
+    const r = boxRect();
+    const g = r?.parentElement;
+    return g ? [...g.querySelectorAll("text")].map((t) => t.textContent) : [];
+  };
   const move = (x: number, y: number) =>
     el.querySelector("svg")!.dispatchEvent(
       new (globalThis as any).PointerEvent("pointermove", {
@@ -303,47 +304,203 @@ console.log("# a line: the box follows the pointer along it, with no re-run");
         pointerType: "mouse",
       })
     );
-  const revenue = lineOf("Revenue");
-  const [x0, y0] = at(revenue, 0);
-  move(x0 + 20, y0 + 20);
-  await settle();
-  check("on Revenue: its box", shown().includes("Revenue") && boxRect() !== undefined, shown());
-  const opened = runs;
-  const svgBefore = el.querySelector("svg");
-  const seen: number[][] = [];
-  for (const t of [0, 0.25, 0.5, 0.75, 1]) {
-    const [x, y] = at(revenue, t);
-    move(x, y + 1);
-    await settle(2);
-    const b = boxAt()!;
-    seen.push(b);
+  const years = ["2,018", "2,019", "2,020", "2,021", "2,022"];
+  const values = {
+    Revenue: ["1.6", "1.9", "1.7", "2.3", "2.6"],
+    Cost: ["1.2", "1.3", "1.5", "1.6", "2"],
+  };
+  for (const series of ["Revenue", "Cost"] as const) {
+    const pts = rowsOf(series);
+    check(`${series}: five rows drawn`, pts.length === 5, pts);
+    for (const [i, [x, y]] of pts.entries()) {
+      // A little off the point, toward its neighbor (inside the chart).
+      move(i === 4 ? x - 12 : x + 12, y + (series === "Revenue" ? -2 : 2));
+      await settle();
+      const text = shown();
+      check(
+        `${series} ${years[i]}: the box names its series, year and value`,
+        text.includes(series) && text.includes(years[i]) && text.includes(values[series][i]),
+        text
+      );
+      const m = markers();
+      check(
+        `${series} ${years[i]}: one marker, on the row's point`,
+        m.length === 1 &&
+          Math.abs(Number(m[0].getAttribute("cx")) - x) < 0.5 &&
+          Math.abs(Number(m[0].getAttribute("cy")) - y) < 0.5,
+        [m.map((e) => [e.getAttribute("cx"), e.getAttribute("cy")]), x, y]
+      );
+      check(
+        `${series} ${years[i]}: the marker is no pointer target`,
+        m[0] !== undefined &&
+          (m[0].closest('[pointer-events="none"]') !== null ||
+            m[0].getAttribute("pointer-events") === "none")
+      );
+      const b = boxAt()!;
+      const gap = Math.hypot(
+        Math.max(b[0] - x, 0, x - (b[0] + b[2])),
+        Math.max(b[1] - y, 0, y - (b[1] + b[3]))
+      );
+      check(
+        `${series} ${years[i]}: the box beside the point (${gap.toFixed(1)} px)`,
+        gap <= 8 + 4 + 0.5,
+        [b, x, y]
+      );
+    }
+  }
+  console.log("# a sweep along a line: one re-run per row crossed");
+  {
+    const pts = rowsOf("Revenue");
+    move(pts[0][0], pts[0][1]);
+    await settle();
+    const before = runs;
+    const svgs = new Set<Element>();
+    for (let k = 0; k <= 80; k++) {
+      const t = k / 80;
+      const seg = Math.min(3, Math.floor(t * 4));
+      const f = t * 4 - seg;
+      const [ax, ay] = pts[seg];
+      const [bx, by] = pts[seg + 1];
+      move(ax + f * (bx - ax), ay + f * (by - ay) - 1);
+      await settle();
+      svgs.add(el.querySelector("svg")!);
+    }
     check(
-      `t=${t}: the box is beside the pointer`,
-      // Right of it by the gap, or, at the right edge, left of it.
-      b !== undefined && (Math.abs(b[0] - (x + 8)) < 2.5 || b[0] + 60 < x),
-      [b, x, y]
+      `from the first row to the last: four re-runs (${runs - before})`,
+      runs - before === 4,
+      runs - before
+    );
+    const still = runs;
+    const [lx, ly] = pts[4];
+    for (let k = 0; k < 10; k++) {
+      move(lx - 3 + k * 0.5, ly - 1);
+      await settle();
+    }
+    check("moving about one row: no re-run", runs === still, runs - still);
+  }
+  console.log("# a line's row: a field list");
+  {
+    const el2 = document.createElement("div");
+    document.body.appendChild(el2);
+    await lineChart(["series"]).render(el2, {});
+    await settle();
+    const path = [...el2.querySelectorAll("path")].find(
+      (p) => p.getAttribute("stroke") === stroke.Cost
+    )!;
+    const [x, y] = (path.getAttribute("d") ?? "")
+      .split(/[A-Za-z]/)
+      .map((c) => c.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)?.map(Number) ?? [])
+      .filter((n) => n.length >= 2)
+      .map((n) => [n[n.length - 2], n[n.length - 1]])[2];
+    el2.querySelector("svg")!.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: x,
+        clientY: y + 1,
+        bubbles: true,
+        pointerType: "mouse",
+      })
+    );
+    await settle();
+    // The box's text: what no pointer lands on.
+    const text = [...el2.querySelectorAll("text")]
+      .filter((t) => t.closest('[pointer-events="none"]') !== null)
+      .map((t) => t.textContent);
+    check(
+      "a field list: those fields of the row",
+      JSON.stringify(text) === JSON.stringify(["series", "Cost"]),
+      text
     );
   }
-  await settle();
-  check("moving along the line: no re-run", runs === opened, runs - opened);
-  check("the same svg (paint patches only)", el.querySelector("svg") === svgBefore);
-  check(
-    "the box moved with the pointer",
-    new Set(seen.map((b) => b.join())).size === seen.length,
-    seen
-  );
-  const cost = lineOf("Cost");
-  const [cx, cy] = at(cost, 0.5);
-  move(cx, cy - 1);
-  await settle();
-  check("on Cost: its box", shown().includes("Cost"), shown());
-  check("one re-run for the change of line", runs === opened + 1, runs - opened);
-  const costBox = boxAt()!;
-  const [rx, ry] = at(revenue, 0.5);
-  move(rx, ry + 1);
-  await settle();
-  const revBox = boxAt()!;
-  check("at the same x, the Cost box is below the Revenue box", costBox[1] > revBox[1], [costBox, revBox]);
+  console.log("# the same x: the Cost box sits below the Revenue box");
+  {
+    const [rx, ry] = rowsOf("Revenue")[2];
+    move(rx, ry - 1);
+    await settle();
+    const rev = boxAt()!;
+    const [cx, cy] = rowsOf("Cost")[2];
+    move(cx, cy + 1);
+    await settle();
+    const cost = boxAt()!;
+    check("the Cost box is below the Revenue box", cost[1] > rev[1], [rev, cost]);
+  }
+}
+
+console.log("# a line drawn from a function, and a connector: one box, no snap");
+{
+  const { line, fun, scatter, circle, selectAll } = GoFish as any;
+  const wave = fun((t: number) => 1 + 0.6 * Math.sin(t), { domain: [0, 10] });
+  const boxIn = (el: Element) =>
+    [...el.querySelectorAll("rect")].find((r) => r.getAttribute("stroke") === "#c9ced6");
+  const textIn = (el: Element) => {
+    const r = boxIn(el);
+    return r ? [...r.parentElement!.querySelectorAll("text")].map((t) => t.textContent) : [];
+  };
+  const pathIn = (el: Element) =>
+    [...el.querySelectorAll("path")].find((p) => p.getAttribute("fill") === "none")!;
+  /** Points along a drawn path: the end of each command of its `d`. */
+  const along = (path: Element) =>
+    (path.getAttribute("d") ?? "")
+      .split(/[A-Za-z]/)
+      .map((c) => c.match(/-?\d+(?:\.\d+)?(?:e-?\d+)?/g)?.map(Number) ?? [])
+      .filter((n) => n.length >= 2)
+      .map((n) => [n[n.length - 2], n[n.length - 1]] as [number, number]);
+  const moveIn = (el: Element, x: number, y: number) =>
+    el.querySelector("svg")!.dispatchEvent(
+      new (globalThis as any).PointerEvent("pointermove", {
+        clientX: x,
+        clientY: y,
+        bubbles: true,
+        pointerType: "mouse",
+      })
+    );
+  for (const [name, make] of [
+    [
+      "from a function",
+      (count: () => void) =>
+        chart([{ name: "wave" }], { w: 400, h: 200 })
+          .flow(derive((r: any) => (count(), r)))
+          .mark(line({ x: wave.domain(), y: wave }).tooltip()),
+    ],
+    [
+      "a connector",
+      (count: () => void) =>
+        chart(
+          [
+            { t: 1, v: 2, s: "A" },
+            { t: 2, v: 3, s: "A" },
+            { t: 3, v: 1, s: "A" },
+          ],
+          { w: 400, h: 200 }
+        )
+          .flow(derive((r: any) => (count(), r)), scatter({ by: "t", x: "t", y: "v" }))
+          .mark(circle({ r: 0 }).name("pts"))
+          .layer(chart(selectAll("pts")).mark(line().tooltip())),
+    ],
+  ] as const) {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    let runs = 0;
+    await make(() => runs++).render(el, {});
+    await settle();
+    const pts = along(pathIn(el));
+    const [x0, y0] = pts[Math.floor(pts.length / 4)];
+    moveIn(el, x0, y0 + 1);
+    await settle();
+    const opened = runs;
+    const first = boxIn(el)?.getAttribute("x");
+    check(`${name}: a box`, boxIn(el) !== undefined, textIn(el));
+    check(
+      `${name}: no marker`,
+      [...el.querySelectorAll("ellipse")].every((e) => e.getAttribute("stroke") !== "#c9ced6")
+    );
+    for (const t of [0.4, 0.6, 0.8]) {
+      const [x, y] = pts[Math.floor(t * (pts.length - 1))];
+      moveIn(el, x, y + 1);
+      await settle();
+    }
+    check(`${name}: moving along it, no re-run`, runs === opened, runs - opened);
+    check(`${name}: the box stays where it is`, boxIn(el)?.getAttribute("x") === first);
+  }
 }
 
 console.log("# the widget path: an IR document rendered by renderIR");

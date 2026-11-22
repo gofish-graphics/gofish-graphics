@@ -412,9 +412,11 @@ methods:
   pointer. A post-solve constraint, `tooltipPlace` (`place.ts`, run after
   `labelPlace`), seats it: right of the mark, else left, centered on its
   row; else under or over it, flush with its end; else moved into the
-  graphic's box. It also tells the focus the box's seat beside any point,
-  which is how a line's box follows the pointer at paint (see
-  [Reactivity](/internals/frontend/reactivity)). The row values come from `content.ts`:
+  graphic's box. On a row of a line it seats the box beside the row's
+  point instead, with a marker on the point (see
+  [Reactivity](/internals/frontend/reactivity)). The box and the marker are
+  overlays (`GoFishNode.overlay`): no pointer lands on them, and the canvas
+  is sized without them. The row values come from `content.ts`:
   with no list, every field with one value on the mark's rows, and a size
   or position channel's field with the value it draws, inferred as the
   channel infers it (a sum for a size).
@@ -596,7 +598,9 @@ its values. In layout it reads its edges through the axis maps into local
 pixels (`reparameterize` in `fun.ts` for the parameter). It draws them as exact
 lines and Béziers, and resamples them only under a coordinate transform. Its
 geometry gives the box, the outline of the drawn path, and the exact
-cross-section along its value axis.
+cross-section along its value axis. A line built from rows also keeps each
+row's parameter (`rows`), and its geometry gives the point where it draws
+each row (`rowPoints`), which a tooltip seats a row's box beside.
 
 A band sets the node's `shearAxis` to its value axis, so a stack can move it
 by an offset that changes along the parameter (a stacked area, see

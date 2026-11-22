@@ -237,10 +237,7 @@ function paintSVG(
       const filter =
         f?.kind === "luminanceToAlpha" ? `url(#${filterId})` : f?.value;
       return (
-        <g
-          transform={transformAttr(patched(live, "transform", item.transform))}
-          filter={filter}
-        >
+        <g transform={transformAttr(item.transform)} filter={filter}>
           {title}
           {children}
         </g>

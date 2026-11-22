@@ -602,7 +602,7 @@ export function* breadthFirst(root: GoFishNode): Generator<GoFishNode> {
 }
 
 /** Make every item in `items`, the items of groups and of composites'
- *  operands included, no pointer target (`GoFishNode.noPointerTarget`). */
+ *  operands included, no pointer target (`GoFishNode.overlay`). */
 const clearPointerEvents = (items: DisplayList.DisplayItem[]): void =>
   walkItems(items, (item) => {
     item.style = { ...item.style, pointerEvents: "none" };
@@ -749,9 +749,6 @@ export class GoFishNode {
   /** Paint-time visibility rules, one per owner (see
    *  {@link INTERNAL_visibleWhile}); undefined on the static path. */
   public __gfVisible?: Map<object, () => boolean>;
-  /** A paint-time move of the node's whole drawing (see
-   *  {@link INTERNAL_moveWhile}); undefined on the static path. */
-  public __gfMove?: () => [number, number];
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   private _resolveSharing: ResolveSharing;
   private _sharing?: SharingPlan;
@@ -991,10 +988,12 @@ export class GoFishNode {
    *  draws itself (a mark's `.tooltip()` content), or of all its items when
    *  it draws none itself. A static drawing shows it on hover. */
   public title?: string;
-  /** Set when nothing this node draws is a pointer target (a tooltip's
-   *  box, drawn over the marks it describes): its items paint with
-   *  `pointerEvents: "none"`. */
-  public noPointerTarget?: true;
+  /** Set on a node drawn over the graphic, inside it (a tooltip's box and
+   *  the marker on a line's point): nothing it draws is a pointer target
+   *  (its items paint with `pointerEvents: "none"`), and the canvas is
+   *  sized without it (`drawnOverflow` in `gofish.tsx`), so opening it
+   *  moves nothing else. */
+  public overlay?: true;
   /** The box its own options give it (`elaborateOwnDims`), for a construct
    *  whose own `w`/`h` may be a length (#1176 step 6): the same intervals
    *  the construct reads. Its length is read here ({@link lengthOn}). */
@@ -2155,12 +2154,12 @@ export class GoFishNode {
   }
 
   /**
-   * Whether this node or an ancestor is no pointer target
-   * ({@link noPointerTarget}).
+   * Whether this node or an ancestor is an overlay, no pointer target
+   * ({@link overlay}).
    */
-  private underNoPointerTarget(): boolean {
+  private underOverlay(): boolean {
     for (let n: unknown = this; n instanceof GoFishNode; n = n.parent)
-      if (n.noPointerTarget) return true;
+      if (n.overlay) return true;
     return false;
   }
 
@@ -3254,22 +3253,6 @@ export class GoFishNode {
   }
 
   /**
-   * Move this node's whole drawing by `by()` px as a PAINT-time fact, the
-   * items together: they are lowered where the layout put them, in one group
-   * whose translate is patched per frame from the live-slot side table, as
-   * {@link INTERNAL_visibleWhile} patches opacity. Nothing is laid out again,
-   * so the node must take no room (it is ink), or the room it took is where
-   * it was placed. A tooltip's box follows the pointer along a line this way
-   * (`tooltip.ts`). A moving node is a bake boundary, as a filtered one is.
-   *
-   * The limitation is the live channels' own: the frame the runtime records
-   * for hit-testing has the items where the layout put them.
-   */
-  public INTERNAL_moveWhile(by: () => [number, number]): void {
-    this.__gfMove = by;
-  }
-
-  /**
    * Record that `node` belongs to this node as a mark though it lives outside
    * its subtree (a label the label pass seats in the tier above), in both
    * directions: `this._attachments` lists it, and `node._attachedTo` names
@@ -3364,7 +3347,7 @@ export class GoFishNode {
         coordinateTransform,
         true
       );
-    else if (this._filter !== undefined || this.__gfMove !== undefined)
+    else if (this._filter !== undefined)
       items = lowerChildrenOffset(this, transform, coordinateTransform);
     else
       throw new Error(
@@ -3377,24 +3360,20 @@ export class GoFishNode {
   }
 
   /** The node's drawing under its `filter` option, which filters the whole
-   *  drawing as one picture, and under its paint-time move
-   *  ({@link INTERNAL_moveWhile}), which moves it as one picture. Both
-   *  {@link INTERNAL_lower} and a lent drawing ({@link INTERNAL_lendDrawing})
-   *  draw through it. */
+   *  drawing as one picture. Both {@link INTERNAL_lower} and a lent drawing
+   *  ({@link INTERNAL_lendDrawing}) draw through it. */
   private filtered(
     items: DisplayList.DisplayItem[]
   ): DisplayList.DisplayItem[] {
-    const move = this.__gfMove;
-    if (items.length === 0 || (this._filter === undefined && !move))
-      return items;
-    const group: DisplayList.GroupItem = {
-      kind: "group",
-      transform: {},
-      ...(this._filter !== undefined && { filter: this._filter }),
-      children: items,
-    };
-    if (move) setLiveSlots(group, { transform: () => ({ translate: move() }) });
-    return [group];
+    if (items.length === 0 || this._filter === undefined) return items;
+    return [
+      {
+        kind: "group",
+        transform: {},
+        filter: this._filter,
+        children: items,
+      },
+    ];
   }
 
   /**
@@ -3456,8 +3435,7 @@ export class GoFishNode {
     }
     // A container lowers its leaves through their own `lowerWith`, so each
     // node looks up its ancestors for the flag, as for visibility.
-    if (items.length > 0 && this.underNoPointerTarget())
-      clearPointerEvents(items);
+    if (items.length > 0 && this.underOverlay()) clearPointerEvents(items);
     // Live channels (a `live()` value): bake a datum-bound thunk per channel
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
@@ -3782,13 +3760,9 @@ export class GoFishNode {
 
   /** Whether the bake stops at this node, which lowers its own subtree
    *  (`coordinateTransforms/bake.ts`): a boundary type, or a node with a
-   *  `filter` or a paint-time move, which draws its subtree as one picture. */
+   *  `filter`, which draws its subtree as one picture. */
   public isBakeBoundary(): boolean {
-    return (
-      BAKE_BOUNDARY_TYPES.has(this.type) ||
-      this._filter !== undefined ||
-      this.__gfMove !== undefined
-    );
+    return BAKE_BOUNDARY_TYPES.has(this.type) || this._filter !== undefined;
   }
 
   /** The raw author-set z-order hint, or `undefined` if never set (distinct

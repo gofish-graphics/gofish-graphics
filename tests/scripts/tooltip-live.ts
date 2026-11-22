@@ -266,128 +266,168 @@ async function main() {
       const LINE = 'path[stroke-width="2"]';
       const closed = await render(page, story("LineChart"), LINE);
       const lineStroke = { Revenue: "#4190c5", Cost: "#f2cf57" } as const;
-      /** In the page: points along a line, its point nearest (x, y), the
-       *  distance from that point to the box, and whether the drawn marks
-       *  are the elements of the last call (a re-run paints new ones). */
-      const LINE_AT = (stroke: string, t: number) => `(() => {
-        const e = document.querySelector('#stories-root svg ${LINE}[stroke="${stroke}"]');
-        const p = e.getPointAtLength(e.getTotalLength() * ${t});
-        const q = new DOMPoint(p.x, p.y).matrixTransform(e.getScreenCTM());
-        return [q.x, q.y];
-      })()`;
-      const NEAREST = (stroke: string, x: number, y: number) => `(() => {
+      // The story's rows, as the box formats them.
+      const years = ["2,018", "2,019", "2,020", "2,021", "2,022"];
+      const values = {
+        Revenue: ["1.6", "1.9", "1.7", "2.3", "2.6"],
+        Cost: ["1.2", "1.3", "1.5", "1.6", "2"],
+      };
+      /** In the page: the client point of each row of a line, the end of
+       *  each command of its path (a curve's control points are off it). */
+      const ROWS = (stroke: string) => `(() => {
         const e = document.querySelector('#stories-root svg ${LINE}[stroke="${stroke}"]');
         const m = e.getScreenCTM();
-        const n = e.getTotalLength();
-        let best = null, d = Infinity;
-        for (let k = 0; k <= 2000; k++) {
-          const p = e.getPointAtLength((n * k) / 2000);
-          const q = new DOMPoint(p.x, p.y).matrixTransform(m);
-          const dq = Math.hypot(q.x - ${x}, q.y - ${y});
-          if (dq < d) [best, d] = [[q.x, q.y], dq];
-        }
-        return best;
+        return e.getAttribute("d").split(/[A-Za-z]/)
+          .map((c) => (c.match(/-?[\\d.]+(?:e-?\\d+)?/g) || []).map(Number))
+          .filter((n) => n.length >= 2)
+          .map((n) => {
+            const q = new DOMPoint(n[n.length - 2], n[n.length - 1]).matrixTransform(m);
+            return [q.x, q.y];
+          });
       })()`;
-      const at = (stroke: string, t: number) =>
-        page.evaluate(LINE_AT(stroke, t)) as Promise<[number, number]>;
-      const nearest = (stroke: string, x: number, y: number) =>
-        page.evaluate(NEAREST(stroke, x, y)) as Promise<[number, number]>;
-      const MARK_TAG = `(() => {
-        for (const e of document.querySelectorAll('#stories-root svg ${LINE}')) e.__seen = true;
+      /** In the page: the marker's center, in client px. */
+      const MARKER = `(() => {
+        const e = [...document.querySelectorAll('#stories-root svg ellipse[stroke="${BOX_STROKE}"]')];
+        return e.map((m) => {
+          const b = m.getBoundingClientRect();
+          return [b.x + b.width / 2, b.y + b.height / 2, m.closest('[pointer-events="none"]') !== null];
+        });
       })()`;
-      const STILL_TAGGED = `[...document.querySelectorAll('#stories-root svg ${LINE}')].every((e) => e.__seen === true)`;
+      const rowsOf = (stroke: string) =>
+        page.evaluate(ROWS(stroke)) as Promise<[number, number][]>;
+      const marker = () =>
+        page.evaluate(MARKER) as Promise<[number, number, boolean][]>;
+      // A re-run paints new marks: tag the drawn line, and count a re-run
+      // each time it is gone.
+      const TAG = `(() => {
+        const e = document.querySelector('#stories-root svg ${LINE}');
+        const was = e.__seen === true;
+        e.__seen = true;
+        return !was;
+      })()`;
+      const reran = () => page.evaluate(TAG) as Promise<boolean>;
       const gapTo = (b: [number, number, number, number], [x, y]: number[]) =>
         Math.hypot(
           Math.max(b[0] - x, 0, x - (b[0] + b[2])),
           Math.max(b[1] - y, 0, y - (b[1] + b[3]))
         );
+      const rows = {
+        Revenue: await rowsOf(lineStroke.Revenue),
+        Cost: await rowsOf(lineStroke.Cost),
+      };
       for (const name of ["Revenue", "Cost"] as const) {
-        const stroke = lineStroke[name];
-        const boxes: string[] = [];
-        let opened = false;
-        for (const t of [0.05, 0.25, 0.5, 0.75, 0.95]) {
-          const [x, y] = await at(stroke, t);
-          const s = await hover(page, x, y);
-          const q = await nearest(stroke, x, y);
-          const gap = s.boxClient ? gapTo(s.boxClient, q) : Infinity;
-          // The gap is 8 px; the focus reads a curve as its chords, a few px
-          // off the drawn curve.
-          check(
-            `${name} at ${t}: its box, beside its nearest point (${gap.toFixed(1)} px)`,
-            s.box?.includes(name) === true && gap <= 14,
-            [s.box, s.boxClient, q]
-          );
-          check(
-            `${name} at ${t}: nothing else moved`,
-            same(s.marks, closed.marks)
-          );
-          boxes.push(JSON.stringify(s.boxClient));
-          if (!opened) {
-            // The box is open on this line: from here on a re-run would
-            // paint new marks.
-            await page.evaluate(MARK_TAG);
-            opened = true;
+        const pts = rows[name];
+        check(`${name}: five rows`, pts.length === 5, pts);
+        for (const [i, [x, y]] of pts.entries()) {
+          const seats = new Set<string>();
+          // On the point, and off it toward a neighbor, nearer this row.
+          const dx = i === 4 ? -12 : 12;
+          for (const [px, py] of [
+            [x, y],
+            [x + dx, y + (name === "Revenue" ? -3 : 3)],
+          ]) {
+            const s = await hover(page, px, py);
+            check(
+              `${name} ${years[i]} (${Math.round(px - x)} px off): the box names its series, year and value`,
+              s.box !== null &&
+                s.box.includes(name) &&
+                s.box.includes(years[i]) &&
+                s.box.includes(values[name][i]),
+              s.box
+            );
+            const gap = s.boxClient ? gapTo(s.boxClient, [x, y]) : Infinity;
+            check(
+              `${name} ${years[i]}: the box beside the point (${gap.toFixed(1)} px)`,
+              gap <= 8 + 4 + 1,
+              [s.boxClient, x, y]
+            );
+            const m = await marker();
+            check(
+              `${name} ${years[i]}: a marker on the point, no pointer target`,
+              m.length === 1 &&
+                Math.hypot(m[0][0] - x, m[0][1] - y) < 1 &&
+                m[0][2] === true,
+              [m, x, y]
+            );
+            check(
+              `${name} ${years[i]}: nothing else moved`,
+              same(s.marks, closed.marks)
+            );
+            seats.add(JSON.stringify(s.boxClient));
           }
-          if (t === 0.05 || t === 0.5 || t === 0.95)
-            await shot(`line-${name.toLowerCase()}-${Math.round(t * 100)}`);
-        }
-        check(
-          `${name}: along the line, no re-run`,
-          (await page.evaluate(STILL_TAGGED)) === true
-        );
-        check(
-          `${name}: the box moved with the pointer`,
-          new Set(boxes).size === boxes.length,
-          boxes
-        );
-      }
-      // Between the two lines, at several x: the nearer line's box.
-      for (const t of [0.1, 0.3, 0.5, 0.7, 0.9]) {
-        const r = await at(lineStroke.Revenue, t);
-        for (const f of [0.25, 0.75]) {
-          const x = r[0];
-          const c = await nearest(lineStroke.Cost, x, r[1] + 1000);
-          // The Cost line's point straight below (its nearest to a point far
-          // below is near x; read its y at x).
-          const cy = (await page.evaluate(`(() => {
-            const e = document.querySelector('#stories-root svg ${LINE}[stroke="${lineStroke.Cost}"]');
-            const m = e.getScreenCTM(); const n = e.getTotalLength();
-            let best = ${c[1]}, d = Infinity;
-            for (let k = 0; k <= 2000; k++) {
-              const p = e.getPointAtLength((n * k) / 2000);
-              const q = new DOMPoint(p.x, p.y).matrixTransform(m);
-              if (Math.abs(q.x - ${x}) < d) [best, d] = [q.y, Math.abs(q.x - ${x})];
-            }
-            return best;
-          })()`)) as number;
-          const y = r[1] + f * (cy - r[1]);
-          const [nr, nc] = [
-            await nearest(lineStroke.Revenue, x, y),
-            await nearest(lineStroke.Cost, x, y),
-          ];
-          const dr = Math.hypot(nr[0] - x, nr[1] - y);
-          const dc = Math.hypot(nc[0] - x, nc[1] - y);
-          // Skip a point about as near both: the head start decides there.
-          if (Math.abs(dr - dc) < 5) continue;
-          await page.mouse.move(1, 1);
-          await page.waitForTimeout(150);
-          const s = await hover(page, x, y);
-          const want = dr < dc ? "Revenue" : "Cost";
           check(
-            `between, x ${Math.round(x)} y ${Math.round(y)}: ${want} (${dr.toFixed(0)} vs ${dc.toFixed(0)} px)`,
-            s.box?.includes(want) === true,
-            s.box
+            `${name} ${years[i]}: the box sits by the point, not the pointer`,
+            seats.size === 1,
+            [...seats]
           );
         }
       }
-      // At the same x, the Cost box sits below the Revenue box.
-      for (const t of [0.25, 0.5]) {
-        const r = await at(lineStroke.Revenue, t);
-        const rs = await hover(page, r[0], r[1]);
-        const c = await nearest(lineStroke.Cost, r[0], r[1] + 1000);
-        const cs = await hover(page, c[0], c[1]);
+      // Screenshots: by a point on each line, midway between two points,
+      // and at both ends.
+      {
+        const [r, c] = [rows.Revenue, rows.Cost];
+        const views: [string, number, number][] = [
+          ["line-revenue-point", r[1][0] + 6, r[1][1] - 2],
+          ["line-cost-point", c[3][0] + 6, c[3][1] + 2],
+          [
+            "line-revenue-mid",
+            (r[2][0] + r[3][0]) / 2,
+            (r[2][1] + r[3][1]) / 2,
+          ],
+          ["line-revenue-start", r[0][0], r[0][1]],
+          ["line-revenue-end", r[4][0], r[4][1]],
+          ["line-cost-start", c[0][0], c[0][1]],
+          ["line-cost-end", c[4][0], c[4][1]],
+        ];
+        for (const [file, x, y] of views) {
+          const s = await hover(page, x, y);
+          check(`${file}: a box`, s.box !== null, s.box);
+          await shot(file);
+        }
+      }
+      // A sweep along Revenue from its first row to its last: a re-run
+      // only when the nearest row changes, one per row crossed.
+      {
+        const pts = rows.Revenue;
+        await hover(page, pts[0][0], pts[0][1] - 1);
+        await reran();
+        let runs = 0;
+        let changes = 0;
+        let last = "";
+        const steps = 40;
+        for (let k = 0; k <= steps; k++) {
+          const t = (k / steps) * 4;
+          const seg = Math.min(3, Math.floor(t));
+          const f = t - seg;
+          const [ax, ay] = pts[seg];
+          const [bx, by] = pts[seg + 1];
+          await page.mouse.move(ax + f * (bx - ax), ay + f * (by - ay) - 1);
+          await page.waitForTimeout(60);
+          const s = await snap(page);
+          const year = years.find((y) => s.box?.includes(y)) ?? "";
+          if (year !== last) changes++;
+          last = year;
+          if (await reran()) runs++;
+        }
         check(
-          `at x ${Math.round(r[0])}: the Cost box is below the Revenue box`,
+          `sweep along Revenue: ${runs} re-runs, ${changes - 1} changes of row (4 rows crossed)`,
+          runs === 4 && changes - 1 === 4,
+          [runs, changes - 1]
+        );
+        const [lx, ly] = pts[4];
+        for (let k = 0; k < 8; k++) {
+          await page.mouse.move(lx - 4 + k, ly - 1);
+          await page.waitForTimeout(40);
+        }
+        await page.waitForTimeout(200);
+        check("moving about one row: no re-run", !(await reran()));
+      }
+      // At the same year, the Cost box sits below the Revenue box.
+      for (const i of [1, 2, 3]) {
+        const rs = await hover(page, rows.Revenue[i][0], rows.Revenue[i][1]);
+        const cs = await hover(page, rows.Cost[i][0], rows.Cost[i][1]);
+        check(
+          `${years[i]}: the Cost box is below the Revenue box`,
           rs.boxClient !== null &&
             cs.boxClient !== null &&
             cs.boxClient[1] > rs.boxClient[1],
@@ -396,6 +436,7 @@ async function main() {
       }
       const out = await hover(page, 2, 2);
       check("away: closed", out.box === null);
+      check("away: no marker", (await marker()).length === 0);
       check("closed again: as before", same(out.marks, closed.marks));
     }
 

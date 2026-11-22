@@ -363,7 +363,7 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   // form for one base field, so the table comes from this `doc`.
   tooltip: {
     type: t.union(t.literal(true), t.array(t.string)),
-    doc: "From `.tooltip(fields?)`: a box that describes the mark under the pointer, beside it. `true` shows every field with one value on the mark, a size or position channel's field with the value it draws (a stacked segment's summed count), except a `line`'s or `ribbon`'s, which draw each row's value; a list shows exactly those fields, in order. Numbers show digit grouping and at most two fraction digits, and a number below 1 shows three significant digits. A static drawing writes the same rows as the mark's SVG `<title>`.",
+    doc: "From `.tooltip(fields?)`: a box that describes the mark under the pointer, beside it. `true` shows every field with one value on the mark, a size or position channel's field with the value it draws (a stacked segment's summed count), except a `line`'s or `ribbon`'s, which draw each row's value; a list shows exactly those fields, in order. On a `line` drawn through rows, the box shows the fields of the row nearest the pointer, beside its point. Numbers show digit grouping and at most two fraction digits, and a number below 1 shows three significant digits. A static drawing writes the same rows as the mark's SVG `<title>`.",
   },
   translate: { type: t.ref("TranslateIR") },
   debug: {

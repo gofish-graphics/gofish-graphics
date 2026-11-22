@@ -53,7 +53,9 @@ chart(pathTypes)
 
 - **Focus.** The box describes the mark under the pointer. Off every mark,
   it describes the nearest one by where the layout placed it: a bar by its
-  row, a dot by its center. A line is as near as its path. The box closes
+  row, a dot by its center. A line is as near as its path. On a `line`
+  drawn through rows, the box describes the row whose point is nearest the
+  pointer, and it keeps that row until another is 4 px nearer. The box closes
   when the pointer is more than 8 px from the marks, or 12 px once a box is
   open. The open box keeps its mark until another one is 4 px nearer, and
   while the pointer is over the box. On a touch screen, a tap opens the box
@@ -63,11 +65,13 @@ chart(pathTypes)
   (`0.13`, `0.0119`). Dates, and the values of a time column, show as a
   date, with the time when it is not midnight, in the time zone of the
   column's `Unit.time` (UTC when it has none), as its axis reads them. A `line`'s or `ribbon`'s position fields read each row, so they
-  show only when every row agrees.
+  show only when every row agrees. A row of a `line` shows that row's
+  fields.
 - **Placement.** The box sits right of the mark, else left of it, centered
   on its row; else under or over it, flush with its end; else it is moved
-  inside the chart. A line's box sits the same way beside the point of the
-  line nearest the pointer, and follows the pointer along the line. It paints over the marks, their labels and the axes. It
+  inside the chart. A row's box sits the same way beside the row's point,
+  with a dot on the point. A line drawn from a function, or between marks,
+  has no rows, and its box sits beside the end of the line. It paints over the marks, their labels and the axes. It
   takes no room, takes no pointer events, and moves nothing else.
 - **Static output.** A drawing with no pointer (an exported SVG) draws no box.
   Each mark carries the same rows as its SVG `<title>`.

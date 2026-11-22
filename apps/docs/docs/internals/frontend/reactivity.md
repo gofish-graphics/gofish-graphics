@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/interaction/widgets.ts
   - packages/gofish-graphics/src/interaction/focus.ts
   - packages/gofish-graphics/src/interaction/tooltipFocus.ts
+  - packages/gofish-graphics/src/ast/displayList/drawnRowPoints.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -359,33 +360,44 @@ pointer right of a short bar describes. Inside a coordinate space
 (`inCoordinateSpace`), a mark's drawn box is not its data box, so its drawn
 center counts on both screen axes.
 On each pointer event it runs the focus behavior (`focus.ts`, by default
-`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(8)`; `within`
+`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).snap(4).within(8)`; `within`
 measures the pointer against the hull of the marks first, so a pointer far
 from every mark runs nothing else), and it invalidates its readers only when
-the focused key changes. Thirty moves across
+the focused key, or the focused point, changes. Thirty moves across
 three bars re-run the chart twice. A key is the JSON of the mark's rows (a ref
 or node by its rows, a date by its instant), so two marks drawn from equal rows
 are one candidate. While the pointer is over the open box (the box the layer
 drew in the last frame), the focus does not move: the box covers the marks
-under it. A touch tap holds its point through the `pointerleave` that ends it,
+under it. On a line, it keeps the line and picks among its rows, since the
+box covers the line's next rows. A touch tap holds its point through the `pointerleave` that ends it,
 until the next tap or a mouse move. A tap outside the chart does not close
 it: the runtime hears only events in the chart's container. When the chart is
 disposed, the runtime calls each input's `detach`, and the focus drops its
 marks, its box and its candidates.
 
 A line is one candidate for its whole path: it has no placed position, so it
-is as near as its path, and where the pointer is along it is no change of
-focus. Its box follows the pointer at paint instead. A candidate drawn as a
-path (`isPath`: no position on either axis, an outline of segments only) gets
-a box the lowering moves with `INTERNAL_moveWhile`: the box's items are drawn
-in one group whose `transform` is a live slot reading `focus.offset()`. The
-offset reads two signals, the pointer and the frame's candidates, and is the
-box's seat beside the point of the path nearest the pointer
-(`nearestOnPath`) less the seat the layout gave it; `tooltipPlace` hands the
-focus both seats (`focus.seated`). So moving along a line patches one
-attribute and re-runs nothing, and moving to the other line re-runs the chart
-once. The frame has the box where the layout put it, so the focus moves its
-record of the box by the same offset to tell when the pointer is over it.
+is as near as its path. A line drawn through rows also has a point per row
+(`Candidate.points`). The shape form of `line` (`Band`, `shapes/band.tsx`)
+keeps each row's parameter from `bandOfRows`, and its layout puts each row on
+its drawn edge. Its lowering records where each row is drawn, through the
+coordinate transform, on a side table keyed by the path's display item
+(`displayList/drawnRowPoints.ts`), and the focus reads it there as it reads
+the item's `d`. `.snap(stickiness)` runs the inner behavior to pick a line,
+then picks that line's nearest point, with the current point's head start.
+The focused key is the line's key and the point's key (the line's key and
+the row's index), so moving along a line re-runs the chart once per row
+crossed, and not while the nearest row stays the same. The box shows that
+row (`tooltipContent(request, point)`), and `tooltipPlace` seats it beside
+the row's point, read from the line's geometry (`rowPoints`), with a marker
+on the point. In a future API this would read
+`pointer().snap(selectAll("lines"), { by: ... })`.
+
+A ribbon or area is a region and gives no points, and a line drawn from a
+function (no rows) or a connector between marks gives none either: its box
+describes the whole line, beside its end. TODO(#1395): the right behavior
+there is a continuous focus that shows the function's value at the pointer
+(Dragology's `between`, where snapping to rows is its `closest`), which needs
+content that changes per pointer move without a re-run.
 
 ## The timer is a scale, not a tick counter
 

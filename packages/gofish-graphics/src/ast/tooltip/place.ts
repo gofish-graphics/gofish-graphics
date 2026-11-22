@@ -4,7 +4,8 @@
 
 /**
  * Where a tooltip's box goes (#1395): beside the mark it describes, inside
- * the chart's marks. INTERNAL: the private elaboration target of
+ * the chart's marks; on a line, beside the point of the row it describes,
+ * with a marker on that point. INTERNAL: the private elaboration target of
  * `.tooltip()`, as `labelPlace` is of `.label()`; there is no
  * `Constraint.tooltipPlace`.
  *
@@ -21,38 +22,42 @@
 import type { Placeable } from "../_node";
 import { rawPlaceable } from "../axisDirection";
 import type { ConstraintRef, KeyOf } from "../constraints/shared";
+import { placedOutlines } from "../geometry";
 
 export interface TooltipPlaceConstraint {
   type: "tooltipPlace";
   /** The described mark (a ref to it), the area the box stays in (a ref to
-   *  the chart's marks) and the box. */
-  children: [target: ConstraintRef, frame: ConstraintRef, box: ConstraintRef];
-  /** The gap between the mark and the box, in px. */
+   *  the chart's marks), the box, and, for a row of a line, the marker
+   *  drawn on its point. */
+  children:
+    | [target: ConstraintRef, frame: ConstraintRef, box: ConstraintRef]
+    | [
+        target: ConstraintRef,
+        frame: ConstraintRef,
+        box: ConstraintRef,
+        marker: ConstraintRef,
+      ];
+  /** The gap between the mark (or the marker) and the box, in px. */
   gap: number;
-  /** Told, after the box is seated at `at`, where the box would sit beside
-   *  a point instead, so a box can follow a point of its mark at paint (a
-   *  line's box follows the pointer along the line, `tooltipFocus.ts`). */
-  seated?: Seated;
+  /** The row of the mark the box describes, when the mark is drawn through
+   *  rows (its geometry's `rowPoints`). */
+  point?: { row: unknown };
 }
-
-/** A box's seat `at`, and its seat beside a point (`seatAt`), both in the
- *  layout's px. */
-export type Seated = (
-  at: [number, number],
-  seatAt: (point: { x: number; y: number }) => [number, number]
-) => void;
 
 /** The gap between a mark and its tooltip's box, in px. */
 const TOOLTIP_GAP = 8;
 
+/** The radius of the marker on a line's focused point, in px. */
+export const MARKER_RADIUS = 4;
+
 export const createTooltipPlaceConstraint = (
   children: TooltipPlaceConstraint["children"],
-  seated?: Seated
+  point?: { row: unknown }
 ): TooltipPlaceConstraint => ({
   type: "tooltipPlace",
   children,
   gap: TOOLTIP_GAP,
-  seated,
+  point,
 });
 
 export const isTooltipPlaceConstraint = (
@@ -94,13 +99,49 @@ export function tooltipSeat(
   return [clamp(tx.max + gap, w, fx), centeredY];
 }
 
-/** Seat the box of a tooltip placement where {@link tooltipSeat} says. */
+/** Where `target`, placed, draws `row`: its geometry's row point moved
+ *  where its box is placed, as `placedOutlines` moves its outline. */
+function placedRowPoint(
+  target: Placeable,
+  row: unknown
+): [number, number] | undefined {
+  const g = target.geometry();
+  const p = g.rowPoints?.().find((q) => q.row === row);
+  if (p === undefined) return undefined;
+  return [
+    p.at[0] + (target.dims[0].min ?? 0) - g.box.min[0],
+    p.at[1] + (target.dims[1].min ?? 0) - g.box.min[1],
+  ];
+}
+
+/** The end of `target` when it is drawn as one open path (a line through
+ *  no rows, a connector): a stable place on it. */
+function openEnd(target: Placeable): [number, number] | undefined {
+  const outlines = placedOutlines(target, 0.25);
+  if (outlines.length !== 1 || outlines[0].closed) return undefined;
+  const points = outlines[0].points;
+  const end = points[points.length - 1];
+  return end && [end[0], end[1]];
+}
+
+/**
+ * Seat the box of a tooltip placement where {@link tooltipSeat} says,
+ * beside what it describes: the point of its row on a mark drawn through
+ * rows, with the marker seated on that point; the end of a mark drawn as
+ * one open path; otherwise the mark's box.
+ *
+ * TODO(#1395): a line drawn from a function or a connector has no rows to
+ * snap to, so its box describes the whole line, beside its end. The right
+ * behavior is a continuous focus that shows the function's value at the
+ * pointer (Dragology's `between`; snapping to rows is its `closest`), which
+ * needs content that changes per pointer move without a re-run.
+ */
 export function applyTooltipPlacement(
   constraint: TooltipPlaceConstraint,
   placeables: Map<string, Placeable>,
   keyOf: KeyOf
 ): void {
-  const [target, frame, box] = constraint.children.map((ref) => {
+  const [target, frame, box, marker] = constraint.children.map((ref) => {
     const p = placeables.get(keyOf(ref));
     if (p === undefined)
       throw new Error(`[gofish] .tooltip(): "${ref.name}" was not laid out`);
@@ -112,23 +153,32 @@ export function applyTooltipPlacement(
   });
   const size: [number, number] = [box.dims[0].size ?? 0, box.dims[1].size ?? 0];
   const area: [Span, Span] = [span(frame, 0), span(frame, 1)];
-  const [x, y] = tooltipSeat(
-    [span(target, 0), span(target, 1)],
-    area,
-    size,
-    constraint.gap
-  );
+  const point =
+    (constraint.point && placedRowPoint(target, constraint.point.row)) ??
+    openEnd(target);
+  // Beside a point, the box keeps its gap from the marker's edge.
+  const r = point && marker ? MARKER_RADIUS : 0;
+  const beside: [Span, Span] = point
+    ? [
+        { min: point[0] - r, max: point[0] + r },
+        { min: point[1] - r, max: point[1] + r },
+      ]
+    : [span(target, 0), span(target, 1)];
+  const [x, y] = tooltipSeat(beside, area, size, constraint.gap);
   box.setExtent!("x", { min: x, size: size[0] });
   box.setExtent!("y", { min: y, size: size[1] });
-  constraint.seated?.([x, y], (p) =>
-    tooltipSeat(
-      [
-        { min: p.x, max: p.x },
-        { min: p.y, max: p.y },
-      ],
-      area,
-      size,
-      constraint.gap
-    )
-  );
+  if (marker) {
+    const [mx, my] = point ?? [
+      (beside[0].min + beside[0].max) / 2,
+      (beside[1].min + beside[1].max) / 2,
+    ];
+    marker.setExtent!("x", {
+      min: mx - MARKER_RADIUS,
+      size: 2 * MARKER_RADIUS,
+    });
+    marker.setExtent!("y", {
+      min: my - MARKER_RADIUS,
+      size: 2 * MARKER_RADIUS,
+    });
+  }
 }

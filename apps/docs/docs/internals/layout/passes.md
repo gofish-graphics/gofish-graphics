@@ -17,6 +17,7 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/geometry/crossSection.ts
+  - packages/gofish-graphics/src/ast/geometry/rowPoints.ts
   - packages/gofish-graphics/src/ast/geometry/clip.ts
   - packages/gofish-graphics/src/ast/geometry/ring.ts
   - packages/gofish-graphics/src/ast/geometry/voronoiTiling.ts
@@ -1118,7 +1119,9 @@ a shape's outline, drawn past its box: the drawing is the hull of the root's
 box, of every ink child's box, and of every node's box grown by its outline.
 A coordinate space's box stands for its interior, and a node that clips its
 content to its box (an `intersect`, `subtract` or `atop` composite: `GoFishNode.clipsToBox`)
-draws nothing past it. The claim walk records the layers that found ink
+draws nothing past it. An overlay (`GoFishNode.overlay`: a tooltip's box and
+the marker on a line's point) is drawn over the graphic and left out, so
+opening a tooltip never resizes the canvas. The claim walk records the layers that found ink
 children on the render session, and layout records whether a shape draws an
 outline, so a render with neither skips the walk. A literal start or
 pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
@@ -1198,8 +1201,9 @@ Once a node is laid out, `node.geometry()` describes its shape in the same
 local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
 The result always has a `box`, which is `intrinsicDims` as a plain box. It may
 also answer optional queries, one file per query in `src/ast/geometry/`, joined
-into `Geometry` with `extends`. There are three. A consumer calls each query's
-helper, which falls back to the box when the node does not answer.
+into `Geometry` with `extends`. There are four. A consumer calls each query's
+helper, which falls back to the box when the node does not answer, except
+`rowPoints`, which has no fallback.
 
 - `crossSection` (`crossSection(g, axis)`): for each position u on the other
   axis, the interval the shape covers along `axis` there, as a function
@@ -1245,6 +1249,13 @@ helper, which falls back to the box when the node does not answer.
   placed node's outlines in its parent's frame, moved so the geometry's box
   sits where `p.dims` puts it. Labels and `enclose` read members this way,
   and `outlineSegments` walks an outline's straight pieces for both.
+
+- `rowPoints` (`g.rowPoints?.()`, `geometry/rowPoints.ts`): for a shape drawn
+  through data rows, the point where it draws each row, in the same frame as
+  its outline. Only the shape form of `line` built from rows answers it
+  (`Band`), with each row on its drawn edge; a ribbon is a region and a line
+  drawn from a function has no rows, so neither does. A tooltip seats a
+  row's box beside its point (`tooltipPlace`). It has no fallback.
 
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
   answers with the circle of its larger radius and its sampled outline,
@@ -1630,12 +1641,6 @@ as riders that follow its timing. They find it through `_attachedTo`, which the
 label pass sets with `INTERNAL_attach` (the inverse of `_attachments`), so the
 order in which a mark and its label lower does not matter. A taken-over drawing
 skips the rule, as it skips visibility.
-
-A fourth hook, `INTERNAL_moveWhile(by)`, moves a node's whole drawing at paint:
-the node lowers where the layout put it, its items in one group (as a `filter`
-puts them), and the group's `transform` is a live slot reading `by()`. It is
-for a node that takes no room, so nothing above it sees it move: a line's
-tooltip box follows the pointer this way.
 
 ### Render Pass 5: Per-Shape Lowering and Painting
 

@@ -17,14 +17,14 @@
  * changes does it invalidate the charts that read it, so a chart re-runs its
  * layout once per change of focus, not once per pointer move.
  *
- * A mark drawn as a path across its data (a line, `isPath`) is one
- * candidate for its whole path, so where the pointer is along it is not a
- * change of focus. Its box follows the pointer as a paint patch: the box is
- * drawn moved by {@link TooltipFocus.offset}, which reads the pointer, to
- * sit beside the point of the path nearest the pointer (`tooltip.ts`).
+ * A mark drawn through rows (a line in shape form) is one candidate with a
+ * point per row (`Candidate.points`, from where its display item draws
+ * them, `drawnRowPoints`), and the focus is one of its points: the line
+ * nearest the pointer, then its row nearest the pointer (`Chain.snap`). A
+ * move to another point is a change of focus, like a move to another bar,
+ * and the box describes that row.
  */
 import type { DisplayList } from "gofish-ir";
-import { createSignal } from "solid-js";
 import type {
   InputPrimitive,
   InteractionEventType,
@@ -36,15 +36,16 @@ import type { Registrar } from "./resolveContext";
 import { itemBox, walkItems, type Affine } from "./runtime";
 import {
   defaultFocus,
-  isPath,
-  nearestOnPath,
   type Box,
   type Candidate,
   type FocusBehavior,
   type Outline,
   type Point,
 } from "./focus";
-import type { Seated } from "../ast/tooltip/place";
+import {
+  drawnRowPoints,
+  type DrawnRowPoint,
+} from "../ast/displayList/drawnRowPoints";
 import { breadthFirst, GoFishNode, placedByOwnData } from "../ast/_node";
 import { chainOn } from "../ast/layoutWarnings";
 import { inCoordinateSpace } from "../ast/axisDirection";
@@ -70,7 +71,8 @@ const POINTER_EVENTS: InteractionEventType[] = [
   "pointerleave",
 ];
 
-/** One tooltip's focus: the focused key, and the marks of the last resolve. */
+/** One tooltip's focus: the focused mark's key and row, and the marks of
+ *  the last resolve. */
 export class TooltipFocus implements InputPrimitive {
   private readonly readers = new Set<SpecInvalidator>();
   readonly specReaders = [this.readers];
@@ -78,27 +80,19 @@ export class TooltipFocus implements InputPrimitive {
   readonly needsFrame = true;
   /** The focused mark's key, or undefined with no focus. */
   key: string | undefined;
+  /** On a mark drawn through rows, the focused row (`Candidate.points`),
+   *  and its point's key; undefined on any other mark. */
+  point: { key: unknown; row: unknown } | undefined;
   private marks: FocusMark[] = [];
-  /** The candidates of the last frame, and the pointer of the last event (a
-   *  tap holds it, see `onEvent`). Signals, so the paint patch that moves a
-   *  path's box ({@link offset}) re-reads them; nothing in layout does. */
-  private readonly candidates = createSignal<Candidate[]>([]);
-  /** The candidates of the last frame by key. */
-  private byKey = new Map<unknown, Candidate>();
-  private readonly pointer = createSignal<Point | undefined>(undefined);
+  /** The candidates of the last frame, and, by key, each candidate and
+   *  each point of one, with the mark it belongs to. */
+  private candidates: Candidate[] = [];
+  private byKey = new Map<unknown, { choice: Candidate; mark: Candidate }>();
+  /** The pointer of the last event (a tap holds it, see `onEvent`). */
+  private pointer: Point | undefined;
   /** The box the last lowering drew, and where it was drawn. */
   private box: GoFishNode | undefined;
   private cover: Box | undefined;
-  /** Where the layout seated a path's box, and where it would seat it
-   *  beside a point (`tooltipPlace`), in the layout's px; and, once a frame
-   *  has the box, where the layout's origin is in the pointer's px. */
-  private seat:
-    | {
-        at: [number, number];
-        seatAt: (p: Point) => [number, number];
-        origin?: Point;
-      }
-    | undefined;
   private touch = false;
 
   constructor(private readonly behavior: FocusBehavior = defaultFocus) {}
@@ -119,7 +113,6 @@ export class TooltipFocus implements InputPrimitive {
   use(marks: FocusMark[]): void {
     this.marks = marks;
     this.box = undefined;
-    this.seat = undefined;
   }
 
   /** The box the lowering drew for the focused mark. */
@@ -127,63 +120,34 @@ export class TooltipFocus implements InputPrimitive {
     this.box = box;
   }
 
-  /** Whether the focused mark is drawn as a path (`isPath`), so its box
-   *  follows the pointer along it. Read from the candidates of the last
-   *  frame: a change of focus moves no mark. */
-  follows(): boolean {
-    const c = this.focused();
-    return c !== undefined && isPath(c);
-  }
-
-  /** Where the layout seated the box of a path (`tooltipPlace`). */
-  readonly seated: Seated = (at, seatAt) => {
-    this.seat = { at, seatAt };
-  };
-
-  /**
-   * How far a path's box moves at paint from where the layout seated it: to
-   * its seat beside the point of the path nearest the pointer, kept inside
-   * the chart as the layout keeps it. A paint-time value: it reads the
-   * pointer and the frame, so the box moves as they change, with no layout.
-   */
-  offset(): [number, number] {
-    const c = this.focused();
-    const p = this.pointer[0]();
-    const seat = this.seat;
-    const q = c && p && nearestOnPath(p, c.outline);
-    const o = seat?.origin;
-    if (!q || !o) return [0, 0];
-    const [x, y] = seat!.seatAt({ x: q.x - o.x, y: q.y - o.y });
-    return [x - seat!.at[0], y - seat!.at[1]];
-  }
-
+  /** The focused candidate: the focused point, or the focused mark. */
   private focused(): Candidate | undefined {
-    this.candidates[0]();
-    return this.key === undefined ? undefined : this.byKey.get(this.key);
+    const key = this.point?.key ?? this.key;
+    return key === undefined ? undefined : this.byKey.get(key)?.choice;
   }
 
   onFrame(frame: InteractionFrame): void {
     const { candidates, cover } = scan(frame.items, this.marks, this.box);
     this.cover = cover;
-    if (this.seat && this.cover)
-      this.seat.origin = {
-        x: this.cover.x0 - this.seat.at[0],
-        y: this.cover.y0 - this.seat.at[1],
-      };
-    this.byKey = new Map(candidates.map((c) => [c.key, c]));
-    this.candidates[1](candidates);
+    this.candidates = candidates;
+    this.byKey = new Map();
+    for (const c of candidates) {
+      this.byKey.set(c.key, { choice: c, mark: c });
+      for (const p of c.points ?? [])
+        this.byKey.set(p.key, { choice: p, mark: c });
+    }
   }
 
   /** The chart is gone: drop its marks, its box and its candidates. */
   detach(): void {
     this.key = undefined;
+    this.point = undefined;
     this.marks = [];
     this.box = undefined;
     this.cover = undefined;
-    this.seat = undefined;
+    this.candidates = [];
     this.byKey = new Map();
-    this.candidates[1]([]);
-    this.pointer[1](undefined);
+    this.pointer = undefined;
     this.readers.clear();
   }
 
@@ -201,40 +165,46 @@ export class TooltipFocus implements InputPrimitive {
       this.touch = kind !== undefined && kind !== "" && kind !== "mouse";
     else if (type === "pointermove" && kind === "mouse") this.touch = false;
     if (type === "pointerleave") {
-      if (!this.touch) this.pointer[1](undefined);
-    } else if (type !== "pointerup")
-      this.pointer[1](pt && { x: pt.x, y: pt.y });
+      if (!this.touch) this.pointer = undefined;
+    } else if (type !== "pointerup") this.pointer = pt && { x: pt.x, y: pt.y };
     this.choose();
   }
 
   /** Run the behavior on the current pointer and candidates, and invalidate
-   *  the readers when the focused key changes. */
+   *  the readers when the focused mark or point changes. */
   private choose(): void {
     // The open box covers the marks under it: a pointer over it reads the
-    // box, so the focus stays on the mark it describes. The frame has the
-    // box where the layout put it, and a path's box is drawn moved.
-    const p = this.pointer[0]();
+    // box, so the focus stays on the mark it describes. On a mark drawn
+    // through rows, the box covers the line's next rows, so there the
+    // pointer still picks among the mark's own rows.
+    const p = this.pointer;
     const c = this.cover;
-    const [dx, dy] = this.offset();
-    if (
+    const covered =
       this.key !== undefined &&
       p !== undefined &&
       c !== undefined &&
-      p.x >= c.x0 + dx &&
-      p.x <= c.x1 + dx &&
-      p.y >= c.y0 + dy &&
-      p.y <= c.y1 + dy
-    )
-      return;
-    const candidates = this.candidates[0]();
-    const key = this.behavior({
+      p.x >= c.x0 &&
+      p.x <= c.x1 &&
+      p.y >= c.y0 &&
+      p.y <= c.y1;
+    const mark = covered ? this.byKey.get(this.key!)?.mark : undefined;
+    if (covered && !mark?.points) return;
+    const choice = this.behavior({
       pointer: p,
-      candidates,
+      candidates: mark ? [mark] : this.candidates,
       current: this.focused(),
       clicked: false,
-    }).choice?.key as string | undefined;
-    if (key === this.key) return;
+    }).choice;
+    if (covered && choice === undefined) return;
+    const found = choice && this.byKey.get(choice.key);
+    const key = found?.mark.key as string | undefined;
+    const point =
+      found && found.choice !== found.mark
+        ? { key: found.choice.key, row: found.choice.datum[0] }
+        : undefined;
+    if (key === this.key && point?.key === this.point?.key) return;
     this.key = key;
+    this.point = point;
     for (const r of this.readers) r.invalidate();
   }
 }
@@ -294,9 +264,18 @@ function scan(
     let drawn = parts.get(m);
     if (drawn === undefined) parts.set(m, (drawn = emptyDrawn()));
     addParts(drawn, outlineOf(item, at));
+    for (const { row, x, y } of drawnRowPoints(item) ?? [])
+      drawn.points.push({
+        row,
+        x: at.tx + at.sx * x,
+        y: at.ty + at.sy * y,
+      });
   });
   const covered = parts.get(COVER);
-  const byKey = new Map<string, Candidate & { marks: FocusMark[] }>();
+  const byKey = new Map<
+    string,
+    Candidate & { marks: FocusMark[]; drawnPoints: DrawnRowPoint[] }
+  >();
   for (const m of marks) {
     const drawn = parts.get(m);
     if (drawn === undefined || drawn.outline.length === 0) continue;
@@ -309,6 +288,7 @@ function scan(
         position: {},
         outline: drawn.outline,
         marks: [m],
+        drawnPoints: drawn.points,
       });
     else {
       // Marks that share a key are one candidate: the union of their parts,
@@ -317,22 +297,28 @@ function scan(
       // The first mark's rows are its own: copy them before adding to them.
       if (c.marks.length === 1) c.datum = [...c.datum];
       for (const r of m.rows) c.datum.push(r);
-      const merged = { outline: c.outline, box: c.box };
+      const merged = { outline: c.outline, box: c.box, points: c.drawnPoints };
       addParts(merged, drawn.outline);
       c.box = merged.box;
+      for (const p of drawn.points) c.drawnPoints.push(p);
       c.marks.push(m);
     }
   }
-  const candidates = [...byKey.values()].map(({ marks: ms, ...c }) => {
-    const [px, py] = positionAxes(ms[0].node);
-    return {
-      ...c,
-      position: {
-        x: px ? (c.box.x0 + c.box.x1) / 2 : undefined,
-        y: py ? (c.box.y0 + c.box.y1) / 2 : undefined,
-      },
-    };
-  });
+  const candidates = [...byKey.values()].map(
+    ({ marks: ms, drawnPoints, ...c }): Candidate => {
+      const [px, py] = positionAxes(ms[0].node);
+      return {
+        ...c,
+        position: {
+          x: px ? (c.box.x0 + c.box.x1) / 2 : undefined,
+          y: py ? (c.box.y0 + c.box.y1) / 2 : undefined,
+        },
+        ...(drawnPoints.length > 0 && {
+          points: pointsOf(c.key, c.datum, drawnPoints),
+        }),
+      };
+    }
+  );
   return {
     candidates,
     cover: covered && covered.outline.length > 0 ? covered.box : undefined,
@@ -342,12 +328,40 @@ function scan(
 /** The owner of the open box's items in {@link scan}. */
 const COVER = Symbol("cover");
 
-/** An outline being collected, and the box of its parts so far. */
-type Drawn = { outline: Outline; box: Box };
+/** A mark's drawn row points as candidates. A point's key is its row's
+ *  place among the mark's rows, after the mark's key: the mark's key is its
+ *  rows (`rowsKey`), so the place is stable across re-runs too. A point
+ *  whose row is not among the mark's rows is left out. */
+function pointsOf(
+  key: unknown,
+  rows: readonly unknown[],
+  drawn: DrawnRowPoint[]
+): Candidate[] {
+  const index = new Map(rows.map((r, i) => [r, i]));
+  const out: Candidate[] = [];
+  for (const { row, x, y } of drawn) {
+    const i = index.get(row);
+    if (i === undefined) continue;
+    const box = { x0: x, y0: y, x1: x, y1: y };
+    out.push({
+      key: `${String(key)}#${i}`,
+      datum: [row],
+      box,
+      position: { x, y },
+      outline: [{ box, round: true }],
+    });
+  }
+  return out;
+}
+
+/** An outline being collected, the box of its parts so far, and the
+ *  points of the rows it is drawn through. */
+type Drawn = { outline: Outline; box: Box; points: DrawnRowPoint[] };
 
 const emptyDrawn = (): Drawn => ({
   outline: [],
   box: { x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity },
+  points: [],
 });
 
 /** Add `parts` to `drawn`, growing its box by each. A loop, not a spread
