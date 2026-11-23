@@ -24,6 +24,7 @@ import {
 } from "../constraints/claimPlacement";
 import { type ConstraintSpec } from "../constraints";
 import type { ResolvedConstraints } from "../_ref";
+import type { AxisDirection } from "../axisDirection";
 
 /** What a child is to its parent's plan on one axis, about its data 0, in
  *  the parent's axis order. */
@@ -733,4 +734,41 @@ export function frameIn(
   const sign = flips(layer, child, axis) ? -1 : 1;
   const [zero, one] = pts.map((x) => (sign === 1 ? x : Pwl.negate(x)));
   return { key: target.uid, child: i, zero, unit: sub(one, zero) };
+}
+
+/**
+ * Where the frame each `position` with `in` of `layer` names sits as laid
+ * out (`InFrame`, which `frameIn` reads in the claim walk), by the uid of
+ * its node and the axis: its data 0 from the origin of the child of
+ * `layer` that holds it, and one data unit, in `layer`'s axis order
+ * (`direction`). A point of a node's frame is at `dir·(σ·v + originPx)` in
+ * its local pixels (a node that reads y upward stores it reflected), which
+ * each node between moves by its translate. Undefined where a node between
+ * is not placed yet.
+ */
+export function laidFrames(
+  layer: GoFishNode,
+  direction: AxisDirection
+): (uid: string, axis: 0 | 1) => [number, number] | undefined {
+  const inTargets = new Map<string, GoFishNode>();
+  for (const c of layer.constraints) {
+    const t = inTarget(c, layer);
+    if (t !== undefined) inTargets.set(t.uid, t);
+  }
+  return (uid, axis) => {
+    const t = inTargets.get(uid);
+    const frame = t?.layoutFrames?.[axis];
+    if (t === undefined || frame === undefined) return undefined;
+    const dirOf = (n: GoFishNode) => (axis === 0 ? 1 : n.yFrame.direction);
+    // Up to the child that holds `t`, whose own translate is its
+    // origin, which the plan adds.
+    let px = dirOf(t) * frame.originPx;
+    for (let n = t; n.parent !== layer; n = n.parent) {
+      const tr = n.projectedTranslate(axis);
+      if (n.parent === undefined || tr === undefined) return undefined;
+      px += tr;
+    }
+    const dir = axis === 0 ? 1 : direction;
+    return [dir * px, dir * dirOf(t) * frame.sigma];
+  };
 }

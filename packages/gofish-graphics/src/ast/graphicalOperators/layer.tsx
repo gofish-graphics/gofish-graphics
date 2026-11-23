@@ -30,8 +30,7 @@ import { applyFilter, displayFilter, type FilterOptions } from "../drawFilter";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import type { AxesOptions } from "../gofish";
-import { NestedOperand, nestedGap } from "../constraints/nestedOperand";
-import { fromFrameStart, orientView, rawPlaceable } from "../axisDirection";
+import { operandPlaceables } from "../constraints/nestedOperand";
 import {
   applyConstraints,
   collectPositionDomains,
@@ -47,7 +46,6 @@ import {
   targetOf,
 } from "../constraints/relationalPaint";
 import { axisName, type ConstraintPosScales } from "../constraints/shared";
-import type { LocalSpan } from "../constraints/placementProgramLowerer";
 import {
   applyNestExtentPlan,
   applyNestLayoutProposal,
@@ -72,21 +70,22 @@ import {
   solveLayerScales,
 } from "../constraints/proposalPlan";
 import {
+  seatByPlan,
   seatingOf,
   type ClaimChild,
+  type LaidOut,
   type Placement,
   type Seating,
 } from "../constraints/claimPlacement";
 import { chainRooms } from "../constraints/distribute";
 import {
   buildPlan,
-  inTarget,
+  laidFrames,
   planPlacement,
   mapForms,
   plotIn,
   type LayerPlan,
 } from "../solver/plan";
-import { evaluate } from "../solver/formula";
 import { plotForms, reachPast } from "../solver/plotForms";
 
 /** `p` grown by an outline drawn `o` pixels past its box on each side
@@ -1135,221 +1134,42 @@ export const layer = createNodeOperatorSequential(
 
           if (node.constraints.length > 0) {
             // Constraint-based placement: the placeable of each operand, by
-            // its key. A direct operand is its child's placeable (a drawing
-            // clause laid out after the solve has none yet); a nested one is
-            // a `NestedOperand` rigidly tied to the child that contains it,
-            // its container, keyed by that child's uid whether or not the
-            // child is an operand too.
-            const keyToPlaceable = new Map<
-              string,
-              (typeof childPlaceables)[number]
-            >();
-            node.children.forEach((c, i) => {
-              // A drawing clause laid out after the solve has no placeable
-              // yet, and nothing in the solve can address it.
-              if (childPlaceables[i])
-                keyToPlaceable.set(c.uid, childPlaceables[i]);
-            });
-            // A nested operand is a `NestedOperand` held at a fixed offset
-            // inside the child that contains it (`gaps`).
-            const gaps = new Map<string, [number, number]>();
-            for (const [key, op] of operands) {
-              if (op.direct) continue;
-              // The operand sits at a fixed pixel offset inside its container
-              // (`nestedGap`), in this layer's axis order.
-              const containerPx = rawPlaceable(childPlaceables[op.child]);
-              const gapPx = nestedGap(op.node, node.children[op.child]);
-              const operand = new NestedOperand(
-                op.name,
-                op.node,
-                containerPx,
-                gapPx
-              );
-              keyToPlaceable.set(
-                key,
-                orientView(
-                  operand,
-                  direction
-                ) as unknown as (typeof childPlaceables)[number]
-              );
-              // The same offset in this layer's axis order: from the
-              // container's start edge to the operand's, which is its top
-              // when y reads top-down and its bottom when y grows upward.
-              const gap: [number, number] = [
-                gapPx[0],
-                fromFrameStart(
-                  gapPx[1],
-                  containerPx.dims[1].size ?? 0,
-                  direction
-                ) - (direction === 1 ? 0 : (op.node.dims[1].size ?? 0)),
-              ];
-              gaps.set(key, gap);
-            }
-
-            // What the plan reads off layout on `axis` (`PlanInput`), for a
-            // child by its index and for a nested operand by its key
-            // (`@key`): a target's laid box about its origin (`lo`, `hi`)
-            // and plot (`plo`, `phi`; its box where its plot is its box),
-            // where a target placed before the solve has its origin (`at`),
-            // where this layer's frame seats a child no constraint places
-            // (`seat`, `seatInScope`), a nested operand's offset in its
-            // container (`gap`), the pixel a literal position seats a
-            // child's origin at (`lit`), the pixel of data 0 (`origin`), and
-            // the layer's box (`size`).
-            // Where the frame a `position` with `in` names sits, as laid
-            // out (`InFrame`): its data 0 from the origin of the child of
-            // this layer that holds it, and one data unit, in this layer's
-            // axis order. A point of a node's frame is at `dir·(σ·v +
-            // originPx)` in its local pixels (a node that reads y upward
-            // stores it reflected), which each node between moves by its
-            // translate.
-            const inTargets = new Map<string, GoFishNode>();
-            for (const c of node.constraints) {
-              const t = inTarget(c, node);
-              if (t !== undefined) inTargets.set(t.uid, t);
-            }
-            const frameAt = (
-              uid: string,
-              axis: 0 | 1
-            ): [number, number] | undefined => {
-              const t = inTargets.get(uid);
-              const frame = t?.layoutFrames?.[axis];
-              if (t === undefined || frame === undefined) return undefined;
-              const dirOf = (n: GoFishNode) =>
-                axis === 0 ? 1 : n.yFrame.direction;
-              // Up to the child that holds `t`, whose own translate is its
-              // origin, which the plan adds.
-              let px = dirOf(t) * frame.originPx;
-              for (let n = t; n.parent !== node; n = n.parent) {
-                const tr = n.projectedTranslate(axis);
-                if (n.parent === undefined || tr === undefined)
-                  return undefined;
-                px += tr;
-              }
-              const dir = axis === 0 ? 1 : direction;
-              return [dir * px, dir * dirOf(t) * frame.sigma];
+            // its key (`operandPlaceables`), and what the plan's inputs read
+            // off layout (`LaidOut`). The solve writes the plan's seats back
+            // onto them (`seatByPlan`), at the σ this layer hands its
+            // children.
+            const { targets, gaps } = operandPlaceables(
+              node.children,
+              childPlaceables,
+              operands,
+              direction
+            );
+            const laid: LaidOut = {
+              child: (i) => childPlaceables[i],
+              nested: (key) => targets.get(key),
+              gap: (key) => gaps.get(key),
+              literalSeat: (i) => literalSeatsByKey.get(node.children[i].uid),
+              seat: seatOf,
+              frame: laidFrames(node, direction),
+              origin: (axis) => effectivePosScales[axis]?.originPx,
+              size,
             };
-            const inputOf =
-              (axis: 0 | 1) =>
-              (key: string): number | undefined => {
-                if (key === "origin") return effectivePosScales[axis]?.originPx;
-                if (key === "size")
-                  return Number.isFinite(size[axis]) ? size[axis] : undefined;
-                const colon = key.indexOf(":");
-                const kind = key.slice(0, colon);
-                const who = key.slice(colon + 1);
-                if (kind === "in0" || kind === "in1")
-                  return frameAt(who, axis)?.[kind === "in0" ? 0 : 1];
-                const nestedKey = who.startsWith("@")
-                  ? who.slice(1)
-                  : undefined;
-                if (kind === "gap") return gaps.get(nestedKey!)?.[axis];
-                const i = nestedKey === undefined ? Number(who) : undefined;
-                const p =
-                  i !== undefined
-                    ? childPlaceables[i]
-                    : keyToPlaceable.get(nestedKey!);
-                if (p === undefined) return undefined;
-                const lo = p.localAnchor?.(axis, "min");
-                const hi = p.localAnchor?.(axis, "max");
-                switch (kind) {
-                  case "lit":
-                    return literalSeatsByKey.get(node.children[i!].uid)?.[axis];
-                  case "lo":
-                    return lo;
-                  case "hi":
-                    return hi;
-                  // An end of a local span (`spanInput`), or of its box
-                  // where that is the span.
-                  case "plot0":
-                  case "plot1":
-                  case "bare0":
-                  case "bare1": {
-                    const end = kind.endsWith("0") ? 0 : 1;
-                    const span = kind.slice(0, -1) as LocalSpan;
-                    return p.localSpan?.(span, axis)?.[end] ?? (end ? hi : lo);
-                  }
-                  case "at": {
-                    const min = p.dims[axis].min;
-                    return min === undefined || lo === undefined
-                      ? undefined
-                      : min - lo;
-                  }
-                  case "seat": {
-                    // Seating leaves a child that placed itself where it is.
-                    const min = p.dims[axis].min;
-                    if (min !== undefined)
-                      return lo === undefined ? undefined : min - lo;
-                    const seat = seatOf(p, i!, axis);
-                    return seat.anchor === "baseline"
-                      ? seat.px
-                      : lo === undefined
-                        ? undefined
-                        : seat.px - lo;
-                  }
-                }
-                return undefined;
-              };
-            // Write the plan's seats back: each placed cell's box start, and
-            // its size where the plan sets one, at the σ this layer hands
-            // its children, with the inputs measured above.
-            const seatByPlan = () => {
-              const evaluated = ([0, 1] as const).map((axis) => {
-                const seats = node._claimMemo.plans[axis]?.placement.seats;
-                if (seats === undefined) return undefined;
-                const sigma =
-                  effectivePosScales[axis]?.sigma ??
-                  childScaleFactors[axis] ??
-                  0;
-                return {
-                  seats,
-                  v: evaluate(seats.tape, sigma, inputOf(axis)),
-                };
-              });
-              // Two constraints that place one child at two places are an
-              // error: each over-determination the solve kept must agree
-              // where layout evaluates it.
-              evaluated.forEach((e, axis) => {
-                if (e === undefined) return;
-                for (const c of e.seats.tape.checks) {
-                  const [a, b] = [e.v[c.a], e.v[c.b]];
-                  if (!(Math.abs(a - b) <= c.tolerance))
-                    throw new Error(
-                      `Constraint placement conflict on ${axisName(axis as 0 | 1)}: ` +
-                        `${c.owner} asserts ${a}, but ${c.priorOwner} implies ${b}`
-                    );
-                }
-              });
-              evaluated.forEach((e, i) => {
-                if (e === undefined) return;
-                const axis = i as 0 | 1;
-                const { seats, v } = e;
-                const label = axisName(axis);
-                for (const [key, cell] of seats.cells) {
-                  const t = keyToPlaceable.get(key);
-                  if (t === undefined) continue;
-                  const min = v[cell.min];
-                  if (cell.sizeStrong && cell.size !== undefined && t.setExtent)
-                    t.setExtent(
-                      label,
-                      { min, max: min + v[cell.size] },
-                      cell.sizeOwner
-                    );
-                  else if (t.pinAnchor) t.pinAnchor(axis, min, "min");
-                  else t.place(axis, min, "min");
-                }
-                for (const [key, { size, owner }] of seats.sizeOnly)
-                  keyToPlaceable.get(key)?.setSizeOnly?.(label, v[size], owner);
-              });
-            };
-
             applyConstraints(
               node.constraints,
               keyOf,
-              keyToPlaceable,
+              targets,
               size,
               effectivePosScales,
-              seatByPlan
+              () =>
+                seatByPlan(
+                  (axis) => node._claimMemo.plans[axis]?.placement.seats,
+                  (axis) =>
+                    effectivePosScales[axis]?.sigma ??
+                    childScaleFactors[axis] ??
+                    0,
+                  laid,
+                  targets
+                )
             );
 
             // Place any child the constraints left unplaced at its seat

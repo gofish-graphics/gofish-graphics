@@ -2858,8 +2858,8 @@ export class GoFishNode {
     if (!this.children.some((_, i) => out(i)) && own.every((p) => !p))
       return undefined;
     // The domain's span is in this node's axis order, as its layout reads
-    // it; its box is stored in pixels, `direction × order` (`frameAt` in
-    // `layer`), so a y-up node reflects it.
+    // it; its box is stored in pixels, `direction × order` (`laidFrames` in
+    // `solver/plan.ts`), so a y-up node reflects it.
     const ordered = this.domainSpan(axis);
     const dir = axis === 0 ? 1 : this.yFrame.direction;
     const domain: [number, number] | undefined =

@@ -14,6 +14,13 @@ import {
 } from "../dims";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import type { Geometry } from "../geometry";
+import type { ResolvedOperand } from "../_ref";
+import {
+  fromFrameStart,
+  orientView,
+  rawPlaceable,
+  type AxisDirection,
+} from "../axisDirection";
 
 /**
  * A constraint operand that lives INSIDE one of the layer's direct children
@@ -118,4 +125,51 @@ export function nestedGap(
     }
     return min - (container.localAnchor(i, "min") ?? 0);
   }) as [number, number];
+}
+
+/**
+ * The placeable of each constraint operand of a layer, by its key, as the
+ * layer laid out its `children` (`placeables`, by index), and the offset of
+ * each nested operand in its container (`gaps`). A direct operand is its
+ * child's placeable (a drawing clause laid out after the solve has none
+ * yet, and nothing in the solve can address it); a nested one is a
+ * `NestedOperand` rigidly tied to the child that contains it, its
+ * container, keyed by that child's uid whether or not the child is an
+ * operand too, seen in the layer's axis order (`direction`).
+ */
+export function operandPlaceables(
+  children: readonly GoFishAST[],
+  placeables: readonly (Placeable | undefined)[],
+  operands: ReadonlyMap<string, ResolvedOperand>,
+  direction: AxisDirection
+): {
+  targets: Map<string, Placeable>;
+  gaps: Map<string, [number, number]>;
+} {
+  const targets = new Map<string, Placeable>();
+  children.forEach((c, i) => {
+    if (placeables[i]) targets.set(c.uid, placeables[i]);
+  });
+  // A nested operand is a `NestedOperand` held at a fixed offset
+  // inside the child that contains it (`gaps`).
+  const gaps = new Map<string, [number, number]>();
+  for (const [key, op] of operands) {
+    if (op.direct) continue;
+    // The operand sits at a fixed pixel offset inside its container
+    // (`nestedGap`), in the layer's axis order.
+    const containerPx = rawPlaceable(placeables[op.child]!);
+    const gapPx = nestedGap(op.node, children[op.child]);
+    const operand = new NestedOperand(op.name, op.node, containerPx, gapPx);
+    targets.set(key, orientView(operand, direction));
+    // The same offset in the layer's axis order: from the
+    // container's start edge to the operand's, which is its top
+    // when y reads top-down and its bottom when y grows upward.
+    const gap: [number, number] = [
+      gapPx[0],
+      fromFrameStart(gapPx[1], containerPx.dims[1].size ?? 0, direction) -
+        (direction === 1 ? 0 : (op.node.dims[1].size ?? 0)),
+    ];
+    gaps.set(key, gap);
+  }
+  return { targets, gaps };
 }
