@@ -889,3 +889,193 @@ stack({ by: "series", dir: "y", size: field("amount").normalize() });
 // stackOffsetSilhouette: the stacks centered on one line.
 spread({ by: "x", dir: "x", spacing: 14, alignment: "middle" });
 ```
+
+<!-- id: slack-today -->
+
+```ts
+// Today (commit b960e601d, placeholder): the rule rides on each gap, and
+// two linked gaps with different rules are an error.
+layer([A, B, C, D, p, q, s, r]).relate((c) => [
+  Constraint.align({ x: "start" }, [c.A, c.p]),
+  Constraint.align({ x: "end" }, [c.D, c.r]),
+  Constraint.distribute(
+    { dir: "x", spacing: Spacing.atLeast(8, { justify: "center" }) },
+    [c.p, c.q, c.s, c.r]
+  ),
+]);
+```
+
+<!-- id: slack-a-family -->
+
+```ts
+// The family, once per scope and axis. Each item takes a fraction t of
+// its slack: x = least + t * (greatest - least).
+Slack.start(); // t = 0: the least solution (ASAP, early start)
+Slack.end(); // t = 1: the greatest solution (ALAP, late start)
+Slack.center(); // t = 1/2
+Slack.at(0.25); // any t from 0 to 1; the three above are presets of it
+Slack.even(); // on a chain: t grows by one step per gap between tight items
+```
+
+<!-- id: slack-a-row -->
+
+```ts
+layer({ slack: { x: Slack.even() } }, [A, B, C, D, p, q, s, r]).relate((c) => [
+  Constraint.align({ x: "start" }, [c.A, c.p]),
+  Constraint.align({ x: "end" }, [c.D, c.r]),
+  Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+    c.p,
+    c.q,
+    c.s,
+    c.r,
+  ]),
+]);
+```
+
+<!-- id: slack-a-sankey -->
+
+```ts
+// Columns: every link's target at least one column after its source.
+layer({ slack: { x: Slack.end() } }, nodes).relate((c) =>
+  links.map((l) =>
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(COLUMN_GAP) }, [
+      c[l.source],
+      c[l.target],
+    ])
+  )
+);
+// Inside a column, a spread in the column's room: the walls are its edges.
+spread(
+  { dir: "y", spacing: Spacing.atLeast(10), slack: Slack.even() },
+  column.map((n) => rect({ w: 12, h: v(value(n)) }))
+);
+```
+
+<!-- id: slack-a-tree -->
+
+```ts
+// Each set of siblings: at least their contour gap apart, slack shared.
+spread(
+  { dir: "x", spacing: Spacing.contour(10), slack: Slack.even() },
+  children.map(subtree)
+);
+```
+
+<!-- id: slack-a-dendro -->
+
+```ts
+layer({ slack: { y: Slack.end() } }, nodes).relate((c) => [
+  ...edges.map(([parent, child]) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[parent],
+      c[child],
+    ])
+  ),
+  ...inner.map((n) => Constraint.align({ x: "mean" }, [c[n], ...kids(c, n)])),
+]);
+```
+
+<!-- id: slack-b-row -->
+
+```ts
+// Glue: each gap has a minimum and a weight for its share of the slack
+// in its run (TeX's "plus", CSS flex-grow, grid's minmax(8px, 1fr)).
+Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8, { grow: 1 }) }, [
+  c.p,
+  c.q,
+  c.s,
+  c.r,
+]);
+// start: only the last gap grows. end: only the first. center: the first
+// and the last. Uneven shares: list one spacing per gap.
+Constraint.distribute(
+  {
+    dir: "x",
+    spacing: [
+      Spacing.atLeast(8, { grow: 2 }),
+      Spacing.atLeast(8, { grow: 1 }),
+      Spacing.atLeast(8, { grow: 0 }),
+    ],
+  },
+  [c.p, c.q, c.s, c.r]
+);
+```
+
+<!-- id: slack-b-dendro -->
+
+```ts
+// The levels are not a chain, so "which gap grows" has no local answer.
+// The nearest local spelling pins the leaves and lets every gap grow:
+layer(nodes).relate((c) => [
+  ...edges.map(([parent, child]) =>
+    Constraint.distribute(
+      { dir: "y", spacing: Spacing.atLeast(70, { grow: 1 }) },
+      [c[parent], c[child]]
+    )
+  ),
+  Constraint.align({ y: "end" }, leaves(c)),
+]);
+```
+
+<!-- id: slack-c-row -->
+
+```ts
+// No rule: a minimum gap always takes the least solution.
+Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+  c.p,
+  c.q,
+  c.s,
+  c.r,
+]);
+// Anything else is an exact relation the user writes, e.g. q midway:
+Constraint.align({ x: "mean" }, [c.q, c.p, c.r]);
+```
+
+<!-- id: slack-c-dendro -->
+
+```ts
+// Leaves on the last level: an explicit align. Inner nodes stay at their
+// depth, which is not d3.cluster.
+layer(nodes).relate((c) => [
+  ...edges.map(([parent, child]) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[parent],
+      c[child],
+    ])
+  ),
+  Constraint.align({ y: "end" }, leaves(c)),
+]);
+```
+
+<!-- id: slack-d-sketch -->
+
+```ts
+// The rule as an objective, in the optimizing solver of the main design:
+// least squares on how far each gap stretches past its minimum.
+layer({ solver: Solver.optimize({ cost: Cost.stretch() }) }, children).relate(
+  (c) => gaps(c)
+);
+```
+
+<!-- id: slack-a-py -->
+
+```python
+from gofish import Constraint, Slack, Spacing, layer, spread
+
+row = layer([A, B, C, D, p, q, s, r], slack={"x": Slack.even()}).relate(
+    lambda c: [
+        Constraint.align([c.A, c.p], x="start"),
+        Constraint.align([c.D, c.r], x="end"),
+        Constraint.distribute(
+            [c.p, c.q, c.s, c.r], dir="x", spacing=Spacing.at_least(8)
+        ),
+    ]
+)
+
+siblings = spread(
+    [subtree(k) for k in children],
+    dir="x",
+    spacing=Spacing.contour(10),
+    slack=Slack.even(),
+)
+```

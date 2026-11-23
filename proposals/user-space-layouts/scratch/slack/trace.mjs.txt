@@ -1,0 +1,25 @@
+// Scratch: the root's sibling chain of the smallest tree where "even" and
+// d3.tree disagree: pairwise gaps, least, greatest, and Walker's pushes.
+import fs from "node:fs";
+import { createRequire } from "node:module";
+const [repoRoot] = process.argv.slice(2);
+const require = createRequire(repoRoot + "/packages/gofish-graphics/package.json");
+const ts = require("typescript");
+let src = fs.readFileSync(repoRoot + "/packages/gofish-graphics/stories/_proposals/SlackRule.stories.tsx", "utf8");
+src = src.replace(/^import[\s\S]*?;\n/gm, "").replace(/^export default meta;$/m, "").replace(/^export /gm, "");
+const js = ts.transpileModule(src, { compilerOptions: { target: 99, module: 99, jsx: 1 } }).outputText;
+const stub = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : stub), apply: () => stub });
+const names = "circle layer line polygon position rect text initializeContainer".split(" ");
+const L = new Function(...names, js + "\nreturn { least, greatest, runs, siblingSys, layoutTree, walkerRule, sysRule };")(...names.map(() => stub));
+
+const T = (x) => (x === 0 ? { name: "l" } : { name: "n", children: x.map(T) });
+const t = T([[0, [0, 0], [0, 0, 0, 0]], 0, [0], [[0, 0]]]);
+// capture the extents the root's rule sees
+let rootEs;
+const spy = (rule) => (es) => { if (es.length === 4) rootEs = es; return rule(es); };
+L.layoutTree(t, spy(L.walkerRule));
+console.log("extents", JSON.stringify(rootEs));
+const s = L.siblingSys(rootEs);
+console.log("gaps", s.gaps.map((g) => `${g.from}->${g.to}:${g.w}`).join(" "));
+console.log("least", JSON.stringify(L.least(s)), "greatest", JSON.stringify(L.greatest(s)));
+console.log("even", JSON.stringify(L.runs(s)), "walker", JSON.stringify(L.walkerRule(rootEs)));

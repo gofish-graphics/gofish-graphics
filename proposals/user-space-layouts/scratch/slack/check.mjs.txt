@@ -1,0 +1,314 @@
+// Scratch: evaluate the rules of stories/_proposals/SlackRule.stories.tsx
+// (GoFish calls stubbed) against d3-hierarchy and d3-sankey.
+// Run: node check.mjs <repo root> <dir holding node_modules with d3-sankey>
+import fs from "node:fs";
+import { createRequire } from "node:module";
+const [repoRoot, d3dir] = process.argv.slice(2);
+const require = createRequire(repoRoot + "/packages/gofish-graphics/package.json");
+const ts = require("typescript");
+const d3req = createRequire(d3dir + "/package.json");
+const { hierarchy, tree, cluster } = d3req("d3-hierarchy");
+const S = d3req("d3-sankey");
+
+let src = fs.readFileSync(
+  repoRoot + "/packages/gofish-graphics/stories/_proposals/SlackRule.stories.tsx",
+  "utf8"
+);
+src = src
+  .replace(/^import[\s\S]*?;\n/gm, "")
+  .replace(/^export default meta;$/m, "")
+  .replace(/^export /gm, "");
+const js = ts.transpileModule(src, {
+  compilerOptions: { target: 99, module: 99, jsx: 1 },
+}).outputText;
+const stub = new Proxy(function () {}, {
+  get: (t, k) => (k === Symbol.toPrimitive ? () => 0 : stub),
+  apply: () => stub,
+});
+const names = "circle layer line polygon position rect text initializeContainer".split(" ");
+const L = new Function(
+  ...names,
+  js +
+    "\nreturn { ramps, least, greatest, lerp, runs, glue, spanEnd, rowSys, columnSys, justifyColumns, d3CenterColumns, sankeyTops, energyNodes, energyLinks, wedge, counter, layoutTree, walkerRule, sysRule, SEP, LEVEL, budget, levelSys, leavesOnWall, dendroGlue, valueOf };"
+)(...names.map(() => stub));
+const r3 = (x) => Math.round(x * 1000) / 1000;
+
+// (a) the row
+console.log("== row");
+for (const [k, f] of [
+  ["start", L.lerp(0)],
+  ["center", L.lerp(0.5)],
+  ["end", L.lerp(1)],
+  ["even", L.runs],
+  ["glue QP 1,1,1", (s) => L.glue(s)],
+]) {
+  const x = f(L.rowSys([1, 1, 1]));
+  console.log(k, "q", r3(x.q), "s", r3(x.s));
+}
+console.log(
+  "glue 2,1,0 via runs",
+  JSON.stringify(L.runs(L.rowSys([2, 1, 0]))),
+  "via QP",
+  JSON.stringify(L.glue(L.rowSys([2, 1, 0])))
+);
+
+// (b) sankey
+console.log("== sankey columns");
+const run = (align) =>
+  S.sankey()
+    .nodeId((d) => d.name)
+    .nodeAlign(align)
+    .nodeWidth(12)
+    .nodePadding(10)
+    .extent([
+      [0, 0],
+      [420, 300],
+    ])
+    .iterations(0)({
+    nodes: L.energyNodes.map((name) => ({ name })),
+    links: L.energyLinks.map((l) => ({ ...l })),
+  });
+const d3cols = {};
+for (const [k, a] of Object.entries({
+  left: S.sankeyLeft,
+  right: S.sankeyRight,
+  center: S.sankeyCenter,
+  justify: S.sankeyJustify,
+}))
+  d3cols[k] = Object.fromEntries(run(a).nodes.map((n) => [n.name, n.layer]));
+const cand = {
+  "A start (least)": L.least(L.columnSys()),
+  "A end (greatest)": L.greatest(L.columnSys()),
+  "A center (mean)": L.lerp(0.5)(L.columnSys()),
+  "least + sinks pinned": L.justifyColumns(),
+  "least, then sources late": L.d3CenterColumns(),
+  "B glue QP weight 1": L.glue(L.columnSys(1)),
+};
+const colErr = (a, b) =>
+  Math.max(...L.energyNodes.map((n) => Math.abs(a[n] - b[n])));
+for (const [k, c] of Object.entries(cand))
+  console.log(
+    k.padEnd(28),
+    Object.entries(d3cols)
+      .map(([d, v]) => `${d}:${r3(colErr(c, v))}`)
+      .join(" ")
+  );
+console.log(
+  "glue columns",
+  JSON.stringify(
+    Object.fromEntries(
+      Object.entries(cand["B glue QP weight 1"]).map(([k, v]) => [k, r3(v)])
+    )
+  )
+);
+console.log("d3 columns", JSON.stringify(d3cols));
+console.log("== sankey tops (justify columns)");
+const g = run(S.sankeyJustify);
+const d3y = Object.fromEntries(g.nodes.map((n) => [n.name, n.y0]));
+for (const [k, f] of [
+  ["runs (even, walls)", L.runs],
+  ["glue QP", (s) => L.glue(s)],
+  ["start", L.least],
+  ["center", L.lerp(0.5)],
+]) {
+  const { y, ky } = L.sankeyTops(L.justifyColumns(), f);
+  console.log(
+    k.padEnd(20),
+    "ky",
+    r3(ky),
+    "d3 ky",
+    r3(g.links[0].width / g.links[0].value),
+    "max |y0 - d3| =",
+    r3(Math.max(...L.energyNodes.map((n) => Math.abs(y[n] - d3y[n]))))
+  );
+}
+{
+  const n = 5,
+    d = 1; // A, three leaves, B; A and B tight
+  console.log(
+    "sankey formula with the tight ends counted as nodes:",
+    [1, 2, 3].map((i) => r3(((i + 1) / (n + 1)) * d)),
+    "walker:",
+    [1, 2, 3].map((i) => r3((i / 4) * d))
+  );
+}
+
+// (c) trees
+console.log("== trees");
+const pathOf = (v) => {
+  const idx = [];
+  for (let u = v; u.parent; u = u.parent)
+    idx.unshift(u.parent.children.indexOf(u));
+  return ["n", ...idx].join(".");
+};
+const d3tree = (t) => {
+  const m = new Map();
+  tree()
+    .nodeSize([L.SEP, L.LEVEL])
+    .separation(() => 1)(hierarchy(t))
+    .each((v) => m.set(pathOf(v), v.x));
+  return m;
+};
+const rules = {
+  walker: L.walkerRule,
+  start: L.sysRule(L.least),
+  center: L.sysRule(L.lerp(0.5)),
+  even: L.sysRule(L.runs),
+  ramps: L.sysRule(L.ramps),
+  glueFree: L.sysRule((s) => L.glue(s, { boxed: false })),
+  glueBoxed: L.sysRule((s) => L.glue(s)),
+};
+const errVsD3 = (t, rule) => {
+  const d = d3tree(t);
+  const o = L.layoutTree(t, rule);
+  return Math.max(...[...d].map(([p, x]) => Math.abs(x - o.get(p).x)));
+};
+const width = (t, rule) => {
+  const xs = [...L.layoutTree(t, rule).values()].map((p) => p.x);
+  return Math.max(...xs) - Math.min(...xs);
+};
+const mirror = (t) => ({
+  ...t,
+  children: t.children && [...t.children].reverse().map(mirror),
+});
+const mirrorErr = (t, rule) => {
+  const a = L.layoutTree(t, rule);
+  const b = L.layoutTree(mirror(t), rule);
+  // path in t -> path in mirror(t)
+  const mp = (t, path) => {
+    const idx = path.split(".").slice(1).map(Number);
+    let node = t,
+      out = "n";
+    for (const i of idx) {
+      out += "." + (node.children.length - 1 - i);
+      node = node.children[i];
+    }
+    return out;
+  };
+  return Math.max(
+    ...[...a].map(([p, v]) => Math.abs(v.x + b.get(mp(t, p)).x))
+  );
+};
+for (const [tn, t] of [
+  ["wedge", L.wedge],
+  ["counter", L.counter],
+]) {
+  console.log(tn, "width d3", r3(width(t, L.walkerRule)));
+  for (const [k, f] of Object.entries(rules))
+    console.log(
+      "  ",
+      k.padEnd(10),
+      "max err vs d3.tree",
+      r3(errVsD3(t, f)),
+      "width",
+      r3(width(t, f)),
+      "mirror err",
+      r3(mirrorErr(t, f))
+    );
+}
+let seed = 7;
+const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const randTree = (depth) => ({
+  name: "x",
+  children:
+    depth > 0 && rand() < 0.8
+      ? Array.from({ length: 1 + Math.floor(rand() * 4) }, () =>
+          randTree(depth - 1 - (rand() < 0.3 ? 1 : 0))
+        )
+      : undefined,
+});
+const size = (t) => 1 + (t.children ?? []).reduce((a, c) => a + size(c), 0);
+const stats = Object.fromEntries(
+  Object.keys(rules).map((k) => [k, { exact: 0, worst: 0, wider: 0, mirror: 0 }])
+);
+let N = 0,
+  smallest = null,
+  d3Mirror = 0,
+  d3Wider = 0;
+const trees = [];
+for (let k = 0; k < 400; k++) {
+  const t = randTree(5);
+  if (t.children) trees.push(t);
+}
+for (const t of trees) {
+  N++;
+  const w0 = width(t, L.walkerRule);
+  if (w0 > width(t, rules.start) + 1e-6) d3Wider++;
+  for (const [name, f] of Object.entries(rules)) {
+    const e = errVsD3(t, f);
+    const st = stats[name];
+    if (e < 0.05) st.exact++;
+    st.worst = Math.max(st.worst, e);
+    if (width(t, f) > w0 + 1e-6) st.wider++;
+    st.mirror = Math.max(st.mirror, mirrorErr(t, f));
+    if (name === "even" && e > 1e-6 && (!smallest || size(t) < size(smallest)))
+      smallest = t;
+  }
+}
+console.log("random trees", N);
+for (const [k, s] of Object.entries(stats))
+  console.log(
+    "  ",
+    k.padEnd(10),
+    `exact ${s.exact}/${N}, worst ${r3(s.worst)} px, wider than d3 in ${s.wider}, mirror err max ${r3(s.mirror)}`
+  );
+console.log("walker (d3) wider than start (least) in", d3Wider, "of", N);
+if (smallest)
+  console.log(
+    "smallest tree where even != d3:",
+    size(smallest),
+    "nodes",
+    JSON.stringify(smallest)
+  );
+
+// The smallest tree where "even" and d3.tree disagree, over many small trees.
+{
+  let best = null;
+  seed = 11;
+  const small = (depth) => ({
+    name: "x",
+    children:
+      depth > 0 && rand() < 0.75
+        ? Array.from({ length: 1 + Math.floor(rand() * 4) }, () =>
+            small(depth - 1 - (rand() < 0.4 ? 1 : 0))
+          )
+        : undefined,
+  });
+  for (let k = 0; k < 60000; k++) {
+    const t = small(4);
+    if (!t.children || (best && size(t) >= size(best))) continue;
+    if (errVsD3(t, rules.even) > 1e-6) best = t;
+  }
+  const strip = (t) => (t.children ? t.children.map(strip) : 0);
+  console.log("smallest counterexample:", size(best), "nodes", JSON.stringify(strip(best)));
+  for (const [k, f] of Object.entries(rules))
+    console.log("  ", k.padEnd(10), "err vs d3", r3(errVsD3(best, f)), "width", r3(width(best, f)), "mirror", r3(mirrorErr(best, f)));
+  const d = d3tree(best);
+  const kids = best.children.map((_, i) => `n.${i}`);
+  console.log(
+    "  root children x: d3", kids.map((p) => r3(d.get(p))),
+    "even", kids.map((p) => r3(L.layoutTree(best, rules.even).get(p).x)),
+    "glueFree", kids.map((p) => r3(L.layoutTree(best, rules.glueFree).get(p).x))
+  );
+}
+
+// (d) dendrogram
+console.log("== dendrogram");
+const cl = new Map();
+cluster()
+  .nodeSize([20, 1])
+  .separation(() => 1)(hierarchy(L.budget))
+  .each((v) => cl.set(pathOf(v), v.y));
+for (const [k, lv] of [
+  ["end (greatest)", L.greatest(L.levelSys(L.budget))],
+  ["start (least)", L.least(L.levelSys(L.budget))],
+  ["center", L.lerp(0.5)(L.levelSys(L.budget))],
+  ["leaves pinned, least", L.leavesOnWall(L.budget)],
+  ["B glue, leaves pinned", L.dendroGlue(L.budget)],
+])
+  console.log(
+    k.padEnd(24),
+    "max level err vs d3.cluster",
+    r3(Math.max(...[...cl].map(([p, y]) => Math.abs(y - lv[p])))),
+    "(levels)"
+  );

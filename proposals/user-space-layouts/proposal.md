@@ -9,7 +9,7 @@ A design for writing layout algorithms as GoFish code, on the smallest set of la
 - Every d3 layout was written this way and compared with d3's own numbers. Pie, stack, partition, treemap, tree, cluster, chord arcs and a sankey without relaxation match exactly. Circle packing, force and sankey relaxation need relations today's solver does not have.
 - Those are jobs for other solvers: one for geometry (touching, intersecting) and one that optimizes (pulls, repulsion). A scope picks its solver the way it picks a coordinate space, and solvers meet only at scope boundaries.
 - User code writes decisions three ways: a function that calls `measure` on its children, a `choose` among alternatives, or a `layout` that reads the room it was given.
-- Nothing is implemented except prototype stories. Two of the five primitives are partly missing: the minimum gap, and an average of positions.
+- Nothing is implemented except prototype stories, and the minimum gap and the average of positions, which are in the engine since commit b960e601d with a placeholder slack option.
 
 **Decisions.** Discrete. Made by plan code, or by `choose`. _which items share a row, the order in a column, which two circles a new one rests on_
 
@@ -26,7 +26,7 @@ This is the split issue \#485 asks for: a small relational core, and user-space 
 | Primitive                                | In math                                                      | In GoFish                                                                             | Status                                                                                                           |
 | ---------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | A linear equation between positions      | a = b; b − a = g; p = the average of a, b, c                 | `Constraint.align`, `Constraint.distribute`, `Constraint.position`, `Constraint.nest` | Today, except the average. A dendrogram puts a parent at the mean of its children, and nothing public says that. |
-| A minimum gap, with a rule for the slack | b − a ≥ g, then start, end, center or even                   | `Spacing.atLeast(g)`, `Spacing.contour(g)` on `distribute` and `spread` (sketch)      | Missing. Prototyped as a 56-line solver.                                                                         |
+| A minimum gap, with a rule for the slack | b − a ≥ g, then start, end, center or even                   | `Spacing.atLeast(g)`, `Spacing.contour(g)` on `distribute` and `spread` (sketch)      | In the engine since commit b960e601d. The slack option is a placeholder; see "The slack rule".                   |
 | One scale per scope                      | size = value × scale; a container is the max of its contents | `rect({ h: "value" })`, shared across a scope                                         | Today. It solved d3-sankey's scale on its own.                                                                   |
 | A coordinate map                         | positions → f(positions), applied after the solve            | `Coord.polar()`, `Coord.clock()`                                                      | Today, except that an angle axis does not wrap.                                                                  |
 | A choice                                 | the minimum over alternatives                                | `choose([a, b])` (sketch)                                                             | The choice proposal. Needs `min` in the size algebra (\#630).                                                    |
@@ -261,11 +261,11 @@ tree (tidy)
 
 none
 
-minimum gaps between subtree contours, slack shared evenly; the parent at the average of its first and last child
+minimum gaps between subtree contours, slack spread by Walker's rule; the parent at the average of its first and last child
 
 symbolic, with the minimum gap
 
-(exact) node for node, on the test tree and 398 random trees. The left-packed and centered variants were run through the one solver. d3's even spread was matched by direct code, not yet through the solver.
+(exact) node for node, on the test tree and 398 random trees. The left-packed and centered variants were run through the one solver. d3's spread was matched by direct code, not yet through the solver. The even rule alone matches 327 of 331 random trees ("The slack rule" tab).
 
 cluster (dendrogram)
 
@@ -594,13 +594,13 @@ _Minimum gaps between contours: 314 px, **d3.tree**'s width._
 
 ![Slack shared evenly](img/trees-tree-symmetry-spread.png)
 
-**\*even**. Equals **d3.tree**.\*
+**\*Walker**. Equals **d3.tree**.\*
 
 ![Dendrogram](img/d3-cluster.png)
 
 _Dendrogram. Equals **d3.cluster**._
 
-Each subtree is at least its contour gap from every earlier sibling. Where the slack goes is the only choice, and d3's is "shared evenly". Nodes of different heights need no new idea: the contour is measured over vertical position, and a layered tree is the case where every node in a row has the same height.
+Each subtree is at least its contour gap from every earlier sibling. Where the slack goes is the only choice, and d3's is Walker's spread, which is close to "shared evenly" but not the same. Nodes of different heights need no new idea: the contour is measured over vertical position, and a layered tree is the case where every node in a row has the same height.
 
 **Proposed (sketch)**
 
@@ -1000,7 +1000,7 @@ Not proposed: a geometry or optimizing solver now, a constraint that iterates, o
 
 - **The names `layout` and `measure`**, or a second argument to `createMark`. Shown with the API on the first tab.
 - **What spacing means in a tiling:** d3's inset or a stack's gap. Shown with the treemap on the second tab. It decides whether the built-in tilings can become presets with no pixel change.
-- **The spelling of the minimum gap and its slack rule.** This page writes `Spacing.atLeast(n)` and `justify: "start" | "end" | "center" | "even"`. `justify` is CSS's word. "Even" is what an `fr` gap already does, so the slack rule may be the same option spacing already has.
+- **The spelling of the minimum gap and its slack rule.** The slack rule tab compares four spellings and recommends one `Slack` rule per scope and axis.
 
 #### Hard parts
 
@@ -1039,6 +1039,425 @@ Each is a candidate issue. The stories mark every workaround with a comment.
 - **`stack` along y runs up and `spread` along y runs down** in the same frame.
 - **A `.name()` inside a `.mark((d) => ...)` function does not register**, and a `createMark` prop declared `"raw"` arrives wrapped.
 - **Rendering a combinator puts the legend inside `w`**, and a layer of positioned marks is shifted so its bounding box starts at the corner.
+
+## The slack rule
+
+Commit b960e601d added minimum gaps to the engine with a placeholder option, `Spacing.atLeast(8, { justify: "center" })`. The question it left is what `justify` means, and how anyone knows how much room is left over. This tab answers that, compares four ways to spell the choice on the same four examples, and recommends one.
+
+#### How much room is left over
+
+A set of minimum gaps does not fix a position. It fixes a range. Each item has an earliest place and a latest place, and the room left over for that item is the distance between them. Both ends come from the same pass the engine already runs.
+
+![q and s at their earliest places, solid, and latest, dashed](img/slack-row-slack.png)
+
+_p is pinned at 0 and r at 290. q and s must each be 8 px from their neighbors. Solid outlines are the earliest places, dashed are the latest. The bars are each item's slack, 156 px._
+
+**Today (the placeholder)**
+
+```ts
+// Today (commit b960e601d, placeholder): the rule rides on each gap, and
+// two linked gaps with different rules are an error.
+layer([A, B, C, D, p, q, s, r]).relate((c) => [
+  Constraint.align({ x: "start" }, [c.A, c.p]),
+  Constraint.align({ x: "end" }, [c.D, c.r]),
+  Constraint.distribute(
+    { dir: "x", spacing: Spacing.atLeast(8, { justify: "center" }) },
+    [c.p, c.q, c.s, c.r]
+  ),
+]);
+```
+
+### Terms
+
+- **Least solution.** Every item as early as its minimum gaps allow. Scheduling calls each item's place its early start, or "as soon as possible" (ASAP). The engine computes it by longest path in order.
+- **Greatest solution.** Every item as late as its gaps allow, while the whole span stays as short as the least one or ends at a pinned item. Scheduling calls this the late start, or "as late as possible" (ALAP). The engine computes it by the same pass run backward.
+- **Slack.** For one item, its greatest place minus its least place. The critical path method calls this total float. High-level synthesis calls it mobility.
+- **Tight item.** An item with no slack: a pinned item, or one on the longest chain of gaps. The longest chain is the critical path.
+- **Run.** The items between two tight items along a chain.
+- **Slack rule.** A rule that picks one place for every item inside its range, so that every gap still holds.
+
+### What the four examples need
+
+Each example below has a minimum gap and some slack. The d3 layout for each one picks a different place inside the range, so a single fixed rule does not cover them.
+
+| Example                      | Minimum gaps                                                | What d3 does with the slack                                                                                                                             |
+| ---------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| (a) A row of p, q, s, r      | 8 px between neighbors, p and r pinned                      | No d3 layout. CSS would say start, end, center or space-between.                                                                                        |
+| (b) Sankey columns           | each link's target at least one column after its source     | `nodeAlign`: left is the least solution, right is the greatest, justify is the least with every sink in the last column, and center is a two-step rule. |
+| (b) Sankey nodes in a column | a padding between neighbors, inside the column's height     | Node _i_ of _n_ moves down by (_i_ + 1) / (_n_ + 1) of the room left. That is CSS's space-evenly.                                                       |
+| (c) Tidy tree siblings       | each subtree at least its contour gap from earlier siblings | Walker's rule: when one subtree is pushed right, the siblings between it and the one that pushed it take equal steps of the push.                       |
+| (d) Dendrogram levels        | each child at least one level below its parent              | `d3.cluster` puts every node at the root's height minus its own height, which is the greatest solution.                                                 |
+
+### Precedent
+
+Every system below has a minimum and a rule for what is left. They differ in where the rule lives and whether it is one choice or a weight on every gap.
+
+| System                                        | Where the choice lives       | The choices                                                                                                                                                                                  |
+| --------------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TeX glue                                      | each gap                     | A natural width, a stretch and a shrink. Stretch has orders (fil, fill, filll), and only the highest order present stretches. `\hfil` on both sides centers.                                 |
+| CSS flexbox                                   | the container, and each item | `justify-content`: start, end, center, space-between, space-around, space-evenly. Items with `flex-grow` take the free space first, and then `justify-content` has nothing to place.         |
+| CSS grid                                      | each track                   | `minmax(8px, 1fr)`. A flexible maximum is a weight, and leftover space is shared by weight after the fixed tracks are sized.                                                                 |
+| Jetpack Compose                               | the row or column            | `Arrangement`: Start, End, Center, SpaceBetween, SpaceAround, SpaceEvenly, and `spacedBy(space, alignment)`, a minimum with a rule for the rest.                                             |
+| Figma auto layout                             | the frame                    | A fixed gap, or "Auto", which spaces items between the edges.                                                                                                                                |
+| Critical path method                          | the analysis                 | Early start, late start, and total float for each task. Tasks with no float form the critical path. It reports the range and leaves the choice to the planner.                               |
+| High-level synthesis                          | the scheduler                | ASAP, ALAP, and mobility (ALAP minus ASAP). List schedulers place the least mobile operations first.                                                                                         |
+| d3-sankey                                     | the layout, one option       | `nodeAlign`: left, right, center, justify, or any function of a node.                                                                                                                        |
+| dagre, ELK, Brandes and Köpf                  | the layout, one option       | Four one-sided alignments (up-left, up-right, down-left, down-right) and their balanced average. dagre's `align` and ELK's `fixedAlignment` pick one.                                        |
+| Graphviz dot                                  | an objective                 | No rule. It minimizes the weighted length of edges subject to the minimum separations, by network simplex.                                                                                   |
+| Reingold and Tilford, Walker, Buchheim et al. | the algorithm                | A parent centered over its children. Walker adds the equal spread of smaller subtrees between two that pushed apart. Buchheim, Jünger and Leipert make it linear time with the same layouts. |
+| VPSC, CoLa                                    | an objective                 | Separation constraints _u_ + _a_ ≤ _v_, and the placement nearest to given desired positions.                                                                                                |
+| Cassowary                                     | each constraint              | Strengths: required, strong, medium, weak. A weak "stay" keeps a value where it was. Ties between equal strengths are not defined by the user.                                               |
+| Bluefish                                      | the distribute               | `spacing`, `total`, or both. All are exact, and there is no minimum.                                                                                                                         |
+
+Three findings matter for GoFish.
+
+- The ends of the range already have names in scheduling, and d3's choices are those ends. Sankey left is ASAP, sankey right and `d3.cluster` are ALAP.
+- The interface toolkits put the choice on the container, once per line. A weight on each gap (TeX stretch, `flex-grow`, `fr`) is a second, finer mechanism, and when both are present the weights win.
+- The graph drawing tools put it on the layout as one option. The ones that do not (dot, VPSC) replace the rule with an objective.
+
+Sources: MDN's `justify-content`, the CSS Grid 1 specification, the Compose `Arrangement` reference, Figma's auto layout help, the d3-sankey `align.js` source, the dagre wiki, ELK's option reference, Brandes and Köpf (2001) and its 2020 erratum (arXiv 2008.01252), Gansner et al. (1993), Dwyer, Marriott and Stuckey (2005), Badros, Borning and Stuckey (2001), and the Bluefish `Distribute` source. Walker (1990) and Buchheim et al. (2002) are described from their abstracts and from d3's code, not read in full. SwiftUI's `Spacer` and Typst's `fr` spacing were not checked.
+
+### Sankey's even spread and Walker's are not the same rule
+
+On one run they agree. Sankey's vertical spread is space-between over a column, with the two walls counted as items. Walker's spread is space-between over the siblings between two tight siblings. The only difference is what counts as the ends. With the walls as the ends, the even rule matches d3-sankey's node tops to 0 px.
+
+They part when two pushes nest. Walker adds one ramp of steps for each push. The even rule makes one ramp per run from each item's total slack. The smallest tree where they differ has 18 nodes. Its root's four children are at −60, −16, 28 and 60 in d3. The even rule puts the second at −20.
+
+![Walker's spread](img/slack-counter-walker.png)
+
+**\*Walker**, equals **d3.tree\***
+
+![The even rule](img/slack-counter-even.png)
+
+**\*even**, 4 px off\*
+
+![Glue on every gap](img/slack-counter-glue.png)
+
+**\*glue**, 8 px off\*
+
+Over 331 random trees, the even rule matched `d3.tree` to 0.05 px on 327, and was off by at most 24 px. Walker's steps are a procedure over the order the siblings arrive in, not a rule over the final ranges.
+
+### Four approaches
+
+#### A. One slack rule per scope and axis (sketch)
+
+A strategy family, `Slack`, set once on a layer or spread for each axis. Every item takes the same fraction _t_ of its own slack. `start`, `center` and `end` are _t_ = 0, 0.5 and 1, and `at(t)` is any point between. `even` shares the slack of each run in equal steps. A uniform _t_ always keeps every gap, on any set of gaps, because a gap that holds at both ends holds at every point between them.
+
+```ts
+// The family, once per scope and axis. Each item takes a fraction t of
+// its slack: x = least + t * (greatest - least).
+Slack.start(); // t = 0: the least solution (ASAP, early start)
+Slack.end(); // t = 1: the greatest solution (ALAP, late start)
+Slack.center(); // t = 1/2
+Slack.at(0.25); // any t from 0 to 1; the three above are presets of it
+Slack.even(); // on a chain: t grows by one step per gap between tight items
+```
+
+> **Fork: the name.** `slack: Slack.even()`, the word this page uses for the room, or `justify: Justify.even()`, CSS's word for the same choice on a line. Both follow the family rule (a noun, and its key the same word). `justify` is familiar but reads as "fill the line" in typography, which is only one member. Recommended: `Slack`.
+
+![start](img/slack-row-start.png)
+
+**\*start**, q at 38\*
+
+![center](img/slack-row-center.png)
+
+**\*center**, q at 116\*
+
+![end](img/slack-row-end.png)
+
+**\*end**, q at 194\*
+
+![even](img/slack-row-even.png)
+
+**\*even**, q at 90, s at 190\*
+
+**Proposed, the row**
+
+```ts
+layer({ slack: { x: Slack.even() } }, [A, B, C, D, p, q, s, r]).relate((c) => [
+  Constraint.align({ x: "start" }, [c.A, c.p]),
+  Constraint.align({ x: "end" }, [c.D, c.r]),
+  Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+    c.p,
+    c.q,
+    c.s,
+    c.r,
+  ]),
+]);
+```
+
+```python
+from gofish import Constraint, Slack, Spacing, layer, spread
+
+row = layer([A, B, C, D, p, q, s, r], slack={"x": Slack.even()}).relate(
+    lambda c: [
+        Constraint.align([c.A, c.p], x="start"),
+        Constraint.align([c.D, c.r], x="end"),
+        Constraint.distribute(
+            [c.p, c.q, c.s, c.r], dir="x", spacing=Spacing.at_least(8)
+        ),
+    ]
+)
+
+siblings = spread(
+    [subtree(k) for k in children],
+    dir="x",
+    spacing=Spacing.contour(10),
+    slack=Slack.even(),
+)
+```
+
+> **Fork: where the choice lives.** On the scope, as here, or on each gap, as approach B does. On the scope, two linked gaps can never disagree, so today's error "all linked gaps must agree" goes away. On each gap, a row can share its slack unevenly. Recommended: on the scope.
+
+![Sankey, start](img/slack-sankey-left.png)
+
+**\*Slack.start**, equals d3 left\*
+
+![Sankey, end](img/slack-sankey-right.png)
+
+**\*Slack.end**, equals d3 right\*
+
+![Sankey, justify](img/slack-sankey-justify.png)
+
+**\*Slack.start** with the sinks aligned to the end, equals d3 justify\*
+
+![Sankey, center](img/slack-sankey-mean.png)
+
+**\*Slack.center**, half a column from d3 center\*
+
+![Sankey, d3 center](img/slack-sankey-d3-center.png)
+
+_d3 center is the least solution, then each source moved next to its first target. A decision in user space._
+
+**Proposed, the sankey**
+
+```ts
+// Columns: every link's target at least one column after its source.
+layer({ slack: { x: Slack.end() } }, nodes).relate((c) =>
+  links.map((l) =>
+    Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(COLUMN_GAP) }, [
+      c[l.source],
+      c[l.target],
+    ])
+  )
+);
+// Inside a column, a spread in the column's room: the walls are its edges.
+spread(
+  { dir: "y", spacing: Spacing.atLeast(10), slack: Slack.even() },
+  column.map((n) => rect({ w: 12, h: v(value(n)) }))
+);
+```
+
+![Tree, start](img/slack-wedge-start.png)
+
+**\*start**, 45 px from d3.tree\*
+
+![Tree, center](img/slack-wedge-center.png)
+
+**\*center**, 15 px\*
+
+![Tree, even](img/slack-wedge-even.png)
+
+**\*even**, 0 px\*
+
+![Tree, Walker](img/slack-wedge-walker.png)
+
+**\*Walker**, d3.tree\*
+
+**Proposed, the tree**
+
+```ts
+// Each set of siblings: at least their contour gap apart, slack shared.
+spread(
+  { dir: "x", spacing: Spacing.contour(10), slack: Slack.even() },
+  children.map(subtree)
+);
+```
+
+> **Fork: Walker as a member.** `even` matches `d3.tree` on this tree and 327 of 331 random ones. To match all of them, `Slack.walker()` could be a member, defined only on a chain of siblings. Or Walker stays a plan written in user space, as on the "Every d3 layout" tab, and the family keeps only rules over ranges. Recommended: keep it in user space, because its steps depend on the order of pushes, which a range does not record.
+
+![Dendrogram, end](img/slack-dendro-end.png)
+
+**\*Slack.end**, equals d3.cluster\*
+
+![Dendrogram, start](img/slack-dendro-start.png)
+
+**\*Slack.start**, a tidy tree's levels\*
+
+**Proposed, the dendrogram**
+
+```ts
+layer({ slack: { y: Slack.end() } }, nodes).relate((c) => [
+  ...edges.map(([parent, child]) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[parent],
+      c[child],
+    ])
+  ),
+  ...inner.map((n) => Constraint.align({ x: "mean" }, [c[n], ...kids(c, n)])),
+]);
+```
+
+For size, `start`, `end`, `center` and `at` need nothing new, since the engine already computes both solutions. `even` is 28 lines in the prototype. It is defined on a chain, so on a scope whose gaps are not a chain it is an error.
+
+#### B. Glue: a weight on each gap (sketch)
+
+Each minimum gap carries a `grow` weight, as TeX's stretch, `flex-grow`, and grid's `fr` do. The slack goes to the gaps in proportion to their weights. On a chain this is the even rule with weights, and `fr` on a spread already means it. On a set of gaps that is not a chain, "in proportion" has no closed form, and it becomes a least-squares problem.
+
+![weights 1, 1, 1](img/slack-row-even.png)
+
+_weights 1, 1, 1_
+
+![weights 2, 1, 0](img/slack-row-glue210.png)
+
+_weights 2, 1, 0, q at 142, s at 242_
+
+![Sankey glue](img/slack-sankey-glue-columns.png)
+
+_Sankey columns, weight 1 on every link. d3 center except Heat, at column 1.5_
+
+![Tree glue](img/slack-wedge-glue.png)
+
+_Tree, 0.001 px from d3.tree_
+
+![Dendrogram glue](img/slack-dendro-glue.png)
+
+_Dendrogram, leaves pinned. Inner nodes land between levels_
+
+**Proposed, the row**
+
+```ts
+// Glue: each gap has a minimum and a weight for its share of the slack
+// in its run (TeX's "plus", CSS flex-grow, grid's minmax(8px, 1fr)).
+Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8, { grow: 1 }) }, [
+  c.p,
+  c.q,
+  c.s,
+  c.r,
+]);
+// start: only the last gap grows. end: only the first. center: the first
+// and the last. Uneven shares: list one spacing per gap.
+Constraint.distribute(
+  {
+    dir: "x",
+    spacing: [
+      Spacing.atLeast(8, { grow: 2 }),
+      Spacing.atLeast(8, { grow: 1 }),
+      Spacing.atLeast(8, { grow: 0 }),
+    ],
+  },
+  [c.p, c.q, c.s, c.r]
+);
+```
+
+**Proposed, the dendrogram**
+
+```ts
+// The levels are not a chain, so "which gap grows" has no local answer.
+// The nearest local spelling pins the leaves and lets every gap grow:
+layer(nodes).relate((c) => [
+  ...edges.map(([parent, child]) =>
+    Constraint.distribute(
+      { dir: "y", spacing: Spacing.atLeast(70, { grow: 1 }) },
+      [c[parent], c[child]]
+    )
+  ),
+  Constraint.align({ y: "end" }, leaves(c)),
+]);
+```
+
+For size, off a chain it needs a quadratic program. The prototype is an 80-line dual coordinate ascent, accurate to about 0.02 px. That is an optimizing solver inside the symbolic one, which this design rules out. Nor can local weights state "every node as late as possible" on a graph, so sankey right and the dendrogram have no spelling.
+
+#### C. No rule: always the least solution (works today)
+
+A minimum gap always takes its least solution. Any other place is an exact relation the user adds, such as an align to a wall or a mean.
+
+![Row, least](img/slack-row-start.png)
+
+_The row, start only_
+
+![Sankey tops packed](img/slack-sankey-tops-start.png)
+
+_Sankey nodes packed to the top of each column, 95 px from d3_
+
+![Dendrogram, leaves pinned](img/slack-dendro-wall-pins.png)
+
+_Dendrogram, leaves aligned to the bottom. Inner nodes stay high, one level from d3.cluster_
+
+```ts
+// No rule: a minimum gap always takes the least solution.
+Constraint.distribute({ dir: "x", spacing: Spacing.atLeast(8) }, [
+  c.p,
+  c.q,
+  c.s,
+  c.r,
+]);
+// Anything else is an exact relation the user writes, e.g. q midway:
+Constraint.align({ x: "mean" }, [c.q, c.p, c.r]);
+```
+
+```ts
+// Leaves on the last level: an explicit align. Inner nodes stay at their
+// depth, which is not d3.cluster.
+layer(nodes).relate((c) => [
+  ...edges.map(([parent, child]) =>
+    Constraint.distribute({ dir: "y", spacing: Spacing.atLeast(70) }, [
+      c[parent],
+      c[child],
+    ])
+  ),
+  Constraint.align({ y: "end" }, leaves(c)),
+]);
+```
+
+For size, it needs nothing. But sankey right, the dendrogram and an even spread cannot be written without flipping the axis or adding a relation per node, and the even spread needs each item's slack, which the user cannot see.
+
+#### D. An objective in the optimizing solver (sketch)
+
+dot and VPSC treat the slack as an objective, such as the least total stretch or the nearest place to a wish. In this design that belongs to the optimizing solver of a scope, not to the minimum gap. It is shown only to mark the boundary. Approach B's 80-line solver is this approach on a small scale.
+
+```ts
+// The rule as an objective, in the optimizing solver of the main design:
+// least squares on how far each gap stretches past its minimum.
+layer({ solver: Solver.optimize({ cost: Cost.stretch() }) }, children).relate(
+  (c) => gaps(c)
+);
+```
+
+### Against d3
+
+The largest difference from d3 for each rule and example. Columns and levels are in columns and levels; the rest is in pixels.
+
+| Rule                              | Sankey columns (left, right, center, justify) | Sankey tops | Wedge tree | 18-node tree | 331 random trees       | Dendrogram levels |
+| --------------------------------- | --------------------------------------------- | ----------- | ---------- | ------------ | ---------------------- | ----------------- |
+| A start                           | (0), 1, 1, 1                                  | (94.75)     | (45)       | (20)         | (169 exact, worst 485) | (2)               |
+| A end                             | 1, (0), 1, 1                                  |             |            |              |                        | (0)               |
+| A center                          | 0.5, 0.5, 0.5, 0.5                            | (23.69)     | (15)       | (4)          | (319 exact, worst 65)  | (1)               |
+| A start, sinks aligned to the end | 1, 1, 1, (0)                                  |             |            |              |                        |                   |
+| A even                            |                                               | (0)         | (0)        | (4)          | (327 exact, worst 24)  |                   |
+| Walker, in user space             |                                               |             | (0)        | (0)          | (331 exact)            |                   |
+| B glue, weight 1                  | 1, 1, 0.5, 1                                  | (0.022)     | (0.001)    | (8)          | (327 exact, worst 44)  | (0.333)           |
+| C, leaves aligned to the bottom   |                                               |             |            |              |                        | (1)               |
+
+d3's center is the least solution followed by moving each source next to its first target. That two-step rule matches it exactly and is a decision, so it is written in user space. A blank cell was not measured, or the rule does not apply to that example. Exact means within 0.05 px. The sankey uses d3-sankey 0.12.3 with no relaxation passes, and the trees use `d3.tree().nodeSize([24, 40])`. Scripts: `scratch/slack/check.mjs.txt`.
+
+### Trade-offs
+
+|                          | A. One rule per scope                                       | B. Glue per gap                                  | C. No rule                          |
+| ------------------------ | ----------------------------------------------------------- | ------------------------------------------------ | ----------------------------------- |
+| Covers the four examples | All but d3 center and Walker's nested case, which are plans | Row and tree; not sankey right or the dendrogram | Row start and sankey left only      |
+| Stays symbolic           | Yes                                                         | Only on a chain                                  | Yes                                 |
+| Can two gaps disagree    | No                                                          | Yes, by design                                   | No                                  |
+| Uneven shares in one row | No                                                          | Yes                                              | By hand                             |
+| Precedent                | justify-content, Arrangement, nodeAlign, dagre align        | TeX glue, flex-grow, grid fr                     | dot and VPSC, but with an objective |
+
+### Recommendation
+
+**Approach A.** One `Slack` rule per scope and axis, with `start`, `end`, `center`, `at(t)` and `even`, and the default `start`. `Spacing.atLeast(n)` loses its `justify` option. The first three are points of `at(t)`, and `even` is the weighted case of B with equal weights, so the family is one rule with presets. It reaches every d3 example that is a rule over ranges, it never solves an optimization, and it puts the choice where the toolkits and the graph layouts both put it.
+
+**Runner-up: approach B.** It is the more general idea, and it is what `fr` on a spread already does. It loses because off a chain it is an optimization, and because it cannot say "as late as possible", which the dendrogram and sankey right need.
+
+The pick would change if real examples need uneven shares inside one run often, for example a toolbar where one gap takes all the room. Then B's weights on a chain, which stay symbolic, could be added under A as a finer option, the way `flex-grow` sits under `justify-content`. The open `fr` issues (even slack beside data sizes, \#1292, \#1406) point the same way.
 
 ## Background
 
