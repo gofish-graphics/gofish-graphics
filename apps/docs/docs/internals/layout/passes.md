@@ -1194,6 +1194,13 @@ those lines, so `pnpm capture-one` prints them under the story.
   that reaches farthest. Where the root's own box reaches past the canvas,
   no ink node is to blame, and the warning says only that: layout drew the
   box larger than its claim, or away from it.
+- **A threaded curve over overlapping marks (`overlapping-marks`).** A
+  `line` or `ribbon` whose curve threads the whole run passes where it
+  enters and then leaves each mark (`connect.tsx`). Where the marks overlap
+  along the connection axis, one mark's leave point is past the next one's
+  enter point, so the knots go back along the axis. The connector draws the
+  curve through them in order anyway and warns, asking for room between the
+  marks or a pairwise curve such as `Curve.linear()`.
 
 #### Shape geometry after layout
 

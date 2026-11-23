@@ -40,6 +40,7 @@ import {
   originIs,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
+import { overlappingMarks, warnLayout } from "../layoutWarnings";
 import {
   resolveCurve,
   centerPoint,
@@ -597,50 +598,104 @@ export const connect = createNodeOperator(
           let steps: Step[][];
 
           // A *sequence* curve (`monotone`, `smooth`, `step`, `catmullRom`)
-          // threads each edge through the whole run as one spline, one knot
-          // per operand, bypassing the pairwise routes. Every operand, the
-          // first and last included, has its knot midway between where the
-          // edge enters it (`target`) and where it leaves it (`source`). An
-          // omitted end attaches as near the other end as the box allows,
+          // threads each edge through the whole run as one spline, bypassing
+          // the pairwise routes. Its knots are where the edge enters each
+          // operand (`target`) and then where it leaves it (`source`), in
+          // that order: the first operand has only its leave point and the
+          // last only its enter point, since the edge starts and ends there.
+          // An omitted end attaches as near the other end as the box allows,
           // which on the same operand is the other end's own point; with
-          // neither given, both are the operand's center. So a line through
-          // its marks' centers threads the centers, a line given only
-          // `source` threads each mark's `source` point, and a ribbon's two
-          // edges pass each operand at the middle of its near and far sides,
-          // so a continuous stacked area curves like its line-chart sibling.
-          // TODO: should a threaded curve pass through both the enter and
-          // the leave point of each operand (two knots per operand)? Then an
-          // anchored smooth line would start and end on its anchors, and a
-          // smooth band would follow each operand's side across its width.
+          // neither given, both are the operand's center. Where an operand's
+          // enter and leave points are one point, it is one knot. So a line
+          // through its marks' centers threads the centers, a line given
+          // only `source` threads each mark's `source` point, a band over
+          // points (an area) threads each point once, and a band between
+          // bars runs flat across each bar's top, from the first bar's far
+          // side to the last bar's near side, as the pairwise band does.
           const sequence = sequenceCurve(resolvedCurveName);
           if (sequence !== undefined) {
-            const knotsOf = (a: EdgeAnchors) =>
-              childPlaceables.map(({ dims: b }, j): Point => {
+            const lastIndex = childPlaceables.length - 1;
+            /** An edge's knots, and whether some operand gives it two. */
+            const knotsOf = (a: EdgeAnchors) => {
+              let sided = false;
+              const knots = childPlaceables.flatMap(({ dims: b }, j) => {
                 const at = (f: Point | undefined): Point =>
                   f === undefined ? centers[j] : pointOn(b, f);
                 const enter = at(a.target ?? a.source);
                 const leave = at(a.source ?? a.target);
-                return [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2];
+                // One point (to within rounding), or a run of one operand,
+                // which joins nothing: one knot, between the two.
+                if (lastIndex === 0 || samePoint(enter, leave)) {
+                  return [
+                    [(enter[0] + leave[0]) / 2, (enter[1] + leave[1]) / 2],
+                  ] as Point[];
+                }
+                sided = true;
+                return j === 0
+                  ? [leave]
+                  : j === lastIndex
+                    ? [enter]
+                    : [enter, leave];
               });
-            const knots = anchors.map(knotsOf);
+              // With one knot per operand, each knot stands for its operand
+              // (the time cut and the connection variable read them so), and
+              // two operands at one place are two knots. With two, the knots
+              // are where the edge touches the operands, and where one
+              // operand's leave point is the next one's enter point (bars
+              // that touch) it touches once: one knot.
+              return {
+                knots: sided
+                  ? knots.filter(
+                      (p, i) => i === 0 || !samePoint(p, knots[i - 1])
+                    )
+                  : knots,
+                sided,
+              };
+            };
+            const edgeKnots = anchors.map(knotsOf);
+            const knots = edgeKnots.map((e) => e.knots);
             // The path passes through its knots, and `pathBounds` below
             // holds the rest of it.
             if (bboxPairs.length > 0) {
               for (const k of knots) k.forEach(addPoint);
+            }
+            // Where an edge enters and leaves its operands at different
+            // points, they go on along the connection axis when the operands
+            // stand apart on it. Operands that overlap there put one's leave
+            // point past the next one's enter point, and the curve turns
+            // back: it is drawn through them in order anyway, and says so.
+            if (
+              edgeKnots.some(
+                (e) =>
+                  e.sided && firstStepBack(e.knots.map((p) => p[mainAxis])) >= 0
+              )
+            ) {
+              warnLayout(
+                node,
+                overlappingMarks(mainAxis, closed, resolvedCurveName)
+              );
             }
             // A curve read over the run's parameter (a data-space curve)
             // takes the run's own parameter when it has one (#635), so the
             // curve follows the data rather than the distances between its
             // points on screen. A line through a sequence's keyframes uses
             // their times, which are what it is cut by and what a transition
-            // reads it at, so the cut, the moving mark and the curve agree.
-            // Otherwise the connection variable's values (the flow tier the
-            // run threads, e.g. `along: "year"`), read only here; else the
-            // operands' positions on the connection axis when that axis is
-            // continuous (a line chart over x). A run with none of these has
-            // no parameter of its own, so the curve threads it with
-            // centripetal knots, and it then depends on where the points sit
-            // on screen.
+            // reads it at, so the cut, the moving mark and the curve agree
+            // (such a line has no anchors, so one knot per keyframe).
+            // Otherwise, with one knot per operand, the connection
+            // variable's values (the flow tier the run threads, e.g.
+            // `along: "year"`), read only here; else the knots' positions on
+            // the connection axis when that axis is continuous (a line chart
+            // over x). An edge with two knots on some operand has no value of
+            // the connection variable for each of them, so it reads
+            // positions, when the axis is continuous: when the connection
+            // variable is what places the operands on it, the positions are
+            // an affine image of its values, and the operands' sides lie on
+            // the same scale. A run with none of these has no parameter of
+            // its own, so the curve threads it with centripetal knots, and it
+            // then depends on where the points sit on screen. So does a run
+            // whose positions do not move one way (overlapping operands,
+            // above).
             //
             // The spline is evaluated here, in layout space, before any
             // coordinate transform. That equals evaluating it in data space
@@ -658,19 +713,23 @@ export const connect = createNodeOperator(
             // the positions on the connection axis themselves, or the flow
             // tier the run threads places its groups on an axis by the same
             // field it groups them by (`parameterAxis`, worked out where the
-            // flow is known), such as a line chart over years. `step` reads
-            // it; the smooth curves do not need it.
-            //
-            // Read from position, an edge's parameter is where each of its
-            // knots is on the connection axis: for a ribbon and an unanchored
-            // line, the operands' centers on that axis.
-            const dataKnots = (k: Point[]): RunParameter | undefined => {
+            // flow is known), such as a line chart over years. That axis draws
+            // the connection variable whether or not the run has knots of its
+            // own (bars spread by year, whose sides have no year of their
+            // own). `step` reads it; the smooth curves do not need it.
+            const dataKnots = ({
+              knots: k,
+              sided,
+            }: {
+              knots: Point[];
+              sided: boolean;
+            }): RunParameter => {
               const time = runKnots(timeKnots);
               if (time !== undefined) {
                 return { knots: time, parameterAxis: drawnAxis };
               }
               const byAlong =
-                along === undefined
+                along === undefined || sided
                   ? undefined
                   : runKnots(children.map((c) => projectBy(c, along)));
               if (byAlong !== undefined) {
@@ -679,15 +738,15 @@ export const connect = createNodeOperator(
               const byPosition = continuousConnectionAxis()
                 ? runKnots(k.map((p) => p[mainAxis]))
                 : undefined;
-              return byPosition === undefined
-                ? undefined
-                : { knots: byPosition, parameterAxis: mainAxis };
+              if (byPosition !== undefined) {
+                return { knots: byPosition, parameterAxis: mainAxis };
+              }
+              // No knots of its own; the axis that draws the connection
+              // variable, when one does, still draws it.
+              return { parameterAxis: drawnAxis };
             };
-            steps = knots.map((k) =>
-              sequence.thread(
-                k,
-                sequence.takesKnots ? (dataKnots(k) ?? {}) : {}
-              )
+            steps = edgeKnots.map((e) =>
+              sequence.thread(e.knots, sequence.takesKnots ? dataKnots(e) : {})
             );
             drawn.push(
               ...drawEdges(

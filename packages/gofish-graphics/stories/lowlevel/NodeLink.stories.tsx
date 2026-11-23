@@ -195,3 +195,33 @@ export const AnchoredArc: StoryObj<Args> = {
     return container;
   },
 };
+
+// An anchored line threaded by a smooth curve through three boxes: it leaves
+// each box at the middle of its right side and enters the next at the middle
+// of its left side, and passes through both points of the box in between.
+export const AnchoredSmooth: StoryObj<Args> = {
+  args: { w: 340, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    layer({ x: 20, y: 20 }, [
+      rect({ x: 0, y: 20, w: 70, h: 40, fill: "#e2ebf6" }).name("a"),
+      rect({ x: 110, y: 110, w: 70, h: 40, fill: "#e2ebf6" }).name("b"),
+      rect({ x: 220, y: 0, w: 70, h: 40, fill: "#e2ebf6" }).name("c"),
+    ])
+      .relate(({ a, b, c }) => [
+        line(
+          {
+            ...edge,
+            source: ["end", "middle"],
+            target: ["start", "middle"],
+            curve: Curve.monotone(),
+          },
+          [a, b, c]
+        ).zOrder(-1),
+      ])
+      .render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};

@@ -122,9 +122,11 @@ or a categorical ribbon).
 
 A ribbon drawn with `Curve.monotone()` or `Curve.smooth()` takes the knots of
 its curve the same way a [`line`](/js/api/marks/line) does, and both edges of
-the band use the same knots. Such a band passes every mark, the first and last
-included, at the middle of its two sides across `dir`, so it starts and ends at
-the middle of its first and last mark along `dir`. `Curve.step()` steps both edges, as Vega-Lite's
+the band use the same knots. Such a band enters each mark at its near side
+along `dir` and leaves at its far side, so it starts at the first mark's far
+side, runs across each mark in between, and ends at the last mark's near side.
+When the marks overlap along `dir`, these points are out of order, and the
+ribbon prints a `[gofish:layout]` warning. `Curve.step()` steps both edges, as Vega-Lite's
 stepped area does. The [`Curve`](/js/api/curve#curves-through-data) page
 compares the curves.
 

@@ -166,3 +166,30 @@ def story_anchored_bezier():
 
 def story_anchored_arc():
     return _anchored(Curve.arc())
+
+
+def story_anchored_smooth():
+    """An anchored line threaded by a smooth curve through three boxes,
+    through both the left and right side of the box in between."""
+    return (
+        layer(
+            [
+                rect(x=0, y=20, w=70, h=40, fill="#e2ebf6").name("a"),
+                rect(x=110, y=110, w=70, h=40, fill="#e2ebf6").name("b"),
+                rect(x=220, y=0, w=70, h=40, fill="#e2ebf6").name("c"),
+            ],
+            x=20,
+            y=20,
+        ).relate(
+            lambda a, b, c: [
+                line(
+                    [a, b, c],
+                    source=["end", "middle"],
+                    target=["start", "middle"],
+                    curve=Curve.monotone(),
+                    **EDGE_OPTS,
+                ).z_order(-1),
+            ]
+        ),
+        {"w": 340, "h": 200},
+    )

@@ -128,3 +128,27 @@ export const OrthogonalVertical: StoryObj<Args> = {
     return container;
   },
 };
+
+// A smooth band over bars with width on a continuous x: it runs across each
+// bar's top, from the first bar's far side to the last bar's near side, and
+// curves between the bars.
+export const SmoothOverBars: StoryObj<Args> = {
+  render: () => {
+    const container = initializeContainer();
+
+    const data = [
+      { x: 0, v: 40 },
+      { x: 1, v: 150 },
+      { x: 2, v: 90 },
+      { x: 3, v: 180 },
+      { x: 4, v: 60 },
+    ];
+    chart(data, { w: 360, h: 220 })
+      .flow(scatter({ by: "x", x: "x" }))
+      .mark(rect({ w: 30, h: "v", fill: "#4c78a8", opacity: 0.5 }))
+      .layer(ribbon({ fill: "#f58518", opacity: 0.5 }))
+      .render(container);
+
+    return container;
+  },
+};

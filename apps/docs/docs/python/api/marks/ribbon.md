@@ -50,9 +50,11 @@ In the connector form, `curve` takes `Curve.linear()`, `Curve.bezier()`,
 `Curve.arc()` and `Curve.perfect_arrows()`, which bow away from the line between
 their ends, are errors, and so is `Curve.orthogonal(bend="auto")`, which picks a
 bend axis for each edge on its own. A band drawn with `Curve.step()`,
-`Curve.monotone()`, `Curve.smooth()` or `Curve.catmull_rom()` passes every
-mark, the first and last included, at the middle of its two sides across `dir`,
-so it starts and ends at the middle of its first and last mark along `dir`.
+`Curve.monotone()`, `Curve.smooth()` or `Curve.catmull_rom()` enters each mark
+at its near side along `dir` and leaves at its far side, so it starts at the
+first mark's far side, runs across each mark in between, and ends at the last
+mark's near side. When the marks overlap along `dir`, these points are out of
+order, and the ribbon prints a `[gofish:layout]` warning.
 
 ## Shape form
 

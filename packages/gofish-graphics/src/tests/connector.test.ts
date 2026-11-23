@@ -2,8 +2,9 @@
  * The connector form of `line` and `ribbon` (`graphicalOperators/connect.tsx`):
  * an anchored line is routed by its curve between its anchor points, and is
  * straight when it has none; consecutive pairs are one path only where their
- * routes meet; a sequence curve passes each mark midway between where its
- * edge enters and leaves it; a ribbon takes only a curve that draws a band
+ * routes meet; a sequence curve passes through where its edge enters each
+ * mark and then where it leaves it, and warns when the marks overlap so
+ * those points go back along its axis; a ribbon takes only a curve that draws a band
  * edge (`drawsBandEdge` in `routers.ts`).
  * Run: `tsx src/tests/connector.test.ts` (wired into `pnpm test` as
  * `test:connector`).
@@ -160,7 +161,10 @@ async function main() {
       const cmds = commands(d);
       const last = cmds[cmds.length - 1]?.args ?? [];
       return cmds.length > 1 && cmds[0].op === "M"
-        ? [cmds[0].args as Point, [last[last.length - 2], last[last.length - 1]]]
+        ? [
+            cmds[0].args as Point,
+            [last[last.length - 2], last[last.length - 1]],
+          ]
         : undefined;
     };
     try {
@@ -232,7 +236,9 @@ async function main() {
     check(
       "two paths, each starting on its own mark",
       paths.length === 2 &&
-        paths.every((p) => commands(p.d).filter((c) => c.op === "M").length === 1) &&
+        paths.every(
+          (p) => commands(p.d).filter((c) => c.op === "M").length === 1
+        ) &&
         on(starts[0], sorted[0]) &&
         on(starts[1], sorted[1]),
       paths.map((p) => p.d)
@@ -276,7 +282,7 @@ async function main() {
   }
 
   console.log(
-    "\n# a sequence curve passes each mark midway between where it enters and leaves"
+    "\n# a sequence curve passes through where it enters and leaves each mark"
   );
   {
     const through = (anchors: object) =>
@@ -291,56 +297,56 @@ async function main() {
           c,
         ]),
       ]);
-    /** The path's start, the end of its first cubic, and its end. */
+    /** The path's start and the end of each of its cubics, when it is one
+     *  M followed by cubics only. */
     const knotsOf = (d: string): Point[] => {
       const cmds = commands(d);
       const end = (args: number[]): Point => [
         args[args.length - 2],
         args[args.length - 1],
       ];
-      return cmds.length === 3
-        ? [cmds[0].args as Point, end(cmds[1].args), end(cmds[2].args)]
+      return cmds[0]?.op === "M" && cmds.slice(1).every((c) => c.op === "C")
+        ? [cmds[0].args as Point, ...cmds.slice(1).map((c) => end(c.args))]
         : [];
     };
-    const sortedCenters = (rects: any[]): Point[] =>
-      [...rects]
-        .sort((r, s) => r.x - s.x)
-        .map((r): Point => [r.x + r.w / 2, r.y + r.h / 2]);
+    const sorted = (rects: any[]) => [...rects].sort((r, s) => r.x - s.x);
     {
       // It leaves each mark at the middle of its right side and enters each
-      // at the middle of its left side: midway between is the center, the
-      // first and last mark included.
+      // at the middle of its left side: the first mark only leaves, the
+      // last only enters.
       const { rects, paths } = await drawn(
         through({ source: ["end", "middle"], target: ["start", "middle"] })
       );
-      const centers = sortedCenters(rects);
+      const [a, b, c] = sorted(rects);
+      const left = (r: any): Point => [r.x, r.y + r.h / 2];
+      const right = (r: any): Point => [r.x + r.w, r.y + r.h / 2];
+      const want = [right(a), left(b), right(b), left(c)];
       const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
       check(
-        "anchored at facing sides, it threads every mark's center",
-        knots.length === 3 && knots.every((k, i) => close(k, centers[i])),
+        "anchored at facing sides, it runs from a's source through b's target and source to c's target",
+        knots.length === 4 && knots.every((k, i) => close(k, want[i])),
         paths.map((p) => p.d)
       );
     }
     {
-      // It enters and leaves each mark at the middle of the same side, so
-      // it threads that point on every mark.
+      // Only `source`: the omitted target on each mark is the source point
+      // itself, so it threads that point once on every mark.
       const { rects, paths } = await drawn(
-        through({ source: ["middle", "end"], target: ["middle", "end"] })
+        through({ source: ["end", "middle"] })
       );
+      const want = sorted(rects).map((r): Point => [r.x + r.w, r.y + r.h / 2]);
       const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
-      // A layer's y reads top-down, so `end` on y is the bottom.
-      const bottoms = [...rects]
-        .sort((r, s) => r.x - s.x)
-        .map((r): Point => [r.x + r.w / 2, r.y + r.h]);
       check(
-        "anchored at the same side, it threads that side's middle on every mark",
-        knots.length === 3 && knots.every((k, i) => close(k, bottoms[i])),
+        "with one end given, it threads that point on every mark",
+        knots.length === 3 && knots.every((k, i) => close(k, want[i])),
         paths.map((p) => p.d)
       );
     }
     {
       const { rects, paths } = await drawn(through({}));
-      const centers = sortedCenters(rects);
+      const centers = sorted(rects).map(
+        (r): Point => [r.x + r.w / 2, r.y + r.h / 2]
+      );
       const knots = paths.length === 1 ? knotsOf(paths[0].d) : [];
       check(
         "unanchored, it threads the marks' centers",
@@ -350,36 +356,83 @@ async function main() {
     }
   }
 
-  console.log("\n# a smooth ribbon passes each mark at the middle of its sides");
+  console.log("\n# a smooth ribbon over bars runs across each bar's top");
   {
-    // The marks overlap along x, so their facing sides are out of order
-    // along it; the middles are not.
-    const { rects, paths } = await drawn(
-      layer([
-        rect({ x: 0, y: 0, w: 60, h: 40, fill: "#ccc" }).name("a"),
-        rect({ x: 30, y: 60, w: 60, h: 40, fill: "#ccc" }).name("b"),
-        rect({ x: 60, y: 20, w: 60, h: 40, fill: "#ccc" }).name("c"),
-      ]).relate(({ a, b, c }: any) => [
-        ribbon({ curve: Curve.monotone(), fill: "steelblue" }, [a, b, c]),
-      ])
+    const rows = [
+      { x: 0, v: 40 },
+      { x: 1, v: 150 },
+      { x: 2, v: 90 },
+      { x: 3, v: 180 },
+      { x: 4, v: 60 },
+    ];
+    const all = items(
+      await chart(rows, { axes: false })
+        .flow(scatter({ by: "x", x: "x" }))
+        .mark(rect({ w: 30, h: "v", fill: "#ccc" }))
+        .layer(ribbon({ fill: "steelblue" }))
+        .toDisplayList({ w: 360, h: 220 })
     );
-    const [a, b, c] = [...rects].sort((r, s) => r.x - s.x);
+    const bars = all
+      .filter((i) => i.kind === "rect")
+      .sort((r: any, s: any) => r.x - s.x) as any[];
+    const paths = all.filter((i) => i.kind === "path");
     const cmds = paths.length === 1 ? commands(paths[0].d) : [];
-    const endOf = (i: number): Point => {
-      const args = cmds[i]?.args ?? [];
-      return [args[args.length - 2], args[args.length - 1]];
-    };
-    // Near edge forward (M, C, C), then across at c, far edge back.
-    // A layer's y reads top-down, so `start` on y is the top.
+    // Every point the band's outline passes through.
+    const ends: Point[] = cmds.map(({ args }) => [
+      args[args.length - 2],
+      args[args.length - 1],
+    ]);
+    const passes = (p: Point) => ends.some((q) => close(p, q, 1e-3));
+    const topLeft = (r: any): Point => [r.x, r.y];
+    const topRight = (r: any): Point => [r.x + r.w, r.y];
+    const interior = bars.slice(1, -1);
     check(
-      "the near edge threads the top middle of every mark, smoothly",
-      cmds.length > 3 &&
-        cmds[1].op === "C" &&
-        cmds[2].op === "C" &&
-        close(endOf(0), [a.x + a.w / 2, a.y]) &&
-        close(endOf(1), [b.x + b.w / 2, b.y]) &&
-        close(endOf(2), [c.x + c.w / 2, c.y]),
+      "smooth (cubic segments), through both top corners of each interior bar",
+      bars.length === 5 &&
+        cmds.some((c) => c.op === "C") &&
+        interior.every((r) => passes(topLeft(r)) && passes(topRight(r))),
       paths.map((p) => p.d)
+    );
+    check(
+      "from the first bar's far side to the last bar's near side",
+      bars.length === 5 &&
+        passes(topRight(bars[0])) &&
+        !passes(topLeft(bars[0])) &&
+        passes(topLeft(bars[4])) &&
+        !passes(topRight(bars[4])),
+      paths.map((p) => p.d)
+    );
+  }
+
+  console.log("\n# a smooth ribbon over overlapping marks warns");
+  {
+    // The marks overlap along x, so each one's far side is past the next
+    // one's near side.
+    const warned: string[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => warned.push(args.join(" "));
+    try {
+      await drawn(
+        layer([
+          rect({ x: 0, y: 0, w: 60, h: 40, fill: "#ccc" }).name("a"),
+          rect({ x: 30, y: 60, w: 60, h: 40, fill: "#ccc" }).name("b"),
+          rect({ x: 60, y: 20, w: 60, h: 40, fill: "#ccc" }).name("c"),
+        ]).relate(({ a, b, c }: any) => [
+          ribbon({ curve: Curve.monotone(), fill: "steelblue" }, [a, b, c]),
+        ])
+      );
+    } finally {
+      console.warn = warn;
+    }
+    check(
+      "a [gofish:layout] warning names the overlap and what to do",
+      warned.some(
+        (w) =>
+          w.startsWith("[gofish:layout] ribbon({ curve: Curve.monotone() })") &&
+          w.includes("overlap along x") &&
+          w.includes("Curve.linear()")
+      ),
+      warned
     );
   }
 

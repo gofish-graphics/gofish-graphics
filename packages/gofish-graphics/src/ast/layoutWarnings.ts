@@ -30,9 +30,18 @@ import { isFr, printLength, type Length, type LengthValue } from "./length";
  *   that data sizes. It is drawn that many data units wide.
  * - `no-room`: an `fr` gap sits in a scope that nothing gives room (an
  *   axis the render gives no size), so it is 0.
+ * - `overlapping-marks`: a connector threads a curve through where it
+ *   enters and leaves each mark, but the marks overlap along its axis, so
+ *   those points go back along it. The curve is drawn through them in
+ *   order anyway.
  */
 export type LayoutWarning = {
-  kind: "fixed-overflow" | "ink-overflow" | "mixed-sizes" | "no-room";
+  kind:
+    | "fixed-overflow"
+    | "ink-overflow"
+    | "mixed-sizes"
+    | "no-room"
+    | "overlapping-marks";
   /** The node, as its operator or mark and key: `spread(by: "site")`. */
   node: string;
   axis: "x" | "y";
@@ -434,6 +443,36 @@ function noRoom(
     message:
       `${what}: \`spacing: ${printLength(gap)}\` has no room on ${name}, so its gaps ` +
       `are 0; give the chart a ${axis === 0 ? "w" : "h"}.`,
+  };
+}
+
+/**
+ * An `overlapping-marks` warning: a connector (a `line`, or a `ribbon`
+ * when `closed`) threads `curve` through where it enters and leaves
+ * each mark, and those points go back along the connection `axis`, because
+ * the marks overlap there.
+ */
+export function overlappingMarks(
+  axis: 0 | 1,
+  closed: boolean,
+  curve: string
+): LayoutWarning {
+  const name = axisName(axis);
+  const what = closed ? "ribbon" : "line";
+  return {
+    kind: "overlapping-marks",
+    node: what,
+    axis: name,
+    needed: 0,
+    available: 0,
+    parts: [],
+    message:
+      `${what}({ curve: Curve.${curve}() }): the marks it joins overlap ` +
+      `along ${name}, so the curve cannot run through their sides in ` +
+      `order: one mark's side it leaves from is past the next mark's side ` +
+      `it enters at. It is drawn through them in that order anyway, and ` +
+      `turns back along ${name}. Give the marks room along ${name}, or pass ` +
+      `a pairwise curve such as Curve.linear().`,
   };
 }
 

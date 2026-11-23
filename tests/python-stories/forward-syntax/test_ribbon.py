@@ -81,3 +81,20 @@ def story_orthogonal_vertical():
         .layer(ribbon(dir="y", opacity=0.8, curve=Curve.orthogonal())),
         {},
     )
+
+
+def story_smooth_over_bars():
+    data = [
+        {"x": 0, "v": 40},
+        {"x": 1, "v": 150},
+        {"x": 2, "v": 90},
+        {"x": 3, "v": 180},
+        {"x": 4, "v": 60},
+    ]
+    return (
+        chart(data, w=360, h=220)
+        .flow(scatter(by="x", x="x"))
+        .mark(rect(w=30, h="v", fill="#4c78a8", opacity=0.5))
+        .layer(ribbon(fill="#f58518", opacity=0.5)),
+        {},
+    )
