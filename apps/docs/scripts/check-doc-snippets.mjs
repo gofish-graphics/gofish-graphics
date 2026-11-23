@@ -23,16 +23,13 @@
  * A fence tagged `no-check` after the language (```ts no-check) is skipped, so
  * a maintainer can show intentionally partial or pseudo code.
  *
- * Export-list strategy: the JS export list is derived by parsing
- * packages/gofish-graphics/src/lib.ts with the TypeScript AST and following
- * `export * from "./mod"` one level into the referenced module's named exports.
- * Source parsing was chosen over reading a built `dist/lib.d.ts` so the check
- * needs no build step (it can run in a lint job with nothing compiled) and
- * never reports a stale name from a stale `dist/`. lib.ts has only three
- * `export * from` re-exports (./color, ./path, ./util), and those modules
- * re-export nothing further, so one level is exact today; a nested `export *`
- * would only make the list *smaller*, i.e. produce a loud failure rather than
- * a silent pass.
+ * Export-list strategy: the JS export list is the public surface of the
+ * package root as the TypeScript checker reads it from
+ * packages/gofish-graphics/src/lib.ts (docs/.vitepress/data/publicExports.mjs,
+ * shared with the gallery loader), so every `export *` and `export * as` is
+ * followed to any depth. It reads the source, not a built `dist/`, so the
+ * check needs no build step and never reports a stale name from a stale
+ * `dist/`.
  *
  * Usage: node scripts/check-doc-snippets.mjs   (no flags)
  */
@@ -48,6 +45,7 @@ import {
   rmSync,
 } from "node:fs";
 import { execSync, execFileSync } from "node:child_process";
+import { publicSurface } from "../docs/.vitepress/data/publicExports.mjs";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -56,8 +54,6 @@ const matter = require("gray-matter");
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DOCS_DIR = resolve(__dirname, "../docs");
 const REPO_ROOT = resolve(__dirname, "../../..");
-const LIB_SRC = resolve(REPO_ROOT, "packages/gofish-graphics/src");
-const LIB_ENTRY = join(LIB_SRC, "lib.ts");
 const PY_INIT = resolve(REPO_ROOT, "packages/gofish-python/gofish/__init__.py");
 
 const JS_LANGS = new Set([
@@ -70,110 +66,6 @@ const JS_LANGS = new Set([
 ]);
 const PY_LANGS = new Set(["python", "py"]);
 const JS_SPECIFIERS = new Set(["gofish-graphics", "@gofish/graphics"]);
-
-// ---------------------------------------------------------------------------
-// JS export list (parsed from lib.ts; `export * from` followed one level)
-// ---------------------------------------------------------------------------
-
-function resolveModule(fromFile, specifier) {
-  if (!specifier.startsWith(".")) return undefined;
-  const base = resolve(dirname(fromFile), specifier);
-  for (const candidate of [
-    `${base}.ts`,
-    `${base}.tsx`,
-    join(base, "index.ts"),
-    join(base, "index.tsx"),
-  ]) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return undefined;
-}
-
-/** Named exports declared or re-exported by one module file (no `export *`). */
-function namedExports(file) {
-  const names = new Set();
-  const source = ts.createSourceFile(
-    file,
-    readFileSync(file, "utf-8"),
-    ts.ScriptTarget.Latest,
-    true
-  );
-  for (const stmt of source.statements) {
-    if (ts.isExportDeclaration(stmt)) {
-      if (stmt.exportClause && ts.isNamespaceExport(stmt.exportClause)) {
-        names.add(stmt.exportClause.name.text);
-      } else if (stmt.exportClause && ts.isNamedExports(stmt.exportClause)) {
-        for (const el of stmt.exportClause.elements) names.add(el.name.text);
-      }
-      continue;
-    }
-    const isExported = (stmt.modifiers ?? []).some(
-      (m) => m.kind === ts.SyntaxKind.ExportKeyword
-    );
-    if (!isExported) continue;
-    if (ts.isVariableStatement(stmt)) {
-      for (const decl of stmt.declarationList.declarations) {
-        if (ts.isIdentifier(decl.name)) names.add(decl.name.text);
-      }
-    } else if (
-      (ts.isFunctionDeclaration(stmt) ||
-        ts.isClassDeclaration(stmt) ||
-        ts.isInterfaceDeclaration(stmt) ||
-        ts.isTypeAliasDeclaration(stmt) ||
-        ts.isEnumDeclaration(stmt) ||
-        ts.isModuleDeclaration(stmt)) &&
-      stmt.name &&
-      ts.isIdentifier(stmt.name)
-    ) {
-      names.add(stmt.name.text);
-    }
-  }
-  return names;
-}
-
-/** `export * from "./mod"` specifiers of one module file. */
-function starExports(file) {
-  const specs = [];
-  const source = ts.createSourceFile(
-    file,
-    readFileSync(file, "utf-8"),
-    ts.ScriptTarget.Latest,
-    true
-  );
-  for (const stmt of source.statements) {
-    if (
-      ts.isExportDeclaration(stmt) &&
-      !stmt.exportClause &&
-      stmt.moduleSpecifier &&
-      ts.isStringLiteral(stmt.moduleSpecifier)
-    ) {
-      specs.push(stmt.moduleSpecifier.text);
-    }
-  }
-  return specs;
-}
-
-function collectLibraryExports() {
-  const names = namedExports(LIB_ENTRY);
-  const unresolved = [];
-  for (const spec of starExports(LIB_ENTRY)) {
-    const file = resolveModule(LIB_ENTRY, spec);
-    if (!file) {
-      unresolved.push(spec);
-      continue;
-    }
-    for (const n of namedExports(file)) names.add(n);
-    for (const nested of starExports(file)) {
-      const nestedFile = resolveModule(file, nested);
-      if (!nestedFile) {
-        unresolved.push(nested);
-        continue;
-      }
-      for (const n of namedExports(nestedFile)) names.add(n);
-    }
-  }
-  return { names, unresolved };
-}
 
 // ---------------------------------------------------------------------------
 // Python export list (parsed from gofish/__init__.py)
@@ -379,12 +271,7 @@ function handwrittenPages() {
 // ---------------------------------------------------------------------------
 
 function main() {
-  const { names: jsExports, unresolved } = collectLibraryExports();
-  for (const spec of unresolved) {
-    console.warn(
-      `warning: could not resolve \`export * from "${spec}"\` in lib.ts — its names are unknown to this check`
-    );
-  }
+  const jsExports = publicSurface().names("gofish-graphics");
   const pyExports = collectPythonExports();
 
   let pythonAvailable = true;
