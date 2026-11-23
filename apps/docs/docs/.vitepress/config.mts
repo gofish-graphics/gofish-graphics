@@ -530,7 +530,9 @@ export default defineConfig({
                 { text: "flow", link: "/js/api/core/flow" },
                 { text: "mark", link: "/js/api/core/mark" },
                 { text: "layer", link: "/js/api/core/layer" },
+                { text: "tooltip", link: "/js/api/core/tooltip" },
                 { text: "percent / fr", link: "/js/api/core/lengths" },
+                { text: "fun", link: "/js/api/core/fun" },
                 { text: "render", link: "/js/api/core/render" },
                 { text: "export (SVG)", link: "/js/api/core/export" },
               ],
@@ -584,9 +586,19 @@ export default defineConfig({
               items: [{ text: "Curve", link: "/js/api/curve" }],
             },
             {
+              text: "Baseline",
+              collapsed: true,
+              items: [{ text: "Baseline", link: "/js/api/baseline" }],
+            },
+            {
               text: "Binning",
               collapsed: true,
               items: [{ text: "Binning", link: "/js/api/binning" }],
+            },
+            {
+              text: "Dist",
+              collapsed: true,
+              items: [{ text: "Dist", link: "/js/api/dist" }],
             },
             {
               text: "Shape",
@@ -665,7 +677,9 @@ export default defineConfig({
                 { text: "flow", link: "/python/api/core/flow" },
                 { text: "mark", link: "/python/api/core/mark" },
                 { text: "layer", link: "/python/api/core/layer" },
+                { text: "tooltip", link: "/python/api/core/tooltip" },
                 { text: "percent / fr", link: "/python/api/core/lengths" },
+                { text: "fun", link: "/python/api/core/fun" },
                 { text: "render", link: "/python/api/core/render" },
                 { text: "export (SVG)", link: "/python/api/core/export" },
               ],
@@ -723,9 +737,19 @@ export default defineConfig({
               items: [{ text: "Curve", link: "/python/api/curve" }],
             },
             {
+              text: "Baseline",
+              collapsed: true,
+              items: [{ text: "Baseline", link: "/python/api/baseline" }],
+            },
+            {
               text: "Binning",
               collapsed: true,
               items: [{ text: "Binning", link: "/python/api/binning" }],
+            },
+            {
+              text: "Dist",
+              collapsed: true,
+              items: [{ text: "Dist", link: "/python/api/dist" }],
             },
             {
               text: "Shape",

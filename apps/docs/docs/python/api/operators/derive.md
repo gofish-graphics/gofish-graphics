@@ -94,16 +94,10 @@ GoFish ships small helpers that pair well with `derive`:
 
 - `normalize(data, field)` — scale `field` so the values sum to 1.
 - `repeat(row, field)` — repeat a row `row[field]` times.
-- `quantile_rows(rows, x=..., density=..., n=...)` — `n` rows at the
-  quantiles of a density curve, one at each probability `(i + 0.5) / n`.
-  `rows` is a grid of one curve, each row a position `x` and the `density`
-  there, in any order, with no two rows at one position (call it after the split into curves). The density is integrated by the trapezoid rule. Each
-  row made holds `x` and every column whose value is the same in all of
-  `rows` (a group's `month`). [`Binning.quantiles`](/python/api/binning#binning-quantiles)
-  and `field(x).median()` over the result read the curve instead of the
-  grid. It stands in for first-class distributions
-  ([#980](https://github.com/gofish-graphics/gofish-graphics/issues/980)),
-  which will replace it.
+- [`kde(column, bandwidth=None)`](/python/api/dist#kde) — the function
+  itself. It gives one row whose `column` holds the rows' values smoothed
+  into a kernel density, a [`Dist`](/python/api/dist), with the columns that
+  are the same in every row.
 
 ```python
 from gofish import derive, normalize
@@ -112,16 +106,18 @@ derive(lambda d: normalize(d, "count"))
 ```
 
 ```python
-from gofish import Binning, chart, circle, derive, field, partition, quantile_rows
+from gofish import Binning, chart, derive, field, kde, partition, ribbon, spread
 
-# The quantiles of a drawn density, cut into ten equal-mass cells
+# Each month's highs as a kernel density, cut at its own quintiles
+temp = field("temp_max")
 (
-    chart(grid)
+    chart(highs)
     .flow(
-        derive(lambda rows: quantile_rows(rows, x="x", density="pdf", n=1000)),
-        partition(by=field("x").bin(Binning.quantiles(10)), dir="x"),
+        spread(by="month", dir="y"),
+        derive(kde("temp_max")),
+        partition(by=temp.bin(Binning.quantiles(5)), dir="x"),
     )
-    .mark(circle(cx=field("x").median(), r=3))
+    .mark(ribbon(x=temp.domain(), h=temp.density()))
 )
 ```
 

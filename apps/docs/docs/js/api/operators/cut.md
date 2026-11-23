@@ -24,7 +24,7 @@ gf.spread(
     dir: "x",
     size: [gf.datum(1), gf.datum(1), gf.datum(2)],
   })
-).render(root, { w: 620, h: 100 });
+).render(root);
 ```
 
 :::
@@ -41,8 +41,8 @@ The core primitive. Returns an array of N slice marks that you can drop
 straight into a combinator's children, synchronously:
 
 ```js
-gf.stack(
-  { dir: "y" },
+gf.spread(
+  { dir: "y", spacing: 0 },
   gf.cut(gf.image({ href, w: 193, h: 600 }), {
     dir: "y",
     size: bottleData.map((d) => gf.datum(d.amount)),
@@ -98,9 +98,8 @@ gf.chart(data)
 The inner `spread` consumes the expand mark (cutting one bottle per group and
 arranging its slices into a single node — with `spacing: 14`, so each bottle
 reads as an exploded stack of its slices), so the outer `spread({ by })` sees a
-single node per group — no throw. Use `stack` instead of `spread` here to
-recompose each bottle's slices flush into a whole (no gaps), since `stack` has
-no `spacing`.
+single node per group — no throw. Give the inner `spread` `spacing: 0` to
+recompose each bottle's slices flush into a whole (no gaps).
 
 ## Size semantics
 
@@ -158,8 +157,8 @@ Because `cut` only ever returns the slice array, the surrounding combinator
 decides everything spatial. The same `cut(...)` re-arranges freely:
 
 ```js
-// stack recomposes the slices back into the whole source (no gaps):
-gf.stack({ dir: "y" }, gf.cut(source, { dir: "y", size }));
+// spread with no spacing recomposes the slices back into the whole source:
+gf.spread({ dir: "y", spacing: 0 }, gf.cut(source, { dir: "y", size }));
 
 // spread explodes them apart:
 gf.spread(
@@ -173,14 +172,14 @@ gf.spread(
 `inset` shrinks both the visible window **and** the slice's reported bounding
 box — a slice reports the bounds of its visible region, not its full logical
 extent. That is deliberate (`intersect` reports its overlap's bounds). It does mean a
-plain flush `stack` pulls the inset slices flush and drops the gaps (`stack`
-recomposes its children flush by design — it has no `spacing` option).
+flush `spread({ spacing: 0 })` pulls the inset slices flush and drops the
+gaps.
 
 To recompose the slices back into the source's **continuous** space while
 keeping the inset gaps, pad each slice back to its full logical extent in user
 space: add `inset / 2`
-of transparent space on each side along `dir` (an inner `stack` with
-zero-cross-extent spacer rects), then flush-stack the padded slices.
+of transparent space on each side along `dir` (an inner flush `spread` with
+zero-cross-extent spacer rects), then lay the padded slices out flush.
 The padding amount is the constant `inset / 2`, independent of each slice's
 extent, so the same wrapper works for any `size`:
 
@@ -192,10 +191,10 @@ const slices = gf.cut(source, { dir: "x", size, inset });
 const spacer = () =>
   gf.rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
 const padded = slices.map((slice) =>
-  gf.stack({ dir: "x" }, [spacer(), slice, spacer()])
+  gf.spread({ dir: "x", spacing: 0 }, [spacer(), slice, spacer()])
 );
 
-gf.stack({ dir: "x" }, padded);
+gf.spread({ dir: "x", spacing: 0 }, padded);
 ```
 
 The recomposed row spans the source's **exact** extent, with an even `inset`-wide

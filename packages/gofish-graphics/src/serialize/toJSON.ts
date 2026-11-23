@@ -34,6 +34,7 @@ import { wireOf } from "../ast/wire";
 import { flowStepMarkOf } from "../ast/marks/compose";
 import { nodeSelectionOf } from "../ast/nodeSelection";
 import { schemaToWire } from "../ast/schema";
+import { hasNoWireForm } from "../ast/groupExpr";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -55,13 +56,15 @@ interface SerializeTag {
    *  `field(...)` aggregate's serialized `FieldExprWire` (`{type: "field",
    *  ...}`) — see `labelIRField` in createOperator.ts. */
   label?: Array<{ accessor: string | AnyObject; [k: string]: unknown }>;
-  /** Set when `.translate({x, y})` is chained on an operator (traversal
-   *  form) — `translateOperator` copies the base operator's tag forward onto
+  /** Set when `.translate({x, y})` is chained on a mark (`translateMark`)
+   *  or an operator (traversal form) — `translateOperator` copies the base operator's tag forward onto
    *  its wrapper and stamps this field so the structural pixel offset
    *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
   translate?: { x?: number; y?: number };
   /** Set when a constant `.hidden(value)` is chained on a mark. */
   hidden?: boolean;
+  /** Set when `.tooltip(fields?)` is chained on a mark. */
+  tooltip?: true | string[];
 }
 
 /**
@@ -73,7 +76,8 @@ interface SerializeTag {
  *
  * A function value is dropped too, whatever the key: a callback or `live(...)`
  * channel is a JS closure with no JSON form (the same reason a JS `derive(fn)`
- * emits an opaque `{type: "derive"}`). A strategy kind used bare
+ * emits an opaque `{type: "derive"}`), and so is an expression that holds
+ * one (`hasNoWireForm`: a `fun(...)` value). A strategy kind used bare
  * (`Curve.monotone`) is no function here: the factory that tagged the
  * options read it as its value (`withKindValues`). A type the descriptor
  * table does not declare has no wire form at all, so it throws.
@@ -102,7 +106,7 @@ function wireFields(
 ): AnyObject {
   const out: AnyObject = {};
   for (const [key, value] of Object.entries(opts)) {
-    if (Object.hasOwn(accepted, key) && typeof value !== "function")
+    if (Object.hasOwn(accepted, key) && !hasNoWireForm(value))
       out[key] = Frontend.mapHeldNodes(accepted[key].type, value, nodesToIR);
   }
   return out;
@@ -389,11 +393,13 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
   // `.label(accessor, options)` / `.translate({x, y})` chained on the
   // operator (traversal) form land in `tag.label` / `tag.translate`,
   // mirroring how a chained mark `.label()` surfaces as a top-level field in
-  // `markToIR` — see createOperator.ts's `attachLabelOption` /
+  // `markToIR` — see createOperator.ts's `attachChainedMethod` calls (its
+  // `groupModifiers` list holds the `.name()` and `.label()` calls) and
   // `translateOperator`.
   return {
     type: tag.type,
     ...wireOpts("operator", tag.type, tag.opts),
+    ...(tag.name !== undefined ? { name: tag.name } : {}),
     ...(tag.label !== undefined ? { label: wireLabels(tag.label) } : {}),
     ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
@@ -453,6 +459,8 @@ async function markToIR(
   if (tag.name !== undefined) chained.name = tag.name;
   if (tag.label !== undefined) chained.label = wireLabels(tag.label);
   if (tag.hidden !== undefined) chained.hidden = tag.hidden;
+  if (tag.tooltip !== undefined) chained.tooltip = tag.tooltip;
+  if (tag.translate !== undefined) chained.translate = tag.translate;
 
   if (tag.__combinator) {
     const childrenResolved = await flatChildren(tag.children);

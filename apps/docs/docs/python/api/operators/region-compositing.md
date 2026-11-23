@@ -26,7 +26,7 @@ from gofish import atop, rect
 atop([
     rect(x=0, y=0, w=120, h=120, fill="#6aa9d6"),
     rect(x=40, y=40, w=120, h=120, fill="#e06666"),
-]).render(w=160, h=160)
+]).render()
 ```
 
 Here A is the blue square and B is the red square. B is drawn only where it
@@ -53,7 +53,7 @@ intersect(
     fill="#D1E4F6",
     stroke="#467DA8",
     stroke_width=2,
-).render(w=220, h=180)
+).render()
 ```
 
 A painted `intersect` of two children draws one exact path when both trace
@@ -87,7 +87,7 @@ from gofish import ellipse, intersect, rect
 intersect([
     ellipse(cx=80, cy=60, w=160, h=120, fill="white").hidden(),
     rect(x=0, y=0, w=160, h=120, fill="#6aa9d6"),
-]).render(w=160, h=120)
+]).render()
 ```
 
 ## Signatures

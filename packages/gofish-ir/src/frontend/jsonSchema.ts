@@ -37,6 +37,7 @@ import {
   type FieldGroup,
   type FieldType,
 } from "./descriptors.js";
+import { DIST_FAMILIES } from "./schema.js";
 
 // ---------------------------------------------------------------------------
 // Descriptor → JSON Schema fragment
@@ -213,6 +214,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
         relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         hidden: fieldTypeToSchema(MARK_BASE_FIELDS.hidden.type),
+        tooltip: fieldTypeToSchema(MARK_BASE_FIELDS.tooltip.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -409,6 +411,28 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       },
     },
+    DistAccessor: {
+      description:
+        "A distribution, emitted by Dist.normal({ mean, sd }) and the other families. Each parameter is a number, a column name or a field expression, read over each group's rows; ops are the members it is read through (d.density()).",
+      type: "object",
+      required: ["type", "family", "params"],
+      additionalProperties: false,
+      properties: {
+        type: { const: "dist" },
+        family: { enum: Object.keys(DIST_FAMILIES) },
+        params: {
+          type: "object",
+          additionalProperties: {
+            oneOf: [
+              { type: "string" },
+              { $ref: "#/$defs/Number" },
+              { $ref: "#/$defs/FieldAccessor" },
+            ],
+          },
+        },
+        ops: { type: "array", items: { $ref: "#/$defs/FieldOpIR" } },
+      },
+    },
     StructAccessor: {
       description:
         "A key built from two fields at once, emitted by struct({ x, y }), with the cells it is binned into (its one op, bin, takes Binning.hex or Binning.voronoi). Valid as a partition's `by` only once binned.",
@@ -528,6 +552,39 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           required: ["op"],
           properties: { op: { const: "distinct" } },
         },
+        {
+          type: "object",
+          required: ["op", "fn"],
+          properties: {
+            op: { enum: ["map", "reduce"] },
+            fn: { $ref: "#/$defs/BridgeLambdaSentinel" },
+            unit: { $ref: "#/$defs/UnitSpecIR" },
+          },
+          additionalProperties: false,
+        },
+        {
+          type: "object",
+          required: ["op", "name"],
+          properties: {
+            op: { const: "member" },
+            name: { type: "string" },
+            args: { type: "array" },
+          },
+          additionalProperties: false,
+        },
+      ],
+    },
+    UnitSpecIR: {
+      description:
+        "The unit option of map or reduce: a unit's name, a unit's wire traits ({ HasUnit }), or a record that mirrors the result's shape.",
+      oneOf: [
+        { type: "string" },
+        { type: "object", required: ["HasUnit"] },
+        {
+          type: "object",
+          not: { required: ["HasUnit"] },
+          additionalProperties: { $ref: "#/$defs/UnitSpecIR" },
+        },
       ],
     },
     MarkIR: {
@@ -629,6 +686,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         relate: fieldTypeToSchema(MARK_BASE_FIELDS.relate.type),
         zOrder: fieldTypeToSchema(MARK_BASE_FIELDS.zOrder.type),
         hidden: fieldTypeToSchema(MARK_BASE_FIELDS.hidden.type),
+        tooltip: fieldTypeToSchema(MARK_BASE_FIELDS.tooltip.type),
         debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -754,6 +812,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { type: "boolean" },
         { type: "null" },
         { $ref: "#/$defs/FieldAccessor" },
+        { $ref: "#/$defs/DistAccessor" },
         {
           type: "object",
           required: ["type", "value"],

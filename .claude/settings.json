@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "sh -c 'in=$(cat); case \"$in\" in *\"gh pr\"*) printf %s \"$in\" | python3 \"$CLAUDE_PROJECT_DIR/.claude/hooks/pr-gate.py\";; esac'",
+            "command": "sh -c 'in=$(cat); case \"$in\" in *\"gh pr\"*) dir=\"${CLAUDE_PROJECT_DIR:-$PWD}\"; root=$(git -C \"$dir\" rev-parse --show-toplevel 2>/dev/null); gate=\"$root/.claude/hooks/pr-gate.py\"; if [ -z \"$root\" ] || [ ! -f \"$gate\" ]; then echo \"PR gate: cannot find .claude/hooks/pr-gate.py from $dir; refusing pull request commands\" >&2; exit 2; fi; printf %s \"$in\" | python3 \"$gate\";; esac'",
             "timeout": 10
           }
         ]

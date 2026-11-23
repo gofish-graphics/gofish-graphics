@@ -25,12 +25,17 @@ counterpart — the single value when the row-bag agrees on the field (the same
 homogeneity collapse `by:` performs), else `undefined`. Reach for `project` to
 read a field off the datum a mark is bound to (e.g. inside a `.zOrder(d => …)`
 callback) without indexing `pluck(...)[0]`; reach for `pluck` when the field is
-genuinely multi-valued in the bag. It also exports `quantileRows(rows, { x,
-density, n })`, a data helper for `derive` that turns the grid rows of a
-density curve into `n` rows at its quantiles, so `Binning.quantiles` and
-`field(x).median()` read the curve. It is a declared shortcut, kept in its
-own module (`ast/quantileRows.ts`), until first-class distributions (#980)
-replace it.
+genuinely multi-valued in the bag. It also exports `kde(column, {
+bandwidth })`, a data helper for `derive` that smooths a group's rows into
+one row whose column holds a kernel density, a distribution as data.
+It exports `fun(at, { domain })`, a function value over `domain` (`[min,
+max]`) that the shape form of `ribbon` and `line` reads at one parameter t
+(`ast/groupExpr.ts`). It is lowercase because it is a value constructor, like
+`field`, not a family. The namespace `Dist` holds distributions
+(`ast/distExpr.ts`, `ast/dist.ts`): its families, `Dist.normal({ mean, sd
+})` and the others, are expressions a channel reads through their members
+(`d.density()`, `d.median()`), as a column that holds a distribution is
+read through `field(x)`.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has
@@ -140,8 +145,8 @@ one of which takes arguments, gets one **strategy family** (#1013): `Overlap`
 `field(x).bin(...)`, and a time axis's `levels`, #1057),
 `Coord` (a chart's or a layer's `coord`), `Color`
 (a chart's `color`), `Spacing` (`spread`'s and `Constraint.distribute`'s
-`spacing`, which also takes a bare amount for `Spacing.box(amount)`) and
-`Animation` (`.transition()`'s `enter`, `exit` and `update`). Each family is one module with a lowercase file name,
+`spacing`, which also takes a bare amount for `Spacing.box(amount)`),
+`Baseline` (`stack`'s `baseline`, #1375) and `Animation` (`.transition()`'s `enter`, `exit` and `update`). Each family is one module with a lowercase file name,
 `src/families/<name>.ts`, which `lib.ts` binds under the capitalized name with
 `export * as Curve from "./families/curve"`, the same mechanism as
 `Serialize`. The same module is published as the subpath

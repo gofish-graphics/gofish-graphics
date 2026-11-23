@@ -28,11 +28,14 @@ import { Frontend } from "gofish-ir";
 import {
   evalFieldValues,
   getFieldOps,
+  holdsBatchStep,
   isMissing,
   meanOf,
+  resolveGroupSteps,
   sumIn,
   type FieldExpr,
 } from "./fieldExpr";
+import type { ValueExpr } from "./groupExpr";
 import { columnType, type ColumnType } from "./schema";
 import {
   isAxisInterval,
@@ -119,6 +122,7 @@ export type DeriveMarkProps<
             | ((d: T) => number)
             | Value<number>
             | FieldExpr
+            | ValueExpr
             | undefined
         : Channels[K] extends "pos" | { type: "pos" }
           ?
@@ -127,6 +131,7 @@ export type DeriveMarkProps<
               | ((d: T) => number)
               | Value<number>
               | FieldExpr
+              | ValueExpr
               | undefined
           : Channels[K] extends "color" | { type: "color" }
             ?
@@ -135,6 +140,7 @@ export type DeriveMarkProps<
                 | ((d: T) => string)
                 | Value<string>
                 | FieldExpr
+                | ValueExpr
                 // `live(...)` reactive color (paint patch; returns a literal
                 // color — see src/interaction/live.ts).
                 | LiveValue
@@ -147,6 +153,7 @@ export type DeriveMarkProps<
                   | ((d: T) => string | number)
                   | Value<string | number>
                   | FieldExpr
+                  | ValueExpr
                   // `live(...)` reactive content (paint patch; the pipeline
                   // measures the resolve-time value).
                   | LiveValue
@@ -159,6 +166,7 @@ export type DeriveMarkProps<
                         | ((d: T) => number)
                         | Value<number>
                         | FieldExpr
+                        | ValueExpr
                       >
                     | undefined
                 : ShapeProps[K]
@@ -382,7 +390,9 @@ function firstRowValue<T extends Record<string, any>>(
         data,
         resolveColumn(data, accessor).quantity
       );
-      if (folded)
+      // A fold's value, or, after maps with no fold, the first row's
+      // mapped value: either is computed, so it records no field.
+      if (folded || values.length > 0)
         return isMissing(values[0])
           ? { kind: "none" }
           : { kind: "row", value: values[0] };
@@ -488,6 +498,7 @@ export const isBatchAccessor = (v: unknown): v is BatchAccessor =>
  *  objects (a `dims` bag). */
 const holdsBatchAccessor = (v: unknown): boolean =>
   isBatchAccessor(v) ||
+  holdsBatchStep(v) ||
   (Frontend.isPlainObject(v) && Object.values(v).some(holdsBatchAccessor));
 
 /** A synchronous accessor that reads a resolved value back by row. */
@@ -510,18 +521,26 @@ const readByRow =
  *  to (`zOrderModifier`). */
 export async function resolveValue(
   value: unknown,
-  rows: readonly unknown[]
+  rows: readonly unknown[],
+  groups: readonly (readonly unknown[])[] = [rows]
 ): Promise<unknown> {
   if (isBatchAccessor(value)) {
     const values = await value[RESOLVE_ROWS](rows);
     return readByRow(new Map(rows.map((row, i) => [row, values[i]])));
+  }
+  // A field expression with a Python map or reduce: each callback is called
+  // once, over every group inference reads, and inference reads the
+  // results back by group (`resolveGroupSteps` in fieldExpr.ts).
+  if (holdsBatchStep(value)) {
+    await resolveGroupSteps(value, groups);
+    return value;
   }
   if (!Frontend.isPlainObject(value) || !holdsBatchAccessor(value)) {
     return value;
   }
   const entries = Object.entries(value);
   const resolved = await Promise.all(
-    entries.map(([, v]) => resolveValue(v, rows))
+    entries.map(([, v]) => resolveValue(v, rows, groups))
   );
   return Object.fromEntries(entries.map(([k], i) => [k, resolved[i]]));
 }
@@ -543,14 +562,16 @@ export async function resolveValue(
 export function resolveChannelAccessors<O extends Record<string, any>>(
   opts: O,
   channels: Record<string, unknown> | undefined,
-  rowsOf: () => readonly unknown[]
+  rowsOf: () => readonly unknown[],
+  groupsOf?: () => readonly (readonly unknown[])[]
 ): O | Promise<O> {
   const keys = Object.keys(channels ?? {}).filter((k) =>
     holdsBatchAccessor(opts[k])
   );
   if (keys.length === 0) return opts;
   const rows = rowsOf();
-  return Promise.all(keys.map((k) => resolveValue(opts[k], rows))).then(
+  const groups = groupsOf?.() ?? [rows];
+  return Promise.all(keys.map((k) => resolveValue(opts[k], rows, groups))).then(
     (values) => {
       const out: Record<string, any> = { ...opts };
       keys.forEach((k, i) => (out[k] = values[i]));

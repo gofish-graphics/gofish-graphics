@@ -62,6 +62,10 @@ between a polar chart's circle and the edge of its box.
 and also a [`render`](/python/api/core/render) option.
 It accepts a bool, a per-dimension dict, or per-dimension title control:
 
+An axis is drawn only for a dimension whose scale has positions. A dimension
+with no origin, such as a streamgraph's y, is a length scale: it draws no
+axis, and its scale gets an entry in the [legend](#legend) instead.
+
 Each chart's `axes` applies at that chart. A chart nested in another reads its
 own `axes` and draws only the axes of the domains it owns, so a shared axis is
 drawn once. An axis a chart turns off is hidden: no chart inside it draws that
@@ -197,6 +201,50 @@ Per-operator overrides use the same shape on
 ```python
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
+
+## Legend
+
+Axes are for scales that have positions. Legends are for scales that do not.
+The legend sits beside the plot and holds one entry for each such scale:
+
+- **Color.** When the marks color by a field, the entry is a swatch column for
+  a categorical scale, or a colorbar for a gradient.
+- **Length.** A space with no origin is a length scale. Its data has lengths
+  but no places, as in a streamgraph or a stack centered with
+  `Baseline.middle()`. That dimension gets no axis. Its entry is a bracket of
+  a round amount near a quarter of the data's widest extent, drawn at the
+  plot's scale and labeled once with the amount and the measure's name, for
+  example "2000 count". It sits at the top of the legend, above the swatches.
+
+A length entry stands in for the axis the dimension would have if its space
+had an origin, so by default it is drawn where that axis would be: along a
+dimension whose axes the chart draws. A chart draws its axes unless `axes`
+turns them off, so with `axes={"y": False}` the length entry along y is not
+drawn either. A figure rendered without `chart()` draws no axes by default,
+and no length entries. The color entry is drawn either way.
+
+`legend` turns entries on or off. The marks keep their colors and sizes; only
+the legend goes away.
+
+| Value                     | Draws                                                        |
+| ------------------------- | ------------------------------------------------------------ |
+| omitted (default)         | the color entry, and the length entries where axes are drawn |
+| `True`                    | every entry                                                  |
+| `False`                   | no entries                                                   |
+| `{"color": False}`        | the length entries, no color entry                           |
+| `{"y": False}`            | no length entry for the scales along y                       |
+| `{"y": {"title": "..."}}` | the length entry along y, its amount named by the title      |
+
+A key left out of the dict keeps its default.
+
+```python
+chart(data, legend=False)
+chart(data, legend={"color": False})
+chart(rows, legend={"y": {"title": "unemployed (thousands)"}})
+```
+
+The length entry's title is set on `legend`, not on `axes`: a dimension with
+no origin draws no axis, so `axes={"y": ...}` does not apply there.
 
 ## Equal scale from a shared unit
 

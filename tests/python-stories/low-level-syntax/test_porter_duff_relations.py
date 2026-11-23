@@ -114,7 +114,7 @@ def story_intersect_painted():
             stroke="#467DA8",
             stroke_width=2,
         ),
-        {"w": 220, "h": 180},
+        {},
     )
 
 
@@ -128,7 +128,7 @@ def story_intersect_image_fill():
             ],
             fill="#467DA8",
         ),
-        {"w": 193, "h": 678},
+        {},
     )
 
 
@@ -154,7 +154,6 @@ def story_intersect_in_cells():
 # No fill: each operand draws its own paint where the result keeps it. A fill:
 # the result is one new shape.
 
-_PAIR_SIZE = {"w": 220, "h": 180}
 _FILL = "#D1E4F6"
 
 
@@ -171,38 +170,38 @@ def _pair():
 
 
 def story_union_shapes():
-    return union(_pair()), _PAIR_SIZE
+    return union(_pair()), {}
 
 
 def story_union_filled():
-    return union(_pair(), fill=_FILL), _PAIR_SIZE
+    return union(_pair(), fill=_FILL), {}
 
 
 def story_intersect_shapes():
-    return intersect(_pair()), _PAIR_SIZE
+    return intersect(_pair()), {}
 
 
 def story_subtract_shapes():
-    return subtract(_pair()), _PAIR_SIZE
+    return subtract(_pair()), {}
 
 
 def story_subtract_filled():
-    return subtract(_pair(), fill=_FILL), _PAIR_SIZE
+    return subtract(_pair(), fill=_FILL), {}
 
 
 def story_exclude_shapes():
-    return exclude(_pair()), _PAIR_SIZE
+    return exclude(_pair()), {}
 
 
 def story_exclude_filled():
-    return exclude(_pair(), fill=_FILL), _PAIR_SIZE
+    return exclude(_pair(), fill=_FILL), {}
 
 
 def story_atop_shapes():
-    return atop(_pair()), _PAIR_SIZE
+    return atop(_pair()), {}
 
 
 def story_hidden_mask():
     # A hidden operand gives its shape and no paint: the square, clipped to the
     # circle, with the circle itself not drawn.
-    return intersect([_disk().hidden(), _square()]), _PAIR_SIZE
+    return intersect([_disk().hidden(), _square()]), {}

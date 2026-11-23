@@ -3,7 +3,6 @@ import { initializeContainer } from "../helper";
 import {
   chart,
   spread,
-  stack,
   rect,
   selectAll,
   group,
@@ -43,7 +42,7 @@ export const GroupedBarsInnerHeight: StoryObj = {
     chart(values)
       .flow(
         spread({ by: "group", dir: "x", spacing: 24 }),
-        stack({ by: "item", dir: "x", h: 150 })
+        spread({ by: "item", dir: "x", h: 150, spacing: 0 })
       )
       .mark(rect({ w: 20, h: "value", fill: "item" }))
       .render(container);

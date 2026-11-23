@@ -58,10 +58,10 @@ import { type ConstraintSpec } from ".";
 import * as Interval from "../../util/interval";
 import {
   distributeChildrenInPlacementOrder,
-  distributeOrigin,
+  resolveBaseline,
   distributeSpaceFold,
   type DistributeConstraint,
-  type StackOrigin,
+  type StackBaseline,
 } from "./distribute";
 import { type AlignConstraint } from "./align";
 import {
@@ -206,7 +206,8 @@ type Seg = {
   glue: boolean;
   measure?: string;
   hasOrder?: boolean;
-  origin: StackOrigin<number>;
+  baseline: StackBaseline<number>;
+  hasMidpoint?: boolean;
   keys: (OrdinalKey | undefined)[];
   anonymous: boolean;
 };
@@ -296,7 +297,8 @@ export function planConstraintComposition(
       glue: d.glue,
       measure: d.measure,
       hasOrder: d.hasOrder,
-      origin: distributeOrigin(d, ordered, resolved.keyOf),
+      baseline: resolveBaseline(d, ordered, resolved.keyOf),
+      hasMidpoint: d.hasMidpoint,
       keys: idx.map(keyOf),
       anonymous: idx.length > 0 && idx.every(syntheticOf),
     });
@@ -567,7 +569,8 @@ const foldOptions = (s: Seg) => ({
   measure: s.measure,
   hasOrder: s.hasOrder,
   anonymous: s.anonymous,
-  origin: s.origin,
+  baseline: s.baseline,
+  hasMidpoint: s.hasMidpoint,
 });
 
 /** The types of the operands of `axis`'s max-union (each distribute fold,
@@ -576,6 +579,7 @@ const foldOptions = (s: Seg) => ({
 function axisFragments(
   plan: ComposePlan,
   childSpaces: Size<UnderlyingSpace>[],
+  pixelSized: (i: number, axis: 0 | 1) => boolean,
   axis: 0 | 1
 ): UnderlyingSpace[] | undefined {
   const dists = plan.segments.filter((s) => s.dAxis === axis);
@@ -586,8 +590,13 @@ function axisFragments(
   const covered = new Set<number>(plan.spanCover[axis]);
   for (const s of dists) {
     s.idx.forEach((i) => covered.add(i));
+    // A part of content with a size of its own in pixels solves σ for that
+    // content in that size, so to a stack it is a box of pixels, whatever
+    // data it holds: no amount to add.
     const space = distributeSpaceFold(
-      s.idx.map((i) => childSpaces[i][axis]),
+      s.idx.map((i) =>
+        s.glue && pixelSized(i, axis) ? UNDEFINED : childSpaces[i][axis]
+      ),
       s.keys,
       foldOptions(s)
     );
@@ -614,14 +623,15 @@ function axisFragments(
  *  union in place (no distribute or align on that axis). */
 export function composePlanSpaces(
   plan: ComposePlan,
-  childSpaces: Size<UnderlyingSpace>[]
+  childSpaces: Size<UnderlyingSpace>[],
+  pixelSized: (i: number, axis: 0 | 1) => boolean
 ): [UnderlyingSpace | undefined, UnderlyingSpace | undefined] {
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
   ];
   for (const axis of [0, 1] as const) {
-    const axisFrags = axisFragments(plan, childSpaces, axis);
+    const axisFrags = axisFragments(plan, childSpaces, pixelSized, axis);
     if (axisFrags === undefined) continue; // keep default union
     // This axis is covered by an align/distribute, so the FOLD is authoritative
     // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default

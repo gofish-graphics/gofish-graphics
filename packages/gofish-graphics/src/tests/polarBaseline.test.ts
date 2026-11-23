@@ -6,7 +6,7 @@
  *
  * Run: `pnpm build && tsx src/tests/polarBaseline.test.ts` (wired as
  * `pnpm test:polar-baseline`). Imports from `dist` for the same lodash-ESM
- * reason as `stackOrigin.test.ts`.
+ * reason as `baseline.test.ts`.
  */
 
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.

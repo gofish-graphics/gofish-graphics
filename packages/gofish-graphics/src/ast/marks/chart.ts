@@ -18,6 +18,7 @@ import {
 } from "../data";
 import { predicateWire, sumIn, type FieldExpr } from "../fieldExpr";
 import { columnQuantity } from "../measure";
+import { distOf, type DistData } from "../dist";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
@@ -41,8 +42,18 @@ import {
   addRenderMethod,
   createMark,
   reifyChildren,
+  sealComponent,
   type NameableMark,
 } from "../withGoFish";
+import { Band, bandOfFunctions, bandOfRows } from "../shapes/band";
+import {
+  groupFun,
+  isFunValue,
+  type FunctionExpr,
+  type ValueExpr,
+} from "../groupExpr";
+import { monotone } from "../../families/curve";
+import type { ParameterCurve } from "../fun";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -256,6 +267,56 @@ export const normalize = <T, K extends keyof T>(
     [field]: (d[field] as unknown as number) / (total ?? NaN),
   }));
 };
+
+/** The options of {@link kde}. */
+export type KdeOptions = {
+  /** The standard deviation of each value's kernel, in the column's unit.
+   *  Silverman's rule (R's `bw.nrd0`) when omitted. */
+  bandwidth?: number;
+};
+
+/**
+ * A derive helper, `derive(kde("x"))`: the rows going in are a sample of
+ * the column `column`, and the one row coming out holds, in that column,
+ * the sample smoothed by a normal kernel, a distribution
+ * (`{ type: "dist", family: "kde", params: { values, bandwidth? } }`, see
+ * `DistData` in dist.ts). `field(column)`'s members read it: `density()`,
+ * `domain()`, `cdf()`, `quantile(p)`, `median()`, `mean()`, and
+ * `.bin(Binning.quantiles(n))` cuts it at its own quantiles.
+ *
+ * The row also holds every other column whose value is the same in all
+ * the rows (a group's species, after a split by it), and nothing else. In a
+ * flow after a split, `derive` runs once per group, so each group's column
+ * holds its own distribution. No rows give no row. Missing values are left
+ * out of the sample.
+ */
+export const kde =
+  (column: string, options: KdeOptions = {}) =>
+  <T>(rows: T[]): Record<string, unknown>[] => {
+    if (rows.length === 0) return [];
+    const records = rows as unknown as (Record<string, unknown> | null)[];
+    const first = records.find((r) => r != null) ?? {};
+    const same = Object.fromEntries(
+      Object.entries(first).filter(
+        ([k, v]) => k !== column && records.every((r) => Object.is(r?.[k], v))
+      )
+    );
+    const data: DistData = {
+      type: "dist",
+      family: "kde",
+      params: {
+        values: records.flatMap((r) =>
+          r?.[column] == null ? [] : [r[column]]
+        ),
+        ...(options.bandwidth !== undefined
+          ? { bandwidth: options.bandwidth }
+          : {}),
+      },
+    };
+    // Built here, so a sample that has no density is an error at the kde.
+    distOf(data);
+    return [{ ...same, [column]: data }];
+  };
 
 export function log<T>(prefix?: string): Operator<T, T> {
   return mapOperator<T, T>(
@@ -1046,12 +1107,147 @@ export type LineOptions = WithEffect & {
   h?: number | string | Value<number> | FieldExpr;
   emX?: boolean;
   emY?: boolean;
+  /** The shape form: each row's position. Given, the line owns its rows and
+   *  draws one path per group through them, sorted by `x`. */
+  x?: ShapeChannel;
+  y?: ShapeChannel;
 };
 
-// `line` — a center-mode connector (the "line" component): the path between the
-// centers of consecutive marks. `route` picks the shape (linear | bezier |
-// orthogonal | arc | perfectArrows | …).
-export const line = createRelationalMark<LineOptions>(
+/** A position or value channel of the shape form of `ribbon` and `line`:
+ *  read once per row (a column name, an accessor, or a `field(...)`
+ *  expression), or a function expression read at the mark's parameter t
+ *  (`fun(...)`, `f.domain()`). */
+export type ShapeChannel =
+  | string
+  | ((d: any) => unknown)
+  | FieldExpr
+  | FunctionExpr;
+
+/** The options only the connector form of `ribbon` and `line` reads. */
+const CONNECTOR_ONLY = [
+  "dir",
+  "from",
+  "to",
+  "along",
+  "source",
+  "target",
+  "emX",
+  "emY",
+] as const;
+
+/**
+ * The shape form of `ribbon` and `line`: a mark that owns its rows and
+ * builds one {@link Band} node per group, through them. `parameter` and
+ * `value` name the two channels it reads per row: `x` and `h` for
+ * `ribbon({ x, h })`, `y` and `w` for `ribbon({ y, w })`, `x` and `y` for
+ * `line({ x, y })`. A ribbon's values are amounts from a baseline, which its
+ * parent places, and it is filled; a line's are positions, and it is a path.
+ * Its paint is read once per group, as the connector's is
+ * (`resolveGroupPaint`).
+ */
+function shapeForm(
+  type: "ribbon" | "line",
+  options: Record<string, any>,
+  axis: 0 | 1,
+  parameter: string,
+  value: string
+): NameableMark<any> {
+  const opts = withKindValues(options);
+  for (const key of CONNECTOR_ONLY)
+    if (opts[key] !== undefined)
+      throw new Error(
+        `[gofish] ${type}({ ${parameter}, ${key} }): \`${key}\` belongs to ` +
+          `the connector form, which joins marks another flow placed. The ` +
+          `shape form, with \`${parameter}\`, places its own rows; remove ` +
+          `\`${key}\`, or drop \`${parameter}\` for the connector form.`
+      );
+  for (const key of type === "line" ? ["h", "w"] : [axis === 0 ? "w" : "h"])
+    if (opts[key] !== undefined)
+      throw new Error(
+        `[gofish] ${type}({ ${parameter}, ${key} }): the shape form reads ` +
+          `${parameter} and ${value}; \`${key}\` is not one of its channels.`
+      );
+  if (opts[value] === undefined)
+    throw new Error(
+      `[gofish] ${type}({ ${parameter} }): the shape form needs \`${value}\` ` +
+        `too, the value at each ${parameter}.`
+    );
+  const curve = (opts.curve ?? monotone()) as Curve;
+  if (!["linear", "step", "monotone", "smooth"].includes(curve.kind))
+    throw new Error(
+      `[gofish] ${type}({ ${parameter}, curve: Curve.${curve.kind}() }): the ` +
+        `shape form reads its curve over ${parameter}, so it takes ` +
+        `Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth().`
+    );
+  const closed = type === "ribbon";
+  const filter = displayFilter(
+    opts.effect as EffectValue | undefined,
+    `${type}({ effect })`
+  );
+  const liveChannels = liveChannelsOf(opts);
+  const channels = (MARK_CHANNELS as Record<string, Record<string, string>>)[
+    type
+  ];
+  const mark: Mark<any[]> = async (rows, key, given) => {
+    const layerContext = markContext(given);
+    const pending = resolveChannelAccessors(opts, channels, () => rows);
+    const accessors = isThenable(pending) ? await pending : pending;
+    const paint = await resolveGroupPaint(type, accessors, rows);
+    const o = withLiveStatics(paint, liveChannels, rows) as Record<string, any>;
+    // A channel that holds a function expression (a function value, or a
+    // reduce that returns a function for this group) gives the mark a
+    // parameter t, which every function channel is read at; rows are not
+    // read at t.
+    const ofT =
+      groupFun(o[parameter], rows) !== undefined ||
+      groupFun(o[value], rows) !== undefined;
+    if (ofT && opts.curve !== undefined)
+      throw new Error(
+        `[gofish] ${type}({ ${parameter}, ${value}, curve }): a curve says ` +
+          `how a ${type} runs between its rows, but these channels hold ` +
+          `functions of t, which run as they are. Remove curve.`
+      );
+    const along = { name: parameter, accessor: o[parameter] };
+    const values = {
+      name: value,
+      accessor: o[value],
+      kind: closed ? ("amount" as const) : ("position" as const),
+    };
+    const node = withRegistrar(layerContext.registrar, () =>
+      Band({
+        axis,
+        ...(ofT
+          ? bandOfFunctions(type, rows, along, values, key)
+          : bandOfRows(
+              type,
+              rows,
+              along,
+              values,
+              curve as ParameterCurve,
+              key
+            )),
+        origin: closed ? "free" : "pinned",
+        closed,
+        inset: opts.inset,
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth,
+        strokeDasharray: o.strokeDasharray,
+        opacity: o.opacity,
+        blendMode: o.blendMode,
+      })
+    );
+    if (liveChannels) (node as any).__gfLive = liveChannels;
+    applyFilter(node, filter);
+    return sealComponent(node, rows);
+  };
+  return withWire(nameableMark(mark), { type, opts: options });
+}
+
+// `line`'s connector form — a center-mode connector (the "line" component):
+// the path between the centers of consecutive marks. `route` picks the shape
+// (linear | bezier | orthogonal | arc | perfectArrows | …).
+const lineConnector = createRelationalMark<LineOptions>(
   "line",
   (o, children, inferred) =>
     Connect(
@@ -1075,6 +1271,45 @@ export const line = createRelationalMark<LineOptions>(
       children
     )
 );
+
+/**
+ * `line` has two forms, picked by whether a position channel is given:
+ *
+ * - `line({ x, y })`, the shape form: the mark owns its rows and draws one
+ *   path per group through them, sorted by `x` ({@link shapeForm}).
+ * - `line(opts)` with no `x` or `y`, the connector form: the path between
+ *   the centers of consecutive marks another flow placed, over a ref bag, a
+ *   pairwise `{ from, to }`, or a combinator's children.
+ */
+export function line(
+  options: LineOptions & { x: ShapeChannel; y: ShapeChannel }
+): NameableMark<any>;
+export function line(
+  options: LineOptions | undefined,
+  children: GoFishAST[]
+): GoFishNode;
+export function line(options?: LineOptions): RelationalMark;
+export function line(
+  options?: LineOptions,
+  children?: GoFishAST[]
+): GoFishNode | Mark<any> {
+  if (options?.x === undefined && options?.y === undefined)
+    return children === undefined
+      ? lineConnector(options)
+      : lineConnector(options, children);
+  if (children !== undefined)
+    throw new Error(
+      "[gofish] line({ x, y }, children): the shape form draws its own rows; " +
+        "the combinator form joins its children. Drop x and y to join the " +
+        "children."
+    );
+  if (options.x === undefined)
+    throw new Error(
+      "[gofish] line({ y }): the shape form needs `x` too: a line runs " +
+        "through its rows sorted by x."
+    );
+  return shapeForm("line", options, 0, "x", "y");
+}
 
 export type RibbonOptions = WithEffect & {
   fill?: MaybeValue<string> | LiveValue;
@@ -1100,15 +1335,28 @@ export type RibbonOptions = WithEffect & {
   // a field name, a `Value<number>`, or a `field(...)` pipeline like
   // `field("count").sum()` — since they're forwarded verbatim to the
   // synthesized `blank()`, which evaluates them the same way.
-  w?: number | string | Value<number> | FieldExpr;
-  h?: number | string | Value<number> | FieldExpr;
+  // In the shape form they are the band's values: a column, or a function
+  // expression read at the mark's parameter t.
+  w?: number | string | Value<number> | FieldExpr | FunctionExpr;
+  h?: number | string | Value<number> | FieldExpr | FunctionExpr;
   emX?: boolean;
   emY?: boolean;
+  /** The shape form: pixels the band is drawn in by, from each end of its
+   *  parameter and up from its baseline, so the bands of a partition's
+   *  cells are drawn apart. It changes only what is drawn: the band's box
+   *  is the same. */
+  inset?: number;
+  /** The shape form: each row's position along the band, or a function
+   *  expression's `domain()`. `x` with `h` is a band over x, of height h
+   *  from its baseline; `y` with `w` is a band over y, of width w. */
+  x?: ShapeChannel;
+  y?: ShapeChannel;
 };
 
-// `ribbon` — an edge-mode connector: a filled band between the facing edges of
-// consecutive marks (areas, streamgraphs, sankey ribbons).
-export const ribbon = createRelationalMark<RibbonOptions>(
+// `ribbon`'s connector form — an edge-mode connector: a filled band between
+// the facing edges of consecutive marks (sankey ribbons, bands between
+// discrete marks).
+const ribbonConnector = createRelationalMark<RibbonOptions>(
   "ribbon",
   (o, children, inferred) =>
     Connect(
@@ -1129,6 +1377,65 @@ export const ribbon = createRelationalMark<RibbonOptions>(
       children
     )
 );
+
+/**
+ * `ribbon` has two forms, picked by whether a position channel is given:
+ *
+ * - `ribbon({ x, h })` or `ribbon({ y, w })`, the shape form: the mark owns
+ *   its rows and draws one band per group, from its baseline to `h` (or
+ *   `w`) at each row's `x` (or `y`), sorted by it ({@link shapeForm}).
+ * - `ribbon(opts)` with no `x` or `y`, the connector form: a band between
+ *   the facing edges of consecutive marks another flow placed, over a ref
+ *   bag, a pairwise `{ from, to }`, or a combinator's children.
+ */
+export function ribbon(
+  options: RibbonOptions & ({ x: ShapeChannel } | { y: ShapeChannel })
+): NameableMark<any>;
+export function ribbon(
+  options: RibbonOptions | undefined,
+  children: GoFishAST[]
+): GoFishNode;
+export function ribbon(options?: RibbonOptions): RelationalMark;
+export function ribbon(
+  options?: RibbonOptions,
+  children?: GoFishAST[]
+): GoFishNode | Mark<any> {
+  if (options?.x === undefined && options?.y === undefined) {
+    for (const [key, at] of [
+      ["h", "x"],
+      ["w", "y"],
+    ] as const)
+      if (isFunValue(options?.[key]))
+        throw new Error(
+          `[gofish] ribbon({ ${key} }): ${key} holds a function of t, which ` +
+            `the shape form reads; give it ${at} too, the function's ` +
+            `domain: ribbon({ ${at}: f.domain(), ${key}: f }).`
+        );
+    if (options?.inset !== undefined)
+      throw new Error(
+        "[gofish] ribbon({ inset }): inset draws in the band of the shape " +
+          "form, ribbon({ x, h }) or ribbon({ y, w }). The connector form " +
+          "joins the edges of other marks, which it does not draw in."
+      );
+    return children === undefined
+      ? ribbonConnector(options)
+      : ribbonConnector(options, children);
+  }
+  if (children !== undefined)
+    throw new Error(
+      "[gofish] ribbon({ x }, children): the shape form draws its own rows; " +
+        "the combinator form joins its children. Drop x and y to join the " +
+        "children."
+    );
+  if (options.x !== undefined && options.y !== undefined)
+    throw new Error(
+      "[gofish] ribbon({ x, y }): the shape form runs along one axis: " +
+        "ribbon({ x, h }) is a band over x, ribbon({ y, w }) a band over y."
+    );
+  return options.x !== undefined
+    ? shapeForm("ribbon", options, 0, "x", "h")
+    : shapeForm("ribbon", options, 1, "y", "w");
+}
 
 /**
  * Draw an outline around nodes, under them: their padded bounding box

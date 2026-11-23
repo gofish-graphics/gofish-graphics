@@ -864,9 +864,9 @@ function resolveConstraints(layer: GoFishNode): ResolvedConstraints {
       continue;
     }
     for (const ref of c.children) place(ref, what);
-    // A stack's origin names one of its parts.
-    if (c.type === "distribute" && c.origin !== undefined)
-      place(c.origin.part, what);
+    // A stack's baseline may name one of its parts.
+    if (c.type === "distribute" && c.baseline?.kind === "at")
+      place(c.baseline.part, what);
   }
   const keyOf: KeyOf = (ref) => keys.get(ref) ?? noKey(ref);
   // With every ref resolved, check the relate clauses' dependency order

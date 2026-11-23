@@ -20,7 +20,18 @@ import {
   UnderlyingSpace,
   CONTINUOUS,
   originIs,
+  crossSectionOf,
+  withProfile,
 } from "../underlyingSpace";
+import {
+  add,
+  constant,
+  field,
+  lowerEnvelope,
+  record,
+  upperEnvelope,
+  type Fun,
+} from "../fun";
 import { unionInOrder } from "../measure";
 import { Extent, hullExtent } from "../extent";
 import * as Pwl from "../solver/pwl";
@@ -48,28 +59,66 @@ const atOwnData = (s: CONTINUOUS_TYPE, seat: Seat): boolean =>
 const seatedInterval = (s: CONTINUOUS_TYPE, seat: Seat): Interval.Interval =>
   atOwnData(s, seat) ? s.dataInterval : Interval.interval(0, dataWidth(s));
 
+/** The cross-section of a child in its parent's frame, seated by `seat`:
+ *  its own, or moved so its box starts at 0, as {@link seatedInterval}
+ *  moves its interval. */
+const seatedCrossSection = (
+  s: CONTINUOUS_TYPE,
+  seat: Seat
+): Fun<Interval.Interval> => {
+  const cs = crossSectionOf(s);
+  if (atOwnData(s, seat)) return cs;
+  const by = -s.dataInterval.min;
+  return add(cs, constant({ min: by, max: by }, cs.domain));
+};
+
+/** The children of an overlay of `conts` whose result has origin `origin`
+ *  that count toward its data. When the result is pinned it has data
+ *  coordinates, and an origin-less child has none to give it (it has no data
+ *  0), so it adds nothing to the result's data interval; it still takes room
+ *  through its claim. Otherwise every child counts. */
+const counted = (conts: CONTINUOUS_TYPE[], origin: Origin) =>
+  conts.filter((s) => origin !== "pinned" || s.origin !== "none");
+
 /** The data interval of an overlay of `conts` seated by `seat`, whose result
- *  has origin `origin`. When the result is pinned it has data coordinates,
- *  and an origin-less child has none to give it (it has no data 0), so it
- *  adds nothing to the result's data interval; it still takes room through
- *  its claim. Otherwise every child counts by its seated interval. */
+ *  has origin `origin`: the union of the seated intervals of the children
+ *  that count ({@link counted}). */
 export const seatedUnion = (
   conts: CONTINUOUS_TYPE[],
   seat: Seat,
   origin: Origin
 ): Interval.Interval =>
   Interval.unionAll(
-    ...conts
-      .filter((s) => origin !== "pinned" || s.origin !== "none")
-      .map((s) => seatedInterval(s, seat))
+    ...counted(conts, origin).map((s) => seatedInterval(s, seat))
   );
+
+/** The cross-section of an overlay: at each u, the union of the seated
+ *  cross-sections of the children that count, as {@link seatedUnion} is the
+ *  union of their intervals. */
+const seatedProfileUnion = (
+  conts: CONTINUOUS_TYPE[],
+  seat: Seat,
+  origin: Origin
+): Fun<Interval.Interval> | undefined => {
+  const children = counted(conts, origin);
+  // Children with no profile are boxes, and the union of boxes is the box of
+  // the union, which the interval already is. Skipping them saves building
+  // a constant function per child of a large overlay (a scatter's points).
+  if (!children.some((s) => s.profile !== undefined)) return undefined;
+  const parts = children.map((s) => seatedCrossSection(s, seat));
+  return record({
+    min: lowerEnvelope(parts.map((p) => field(p, "min"))),
+    max: upperEnvelope(parts.map((p) => field(p, "max"))),
+  });
+};
 
 /**
  * The one overlay fold: the union of the children's seated intervals, with
  * the origin the operator gives the result and the children's measures
  * unified as types, whatever their origin (a clash is an error; see
- * {@link joinUnits}). Children that all hold amounts on both sides of 0
- * still do together, when the result has a 0.
+ * {@link joinUnits}), and at each u across, the union of their
+ * cross-sections ({@link CONTINUOUS_TYPE.profile}). Children that all hold
+ * amounts on both sides of 0 still do together, when the result has a 0.
  */
 function overlay(
   conts: CONTINUOUS_TYPE[],
@@ -82,9 +131,11 @@ function overlay(
     true,
     site
   );
+  const space = CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure);
+  const profile = seatedProfileUnion(conts, seat, origin);
   return mirrored(
     withCells(
-      CONTINUOUS(seatedUnion(conts, seat, origin), origin, measure),
+      profile === undefined ? space : withProfile(space, profile),
       mergeCells(conts.map((s) => s.cells))
     ),
     origin !== "none" && allMirrored(conts)

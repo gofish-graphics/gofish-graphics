@@ -117,5 +117,5 @@ def story_radial_tree_incline():
     # Inside a coord, paint order is list order: links first, under the nodes.
     return (
         layer([layer([*LINKS, *NODES])], coord=Coord.clock()),
-        {"w": 520, "h": 520},
+        {},
     )

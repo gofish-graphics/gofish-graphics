@@ -167,7 +167,7 @@ export const AboveStart: StoryObj<Args> = {
     chart(seafood, { w: args.w, h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species",  dir: "x", spacing: 0 })
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
@@ -191,7 +191,7 @@ export const AboveEnd: StoryObj<Args> = {
     chart(seafood, { w: args.w, h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species",  dir: "x", spacing: 0 })
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("count", {
@@ -299,7 +299,7 @@ export const LabelOnSpread: StoryObj<Args> = {
       )
       .mark(async (d: any) => {
         return chart(d, { axes: false })
-          .flow(stack({ by: "species", dir: "x" }))
+          .flow(spread({ by: "species", dir: "x", spacing: 0 }))
           .mark(rect({ h: "count" as any, fill: "species" as any }))
           .resolve();
       })

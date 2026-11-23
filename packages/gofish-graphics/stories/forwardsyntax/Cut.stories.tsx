@@ -8,7 +8,6 @@ import {
   text,
   Constraint,
   spread,
-  stack,
   cut,
   datum,
 } from "../../src/lib";
@@ -135,9 +134,9 @@ export const ImageCutWithLabels: StoryObj<Args> = {
  *  vintage along x; the inner `spread({ dir: "y", spacing: 14, reverse: true })`
  *  collapses each group's array of cut slices into a single node — but with
  *  visible 14px spacing, so each bottle reads as an EXPLODED stack of its three
- *  slices rather than a packed-back-together whole. (We interpose `spread`, not
- *  `stack`, precisely because `stack` recomposes the slices flush — it has no
- *  spacing option — whereas `spread` separates them.) Compare the slice heights
+ *  slices rather than a packed-back-together whole. (The slices are boxes of
+ *  pixels, so they are laid out by `spread`; with `spacing: 0` it would lay
+ *  them flush.) Compare the slice heights
  *  between the two bottles: 2019 splits 40/42/18 (a tall middle band), 2021
  *  splits 55/30/15 (a dominant bottom band) — the differing proportions are the
  *  point. This is the canonical way to combine `by`-grouping with an expand
@@ -188,23 +187,23 @@ export const RectEqualSlices: StoryObj = {
   },
 };
 
-/** Regression coverage for `stack`'s flush recomposition of a cut. The same
- *  rect is cut into 4 equal slices and collapsed back with the `stack`
- *  operator, which recomposes its children flush by design — `StackOptions =
- *  Omit<SpreadOptions, "spacing" | "glue">`, so there is NO spacing option and
- *  adjacent slice windows necessarily tile the source back into a single shape.
- *  The source rect carries a visible stroke — a CORRECT recomposition shows ONE
- *  continuous border around the whole rect, whereas misaligned slice windows
- *  would reveal repeated/broken stroke lines in the interior where the slices
- *  meet. The continuous border is the falsifiable witness. This story exists
- *  purely to pin that flush-recompose behavior; do not use flush `stack` as the
+/** Regression coverage for the flush recomposition of a cut. The same rect
+ *  is cut into 4 equal slices and laid back side by side with
+ *  `spread({ spacing: 0 })`: the slices are boxes of pixels, not data
+ *  amounts, so they touch rather than stack, and adjacent slice windows
+ *  tile the source back into a single shape. The source rect carries a
+ *  visible stroke — a CORRECT recomposition shows ONE continuous border
+ *  around the whole rect, whereas misaligned slice windows would reveal
+ *  repeated/broken stroke lines in the interior where the slices meet. The
+ *  continuous border is the falsifiable witness. This story exists purely to
+ *  pin that flush-recompose behavior; do not use a flush spread as the
  *  collapse operator in stories that demonstrate other features. */
 export const RectFlushStack: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
     chart(abcdData)
-      .flow(stack({ dir: "x" }))
+      .flow(spread({ dir: "x", spacing: 0 }))
       .mark(
         rect({
           w: 400,

@@ -105,24 +105,19 @@ Helpers for the function `derive` takes:
 - `normalize(rows, field)`: each row with `field` divided by the column's
   total.
 - `repeat(row, field)`: the row, `row[field]` times.
-- `quantileRows(rows, { x, density, n })`: `n` rows at the quantiles of a
-  density curve, one at each probability `(i + 0.5) / n`. `rows` is a grid of one curve,
-  each row a position `x` and the `density` there, in any order, with no two rows at one position (call it after the split into curves).
-  The density is integrated by the trapezoid rule. Each row made holds `x`
-  and every column whose value is the same in all of `rows` (a group's
-  `month`). [`Binning.quantiles`](/js/api/binning#binning-quantiles) and
-  `field(x).median()` over the result read the curve instead of the grid.
-  It stands in for first-class distributions
-  ([#980](https://github.com/gofish-graphics/gofish-graphics/issues/980)),
-  which will replace it.
+- [`kde(column, { bandwidth })`](/js/api/dist#kde): the function itself.
+  It gives one row whose `column` holds the rows' values smoothed into a
+  kernel density, a [`Dist`](/js/api/dist), with the columns that are the
+  same in every row.
 
 ```ts
-// The quantiles of a drawn density, cut into ten equal-mass cells
+// Each month's highs as a kernel density, cut at its own quintiles
 .flow(
-  derive((rows) => quantileRows(rows, { x: "x", density: "pdf", n: 1000 })),
-  partition({ by: field("x").bin(Binning.quantiles(10)), dir: "x" })
+  spread({ by: "month", dir: "y" }),
+  derive(kde("temp_max")),
+  partition({ by: field("temp_max").bin(Binning.quantiles(5)), dir: "x" })
 )
-.mark(circle({ cx: field("x").median(), r: 3 }))
+.mark(ribbon({ x: field("temp_max").domain(), h: field("temp_max").density() }))
 ```
 
 ## Units: keeping axes shared across a transform

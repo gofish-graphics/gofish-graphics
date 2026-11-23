@@ -12,7 +12,7 @@ from gofish import chart, text
 
 chart([{"label": "GoFish"}]).mark(
     text(text="label", font_size=28, fill="steelblue")
-).render(w=240, h=80)
+).render()
 ```
 
 ## Signature

@@ -55,7 +55,7 @@ const indicesWhere = (
 const isLabel = (c: GoFishNode["children"][number]) =>
   c instanceof GoFishNode && c.type === "label";
 
-/** The layer of a laid-out tree that holds its labels (`elaborateLabels`). */
+/** The layer of a laid-out tree that holds its labels (`labelLayer`). */
 const labelLayer = (root: GoFishNode): GoFishNode =>
   nodesOf(root).find((n) => n.children.some(isLabel))!;
 

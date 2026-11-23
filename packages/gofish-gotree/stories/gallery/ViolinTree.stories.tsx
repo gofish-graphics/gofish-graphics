@@ -65,33 +65,30 @@ const node = (d: any) =>
 
 export const ViolinTree: StoryObj = {
   render: () =>
-    mount(
-      {
-        node,
-        link: "none",
-        // parentChild: X juxtapose → distribute θ ; Y include → nest r.
-        // spacing:0/center on θ keeps parent θ-centered over its subtree (see
-        // NOTES); nest on r grows the parent's rect to embed the subtree.
-        parentChild: combine({
-          x: {
-            kind: "distribute",
-            spacing: Spacing.pitch(0, { at: "middle" }),
-          },
-          y: { kind: "nest", pad: 18 },
-        }),
-        // sibling: X flatten → distribute θ ; Y flatten → distribute r.
-        sibling: combine({
-          x: {
-            kind: "distribute",
-            spacing: Spacing.pitch(LEAF_THETA, { at: "middle" }),
-          },
-          y: {
-            kind: "distribute",
-            spacing: Spacing.pitch(0, { at: "middle" }),
-          },
-        }),
-        coord: Coord.clock(),
-      },
-      { w: 520, h: 520 }
-    ),
+    mount({
+      node,
+      link: "none",
+      // parentChild: X juxtapose → distribute θ ; Y include → nest r.
+      // spacing:0/center on θ keeps parent θ-centered over its subtree (see
+      // NOTES); nest on r grows the parent's rect to embed the subtree.
+      parentChild: combine({
+        x: {
+          kind: "distribute",
+          spacing: Spacing.pitch(0, { at: "middle" }),
+        },
+        y: { kind: "nest", pad: 18 },
+      }),
+      // sibling: X flatten → distribute θ ; Y flatten → distribute r.
+      sibling: combine({
+        x: {
+          kind: "distribute",
+          spacing: Spacing.pitch(LEAF_THETA, { at: "middle" }),
+        },
+        y: {
+          kind: "distribute",
+          spacing: Spacing.pitch(0, { at: "middle" }),
+        },
+      }),
+      coord: Coord.clock(),
+    }),
 };

@@ -286,7 +286,9 @@ story's combinator trees.
 Operators and marks may also carry `translate: {x?, y?}`. This is canonical
 frontend IR, not a Python-only bridge sentinel: it records the structural
 `.translate({x?, y?})` modifier and the JS deserializer reapplies it as a
-runtime chain.
+runtime chain. An operator may also carry `name`, from `.name("...")` on the
+operator (#802): the deserializer reapplies it before the operator's labels
+and translate, and each group the operator makes is filed under it.
 
 `offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
 child and shifts it by `(x, y)` render-pixels without moving the bounds it
@@ -820,7 +822,18 @@ Six consumers read the table:
 - **The JS emitter** (`toJSON`) filters what reaches the wire through it.
   A factory tags its options as the caller passed them; `wireOpts` keeps
   only the keys `acceptedFields(kind, type)` lists, and drops any function
-  value, since a callback has no JSON form. So a key the descriptor does not
+  value, since a callback has no JSON form. It drops a `fun(...)` value for
+  the same reason (`hasNoWireForm` in `ast/groupExpr.ts`): it holds a JS
+  closure. A Python `fun` raises, since a function value is read during
+  layout, which is synchronous, and the bridge is not. A `field(...)` whose
+  `map` or `reduce` holds a JS function is dropped too. A Python `map` or
+  `reduce` does cross: its op is `{ op: "map" | "reduce", fn, unit? }` with
+  `fn` a bridge handle (`{ __gofish_lambda }`), and a member read of the
+  result is `{ op: "member", name, args? }` (`FieldOpIR`; `validate.ts`
+  checks both). `unwrapOpts` turns the handle into a batch accessor, which
+  JS calls once with every group's values (`resolveGroupSteps`), and
+  Python's `_PendingGroupStep` answers one result per group. A Python reply
+  that holds a function raises in Python, for the same reason as `fun`. So a key the descriptor does not
   know never reaches the IR, and a construct with no descriptor (such as
   `time.transition`) has no IR form: `toJSON` throws.
 
@@ -832,7 +845,7 @@ Six consumers read the table:
   `COMBINATOR_OPTIONS_BASE_FIELDS` (`debug`) ride; its other base fields sit on
   the node. The emitter keeps these keys, and the validator checks an operator
   or leaf-mark node against them. On a leaf mark, the base fields that Mark
-  methods set (`name`, `label`, `relate`, `zOrder`, `hidden`, `translate`) are checked by
+  methods set (`name`, `label`, `relate`, `zOrder`, `hidden`, `tooltip`, `translate`) are checked by
   their own walkers, so the check of the mark's channels skips them. The
   emitter writes each `field(...)` or `datum(...)` instance, and each
   strategy kind used bare (`Curve.monotone`), in its plain `toJSON()` form, so the document it returns validates as the wire carries

@@ -143,7 +143,7 @@ export const IntersectPainted: StoryObj = {
     intersect({ fill: "#D1E4F6", stroke: "#467DA8", strokeWidth: 2 }, [
       circle({ cx: 90, cy: 90, r: 70 }),
       rect({ x: 80, y: 30, w: 120, h: 120 }),
-    ]).render(container, { w: 220, h: 180 });
+    ]).render(container);
     return container;
   },
 };
@@ -159,7 +159,7 @@ export const IntersectImageFill: StoryObj = {
     intersect({ fill: "#467DA8" }, [
       image({ href: bottlePng, x: 0, y: 0, w: 193, h: 678 }),
       rect({ x: 0, y: 339, w: 193, h: 339 }),
-    ]).render(container, { w: 193, h: 678 });
+    ]).render(container);
     return container;
   },
 };
@@ -193,11 +193,11 @@ const pair = (): [MarkChild, MarkChild] => [disk(), square()];
 const FILL = { fill: "#D1E4F6" };
 
 const showPair = (mark: {
-  render(c: HTMLElement, o: { w: number; h: number }): unknown;
+  render(c: HTMLElement): unknown;
 }) => {
   const container = initializeContainer();
   container.innerHTML = "";
-  mark.render(container, { w: 220, h: 180 });
+  mark.render(container);
   return container;
 };
 

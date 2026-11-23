@@ -24,5 +24,5 @@ def story_weave_tree():
                 y={"kind": "distribute", "spacing": 26},
             ),
         ),
-        {"w": 640, "h": 420},
+        {},
     )

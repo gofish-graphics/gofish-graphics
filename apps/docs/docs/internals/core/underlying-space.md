@@ -5,6 +5,7 @@ order: 10
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
+  - packages/gofish-graphics/src/ast/fun.ts
   - packages/gofish-graphics/src/ast/extent.ts
   - packages/gofish-graphics/src/ast/keyedDomains.ts
   - packages/gofish-graphics/src/ast/_node.ts
@@ -14,12 +15,17 @@ covers:
   - packages/gofish-graphics/src/ast/length.ts
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/fieldExpr.ts
+  - packages/gofish-graphics/src/ast/dist.ts
+  - packages/gofish-graphics/src/ast/distExpr.ts
+  - packages/gofish-graphics/src/families/dist.ts
+  - packages/gofish-graphics/src/ast/groupCell.ts
   - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/schema.ts
   - packages/gofish-graphics/src/ast/calendar.ts
   - packages/gofish-graphics/src/ast/cells.ts
   - packages/gofish-graphics/src/ast/polygonCells.ts
   - packages/gofish-graphics/src/ast/structExpr.ts
+  - packages/gofish-graphics/src/families/baseline.ts
   - packages/gofish-graphics/src/families/binning.ts
   - packages/gofish-graphics/src/families/calendar.ts
   - packages/gofish-graphics/src/families/domain.ts
@@ -257,6 +263,7 @@ type CONTINUOUS_TYPE = {
   measure?: UnitRecord; // { unit?, titles, summands? }
   mirrored?: true;
   cells?: readonly Cell[]; // every region placed along the axis is a cell
+  profile?: Fun<Interval>; // the interval covered at each u across
 };
 type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; titles?: string[]; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
@@ -279,9 +286,9 @@ measure?)`:
   overlay is one. An overlay of an origin-less child and a free one seated
   on its baseline keeps the free child's interval, so it can start below 0
   (`none [−20, 7]` for a bar of −20 beside an origin-less bar of 7). Only
-  its width means anything, so what reads one reads its width: a
-  difference axis spans its niced width from the content's start
-  (`differenceSpan`).
+  its width means anything, so what reads one reads its width from the
+  content's start (`differenceSpan`). It is a length scale: it draws no
+  axis, and its guide is a length entry in the legend.
 
 Because the three share one shape, **pinning a free extent is "shift the
 interval and pin the origin"**: `anchorAt(space, at)` turns `free [−d, a]`
@@ -291,6 +298,38 @@ it, and the `position` operator shifts by its datum offset. Alignment does not
 pin: it establishes a shared baseline (see below). What places a free
 baseline is placement: a parent constraint, a data anchor, or the scope root
 (`placeBaseline`).
+
+**The profile.** A continuous type may also hold a **`profile`**: for each
+position u on the other axis, in that axis's data units, the interval the
+content covers along this one, about the same local origin. It is a function
+value, `Fun<Interval>` (`ast/fun.ts`), and `dataInterval` is its hull. A type
+with no profile covers its `dataInterval` at every u, as a box does, and
+everything reads a type's profile through `crossSectionOf(space)`, which
+gives that box a constant one over the whole line. So nothing asks whether a
+type has a profile. A profile that is constant is never stored
+(`withProfile`), so a box's type stays as it is. The shape form of `ribbon`
+(`ribbon({ x, h })`) makes one: the interval between its baseline and its
+edge at each x.
+
+A function value built from rows is exact: it holds one polynomial per
+interval between knots (degree 0 for `Curve.step`, 1 for `Curve.linear`, and
+the cubics of `spline.ts` for `Curve.monotone` and `Curve.smooth`). Sums,
+scales, envelopes and their maxima are exact again, so the folds below get
+the same numbers from constant profiles as from plain intervals. So are
+products (`multiply`) and running integrals (`antiderivative`): a polynomial
+piece integrates in closed form. A function the module cannot see into (a
+kernel density) is read to a tolerance, and its running integral is a set of
+cubic pieces that match it to that tolerance. A function can also be read
+over a new parameter `u = a·t + b` (`reparameterize`), exactly when it has
+pieces: this is how a band takes its edges from data units to pixels in
+layout.
+
+The folds carry profiles pointwise. A stack's chain fold runs at every u
+(`tailSides` and `chainFold` take and return functions), and its type's
+interval is the largest reach over u, not the sum of each part's largest
+reach. An overlay (`overlay` in `alignment.ts`) takes the lower envelope of
+its parts' low edges and the upper envelope of their high edges. `anchorAt`
+shifts the profile with the interval.
 
 **The data interval has no σ in it.** Pixel overhead (a spread's spacing, a
 nest's padding, a fixed pitch, a `transform.scale`) is never part of the data
@@ -346,27 +385,93 @@ the two sides:
   part's tail is where placement puts it (`tailSides`): a free part's tail is
   its baseline, and a pinned or origin-less part, which has no data baseline
   for placement, lies above its tail as a box.
-- The 0 of a stack is its **origin**: its first part's tail by default, as
-  above. A stack whose `by` column has `HasMidpoint` (see
-  [Column types](#column-types-the-chart-schema)) puts its origin at the
-  midpoint of the column's order instead, and the fold shifts the extent so
-  the midpoint sits at 0: the parts before the midpoint (and the share of the
-  level it falls in that lies before it) lie below 0, the rest above. Parts
-  (5, 10, 20, 40, 25) centered on the middle of the 20 span `[−25, 75]`. The
-  parts of a centered stack must be nonnegative (a negative one is an error
-  naming `HasMidpoint`), and the space
-  it builds is **mirrored** (the origin's `mirrored` flag, then
-  `CONTINUOUS_TYPE.mirrored`; see `StackOrigin`): both sides of 0 hold
-  amounts measured away from it, so an axis over it labels each tick with its
-  distance from 0. A union stays mirrored only when every part is.
+- The 0 of a stack is its **baseline** (`StackBaseline` in `distribute.ts`,
+  the `Baseline` family, `families/baseline.ts`). The parts run from the
+  start of the chain (the first part's tail) to its end (the last part's
+  head). `Baseline.start()` is the start, as above, and the default.
+  `Baseline.end()` is the end, `Baseline.middle()` is halfway between, and
+  `Baseline.at(part, point)` is a point on one part: a fraction of the way
+  from its tail to its head, or one of its anchors (`"baseline"` is its
+  own 0, as `alignment` reads it: a bar's tail, or a nested spread's or
+  stack's baseline). `chainFold` computes the 0 at every u and measures both
+  reaches from it. The fold sees a part with no data baseline as a box from
+  its start, so for such a part `"baseline"` is its start there, while
+  placement seats the part's own 0 (a declared shortcut, `TODO` at
+  `pointOnPart`). In a flow, the `at` part is a value of the `by` column, which the
+  split turns into a child index (`stackBaseline` in `schema.ts`). A part the
+  data lacks takes no room, so the split places the 0 on the boundary where
+  it would be, by the column's declared order (`baselineAlongOrder`); with no
+  declared order that is an error. On the way down the part is a child
+  index, an operand of the constraint, and then an index into the parts in
+  placement order (`resolveBaseline`). Placement reads the same 0 from the
+  parts' data offsets (`stackPlaces`, below): each part states its own 0 to
+  the free-origin seat (`StackPoint` in `placementFacts.ts`) as its offset
+  times σ before its tail.
+- A **spread** takes `baseline` too, every value but `wiggle` (an error: its
+  0 moves with the cross-sections a stack glues). It is placement only: the
+  spread's fold ignores it, and its space stays a sequence of separate
+  spaces. It states its 0 to the free-origin seat as a point on one part,
+  or a place `along` the whole chain for `end` and `middle`. The way along
+  is a `ChainPath`, from its first part's start to its last part's end, through the anchors its edges tie (`end` to `start`, or a
+  pitch's anchor), and its gaps, `fr` included, are part of the way. The
+  split resolves an `at` part as for a stack, and a `HasMidpoint` column
+  sets it the same way. A spread with no `baseline` states no 0, and keeps
+  its sequence origin, its start. So `alignment: "start" | "middle" |
+"end"` on a parent draws what each child's `Baseline.start()`, `.middle()`
+  or `.end()` under the default `alignment: "baseline"` draws.
+- A stack whose `by` column has `HasMidpoint` (see
+  [Column types](#column-types-the-chart-schema)) is `Baseline.at` at the
+  midpoint of the column's order: the split builds that baseline from the
+  trait, and the fold shifts the extent so the midpoint sits at 0. The parts
+  before the midpoint (and the share of the level it falls in that lies
+  before it) lie below 0, the rest above. Parts (5, 10, 20, 40, 25) centered
+  on the middle of the 20 span `[−25, 75]`. The parts of a centered stack
+  must be nonnegative: each lies on the side of the midpoint its level is
+  on, so a negative one is an error naming `HasMidpoint`. The split tells
+  the fold that the column has the trait (`hasMidpoint`, beside
+  `hasOrder`). A stack given both the trait and a `baseline` is an error:
+  the trait already puts the 0.
+- Under `Baseline.middle()` and `Baseline.wiggle()` the stack's 0 is no data
+  value, so the stack's space has **no origin** (`"none"`): a position on it
+  is no amount, so it draws no axis: its scale gets a length entry in the
+  legend. Two things are apart
+  here. The space's data origin says whether a position is an amount from 0.
+  The node's own 0 is where a parent lines it up, and that is a placement
+  fact: the point its baseline names. The placement solve seats a stack's
+  baseline point at the layer's data 0 when the layer has one, and at the
+  layer's own 0 (pixel 0) when it has none (`solveRank2Axis`). So a spread
+  of middle stacks with `alignment: "baseline"` lines their middles up on
+  one line. `Baseline.wiggle()` moves its 0 with u: its slope
+  is the average slope of the parts' middles, weighted by their thickness,
+  `Σ wᵢ mᵢ′ / Σ wᵢ` (`wiggleZero`), integrated from the first u. That is
+  d3's `stackOffsetWiggle` in the limit of fine data. It is defined on the
+  functions, so more knots on the same curves do not move it. Over boxes
+  every slope is 0 and it is the start.
+- A stack moves each part by an **offset function**: the part's tail
+  measured from the stack's 0 at every u, in data units (`stackPlaces` in
+  `distribute.ts`, from the same chain as `chainFold`). Over boxes, and
+  over bands of one thickness under a baseline that does not move with u,
+  every offset is a constant. Part k's offset is the sum of the
+  thicknesses before it, moved by the baseline. Each band keeps its
+  thickness at every u; only its cross-section moves. Outside its own domain
+  a band's thickness is 0 (`add` in `fun.ts` reads 0 there), so series
+  sampled at different u stack. `wiggle` here reads the function-level `wiggleZero`, never the box
+  shortcut. Each part reaches over `[min_u(offset − descent),
+max_u(offset + ascent)]` about the stack's 0 (`StackPlace.reach`).
+- A stack whose parts are all nonnegative amounts (no part reaches below its
+  tail), on a 0 that is data 0, builds a **mirrored** space
+  (`CONTINUOUS_TYPE.mirrored`): both sides of 0 hold amounts measured away
+  from it, so an axis over it labels each tick with its distance from 0. The
+  fold reads this from the parts, not from the baseline (a middle or
+  wiggle stack, which has no origin, is never mirrored). With the 0 at the first part's tail every tick is already
+  a distance, so this changes nothing for a plain stack; a centered stack's
+  axis reads `40 20 0 20 40`. A stack with a negative part keeps signed
+  labels. A union stays mirrored only when every part is.
 - A spread lays its parts by the same chain fold as a stack (`chainFold`),
   with a different step: an edge chain lays each part's box after the
   previous one's end plus the spacing, and a fixed-pitch chain lays each
   part's anchor one pitch from the previous one's. A baseline-pitched part
-  keeps its signed sides about its baseline; any other part is a box. A
-  stack of parts with no data in common (bands, text) folds no data
-  interval, but it still claims its parts by the stack's step, since its
-  layout lays them head to tail.
+  keeps its signed sides about its baseline; any other part is a box.
 
 With every descent 0, all of this reduces to a single width.
 
@@ -378,7 +483,10 @@ the titles of the ordinals it overlays, in order. So `spaceTitle(space)` reads a
 **both** continuous and ordinal kinds (only `UNDEFINED` has none), which is what
 lets an axis name itself off its own resolved space — a continuous axis by its
 quantity names, an ordinal axis by its grouping field (see [the layout
-passes](/internals/layout/passes)).
+passes](/internals/layout/passes)). A quantity may have no name (a
+distribution family's variable, in its location column's unit but not that
+column): it titles nothing, and with no declared unit its unit is a fresh
+unknown that binds nothing else.
 
 An `ORDINAL` can also hold **cells** (`ORDINAL_TYPE.cells`, the cells in
 order of their starts, as `CONTINUOUS_TYPE.cells` holds them; a key is its
@@ -537,7 +645,13 @@ each inherent to what the origin states are:
   scope's σ, so it claims the chain of their claims plus spacing, on an
   ordinal or undefined type; a spread of pinned frames (facet panels) claims
   nothing, and each panel roots its own scope in its slice. A marimekko is a
-  stack, so its widths still add up to one axis.
+  stack, so its widths still add up to one axis. Since a stack adds data
+  amounts, every part must be continuous on the stack's direction: it does
+  not make sense to stack pixels. A part with no data space there (a pixel
+  box, a text, a spread) is an error at the fold (`requireAmount`) that
+  points at `spread({ spacing: 0 })`, since parts that only touch are a
+  spread with no spacing. A part with only a data width (origin `"none"`)
+  is an amount, and lies from its start as a pinned part does.
 - **A share is a claim** (#493 piece 3): on an axis where nothing in a scope
   is sized or placed by data (`GoFishNode.carriesData`), σ has no data unit,
   and it is the room a node with no size of its own takes
@@ -680,8 +794,11 @@ each inherent to what the origin states are:
   (`overlayOrigin`: pinned only when a child is pinned, none when a child has
   no origin, and none for `middle`). The bars of a bar chart are one free
   magnitude until the scope root places its baseline.
-- **Which axis renders** (`axisOver`): pinned renders an absolute axis, none
-  a delta axis, free none, until placed. The render root places a free
+- **Which guide renders** (`domainOver`, `axisOver`): pinned maps
+  `"positions"` and renders an absolute axis. None maps `"widths"`: it is a
+  length scale, so it renders no axis and its scale gets a length entry in
+  the legend ([Legends](/internals/frontend/legends#length-entries)). Free
+  renders none, until placed. The render root places a free
   space's baseline at its `originPx` (`placeBaseline`; `GoFishNode.
 placedSpace`), so a free root renders an absolute axis, niced about its 0;
   the axis's frame seats the free content's baseline at its data 0 (the
@@ -807,9 +924,12 @@ composes its targets' spaces into the layer's claim on that axis:
   With `glue: true` (stack semantics) the extents are laid end to end and
   pinned over the range of their running sums (`[0, Σ]` when no part has a
   descent), by the chain fold (`chainFold`) in data for the type, and by
-  the plan's solve for the claim.
-  A target with no origin (a difference or a non-continuous axis) leaves only
-  the ORDINAL of the keys, if any.
+  the plan's solve for the claim, which places each part by its data offset
+  (below).
+  A glued target that is not continuous is an error (`requireAmount`), and
+  so is a target of content with a size of its own in pixels (a layer
+  `w: 100` around data): it solves its own σ in that size, so it is a box of
+  pixels to the stack (`composePlanSpaces`).
 - `Constraint.align` contributes the alignment fold (`resolveAlignmentSpace`)
   on its axis — but only for a point-anchor value;
   `"span"`/`"size"` (#726, below) contribute nothing to the space fold, since
@@ -983,15 +1103,14 @@ family, even under `glue`, which then uses a zero box), and `distributePlacement
 `Spacing.pitch(distance, { at })` relates the _same_ anchor on both sides
 (`prev.at → cur.at`, spacing = anchor-to-anchor pitch,
 content-independent) — `at[i+1] = at[i] + distance`, with `at` one of
-`"start" | "middle" | "end" | "baseline"`, default `"baseline"`. A glued chain
-(`glue: true`, i.e. `stack`) relates `prev.head → cur.tail` instead
-(`distributePlacementAnchors`). A part's **tail** is where its baseline sits,
-or its start when it is not a baseline magnitude; its **head** is the point as
-far in from its end as the tail is from its start, which is the baseline moved
-by `ascent − descent`. A positive bar's tail is its start and its head its
-end, so with positive parts (or parts with no data baseline, such as text or
-a nested stack) this is exactly the `"edge"` chain; a negative bar's tail is
-its end and its head its start, so the next part starts where it ends.
+`"start" | "middle" | "end" | "baseline"`, default `"baseline"`. A glued
+`distribute` (`glue: true`, i.e. `stack`) relates no anchors: each part is
+placed by its data offset (below). A part's **tail** is where its baseline
+sits, or its start when it is not a baseline magnitude; its **head** is the
+point as far in from its end as the tail is from its start, which is the
+baseline moved by `ascent − descent`. A positive bar's tail is its start and
+its head its end; a negative bar's tail is its end and its head its start, so
+the next part starts where it ends.
 A middle pitch is the
 old `mode: "center"` (later `anchor: "middle"`); the other pitches reuse the
 same anchor vocabulary `align` already uses
@@ -1257,25 +1376,50 @@ baseline sits at the origin. Free nodes whose baselines differ (an `end` or
 to the sequence or normalized origin as before. A `distribute` chain along the
 axis places its members' baselines itself (its lowering marks those relations
 `chain`), so the solver (`solveRank2Axis`)
-does not list them as free. A stack puts each part's tail on the previous
-head, so its one baseline is its origin, the 0 its running sums are measured
-from. The stack's lowering names it: it includes the part that carries the
-origin with how far from that part's tail to its head the origin lies
-(`AnchorParticipantFact.origin`), and the solver lists that point whether or
-not the part is a baseline magnitude, and whether or not it is size-strong (a
-size-strong part's tail is its start). By default it is the first part's tail.
+does not list them as free. A stack has no chain: its 0 is the 0 its running
+sums are measured from, and every part states it. The stack's lowering
+includes each part with its data offset times σ before its tail
+(`AnchorParticipantFact.origin`, `{ tail }`), and the solver lists that point
+whether or not the part is a baseline magnitude, and whether or not it is
+size-strong (a size-strong part's tail is its start). Each part is then a
+component of its own, seated at the origin by its stated 0.
+A stack in a layer with no data 0 (a middle or wiggle stack, whose space has
+no origin) still has its own 0: the solver seats the stack's origin at the
+layer's pixel 0, where the free origin would be. Only a free node's baseline
+needs the layer's data 0. So a node's 0 is where its baseline says, and a
+node that says nothing has it at its data 0, else at its start.
+
+Every stack is placed one way (`stackPlaces`). A part whose offset is a
+constant states its tail that offset times σ from the stack's 0, and the
+solve places it there, as it places any box: its claim is its own claim
+moved by σ·offset, its pixel dressing (a stroke) included, and nothing is
+added between parts. A part whose offset changes along u states its tail at
+the stack's 0, and the layer hands it the offset as the `shear` of its
+`AxisScale` on the stack's axis (`composeLayerTypes` → `stackPlacesOf` in
+`layer.tsx`). The band adds it to both edges before it maps them
+(`band.tsx`), so its box, outline and cross-section are where it is drawn,
+and labels, `ref` and `selectAll` read them there. Only a node with a
+`shearAxis` (a band, on its value axis) draws a shear. Any other part with a
+changing offset is an error that names it: a rect or text has one size along
+the axis, and it can't be split along a changing boundary. Every part of a
+stack is an amount (`requireAmount`), so every part has a data offset.
+Overhang still enters a stack's claim in two places: each part's claim, its
+box widened by its stroke, at the stack's two ends and on the cross axis;
+and a sheared band's outline (`placeExtent`, `TODO(#1368)`).
 So a stack seats at the origin like a single bar, a negative first part hangs
 below it, and two stacks of one sign each (grouped by sign) meet on the 0
 tick. A stack over a `HasMidpoint` column carries its origin at the midpoint
 of the order (a fraction of the way through the part it falls in, or the
 tail of the first part past it), so every row of a Likert chart seats its
 midpoint on the 0 tick
-with no other code. A spread packs boxes from its first
+with no other code. A spread with no `baseline` packs boxes from its first
 member's start, which is not a baseline, so it lists none and keeps its
 sequence origin, even when its members' baselines happen to coincide. Its
-lowering marks its relations `chain: "spread"` (a stack's are `"stack"`), and
-the difference graph gives a component that holds one no baseline at all, so
-a free node aligned to one of its members does not seat it either. So a bar
+lowering marks its relations `chain`, and the difference graph gives a component that holds one no baseline at all, so
+a free node aligned to one of its members does not seat it either. A spread
+given a `baseline` states its 0 as a stack does: it carries an origin, the
+solve lists the part that carries it as `stated` (`FreeOriginInput`), and a
+component with a stated 0 is seated by it like a stack's. So a bar
 with value −35 on an axis niced to `[−40, 50]` grows from the 0 tick, not from
 the rounded −40. A free
 layer is itself seated by its parent at its own baseline, so its frame has
@@ -1613,9 +1757,9 @@ axis's claim is measured from data 0 and is the hull of what the content
 draws, so each side reaches the farther of the claim and the domain's niced
 end: pixels drawn past the data (a mark's size at its datum, a tick label
 past the last tick) take room only where the domain does not already reach
-past them. A delta axis centers its content in the niced width, so each
-side reaches at least `σ·nicedWidth/2` from the middle of its claim. Widening
-twice to one width changes nothing.
+past them. Widths (a space with no origin) widen to a keyed domain's width
+centered on the claim, so each side reaches at least `σ·width/2` from the
+middle of its claim. Widening twice to one width changes nothing.
 
 Leaf shapes never need to compute their own scale factors — they receive the
 per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
@@ -1768,7 +1912,8 @@ reads the same rounded domain (#659). `niceContinuous` (`underlyingSpace.ts`)
 is the one nicing function, and `niceScope` (`extent.ts`) widens the claim to
 match. It nices exactly the spaces that render an axis over their interval
 (`axisOver`), or will once placed: a pinned domain's two ends, a free one's two
-ends about its 0, and a delta axis's width from 0. A **coord scope never
+ends about its 0. A space with no origin draws no axis, so it is not niced:
+its widths fill the scope that maps them. A **coord scope never
 nices** (its domains map into a fixed coordinate range).
 
 A domain nices **to the ticks of the axis drawn over it** (`AxisTicks`): a tick
@@ -1929,9 +2074,14 @@ is an instance of the data-valued size above, with no layout-side special
 case. Its segments _fill_ the extent in proportion to their value:
 `stack({ by, dir, size: field("count").normalize() })`.
 
-`.normalize()` is a **data** transform, evaluated once, up front, by
-`applyChannels` (`marks/createOperator.ts`) via
-`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts`. For each of the
+`.normalize()` is a **data** transform, the built-in map `x / Σxs`,
+evaluated once, up front, by `applyChannels` (`marks/createOperator.ts`) via
+`splitWindowMaps`/`applyWindowMaps` in `fieldExpr.ts`. On an operator's
+per-entry `size` channel, the maps at the end of an expression, after its
+named fold or with no fold, run over the entries' values (the window)
+instead of a group's rows (`hasWindowMaps`); `normalize` is one such map,
+and a user's `map` is another. Each entry's value is the expression before
+them: `field("n").count().normalize()` is each entry's share of the counts. For each of the
 operator's own split entries it computes the entry's **share** of their sum,
 `v_e / Σv_e`, tagged with a share [unit](#measures-units-are-types)
 (`"<base> share by <by>"`, via `shareQuantity`) so a share axis can never
@@ -2383,7 +2533,7 @@ a unit has one trait of its own (`CanSum`):
   not a finite number in `[0, n]` is an error from `checkMidpointOnOrder`,
   which `Unit` calls at once and `columnTypeOf` calls on a wire
   record; Python's `Unit` raises the same messages, with code spelled in Python. A stack over the column takes the
-  midpoint as its origin (`stackOrigin`, then the stack fold and the
+  midpoint as its baseline (`stackBaseline`, then the stack fold and the
   free-origin seat above): inside a present level, that fraction of its
   part; on a boundary, or inside a level the row lacks, the tail of the
   first part past it (or the last part's head). A stack laid out against the
@@ -2392,7 +2542,7 @@ a unit has one trait of its own (`CanSum`):
   the parts present: a row with no responses for some level keeps the same
   midpoint. So does the side of it each level lies on: the split applies its
   `field(...).sort()` and `.reverse()` to every level of the order
-  (`orderEntries`), and `stackOrigin` reads the stack's direction off that,
+  (`orderEntries`), and `stackBaseline` reads the stack's direction off that,
   so a row with one part puts it where a full row does. A split order that
   is neither the order nor its reverse is an error.
 - A time (`Unit.time({ zone })`, #1057) is a `HasUnit` with a `zone`: the
@@ -2630,6 +2780,131 @@ error rather than silently doing the wrong thing:
   entry-flagged `size`) and fold a group's rows to a single value —
   `evalFieldValues` in `fieldExpr.ts`. A domain op or a second aggregate
   reaching a value slot throws (the fold happens once).
+- **Maps and reduces** (`.map(fn)`, `.reduce(fn)`, stack profiles S10) are
+  the general form of the value slot, and the named methods are built-in
+  callbacks of them on one path, `evalGroup` in `fieldExpr.ts`. Its
+  pipeline is read in three parts, in order: maps (each a function of all
+  the values: `map`'s `fn(x, i, xs)` on each, or `normalize`'s shares), at
+  most one fold (a user's `reduce`, or `sum`, `mean`, `median`, `count`,
+  `distinct` from the `NAMED_FOLDS` table), and then the members a lifted
+  result is read through (`{ op: "member", name, args }`). A member after
+  a named fold, or anything but a member after a lifted result, is the
+  chaining error: nothing chains after a value. A map after a named fold
+  is the chaining error too, except on an operator's `size` channel, where
+  it runs over the entries' values (the window).
+
+### Lifting a reduce's result
+
+A reduce's result is lifted by its shape, which is known only when it runs
+(`liftLeaf`). A number, or no value, is a value; a `Fun` is a function of
+`t`, which only the shape form of `ribbon` and `line` reads (`groupFun` in
+`groupExpr.ts` asks per group); a record is read through the members after
+it, a method member called with its arguments; an array is an error. A
+function value a spec writes (`fun(at, { domain })`) is an expression that
+holds a `Fun` (`heldFun`) and is not one, so `liftLeaf` reads the `Fun` it
+holds wherever one appears in the result. The
+expression holds the members as ops, so the spec can name a member before
+the reduce has run: `field(x).reduce(fn)` is a `Proxy` over the expression
+(`lifted`), whose every property but its own wire and the hooks the runtime
+probes (`OWN_KEYS`) is a member method. The types mirror this: `Lift<V>` in
+`groupExpr.ts` maps a number to `ValueExpr`, a `Fun<number>` to
+`FunctionExpr` (as it maps a `FunValue`), a record to one method per member, and an array to a
+`LiftError`, which no channel takes.
+
+Each step runs once per group. `evalGroup` keeps what a map or a fold
+computed by its op object and the rows array it ran on (`stepCache`, two
+`WeakMap`s), so the channels of one mark, the extent pass and the drawing
+pass all read the one result. A named fold goes through the cache too, so
+there is one path. A Python map or reduce has only a batch form: before
+inference, `resolveChannelAccessors` (`channels.ts`) calls it once over
+every group the channel will read (`resolveGroupSteps`), one bridge call
+whose input is each group's values and whose reply is one result per group,
+and fills the cache. Reading a Python step on a group it was not resolved
+over is an error, not a silent call.
+
+### Distributions
+
+A distribution is the record `Dist` (`dist.ts`): `density`, `cdf` and
+`domain`, each a `Fun<number>` over one interval, `quantile(p)`, `median`,
+`mean` and `mass`. It is a plain record, so a reduce that returns one is
+lifted by the rule above with no case of its own: `d.density()` is a member
+that is a `Fun`, `d.quantile(0.9)` a method member, `d.median()` a number.
+Its `domain` member is the identity over the interval `density` is drawn
+over, which is what the generic `domain()` of a `Fun` gives too, so
+`d.domain()` and `d.density().domain()` are the same function. The record
+has the member; a bare `Fun` has the generic rule in `liftLeaf`. Neither
+knows about the other.
+
+Every `Dist` is built in one place, `distOf` in `dist.ts`, from a
+distribution's data form (`DistData`), a plain tagged record that crosses
+to and from Python: `{ type: "dist", family, params }`, a family with
+numbers for its parameters, or `{ type: "dist", family: "kde", params: {
+values, bandwidth? } }`, a kernel density. A kernel density is one
+self-consistent distribution (`kernelDist`): a normal kernel on each value
+with Silverman's bandwidth when none is given (`silvermanBandwidth` in
+`overlap.ts`), drawn from 3 bandwidths below the least value to 3 above the
+greatest (`KDE_CUT`, seaborn's `cut=3`), with area the number of values
+over the whole line; its cdf is the mean of the kernels' cdfs, the
+density's integral over the mass, its quantile inverts that cdf (Newton's
+method in a bracket), and its mean is the values' mean, the density's mean.
+`distOf` caches each data form's `Dist` by identity.
+
+A column holds a distribution after `derive(kde("x"))`, which writes the
+data form into it. `evalGroup` asks `heldDist` (`fieldExpr.ts`) whether the
+group's column holds one: the first row that is not missing decides, and a
+row with a different one (by identity, then by its JSON) is an error that
+says to split the rows so each group holds one. A column that holds one is
+lifted like a reduce's result: `liftLeaf` reads the `Dist` through the
+expression's member ops (`distMembers`; `median()` and `mean()` become
+members, every other fold is an error naming the members). A column of
+numbers has no distribution: a member op with no fold before it is an error
+in `stepsOf` that names `derive(kde(...))`. A family,
+`Dist.normal({ mean, sd })`, is its own expression (`DistExpr` in
+`distExpr.ts`, wire `{ type: "dist", family, params, ops }`): `evalGroup`
+reads its parameters over the group's rows (`exprDist`), builds the
+family's data form, and lifts its `Dist` through its member ops.
+
+A partition by a key over a variable gives each group its cell, and the
+cell's distribution is the whole one restricted to it. The group's rows
+array carries a tag (`groupCell.ts`, a symbol on the array, as the column
+types are): the variable, a column name or a family's identity, the cell's
+interval, and the whole rows. `splitEntries` writes it for a field binned on
+the line and for a family binned with `d.bin(p)` (`distEntries`, whose cells
+are `distributionCells` over the density's interval, each holding every
+row). A split inside a cell (a spread by species in a binned partition)
+keeps the cell (`keepCell`): each of its groups gets the cell's interval,
+and its whole is the group the same split gives for its rows in the cell's
+whole, so a species' density in a cell is that species' density restricted
+to the cell. A group that is a cell of its own keeps its own; a group holds
+one cell, so a split binned on a second variable replaces the first's.
+Three leaves read it, and only when their variable is the cell's: a
+family's `exprDist` restricts the whole group's `Dist` (`restrictDist`; a
+family is drawn from its 0.001 to its 0.999 quantile, so a cell at an end
+of that interval also holds the tail past it), a column that holds a
+distribution restricts it the same way (`groupDist`; `splitEntries` cuts a
+field binned over such a column at the distribution's own cells,
+`distCells`, as it does a family's), and
+`bandOfRows` builds the band through the whole rows and restricts both
+edges to the cell, so the bands in neighboring cells meet. A distribution of
+another variable is read whole. A fold over the cell's rows that is not a distribution, such as
+`median()` of the column, needs no tag: the cell's rows are the values in
+the cell.
+
+A fold that lifts says the quantity of each leaf (`FoldStep.lift`). A
+reduce reads its `unit` option. A `Dist` reads its variable
+(`distQuantities`): the domain, the quantiles, the median and the mean are
+amounts of the variable (the column; for a family, a quantity with no name
+in its location column's unit, since the variable is not that column), so
+their axes join; the density is the mass per the variable's unit, or per
+its difference unit (a density over instants is per duration), with
+`CanSum`, so densities stack; the cdf is a `ratio`, which does not add up.
+
+The `unit` option mirrors the result's shape: one unit for every number
+below it, or a record with a unit per member (`quantityAt`). A number with
+no declared unit gets a quantity marked `undeclared`, whose unit has no
+`CanSum`, so `checkSummable` refuses to sum or stack it and says to declare
+the unit. A named fold keeps the column's quantity (none of its own), as
+before; `count` and `distinct` report counts.
 
 `.between(lo, hi, { closed })` is deliberately **not** an op. It returns a row
 predicate `(row) => boolean` for the `filter` flow operator, and a predicate
@@ -3021,7 +3296,7 @@ with no rows is 0.
 **Unit implications.** `count`/`distinct` report values that are counts,
 not the source field's own units — `evalFieldValues` reports the quantity
 `"count"`, in the declared unit `"count"`, for them. Every other pipeline
-reports no quantity of its own, leaving
+without a map reports no quantity of its own, leaving
 [`resolveColumn`](#measures-units-are-types) to the channel as before, so
 `.sum()` and `.mean()` keep the column's unit. `.normalize()`'s share values
 get their own declared unit, `shareQuantity(base, byName)` — see

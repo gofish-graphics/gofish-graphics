@@ -311,8 +311,7 @@ A column of date strings is a time in `Unit.time()`:
 
 ```ts
 chart(prices, { schema: { date: Unit.time() }, axes: true })
-  .flow(scatter({ by: "date", x: "date", y: "price" }))
-  .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
+  .mark(line({ x: "date", y: "price", stroke: "steelblue", strokeWidth: 2 }))
   .render(container, { w: 560, h: 200 });
 ```
 

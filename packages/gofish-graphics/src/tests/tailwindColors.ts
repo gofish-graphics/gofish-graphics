@@ -3,7 +3,7 @@ import {
   tailwindColorsMuted,
   tailwindColorsVivid,
 } from "../color";
-import { rect, spreadX, spreadY, stackX, stackY } from "../lib";
+import { rect, spreadX, spreadY } from "../lib";
 
 export const tailwindColorGrid = () => {
   const colorNames = Object.keys(tailwindColors);
@@ -54,10 +54,10 @@ export const tailwindColorGridCompact = () => {
       });
     });
 
-    return stackX(shadeSquares);
+    return spreadX({ spacing: 0 }, shadeSquares);
   });
 
-  return stackY(colorRows);
+  return spreadY({ spacing: 0 }, colorRows);
   // .translate(20, 20);
 };
 
@@ -105,10 +105,10 @@ const createColorGridCompact = (
       });
     });
 
-    return stackX(shadeSquares);
+    return spreadX({ spacing: 0 }, shadeSquares);
   });
 
-  return stackY(colorRows);
+  return spreadY({ spacing: 0 }, colorRows);
 };
 
 // Muted variant grids

@@ -114,7 +114,9 @@ a nested component (the component's own name is visible, its insides are not).
 Without an enclosing component, the whole diagram is the outermost level.
 The chart layer registry (`collectLayerRegistrations` in `chartBuilder.ts`,
 through `visibleNodes`) and the `.relate()` environment (`namesIn`) walk the
-same boundary, so
+same boundary. A named operator's groups enter both like named marks: each
+group node gets the name, and the registry files a node under every name it
+was given, a mark's and an operator's. So
 the component boundary means the same thing for `ref`, `.relate()`,
 `selectAll`, and `zAbove` / `zBelow`.
 

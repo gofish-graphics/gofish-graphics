@@ -57,6 +57,11 @@ function checkStyle(
     if (s[k] !== undefined && !isStr(s[k]))
       errors.push({ path: `${path}.${k}`, message: `${k} must be a string` });
   }
+  if (s.pointerEvents !== undefined && s.pointerEvents !== "none")
+    errors.push({
+      path: `${path}.pointerEvents`,
+      message: 'pointerEvents must be "none"',
+    });
 }
 
 function checkBBox(
@@ -99,6 +104,8 @@ function checkBase(
     });
   if (item.id !== undefined && !isStr(item.id))
     errors.push({ path: `${path}.id`, message: "id must be a string" });
+  if (item.title !== undefined && !isStr(item.title))
+    errors.push({ path: `${path}.title`, message: "title must be a string" });
 }
 
 /** Required fields per kind: `num` checked with `isNum`, `str` with `isStr`. */

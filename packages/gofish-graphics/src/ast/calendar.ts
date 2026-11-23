@@ -195,8 +195,10 @@ const LABEL_LOCALE = "en-US";
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
 /** The `Intl.DateTimeFormat` in en-US ({@link LABEL_LOCALE}) with `options`
- *  in `zone`, made once per `name` (which names the options) and zone. */
-function formatter(
+ *  in `zone`, made once per `name` (which names the options) and zone. The
+ *  one place a time label's locale is chosen: axis labels and tooltips read
+ *  it. */
+export function formatter(
   name: string,
   options: Intl.DateTimeFormatOptions,
   zone: string

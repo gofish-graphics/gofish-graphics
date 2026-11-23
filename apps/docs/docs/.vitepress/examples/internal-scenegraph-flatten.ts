@@ -20,7 +20,7 @@ const LEAF = "#51931b";
 
 // One indented row of the "before" tree: a transparent spacer sets the depth.
 const treeRow = (depth, label, fill) =>
-  gf.stackX({ spacing: 0, alignment: "middle" }, [
+  gf.spreadX({ spacing: 0, alignment: "middle" }, [
     gf.rect({ w: depth * 30 + 0.01, h: 30, fill: "transparent" }),
     box(label, fill, 92),
   ]);
@@ -35,18 +35,18 @@ const treeRows = [
 ];
 
 // y axis points up — reverse each vertical stack for top-to-bottom order.
-const before = gf.stackY(
+const before = gf.spreadY(
   { spacing: 11, alignment: "start" },
   treeRows.slice().reverse()
 );
 
-const after = gf.stackX({ spacing: 14, alignment: "middle" }, [
+const after = gf.spreadX({ spacing: 14, alignment: "middle" }, [
   box("rect", LEAF, 96),
   box("rect", LEAF, 96),
   box("ellipse", LEAF, 96),
 ]);
 
-gf.stackY(
+gf.spreadY(
   { spacing: 14, alignment: "start" },
   [
     lbl("Before — nested operator tree", "#333", 13),
@@ -57,4 +57,4 @@ gf.stackY(
   ]
     .slice()
     .reverse()
-).render(root, { w: 320, h: 282 });
+).render(root);

@@ -17,14 +17,13 @@ gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 });
 
 `r` is the radius in pixels. `stroke` is the color of the outline, and `strokeWidth` is how thick it is.
 
-To render it, you can call the `render` method with a root HTML container and the width and height you want for the GoFish graphic:
+To render it, you can call the `render` method with a root HTML container:
 
 ::: gofish
 
 ```js
 gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }).render(
-  root,
-  { w: 30, h: 30 }
+  root
 );
 ```
 
@@ -33,9 +32,9 @@ gf.circle({ r: 15, fill: "#F5E3C8", stroke: "#EFC9A2", strokeWidth: 3 }).render(
 `root` here is the DOM element the picture is drawn into. In your own code you
 would write something like `document.getElementById("chart")`.
 
-The second argument to `.render()` is the size of the drawing surface in
-pixels. If you leave `w` or `h` out, GoFish works out a size that fits the
-content.
+`.render()` also takes a second argument, the size of the drawing surface in
+pixels, such as `{ w: 400, h: 300 }`. We leave it out here, so GoFish works out
+a size that fits the content.
 
 This circle is Mercury. Next we'll add the other three planets.
 
@@ -55,7 +54,7 @@ gf.layer([
   gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
   gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
   gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
-]).render(root, { w: 80, h: 80 });
+]).render(root);
 ```
 
 :::
@@ -74,7 +73,7 @@ gf.spread({ dir: "x", spacing: 50 }, [
   gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
   gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
   gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
-]).render(root, { w: 370, h: 76 });
+]).render(root);
 ```
 
 :::
@@ -93,7 +92,7 @@ gf.spread({ dir: "x", spacing: 50, alignment: "middle" }, [
   gf.circle({ r: 36, fill: "#D2913C", stroke: "#A96F26", strokeWidth: 3 }),
   gf.circle({ r: 38, fill: "#3E8CCC", stroke: "#2F6FA6", strokeWidth: 3 }),
   gf.circle({ r: 21, fill: "#F4BC80", stroke: "#E0954C", strokeWidth: 3 }),
-]).render(root, { w: 370, h: 76 });
+]).render(root);
 ```
 
 :::
@@ -119,7 +118,7 @@ gf.spread(
   data.map((d) =>
     gf.circle({ r: d.r, fill: d.fill, stroke: d.stroke, strokeWidth: 3 })
   )
-).render(root, { w: 370, h: 76 });
+).render(root);
 ```
 
 :::
@@ -157,7 +156,7 @@ gf.enclose(
       )
     ),
   ]
-).render(root, { w: 410, h: 116 });
+).render(root);
 ```
 
 :::

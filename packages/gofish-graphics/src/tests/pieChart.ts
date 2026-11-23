@@ -6,10 +6,10 @@ import { d as $d } from "../components/data"; */
 import { value } from "../ast/data";
 import { gofish } from "../ast/gofish";
 import { rect } from "../ast/shapes/rect";
-import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
+import { spread } from "../ast/graphicalOperators/spread";
 const data = [
   { category: 1, value: 4 },
   { category: 2, value: 6 },
@@ -23,7 +23,7 @@ export const testPieChart = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height, transform: { x: 100, y: 150 } },
     coord({ transform: polar_DEPRECATED() }, [
-      stack(
+      spread(
         { x: 20, dir: 1, spacing: 0, alignment: "start" },
         data.map((d, i) =>
           rect({

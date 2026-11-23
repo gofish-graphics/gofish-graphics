@@ -19,7 +19,7 @@ With none of them, the circle fills the space it is given. Passing more than one
 ```js
 gf.chart([{ size: 40 }])
   .mark(gf.circle({ r: 40, fill: "coral" }))
-  .render(root, { w: 150, h: 150 });
+  .render(root);
 ```
 
 :::

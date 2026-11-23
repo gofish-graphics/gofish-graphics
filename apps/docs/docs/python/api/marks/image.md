@@ -12,7 +12,7 @@ from gofish import chart, image
 
 chart([{"label": "badge"}]).mark(
     image(href="https://example.com/badge.svg", w=96, h=64)
-).render(w=150, h=120)
+).render()
 ```
 
 ## Signature

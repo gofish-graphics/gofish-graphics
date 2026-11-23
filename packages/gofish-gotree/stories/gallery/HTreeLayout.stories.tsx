@@ -80,7 +80,7 @@ export const HTreeLayout: StoryObj = {
         sibling: alternate([H, V]),
       },
       balancedTree
-    ).render(container, { w: 720, h: 560 });
+    ).render(container);
     return container;
   },
 };

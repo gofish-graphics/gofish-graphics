@@ -114,7 +114,7 @@ Use `stack` when building part-to-whole visualizations where values should add u
 ```ts
 chart(data)
   .flow(spread({ by: "month", dir: "x" }), stack({ by: "category", dir: "y" }))
-  .mark(rect({ fill: "category" }));
+  .mark(rect({ h: "value", fill: "category" }));
 ```
 
 ## scatter

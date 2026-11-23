@@ -148,7 +148,7 @@ export const PairedPalettes: StoryObj<Args> = {
           });
         }),
         spread({ by: "pair",  dir: "x" }),
-        stack({ by: "type",  dir: "x" })
+        spread({ by: "type",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "value", fill: "color" }))
       .render(container);
@@ -191,7 +191,7 @@ export const NestedDerive: StoryObj<Args> = {
           })
         ),
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
       .render(container);
@@ -216,7 +216,7 @@ export const SelectiveDerive: StoryObj<Args> = {
           }))
         ),
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
       .render(container);
@@ -242,7 +242,7 @@ export const SelectiveGroup: StoryObj<Args> = {
     chart(seafood, { color: Color.palette({ Salmon: "#e15759" }), w: args.w, h: args.h })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 24 }),
-        stack({ by: "species",  dir: "x" })
+        spread({ by: "species",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "count", fill: "species" }))
       .render(container);

@@ -357,6 +357,14 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
     type: t.union(t.boolean, t.ref("BridgeLambdaSentinel")),
     doc: "From `.hidden(value)`: the mark is laid out and feeds scales, axes, legends and refs, and paints nothing. A boolean, or a Python function (a bridge handle) the mark calls once per instance with the input it is bound to. An ancestor's `hidden` wins over a descendant's `false`.",
   },
+  // TODO(#1395): the tooltip reference pages (docs/{js,python}/api/core/
+  // tooltip.md) hand-write their parameter table, because `gofish-ref`
+  // cannot render a base field of a mark. The right fix is a `gofish-ref`
+  // form for one base field, so the table comes from this `doc`.
+  tooltip: {
+    type: t.union(t.literal(true), t.array(t.string)),
+    doc: "From `.tooltip(fields?)`: a box that describes the mark under the pointer, beside it. `true` shows every field with one value on the mark, a size or position channel's field with the value it draws (a stacked segment's summed count), except a `line`'s or `ribbon`'s, which draw each row's value; a list shows exactly those fields, in order. On a `line` drawn through rows, the box shows the fields of the row nearest the pointer, beside its point, and a list names the rows' fields: the box shows them for that row, and the line's `<title>` only those with one value on the whole line. Numbers show digit grouping from five digits on (2018, 11,902) and at most two fraction digits, and a number below 1 shows three significant digits. A static drawing writes the same rows as the mark's SVG `<title>`.",
+  },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -399,6 +407,10 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
  *  or it throws) or a `field(...)` aggregate (`.sum()`/`.mean()`/etc.) folding
  *  the group's rows to one value, e.g. `.label(field("count").sum())`. */
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
+  name: {
+    type: t.string,
+    doc: 'Layer name, from `.name("...")` on the operator: each group the operator makes is filed under it, so `selectAll(name)` yields one ref per group, whose `datum` is the group\'s rows.',
+  },
   label: { type: t.ref("LabelIR") },
   translate: { type: t.ref("TranslateIR") },
   debug: {
@@ -409,7 +421,7 @@ export const OPERATOR_BASE_FIELDS: FieldGroup = group({
 
 /** The base fields the Python generator exposes as kwargs on every operator
  *  core and dual-form combinator core (the rest of OPERATOR_BASE_FIELDS ride
- *  Operator methods: `.label()`, `.translate()`). */
+ *  Operator methods: `.name()`, `.label()`, `.translate()`). */
 export const PY_OPERATOR_BASE_KWARGS: FieldGroup = group({
   debug: OPERATOR_BASE_FIELDS.debug,
 });
@@ -547,11 +559,12 @@ const axisOptions: FieldSpec = {
 export interface StrategyKind {
   doc: string;
   params: FieldGroup;
-  /** The param the factory takes as its argument, not in an options
-   *  object: `Binning.step(0.5)`, not `Binning.step({ size: 0.5 })`. In Python it
-   *  is a positional-only parameter. The wire form is the same either way
+  /** The params the factory takes as its arguments, in order, not in an
+   *  options object: `Binning.step(0.5)`, not `Binning.step({ size: 0.5 })`, and
+   *  `Baseline.at("Neutral", 0.5)`. In Python they are positional-only
+   *  parameters. The wire form is the same either way
    *  (`{ kind: "step", size: 0.5 }`). */
-  positional?: string;
+  positional?: readonly string[];
 }
 
 /** A factory that makes a kind with some of its params already set
@@ -855,7 +868,7 @@ export const STRATEGIES = {
     kinds: {
       step: {
         doc: "Cells of one width, aligned to multiples of it: a value is in the cell that starts at the largest multiple of the width at or below it. Every value has a cell, whatever the domain.",
-        positional: "size",
+        positional: ["size"],
         params: {
           size: {
             type: t.num({ exclusiveMin: 0, finite: true }),
@@ -866,7 +879,7 @@ export const STRATEGIES = {
       },
       thresholds: {
         doc: "Cells fitted to the domain of the field in the chart's data, which they cover with both ends included: a value on the last edge falls in the last cell, as in numpy's `histogram` and d3's `bin`.",
-        positional: "thresholds",
+        positional: ["thresholds"],
         params: {
           thresholds: {
             type: t.union(
@@ -880,7 +893,7 @@ export const STRATEGIES = {
       },
       quantiles: {
         doc: "Cells whose inner edges are quantiles of the field's values in the chart's data (type 7, the default of numpy and d3), with the domain's ends as the outer edges, as in polars' and pandas' `qcut`. Two edges at one value, as many equal values can give, are an error: ask for fewer cells.",
-        positional: "quantiles",
+        positional: ["quantiles"],
         params: {
           quantiles: {
             type: t.union(
@@ -1107,12 +1120,52 @@ export const STRATEGIES = {
       },
     },
   },
+  Baseline: {
+    doc: "Where a stack or a spread puts its own 0, the point its parent lines up with other baselines: the value of the `baseline` option of `stack` and `spread`. On a spread the start is its first child's start, the end its last child's end, and the gaps between children are part of the way; a spread's baseline only places it. For a stack, the parts are laid end to end from the start of the stack (the first part's tail) to its end (the last part's head), and the baseline is a place on that chain. With `start`, `end` and `at`, the stack's 0 is data 0, and a position on its axis is an amount from 0. With `middle` and `wiggle` it is not: a position on the stack's axis is no amount, and its axis shows only differences. The 0 is still the stack's baseline, which its parent lines up.",
+    kinds: {
+      start: {
+        doc: "The start of the stack, where its first part's tail is. The default.",
+        params: {},
+      },
+      end: {
+        doc: "The end of the stack, where its last part's head is, so the parts lie before 0: bars that grow the other way.",
+        params: {},
+      },
+      middle: {
+        doc: "Halfway from the start of the stack to its end, so the stack is centered on its baseline (d3's `stackOffsetSilhouette`).",
+        params: {},
+      },
+      wiggle: {
+        doc: "A baseline that moves along the cross axis to keep the bands as flat as it can: at each place, the slope of the baseline cancels the average slope of the middles of the parts, weighted by their thickness (d3's `stackOffsetWiggle`, Byron and Wattenberg 2008). A streamgraph. Over parts that are boxes it is `start`. Not on `spread`.",
+        params: {},
+      },
+      at: {
+        doc: "A point on one part. A part the data lacks is placed by the order of the `by` column (its declared levels) and moves nothing: the baseline falls on the boundary where the part would be. `Trait.diverging()` on the `by` column's unit is this baseline at the midpoint of the order.",
+        positional: ["part", "point"],
+        params: {
+          part: {
+            type: t.union(t.string, t.number),
+            required: true,
+            doc: "The part: a value of the `by` column in a flow, or a child index in the combinator form.",
+          },
+          point: {
+            type: t.union(
+              t.num({ min: 0, max: 1 }),
+              t.enum("start", "middle", "end", "baseline")
+            ),
+            required: true,
+            doc: 'Where on the part: a fraction of the way from its tail to its head (0 is its tail, 1 its head), or one of its anchors, "start", "middle", "end" or "baseline" (its own 0: a bar\'s tail, or the baseline of a nested spread or stack).',
+          },
+        },
+      },
+    },
+  },
   Spacing: {
     doc: "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`.",
     kinds: {
       box: {
         doc: "A gap between the facing edges of each child's box: the end of one child to the start of the next. The distance between the children depends on their sizes.",
-        positional: "gap",
+        positional: ["gap"],
         params: {
           gap: {
             type: t.union(t.num({ finite: true }), t.ref("Length")),
@@ -1125,7 +1178,7 @@ export const STRATEGIES = {
       },
       pitch: {
         doc: "A fixed distance between the same point on each child: from that point on one child to that point on the next. The distance does not depend on the children's sizes.",
-        positional: "distance",
+        positional: ["distance"],
         params: {
           distance: {
             type: t.union(t.num({ finite: true }), t.ref("Length")),
@@ -1144,8 +1197,8 @@ export const STRATEGIES = {
 } satisfies Record<string, StrategyFamily>;
 
 /** The name of a strategy family: `"Effect"`, `"Tiling"`, `"Overlap"`,
- *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"`, `"Placement"` or
- *  `"Spacing"`. */
+ *  `"Curve"`, `"Binning"`, `"Calendar"`, `"Shape"`, `"Placement"`,
+ *  `"Baseline"` or `"Spacing"`. */
 export type StrategyFamilyName = keyof typeof STRATEGIES;
 
 /** The `Binning` kinds by the key they bin: one field, `field(x).bin(b)`, whose
@@ -1215,9 +1268,8 @@ export const CHART_OPTIONS: FieldGroup = group({
     doc: "Draw this chart's axes: a boolean for both axes, or per-axis options {x?, y?}. It applies at this chart: a nested chart reads its own, and draws only the axes of the domains it owns. A chart that turns an axis off hides it; no chart inside it draws that axis instead.",
   },
   legend: {
-    type: t.boolean,
-    default: true,
-    doc: "Draw the color legend. Turned off, the marks keep their colors and only the legend is dropped.",
+    type: t.ref("LegendOptions"),
+    doc: "Draw this chart's legend: a boolean for every entry, or per-entry options {color?, x?, y?}. A legend holds the guides of the scales that have no place in the plot: the color scale, and a length scale (the widths of a space with no origin, such as a streamgraph's thickness), which gets a bracket of a round amount. Scales that have positions get axes instead. Omitted, the color entry is drawn, and a length entry is drawn along a dimension whose axes the chart draws (`axes`): it stands in for that dimension's axis. Turned off, the marks keep their colors and sizes and only the entry is dropped.",
   },
   padding: {
     type: t.number,
@@ -1250,6 +1302,38 @@ export const OPTION_TYPES: Readonly<Record<string, FieldSpec>> = {
       t.object({
         x: { type: t.ref("AxisOptions"), doc: "Options for the x axis." },
         y: { type: t.ref("AxisOptions"), doc: "Options for the y axis." },
+      })
+    ),
+  },
+  LegendOptions: {
+    doc: "Which legend entries to draw: a boolean for every entry; an object sets each on its own, and an entry left out keeps its default (the color entry is drawn, and a length entry is drawn along a dimension whose axes are drawn).",
+    type: t.union(
+      t.boolean,
+      t.object({
+        color: {
+          type: t.boolean,
+          doc: "The color scale's entry: its swatches, or its colorbar for a gradient.",
+        },
+        x: {
+          type: t.ref("LengthEntryOptions"),
+          doc: "The length entry of the scales along x that have no origin.",
+        },
+        y: {
+          type: t.ref("LengthEntryOptions"),
+          doc: "The length entry of the scales along y that have no origin.",
+        },
+      })
+    ),
+  },
+  LengthEntryOptions: {
+    doc: "One length entry's options: a boolean draws it or not; an object sets its title.",
+    type: t.union(
+      t.boolean,
+      t.object({
+        title: {
+          type: t.union(t.string, t.literal(false)),
+          doc: "The name after the amount, as in 2000 unemployed (thousands). A string sets it; false drops it. Omitted, the measure's name, as an axis title is.",
+        },
       })
     ),
   },
@@ -1351,6 +1435,7 @@ export const AUTHORED_REFS: Readonly<
 > = {
   FieldAccessor: { pyClass: "FieldAccessor", tag: "field" },
   StructAccessor: { pyClass: "StructAccessor", tag: "struct" },
+  DistAccessor: { pyClass: "DistAccessor", tag: "dist" },
   ChunkKey: { pyClass: "ChunkKey", tag: "chunk" },
   DatumValue: { pyClass: "DatumValue", tag: "datum" },
   LabelIR: {},
@@ -1702,6 +1787,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: false,
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
+      baseline: {
+        type: t.ref("Baseline"),
+        doc: "Where the spread puts its own 0, the point its parent lines up, made by a call in the Baseline family: Baseline.start() (its first child's start), Baseline.end() (its last child's end), Baseline.middle() (halfway, gaps included) or Baseline.at(part, point) (a point on one child). Omitted, its 0 is its start. Baseline.wiggle() is for stack only, and an error here. It only places the spread, which draws no data axis along `dir`.",
+      },
       axes: { type: t.ref("AxesOptions") },
       ...operatorBoxFields,
       ...spreadSizeField,
@@ -1709,7 +1798,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   stack: operator("stack", {
-    doc: "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
+    doc: "Add the children's data amounts along `dir`: each part starts where the one before it ends, in one data space. Every part needs a data size along `dir`; parts sized in pixels or by their content are laid out with `spread({ spacing: 0 })` instead.",
     fields: {
       by: splitBy(
         "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin), or chunk(size) to group consecutive rows. Without `by`, each row is its own group."
@@ -1717,19 +1806,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       dir: {
         type: t.string,
         doc: "Axis to stack along: x, y, or an axis name the enclosing coordinate space declares (polar theta/r, geo lon/lat).",
-      },
-      // Real producers pass spread's options through (the JS `stack` is a
-      // literal `Spread({...props, glue: true})` forward, and stories emit
-      // `stack(spacing=2)`), so the wire accepts them and the validator
-      // type-checks them when present — restoring the shared
-      // spread/stack switch-case behavior the descriptor split dropped.
-      spacing: {
-        type: t.number,
-        doc: "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.",
-      },
-      glue: {
-        type: t.boolean,
-        doc: "Spread-parity passthrough; stack always glues regardless.",
       },
       alignment: {
         type: t.string,
@@ -1740,6 +1816,11 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.boolean,
         default: false,
         doc: "Reverse the children's order along dir.",
+      },
+      baseline: {
+        type: t.ref("Baseline"),
+        default: { kind: "start" },
+        doc: "Where the stack puts its own 0, the point its parent lines up: Baseline.start() (the first part's tail), Baseline.end() (the last part's head), Baseline.middle() (halfway between), Baseline.wiggle() (a streamgraph's baseline) or Baseline.at(part, point) (a point on one part). With Trait.diverging() on the `by` column's unit the default is that column's midpoint, and an explicit baseline is an error.",
       },
       axes: { type: t.ref("AxesOptions") },
       ...operatorBoxFields,
@@ -1921,9 +2002,13 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     doc: "Divide the space into the cells of a binned key, and give each group its cell. Each cell sits at its true place on one continuous scale, so a cell's width follows its width in data, and an empty cell keeps its place. A mark with no size of its own fills its cell, and a mark with a size of its own is centered in it.",
     fields: {
       by: {
-        type: t.union(t.ref("FieldAccessor"), t.ref("StructAccessor")),
+        type: t.union(
+          t.ref("FieldAccessor"),
+          t.ref("StructAccessor"),
+          t.ref("DistAccessor")
+        ),
         required: true,
-        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Binning.step(size), Binning.thresholds(countOrEdges), Binning.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Binning.hex({ radius })) or .bin(Binning.voronoi({ seeds })), whose cells are polygons over both axes. A plain field, or a struct with no bin, has no region and is an error.",
+        doc: "A key that has a region: a binned field whose cells lie on the line, whose cells divide the axis `dir`: field(x).bin(p) with p Binning.step(size), Binning.thresholds(countOrEdges), Binning.quantiles(countOrProbabilities), or a Calendar level that is a part of nothing (Calendar.year, Calendar.week); a product that starts with one, field(x).bin([Calendar.year, Calendar.month]); or a chain that starts with one, field(x).bin(Calendar.year).bin(Calendar.month). A part of a cycle (field(x).bin(Calendar.month), the month of the year) has no one region on the time line and is an error. Or one binned field per axis, { x: field(a).bin(p), y: field(b).bin(q) }, whose cells divide both axes into rectangles; this is the partition on x, then the partition on y, and it is written as those two partitions. Or two fields binned together, struct({ x: a, y: b }).bin(Binning.hex({ radius })) or .bin(Binning.voronoi({ seeds })), whose cells are polygons over both axes. Or a distribution binned into cells, with p Binning.step, Binning.thresholds or Binning.quantiles: d.bin(p) with d a Dist family, or field(x).bin(p) where the column holds a distribution (after derive(kde(x))). Its cells are those of p over the interval its density is drawn over, Binning.quantiles(n) at its own quantiles; each cell's group holds every row, and the distribution in it is the whole one restricted to the cell (field(x).density(), d.density()). In a cell of a field's line, a ribbon or line through the rows over the field is the whole group's restricted to the cell too, so the cells of one curve meet. A plain field, or a struct with no bin, has no region and is an error.",
       },
       dir: {
         type: t.string,
@@ -2226,7 +2311,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   line: leafMark("line", {
-    doc: "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
+    doc: "A path. Given `x` and `y`, the shape form: the mark owns its rows and draws one path per group through them, sorted by `x`. Without them, the connector form: the path between the centers of consecutive marks another flow placed, in bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
     include: [withEffect],
     fields: {
       // Center mode paints `fill: "none"` on the path (connect.tsx's
@@ -2256,7 +2341,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       curve: {
         type: t.ref("Curve"),
-        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear().',
+        doc: 'Screen-space path shape, made by a call in the Curve family: Curve.linear(), Curve.step(), Curve.monotone(), Curve.smooth(), Curve.catmullRom(), Curve.bezier(), Curve.orthogonal({bend}), Curve.arc({direction}) or Curve.perfectArrows({bow, ...}). Curve.step(), Curve.linear(), Curve.monotone() and Curve.smooth() are read over the parameter of the run, from the least to the most smooth. Curve.step() holds every value that depends on the ordering field until the next point, then jumps: a staircase when the ordering field is an axis (a line chart over years), and straight jumps between the points when it is not (a connected scatter plot). Curve.monotone() is piecewise monotone: between two neighboring points each coordinate only rises or only falls, so the curve never goes past either point. It does not make the whole line monotone: the line still turns where the data turns, and the turn sits exactly on the data point. For a path in x and y (a connected scatter plot) this holds for x and y separately, over the ordering field. It is the same curve as d3 curveMonotoneX and Vega-Lite interpolate "monotone". Curve.smooth() rounds a peak a little past its point, but keeps a run of equal values flat. Curve.catmullRom() is a centripetal Catmull-Rom through the points on screen. It can overshoot between points, and it is not used when reading values over time (a mark moving along the run follows a data-space curve). Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else Curve.linear(). The shape form reads its curve over x, so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.',
       },
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       source: {
@@ -2292,11 +2377,17 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         ...ch.size(),
         doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
       },
+      x: ch.pos(
+        "Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The path runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `y`."
+      ),
+      y: ch.pos(
+        "Shape form: each row's y, a position on the y axis. Needs `x`."
+      ),
     },
   }),
 
   ribbon: leafMark("ribbon", {
-    doc: "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
+    doc: "A filled band. Given `x` (with `h`) or `y` (with `w`), the shape form: the mark owns its rows and draws one band per group, from its baseline to `h` at each row's `x` (or to `w` at each row's `y`), sorted by it. Without them, the connector form: a band between the facing edges of consecutive marks another flow placed (sankey ribbons, bands between bars).",
     include: [withEffect],
     fields: {
       fill: ch.color(
@@ -2319,7 +2410,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       dir: { type: t.enum("x", "y"), doc: "Connection axis." },
       curve: {
         type: t.ref("Curve"),
-        doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band.',
+        doc: 'Screen-space band-edge shape, made by a call in the Curve family: Curve.linear(), Curve.bezier(), Curve.step(), Curve.monotone(), Curve.smooth() or Curve.catmullRom(). Curve.step() steps both edges, as a stepped area does. Curve.monotone() is piecewise monotone: between two neighboring points each edge only rises or only falls, so it never goes past either point, though the band still turns where the data turns (d3 curveMonotoneX, Vega-Lite interpolate "monotone"); Curve.smooth() is a rounder reading over the same parameter, and can go a little past a point; Curve.catmullRom() is a centripetal Catmull-Rom on screen and can overshoot. Omitted, it is Curve.monotone() on a homogeneous continuous connection axis, else a Curve.bezier() band. The shape form reads its curve over x (or y), so it takes Curve.linear(), Curve.step(), Curve.monotone() or Curve.smooth(), and Curve.monotone() when omitted.',
       },
       from: { type: t.string },
       to: { type: t.string },
@@ -2337,11 +2428,21 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       w: {
         ...ch.size(),
-        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
+        doc: "Shape form with `y`: the band's width at each row, an amount from its baseline (negative values extend the other way). Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.",
       },
       h: {
         ...ch.size(),
-        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
+        doc: "Shape form with `x`: the band's height at each row, an amount from its baseline (negative values extend below it), so a stack can place it. Connector form: a blank-fusion anchor key (see `emX`), ignored by `ribbon` itself.",
+      },
+      x: ch.pos(
+        "Shape form: each row's x, a numeric or time column, a field expression, or an accessor. The band runs through the rows sorted by x, read between them as `curve` says; two rows of one group at one x are an error. Needs `h`."
+      ),
+      y: ch.pos(
+        "Shape form: each row's y, for a band that runs up the y axis. Needs `w`."
+      ),
+      inset: {
+        type: t.number,
+        doc: "Shape form: pixels the band is drawn in by from each end of its parameter, so the bands in the cells of a partition are drawn apart. Its values are not drawn in: the band stays on the baseline its data gives it, as a bar's data height is never inset. It changes only what is drawn: the band's box is the same. Not allowed on the connector form.",
       },
     },
   }),
@@ -2678,8 +2779,8 @@ const positionAxis = (axis: string): FieldSpec => ({
  *  of a `.relate()` callback. On the wire a constraint is
  *  `{ type, options?, refs }` (`ConstraintIR` in schema.ts), so, as a
  *  combinator mark's, its fields sit under `options`. JS-only options that
- *  no producer writes to the IR (distribute's `measure`, `hasOrder` and
- *  `origin`, which spread sets; position's `region`, `override` and `in`,
+ *  no producer writes to the IR (distribute's `measure`, `hasOrder`,
+ *  `baseline` and `hasMidpoint`, which spread sets; position's `region`, `override` and `in`,
  *  which partition, scatter and chrome set) are not declared, so a document
  *  that holds one is rejected. */
 export const CONSTRAINTS: Record<string, ConstructDescriptor> = {
@@ -2709,7 +2810,7 @@ export const CONSTRAINTS: Record<string, ConstructDescriptor> = {
       glue: {
         type: t.boolean,
         default: false,
-        doc: "Stack semantics: the refs touch, and their data-driven sizes sum along one positional axis.",
+        doc: "Stack semantics: the refs are data amounts, added along `dir` in one data space, each placed where the one before it ends. Every ref needs a data size along `dir`.",
       },
     },
   }),

@@ -12,13 +12,13 @@ spot by the mark's box. A placement reads the mark's outline and tries spots in
 order.
 
 ```python
-from gofish import Placement, Unit, chart, group, line, scatter
+from gofish import Placement, Unit, chart, group, line
 
 (
     chart(stocks, schema={"date": Unit.time()})
-    .flow(group(by="symbol"), scatter(by="date", x="date", y="price"))
+    .flow(group(by="symbol"))
     .mark(
-        line(stroke="symbol", stroke_width=2).label(
+        line(x="date", y="price", stroke="symbol", stroke_width=2).label(
             "symbol",
             placement=Placement.along(at=0.6, orient="sloped"),
             halo={},

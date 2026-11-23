@@ -10,7 +10,7 @@ A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top)
 :::
 
 ```python
-from gofish import chart, stack, rect, Coord
+from gofish import chart, stack, spread, rect, Coord
 
 chart(seafood, coord=Coord.clock()) \
     .flow(stack(by="species", dir="x")) \
@@ -79,7 +79,7 @@ chart(data, coord=Coord.clock(inner_radius=0.6)) \
 
 # Rose chart (radial bar chart)
 chart(data, coord=Coord.clock()) \
-    .flow(stack(by="month", dir="x")) \
+    .flow(spread(by="month", dir="x", spacing=0)) \
     .mark(rect(w=(math.pi * 2) / 12, em_x=True, h="value"))
 ```
 

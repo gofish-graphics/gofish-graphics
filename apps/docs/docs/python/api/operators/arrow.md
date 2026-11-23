@@ -22,7 +22,7 @@ layer([
     Constraint.distribute([a, b], dir="x", spacing=120),
     Constraint.align([a, b], y="middle"),
     arrow([a, b], stroke="#333", stroke_width=3),
-]).render(w=320, h=100)
+]).render()
 ```
 
 ## Signature

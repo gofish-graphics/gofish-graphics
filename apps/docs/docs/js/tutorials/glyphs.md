@@ -33,7 +33,7 @@ const marker = ({ fill }) =>
     gf.rect({ cx: 0, cy: 0, w: 8, h: 8, fill }),
   ]);
 
-marker({ fill: "#e63946" }).render(root, { w: 70, h: 70 });
+marker({ fill: "#e63946" }).render(root);
 ```
 
 :::
@@ -69,7 +69,7 @@ gf.spread({ dir: "x", spacing: 16 }, [
   marker({ fill: "#e63946" }),
   marker({ fill: "#457b9d" }),
   marker({ fill: "#2a9d8f" }),
-]).render(root, { w: 220, h: 70 });
+]).render(root);
 ```
 
 :::

@@ -13,7 +13,7 @@ from gofish import layer, position, rect
 
 layer([
     position([rect(w=60, h=40, fill="#9ecae1")], x=20, y=30),
-]).render(w=120, h=90)
+]).render()
 ```
 
 ## Signature

@@ -9,7 +9,7 @@ import { checkLengths } from "./length";
 import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
-import { GoFishNode } from "./_node";
+import { breadthFirst, GoFishNode } from "./_node";
 import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
@@ -50,8 +50,8 @@ import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
-import { breadthFirst } from "./elaborationUtils";
 import { withKindValues } from "./strategyKind";
+import { functionInChannelError, groupFun } from "./groupExpr";
 
 export interface RenderOptions {
   w?: number;
@@ -380,6 +380,9 @@ export type NameableMark<T> = Mark<T> & {
   /** How the mark looks in each phase of an animation: `Animation.grow()`,
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition): NameableMark<T>;
+  /** A box that describes the mark under the pointer: every field with one
+   *  value on the mark, or `fields`, in order. */
+  tooltip(fields?: readonly string[]): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -562,6 +565,10 @@ function buildCreatedMark(
             ? markValue
             : inferEntrySize(markValue, d);
         } else if (channelType !== undefined) {
+          // A function value is read only by a mark that draws along a path
+          // (the shape form of ribbon and line, which is no createMark).
+          if (groupFun(markValue, d) !== undefined)
+            throw functionInChannelError(serialize ?? "mark", propName);
           // Each kind reads an already-wrapped value (`datum(...)`) itself
           // (`CHANNEL_INFER`): an area roots it, the others keep it.
           shapeProps[propName] = CHANNEL_INFER[channelType](markValue, d);

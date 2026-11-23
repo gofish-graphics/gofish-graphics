@@ -19,6 +19,7 @@ const STYLE = {
     strokeDasharray: { type: "string" },
     paintOrder: { type: "string" },
     strokeLinejoin: { type: "string" },
+    pointerEvents: { const: "none" },
   },
 } as const;
 
@@ -41,6 +42,7 @@ const BASE_PROPS = {
   },
   role: { enum: ["node", "overlay"] },
   id: { type: "string" },
+  title: { type: "string" },
 } as const;
 
 export const DISPLAY_LIST_JSON_SCHEMA = {

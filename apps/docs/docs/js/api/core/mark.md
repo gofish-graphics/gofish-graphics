@@ -153,6 +153,16 @@ An ancestor's `.hidden()` wins over a descendant's `.hidden(false)`. A
 hidden child's region and draws none of its paint. `chart(...)` and
 `layer([...])` take `.hidden()` too.
 
+### `.tooltip(fields?)` — a box on hover {#tooltip}
+
+`.tooltip()` shows a box that describes the mark under the pointer: every
+field with one value on the mark, or `fields`, in order. See
+[tooltip](/js/api/core/tooltip).
+
+```ts
+rect({ w: "share" }).tooltip(["path", "n", "share"]);
+```
+
 ### `.translate({ x?, y? })` — pixel offset
 
 `.translate({ x?, y? })` applies a structural pixel translation around the
@@ -221,3 +231,23 @@ with a console warning.
 stack({ by: "class", dir: "y" }).translate({ y: 8 }).label("class");
 stack({ by: "class", dir: "y" }).label("class").translate({ y: 8 });
 ```
+
+### `.name()` on operators {#operator-name}
+
+The same dual-mode operators accept `.name(layerName)`, with the same argument
+as a mark's `.name()`: a string, or a `createName` token. Each node a split
+leaf produces is filed under the name, so
+[`selectAll(name)`](/js/api/selection/ref) yields one ref per group, and
+`ref.datum` is that group's rows:
+
+```ts
+chart(seafood)
+  .flow(spread({ by: "lake", dir: "x" }).name("lakes"))
+  .mark(rect({ h: "count" }))
+  .layer(chart(selectAll("lakes")).mark(/* one mark per lake */));
+```
+
+The name follows a mark name's scoping rules, and a node can carry both: a
+named mark that is also a named operator's group is filed under each name. A
+string name round-trips through the [IR](/internals/python/bridge). `.name()`,
+`.label()` and `.translate()` chain in any order.

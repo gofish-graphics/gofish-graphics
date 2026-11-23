@@ -30,7 +30,10 @@ Combined with marks:
 
 ```ts
 chart(seafood, { color: Color.palette("tableau10") })
-  .flow(spread("lake", { dir: "x" }), stack("species", { dir: "x" }))
+  .flow(
+    spread("lake", { dir: "x" }),
+    spread("species", { dir: "x", spacing: 0 })
+  )
   .mark(rect({ h: "count", fill: "species" }));
 ```
 

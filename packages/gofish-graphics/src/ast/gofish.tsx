@@ -10,6 +10,7 @@ import { render as solidRender } from "solid-js/web";
 import {
   debugInputSceneGraph,
   debugNodeTree,
+  breadthFirst,
   debugUnderlyingSpaceTree,
   GoFishNode,
   type RenderSession,
@@ -26,6 +27,7 @@ import type { Size } from "./dims";
 import {
   continuousInterval,
   DEFAULT_AXIS_TICKS,
+  spaceTitle,
   type AxisTicks,
   type UnderlyingSpace,
 } from "./underlyingSpace";
@@ -54,11 +56,13 @@ import {
   perfSetCount,
 } from "./perf";
 import {
+  axisTitle,
   elaborateChrome,
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
-import { breadthFirst } from "./elaborationUtils";
+import { fmtNum } from "./elaborationUtils";
+import { width as intervalWidth } from "../util/interval";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
 import {
@@ -77,8 +81,11 @@ import {
   type EqualMeasureAxis,
   type ScopeSolution,
 } from "./solver/scopes";
-import { legendRing } from "./legends/elaborate";
-import { elaborateLabels } from "./labels/elaborate";
+import { entryAmount, legendRing } from "./legends/elaborate";
+import { labelLayer } from "./labels/elaborate";
+import { lowerSelectionLayers, type SelectionLayer } from "./selectionLayer";
+import { tooltipLayer } from "./tooltip/tooltip";
+import { hasTooltips } from "../interaction/tooltipFocus";
 import { reportHiddenLabels } from "./labels/placeStep";
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
 // axis, which needs a concrete canvas to scale data into (see the per-axis
@@ -143,6 +150,53 @@ export type PixelPosScales = [
 ];
 
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
+
+/**
+ * Which legend entries a chart draws. A legend holds the guides of the
+ * scales that have no place in the plot: the color scale, and a length
+ * scale (the widths of a space with no origin, a streamgraph's thickness).
+ * Scales that have positions get axes instead (`axes`).
+ *
+ * A length entry stands in for the axis its dimension would have if its
+ * space had an origin, so by default it is drawn where that axis would be:
+ * on a dim the render's `axes` turns on (a chart's are on unless it says
+ * otherwise; a bare node's are off). The color entry is drawn by default.
+ *
+ * - `true` draws every entry, and `false` draws none.
+ * - `{ color?, x?, y? }` sets each entry on its own: `color` is the color
+ *   scale's swatches or colorbar, and `x` and `y` are the length entries of
+ *   the scales along that axis. An entry left out keeps its default.
+ */
+export type LegendOptions =
+  | boolean
+  | { color?: boolean; x?: LengthEntryOptions; y?: LengthEntryOptions };
+
+/** One length entry's options (`legend.y`): a boolean draws it or not; an
+ *  object sets its `title`, the name after the amount (`false` drops it).
+ *  Without a title the entry is named by the measure, as an axis is. */
+export type LengthEntryOptions = boolean | { title?: string | false };
+
+/** A chart's `legend` option, read: whether the color entry is drawn, and
+ *  each axis's length entry options, `false` where it is not drawn. A
+ *  length entry the option leaves out follows `axesOn`, whether the render
+ *  draws that dim's axes ({@link LegendOptions}). Checked against the IR's
+ *  declared `LegendOptions` (`Frontend.checkOption`), as `axes` is. */
+export function readLegendOptions(
+  legend: LegendOptions | undefined,
+  axesOn: readonly [boolean, boolean]
+): {
+  color: boolean;
+  lengths: [LengthEntryOptions, LengthEntryOptions];
+} {
+  if (legend === undefined) return { color: true, lengths: [...axesOn] };
+  if (typeof legend === "boolean")
+    return { color: legend, lengths: [legend, legend] };
+  Frontend.checkOption("LegendOptions", legend, "legend");
+  return {
+    color: legend.color !== false,
+    lengths: [legend.x ?? axesOn[0], legend.y ?? axesOn[1]],
+  };
+}
 /** `side` (issue #143/#16): which frame edge the axis seats on — `"start"` (the
  *  start of the frame's axis order: the top of a y that reads top-down, the
  *  bottom of a continuous y, which grows upward) or `"end"` (the far side).
@@ -359,8 +413,9 @@ export async function layout(
     transform,
     debug = false,
     axes,
-    legend = true,
+    legend,
     labelRowSettings,
+    interaction,
   }: {
     w?: number;
     h?: number;
@@ -369,10 +424,13 @@ export async function layout(
     transform?: { x?: number; y?: number };
     debug?: boolean;
     axes?: AxesOptions;
-    legend?: boolean;
+    legend?: LegendOptions;
     /** Internal: how each axis label row is drawn, as chosen by
      *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
+    /** The chart's interaction runtime: the registrar its resolve read
+     *  inputs through, so a tooltip in it has a focus. */
+    interaction?: InteractionRuntime;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts: {
@@ -456,7 +514,8 @@ export async function layout(
     read[0].perLevel,
     read[1].perLevel,
   ];
-  child.resolveAxes(new Map(), axesEnabled(axes));
+  const enabled = axesEnabled(axes);
+  child.resolveAxes(new Map(), enabled);
   keyedDomains.refreshDemand();
 
   // Chrome elaboration (src/ast/axes/elaborate.tsx): every node that owns
@@ -469,20 +528,58 @@ export async function layout(
   // on it as its request. The root also carries the legend, because the
   // color scale is resolved once, from the root, for the whole render. The
   // legend is built here, from the root as it is laid out, before any
-  // chrome wraps the nodes inside it. `legend: false` drops the legend; the
-  // color scale still paints the marks.
+  // chrome wraps the nodes inside it.
+  //
+  // Which guide a scale gets follows from its kind (`domainOver`): a scale
+  // that maps data to positions in the plot is drawn in place, as an axis
+  // (`resolveAxes` above), and a scale that maps data to anything with no
+  // place in the plot is drawn aside, as a legend entry: the color scale,
+  // and each length scale the root maps (`KeyedDomains.lengthScales`).
+  // A length entry stands in for the axis its dim would have, so it is
+  // drawn by default where the root's axes are (`enabled`, the one decision
+  // both read), and `legend` turns entries on or off; the scales still paint
+  // the marks.
+  // The entries are drawn at the root's σ, which is the plot's: the root
+  // maps a domain its sized nodes map at their σ (`rootSizes` below).
+  // TODO(#1322): a length scale that a coordinate transform maps (a polar
+  // stream) is mapped in the coord's units, so it gets no entry yet
+  // (`lengthScales`). Nor is there one entry per σ where sized panels map
+  // one domain at different σs: the root then fits its own. Each wants
+  // its entry owned by the node at the root of its scale.
+  const root0 = child;
+  const legendRead = readLegendOptions(legend, [
+    Boolean(enabled.get(0)),
+    Boolean(enabled.get(1)),
+  ]);
   const unitScale = contexts.session.scaleContext.unit;
   const hasLegend =
-    legend !== false &&
+    legendRead.color &&
     ((isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
       isContinuousColorScale(unitScale));
+  const lengths = ([0, 1] as const).flatMap((dim) => {
+    const opt = legendRead.lengths[dim];
+    if (opt === false) return [];
+    return keyedDomains.lengthScales(root0, dim).map(({ interval, space }) => {
+      const amount = entryAmount(intervalWidth(interval));
+      const title = axisTitle(opt, spaceTitle(space));
+      return {
+        dim,
+        amount,
+        label:
+          title === undefined ? fmtNum(amount) : `${fmtNum(amount)} ${title}`,
+      };
+    });
+  });
   child._chromeRequest = {
-    legend: hasLegend
-      ? await legendRing(
-          unitScale as CategoricalScale | ContinuousColorScale,
-          child
-        )
-      : undefined,
+    legend: await legendRing(
+      {
+        color: hasLegend
+          ? (unitScale as CategoricalScale | ContinuousColorScale)
+          : undefined,
+        lengths,
+      },
+      child
+    ),
   };
   // Each node titles only the axes it draws.
   for (const n of breadthFirst(child)) {
@@ -508,14 +605,24 @@ export async function layout(
     await reresolve(child);
   }
 
-  // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
-  // constraints (src/ast/labels/elaborate.tsx), the same technique the chrome
-  // pass above uses. Runs after chrome elaboration (a label may target a node
-  // the chrome pass just wrapped).
-  const labelRes = await elaborateLabels(child);
-  if (labelRes.changed) {
-    child = labelRes.node;
-    await reresolve(child);
+  // The modifiers lowered as layers over their selections
+  // (src/ast/selectionLayer.ts), after chrome elaboration (a label may target
+  // a node the chrome pass just wrapped). Labels turn every `.label(...)` spec
+  // into a real `Text` node + constraints (src/ast/labels/elaborate.tsx).
+  // Tooltips draw the box of the focused mark of each `.tooltip()`, as a
+  // layer over the whole graphic (src/ast/tooltip/tooltip.ts), after the
+  // labels, so it paints over them and the chrome.
+  // A chart with no `.tooltip()` mark in its resolve has no tooltip layer.
+  const layers: SelectionLayer<any, any>[] = hasTooltips(interaction)
+    ? [labelLayer, tooltipLayer]
+    : [labelLayer];
+  for (const modifier of layers) {
+    const lowered: { node: GoFishNode; changed: boolean } =
+      await lowerSelectionLayers(child, modifier);
+    if (lowered.changed) {
+      child = lowered.node;
+      await reresolve(child);
+    }
   }
   perfAdd("axes", perfNow() - __tAxes);
 
@@ -581,6 +688,8 @@ export async function layout(
   // what it wraps and of its shapes, `placeByClaims`), so a scope solved
   // against the slot leaves the chrome room.
   const rootExtent = root.resolveExtent();
+  // The claim of what the chrome wraps, the plot and its content.
+  const contentExtent = root0.resolveExtent();
   const rootScope = (axis: 0 | 1) => {
     const space = root._underlyingSpace![axis];
     return keyedDomains.scope(root, axis, space, rootExtent[axis]);
@@ -593,7 +702,8 @@ export async function layout(
   // then a sized node, #1114). On an axis with no render size the root
   // shrink-wraps its content: when the nodes with a literal size below map
   // its keyed domain, all at one σ (`ScopeRegistry.keyedSigma`), the root
-  // maps it at that σ too, so the axis it draws agrees with the marks. Only
+  // maps it at that σ too, so the axis it draws (and a length entry in its
+  // legend) agrees with the marks. Only
   // when none does (the common `chart(...).render(el, {})`), or they map it
   // at different σs (an over-constrained layout), is σ solved against the
   // default canvas. The root's size is the box the fit lays its claim out
@@ -620,13 +730,19 @@ export async function layout(
     const key = mapsDomain(space, claim)
       ? keyedDomains.axisKey(root, axis, root._underlyingSpace![axis])
       : undefined;
+    // The render's slot is room to fit the root's data into. Where the
+    // root's content holds none at its own σ (its plot has a size of its
+    // own) only its chrome may still map the domain (a length entry), and
+    // chrome follows the plot: the slot sets no σ there.
+    const fitsSlot =
+      given[axis] !== undefined &&
+      mapsDomain(root0._underlyingSpace?.[axis], contentExtent[axis]);
     const keyed =
-      key === undefined || given[axis] !== undefined
-        ? undefined
-        : scopes.keyedSigma(key, axis);
+      key === undefined || fitsSlot ? undefined : scopes.keyedSigma(key, axis);
     const allocated = given[axis] ?? DEFAULT_CANVAS_SIZE;
-    // An unsized root whose nodes with a literal size map its keyed domain
-    // maps it at their σ. Any other root fits its claim to its slot, the
+    // A root whose nodes with a literal size map its keyed domain maps it
+    // at their σ, unless it fits its content to the render's slot. Any
+    // other root fits its claim to its slot, the
     // render's or the default canvas, by the one scope fit
     // (`ScopeRegistry.fit`). When the claim's fixed parts are larger than
     // the slot, the data fills the slot as if they took no room, and the
@@ -934,7 +1050,8 @@ type Span = [number, number];
  * node grown by its outline. A coordinate space's interior is in its own
  * coordinates, and its box stands for it, outlines included (`coord`); a
  * node that clips its content to its box (`GoFishNode.clipsToBox`) draws
- * nothing past it.
+ * nothing past it, and an overlay (`GoFishNode.overlay`, a tooltip's box)
+ * is drawn over the graphic, so it is left out.
  *
  * `outline` is the part of it the root's claim holds: the outlines of the
  * nodes that take room, ink left out.
@@ -1016,7 +1133,7 @@ function drawnOverflow(root: GoFishNode): {
       offset[1] + (n.projectedTranslate(1) ?? 0),
     ];
     n.children.forEach((c, i) => {
-      if (!(c instanceof GoFishNode)) return;
+      if (!(c instanceof GoFishNode) || c.overlay) return;
       const isInk = ([0, 1] as const).map(
         (axis) => inkLayer && n.claimWalk?.ink[axis].has(i) === true
       ) as [boolean, boolean];
@@ -1056,9 +1173,10 @@ export type GoFishRenderOptions = {
   debug?: boolean;
   defs?: JSX.Element[];
   axes?: AxesOptions;
-  /** Whether to elaborate the color-scale legend (swatch column / colorbar).
-   *  Default true; `false` suppresses it. See `ChartOptions.legend`. */
-  legend?: boolean;
+  /** Which legend entries to draw (color, and the length entries of
+   *  scales with no origin). Default true; `false` draws none. See
+   *  `ChartOptions.legend`. */
+  legend?: LegendOptions;
   colorConfig?: ColorConfig;
   /**
    * Interaction runtime (see src/interaction/). When present, the render pass
@@ -1124,7 +1242,7 @@ async function layoutOnce(
     transform,
     debug = false,
     axes,
-    legend = true,
+    legend,
     colorConfig,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
@@ -1178,6 +1296,7 @@ async function layoutOnce(
         axes,
         legend,
         labelRowSettings,
+        interaction: options.interaction,
       },
       child,
       contexts
@@ -1373,6 +1492,10 @@ export function gofish(
       warned: new Set(),
     };
   }
+
+  // The runtime listens on the container, which outlives the svg each
+  // re-render replaces (`InteractionRuntime.attachHost`).
+  options.interaction?.attachHost(container);
 
   const [layoutData] = createResource(() =>
     runLayout(options, child).then((data) => {

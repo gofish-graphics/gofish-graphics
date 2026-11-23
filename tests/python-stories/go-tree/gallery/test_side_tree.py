@@ -25,5 +25,5 @@ def story_side_tree():
             ),
             coord=Coord.clock(),
         ),
-        {"w": 560, "h": 560},
+        {},
     )

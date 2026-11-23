@@ -303,6 +303,26 @@ stack(by="class", dir="y").translate(y=8).label("class")
 stack(by="class", dir="y").label("class").translate(y=8)
 ```
 
+### `.name()` on operators {#operator-name}
+
+The same dual-mode operators accept `.name(name)`. Each node a split leaf
+produces is filed under the name, so
+[`select_all(name)`](/python/api/selection/ref) yields one ref per group, and a
+ref's `datum` is that group's rows:
+
+```python
+chart(seafood).flow(
+    spread(by="lake", dir="x").name("lakes")
+).mark(rect(h="count")).layer(
+    chart(select_all("lakes")).mark(...)  # one mark per lake
+)
+```
+
+The name follows a mark name's scoping rules, and a node can carry both: a
+named mark that is also a named operator's group is filed under each name.
+`.name()`, `.label()` and `.translate()` chain in any order. `derive(fn)` makes
+no groups and raises on `.name()`.
+
 ## Hidden marks {#hidden}
 
 `.hidden(value=True)` lays the mark out and draws nothing, mirroring JS's
@@ -323,6 +343,17 @@ An ancestor's `.hidden()` wins over a descendant's `.hidden(False)`. A
 [region compositing](/python/api/operators/region-compositing) operator reads
 a hidden child's region and draws none of its paint. `chart(...)` and
 `layer([...])` take `.hidden()` too.
+
+## Tooltips {#tooltip}
+
+`.tooltip(fields=None)` shows a box that describes the mark under the
+pointer, mirroring JS's [`.tooltip(fields)`](/js/api/core/mark#tooltip):
+every field with one value on the mark, or `fields`, in order. See
+[tooltip](/python/api/core/tooltip).
+
+```python
+rect(w="share").tooltip(["path", "n", "share"])
+```
 
 ## Paint order {#z-order}
 

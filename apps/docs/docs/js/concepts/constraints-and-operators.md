@@ -36,7 +36,7 @@ gf.spread({ dir: "x", spacing: 10, alignment: "middle" }, [
   gf.rect({ w: 40, h: 70, fill: "#e63946" }),
   gf.rect({ w: 40, h: 40, fill: "#457b9d" }),
   gf.rect({ w: 40, h: 55, fill: "#2a9d8f" }),
-]).render(root, { w: 220, h: 120 });
+]).render(root);
 ```
 
 :::
@@ -88,7 +88,7 @@ gf.chart(fruit, { axes: false })
         gf.Constraint.align({ x: "end" }, [label, line]),
       ])
   )
-  .render(root, { w: 300, h: 200 });
+  .render(root, { h: 200 });
 ```
 
 :::

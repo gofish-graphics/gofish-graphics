@@ -37,6 +37,16 @@ two operators cover much of the same ground by different routes. When a
 degenerate overlap exists, build it through one shared mechanism so the
 operators cannot drift apart.
 
+**Stacks are in data space.** A `stack` glues its children's spaces into one
+space, and a `spread` keeps them separate. So a stack adds data amounts, and
+every part needs a continuous data space on the stack axis. It does not make
+sense to stack pixels, nor to count a boundary's stroke width, since neither
+is data. A part sized in pixels or by its content (a `rect({ h: 20 })`, a
+`text`, an `image`, a nested `spread`) is an error at the stack that points
+to `spread({ spacing: 0 })`: parts that only touch are a spread with no
+spacing. A stack has no `spacing` either, since its parts touch by
+construction.
+
 **Prefer the simple general rule to a case split.** If a fix special-cases a
 shape or a count (`length === 1`, the first element, a fallback value), ask
 what the general operation is. Usually it has a known name in math or
@@ -141,6 +151,33 @@ drawn. `Domain` and `Trait` are families, but never
 reach the wire: the wire carries the traits they expand into. Named types such as `Price` or `Revenue` are sugar over the
 traits, like chart templates over operators, so design the traits
 first.
+
+**GoFish draws data, it does not transform it.** GoFish is a visualization
+library, not a data transformation library. It builds in only simple
+summaries of one column per group: sum, mean, median, min, max, count and
+the like. Computing those beforehand would add columns to the table that
+exist only for the picture. `map` and `reduce` take the user's own callback
+over one column for the same reason. Anything more, such as a fit or a
+computation that combines columns, is a data transform. The user writes it
+in `derive` or before the visualization, and returns rows that keep the
+original column names, so the axes and units join. A least-squares trend
+line over a scatter is a `derive` that returns two rows, the line's ends,
+named like the scatter's columns, drawn with `line({ x, y })`. GoFish has
+no built-in regression, smoothing or other fit in a channel. A helper that
+does one is a function of rows for `derive`.
+
+**A smoothing belongs in `derive`: `kde` is the worked example.** A kernel
+density was once a field method, `field(x).density()`, while `median()` of the
+same field read the data. One field then gave two different distributions,
+and its median did not sit at the middle of its density's area. Now
+`derive(kde("x"))` smooths the rows into one row whose column `x` holds a
+distribution, a value like any other. After it, every member of `field("x")`
+reads that one distribution, so its density, cdf, quantiles, median and mean
+agree. Before it, the field reads the data. A visualization that wants the
+data's median on a kernel density, as ggplot2's `geom_violin` and seaborn's
+`violinplot` draw it, reads the median before the `kde` and keeps it as a
+column. On a column of numbers, `density()` is an error that names
+`derive(kde(...))`. See [`kde`](/js/api/dist#kde).
 
 **Add a type only where a real example forces it.** A type earns its place by
 removing a special case that a real example runs into. For time and binning,

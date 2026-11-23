@@ -78,7 +78,7 @@ gf.chart(seafood)
     gf.pack({ spacing: 2 })
   )
   .mark(gf.circle({ r: 12, fill: "species" }))
-  .render(root, { w: 420, h: 420 });
+  .render(root);
 ```
 
 :::

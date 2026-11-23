@@ -169,15 +169,14 @@ async function main() {
     );
   }
 
-  console.log("\n# a stack claims its parts end to end");
+  console.log("\n# a flush spread claims its parts end to end");
   {
-    // A stack lays each part's tail on the previous part's head, so three
-    // 20 px boxes claim 60 px, as they are laid out.
+    // Three 20 px boxes that touch claim 60 px, as they are laid out.
     const node = await chart(
       ["a", "b", "c"].map((k) => ({ k })),
       { axes: false }
     )
-      .flow(stack({ by: "k", dir: "x" }))
+      .flow(spread({ by: "k", dir: "x", spacing: 0 }))
       .mark(rect({ w: 20, h: 10 }))
       .resolve();
     const data = await runLayout({}, node);
@@ -270,7 +269,7 @@ async function main() {
       ["p", "q"].map((i, j) => ({ g, i, v: 5 * (j + 1) }))
     );
     const dl = await chart(rows, { w: 200, h: 200 })
-      .flow(spread({ by: "g", dir: "x" }), stack({ by: "i", dir: "x" }))
+      .flow(spread({ by: "g", dir: "x" }), spread({ by: "i", dir: "x", spacing: 0 }))
       .mark(rect({ h: "v" }))
       .toDisplayList();
     const bars = items(dl).filter(

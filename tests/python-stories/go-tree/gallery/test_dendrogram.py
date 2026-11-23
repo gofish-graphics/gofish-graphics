@@ -69,5 +69,5 @@ def story_dendrogram():
                 y={"kind": "align", "alignment": "start"},
             ),
         ),
-        {"w": 900, "h": 520},
+        {},
     )

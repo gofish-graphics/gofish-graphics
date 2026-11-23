@@ -107,6 +107,9 @@ export interface InputPrimitive {
   /** Called once when the input is first registered with a runtime. Used to
    *  reach the scheduler (invalidate) and frame conversions. */
   attach?(runtime: import("./runtime").InteractionRuntime): void;
+  /** Called when a runtime it is registered with is disposed: the input
+   *  drops what it holds of that chart. */
+  detach?(runtime: import("./runtime").InteractionRuntime): void;
   /** Called after each layout frame is lowered, before paint. */
   onFrame?(frame: InteractionFrame): void;
   /** Delegated events. `hit` is the display item under the pointer, if any;

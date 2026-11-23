@@ -68,7 +68,7 @@ chart(seafood).flow(
     pack(by="lake", spacing=6),
     enclose(shape=Shape.fillet(), padding=4, fill="none"),
     pack(spacing=2),
-).mark(circle(r=12, fill="species")).render(w=420, h=420)
+).mark(circle(r=12, fill="species")).render()
 ```
 
 ```python

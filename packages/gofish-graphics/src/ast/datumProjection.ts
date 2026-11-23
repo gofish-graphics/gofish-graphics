@@ -31,12 +31,7 @@ import {
   type ChunkKey,
   type FieldAccessor,
 } from "./data";
-import {
-  getFieldOps,
-  binStepsOf,
-  normalizeNotSupportedError,
-  type FieldOp,
-} from "./fieldExpr";
+import { getFieldOps, binStepsOf, heldDist, type FieldOp } from "./fieldExpr";
 import { chainCells, Cell, CycleCell, KeyCell, type Cells } from "./cells";
 import {
   columnType,
@@ -48,6 +43,16 @@ import {
 import { describe } from "./calendar";
 import { planeCells, type PolygonCells } from "./polygonCells";
 import { isStruct, structBin, type StructExprWire } from "./structExpr";
+import {
+  distCells,
+  distKeyCells,
+  distVariable,
+  isDistKey,
+  type DistExpr,
+  type DistExprWire,
+} from "./distExpr";
+import { distOf } from "./dist";
+import { groupCellOf, setGroupCell, type CellVariable } from "./groupCell";
 import type { Cycle } from "../timeWindow";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
@@ -179,7 +184,9 @@ export type SplitBy =
   | ((r: any, i: number) => unknown)
   | FieldAccessor
   | StructExprWire
-  | ChunkKey;
+  | ChunkKey
+  | DistExpr
+  | DistExprWire;
 
 /** The key of one group of a split: a value of the `by` field (text or a
  *  number), or a cell ({@link KeyCell}): a {@link Cell} or a
@@ -573,6 +580,28 @@ function binEntries<T extends Record<string, any>>(
   return entries;
 }
 
+/** The groups of a key over a distribution, `cells` its cells over `d`'s
+ *  distribution of `variable`: one per cell, in order, each holding every
+ *  row of `d` (the rows give the distribution; they are not in one cell or
+ *  another) and the cell it is (groupCell.ts), so the distribution in it is
+ *  the whole one restricted to it. */
+function distEntries<T extends Record<string, any>>(
+  cells: readonly Cell[],
+  variable: CellVariable,
+  d: T[]
+): Map<SplitKey, T[]> {
+  return new Map(
+    cells.map((cell) => [
+      cell,
+      setGroupCell(copyColumnTypes([...d], d), {
+        variable,
+        cell: { min: cell.start, max: cell.end },
+        whole: d,
+      }),
+    ])
+  );
+}
+
 /** Reorder `entries`: with `values` (#735), by that explicit group-key
  *  order — groups not listed are appended after, in natural sort order; with
  *  `by`, by the SUM of that field over each entry's rows; with neither, by
@@ -666,6 +695,26 @@ export function splitEntries<T extends Record<string, any>>(
   byOpt: SplitBy | undefined,
   d: T[]
 ): SplitGroups<T> {
+  // A key over a distribution: `d.bin(p)`, or a field binned over a column
+  // that holds one (`derive(kde(x))`), cut at its own quantiles.
+  if (isDistKey(byOpt))
+    return distEntries(distKeyCells(byOpt, d).cells, distVariable(byOpt), d);
+  const held = isField(byOpt) ? heldDist(d, byOpt.name) : undefined;
+  if (held !== undefined) {
+    const name = (byOpt as FieldAccessor).name;
+    const where = `field("${name}").bin(...)`;
+    const ops = getFieldOps(byOpt);
+    if (ops.length !== 1 || ops[0].op !== "bin")
+      throw new Error(
+        `${where}: the column "${name}" holds a distribution, which a key ` +
+          `cuts into cells once, field("${name}").bin(p), with no other op.`
+      );
+    return distEntries(
+      distCells(ops[0].partition, distOf(held), where),
+      { kind: "column", name },
+      d
+    );
+  }
   const by = splitByOf(byOpt);
   const ops = getFieldOps(by);
   let rows = d;
@@ -691,8 +740,20 @@ export function splitEntries<T extends Record<string, any>>(
   const type = columnType(d, column);
   const ordered = binned !== undefined || type?.HasOrder !== undefined;
   let entries: Map<SplitKey, T[]>;
-  if (binned !== undefined) entries = binEntries(binned, rows);
-  else {
+  if (binned !== undefined) {
+    entries = binEntries(binned, rows);
+    // Each cell of a column's line is an interval of the column: its group
+    // knows it (groupCell.ts), so a distribution of the column in it is the
+    // whole group's restricted to it.
+    if (column !== undefined)
+      for (const [cell, group] of entries)
+        if (cell instanceof Cell)
+          setGroupCell(group, {
+            variable: { kind: "column", name: column },
+            cell: { min: cell.start, max: cell.end },
+            whole: d,
+          });
+  } else {
     entries = Map.groupBy(rows, splitKeyFn(by, d) as (r: T) => SplitKey);
     if (type?.HasLevels) {
       const keys = orderByLevels(column!, type.HasLevels, [...entries.keys()]);
@@ -719,12 +780,46 @@ export function splitEntries<T extends Record<string, any>>(
             `(e.g. rect({ h: field(...).${op.op}() })), not on \`by\`.`
         );
       case "normalize":
-        throw normalizeNotSupportedError();
+      case "map":
+      case "reduce":
+      case "member":
+        throw new Error(
+          `field(...).${op.op === "member" ? op.name : op.op}(...) computes ` +
+            `values — valid on a value channel (e.g. rect({ h })), not on ` +
+            `\`by\`. To group by computed values, derive a column first.`
+        );
     }
   }
+  keepCell(byOpt, d, entries);
   return ordered
     ? Object.assign(entries, { hasOrder: true as const })
     : entries;
+}
+
+/**
+ * A cell's rows split again (a spread by species in a cell of a binned
+ * partition) are still in the cell: each group keeps the cell's interval,
+ * and its whole is the group the same split gives for its rows in the
+ * cell's whole. So a distribution in it is that group's restricted to the
+ * cell. A group that is a cell of its own keeps its own.
+ */
+function keepCell<T>(
+  byOpt: SplitBy | undefined,
+  d: T[],
+  entries: Map<SplitKey, T[]>
+): void {
+  const c = groupCellOf(d);
+  if (c === undefined) return;
+  let wholeOf: Map<unknown, readonly unknown[]> | undefined;
+  for (const group of entries.values()) {
+    if (group.length === 0 || groupCellOf(group) !== undefined) continue;
+    if (wholeOf === undefined) {
+      wholeOf = new Map();
+      for (const g of splitEntries(byOpt, c.whole as any[]).values())
+        for (const row of g) wholeOf.set(row, g);
+    }
+    setGroupCell(group, { ...c, whole: wholeOf.get(group[0]) ?? group });
+  }
 }
 
 /** Which axes a scatter-family opts object positions: `x`/`y` true when a

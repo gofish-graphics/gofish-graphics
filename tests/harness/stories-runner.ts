@@ -215,3 +215,84 @@ window.__STORY_RENDER_DONE__ = false;
 window.__STORY_RENDER_ERROR__ = null;
 window.__STORY_RENDER_WALL_MS__ = 0;
 window.__STORIES_RUNNER_READY__ = true;
+
+// ---------------------------------------------------------------------------
+// Live mode: `stories-runner.html?file=<story file>&story=<export>`
+// ---------------------------------------------------------------------------
+
+/**
+ * The review pages open a story live by loading this page with the story's
+ * file (repo-relative, as `StorySpec.storyFile` names it) and export in the
+ * query (tests/scripts/live-view.ts). The page then renders that story on
+ * the real clock, so pointer input and animation work, and posts its size
+ * to the page that frames it, so the frame can be drawn at the size of the
+ * story's screenshot. A capture loads the page with no query, so this does
+ * nothing there.
+ */
+function startLiveMode(file: string, name: string): void {
+  const root = document.getElementById("stories-root")!;
+  // The box posted is the root's (the box a capture screenshots), cut to
+  // what the story draws in it: the root spans the page's width, and most
+  // stories draw in its left part. Leaf elements and `<svg>`s are what is
+  // drawn; a block container would span the root again.
+  const postSize = () => {
+    const rect = root.getBoundingClientRect();
+    let right = rect.left;
+    let bottom = rect.top;
+    for (const el of root.querySelectorAll("*")) {
+      if (el.childElementCount > 0 && !(el instanceof SVGSVGElement)) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 && r.height === 0) continue;
+      right = Math.max(right, r.right);
+      bottom = Math.max(bottom, r.bottom);
+    }
+    window.parent.postMessage(
+      {
+        type: "gofish-live-size",
+        left: rect.left + window.scrollX,
+        top: rect.top + window.scrollY,
+        // The stories' containers keep a 20 px margin; keep it on the
+        // right too.
+        width: Math.min(rect.width, right - rect.left + 20),
+        // A story may draw past its root (a box near the bottom edge).
+        height: Math.max(rect.height, bottom - rect.top),
+      },
+      "*"
+    );
+  };
+  // Post again when the story changes what it draws (a box opens, an
+  // animation grows a bar), at most every 250 ms. The frame only grows
+  // (live-view.ts), so a box that closes does not move the story under the
+  // pointer.
+  let pending = false;
+  const schedule = () => {
+    if (pending) return;
+    pending = true;
+    setTimeout(() => {
+      pending = false;
+      postSize();
+    }, 250);
+  };
+  new ResizeObserver(schedule).observe(document.body);
+  new MutationObserver(schedule).observe(root, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+  });
+  void window
+    .__renderStory__({ moduleKey: `../../${file}`, name })
+    .then((ok) => {
+      if (!ok) {
+        const pre = document.createElement("pre");
+        pre.style.cssText = "color:#c0392b;white-space:pre-wrap;font-size:12px";
+        pre.textContent = `Render error: ${window.__STORY_RENDER_ERROR__}`;
+        root.appendChild(pre);
+      }
+      postSize();
+    });
+}
+
+const liveQuery = new URLSearchParams(location.search);
+const liveFile = liveQuery.get("file");
+const liveStory = liveQuery.get("story");
+if (liveFile && liveStory) startLiveMode(liveFile, liveStory);

@@ -34,6 +34,14 @@ import {
   specHtml,
   SPEC_CSS,
 } from "./story-specs.js";
+import {
+  buildLiveHarness,
+  liveSrc,
+  LIVE_CSS,
+  LIVE_DIR,
+  LIVE_SCRIPT,
+} from "./live-view.js";
+import { HARNESS_DIR } from "./capture-core.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -84,12 +92,17 @@ export interface ReviewMeta {
    *  against the new baselines. Empty for the local review server, whose
    *  commit endpoint accepts from the local capture. */
   runId: string;
+  /** What the page says the Live view shows: which build of the stories
+   *  (live-view.ts) runs there. Not sent anywhere. */
+  liveNote: string;
 }
 
 /**
  * Builds the review site for `diffs` into `outDir`: the page (`index.html`),
  * `data/diffs.json` (each entry with its warnings panel), `data/meta.json`,
- * the specs, the DOM diffs and the screenshots. The page calls
+ * the specs, the DOM diffs, the screenshots, and the harness built as static
+ * files (`live/head/`, `buildLiveHarness`) that the Live view runs each story
+ * in. The harness is built from this checkout, so it is the "after" side. The page calls
  * `POST /api/commit` to commit what the reviewer accepted: on Cloudflare
  * Pages that is `cf-functions/api/commit.ts` (copied in as `functions/`),
  * and locally it is review-server.ts.
@@ -117,7 +130,11 @@ export async function buildReviewSite(
       if (result !== null) {
         entry.diffPercent = result.diffPercent;
         write(
-          join(outDir, "screenshots/diff", snapshotParts(entry.path).screenshot),
+          join(
+            outDir,
+            "screenshots/diff",
+            snapshotParts(entry.path).screenshot
+          ),
           result.diffPng
         );
       }
@@ -138,6 +155,16 @@ export async function buildReviewSite(
   }
   console.log(`  ${withSpec.size} spec(s) written`);
 
+  // live/head/: the harness, which the Live view frames a story in. Built
+  // from this checkout, the one the "after" capture was made from. A removed
+  // story has no live view: its source is gone.
+  await buildLiveHarness(HARNESS_DIR, join(outDir, LIVE_DIR, "head"));
+  const liveOf = (d: DiffEntry): string | null => {
+    const spec = d.kind === "removed" ? undefined : specsByPath.get(d.path);
+    return spec ? liveSrc("head", spec) : null;
+  };
+  console.log(`  live harness built in ${LIVE_DIR}/head/`);
+
   write(
     join(outDir, "data/diffs.json"),
     JSON.stringify(
@@ -153,6 +180,9 @@ export async function buildReviewSite(
         /** The story's warnings panel (`formatWarningsPanel`), "" when
          *  there is none. */
         warningsPanel: formatWarningsPanel(d.warnings),
+        /** The story live in the harness (`liveSrc`), null when it has
+         *  no source. */
+        live: liveOf(d),
       })),
       null,
       2
@@ -175,10 +205,16 @@ export async function buildReviewSite(
     }
     const png = snapshotParts(entry.path).screenshot;
     if (entry.beforeScreenshotPath) {
-      copyFile(entry.beforeScreenshotPath, join(outDir, "screenshots/before", png));
+      copyFile(
+        entry.beforeScreenshotPath,
+        join(outDir, "screenshots/before", png)
+      );
     }
     if (entry.afterScreenshotPath) {
-      copyFile(entry.afterScreenshotPath, join(outDir, "screenshots/after", png));
+      copyFile(
+        entry.afterScreenshotPath,
+        join(outDir, "screenshots/after", png)
+      );
     }
   }
 
@@ -246,6 +282,14 @@ const PAGE_HTML = `<!DOCTYPE html>
     #view-toggle { display: flex; gap: 6px; }
     .view-btn { padding: 5px 14px; border-radius: 6px; border: 1px solid #ccc; background: #f5f5f5; font-size: 13px; cursor: pointer; }
     .view-btn.active { background: #222; color: #fff; border-color: #222; }
+    .view-btn:focus-visible { outline: 3px solid #2980b9; outline-offset: 2px; }
+
+    /* Live view: the story running live, above the baseline screenshot,
+       both at the scale they were captured at */
+    #live-view h4 { font-size: 12px; color: #666; margin: 0 0 6px; }
+    .live-cell { background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; padding: 12px; min-height: 80px; margin-bottom: 12px; overflow-x: auto; }
+    #live-before { display: block; }
+    ${LIVE_CSS}
 
     #main-content { flex: 1; overflow-y: auto; padding: 20px; }
 
@@ -335,6 +379,7 @@ const PAGE_HTML = `<!DOCTYPE html>
       <button class="view-btn active" data-view="strobe">Strobe</button>
       <button class="view-btn" data-view="side">Side by Side</button>
       <button class="view-btn" data-view="pixel">Pixel Diff</button>
+      <button class="view-btn" data-view="live" title="Run the story in this page: hover, click, drag, animate">Live</button>
     </div>
   </div>
 
@@ -374,6 +419,18 @@ const PAGE_HTML = `<!DOCTYPE html>
             <div id="sbs-no-after" style="color:#aaa;font-size:13px;padding:32px;display:none;">Story removed — no current render</div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Live view: the "after" side runs the story (live-view.ts). Nothing
+         is framed until this view is chosen. -->
+    <div id="live-view" style="display:none;">
+      <h4>After, live</h4>
+      <div class="live-cell"><div id="live-slot" class="live-slot"></div></div>
+      <h4>Before (baseline, static)</h4>
+      <div class="live-cell">
+        <img id="live-before" />
+        <div id="live-no-before" style="color:#aaa;font-size:13px;padding:32px;display:none;">No baseline</div>
       </div>
     </div>
 
@@ -425,6 +482,7 @@ const PAGE_HTML = `<!DOCTYPE html>
   </div>
 </div>
 
+<script>${LIVE_SCRIPT}</script>
 <script>
   let allDiffs = [];
   let meta = { repo: '', branch: '', sha: '' };
@@ -623,9 +681,14 @@ const PAGE_HTML = `<!DOCTYPE html>
     document.getElementById('strobe-view').style.display = 'none';
     document.getElementById('side-view').style.display = 'none';
     document.getElementById('pixel-diff-view').style.display = 'none';
+    document.getElementById('live-view').style.display = 'none';
     stopStrobe();
+    gofishLive.unmount(document.getElementById('live-slot'));
 
-    if (currentView === 'strobe') {
+    if (currentView === 'live') {
+      document.getElementById('live-view').style.display = 'block';
+      renderLive(entry);
+    } else if (currentView === 'strobe') {
       document.getElementById('strobe-view').style.display = 'block';
       renderStrobe(entry);
     } else if (currentView === 'side') {
@@ -690,6 +753,24 @@ const PAGE_HTML = `<!DOCTYPE html>
       imgBefore.src = '';
       startStrobe(false);
     }
+  }
+
+  function renderLive(entry) {
+    const before = document.getElementById('live-before');
+    const noBefore = document.getElementById('live-no-before');
+    const hasBefore = entry.kind !== 'new';
+    before.style.display = hasBefore ? 'block' : 'none';
+    if (hasBefore) before.src = screenshotUrl('before', entry.path);
+    else before.removeAttribute('src');
+    noBefore.style.display = hasBefore ? 'none' : 'block';
+    const slot = document.getElementById('live-slot');
+    if (!entry.live) {
+      slot.innerHTML = '<div class="live-note">' +
+        (entry.kind === 'removed' ? 'Story removed: nothing to run.' : 'No source found for this story, so it cannot run live.') +
+        '</div>';
+      return;
+    }
+    gofishLive.mount(slot, '/' + entry.live, meta.liveNote);
   }
 
   function renderPixelDiff(entry) {
@@ -938,6 +1019,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
     branch: process.env.REVIEW_BRANCH ?? "unknown",
     sha: process.env.REVIEW_SHA ?? "unknown",
     runId: process.env.REVIEW_RUN_ID ?? "",
+    liveNote:
+      "Live runs this PR's build (the commit this run captured). Before is the static baseline: there is no live build of it.",
   });
   console.log(
     `\nTo test locally:\n  npx wrangler pages dev ${OUT_DIR} --functions-dir ${OUT_DIR}/functions`

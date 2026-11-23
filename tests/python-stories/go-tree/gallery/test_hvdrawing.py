@@ -29,5 +29,5 @@ def story_hvdrawing():
             parent_child=alternate([H, V]),
             sibling=alternate([H, V]),
         ),
-        {"w": 640, "h": 420},
+        {},
     )
