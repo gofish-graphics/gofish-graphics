@@ -285,6 +285,136 @@ console.log("# focus: on a line drawn through rows, the nearest row");
   check("far from the lines: none", at(200, 300) === undefined);
 }
 
+console.log("# focus: a part with NaN coordinates");
+{
+  // A line with one good segment and one with NaN coordinates: the NaN part
+  // is skipped, so the pointer on the good part is on the line.
+  const a = { x: 0, y: 40 };
+  const b = { x: 100, y: 40 };
+  const box = { x0: 0, y0: 40, x1: 100, y1: 40 };
+  const nan = { x: NaN, y: NaN };
+  const broken: Candidate = {
+    key: "broken",
+    datum: [],
+    box,
+    position: {},
+    outline: [
+      { box: { x0: NaN, y0: NaN, x1: NaN, y1: NaN }, round: false, segment: [nan, b] },
+      { box, round: false, segment: [a, b] },
+      { box: { x0: NaN, y0: NaN, x1: NaN, y1: NaN }, round: false },
+    ],
+  };
+  check("on its good part: the mark", pick(frame(50, 40, undefined, [broken])) === "broken");
+  check("near its good part: the mark", pick(frame(50, 50, undefined, [broken])) === "broken");
+  check("far from it: none", pick(frame(50, 80, undefined, [broken])) === undefined);
+}
+
+console.log("# focus: the box pre-test does not change the choice");
+{
+  // A reference `within` that walks every outline, with no box test:
+  // `Focus.closest({ to: "outline", radius })` on one candidate is that
+  // candidate exactly when its outline is within `radius`.
+  const inner = Focus.first([Focus.hit(), Focus.closest({ stickiness: 4 })]);
+  const reference = Focus.from((f) => {
+    const p = f.pointer;
+    if (!p) return undefined;
+    const candidates = f.candidates.filter(
+      (c) =>
+        Focus.closest({
+          to: "outline",
+          radius: c.key === f.current?.key ? 20 : 16,
+        })({ ...f, candidates: [c], current: undefined }) !== undefined
+    );
+    return candidates.length === 0 ? undefined : inner({ ...f, candidates });
+  }).snap(4);
+  // A seeded generator, so a failure reproduces.
+  let seed = 1395;
+  const rand = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+  const r = (lo: number, hi: number) => lo + rand() * (hi - lo);
+  type Part = Candidate["outline"][number];
+  const boxOf = (parts: Part[]) => ({
+    x0: Math.min(...parts.map((q) => q.box.x0)),
+    y0: Math.min(...parts.map((q) => q.box.y0)),
+    x1: Math.max(...parts.map((q) => q.box.x1)),
+    y1: Math.max(...parts.map((q) => q.box.y1)),
+  });
+  const segBox = (a: { x: number; y: number }, b: { x: number; y: number }) => ({
+    x0: Math.min(a.x, b.x),
+    y0: Math.min(a.y, b.y),
+    x1: Math.max(a.x, b.x),
+    y1: Math.max(a.y, b.y),
+  });
+  /** One random mark of each kind: a box, a circle, a line through rows,
+   *  a filled polygon (a region), or a mark of several kinds of part. */
+  const randomMark = (key: string): Candidate => {
+    const kind = Math.floor(r(0, 5));
+    const rectPart = (): Part => {
+      const x = r(0, 300);
+      const y = r(0, 300);
+      return { box: { x0: x, y0: y, x1: x + r(1, 60), y1: y + r(1, 60) }, round: false };
+    };
+    const circlePart = (): Part => {
+      const x = r(0, 300);
+      const y = r(0, 300);
+      const rad = r(1, 20);
+      return { box: { x0: x - rad, y0: y - rad, x1: x + rad, y1: y + rad }, round: true };
+    };
+    const regionPart = (): Part => {
+      const cx = r(20, 280);
+      const cy = r(20, 280);
+      const n = 3 + Math.floor(r(0, 6));
+      const pts = Array.from({ length: n }, () => ({ x: cx + r(-40, 40), y: cy + r(-40, 40) }));
+      const region = pts.map((q, i) => [q, pts[(i + 1) % n]] as const);
+      return { box: boxOf(pts.map((q) => ({ box: segBox(q, q), round: false }))), round: false, region };
+    };
+    if (kind === 0) {
+      const part = rectPart();
+      return { key, datum: [], box: part.box, position: { y: (part.box.y0 + part.box.y1) / 2 }, outline: [part] };
+    }
+    if (kind === 1) {
+      const part = circlePart();
+      const c = { x: (part.box.x0 + part.box.x1) / 2, y: (part.box.y0 + part.box.y1) / 2 };
+      return { key, datum: [], box: part.box, position: c, outline: [part] };
+    }
+    if (kind === 2) {
+      const n = 2 + Math.floor(r(0, 6));
+      const pts = Array.from({ length: n }, (_, i) => ({ x: i * 50 + r(-10, 10), y: r(0, 300) }));
+      const outline = pts.slice(1).map((q, i): Part => ({ box: segBox(pts[i], q), round: false, segment: [pts[i], q] }));
+      const points = pts.map((q, i): Candidate => {
+        const b = segBox(q, q);
+        return { key: `${key}#${i}`, datum: [], box: b, position: q, outline: [{ box: b, round: true }] };
+      });
+      return { key, datum: [], box: boxOf(outline), position: {}, outline, points };
+    }
+    if (kind === 3) {
+      const part = regionPart();
+      return { key, datum: [], box: part.box, position: {}, outline: [part] };
+    }
+    const outline = [rectPart(), circlePart(), regionPart()];
+    return { key, datum: [], box: boxOf(outline), position: {}, outline };
+  };
+  let same = 0;
+  let chosen = 0;
+  const frames = 400;
+  const mismatches: unknown[] = [];
+  for (let i = 0; i < frames; i++) {
+    const marks = Array.from({ length: 1 + Math.floor(r(0, 8)) }, (_, j) => randomMark(`m${j}`));
+    const all = marks.flatMap((m) => [m, ...(m.points ?? [])]);
+    const current = rand() < 0.5 ? all[Math.floor(r(0, all.length))] : undefined;
+    const f = frame(r(-20, 320), r(-20, 320), current, marks);
+    const got = defaultFocus(f)?.key;
+    const want = reference(f)?.key;
+    if (got === want) same++;
+    else mismatches.push({ i, got, want });
+    if (got !== undefined) chosen++;
+  }
+  check(
+    `${frames} random frames: the same choice with and without the box test (${chosen} chose a mark)`,
+    same === frames && chosen > frames / 5 && chosen < frames,
+    mismatches.slice(0, 5)
+  );
+}
+
 console.log("# candidates: long paths and many marks");
 {
   /** A stand-in for a mark's node: its uid, no children, no parent, no

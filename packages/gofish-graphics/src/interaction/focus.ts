@@ -41,7 +41,7 @@ export type Candidate = {
   key: unknown;
   /** The mark's rows. */
   datum: unknown[];
-  /** The drawn box. */
+  /** The drawn box. It bounds the outline: it holds every part's box. */
   box: Box;
   /** Where the layout placed the mark. An axis with only a size is absent,
    *  and so is every axis of a mark drawn across its data (a line): such a
@@ -98,11 +98,18 @@ function from(run: FocusBehavior): Chain {
     from((f) => {
       const p = f.pointer;
       if (!p) return undefined;
-      const candidates = f.candidates.filter(
-        (c) =>
-          outlineDistance(p, c.outline) <=
-          (c.key === f.current?.key ? out : reach)
-      );
+      // The box bounds the outline (each part lies in its own box: a circle
+      // in its square, a region in the box of its edge; the box holds every
+      // part's box), so its distance is a lower bound of the outline's: a
+      // candidate whose box is past the limit is cut without walking its
+      // outline.
+      const candidates = f.candidates.filter((c) => {
+        const limit = c.key === f.current?.key ? out : reach;
+        return (
+          boxDistanceSq(p, c.box) <= limit * limit &&
+          outlineDistance(p, c.outline) <= limit
+        );
+      });
       return candidates.length === 0 ? undefined : run({ ...f, candidates });
     });
   chain.onClick = () => from((f) => (f.clicked ? run(f) : f.current));
@@ -215,6 +222,13 @@ const boxDistance = (p: Point, b: Box): number =>
     Math.max(b.y0 - p.y, 0, p.y - b.y1)
   );
 
+/** The square of {@link boxDistance}: no square root. */
+const boxDistanceSq = (p: Point, b: Box): number => {
+  const dx = Math.max(b.x0 - p.x, 0, p.x - b.x1);
+  const dy = Math.max(b.y0 - p.y, 0, p.y - b.y1);
+  return dx * dx + dy * dy;
+};
+
 /** Distance from a point to a region (its edge segments), zero inside it.
  *  Inside is the nonzero rule, as SVG fills a path by default. */
 function regionDistance(
@@ -233,22 +247,27 @@ function regionDistance(
   return winding !== 0 ? 0 : d;
 }
 
+/** Distance from a point to an outline: to its nearest part. A part with
+ *  NaN coordinates is skipped, so it cannot hide the others. */
 function outlineDistance(p: Point, outline: Outline): number {
   let d = Infinity;
   for (const { box, round, segment, region } of outline) {
+    let dd: number;
     if (segment) {
       const [a, b] = segment;
-      d = Math.min(d, segDist(p.x, p.y, a.x, a.y, b.x, b.y));
+      dd = segDist(p.x, p.y, a.x, a.y, b.x, b.y);
     } else if (region) {
-      if (boxDistance(p, box) < d) d = Math.min(d, regionDistance(p, region));
-    } else if (!round) d = Math.min(d, boxDistance(p, box));
+      if (!(boxDistance(p, box) < d)) continue;
+      dd = regionDistance(p, region);
+    } else if (!round) dd = boxDistance(p, box);
     else {
       const c = center(box);
-      d = Math.min(
-        d,
-        Math.max(0, Math.hypot(p.x - c.x, p.y - c.y) - (box.x1 - box.x0) / 2)
+      dd = Math.max(
+        0,
+        Math.hypot(p.x - c.x, p.y - c.y) - (box.x1 - box.x0) / 2
       );
     }
+    if (dd < d) d = dd;
   }
   return d;
 }
