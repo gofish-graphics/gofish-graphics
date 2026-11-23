@@ -59,7 +59,7 @@ chart(path_types).flow(spread(by="path", dir="y", spacing=4)).mark(
   layout placed it: a bar by its row, a dot by its center. A line is as near
   as its path. On a `line` drawn through rows, the box describes the row
   whose point is nearest the pointer. The open box keeps its mark, and its
-  row, until another is 4 px nearer. The box takes no pointer events, so a mark under it is reached as if it were
+  row, until the pointer is on another mark, or another is 4 px nearer. The box takes no pointer events, so a mark under it is reached as if it were
   not there, and over the box with no mark within reach it closes. On a touch screen, a tap opens the box
   and it stays open. A chart opens one box at a time: the marks of every
   `.tooltip()` in it are candidates together.
