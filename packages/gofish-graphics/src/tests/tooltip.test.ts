@@ -87,9 +87,12 @@ console.log("# focus: stickiness");
 // the long one, the current (short) one keeps it with its 4 px head start.
 check("fresh: the nearer row", pick(frame(20, 24)) === "long");
 check("current: the 4 px head start", pick(frame(20, 24, bars[1])) === "short");
+// Between the long and short bars, inside neither, both within reach: the
+// long bar's row is 12 px off, the short one's 18, more than the 4 px head
+// start, so the long bar takes it from the current short one.
 check(
   "more than 4 px nearer another row moves it",
-  pick(frame(200, 18, bars[1])) === "long"
+  pick(frame(20, 22, bars[1])) === "long"
 );
 
 console.log("# focus: the reach to the chosen mark, and its hysteresis");
@@ -258,6 +261,17 @@ console.log("# focus: on a line drawn through rows, the nearest row");
   // line, midway between two rows 100 px apart, is still the line.
   check("12 px off the line, between rows: its row", at(148, 52) === "high#1");
   check("17 px off the line: none", at(148, 57) === undefined);
+  // The current row counts as its line before the reach is taken, so the
+  // line, not the row's point, keeps the 20 px hysteresis: with a row the
+  // focus, 18 px off a lone line it stays, 21 px off it does not.
+  {
+    const lone = through("lone", [[0, 40], [100, 40], [200, 40]]);
+    const row1 = lone.points![1];
+    const atLone = (x: number, y: number) =>
+      defaultFocus(frame(x, y, row1, [lone]))?.key;
+    check("a row the focus, 18 px off its line: kept", atLone(100, 58) === "lone#1");
+    check("a row the focus, 21 px off its line: none", atLone(100, 61) === undefined);
+  }
   // A sweep along a line: the focus changes exactly when the nearest row
   // does, once per row.
   let current: Candidate | undefined;
