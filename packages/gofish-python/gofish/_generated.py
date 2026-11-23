@@ -51,7 +51,7 @@ _OPTION_TYPES: Dict[str, Any] = {
     "Shape": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "rx": ("rx", None), "ry": ("ry", None)}), "oval": ("object", {"kind": ("kind", None)}), "fillet": ("object", {"kind": ("kind", None), "radius": ("radius", None), "neck": ("neck", None), "holes": ("holes", None)}), "blob": ("object", {"kind": ("kind", None), "convexity": ("convexity", None), "connection": ("connection", None), "neck": ("neck", None), "holes": ("holes", None), "separate": ("separate", None)})}),
     "Placement": ("tagged", "kind", {"around": ("object", {"kind": ("kind", None), "directions": ("directions", None), "side": ("side", None), "offset": ("offset", None)}), "along": ("object", {"kind": ("kind", None), "at": ("at", None), "side": ("side", None), "orient": ("orient", None), "offset": ("offset", None)}), "start": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "end": ("object", {"kind": ("kind", None), "offset": ("offset", None)}), "interior": ("object", {"kind": ("kind", None)})}),
     "Baseline": ("tagged", "kind", {"start": ("object", {"kind": ("kind", None)}), "end": ("object", {"kind": ("kind", None)}), "middle": ("object", {"kind": ("kind", None)}), "wiggle": ("object", {"kind": ("kind", None)}), "at": ("object", {"kind": ("kind", None), "part": ("part", None), "point": ("point", None)})}),
-    "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)})}),
+    "Spacing": ("tagged", "kind", {"box": ("object", {"kind": ("kind", None), "gap": ("gap", ("ref", "Length"))}), "pitch": ("object", {"kind": ("kind", None), "distance": ("distance", ("ref", "Length")), "at": ("at", None)}), "atLeast": ("object", {"kind": ("kind", None), "gap": ("gap", None), "justify": ("justify", None)})}),
 }
 
 
@@ -1293,8 +1293,8 @@ def _align_constraint_opts(*, x: Optional[str | list] = None, y: Optional[str | 
     """Align the refs on one or both axes.
 
     Args:
-        x: How the refs line up on x: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, x is left as it is.
-        y: How the refs line up on y: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, y is left as it is.
+        x: How the refs line up on x: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), "mean" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, x is left as it is.
+        y: How the refs line up on y: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), "mean" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, y is left as it is.
     """
     if x is None and y is None:
         raise ValueError("Constraint.align requires at least one of x, y")

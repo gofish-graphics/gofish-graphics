@@ -10,6 +10,8 @@ import type {
   AnchorFact,
   AnchorProgram,
   PlacementFactEmitter,
+  PlacementMeanRequest,
+  PlacementMinGapRequest,
   PlacementParticipantRequest,
   PlacementPinRequest,
   PlacementRelationRequest,
@@ -181,6 +183,33 @@ export class PlacementProgramLowerer<T> implements PlacementFactEmitter<T> {
       gap: request.gap,
       owner: request.owner,
       chain: request.chain,
+    });
+  }
+
+  atLeast(request: PlacementMinGapRequest<T>): void {
+    if (!this.target(request.from.key) || !this.target(request.to.key)) return;
+    this.anchorFacts(request.axis).push({
+      type: "anchor-min-gap",
+      axis: request.axis,
+      from: { node: request.from.key, anchor: request.from.anchor },
+      to: { node: request.to.key, anchor: request.to.anchor },
+      gap: request.gap,
+      owner: request.owner,
+      slack: request.slack,
+      chain: request.chain,
+    });
+  }
+
+  mean(request: PlacementMeanRequest): void {
+    if (!this.target(request.target.key)) return;
+    const operands = request.operands.filter(({ key }) => this.target(key));
+    if (operands.length === 0) return;
+    this.anchorFacts(request.axis).push({
+      type: "anchor-mean",
+      axis: request.axis,
+      target: { node: request.target.key, anchor: request.target.anchor },
+      operands: operands.map(({ key, anchor }) => ({ node: key, anchor })),
+      owner: request.owner,
     });
   }
 

@@ -74,6 +74,9 @@ export interface DistributeOptions {
    *  - `Spacing.pitch(distance, { at })`: `at[i+1] = at[i] + distance`, a
    *    fixed distance between the same point on each child, which does not
    *    (`"middle"` is center to center).
+   *  - `Spacing.atLeast(gap, { justify })`: `start[i+1] ≥ end[i] + gap`, a
+   *    minimum gap, which the solve meets after the exact constraints
+   *    (PLACEHOLDER name).
    *
    *  A bare amount is `Spacing.box(amount)`: pixels, a percent of the room
    *  of the layer that holds the chain, or an `fr` weight in its scope
@@ -204,7 +207,7 @@ export function spacingOf(spacing: Gap | Spacing): Spacing {
 /** The amount a spacing lays out between neighbors: a box's gap, or a
  *  pitch's distance. */
 export const spacingAmount = (spacing: Spacing): Gap =>
-  spacing.kind === "box" ? spacing.gap : spacing.distance;
+  spacing.kind === "pitch" ? spacing.distance : spacing.gap;
 
 /** A chain's baseline: a spread takes every one but `wiggle`, whose 0
  *  moves with the cross-sections a stack glues. */
@@ -295,6 +298,7 @@ export function distributePlacementAnchors({
   // edges (end of prev → start of cur).
   switch (spacing.kind) {
     case "box":
+    case "atLeast":
       return { from: "end", to: "start" };
     case "pitch": {
       const at = spacing.at ?? "baseline";
@@ -364,14 +368,22 @@ export function lowerDistributePlacement<T>(
       isInitiallyPlaced(constraint.dir, keys[i])
     )
       continue;
-    emitter.relate({
+    const edge = {
       axis: constraint.dir,
       from: { key: keys[i - 1], anchor: anchors.from },
       to: { key: keys[i], anchor: anchors.to },
       gap: A.fromValue(gapOf(constraint, axisIndex(constraint.dir))),
       owner,
       chain: true,
-    });
+    };
+    // A minimum gap is a fact of its own, which the solve separates the
+    // rigid groups by (`separateGroups` in differenceGraph.ts).
+    if (constraint.spacing.kind === "atLeast")
+      emitter.atLeast({
+        ...edge,
+        slack: constraint.spacing.justify ?? "start",
+      });
+    else emitter.relate(edge);
   }
   // A spread that states its 0 carries its {@link StackBaseline}, which the
   // solver's free-origin fallback seats at the measure's origin (#773): a

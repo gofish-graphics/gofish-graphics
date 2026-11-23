@@ -151,6 +151,22 @@ export function lowerAlignPlacement<T>(
       emitSpanOrSize(axis, spec);
       return;
     }
+    // `"mean"`: the first operand's middle at the mean of the others'
+    // middles, one equation the solve places after its operands
+    // (`placeMeans` in differenceGraph.ts).
+    if (spec === "mean") {
+      const [first] = constraint.children;
+      const target = children.find(({ ref }) => ref === first);
+      const operands = children.filter(({ ref }) => ref !== first);
+      if (target === undefined || operands.length === 0) return;
+      emitter.mean({
+        axis,
+        target: { key: target.key, anchor: "middle" },
+        operands: operands.map(({ key }) => ({ key, anchor: "middle" })),
+        owner,
+      });
+      return;
+    }
     if (children.length === 0) return;
     const anchors = normalizedAnchors(spec, children.length);
 

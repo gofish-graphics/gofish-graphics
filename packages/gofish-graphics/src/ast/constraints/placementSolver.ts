@@ -226,6 +226,9 @@ function reduceToAxisProblem<T>(
   const participantFacts: AxisProblem<T>["participantFacts"] = [];
   const participants = new Set<NodeId>();
   const chainAnchors = new Map<NodeId, T>();
+  const minGaps: NonNullable<AxisProblem<T>["minGaps"]> = [];
+  const means: NonNullable<AxisProblem<T>["means"]> = [];
+  const sizes = new Map<NodeId, T>();
 
   // A chain lays its parts by their plots (`anchorOffset`'s `span`).
   const resolveOffset = (
@@ -299,12 +302,80 @@ function reduceToAxisProblem<T>(
       );
       continue;
     }
+    if (fact.type === "anchor-min-gap") {
+      // Reduced as a relation is: `to.min ≥ from.min + fromOffset + gap −
+      // toOffset`, each part of a chain laid by its plot.
+      const chain = fact.chain === true;
+      const fromApart = apart?.has(fact.from.node) === true;
+      const toApart = apart?.has(fact.to.node) === true;
+      const fromOffset = resolveOffset(
+        fact.from.node,
+        fact.from.anchor,
+        chain ? chainSpan(fromApart, toApart) : "box"
+      );
+      const toOffset = resolveOffset(
+        fact.to.node,
+        fact.to.anchor,
+        chain ? chainSpan(toApart, fromApart) : "box"
+      );
+      if (fromOffset === undefined || toOffset === undefined) continue;
+      participants.add(fact.from.node);
+      participants.add(fact.to.node);
+      minGaps.push({
+        from: fact.from.node,
+        to: fact.to.node,
+        offset: A.sub(A.add(fromOffset, fact.gap), toOffset),
+        owner: fact.owner,
+        slack: fact.slack,
+        chain: fact.chain,
+      });
+      for (const node of [fact.from.node, fact.to.node]) {
+        const size =
+          strongSizes.get(node) ??
+          targets.get(node)?.dims[axisIndex(axis)].size;
+        if (size !== undefined) sizes.set(node, size);
+      }
+      continue;
+    }
+    if (fact.type === "anchor-mean") {
+      // `target.min + targetOffset = mean(operand.min + operandOffset)`.
+      const targetOffset = resolveOffset(fact.target.node, fact.target.anchor);
+      const operandOffsets = fact.operands.map((o) =>
+        resolveOffset(o.node, o.anchor)
+      );
+      if (
+        targetOffset === undefined ||
+        operandOffsets.some((o) => o === undefined)
+      )
+        continue;
+      participants.add(fact.target.node);
+      for (const o of fact.operands) participants.add(o.node);
+      means.push({
+        target: fact.target.node,
+        operands: fact.operands.map((o) => o.node),
+        offset: A.sub(
+          A.scale(1 / operandOffsets.length, A.add(...(operandOffsets as T[]))),
+          targetOffset
+        ),
+        owner: fact.owner,
+      });
+      continue;
+    }
     // anchor-participant
     participants.add(fact.node);
     participantFacts.push(participantFact(fact.node, axis, fact.owner));
   }
 
-  return { relations, pins, participantFacts, participants, chainAnchors };
+  return {
+    relations,
+    pins,
+    participantFacts,
+    participants,
+    chainAnchors,
+    minGaps,
+    means,
+    sizes,
+  };
 }
 
 /** Solve one axis's anchor program into `(min, size)` per node, plus any cell or
@@ -346,7 +417,11 @@ function solveRank2Axis<T>(
   for (const fact of facts) {
     if (fact.type === "anchor-participant" && fact.origin !== undefined)
       stackOrigins.set(fact.node, fact.origin);
-    if (fact.type !== "anchor-relation" || !fact.chain) continue;
+    if (
+      (fact.type !== "anchor-relation" && fact.type !== "anchor-min-gap") ||
+      !fact.chain
+    )
+      continue;
     placedByChain.add(fact.from.node);
     placedByChain.add(fact.to.node);
   }
@@ -459,9 +534,12 @@ export function solvePlacementCells<T>(
       const axis = axisName(idx as 0 | 1);
       for (const [operand, { container, gap }] of rigid) {
         const mentioned = facts.some((f) =>
-          f.type === "anchor-relation"
+          f.type === "anchor-relation" || f.type === "anchor-min-gap"
             ? f.from.node === operand || f.to.node === operand
-            : f.node === operand
+            : f.type === "anchor-mean"
+              ? f.target.node === operand ||
+                f.operands.some((o) => o.node === operand)
+              : f.node === operand
         );
         if (!mentioned) continue;
         facts.push({

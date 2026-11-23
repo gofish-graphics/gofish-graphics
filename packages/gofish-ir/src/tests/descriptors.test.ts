@@ -362,6 +362,7 @@ const SCHEMA_STRATEGY_KEYS: Record<
   Spacing: {
     box: { gap: true },
     pitch: { distance: true, at: true },
+    atLeast: { gap: true, justify: true },
   } satisfies StrategyKeys<SpacingIR>,
 };
 

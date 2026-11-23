@@ -9,7 +9,7 @@
  *
  * `lib.ts` binds this module as `Spacing` (`Spacing.pitch(70, { at:
  * "baseline" })`), and `gofish-graphics/spacing` exports the same module.
- * Both kinds take a required amount, so each is a call only. A strategy is a
+ * Every kind takes a required amount, so each is a call only. A strategy is a
  * plain object, `{ kind, ...params }`, and that object is also its wire form,
  * so it crosses the Python bridge as IR. The kinds and their params are
  * declared once, in gofish-ir's `STRATEGIES` table, which checks a strategy
@@ -37,8 +37,15 @@ export type PitchAt = NonNullable<PitchIR["at"]>;
  *  {@link pitch}. */
 export type PitchSpacing = Omit<PitchIR, "distance"> & { distance: Gap };
 
+/** `atLeast()`: a gap between facing edges of at least an amount. See
+ *  {@link atLeast}. */
+export type AtLeastSpacing = Extract<Frontend.SpacingIR, { kind: "atLeast" }>;
+
+/** Where the room a minimum gap leaves goes: see {@link atLeast}. */
+export type Justify = NonNullable<AtLeastSpacing["justify"]>;
+
 /** Every built-in spacing: the value of `spread`'s `spacing`. */
-export type Spacing = BoxSpacing | PitchSpacing;
+export type Spacing = BoxSpacing | PitchSpacing | AtLeastSpacing;
 
 /**
  * A gap between the facing edges of each child's box: the end of one child
@@ -68,4 +75,27 @@ export function pitch(
   opts: { at?: PitchAt } = {}
 ): PitchSpacing {
   return { kind: "pitch", distance, ...given(opts) };
+}
+
+/**
+ * A gap of at least `gap` pixels between the facing edges of each child's
+ * box. Where other constraints already hold two children far enough apart,
+ * the gap leaves them there; where they would come closer, it pushes them
+ * apart. The exact constraints are solved first, and the minimum gaps then
+ * separate what they place.
+ *
+ * PLACEHOLDER: the name and the `justify` option are not signed off.
+ *
+ * @param gap Pixels. A negative gap lets the children overlap by at most
+ *   that much.
+ * @param justify Where the room the gaps leave goes, where they leave some:
+ *   `"start"`, each child as near the start as its gaps allow; `"end"`, as
+ *   near the end of the same span; `"center"`, halfway between. Default
+ *   `"start"`.
+ */
+export function atLeast(
+  gap: number,
+  opts: { justify?: Justify } = {}
+): AtLeastSpacing {
+  return { kind: "atLeast", gap, ...given(opts) };
 }

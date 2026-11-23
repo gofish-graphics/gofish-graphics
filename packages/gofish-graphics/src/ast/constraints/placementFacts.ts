@@ -50,6 +50,45 @@ export type AnchorRelationFact<T = number> = {
   chain?: boolean;
 };
 
+/**
+ * Which solution a set of minimum gaps takes where they leave room to
+ * spare (the slack): `"start"` the least solution (each group as near the
+ * start as its gaps allow), `"end"` the greatest one inside the least
+ * solution's span, `"center"` the mean of the two. See `separateGroups` in
+ * differenceGraph.ts.
+ */
+export type Slack = "start" | "end" | "center";
+
+/** A minimum gap: `to`'s anchor is at least `gap` after `from`'s. Two on
+ *  one pair compose by their max, and a cycle of them is an error. Exact
+ *  facts ({@link AnchorRelationFact}, pins) are solved first, into rigid
+ *  groups, and the minimum gaps then separate the groups (`separateGroups`
+ *  in differenceGraph.ts). */
+export type AnchorMinGapFact<T = number> = {
+  type: "anchor-min-gap";
+  axis: Axis;
+  from: AnchorRef;
+  to: AnchorRef;
+  gap: T;
+  owner: string;
+  /** Where the gaps' slack goes. */
+  slack: Slack;
+  /** Set on an edge of a spread's chain, as on {@link AnchorRelationFact}. */
+  chain?: boolean;
+};
+
+/** A mean of positions: `target`'s anchor is at the mean of the
+ *  `operands`' anchors (a parent at the mean of its children). A linear
+ *  equation the difference graph holds only in part: see `solveAxisProblem`
+ *  in differenceGraph.ts. */
+export type AnchorMeanFact = {
+  type: "anchor-mean";
+  axis: Axis;
+  target: AnchorRef;
+  operands: AnchorRef[];
+  owner: string;
+};
+
 export type AnchorParticipantFact<T = number> = {
   type: "anchor-participant";
   node: NodeId;
@@ -112,6 +151,8 @@ export type SizePinFact<T = number> = {
 export type AnchorFact<T = number> =
   | AnchorPinFact<T>
   | AnchorRelationFact<T>
+  | AnchorMinGapFact<T>
+  | AnchorMeanFact
   | AnchorParticipantFact<T>
   | SizePinFact<T>;
 
@@ -146,6 +187,19 @@ export type PlacementRelationRequest<T = number> = {
   owner: string;
   /** See {@link AnchorRelationFact.chain}. */
   chain?: boolean;
+};
+
+/** Request a minimum gap: see {@link AnchorMinGapFact}. */
+export type PlacementMinGapRequest<T = number> = PlacementRelationRequest<T> & {
+  slack: Slack;
+};
+
+/** Request a mean of positions: see {@link AnchorMeanFact}. */
+export type PlacementMeanRequest = {
+  axis: Axis;
+  target: { key: NodeId; anchor: RelationAnchor };
+  operands: { key: NodeId; anchor: RelationAnchor }[];
+  owner: string;
 };
 
 export type PlacementParticipantRequest<T = number> = {
@@ -192,12 +246,34 @@ export type PlacementRelation<T = number> = {
   chain?: boolean;
 };
 
+/** A minimum gap reduced to `min`-anchored form: `to.min ≥ from.min +
+ *  offset`. */
+export type PlacementMinGap<T = number> = {
+  from: NodeId;
+  to: NodeId;
+  offset: T;
+  owner: string;
+  slack: Slack;
+  chain?: boolean;
+};
+
+/** A mean reduced to `min`-anchored form: `target.min = mean(operand.min)
+ *  + offset`. */
+export type PlacementMean<T = number> = {
+  target: NodeId;
+  operands: NodeId[];
+  offset: T;
+  owner: string;
+};
+
 /** The lowering interface: constraints emit anchor pins, relations, and
  *  participants without pre-evaluating any offset (that is the solver's job). */
 export interface PlacementFactEmitter<T = number> {
   pin(request: PlacementPinRequest<T>): void;
   include(request: PlacementParticipantRequest<T>): void;
   relate(request: PlacementRelationRequest<T>): void;
+  atLeast(request: PlacementMinGapRequest<T>): void;
+  mean(request: PlacementMeanRequest): void;
   pinSize(request: PlacementSizePinRequest<T>): void;
 }
 

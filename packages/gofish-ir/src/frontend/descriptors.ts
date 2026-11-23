@@ -1192,6 +1192,23 @@ export const STRATEGIES = {
           },
         },
       },
+      // PLACEHOLDER: the name `atLeast` and its `justify` are not signed off.
+      atLeast: {
+        doc: "A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer.",
+        positional: ["gap"],
+        params: {
+          gap: {
+            type: t.num({ finite: true }),
+            required: true,
+            doc: "The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much.",
+          },
+          justify: {
+            type: t.enum("start", "end", "center"),
+            default: "start",
+            doc: 'Where the room the gaps leave goes: "start" puts each child as near the start as its gaps allow, "end" as near the end of the same span, and "center" halfway between.',
+          },
+        },
+      },
     },
   },
 } satisfies Record<string, StrategyFamily>;
@@ -2759,10 +2776,11 @@ export const COORDS: Record<string, ConstructDescriptor> = {
  *  operand, or one anchor per operand. */
 const alignAxis = (axis: string): FieldSpec => ({
   type: t.union(
-    t.enum(...ALIGN_ANCHORS, "span", "size"),
+    // PLACEHOLDER: "mean" is not signed off.
+    t.enum(...ALIGN_ANCHORS, "span", "size", "mean"),
     t.array(t.enum(...ALIGN_ANCHORS))
   ),
-  doc: `How the refs line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), or a list of anchors, one per ref. Omitted, ${axis} is left as it is.`,
+  doc: `How the refs line up on ${axis}: an anchor ("start", "middle", "end", "baseline") shared by every ref, "span" (the target takes the source's position and size) or "size" (its size only), "mean" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, ${axis} is left as it is.`,
 });
 
 /** A coordinate of `Constraint.position`: a pixel or a `datum(v)`. */

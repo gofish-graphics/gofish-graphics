@@ -1304,6 +1304,26 @@ operand already placed — except where an operand is placed by its own data
 (a scatter facet, a nested partition's cell: `isDataPositioned`), which
 stays silent.
 
+Beside the exact facts the graph takes two more. A **minimum gap**
+(`anchor-min-gap`, from `Spacing.atLeast`) says one anchor is at least a
+gap after another. The exact facts are solved first, into rigid groups
+(the components), and every pinned component joins one group, since a pin is
+an exact gap from the layer's origin. The gaps then separate the groups
+(`separateGroups`): two gaps between one pair of groups compose by their max,
+a gap inside one group only checks it, and a cycle of gaps is an error naming
+its groups. The least solution is the longest path over the groups, each
+group with no gap into it starting at 0. The greatest is the least solution of
+the mirrored problem, inside the least solution's span. The gaps' `justify`
+picks one, or their mean, and a cluster with a pinned group then moves as one
+so the pins hold. It needs only add, max and negate, so it runs in formulas
+like the rest of the solve. A **mean** (`anchor-mean`, from `Constraint.align({ x:
+"mean" })`) puts one anchor at the mean of others. When its operands are in one
+group it is an exact relation and joins that group (`rigidGroups`). When they
+are in several, it is no difference of two positions, so the graph cannot
+hold it: it is placed after its operands, in an ordered pass (`placeMeans`),
+and a target that the gaps also place, or that shares a group with some of
+its operands, is an error.
+
 Before any of this, every placement operand of the layer is resolved to a
 node inside it (`resolveReferences`, `_ref.tsx`), and the solve keys each
 one by that node's uid (`keyOf`). An operand a user writes is a name, and it
@@ -1318,10 +1338,13 @@ before. An operand nested inside a direct child is a `NestedOperand`
 (`constraints/nestedOperand.ts`): its box is the container's box plus the
 constant offset the container's own layout gave it (the plan input `gap:@n`), and the solve adds one
 rigid `anchor-relation` (container `start` → operand `start`) per axis the
-operand takes part in. Only a directly named child skips phase-1 baseline
-placement, so an unnamed container stays put and the nested operand is a
-fixed reference; a named container moves in the solve and carries the
-operand with it. The container does the write-back; the stand-in's own
+operand takes part in. A container that a constraint names, directly or
+through an operand nested in it, skips phase-1 baseline placement
+(`constrainedOn` in `claimPlacement.ts`), so it moves in the solve and
+carries the operand with it. A container that no constraint reaches stays
+put. (Before, only a directly named child moved, so a constraint between two
+nested operands found both pinned where their containers sat and did
+nothing.) The container does the write-back; the stand-in's own
 placement writes are no-ops, and its size writes throw, because a layer
 cannot resize something another child already laid out.
 

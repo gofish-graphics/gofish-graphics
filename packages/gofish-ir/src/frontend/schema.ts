@@ -669,6 +669,11 @@ export type SpacingIR =
       kind: "pitch";
       distance: number | LengthIR;
       at?: AlignAnchorIR;
+    }
+  | {
+      kind: "atLeast";
+      gap: number;
+      justify?: "start" | "end" | "center";
     };
 
 /** How a path runs through its points, made by a call in the `Curve` family
@@ -1213,7 +1218,12 @@ export type AlignAnchorIR = "start" | "middle" | "end" | "baseline";
 
 /** One axis of an `align` constraint: an anchor or interval statistic for
  *  every operand, or one anchor per operand. */
-export type AlignAxisIR = AlignAnchorIR | "span" | "size" | AlignAnchorIR[];
+export type AlignAxisIR =
+  | AlignAnchorIR
+  | "span"
+  | "size"
+  | "mean"
+  | AlignAnchorIR[];
 
 /** A constraint over the operands of a `.relate()` call: `{ type, options?,
  *  refs }`. The keys of each kind's `options` are declared once, in

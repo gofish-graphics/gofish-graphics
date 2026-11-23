@@ -1959,7 +1959,15 @@ for the API.
             "x": {
               "anyOf": [
                 {
-                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
+                  "enum": [
+                    "start",
+                    "middle",
+                    "end",
+                    "baseline",
+                    "span",
+                    "size",
+                    "mean"
+                  ]
                 },
                 {
                   "type": "array",
@@ -1968,12 +1976,20 @@ for the API.
                   }
                 }
               ],
-              "description": "How the refs line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. Omitted, x is left as it is."
+              "description": "How the refs line up on x: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), \"mean\" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, x is left as it is."
             },
             "y": {
               "anyOf": [
                 {
-                  "enum": ["start", "middle", "end", "baseline", "span", "size"]
+                  "enum": [
+                    "start",
+                    "middle",
+                    "end",
+                    "baseline",
+                    "span",
+                    "size",
+                    "mean"
+                  ]
                 },
                 {
                   "type": "array",
@@ -1982,7 +1998,7 @@ for the API.
                   }
                 }
               ],
-              "description": "How the refs line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), or a list of anchors, one per ref. Omitted, y is left as it is."
+              "description": "How the refs line up on y: an anchor (\"start\", \"middle\", \"end\", \"baseline\") shared by every ref, \"span\" (the target takes the source's position and size) or \"size\" (its size only), \"mean\" (the first ref's middle at the mean of the other refs' middles), or a list of anchors, one per ref. Omitted, y is left as it is."
             }
           },
           "anyOf": [
@@ -5545,6 +5561,24 @@ for the API.
             }
           },
           "required": ["kind", "distance"]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "const": "atLeast"
+            },
+            "gap": {
+              "type": "number",
+              "description": "The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much."
+            },
+            "justify": {
+              "enum": ["start", "end", "center"],
+              "description": "Where the room the gaps leave goes: \"start\" puts each child as near the start as its gaps allow, \"end\" as near the end of the same span, and \"center\" halfway between.",
+              "default": "start"
+            }
+          },
+          "required": ["kind", "gap"]
         }
       ],
       "description": "How far apart `spread` sets its neighbors along `dir`: the value of its `spacing` option, beside a bare amount, which is `Spacing.box(amount)`. Also the `spacing` of `Constraint.distribute`."

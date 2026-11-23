@@ -59,10 +59,15 @@ from gofish.spacing import pitch  # the same function as Spacing.pitch
 
 ## Members
 
-| Member            | Measures from               | To                                | Depends on the children's sizes |
-| ----------------- | --------------------------- | --------------------------------- | ------------------------------- |
-| `Spacing.box()`   | the end of one child's box  | the start of the next child's box | yes                             |
-| `Spacing.pitch()` | the point `at` on one child | the point `at` on the next child  | no                              |
+| Member               | Measures from               | To                                                   | Depends on the children's sizes |
+| -------------------- | --------------------------- | ---------------------------------------------------- | ------------------------------- |
+| `Spacing.box()`      | the end of one child's box  | the start of the next child's box                    | yes                             |
+| `Spacing.pitch()`    | the point `at` on one child | the point `at` on the next child                     | no                              |
+| `Spacing.at_least()` | the end of one child's box  | the start of the next child's box, at least `gap` on | yes                             |
+
+`Spacing.at_least(gap, justify=None)` is a minimum gap, a placeholder name
+that is not yet final. The exact constraints are solved first, and the minimum
+gaps then push apart what they would put closer. Its `gap` is pixels only.
 
 `at` is `"start"`, `"middle"`, `"end"` or `"baseline"`. `"middle"` is center
 to center. `"baseline"` is each child's local 0, which for a ribbon or a text
@@ -76,6 +81,11 @@ is its baseline, not an edge of its box.
 ## `Spacing.pitch()`
 
 ::: gofish-ref Spacing.pitch
+:::
+
+## `Spacing.at_least()`
+
+::: gofish-ref Spacing.atLeast
 :::
 
 ## See also

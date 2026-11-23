@@ -21,16 +21,21 @@ export type AlignAnchor = Alignment | "baseline";
  *  `"size"` (equate lengths only; the target does not move) or `"span"`
  *  (equate both endpoints: position AND size). `"span"`/`"size"` are align-only
  *  — they name a relation the target has no intrinsic size for, not a point on
- *  a box, so `position`/`distribute` do not accept them. */
-export type AlignValue = AlignAnchor | "span" | "size";
+ *  a box, so `position`/`distribute` do not accept them. `"mean"` puts the
+ *  first operand's middle at the mean of the other operands' middles (a
+ *  parent at the mean of its children); PLACEHOLDER spelling, not signed
+ *  off. */
+export type AlignValue = AlignAnchor | "span" | "size" | "mean";
 
 /** Whether an align spec puts its targets at point anchors on its axis: one
  *  anchor, or one per target. `"span"` and `"size"` are interval statistics
- *  that write an unbound target, so they place nothing at a point. */
+ *  that write an unbound target, so they place nothing at a point, and
+ *  `"mean"` places one operand from all the others, not every operand at
+ *  one point. */
 export const isPointAlign = (
   spec: AlignValue | AlignAnchor[] | undefined
 ): spec is AlignAnchor | AlignAnchor[] =>
-  spec !== undefined && spec !== "span" && spec !== "size";
+  spec !== undefined && spec !== "span" && spec !== "size" && spec !== "mean";
 
 /**
  * A constraint operand: a handle on the nodes it means. A macro (an

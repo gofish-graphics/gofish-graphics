@@ -349,8 +349,10 @@ export const constraintsOn = (
 };
 
 /** The children a constraint places on `axis` (a position, an align, a
- *  distribute or a nest acting on it), by their direct operands: of the
- *  constraints that pass `test`, if one is given. */
+ *  distribute or a nest acting on it), by their operands: a direct operand
+ *  is the child, and one nested in a child moves that child with it
+ *  (`NestedOperand`), so it places the child too. Of the constraints that
+ *  pass `test`, if one is given. */
 function constrainedOn(
   axis: 0 | 1,
   constraints: readonly ConstraintSpec[],
@@ -363,7 +365,7 @@ function constrainedOn(
     if (!actsOn(c, axis) || !test(c)) continue;
     for (const r of c.children) {
       const op = operands.get(keyOf(r));
-      if (op?.direct) out.add(op.child);
+      if (op !== undefined) out.add(op.child);
     }
   }
   return out;

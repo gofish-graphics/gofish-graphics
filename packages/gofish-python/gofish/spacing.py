@@ -17,7 +17,7 @@ from typing import Any, Dict, Optional
 
 from .ast import LengthValue
 
-__all__ = ["box", "pitch"]
+__all__ = ["box", "pitch", "at_least"]
 
 
 def box(gap: float | LengthValue, /) -> Dict[str, Any]:
@@ -65,6 +65,32 @@ def pitch(distance: float | LengthValue, /, *, at: Optional[str] = None) -> Dict
     for _k, _v in [
         ("distance", distance),
         ("at", at),
+    ]:
+        if _v is not None:
+            out[_k] = _v
+    return out
+
+
+def at_least(gap: float, /, *, justify: Optional[str] = None) -> Dict[str, Any]:
+    """A gap of at least an amount between the facing edges of each child's box. The exact constraints are solved first, and the minimum gaps then push apart the children they would put closer.
+
+    Args:
+        gap: The least gap between facing edges, in pixels. A negative gap lets the children overlap by at most that much.
+        justify: Where the room the gaps leave goes: "start" puts each child as near the start as its gaps allow, "end" as near the end of the same span, and "center" halfway between. Default "start".
+    """
+    if not (isinstance(gap, (int, float)) and not isinstance(gap, bool)):
+        raise TypeError(f"Spacing.at_least(gap) must be a finite number, got {type(gap).__name__}")
+    if not math.isfinite(gap):
+        raise ValueError(f"Spacing.at_least(gap) must be finite, got {gap!r}")
+    if justify is not None:
+        if not isinstance(justify, str):
+            raise TypeError(f"Spacing.at_least(justify=...) must be one of \"start\", \"end\", \"center\", got {type(justify).__name__}")
+        if justify not in ("start", "end", "center"):
+            raise ValueError(f"Spacing.at_least(justify=...) must be one of \"start\", \"end\", \"center\", got {justify!r}")
+    out: Dict[str, Any] = {"kind": "atLeast"}
+    for _k, _v in [
+        ("gap", gap),
+        ("justify", justify),
     ]:
         if _v is not None:
             out[_k] = _v
