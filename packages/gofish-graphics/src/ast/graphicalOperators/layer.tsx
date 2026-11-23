@@ -45,7 +45,11 @@ import {
   applyRelationalZBelowDefaults,
   targetOf,
 } from "../constraints/relationalPaint";
-import { axisName, type ConstraintPosScales } from "../constraints/shared";
+import {
+  axisName,
+  type ConstraintPosScales,
+  type ResolvedOperands,
+} from "../constraints/shared";
 import {
   applyNestExtentPlan,
   applyNestLayoutProposal,
@@ -77,7 +81,7 @@ import {
   type Placement,
   type Seating,
 } from "../constraints/claimPlacement";
-import { chainRooms } from "../constraints/distribute";
+import { chainRooms, chainsOf } from "../constraints/distribute";
 import {
   buildPlan,
   laidFrames,
@@ -339,6 +343,15 @@ export const layer = createNodeOperatorSequential(
       seatingMemo = { of: resolved, seating: fresh };
       return fresh;
     };
+    // This layer's chains on `axis` with members that have no size of their
+    // own (`chainsOf`), read once per claim (`ClaimMemo.chains`).
+    const chainsOn = (axis: 0 | 1, refs: ResolvedOperands) =>
+      (node._claimMemo.chains[axis] ??= chainsOf(
+        node.constraints,
+        node.children,
+        axis,
+        refs
+      ));
 
     // The layer's composed per-axis types: the types of its content. A pure
     // function of the children's types: the type hook computes it, reports it
@@ -486,8 +499,12 @@ export const layer = createNodeOperatorSequential(
           }),
           aligns,
           { operands, keyOf },
-          (i) => node.children[i] instanceof GoFishRef,
-          (i) => refHome(node.children[i] as GoFishRef, axis)
+          // A `ref`'s part is its target's, or its own where that is not
+          // known yet (`refHome`).
+          (i) => {
+            const c = node.children[i];
+            return c instanceof GoFishRef ? (refHome(c, axis) ?? i) : undefined;
+          }
         )
       ) as [UnderlyingSpace[], UnderlyingSpace[]];
       return {
@@ -1028,18 +1045,21 @@ export const layer = createNodeOperatorSequential(
             inPlot(i, axis) ? plotRooms[axis] : size[axis];
 
           // The room of each member of a chain with no size of its own
-          // (#1257): its need plus its share of the slack (`chainRooms`).
-          const chainRoomsOn = (axis: 0 | 1) =>
-            chainRooms(
-              node,
-              axis,
-              { operands, keyOf },
-              size[axis],
-              sigmaOf(axis),
-              inkChildren[axis],
-              contentExtents[axis]
-            );
-          const chainRoomsByAxis = [chainRoomsOn(0), chainRoomsOn(1)];
+          // (#1257): its need plus its share of the slack (`chainRooms`),
+          // on an axis this layer has room on.
+          const chainRoomsByAxis = ([0, 1] as const).map((axis) =>
+            Number.isFinite(size[axis])
+              ? chainRooms(
+                  chainsOn(axis, { operands, keyOf }),
+                  node.children,
+                  axis,
+                  size[axis],
+                  sigmaOf(axis),
+                  inkChildren[axis],
+                  contentExtents[axis]
+                )
+              : undefined
+          );
 
           const layoutChild = (i: number) => {
             const child = children[i];
@@ -1146,7 +1166,7 @@ export const layer = createNodeOperatorSequential(
             );
             const laid: LaidOut = {
               child: (i) => childPlaceables[i],
-              nested: (key) => targets.get(key),
+              targets,
               gap: (key) => gaps.get(key),
               literalSeat: (i) => literalSeatsByKey.get(node.children[i].uid),
               seat: seatOf,
@@ -1167,8 +1187,7 @@ export const layer = createNodeOperatorSequential(
                     effectivePosScales[axis]?.sigma ??
                     childScaleFactors[axis] ??
                     0,
-                  laid,
-                  targets
+                  laid
                 )
             );
 

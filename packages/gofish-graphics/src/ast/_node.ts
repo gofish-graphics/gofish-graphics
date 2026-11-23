@@ -107,7 +107,8 @@ import {
   type Length,
   type LengthValue,
 } from "./length";
-import type { Placement } from "./constraints/claimPlacement";
+import type { Placement, Seating } from "./constraints/claimPlacement";
+import type { ChainMembers } from "./constraints/distribute";
 import type { LayerPlan } from "./solver/plan";
 import { aroundShare, plotForms } from "./solver/plotForms";
 import { toJSON, width as intervalWidth } from "../util/interval";
@@ -259,7 +260,8 @@ type ClaimMemo = {
    *  ({@link GoFishNode.gapOf}), once read. */
   gaps: Map<GapConstraint, [Pwl.Value | undefined, Pwl.Value | undefined]>;
   /** Per axis, its chains with members that have no size of their own
-   *  (`chainsOf` in `constraints/distribute.ts`), once read. */
+   *  (`chainsOf` in `constraints/distribute.ts`), once `layer` reads
+   *  them. */
   chains: [ChainMembers[] | undefined, ChainMembers[] | undefined];
   /** Per axis, the key of its unit ({@link GoFishNode.unitKeyAt}), once
    *  read. */
@@ -268,11 +270,6 @@ type ClaimMemo = {
    *  read. */
   sizeKinds?: [SizeKind, SizeKind];
 };
-
-/** One chain of a layer along an axis (a `distribute` there): its members
- *  with no size of their own, each with its weight in the slack
- *  (`chainsOf` in `constraints/distribute.ts`). */
-export type ChainMembers = { child: number; weight: number }[];
 
 const freshClaimMemo = (): ClaimMemo => ({
   carriesData: [undefined, undefined],
@@ -304,10 +301,7 @@ export type ClaimWalk = {
    *  constraints that act on it there, and the literal seats its
    *  constraints pin, by key (`literalSeats`; a direct operand's key is its
    *  child's uid). */
-  seating: () => {
-    acting: [Map<number, ConstraintSpec[]>, Map<number, ConstraintSpec[]>];
-    seats: Map<string, [number | undefined, number | undefined]>;
-  };
+  seating: () => Seating;
   /** Per axis, its own size there: pixels, a data value, or undefined. A
    *  size of its own makes it a σ-scope of its own there. */
   ownSize: (axis: 0 | 1) => MaybeValue<number> | undefined;
@@ -1927,7 +1921,8 @@ export class GoFishNode {
    * no size of its own, an `fr` weight) is laid out in the room its parent
    * gives it: its whole room in an overlay, and along a chain its need,
    * plus its share of the slack where its room reaches something that
-   * fills it ({@link readsRoom}; `chainRooms` in `layer`).
+   * fills it ({@link readsRoom}; `chainRooms` in
+   * `constraints/distribute.ts`).
    *
    * A ring of chrome ({@link _chromeRing}) is sized where the box it
    * dresses is ({@link dressedBox}): a chart's `w`/`h` are on its plot.
@@ -2072,8 +2067,9 @@ export class GoFishNode {
   /** Whether the room this node is given on `axis` reaches something that
    *  fills it: it fills ({@link fillsRoom}), or it has no scope of its own
    *  and some child reads its room. A part of a chain that reads no room
-   *  takes only its need of the chain's slack (`chainsOf` in `constraints/distribute.ts`): a
-   *  room larger than its box would change nothing it draws. */
+   *  takes only its need of the chain's slack (`chainsOf` in
+   *  `constraints/distribute.ts`): a room larger than its box would change
+   *  nothing it draws. */
   public readsRoom(axis: 0 | 1): boolean {
     this.resolveExtent();
     return this._claimMemo.reads?.[axis] === true;

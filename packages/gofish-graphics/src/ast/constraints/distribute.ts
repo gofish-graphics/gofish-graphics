@@ -11,7 +11,9 @@ import {
   type ResolvedOperands,
 } from "./shared";
 import { resolution } from "../_ref";
-import { GoFishNode, type ChainMembers } from "../_node";
+import { GoFishNode } from "../_node";
+import type { GoFishAST } from "../_ast";
+import type { ConstraintSpec } from ".";
 import type { Extent } from "../extent";
 import { room } from "../../util";
 import { isValue, type MaybeValue } from "../data";
@@ -56,11 +58,7 @@ import {
 } from "../fun";
 import type { Baseline, Point } from "../../families/baseline";
 import { currentUnits } from "../measure";
-import {
-  inCoordinateSpace,
-  yDirection,
-  type FramedNode,
-} from "../axisDirection";
+import { inCoordinateSpace, yDirection } from "../axisDirection";
 import type { Arith } from "../solver/arith";
 import * as Interval from "../../util/interval";
 import * as Pwl from "../solver/pwl";
@@ -788,29 +786,34 @@ export function wiggleZero(
 /** The whole line. */
 const ALL = { min: -Infinity, max: Infinity };
 
+/** One chain of a layer along an axis (a `distribute` there): its members
+ *  with no size of their own, each with its weight in the slack
+ *  ({@link chainsOf}). */
+export type ChainMembers = { child: number; weight: number }[];
+
 /**
- * The chains of `node` along `axis` (each `distribute` there) that have a
- * member with no size of its own (`GoFishNode.sizedOn`): per chain, those
- * members, each with its weight in the chain's slack, in the order the
- * chain names them. The weight is `GoFishNode.flexWeight` for a member
- * whose room reaches something that fills it (`GoFishNode.readsRoom`), and
- * 0 for any other, which takes only its need. They depend on the node's claim alone, so they are read
+ * The chains of a layer with `constraints` over `children` along `axis`
+ * (each `distribute` there) that have a member with no size of its own
+ * (`GoFishNode.sizedOn`): per chain, those members, each with its weight
+ * in the chain's slack, in the order the chain names them. The weight is
+ * `GoFishNode.flexWeight` for a member whose room reaches something that
+ * fills it (`GoFishNode.readsRoom`), and 0 for any other, which takes only
+ * its need. They depend on the layer's claim alone, so `layer` reads them
  * once per claim (`ClaimMemo.chains`).
  */
 export const chainsOf = (
-  node: GoFishNode,
+  constraints: readonly ConstraintSpec[],
+  children: readonly GoFishAST[],
   axis: 0 | 1,
   refs: ResolvedOperands
 ): ChainMembers[] => {
-  const memo = node._claimMemo.chains[axis];
-  if (memo !== undefined) return memo;
   const chains: ChainMembers[] = [];
-  for (const c of node.constraints) {
+  for (const c of constraints) {
     if (c.type !== "distribute" || axisIndex(c.dir) !== axis) continue;
     const flex: ChainMembers = [];
     for (const ref of c.children) {
       const k = directSlot(refs, ref);
-      const child = k === undefined ? undefined : node.children[k];
+      const child = k === undefined ? undefined : children[k];
       // A member whose room reaches nothing that fills it (a legend of
       // fixed swatches and text) takes only its need: its weight in the
       // slack is 0 (`GoFishNode.readsRoom`).
@@ -826,15 +829,15 @@ export const chainsOf = (
     }
     if (flex.length > 0) chains.push(flex);
   }
-  node._claimMemo.chains[axis] = chains;
   return chains;
 };
 
 /**
- * The room of each member of a chain of `node` along `axis` that has no
- * size of its own (#1257): its need (its claim at `sigma`, the σ the node
- * hands its children; 0 for a member in `ink`) plus its share of the
- * slack, what the node's room `size` leaves past `whole`, the hull of its
+ * The room of each member of `chains`, a layer's chains along `axis` over
+ * its `children` ({@link chainsOf}), in the layer's room `size` (#1257):
+ * its need (its claim at `sigma`, the σ the layer hands its children; 0
+ * for a member in `ink`) plus its share of the slack, what `size` leaves
+ * past `whole`, the hull of its
  * content's needs (chrome or labels seated beside a chain included). Each
  * chain splits the slack among its own members that read their room, so
  * two chains side by side (two rows of one width) each fill the room. An
@@ -847,24 +850,22 @@ export const chainsOf = (
  * `flex: 1 1 auto`. σ is solved from the needs alone, so where the
  * needs fill the room (a scope fitted to it) the slack is 0, and
  * on an axis with no room (an unsized render) the members keep
- * their needs. The chains are read once per claim (`chainsOf`).
+ * their needs: `layer` reads no chains there, so `size` is finite.
  * A member of two chains on one axis takes the first one's room.
  */
 export function chainRooms(
-  node: GoFishNode,
+  chains: readonly ChainMembers[],
+  children: readonly GoFishAST[],
   axis: 0 | 1,
-  refs: ResolvedOperands,
   size: number,
   sigma: number,
   ink: ReadonlySet<number>,
   whole: Extent | undefined
 ): Map<number, number> | undefined {
-  if (!Number.isFinite(size)) return undefined;
-  const chains = chainsOf(node, axis, refs);
   if (chains.length === 0) return undefined;
   const need = (i: number) => {
     if (ink.has(i)) return 0;
-    const c = node.children[i];
+    const c = children[i];
     const claim = c instanceof GoFishNode ? c.resolveExtent()[axis] : undefined;
     return claim === undefined ? 0 : Pwl.at(claim.width, sigma);
   };

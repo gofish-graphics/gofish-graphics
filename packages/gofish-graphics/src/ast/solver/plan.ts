@@ -151,7 +151,7 @@ const reaching = (e: Extent, from: Extent, to: Extent): Extent =>
  * its own: a layer's literal start, a shape's start or center, a pixel or
  * a datum (`positionOf` in its layout), or a node its own layout places
  * from the refs it reads (`GoFishNode.placedByLayout`). Layout pins it
- * where it put itself, so the plan takes it there (`at:`). A child its own
+ * where it put itself, so the plan takes it there (`planInput.at`). A child its own
  * data places (a `region` in its cell) is the other kind of child the plan
  * leaves where it is (`placedByOwnData`, `ClaimChild.dataPositioned`).
  */
@@ -650,7 +650,7 @@ export function planPlacement(
  * (`throughPlans`): its offset inside the container, which holds wherever
  * its parent's solve places the container. Undefined where no plan reaches.
  */
-export function planPlacementInChild(
+function planPlacementInChild(
   target: GoFishNode,
   container: GoFishNode,
   axis: 0 | 1
@@ -677,7 +677,7 @@ const nestedPlacement =
 
 /** The node whose frame a `position` constraint of `layer` reads its
  *  datums in (`PositionOptions.in`), if it names one. */
-export const inTarget = (
+const inTarget = (
   c: ConstraintSpec,
   layer: GoFishNode
 ): GoFishNode | undefined => {

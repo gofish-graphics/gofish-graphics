@@ -39,7 +39,7 @@ import {
  * placement writes are no-ops. Resizing a nested operand is impossible from
  * outside its container, so the size-writing hooks throw.
  */
-export class NestedOperand implements Placeable {
+class NestedOperand implements Placeable {
   constructor(
     private readonly name: string,
     private readonly node: GoFishAST,
@@ -113,10 +113,7 @@ export class NestedOperand implements Placeable {
  * translates of every ancestor strictly between `node` and `container` (the
  * same accumulation `GoFishRef.layout` uses), minus the container's local min.
  */
-export function nestedGap(
-  node: GoFishAST,
-  container: GoFishAST
-): [number, number] {
+function nestedGap(node: GoFishAST, container: GoFishAST): [number, number] {
   return ([0, 1] as const).map((i) => {
     let min =
       (node.localAnchor(i, "min") ?? 0) + (node.projectedTranslate(i) ?? 0);

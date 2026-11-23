@@ -671,9 +671,10 @@ export function composePlanSpaces(
  * data and the operand is in its partner's part the same way. A
  * `"size"` align ties only a length and leaves the position free, so no
  * endpoint is at a datum and it joins nothing. Aligns chain, so this
- * runs until nothing changes. A `ref` operand (`standIn`) is in the part
- * its target is in, in its target's layer (`refHome`: an index into
- * `base`, or a part of another layer's), and an align never moves it.
+ * runs until nothing changes. A `ref` operand is in the part its target
+ * is in, in its target's layer (`refPart`: an index into `base`, or a
+ * part of another layer's; undefined for an operand that is no `ref`),
+ * and an align never moves it.
  * TODO(#1053, #1054): a shortcut. A pixel offset on an aligned operand
  * (a `.translate()` wrapper) would put its anchor at datum + pixels,
  * which is in no data space; today the align's solve overrides that
@@ -686,8 +687,7 @@ export function alignedParts(
   base: UnderlyingSpace[],
   aligns: readonly ConstraintSpec[],
   resolved: ResolvedOperands,
-  standIn: (i: number) => boolean,
-  refHome: (i: number) => number | UnderlyingSpace | undefined
+  refPart: (i: number) => number | UnderlyingSpace | undefined
 ): UnderlyingSpace[] {
   // Per align, the operands it puts in a part (no `ref`), and where
   // each operand's part is read: an index into `parts`, or a part of
@@ -704,7 +704,8 @@ export function alignedParts(
     for (const r of c.children) {
       const i = directSlot(resolved, r);
       if (i === undefined) continue;
-      if (standIn(i)) reads.push(refHome(i) ?? i);
+      const home = refPart(i);
+      if (home !== undefined) reads.push(home);
       else {
         moved.push(i);
         reads.push(i);

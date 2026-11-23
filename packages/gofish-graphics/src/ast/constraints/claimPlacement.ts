@@ -56,9 +56,9 @@ import type { ConstraintSpec } from ".";
  * `planPlacement`). An operand nested in a child is held at its offset in
  * that child, which the plans from it up to the child give
  * (`planPlacementInChild`), so it moves with the child wherever the solve
- * places the child. A value label
- * beside its bar takes room where it draws, while the bar stays where its
- * own layout puts it. A band of a category axis is a share, which is a
+ * places the child. A value label beside its bar takes room where it
+ * draws, while the bar stays where its own layout puts it. A band of a
+ * category axis is a share, which is a
  * claim too (`GoFishNode.sharesRoom`), so a label beside a band is placed
  * the same way. Where the claim walk does not know (the node sits in a
  * coordinate space, or its band is in a scope that mixes data and bands),
@@ -192,7 +192,7 @@ export type PlanSeats = {
 };
 
 /** Whether `c` acts on `axis` (for a position, at a point or over a span). */
-export const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
+const actsOn = (c: ConstraintSpec, axis: 0 | 1): boolean => {
   const name = axisName(axis);
   switch (c.type) {
     case "position":
@@ -225,7 +225,7 @@ export const isLiteralSeat = (c: ConstraintSpec): boolean =>
 /** Per operand key, the literal pixel a `position` pins its origin at on
  *  each axis (`isLiteralSeat`), the first such pin on each axis. One pass
  *  over the constraints. */
-export const literalSeats = (
+const literalSeats = (
   constraints: readonly ConstraintSpec[],
   keyOf: KeyOf
 ): Map<string, [number | undefined, number | undefined]> => {
@@ -338,6 +338,38 @@ const formulaPlaceable = (
  *  (`ClaimChild.plot`, `ClaimChild.bare`). */
 const LOCAL_SPANS: readonly LocalSpan[] = ["plot", "bare"];
 
+/** The kinds of plan input (`planInput`), each the part of its key before
+ *  the `:`, which {@link laidOutInput} reads it by. */
+const INPUT = {
+  at: "at",
+  seat: "seat",
+  lit: "lit",
+  lo: "lo",
+  hi: "hi",
+  gap: "gap",
+  frameZero: "in0",
+  frameUnit: "in1",
+} as const;
+
+/** The mark of an operand nested in a child, before its key. */
+const NESTED = "@";
+
+/** The kind of input of one end (`0` its start, `1` its end) of a local
+ *  `span`. */
+const spanKind = (span: LocalSpan, end: 0 | 1) => `${span}${end}`;
+
+/** Each local span's ends, by their kind of input (`spanKind`). */
+const SPAN_ENDS = new Map<string, { span: LocalSpan; end: 0 | 1 }>(
+  LOCAL_SPANS.flatMap((span) =>
+    ([0, 1] as const).map(
+      (end) => [spanKind(span, end), { span, end }] as const
+    )
+  )
+);
+
+/** A plan input's key: its kind, and what it is of. */
+const inputKey = (kind: string, who: string | number) => `${kind}:${who}`;
+
 /**
  * The inputs of a plan's tape (`Tape.input`), by the key layout answers
  * each by ({@link laidOutInput}): what only layout measures on the axis.
@@ -349,26 +381,27 @@ const LOCAL_SPANS: readonly LocalSpan[] = ["plot", "bare"];
 const planInput = {
   /** Where child `i`'s origin is, placed before the solve: where layout
    *  laid it. */
-  at: (i: number) => `at:${i}`,
+  at: (i: number) => inputKey(INPUT.at, i),
   /** Where the layer's frame seats child `i`'s origin (`seatInScope`). */
-  seat: (i: number) => `seat:${i}`,
+  seat: (i: number) => inputKey(INPUT.seat, i),
   /** The pixel a literal position seats child `i`'s origin at. */
-  lit: (i: number) => `lit:${i}`,
+  lit: (i: number) => inputKey(INPUT.lit, i),
   /** Child `i`'s laid box about its origin: its start, and its end. */
-  lo: (i: number) => `lo:${i}`,
-  hi: (i: number) => `hi:${i}`,
+  lo: (i: number) => inputKey(INPUT.lo, i),
+  hi: (i: number) => inputKey(INPUT.hi, i),
   /** One end (`0` its start, `1` its end) of child `i`'s local `span`,
    *  which layout measures by `localSpan`. */
-  span: (span: LocalSpan, end: 0 | 1, i: number) => `${span}${end}:${i}`,
+  span: (span: LocalSpan, end: 0 | 1, i: number) =>
+    inputKey(spanKind(span, end), i),
   /** A nested operand's offset in its container. */
-  nestedGap: (key: string) => `gap:@${key}`,
+  nestedGap: (key: string) => inputKey(INPUT.gap, NESTED + key),
   /** A nested operand's laid box about its origin. */
-  nestedLo: (key: string) => `lo:@${key}`,
-  nestedHi: (key: string) => `hi:@${key}`,
+  nestedLo: (key: string) => inputKey(INPUT.lo, NESTED + key),
+  nestedHi: (key: string) => inputKey(INPUT.hi, NESTED + key),
   /** A frame's data 0 from the origin of the child that holds it, and one
    *  of its data units. */
-  frameZero: (key: string) => `in0:${key}`,
-  frameUnit: (key: string) => `in1:${key}`,
+  frameZero: (key: string) => inputKey(INPUT.frameZero, key),
+  frameUnit: (key: string) => inputKey(INPUT.frameUnit, key),
   /** The pixel of data 0 in the layer's frame. */
   origin: "origin",
   /** The layer's box. */
@@ -383,8 +416,9 @@ const planInput = {
 export type LaidOut = {
   /** Child `i` as laid out; undefined where it is not laid out yet. */
   child: (i: number) => Placeable | undefined;
-  /** An operand nested in a child, by its key, as laid out. */
-  nested: (key: string) => Placeable | undefined;
+  /** The placeable of each target, a child or an operand nested in one,
+   *  by its key, as laid out. */
+  targets: ReadonlyMap<string, Placeable>;
   /** A nested operand's offset from its container's start edge, per axis,
    *  in the layer's axis order, by its key. */
   gap: (key: string) => readonly [number, number] | undefined;
@@ -414,7 +448,7 @@ export type LaidOut = {
  * the layer laid out (`laid`): undefined where it has no number for it, so
  * the plan reads the input's claim (`evaluate` in formula.ts).
  */
-export const laidOutInput =
+const laidOutInput =
   (laid: LaidOut, axis: 0 | 1) =>
   (key: string): number | undefined => {
     if (key === planInput.origin) return laid.origin(axis);
@@ -423,37 +457,29 @@ export const laidOutInput =
     const colon = key.indexOf(":");
     const kind = key.slice(0, colon);
     const who = key.slice(colon + 1);
-    if (kind === "in0" || kind === "in1")
-      return laid.frame(who, axis)?.[kind === "in0" ? 0 : 1];
-    const nestedKey = who.startsWith("@") ? who.slice(1) : undefined;
-    if (kind === "gap") return laid.gap(nestedKey!)?.[axis];
+    if (kind === INPUT.frameZero || kind === INPUT.frameUnit)
+      return laid.frame(who, axis)?.[kind === INPUT.frameZero ? 0 : 1];
+    const nestedKey = who.startsWith(NESTED)
+      ? who.slice(NESTED.length)
+      : undefined;
+    if (kind === INPUT.gap) return laid.gap(nestedKey!)?.[axis];
     const i = nestedKey === undefined ? Number(who) : undefined;
-    const p = i !== undefined ? laid.child(i) : laid.nested(nestedKey!);
+    const p = i !== undefined ? laid.child(i) : laid.targets.get(nestedKey!);
     if (p === undefined) return undefined;
     const lo = p.localAnchor?.(axis, "min");
     const hi = p.localAnchor?.(axis, "max");
     switch (kind) {
-      case "lit":
+      case INPUT.lit:
         return laid.literalSeat(i!)?.[axis];
-      case "lo":
+      case INPUT.lo:
         return lo;
-      case "hi":
+      case INPUT.hi:
         return hi;
-      // An end of a local span (`planInput.span`), or of its box where
-      // that is the span.
-      case "plot0":
-      case "plot1":
-      case "bare0":
-      case "bare1": {
-        const end = kind.endsWith("0") ? 0 : 1;
-        const span = kind.slice(0, -1) as LocalSpan;
-        return p.localSpan?.(span, axis)?.[end] ?? (end ? hi : lo);
-      }
-      case "at": {
+      case INPUT.at: {
         const min = p.dims[axis].min;
         return min === undefined || lo === undefined ? undefined : min - lo;
       }
-      case "seat": {
+      case INPUT.seat: {
         // Seating leaves a child that placed itself where it is.
         const min = p.dims[axis].min;
         if (min !== undefined) return lo === undefined ? undefined : min - lo;
@@ -465,22 +491,26 @@ export const laidOutInput =
             : seat.px - lo;
       }
     }
-    return undefined;
+    // An end of a local span (`planInput.span`), or of its box where that
+    // is the span.
+    const spanEnd = SPAN_ENDS.get(kind);
+    if (spanEnd === undefined) return undefined;
+    const { span, end } = spanEnd;
+    return p.localSpan?.(span, axis)?.[end] ?? (end ? hi : lo);
   };
 
 /**
  * Write a layer's plan back onto what it laid out: on each axis, each
  * placed cell's box start, and its size where the plan sets one, at the σ
  * `sigmaOf` gives (the σ the layer hands its children), with the inputs
- * layout measured (`laid`). `seatsOf` reads the plan's seats on an axis
- * (`ClaimPlacement.seats`), undefined where it has none; `targets` is the
- * placeable of each target, by its key.
+ * layout measured (`laid`), onto its targets (`LaidOut.targets`). `seatsOf`
+ * reads the plan's seats on an axis (`ClaimPlacement.seats`), undefined
+ * where it has none.
  */
 export function seatByPlan(
   seatsOf: (axis: 0 | 1) => PlanSeats | undefined,
   sigmaOf: (axis: 0 | 1) => number,
-  laid: LaidOut,
-  targets: ReadonlyMap<string, Placeable>
+  laid: LaidOut
 ): void {
   const evaluated = ([0, 1] as const).map((axis) => {
     const seats = seatsOf(axis);
@@ -494,20 +524,22 @@ export function seatByPlan(
   // Two constraints that place one child at two places are an
   // error: each over-determination the solve kept must agree
   // where layout evaluates it.
-  evaluated.forEach((e, axis) => {
-    if (e === undefined) return;
+  for (const axis of [0, 1] as const) {
+    const e = evaluated[axis];
+    if (e === undefined) continue;
     for (const c of e.seats.tape.checks) {
       const [a, b] = [e.v[c.a], e.v[c.b]];
       if (!(Math.abs(a - b) <= c.tolerance))
         throw new Error(
-          `Constraint placement conflict on ${axisName(axis as 0 | 1)}: ` +
+          `Constraint placement conflict on ${axisName(axis)}: ` +
             `${c.owner} asserts ${a}, but ${c.priorOwner} implies ${b}`
         );
     }
-  });
-  evaluated.forEach((e, i) => {
-    if (e === undefined) return;
-    const axis = i as 0 | 1;
+  }
+  const { targets } = laid;
+  for (const axis of [0, 1] as const) {
+    const e = evaluated[axis];
+    if (e === undefined) continue;
     const { seats, v } = e;
     const label = axisName(axis);
     for (const [key, cell] of seats.cells) {
@@ -521,7 +553,7 @@ export function seatByPlan(
     }
     for (const [key, { size, owner }] of seats.sizeOnly)
       targets.get(key)?.setSizeOnly?.(label, v[size], owner);
-  });
+  }
 }
 
 /** The constraints that act on `axis`, each as it acts on that axis alone
@@ -585,8 +617,9 @@ function constrainedOn(
 
 /**
  * Where a layer's constraints place its children on `axis`, from their
- * claims (see the module comment). `nested` is where an operand nested in a child lands in that child's
- * frame, when the claim walk knows (`planPlacementInChild`).
+ * claims (see the module comment). `nested` is where an operand nested in
+ * a child lands in that child's frame, when the claim walk knows
+ * (`planPlacementInChild`).
  */
 export function placeByClaims(
   axis: 0 | 1,
@@ -894,10 +927,9 @@ export function placeByClaims(
   }
   // An operand nested in a child is held at a fixed offset inside it
   // (`NestedOperand`), which layout measures (`planInput.nestedGap`): the
-  // solve moves the
-  // child with it. In the claim walk the offset is where the plans of the
-  // layers between put it in the child (`planPlacementInChild`), from the
-  // child's box start.
+  // solve moves the child with it. In the claim walk the offset is where
+  // the plans of the layers between put it in the child
+  // (`planPlacementInChild`), from the child's box start.
   const rigid = new Map<string, RigidAttachment<F>>();
   for (const [key, op] of operands) {
     if (op.direct) continue;
@@ -951,9 +983,9 @@ export function placeByClaims(
   // The frame a `position` maps its datums through: the layer's, and for
   // one with `in`, the named node's data 0 from the origin of the child
   // that holds it, and its data unit, which layout measures
-  // (`planInput.frameZero`, `planInput.frameUnit`). The child must be placed before the solve (a frame read
-  // through a child the solve moves would need a relation, not a pin),
-  // else nothing places the datums.
+  // (`planInput.frameZero`, `planInput.frameUnit`). The child must be
+  // placed before the solve (a frame read through a child the solve moves
+  // would need a relation, not a pin), else nothing places the datums.
   const scaleOf: ScaleOf<F> = (c, a) => {
     if (a !== axis) return undefined;
     if (c.in === undefined) return map;
