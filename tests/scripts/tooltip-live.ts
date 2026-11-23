@@ -786,6 +786,8 @@ async function main() {
           );
           // Off the svg the pointer is off the chart and the box closes
           // there; that is before 20 px on the rays that leave it sooner.
+          // Coming back, the box opens at 16 px, or where the ray enters
+          // the svg when that is nearer the edge.
           const offChart = rLeave !== undefined && rLeave - wOut < 20;
           check(
             offChart
@@ -794,7 +796,7 @@ async function main() {
             states[rClose] === "none" &&
               (offChart
                 ? Math.abs(rClose - rLeave!) <= 1 &&
-                  Math.abs(rBack - rLeave!) <= 1
+                  Math.abs(rBack - wOut - Math.min(16, rLeave! - wOut)) <= 1
                 : rClose - wOut >= 20 &&
                   rClose - wOut <= 21 &&
                   rBack - wOut >= 15 &&
