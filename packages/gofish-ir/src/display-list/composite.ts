@@ -2,7 +2,7 @@
 // @wiki Rendering — /internals/core/rendering
 // </gofish-wiki>
 
-import type { CompositeItem, DisplayItem } from "./schema.js";
+import type { CompositeItem, DisplayFilter, DisplayItem } from "./schema.js";
 
 /** A mask a composite layer is clipped by: the alpha of the listed
  *  operands' shapes drawn together (their union), or, with `invert`, one
@@ -190,6 +190,20 @@ export const LUMINANCE_TO_ALPHA_FILTER = {
   colorInterpolationFilters: "sRGB",
   matrixType: "luminanceToAlpha",
 } as const;
+
+/** The SVG `filter` attribute of a group drawn under `filter`: a `css`
+ *  filter's value, or, for `luminanceToAlpha`, a reference to the
+ *  {@link LUMINANCE_TO_ALPHA_FILTER} def written under `filterId`. Both SVG
+ *  backends (`render.ts` here and `paintSVG.tsx` in gofish-graphics) use it,
+ *  so they cannot drift. */
+export function filterAttribute(
+  filter: DisplayFilter | undefined,
+  filterId: string
+): string | undefined {
+  if (filter?.kind === "css") return filter.value;
+  if (filter?.kind === "luminanceToAlpha") return `url(#${filterId})`;
+  return undefined;
+}
 
 /** Whether any of `items`, looking inside groups and composites, is drawn
  *  under the `luminanceToAlpha` filter. */

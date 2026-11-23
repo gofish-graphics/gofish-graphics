@@ -16,7 +16,7 @@ import {
   value,
   text,
   ellipse,
-  treemap,
+  tile,
   table,
   image,
 } from "../lib";
@@ -399,9 +399,9 @@ async function main() {
         .mark(rect({ h: "v" }))
         .toDisplayList({})
     );
-    await throws("a treemap's spacing", () =>
+    await throws("tile's spacing", () =>
       chart(rows, { w: 200, h: 200 })
-        .flow(treemap({ by: "k", size: "v", spacing: percent(5) as any }))
+        .flow(tile({ by: "k", size: "v", spacing: percent(5) as any }))
         .mark(rect({}))
         .toDisplayList()
     );

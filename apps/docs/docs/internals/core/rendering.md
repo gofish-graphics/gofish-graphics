@@ -146,11 +146,15 @@ alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
 (`src/ast/labels/elaborate.tsx`, the same technique `elaborateChrome` uses for tick
 labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
 ordinary sibling shape with its own `_lower` fragment.
+A tooltip's box is lowered the same way, after the labels
+(`src/ast/tooltip/tooltip.ts`): by the time the tree is lowered, it is an
+`enclose` of texts on the render root, painted last, with a circle on the
+point of a line's focused row.
 
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` draws only its children, which `bake` lowers directly, so it reaches
 `INTERNAL_lower` only when it has none: then it draws nothing (an operator over a
-group with no rows, such as an empty cell's `pack` or `treemap`). A node with
+group with no rows, such as an empty cell's `pack` or `tile`). A node with
 children and no `_lower` throws: the migration is complete, so every shipping shape
 and every bake boundary supplies one.
 
@@ -202,7 +206,7 @@ Whatever its kind, a boundary that paints its children in turn (`coord`, `box`,
 rule the bake uses, so a z constraint that parts inside a boundary takes effect there.
 A compositor lowers each of its operands as a subtree (`lowerSubtree`, over
 `bakeSubtree` in `bake.ts`, the one-child walk `bakeChildren` runs per child), so an
-operand that only places its children, a `pack` or a `treemap`, lowers its leaves.
+operand that only places its children, a `pack` or a `tile`, lowers its leaves.
 It paints one result from its operands, so it has no
 order to take: it calls `assertNoPaintOrder`, which throws if a z constraint parts at
 it (see [How a layer orders its children](/internals/layout/coord-flattening#how-a-layer-orders-its-children)).
@@ -226,20 +230,27 @@ The item kinds are `rect`, `ellipse`, `path`, `text`, `image`, `group` and
 `composite`. The first five are leaf primitives in absolute pixels with resolved
 `style` (fill/stroke/opacity/…, already mapped through the color scales; a
 label's halo sets `paintOrder: "stroke"` and `strokeLinejoin: "round"`, which
-both backends write as SVG attributes). The last two carry structure the
+both backends write as SVG attributes; a tooltip's box and marker set
+`pointerEvents: "none"`, written as `pointer-events`, so it is no pointer
+target). Any item may carry a `title`, a mark's `.tooltip()` text, which a
+static drawing writes as the item's SVG `<title>` child (a composite's, as the
+first child of its group), made in the SVG namespace, since a browser shows
+no HTML `<title>` inside an svg; a live chart, which draws its tooltip as
+marks, writes none. The last two carry structure the
 flat-absolute fold cannot express on its own:
 
 - **`group`** — an affine transform group, for the rare `box`/`frame` `scale` a flat
-  list can't fold away, and the group a node with a `filter` option draws its whole
-  drawing in (`drawFilter.ts`). Its `filter` is a CSS filter value
-  (`{ kind: "css", value: "grayscale(1)" }`, which `Filter.grayscale` lowers to) or
+  list can't fold away, and the group a node with an `effect` option draws its whole
+  drawing in (`drawEffect.ts`). Its `filter` is a CSS filter value
+  (`{ kind: "css", value: "grayscale(1)" }`, which `Effect.grayscale` lowers to) or
   `{ kind: "luminanceToAlpha" }`, which has no CSS function, so a backend writes an
   SVG `<filter>` def with an `feColorMatrix type="luminanceToAlpha"` in sRGB, once per
   render that uses it (`usesLuminanceToAlpha`), from `LUMINANCE_TO_ALPHA_FILTER`
   (`composite.ts`), which both backends write from. Its id is the render's own,
   drawn from the counter the composite ids come from (`paintDocument` in
   `paintSVG.tsx`, `displayListToSVG`), so two visualizations on one page do not
-  share it. A
+  share it. Both backends take the group's `filter` attribute from
+  `filterAttribute` (`composite.ts`): the CSS value, or `url(#id)` of that def. A
   filtered node is a bake boundary (`GoFishNode.isBakeBoundary()`): a filtered `layer`
   lowers its own subtree, so the filter sees it as one picture, and a filtered
   node with no lowering of its own (a `spread` a `createMark` returns) lowers its
@@ -391,8 +402,8 @@ signal during resolve), three things change; when it is absent — the common ca
   patches only that attribute — no re-lower, no re-layout. A `"text"` slot
   overrides text content while the box keeps its measured size, and a slot named
   after one of the item's own geometry fields (`x`, `y`, `w`, `h`, `cx`, `cy`,
-  `rx`, `ry`, `d`) overrides that field, which is how a mark moves without being
-  laid out again — see [Reactivity](/internals/frontend/reactivity). What the
+  `rx`, `ry`, `d`, a group's `transform`) overrides that field, which is how a
+  mark moves without being laid out again — see [Reactivity](/internals/frontend/reactivity). What the
   item carries statically is what serialization and hit-testing see.
 - **Frame publication.** Before painting, `render()` publishes the lowered
   `items`, the root `posScales` (data → layout pixels, read off the placed root

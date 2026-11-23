@@ -222,7 +222,7 @@ A column record takes the keys `"name"` and `"unit"`. Any other key raises a
 **`CanSum`.**
 
 - A `size` channel (`w`, `h`, ...), a [`stack`](/python/api/operators/stack), a
-  [`treemap`](/python/api/operators/treemap) `size`, `field(x).sum()` and
+  [`tile`](/python/api/operators/tile) `size`, `field(x).sum()` and
   `field(x).normalize()` add up their values. Adding up values in a declared
   unit needs `CanSum`: without it, it is an error that names the column and
   the unit, and says to declare the unit with `Unit(name, traits=[Trait.summable()])`, or,

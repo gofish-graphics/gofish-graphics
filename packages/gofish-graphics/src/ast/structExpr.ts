@@ -7,8 +7,8 @@
  * after polars' `pl.struct`. A hexagon or a Voronoi cell depends on both
  * fields together, so a `.bin` on each field cannot express it.
  *
- * `.bin(b)` chains on it as it does on `field`, with a `Bin` strategy
- * (`Bin.hex({ radius })`, `Bin.voronoi({ seeds })`): the key's groups are
+ * `.bin(b)` chains on it as it does on `field`, with a `Binning` strategy
+ * (`Binning.hex({ radius })`, `Binning.voronoi({ seeds })`): the key's groups are
  * then the cells of the plane (polygonCells.ts), each with its outline. A
  * struct is a key only once it is binned: today only `partition` reads one,
  * and it needs the cells' regions.
@@ -18,11 +18,11 @@
  * Python bridge sends are read the same way ({@link structBin}).
  */
 import { Frontend } from "gofish-ir";
-import type { StructBin } from "../families/bin";
+import type { StructBinning } from "../families/binning";
 import type { PlaneFields } from "./polygonCells";
 
 /** One op of a struct's pipeline: the cells it is binned into. */
-export type StructOp = { op: "bin"; partition: StructBin };
+export type StructOp = { op: "bin"; partition: StructBinning };
 
 /** The wire form of a struct key. */
 export type StructExprWire = Frontend.StructAccessor;
@@ -39,16 +39,16 @@ export class StructExpr<HasRegion extends boolean = boolean> {
     public readonly ops: readonly StructOp[] = []
   ) {}
 
-  /** Map each row's point `(x, y)` to its CELL in `bin`, a call in the `Bin`
-   *  family: `Bin.hex({ radius })` or `Bin.voronoi({ seeds })`. The groups
+  /** Map each row's point `(x, y)` to its CELL in `bin`, a call in the `Binning`
+   *  family: `Binning.hex({ radius })` or `Binning.voronoi({ seeds })`. The groups
    *  are the cells over the two columns' domain in the chart's data, so
    *  every group of a split sees the same cells, and empty cells are kept. */
-  bin(bin: StructBin): StructExpr<true> {
+  bin(bin: StructBinning): StructExpr<true> {
     if (this.ops.length > 0)
       throw new Error(
         "struct(...).bin(...) is already binned: a struct takes one bin."
       );
-    Frontend.checkStructBin(bin, "struct(...).bin");
+    Frontend.checkStructBinning(bin, "struct(...).bin");
     return new StructExpr<true>(this.fields, [{ op: "bin", partition: bin }]);
   }
 
@@ -64,7 +64,7 @@ export class StructExpr<HasRegion extends boolean = boolean> {
 /**
  * A key that reads two fields at once: `struct({ x: "lon", y: "lat" })`.
  * `x` and `y` name the column read on each axis. Bin it with `.bin(b)`, a
- * call in the `Bin` family, to give each group its cell of the plane.
+ * call in the `Binning` family, to give each group its cell of the plane.
  */
 export function struct(fields: PlaneFields): StructExpr<false> {
   const keys = Object.keys(fields ?? {});
@@ -87,5 +87,5 @@ export const isStruct = (v: unknown): v is StructExprWire =>
   (v as { type?: unknown }).type === "struct";
 
 /** A struct key's bin, or undefined when it is not binned. */
-export const structBin = (by: StructExprWire): StructBin | undefined =>
+export const structBin = (by: StructExprWire): StructBinning | undefined =>
   by.ops?.find((op) => op.op === "bin")?.partition;

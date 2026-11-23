@@ -183,8 +183,8 @@ export const Polar: StoryObj<Args> = {
 };
 
 // The shape forms of `ribbon` and `line`, labeled by their outlines: a band's
-// label goes inside it (`Place.interior()`, the default for a filled
-// region), a line's at its end (`Place.end()`, the default for an open
+// label goes inside it (`Placement.interior()`, the default for a filled
+// region), a line's at its end (`Placement.end()`, the default for an open
 // path). A test, not a gallery visualization.
 export const Labeled: StoryObj<Args> = {
   args: { w: 560, h: 300 },

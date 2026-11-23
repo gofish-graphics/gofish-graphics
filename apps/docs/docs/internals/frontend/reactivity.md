@@ -14,6 +14,9 @@ covers:
   - packages/gofish-graphics/src/interaction/runtime.ts
   - packages/gofish-graphics/src/interaction/renderTerminal.ts
   - packages/gofish-graphics/src/interaction/widgets.ts
+  - packages/gofish-graphics/src/interaction/focus.ts
+  - packages/gofish-graphics/src/interaction/tooltipFocus.ts
+  - packages/gofish-graphics/src/ast/displayList/drawnRowPoints.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -272,10 +275,23 @@ layout pipeline:
    renders into the _same_ container — hence the container-dispose hook below.
    `dispose()` clears the thunk, so a run scheduled before the chart unmounted
    does nothing when it fires.
-2. **Delegated event dispatch.** `attachSVG` puts one listener per event type
-   (`pointermove/down/up/leave`, `wheel`) on the root `<svg>` and fans each event
-   out to every registered input, with a `data-gf-id` hit-test resolving the
-   display item (and thus datum) under the pointer.
+2. **Delegated event dispatch.** `attachHost` puts one listener per event type
+   (`pointermove/down/up/leave`, `wheel`) on the chart's container and fans
+   each event whose target is in the current `<svg>` (`attachSVG`) out to every
+   registered input, with a `data-gf-id` hit-test resolving the display item
+   (and thus datum) under the pointer. The listeners are on the container
+   because a re-run replaces the svg: a pointer over the old svg is over none
+   of the new one's elements until it moves, so a move straight off the chart
+   fires `pointerleave` on the container only. A move into the container off
+   the svg, or the container's own `pointerleave`, is a leave, and inputs
+   that take `pointerleave` get one. While a re-run has the svg out of the
+   page, a move over the container is not read. A `drag()` captures its
+   pointer on the container (`capturePointer`), not on the svg, since taking
+   a captured element out of the page ends its capture. The browser then
+   sends that pointer's events to the container wherever it is, so until the
+   release they all count as over the chart: the hit is the element under
+   the pointer, and the point is mapped through the last svg that was in the
+   page.
 3. **Hit-testing + frame publication.** `publishFrame` rebuilds an id→item map
    and an id→box map (uids are minted fresh each resolve) and the data↔px
    conversions, then notifies inputs.
@@ -320,6 +336,119 @@ is **attached** to a chart, which happens when the input is `registerInput`-ed �
 i.e. when it is read during that chart's resolve. An input read only from outside
 code (a bare `createEffect`) never attaches, so `dataPos()`/`currentData()` return
 `undefined`.
+
+## A tooltip's focus is an input
+
+A mark's `.tooltip()` (#1395) needs to know which of its marks the pointer is
+on. That is an input like the others, `TooltipFocus` (`tooltipFocus.ts`), and
+nothing about the runtime is special to it. A mark with `.tooltip()` reads
+its chart's focus as it resolves (`focus.read(registrar)` in `recordTooltip`):
+the input registers itself, since no spec code reads it, and the chart becomes
+a reader of its key. The tooltip's lowering (`ast/tooltip/tooltip.ts`) hands
+the focus the marks with a tooltip in the whole render (`focus.use(marks)`).
+A resolve can lay its chart out
+more than once and paint an earlier run than the last (`label.angle:
+"auto"` tries an angle per run), so the focus keeps the marks of
+every lowering since the last frame, and the next frame reads them all: only
+the painted run's nodes have items in it. One focus lives per chart
+(`focusOf`), for every `.tooltip()` in it, so one pointer opens one box, and
+the focus outlives the resolves that make every node anew. It is not one per
+`.tooltip()` call because a call is not stable across resolves: a call
+written in a mark function, a component thunk or a Python lambda mark is made
+anew on each resolve, once per group the function is called for.
+
+The focus reads geometry the way `nodeBox` does. On each published frame it
+walks the display items once (`walkItems`) for one candidate per key: the
+union of the boxes the mark's subtree drew, an outline (boxes, circles, the
+segments of a stroked path's `d`, `pathSegments`, and regions), and the mark's
+placed position. A path that is filled (its fill is not `none`,
+`transparent` or of zero opacity; SVG fills it closed or not, and a wedge in
+a coordinate space ends on its start with no `Z`) is a region, read from the display item
+alone: a pointer inside it, by the nonzero rule, is on the mark, so a wedge
+or an area is hit anywhere inside, not only near its edge. A position counts
+only on an axis the layout placed the mark along: an ancestor up to the
+chart's box is a chain along that axis (`chainOn`), or the mark is a point
+that data places in an ancestor's frame (`placedByOwnData`, a dot in a
+scatter). A bar's length axis does not count, so the row decides which bar a
+pointer right of a short bar describes. Inside a coordinate space
+(`inCoordinateSpace`), a mark's drawn box is not its data box, so its drawn
+center counts on both screen axes. The candidates are in paint order, by the
+last item each drew in the frame, which the bake has already sorted by
+`zOrder`: where marks overlap, `Focus.hit` takes the last one the pointer is
+inside, the one on top.
+On each pointer event it runs the focus behavior (`focus.ts`, by default
+`Focus.first([Focus.hit(), Focus.closest({stickiness: 4})]).within(16).snap(4)`),
+and it invalidates its readers only when
+the focused key, or the focused point, changes. Thirty moves across
+three bars re-run the chart twice. A key is the JSON of the mark's
+`.tooltip()` call (the wire of the mark it is chained on and its field list)
+and of the mark's rows (a ref or node by its rows, a date by its instant), so
+two marks of one call drawn from equal rows are one candidate, and the marks
+of two calls are not.
+
+The rule is reach first, then position. `within(reach)` narrows the
+frame's candidates before the behavior it is chained on runs: only the marks
+whose drawn outline is within `reach` px of the pointer (0 inside it) are
+considered, and the current focus out to `reach + 4`. With none, there is no
+focus. Then `first([hit, closest])` chooses among them: the one the pointer
+is inside, else the nearest by placed position. So the hole of a donut and a
+wide gap between bars, which are near no mark, show no box, and a pointer
+6 px below a bar's end, in the row of a much shorter bar, gets the box of
+the bar above it, not none. Dragology's `closest(...).whenFar(...)` limits the gap to the
+target it chose; here the reach narrows the targets first, because a mark's
+size is not part of its position: the mark nearest by position can be far
+from the pointer while another is near it. A behavior's result is the mark it
+chose, or none. `snap` is chained after `within`, so on each frame it maps
+the current row to its line before `within` takes the reach: the current
+focus is the line, not its row, and the line keeps the 20 px hysteresis.
+The reach to a line is to its path, so sliding along a line between rows
+far apart keeps the box. The reach,
+`TOOLTIP_REACH`, is 16 px: more than half an ordinary gap between bars, so
+crossing a gap never closes the box, and less than the hole of a donut.
+Observable Plot's pointer uses 40 px to a point's center, Plotly's
+`hoverdistance` 20 px.
+
+The open box (the box the layer drew in the last frame) is
+no pointer target: the behavior runs on the frame's geometry as if the box
+were not there, so a mark or a row under it is reached, and the box is open
+exactly when the behavior chooses a mark. A pointer over the box with no
+mark within reach closes it, and it stays closed: the box's paint does not
+change what the behavior sees, so closing it cannot reopen it. The head
+start and the 4 px of `within` keep a pointer at rest on a boundary from
+flipping. A touch tap holds its point through the `pointerleave` that ends it,
+until the next tap or a mouse move. A tap outside the chart does not close
+it: the runtime hears only events in the chart's container. When the chart is
+disposed, the runtime calls each input's `detach`, and the focus drops its
+marks and its candidates.
+
+A line is one candidate for its whole path: it has no placed position, so it
+is as near as its path. A line drawn through rows also has a point per row
+(`Candidate.points`). The shape form of `line` (`Band`, `shapes/band.tsx`)
+keeps each row's parameter from `bandOfRows`, and its layout puts each row on
+its drawn edge. Its lowering records where each row is drawn, through the
+coordinate transform, on a side table keyed by the path's display item
+(`displayList/drawnRowPoints.ts`), and the focus reads it there as it reads
+the item's `d`. `.snap(stickiness)` runs the inner behavior to pick a line,
+then picks that line's nearest point, with the current point's head start.
+The focused key is the line's key and the point's key (the line's key and
+the row's index), so moving along a line re-runs the chart once per row
+crossed, and not while the nearest row stays the same. The focus keeps the
+row's index, not the row: the next resolve makes the tree the box is drawn
+in, and a flow that makes its rows anew (a `derive` that copies them, any
+Python `derive`) gives it new row objects, so the lowering reads the row at
+that index in the new mark's rows (`rowAt`). The box shows that
+row (`tooltipContent(request, point)`), and `tooltipPlace` seats it beside
+the row's point, read from the line's geometry (`rowPoints`), with a marker
+on the point, a white circle in the line's stroke (each drawn point keeps
+the stroke of the item that drew it). In a future API this would read
+`pointer().snap(selectAll("lines"), { by: ... })`.
+
+A ribbon or area is a region and gives no points, and a line drawn from a
+function (no rows) or a connector between marks gives none either: its box
+describes the whole line, beside its end. TODO(#1395): the right behavior
+there is a continuous focus that shows the function's value at the pointer
+(Dragology's `between`, where snapping to rows is its `closest`), which needs
+content that changes per pointer move without a re-run.
 
 ## The timer is a scale, not a tick counter
 

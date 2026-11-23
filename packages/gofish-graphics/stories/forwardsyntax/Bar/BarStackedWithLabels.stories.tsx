@@ -38,7 +38,7 @@ export const Default: StoryObj<Args> = {
       )
       .mark(
         rect({ h: "count", fill: "species" }).label("species", {
-          position: "center",
+          placement: "center",
           color: "white",
           fontSize: 12,
         })

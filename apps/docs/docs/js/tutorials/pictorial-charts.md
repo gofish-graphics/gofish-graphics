@@ -120,7 +120,7 @@ gf.chart(data, { axes: false })
       gf.image({
         href: "/wilsonblanco.png",
         h: gf.v(100),
-        filter: gf.Filter.grayscale,
+        effect: gf.Effect.grayscale,
       }),
       gf.rect({ h: "amount", w: 175, fill: "#00ff00" }),
     ])
@@ -189,7 +189,7 @@ gf.chart(data, { axes: false })
             gf.image({
               href: "/wilsonblanco.png",
               h: gf.v(100),
-              filter: gf.Filter.grayscale,
+              effect: gf.Effect.grayscale,
             }),
             gf.rect({ h: "amount", w: 175, fill: "#00ff00" }),
           ])

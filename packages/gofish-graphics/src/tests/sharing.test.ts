@@ -6,7 +6,7 @@
  * the marginal histogram, a spread of charts and a stack.
  *
  * A real node's plan comes from its own sharing rule (`GoFishNode.sharing()`).
- * A data-valued `w`/`h` and `treemap` are node-level rules, not constraints.
+ * A data-valued `w`/`h` and `tile` are node-level rules, not constraints.
  * The `position` operator has no rule of its own, so it shares its child.
  *
  * Run: `tsx src/tests/sharing.test.ts` (wired as `pnpm test:sharing`).
@@ -25,7 +25,7 @@ import { Rect as rect } from "../ast/shapes/rect";
 import { ref } from "../ast/shapes/ref";
 import { resolveReferences } from "../ast/_ref";
 import { polar } from "../ast/coordinateTransforms/polar";
-import { scatter, group, treemap, rect as rectMark, enclose } from "../lib";
+import { scatter, group, tile, rect as rectMark, enclose } from "../lib";
 import { wrapRing } from "../ast/elaborationUtils";
 import { datum } from "../ast/data";
 import { isCONTINUOUS } from "../ast/underlyingSpace";
@@ -309,10 +309,10 @@ async function main() {
       { x: [0], y: [0], ny: [0] },
     ],
     [
-      "treemap: nests each child on both axes",
+      "tile: nests each child on both axes",
       async () =>
         planOf(
-          (await (treemap as any)({ by: "c", w: 200, h: 100 })(rectMark({})))([
+          (await (tile as any)({ by: "c", w: 200, h: 100 })(rectMark({})))([
             { c: "p" },
             { c: "q" },
             { c: "r" },

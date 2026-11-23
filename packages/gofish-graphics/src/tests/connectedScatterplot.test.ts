@@ -50,7 +50,7 @@ const {
   selectAll,
   spread,
   field,
-  Bin,
+  Binning,
   time,
   Animation,
   Curve,
@@ -188,7 +188,7 @@ async function dataSpace(rows: any[], at: number) {
             along: "year",
             key: "key",
             at,
-            method: Curve.linear(),
+            curve: Curve.linear(),
           }),
         ];
       }),
@@ -492,7 +492,7 @@ async function main(): Promise<void> {
           .toDisplayList(OPTIONS)
       );
     const [binned, plain] = [
-      await tip(offStart, field("year").bin(Bin.thresholds(starts.slice(1)))),
+      await tip(offStart, field("year").bin(Binning.thresholds(starts.slice(1)))),
       await tip(atStart, "year"),
     ];
     ok(
@@ -940,11 +940,11 @@ async function main(): Promise<void> {
       async () =>
         interpolate(
           drivingShifts.map((d: any) => ({ ...d, key: "us" })),
-          { along: "year", key: "key", at: 1958.5, method: curve }
+          { along: "year", key: "key", at: 1958.5, curve }
         ),
-      new RegExp(`interpolate\\(\\{ method \\}\\)${pattern.source}`)
+      new RegExp(`interpolate\\(\\{ curve \\}\\)${pattern.source}`)
     );
-    ok(`interpolate({ method: ${JSON.stringify(curve)} })`, !why, why);
+    ok(`interpolate({ curve: ${JSON.stringify(curve)} })`, !why, why);
   }
 
   // A line's curve is checked against the Curve family like any strategy:
@@ -976,6 +976,24 @@ async function main(): Promise<void> {
     ) &&
       !sameTween(Animation.tween(), Animation.tween({ curve: Curve.linear() }))
   );
+
+  // A bare member is its call, as in every other `curve` slot.
+  {
+    let bare: ReturnType<typeof Animation.tween> | undefined;
+    let why: string | undefined;
+    try {
+      bare = Animation.tween({ curve: Curve.linear });
+    } catch (e) {
+      why = (e as Error).message;
+    }
+    ok(
+      "tween({ curve: Curve.linear }) is tween({ curve: Curve.linear() })",
+      bare !== undefined &&
+        sameTween(bare, Animation.tween({ curve: Curve.linear() })) &&
+        !sameTween(bare, Animation.tween()),
+      why
+    );
+  }
 
   console.log("\n# the step curve");
   {

@@ -484,7 +484,7 @@ chart(brands, { legend: false })
   )
   .mark(
     rect({ w: "value", fill: "category" }).label("name", {
-      position: "outset-right",
+      placement: "outset-right",
     })
   )
   .layer(time.transition({ curve: Curve.linear() }))
@@ -590,7 +590,7 @@ transition does not blend paint.
 | `along`  | `string`                                                                                | none               | The field the rows are keyed by in time.                       |
 | `key`    | `string`                                                                                | none               | The field saying which rows are the same thing at other times. |
 | `at`     | `number`                                                                                | none               | Where to read the run, in `along`'s units.                     |
-| `method` | `Curve.Curve`: `Curve.step()`, `Curve.linear()`, `Curve.monotone()` or `Curve.smooth()` | `Curve.monotone()` | How a run is read between its keyframes.                       |
+| `curve`  | `Curve.Curve`: `Curve.step()`, `Curve.linear()`, `Curve.monotone()` or `Curve.smooth()` | `Curve.monotone()` | How a run is read between its keyframes.                       |
 | `fields` | `string[]`                                                                              | every number       | Which fields to interpolate.                                   |
 
 ## What is not built yet

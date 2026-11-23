@@ -18,7 +18,7 @@ column whose value is one number in each group, or a value expression
 - ``uniform(min, max)``.
 - ``exponential(rate)``: drawn from 0 to its 0.999 quantile.
 
-``d.bin(Bin.quantiles(n))`` is a key for ``partition``: the cells of the
+``d.bin(Binning.quantiles(n))`` is a key for ``partition``: the cells of the
 distribution at its own quantiles, each group the distribution restricted
 to its cell.
 
@@ -97,9 +97,9 @@ class DistAccessor(dict):
         return self._member("mass")
 
     def bin(self, cells: Dict[str, Any]) -> "DistAccessor":
-        """A grouping key with regions: the cells of ``cells`` (``Bin.step``,
-        ``Bin.thresholds`` or ``Bin.quantiles``) over the interval the
-        density is drawn over, ``Bin.quantiles(n)`` at the distribution's
+        """A grouping key with regions: the cells of ``cells`` (``Binning.step``,
+        ``Binning.thresholds`` or ``Binning.quantiles``) over the interval the
+        density is drawn over, ``Binning.quantiles(n)`` at the distribution's
         own quantiles. Each group is the distribution restricted to its
         cell. Valid only as ``partition``'s ``by``."""
         if self.get("ops"):
@@ -111,8 +111,8 @@ class DistAccessor(dict):
         if kind not in ("step", "thresholds", "quantiles"):
             raise ValueError(
                 f"Dist.{self['family']}(...).bin: a distribution's cells are "
-                f"intervals of numbers: use Bin.step, Bin.thresholds or "
-                f"Bin.quantiles, got {cells!r}."
+                f"intervals of numbers: use Binning.step, Binning.thresholds or "
+                f"Binning.quantiles, got {cells!r}."
             )
         out = DistAccessor(copy.deepcopy(dict(self)))
         out["ops"] = [{"op": "bin", "partition": dict(cells)}]

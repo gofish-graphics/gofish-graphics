@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Bin,
+  Binning,
   Calendar,
   chart,
   circle,
@@ -26,10 +26,10 @@ import { seattleWeather } from "../../src/data/seatle-weather";
  * own with a small gap, with one dot per slice at the slice's median.
  *
  * A partition by a key over a distribution gives each cell the
- * distribution restricted to the cell: `d.bin(Bin.quantiles(5))` cuts the
+ * distribution restricted to the cell: `d.bin(Binning.quantiles(5))` cuts the
  * standard normal at its quintiles. `derive(kde(x))` smooths the rows into
  * a kernel density that the column then holds, and
- * `field(x).bin(Bin.quantiles(n))` cuts it at its own quantiles: the
+ * `field(x).bin(Binning.quantiles(n))` cuts it at its own quantiles: the
  * penguins' body mass at its deciles, and in the ridgeline each month's
  * highs at the month's own quintiles, since the kde runs in each month. In
  * each cell a ribbon of the cell's domain and density, drawn in by a few
@@ -65,7 +65,7 @@ export const Croissant: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart([{ mean: 0, sd: 1 }])
-      .flow(partition({ by: d.bin(Bin.quantiles(5)), dir: "x" }))
+      .flow(partition({ by: d.bin(Binning.quantiles(5)), dir: "x" }))
       .mark(
         layer([
           ribbon({
@@ -107,7 +107,7 @@ export const PenguinBodyMass: StoryObj<Args> = {
     chart(penguins)
       .flow(
         derive(kde("Body Mass (g)")),
-        partition({ by: mass.bin(Bin.quantiles(10)), dir: "x" })
+        partition({ by: mass.bin(Binning.quantiles(10)), dir: "x" })
       )
       .mark(
         layer([
@@ -176,7 +176,7 @@ export const Ridgeline: StoryObj<Args> = {
           spacing: Spacing.pitch(36, { at: "baseline" }),
         }),
         derive(kde("temp_max")),
-        partition({ by: temp.bin(Bin.quantiles(5)), dir: "x" })
+        partition({ by: temp.bin(Binning.quantiles(5)), dir: "x" })
       )
       .mark(
         layer({ h: 34 }, [

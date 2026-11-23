@@ -5,13 +5,15 @@ order: 52
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/labels/elaborate.tsx
+  - packages/gofish-graphics/src/ast/selectionLayer.ts
+  - packages/gofish-graphics/src/ast/tooltip/tooltip.ts
   - packages/gofish-graphics/src/ast/labels/labelPlacement.ts
   - packages/gofish-graphics/src/ast/labels/autoLabelColor.ts
   - packages/gofish-graphics/src/ast/labels/labelNode.tsx
   - packages/gofish-graphics/src/ast/labels/strategies.ts
   - packages/gofish-graphics/src/ast/labels/placeStep.ts
   - packages/gofish-graphics/src/ast/labels/collide.ts
-  - packages/gofish-graphics/src/families/place.ts
+  - packages/gofish-graphics/src/families/placement.ts
 ---
 
 # Labels
@@ -60,11 +62,18 @@ per-instance and per-group labeling; see `resolveLabelTargets` below.
 
 ## The elaboration pass
 
-`elaborateLabels` (`src/ast/labels/elaborate.tsx`) runs inside `gofish.tsx`'s
-`layout()`, immediately after chrome elaboration, so a label may target a node
-the chrome pass just wrapped. A label inside a node's content is inside that
+`labelLayer` (`src/ast/labels/elaborate.tsx`) is lowered inside `gofish.tsx`'s
+`layout()` (`lowerSelectionLayers`), immediately after chrome elaboration, so a
+label may target a node the chrome pass just wrapped. A label inside a node's content is inside that
 node's chrome rings, so at layout time the rings seat their axes, titles, and
-legend past it. It has three phases:
+legend past it.
+
+The pass is `.label()` lowered as a **layer over its selection**, the rewrite
+`src/ast/selectionLayer.ts` holds for every modifier that draws over the
+nodes it is chained on. `lowerSelectionLayers` takes a `SelectionLayer`: how
+to take the modifier's stamps off the tree (`take`), the node each stamp is
+drawn over (`target`), and the tier to draw over one chart's selection
+(`draw`). For labels these are `labelLayer`'s, and it has three phases:
 
 1. **`resolveLabelTargets`** — a single top-down walk that pushes each node's
    `_labels` array down to its children whenever the node has children but no
@@ -81,22 +90,24 @@ legend past it. It has three phases:
    operator factory stamps `datum` on each group leaf it produces, so the push-down
    stops there. A mark that draws its own ink between or around its
    children keeps its label too: it says where its label goes
-   (`labelPosition`, below), as `arrow` and the `line` connector do, and it
+   (`labelPlacement`, below), as `arrow` and the `line` connector do, and it
    is the thing labeled.
 2. **`holdLabels`** — a pre-pass that takes every node's `_labels` off it,
-   each spec resolved once to its position on its target (`positionOf`),
+   each spec resolved once to its placement on its target (`placementOf`),
    into one list: a subtree's labels before those of the nodes that hold
-   it, and siblings' in order. The target and the position travel with the
-   spec from then on.
-3. **The chart's layer** — each label goes to its home (`homeOf`): the
+   it, and siblings' in order. The target and the placement travel with the
+   spec from then on. These two phases are `labelLayer.take`.
+3. **The chart's layer** — each label goes to its home (`homeOf`, in
+   `selectionLayer.ts`): the
    nearest node above its target, the target included, that holds a
    chart's marks (`_chartContent`), or the render root when no `chart()`
    holds it. `chartBuilder.ts` sets `_chartContent` on the node a chart's
    mark resolves to and on the layer its frame holds, so in a `.layer()`
    chain the home is the target's own tier, and the transitions a tier
    draws over its marks (`time.transition()`) are outside it. Each home is
-   wrapped once (`wrapWithLabels`) in a `Layer` holding its original
-   content plus one `ref()` + `label` pair per (target × spec), and the
+   wrapped once in a `Layer` holding its original
+   content plus one ref + `label` pair per (target × spec), drawn by
+   `drawLabels`, and the
    wrapper takes the home's place in its parent. A home is wrapped after
    the homes inside it, so its chooser reads their labels, already placed,
    through refs.
@@ -138,7 +149,8 @@ label lowers under its mark's build-in animation (`INTERNAL_animate`), which it
 finds through `_attachedTo`, so it follows its mark's timing
 (`src/animation/paint.ts`).
 
-Concretely, `wrapWithLabels` builds:
+Concretely, `lowerSelectionLayers` builds, with the refs and labels
+`drawLabels` makes:
 
 ```
 wrap = Layer([ content, ...refs, ...texts ])
@@ -163,6 +175,68 @@ placed):
 
 An `arrow` whose children carry labels is still labeled at its end: its
 own label keeps its target, the arrow, and is read through a `ref()` to it.
+
+## What `.label()` abbreviates
+
+A label tier has the shape of a tier a user can write. The operator form
+
+```ts
+chart(data)
+  .flow(
+    spread({ by: "site", dir: "x" }).label("site"),
+    spread({ by: "variety", dir: "x" })
+  )
+  .mark(rect({ h: "yield" }));
+```
+
+draws what this draws, apart from where the tier sits:
+
+```ts
+chart(data)
+  .flow(
+    spread({ by: "site", dir: "x" }).name("sites"),
+    spread({ by: "variety", dir: "x" })
+  )
+  .mark(rect({ h: "yield" }))
+  .layer(
+    chart(selectAll("sites")).mark((groups) =>
+      layer(groups.map((g) => /* a label of project(g.datum, "site"), placed beside g */))
+    )
+  );
+```
+
+and the mark form is the same with the mark's own nodes as the selection.
+Three parts of that are literally shared with the written form. The
+operator's `.label()` is applied to each group node as the mark's `.label()`
+is applied to a mark's node, after the group node is given its rows as its
+`datum`, in the same list of group calls the written form's `.name("sites")`
+is applied from (see [Operator Factory](/internals/frontend/operator-factory)). Each
+labeled node is read through the ref `selectAll` makes for it
+(`selectNode`, in `resolveRefData.ts`), so `ref.datum` is the node's rows.
+And the text is the accessor over those rows.
+
+Two parts are not. The label is a `label` node (`labelNode.tsx`), not a
+`text` mark, because a placement writes its angle and its visibility after
+layout. And the tier is not a `.layer()` tier: `LayerBuilder` resolves a
+tier with its chart, before chrome, and frames it as a chart of its own,
+while a label is lowered after chrome, as a sibling of its target's ref in
+one layer. Its constraints relate a label to that ref, and the chooser places
+every label of a chart in one run after the solve, which a tier framed
+apart from the refs it reads cannot do. Lowering through `.layer()` would
+need constraints that reach from one tier into another, and a tier resolved
+after chrome. Until then the label tier is drawn by
+`lowerSelectionLayers`, the one lowering every modifier of this kind
+shares (#803).
+
+`.tooltip()` is its second user (`tooltipLayer` in `ast/tooltip/tooltip.ts`,
+lowered after the labels). Its stamps are the requests its marks recorded,
+and its selection is the mark the pointer focuses, so with no focus it takes
+nothing and lowers nothing. Its tier is a ref to that mark and the box beside
+it. It differs from a label in where the tier goes: a `SelectionLayer` may
+name its own `home`, and a tooltip's is the render root. Its box is ink and
+is drawn over the whole graphic, so it paints over the chrome and stays
+inside the graphic, not inside the mark's chart. A label keeps the default,
+`homeOf`, since a label takes room in its chart.
 
 ## Position vocabulary → constraints
 
@@ -247,9 +321,9 @@ warns when it draws past a canvas it does (see `drawnOverflow` in
 
 ## Placement strategies
 
-`position` takes a position string, or a value of the `Place` family
-(`families/place.ts`): `Place.around()`, `Place.along({ at, side, orient })`,
-`Place.start()`, `Place.end()` and `Place.interior()`. A strategy reads the
+`placement` takes a position string, or a value of the `Placement` family
+(`families/placement.ts`): `Placement.around()`, `Placement.along({ at, side, orient })`,
+`Placement.start()`, `Placement.end()` and `Placement.interior()`. A strategy reads the
 target's `outline` geometry (see
 [Layout Calculation](/internals/layout/passes)) and proposes candidate spots,
 best first (`strategies.ts`):
@@ -282,7 +356,7 @@ best first (`strategies.ts`):
   stopping once no unread edge can be nearer.
 
 A strategy that needs geometry the target lacks is an error that names it
-(`Place.interior needs a filled region; connect has an open one`). A
+(`Placement.interior needs a filled region; connect has an open one`). A
 polygon with fill `"none"` has a closed outline but no filled region, so
 `interior` is an error on it too.
 
@@ -328,21 +402,21 @@ box is its turned box. The render prints one `console.info` naming how many
 labels each call hid (`reportHiddenLabels`, from `gofish.tsx`).
 
 A position string never goes through the chooser, so it places exactly as
-before. With no `position`, the default comes from the target's node
-definition (`labelPosition`): `ellipse` gives `Place.around()` and `arrow`
-`Place.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
+before. With no `placement`, the default comes from the target's node
+definition (`labelPlacement`): `ellipse` gives `Placement.around()` and `arrow`
+`Placement.end()` by convention; a connector (`line`, `ribbon`) and a `polygon`
 give `"outline"`, which the chooser reads from the outline the mark draws
-(`placeByOutline`): `Place.end()` for an open path, `Place.interior()` for a
-filled region, `Place.around()` for a closed outline with no fill. A mark
+(`placeByOutline`): `Placement.end()` for an open path, `Placement.interior()` for a
+filled region, `Placement.around()` for a closed outline with no fill. A mark
 that draws no outline (a ring an inset emptied) has nothing to describe,
 so its label is hidden, and the note does not count it. Anything
 else gets `"outset"`. Inside a coordinate space that is not linear (a polar `coord`),
 outlines are not on the screen yet, so a default falls back to `"outset"` and
 a strategy written out is an error that cites #1201. Before that, a strategy
-is checked against the `Place` family with `checkStrategy` (an unknown kind,
+is checked against the `Placement` family with `checkStrategy` (an unknown kind,
 an undeclared param or a value out of bounds throws the validator's own
 message). The family's kinds and params are declared once in `STRATEGIES`
-(`descriptors.ts`), which also gives the wire form, the Python `Place`
+(`descriptors.ts`), which also gives the wire form, the Python `Placement`
 module, and the docs; a label's `avoiding`, `halo` and `background` are
 `LABEL_OPTIONS` fields (see [Frontend IR](/internals/frontend/serialization)).
 
@@ -373,7 +447,7 @@ Whether the label is inside is read from where it landed: its center is inside
 one of its target's filled closed outlines. Inside an unfilled one the page shows
 through, so it counts as outside. So a `"center"` label on a C-shaped polygon,
 whose box center falls in the C's opening, is colored for the page, and a
-`Place.interior()` label for the fill.
+`Placement.interior()` label for the fill.
 
 The label is read against the color directly behind its glyphs. That is the white
 page, under the target's fill when the label is inside, under the label's
@@ -413,7 +487,7 @@ pushes onto an array (`(this._labels ??= []).push({ accessor, ...options, group:
 so `_labels` is genuinely a list of independent specs, each with its own
 accessor, position, and styling — not a single mutable slot. `LabelOptions`
 carries `fontFamily`/`fontWeight`/`fontStyle` alongside the older
-`position`/`fontSize`/`color`/`offset`/`rotate`; all three pass straight
+`placement`/`fontSize`/`color`/`offset`/`rotate`; all three pass straight
 through to the elaborated label node, which measures font family/weight/
 style for its own bbox, so they affect layout correctly. `halo` (a white
 text outline, SVG `paint-order: stroke`) and `background` (a filled box) are
@@ -439,7 +513,7 @@ The former bespoke pipeline is gone:
   its `valueLabelItems` lowering — deleted outright (#741 stage 2); every
   caller that used it (`Treemap`, `CircleTreemap`, `BarStackedWithLabels`, and
   their Python mirrors) migrated to
-  `.label(field, { position: "center", color: "white", fontSize: 12 })`.
+  `.label(field, { placement: "center", color: "white", fontSize: 12 })`.
 
 `.label()` itself, and the operator-level boolean shorthand (`label: false` to
 suppress a group's inherited label — used by `Ribbon`), are unaffected: they

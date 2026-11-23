@@ -2,14 +2,14 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { applyFilter, displayFilter, type FilterOptions } from "./drawFilter";
+import { applyFilter, displayFilter, type WithEffect } from "./drawEffect";
 import { Frontend } from "gofish-ir";
 import { checkLengths } from "./length";
 
 import { getColumnTypes, setColumnTypes } from "./schema";
 import type { JSX } from "solid-js";
 import { GoFishAST } from "./_ast";
-import { GoFishNode } from "./_node";
+import { breadthFirst, GoFishNode } from "./_node";
 import type { AxesOptions, View } from "./gofish";
 import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
@@ -50,7 +50,6 @@ import type { MarkTransition } from "../animation/transition";
 import { attachTerminals } from "./marks/terminals";
 import { withWire } from "./wire";
 import { isThenable } from "../util";
-import { breadthFirst } from "./elaborationUtils";
 import { withKindValues } from "./strategyKind";
 import { functionInChannelError, groupFun } from "./groupExpr";
 
@@ -381,6 +380,9 @@ export type NameableMark<T> = Mark<T> & {
   /** How the mark looks in each phase of an animation: `Animation.grow()`,
    *  `Animation.fadeIn()`, … (see `src/animation/`). */
   transition(spec: MarkTransition): NameableMark<T>;
+  /** A box that describes the mark under the pointer: every field with one
+   *  value on the mark, or `fields`, in order. */
+  tooltip(fields?: readonly string[]): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -431,12 +433,12 @@ export type NameableMark<T> = Mark<T> & {
  */
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild
-): (props: P & FilterOptions) => NameableMark<P>;
+): (props: P & WithEffect) => NameableMark<P>;
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => MarkChild,
   channels: undefined,
   serialize: string
-): (props: P & FilterOptions) => NameableMark<P>;
+): (props: P & WithEffect) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
@@ -453,7 +455,7 @@ export function createMark<
   serialize?: string,
   cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
-  opts: DeriveMarkProps<ShapeProps, C, T> & FilterOptions
+  opts: DeriveMarkProps<ShapeProps, C, T> & WithEffect
 ) => NameableMark<T[]>;
 export function createMark(
   shapeFn: any,
@@ -504,10 +506,10 @@ function buildCreatedMark(
       serialize,
       markOpts
     );
-  // `filter` is no channel: it filters the built node's whole drawing
-  // (`drawFilter.ts`), whatever the mark draws. It is checked once, here.
-  const { filter: filterOpt, ...channelOpts } = markOpts;
-  const filter = displayFilter(filterOpt, `${serialize ?? "mark"}({ filter })`);
+  // `effect` is no channel: it filters the built node's whole drawing
+  // (`drawEffect.ts`), whatever the mark draws. It is checked once, here.
+  const { effect, ...channelOpts } = markOpts;
+  const filter = displayFilter(effect, `${serialize ?? "mark"}({ effect })`);
   const baseMark: Mark<any> = async (
     d: unknown[],
     key?: string | number,

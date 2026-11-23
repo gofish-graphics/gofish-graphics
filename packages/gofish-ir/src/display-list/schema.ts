@@ -63,6 +63,9 @@ export interface BaseDisplayItem {
   role?: "node" | "overlay";
   /** Optional stable id (e.g. for keyed transitions in a host runtime). */
   id?: string;
+  /** Text that describes the primitive, as a static backend shows it on
+   *  hover (an SVG `<title>` child): a mark's `.tooltip()` content. */
+  title?: string;
 }
 
 export interface RectItem extends BaseDisplayItem {
@@ -122,7 +125,7 @@ export interface ImageItem extends BaseDisplayItem {
  * display-list analogue of an SVG `<g transform>` / a Canvas save+transform),
  * and under a `filter` when it has one. Used for the cases the flat-absolute
  * fold can't express on its own: a `box`/`frame` `scale`, and a node with a
- * `filter` option, whose drawing is filtered as one picture. Children are in
+ * `effect` option, whose drawing is filtered as one picture. Children are in
  * the group's local pixel space.
  */
 export interface GroupItem extends BaseDisplayItem {
@@ -200,6 +203,9 @@ export interface Style {
   paintOrder?: string;
   /** SVG `stroke-linejoin`. */
   strokeLinejoin?: string;
+  /** SVG `pointer-events`: `"none"` makes the primitive no pointer target
+   *  (a tooltip's box, drawn over the marks it describes). */
+  pointerEvents?: "none";
 }
 
 export const DISPLAY_ITEM_KINDS = [

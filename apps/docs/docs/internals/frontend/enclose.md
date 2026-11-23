@@ -124,18 +124,18 @@ the same default, installed for the clause's operands (see
 ## Around a member that fills its space
 
 A fresh member that fills the room it is given on both axes (`fillsItsSpace`,
-which reads the claim walk's `fillsRoom`: a `treemap` or a `region` with no size; not a `pack` of sized circles) has nothing to hug: laid
+which reads the claim walk's `fillsRoom`: a `tile` or a `region` with no size; not a `pack` of sized circles) has nothing to hug: laid
 out, it would be as large as whatever it is given. So `enclose` turns the
 layout around (`fillingLayout`). The outline comes first, from the space
 the enclosure is given: `Shape.box()` is that space, and `Shape.oval()` is
 the oval inscribed in its box (`ovalRing`, `geometry/ring.ts`). When the
-enclosure's parent handed it a shape, such as a Voronoi cell of a treemap,
+enclosure's parent handed it a shape, such as a Voronoi cell of a `tile`,
 the space is that shape, so `Shape.box()` is the cell and `Shape.oval()` is
 the oval cut to the cell (`intersectRings`). The outline drawn in by
 `padding` (`insetConvex`) is the shape each member is laid out in: its size
 is the shape's box and its shape the ring (see
 [The shape a parent gives a child](/internals/layout/passes#the-shape-a-parent-gives-a-child)),
-so a `treemap` tiles it and a `region` draws it. The enclosure's box is the
+so a `tile` tiles it and a `region` draws it. The enclosure's box is the
 whole space it was given, as a member's would have been.
 
 `Shape.fillet()` and `Shape.blob()` are built from the members' outlines, so

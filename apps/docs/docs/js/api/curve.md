@@ -7,7 +7,7 @@ title: Curve
 The `Curve` family holds the ways a path can run through its points. A curve is
 the value of the `curve` option of [`line`](/js/api/marks/line) and
 [`ribbon`](/js/api/marks/ribbon), of [`time.transition()`](/js/animation) and
-`Animation.tween()`, and of the `method` option of
+`Animation.tween()`, and of
 [`interpolate()`](/js/animation#interpolate-rows-options).
 
 ::: gofish
@@ -40,7 +40,7 @@ No curve has a required option, so each member is a curve as it is, and
 calling it sets options: `Curve.monotone` and `Curve.monotone()` are the same
 curve, and `Curve.arc({ direction: "down" })` sets the arc's direction. This
 holds in every strategy family: a kind with no required option is a value,
-and a kind with one is a call only, like `Bin.step(size)`. A curve is a plain
+and a kind with one is a call only, like `Binning.step(size)`. A curve is a plain
 object, `{ kind, ...params }`, of type `Curve.Curve`, for example
 `{ kind: "arc", direction: "down" }`. The same object is the curve's wire
 form. ([#1145](https://github.com/gofish-graphics/gofish-graphics/issues/1145)

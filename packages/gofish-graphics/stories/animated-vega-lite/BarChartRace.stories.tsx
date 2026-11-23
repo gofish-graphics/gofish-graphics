@@ -157,7 +157,7 @@ const race = (
     )
     .mark(
       rect({ w: "value", fill: "category" }).label("name", {
-        position: "outset-right",
+        placement: "outset-right",
       })
     )
     .layer(time.transition({ curve: Curve.linear() }))
@@ -194,7 +194,7 @@ export const Animated: StoryObj<Args> = {
       )
       .mark(
         rect({ w: "value", fill: "category" }).label("name", {
-          position: "outset-right",
+          placement: "outset-right",
         })
       )
       .layer(time.transition({ curve: Curve.linear() }))
@@ -303,7 +303,7 @@ export const Frame2000: StoryObj<Args> = {
       )
       .mark(
         rect({ w: "value", fill: "category" }).label("name", {
-          position: "outset-right",
+          placement: "outset-right",
         })
       )
       .render(container, { axes: { x: true, y: false } } as any);
@@ -369,7 +369,7 @@ const raceFromBelow = (
     )
     .mark(
       rect({ w: "value", fill: "category" })
-        .label("name", { position: "outset-right" })
+        .label("name", { placement: "outset-right" })
         .name("bars")
     )
     .layer(

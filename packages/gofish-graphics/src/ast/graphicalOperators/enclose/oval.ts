@@ -29,7 +29,8 @@
  * free test); the outline is then the hull itself: a sliver or a segment, or
  * nothing for a single point.
  */
-import { convexHull, discPoly, type Member, type Pt } from "./prims";
+import { discPoly, type Member, type Pt } from "./prims";
+import { convexHull } from "../../geometry/plane";
 import { ringExtent } from "../../geometry/box";
 
 /** The ellipse `{ p : (p - c)ᵀ A (p - c) <= 1 }`, A = [[a, b], [b, d]]. */

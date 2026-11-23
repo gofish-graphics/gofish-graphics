@@ -4,7 +4,7 @@
 
 /**
  * The label chooser: the post-solve step that places the labels whose
- * `position` is a `Place` strategy. Like `overlap` (`constraints/overlap.ts`)
+ * `placement` is a `Placement` strategy. Like `overlap` (`constraints/overlap.ts`)
  * it is not a difference constraint, so the placement solver never sees it:
  * the label layer runs it after the solve, when the labeled marks are placed
  * and can be read through their `ref()` stand-ins.
@@ -15,7 +15,7 @@
  * mark is read as its outline only), the labels already placed (by this
  * step, or by the solve for a position string; a hidden one takes no room),
  * and the nodes in the call's `avoiding`. A label with no
- * free candidate is hidden. `Place.start()` and `Place.end()` labels have
+ * free candidate is hidden. `Placement.start()` and `Placement.end()` labels have
  * one spot each, past their paths' ends: the ones of a call that overlap
  * there slide apart vertically, and one that still covers an obstacle is
  * hidden.
@@ -32,11 +32,11 @@ import {
   around,
   end,
   interior,
-  type AlongPlace,
-  type AroundPlace,
-  type InteriorPlace,
-  type Place,
-} from "../../families/place";
+  type AlongPlacement,
+  type AroundPlacement,
+  type InteriorPlacement,
+  type Placement,
+} from "../../families/placement";
 import { ringExtent } from "../geometry/box";
 import { turnedCorners } from "../geometry/plane";
 import {
@@ -78,7 +78,7 @@ export type LabelPlaceItem = {
   node: LabelNode;
   /** Its strategy, or `"outline"`: read from its mark's outline
    *  ({@link placeByOutline}). */
-  place: Place | "outline";
+  placement: Placement | "outline";
   /** The label's `offset` option (see {@link placeOffset}). */
   offset?: number;
   /** `ref()` stand-ins of the nodes it avoids. */
@@ -267,18 +267,18 @@ export function applyLabelPlacement(
   // label the note counts.
   const calls = new Map<unknown, Resolved[]>();
   for (const item of constraint.items) {
-    const place =
-      item.place === "outline"
+    const placement =
+      item.placement === "outline"
         ? placeByOutline(shapeOf(item.target))
-        : item.place;
-    if (place === undefined) {
+        : item.placement;
+    if (placement === undefined) {
       hide(get(item.label), item.node, centerOf(shapeOf(item.target)));
       continue;
     }
     const resolved = {
       ...item,
-      place,
-      offset: placeOffset(place, item.offset),
+      placement,
+      offset: placeOffset(placement, item.offset),
     };
     const list = calls.get(item.group);
     if (list) list.push(resolved);
@@ -306,7 +306,7 @@ export function applyLabelPlacement(
    *  spot), or hide it when it took none, counting it for the render's
    *  note. */
   const settle = (item: Resolved, spot: Spot | undefined, size: HalfSize) => {
-    const key = `${item.call} with ${placeName(item.place)}`;
+    const key = `${item.call} with ${placeName(item.placement)}`;
     const entry = hiddenLabels.get(key) ?? { hidden: 0, total: 0 };
     entry.total++;
     hiddenLabels.set(key, entry);
@@ -328,7 +328,7 @@ export function applyLabelPlacement(
     // where its label goes, often past the area (a line chart's end labels
     // take the margin), and the labels join the layout's box.
     for (const which of ["start", "end"] as const) {
-      const ends = items.filter((i) => i.place.kind === which);
+      const ends = items.filter((i) => i.placement.kind === which);
       const spots = endSpots(ends, which, shapeOf).map((e) => ({
         ...e,
         ok: clear(
@@ -343,13 +343,13 @@ export function applyLabelPlacement(
     }
     // The rest take their first free candidate in the frame, in data order.
     for (const item of items) {
-      const { place } = item;
-      if (place.kind === "start" || place.kind === "end") continue;
+      const { placement } = item;
+      if (placement.kind === "start" || placement.kind === "end") continue;
       const shape = shapeOf(item.target);
       const angle = item.node.state.angle;
       const size = item.node.halfSize(angle);
       let chosen: Candidate | undefined;
-      for (const c of candidatesFor(place, item.offset, shape, size, angle))
+      for (const c of candidatesFor(placement, item.offset, shape, size, angle))
         if (inFrame(corners(c, size)) && clear(c, size, shape, group)) {
           chosen = c;
           break;
@@ -360,22 +360,22 @@ export function applyLabelPlacement(
 }
 
 /** A label to place, with its strategy and its offset resolved. */
-type Resolved = Omit<LabelPlaceItem, "place" | "offset"> & {
-  place: Place;
+type Resolved = Omit<LabelPlaceItem, "placement" | "offset"> & {
+  placement: Placement;
   offset: number;
 };
 
-/** A strategy's name as written: `Place.around()`. */
-const placeName = (p: Place): string => `Place.${p.kind}()`;
+/** A strategy's name as written: `Placement.around()`. */
+const placeName = (p: Placement): string => `Placement.${p.kind}()`;
 
 /**
  * The strategy of a label whose default is read from its mark's outline
- * (`labelPosition: "outline"`): inside a filled region (a ring of 3 points
+ * (`labelPlacement: "outline"`): inside a filled region (a ring of 3 points
  * or more), around any other closed outline, and at the end of an open
  * path. A mark that draws no outline, or only empty ones, has none:
  * undefined.
  */
-const placeByOutline = (t: TargetShape): Place | undefined => {
+const placeByOutline = (t: TargetShape): Placement | undefined => {
   const drawn = t.outlines.filter((o) => o.points.length > 0);
   return drawn.some((o) => o.closed && o.filled && o.points.length >= 3)
     ? interior()
@@ -398,33 +398,33 @@ function centerOf(shape: TargetShape): Pt {
  *  `offset`, when neither it nor the label gives one. */
 const DEFAULT_OFFSET = { around: 3, along: 3, start: 4, end: 4, interior: 0 };
 
-/** The pixels between the outline and a label placed by `place`: the
+/** The pixels between the outline and a label placed by `placement`: the
  *  strategy's `offset`, else the label's, else the strategy's default. */
-const placeOffset = (place: Place, label: number | undefined): number =>
-  ("offset" in place ? place.offset : undefined) ??
+const placeOffset = (placement: Placement, label: number | undefined): number =>
+  ("offset" in placement ? placement.offset : undefined) ??
   label ??
-  DEFAULT_OFFSET[place.kind];
+  DEFAULT_OFFSET[placement.kind];
 
 /** The candidates of a strategy that offers several, best first. */
 function candidatesFor(
-  place: AroundPlace | AlongPlace | InteriorPlace,
+  placement: AroundPlacement | AlongPlacement | InteriorPlacement,
   offset: number,
   shape: TargetShape,
   size: HalfSize,
   angle: number
 ): Iterable<Candidate> {
-  switch (place.kind) {
+  switch (placement.kind) {
     case "around":
-      return aroundCandidates(shape, size, angle, place, offset);
+      return aroundCandidates(shape, size, angle, placement, offset);
     case "along":
-      return alongCandidates(shape, size, angle, place, offset);
+      return alongCandidates(shape, size, angle, placement, offset);
     case "interior":
       return interiorCandidates(shape, size, angle);
   }
 }
 
 /**
- * The spots of one call's `Place.start()` or `Place.end()` labels: each at
+ * The spots of one call's `Placement.start()` or `Placement.end()` labels: each at
  * its path's end, then the labels whose boxes overlap in x slid apart
  * vertically, a run of them at a time (labels apart in x keep the heights
  * their ends want). In input order, with each label's box size.

@@ -45,7 +45,7 @@ import { percent, fr } from "gofish-graphics";
 | Option                                                   | Pixels | `percent(n)` of                  | `fr(k)` |
 | -------------------------------------------------------- | ------ | -------------------------------- | ------- |
 | `w`, `h` of `chart`, `layer`, `rect`, `ellipse`, `image` | yes    | the parent's room                | yes     |
-| `w`, `h` of `spread`, `stack`, `treemap`, `blank`        | yes    | the parent's room                | yes     |
+| `w`, `h` of `spread`, `stack`, `tile`, `blank`           | yes    | the parent's room                | yes     |
 | `spacing` of `spread` and `table`                        | yes    | the operator's room              | yes     |
 | `inset` of `rect`                                        | yes    | the rect's own box, on each side | no      |
 
@@ -144,11 +144,11 @@ layer({ w: 720, h: 260 }, [
 
 ## Limits
 
-- A percent `w` or `h` inside a facet panel, a table cell, a treemap tile or
+- A percent `w` or `h` inside a facet panel, a table cell, a `tile` cell or
   a coordinate transform throws.
 - A percent `padding` on `chart` or a coordinate transform throws
   ([#852](https://github.com/gofish-graphics/gofish-graphics/issues/852),
   [#1238](https://github.com/gofish-graphics/gofish-graphics/issues/1238)).
-- `treemap`'s `spacing` and `padding`, and `stack`'s `spacing`, take pixels
+- `tile`'s `spacing` and `padding`, and `stack`'s `spacing`, take pixels
   only.
 - A percent `inset` and its offset are each 0 or more.

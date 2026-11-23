@@ -2,14 +2,14 @@
 // @wiki Legends — /internals/frontend/legends
 // </gofish-wiki>
 
-import { GoFishNode } from "../_node";
+import { breadthFirst, GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
 import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
 import { slotOf } from "../constraints/shared";
-import { breadthFirst, fmtNum, type ChromeRing } from "../elaborationUtils";
+import { fmtNum, type ChromeRing } from "../elaborationUtils";
 import { ticks as d3Ticks, tickStep } from "d3-array";
 import { datum } from "../data";
 import type { CategoricalScale, ContinuousColorScale } from "../gofish";

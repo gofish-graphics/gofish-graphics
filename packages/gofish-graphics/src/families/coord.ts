@@ -5,8 +5,8 @@
  * `lib.ts` binds this module as `Coord` (`Coord.polar()`), and
  * `gofish-graphics/coord` exports the same module. Each transform is defined
  * in its own file under `ast/coordinateTransforms/`; this module is their one
- * public home. (The lowercase `coord` export is a different thing: the
- * low-level combinator `coord({ transform }, children)`.)
+ * public home. A layer with a `coord`, `layer({ coord }, children)`, is the
+ * coordinate space of its children.
  */
 import type { CoordinateTransform } from "../ast/coordinateTransforms/coord";
 

@@ -70,10 +70,6 @@ export * as Dist from "./families/dist";
 // back, so moving them changes which class is defined first).
 export * as Coord from "./families/coord";
 
-// The low-level coordinate combinator `coord({ transform }, children)`; the
-// transforms themselves are the `Coord` family.
-export { coord } from "./ast/coordinateTransforms/coord";
-
 // Main API
 export { gofish } from "./ast/gofish";
 export { GoFishSolid } from "./ast/GoFishSolid";
@@ -167,8 +163,8 @@ export type {
 } from "./ast/calendar";
 export type { LevelOption } from "./ast/axes/levels";
 // Cells (#1058): what `field(x).bin(partition)` maps each value to. A
-// partition is a Calendar value, `Bin.step(size)`,
-// `Bin.thresholds(countOrEdges)`, or `Bin.quantiles(countOrProbabilities)`; a list of Calendar values is a product
+// partition is a Calendar value, `Binning.step(size)`,
+// `Binning.thresholds(countOrEdges)`, or `Binning.quantiles(countOrProbabilities)`; a list of Calendar values is a product
 // (`[Calendar.year, Calendar.month]`). A level that is a part of a larger
 // one (`Calendar.month`, the month of the year) gives parts of a cycle.
 export type {
@@ -183,11 +179,11 @@ export type {
   PartitionJSON,
 } from "./ast/cells";
 // A key that reads two fields at once (#1059), binned into the cells of the
-// plane by a call in the Bin family: `struct({ x, y }).bin(Bin.hex({ radius }))`.
+// plane by a call in the Binning family: `struct({ x, y }).bin(Binning.hex({ radius }))`.
 export { struct, StructExpr } from "./ast/structExpr";
 export type { StructOp, StructExprWire } from "./ast/structExpr";
 export type { PolygonCell, PlaneFields } from "./ast/polygonCells";
-export * as Bin from "./families/bin";
+export * as Binning from "./families/binning";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -221,9 +217,9 @@ export { spreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY } from "./ast/graphicalOperators/spreadY";
 export * as Curve from "./families/curve";
 export * as Baseline from "./families/baseline";
-export { treemap } from "./ast/graphicalOperators/treemap";
-export * as Tile from "./families/tile";
-export type { TreemapOptions } from "./ast/graphicalOperators/treemap";
+export { tile } from "./ast/graphicalOperators/tile";
+export * as Tiling from "./families/tiling";
+export type { TileOptions } from "./ast/graphicalOperators/tile";
 export { pack } from "./ast/graphicalOperators/pack";
 export type { PackOptions } from "./ast/graphicalOperators/pack";
 export { partition } from "./ast/graphicalOperators/partition";
@@ -234,12 +230,12 @@ export type {
   PartitionPlaneOptions,
 } from "./ast/graphicalOperators/partition";
 export * as Overlap from "./families/overlap";
-export * as Filter from "./families/filter";
+export * as Effect from "./families/effect";
 export type { BlendMode } from "./ast/blendMode";
 export type { EncloseOptions } from "./ast/graphicalOperators/enclose";
 export type { Nodes } from "./ast/nodeSelection";
 export * as Shape from "./families/shape";
-export * as Place from "./families/place";
+export * as Placement from "./families/placement";
 export { group } from "./ast/graphicalOperators/group";
 export { position } from "./ast/graphicalOperators/position";
 export { arrow } from "./ast/graphicalOperators/arrow";

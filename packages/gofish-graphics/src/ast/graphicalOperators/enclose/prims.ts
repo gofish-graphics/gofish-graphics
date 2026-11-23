@@ -7,7 +7,7 @@
  * segments, and each member grown by a radius as a primitive with an exact
  * signed distance (negative inside). Pure geometry, no GoFish nodes.
  */
-import { cross, signedArea2 } from "../../geometry/plane";
+import { signedArea2 } from "../../geometry/plane";
 
 /** A point in pixels. */
 export type Pt = [number, number];
@@ -55,31 +55,6 @@ export const boxOf = (rings: Pt[][]): Box => {
 /** A ring winding positive (screen coordinates): itself, or reversed. */
 export const ccw = (r: Pt[]): Pt[] =>
   signedArea2(r) > 0 ? r : r.slice().reverse();
-
-/** Andrew's monotone chain. */
-export const convexHull = (pts: Pt[]): Pt[] => {
-  const p = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-  const lower: Pt[] = [];
-  for (const q of p) {
-    while (
-      lower.length >= 2 &&
-      cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0
-    )
-      lower.pop();
-    lower.push(q);
-  }
-  const upper: Pt[] = [];
-  for (let i = p.length - 1; i >= 0; i--) {
-    const q = p[i];
-    while (
-      upper.length >= 2 &&
-      cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0
-    )
-      upper.pop();
-    upper.push(q);
-  }
-  return lower.slice(0, -1).concat(upper.slice(0, -1));
-};
 
 /** A circle of radius R around c as an n-gon. */
 export const discPoly = (c: Pt, R: number, n = 28): Pt[] =>

@@ -16,7 +16,7 @@ import * as GoFish from "../../dist/index.js";
 import { check, items, report } from "./testHelpers";
 
 const {
-  Bin,
+  Binning,
   chart,
   circle,
   field,
@@ -254,7 +254,7 @@ console.log("# intersect with paint");
   let drawn: unknown[] = ["not drawn"];
   try {
     const dl = await chart([{ v: 5 }, { v: 15 }, { v: 25 }], { axes: false })
-      .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+      .flow(partition({ by: field("v").bin(Binning.step(10)), dir: "x" }))
       .mark(
         intersect({ fill: "#eee", stroke: "black" }, [
           rect({ x: 0, y: 0, w: 1000, h: 50 }),
@@ -293,7 +293,7 @@ console.log("# intersect with paint");
           .flow(
             partition({
               by: field("x").bin(
-                Bin.thresholds([
+                Binning.thresholds([
                   -1.2816, -0.8416, -0.5244, -0.2533, 0, 0.2533, 0.5244, 0.8416,
                   1.2816,
                 ])
@@ -468,7 +468,7 @@ console.log("# intersect under a partition");
   // Operands at literal positions: each cell's copy is centered in its
   // cell, as a layer's would be, not stacked at the origin.
   const dl = await chart([{ v: 5 }, { v: 15 }, { v: 25 }], { axes: false })
-    .flow(partition({ by: field("v").bin(Bin.step(10)), dir: "x" }))
+    .flow(partition({ by: field("v").bin(Binning.step(10)), dir: "x" }))
     .mark(
       intersect([
         rect({ x: 0, y: 0, w: 90, h: 40, fill: "red" }),
@@ -509,7 +509,7 @@ console.log("# intersect: a ref operand claims no room");
         chart(grid)
           .flow(
             partition({
-              by: field("x").bin(Bin.thresholds([4162.8, 4500, 4837.2])),
+              by: field("x").bin(Binning.thresholds([4162.8, 4500, 4837.2])),
               dir: "x",
             })
           )

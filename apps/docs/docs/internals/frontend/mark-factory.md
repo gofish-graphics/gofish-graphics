@@ -9,6 +9,10 @@ covers:
   - packages/gofish-graphics/src/ast/marks/chart.ts
   - packages/gofish-graphics/src/ast/marks/markResult.ts
   - packages/gofish-graphics/src/ast/constraints/relationalPaint.ts
+  - packages/gofish-graphics/src/ast/tooltip/tooltip.ts
+  - packages/gofish-graphics/src/ast/tooltip/request.ts
+  - packages/gofish-graphics/src/ast/tooltip/content.ts
+  - packages/gofish-graphics/src/ast/tooltip/place.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -389,6 +393,38 @@ methods:
   input an operator applies the mark to, also when the mark sits inside a
   `layer([...])` or a compositing mark, which forward their children's batch
   form (see [The Operator Factory](/internals/frontend/operator-factory)).
+- `mark.tooltip(fields?)`, in a static drawing, writes on every produced
+  node the rows a box describing it would show, as the node's `title`. In
+  a live chart, which paints no titles, it records on every node a request:
+  its rows, a key from its call and its data, and the rows its box shows when the call
+  names its fields (checked there, so a missing field fails the render);
+  without a list, the rows are made only for the focused node. The mark
+  also reads its chart's focus, so a change of focus re-runs the chart, and
+  a chart whose resolve read no focus lowers no tooltip layer
+  (`hasTooltips`). The render lowers the box after the labels, as a layer over its selection (`tooltipLayer` in
+  `ast/tooltip/tooltip.ts`, through `lowerSelectionLayers`, see
+  [Labels](/internals/frontend/labels)): it takes the requests off the
+  tree, hands the chart's focus every mark with a tooltip, selects the first mark
+  with the focused key, and draws a box beside it on the render root, so
+  the box paints over the marks, their labels and the chrome. With no focus
+  nothing is lowered. The box is ordinary marks (an `enclose` of two
+  `spread` columns of `text`), and it is ink (`inkOn`) that takes no
+  pointer. A post-solve constraint, `tooltipPlace` (`place.ts`, run after
+  `labelPlace`), seats it: right of the mark, else left, centered on its
+  row; else under or over it, flush with its end; else moved into the
+  graphic's box. On a row of a line it seats the box beside the row's
+  point instead, with a marker on the point (see
+  [Reactivity](/internals/frontend/reactivity)). The box and the marker are
+  overlays (`GoFishNode.overlay`): no pointer lands on them, and the canvas
+  is sized without them. The row values come from `content.ts`:
+  with no list, every field with one value on the mark's rows, and a size
+  or position channel's field with the value it draws, inferred as the
+  channel infers it (a sum for a size). On a node drawn through its rows
+  (`GoFishNode.throughRows`, which `Band` sets on a line built from rows),
+  a list names the rows' fields: a name need only be a column, the box
+  shows the focused row's values, less the listed fields that row lacks
+  (`rowTooltipRows`), and the title keeps only the listed fields with one
+  value on the whole line (none: no title).
 - `mark.transition({ enter, update, exit })` records how the mark looks in
   each phase of an animation (`Animation.grow()`, `Animation.fadeIn()`, and
   so on) on every produced node. With no `time.sequence` in the flow, the
@@ -406,7 +442,11 @@ methods:
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`
-  domain-specific channel meanings.
+  domain-specific channel meanings. The wrapper carries the base mark's wire
+  with the translate (the IR's mark `translate`), and a `.tooltip()` chained
+  after it goes on the base mark, which the tooltip describes, so the two
+  chain in either order. `.name()` and `.zOrder()` stay on the wrapper: they
+  act on the placed node.
 
 These methods wrap or rebuild the base mark rather than mutating it, so naming,
 labeling, or positioning one mark never affects another.
@@ -603,7 +643,10 @@ its values. In layout it reads its edges through the axis maps into local
 pixels (`reparameterize` in `fun.ts` for the parameter). It draws them as exact
 lines and Béziers, and resamples them only under a coordinate transform. Its
 geometry gives the box, the outline of the drawn path, and the exact
-cross-section along its value axis.
+cross-section along its value axis. A line built from rows also keeps each
+row's parameter (`rows`), and its geometry gives the point where it draws
+each row (`rowPoints`), which a tooltip seats a row's box beside. It marks
+itself `throughRows`, which the tooltip's content reads before layout.
 
 A band sets the node's `shearAxis` to its value axis, so a stack can move it
 by an offset that changes along the parameter (a stacked area, see

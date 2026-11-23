@@ -17,10 +17,11 @@ covers:
   - packages/gofish-graphics/src/ast/perf.ts
   - packages/gofish-graphics/src/ast/geometry/index.ts
   - packages/gofish-graphics/src/ast/geometry/crossSection.ts
+  - packages/gofish-graphics/src/ast/geometry/rowPoints.ts
   - packages/gofish-graphics/src/ast/geometry/clip.ts
   - packages/gofish-graphics/src/ast/geometry/ring.ts
   - packages/gofish-graphics/src/ast/geometry/voronoiTiling.ts
-  - packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx
+  - packages/gofish-graphics/src/ast/graphicalOperators/tile.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/pack.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/overlap.ts
   - packages/gofish-graphics/src/ast/constraints/overlap.ts
@@ -200,7 +201,7 @@ used in two places, and in both the meaning of a name depends on where the node 
 which a factory does not know when it runs:
 
 - a box-dims mark's `dims` option, keyed by axis name (`rect({ dims: { theta: { size:
-0.4 } } })`), and a treemap's `dims` for its own box. Channel inference has already
+0.4 } } })`), and a `tile`'s `dims` for its own box. Channel inference has already
   run on it at build time: a mark gives each slot a kind by its structure (`size` is
   a size channel; a bare value, `min`, `center`, `max` are positions), and an
   operator gives each slot the channel of its top-level counterpart. Neither depends
@@ -553,8 +554,8 @@ direction)`. Geometry a node keeps for its own `lower` (a connector's paths, an
 arrow, a polygon's vertices, a tween's run) is in its axis order too; `lower`
 receives one node-local map, `local` (`p ↦ translate + (x, direction·y)`), the one
 place that geometry is reflected. A node that runs a pixel-native algorithm (the
-treemap's d3 tiling, pack's `packSiblings`) places its children in its own axis
-order like any operator, with no reflection of its own. A treemap or pack with no
+`tile`'s d3 tiling, pack's `packSiblings`) places its children in its own axis
+order like any operator, with no reflection of its own. A `tile` or `pack` with no
 data-driven size has no y axis, so it takes its frame's direction: in free space
 d3's first tile lands at the top left, as in d3; in a chart whose y grows upward
 it lands at the bottom left.
@@ -750,7 +751,7 @@ constraint with a `region` (`PositionRegion`,
 
 See
 [Underlying Space](/internals/core/underlying-space#partition-each-group-in-its-cell).
-A cell of a binned struct (`struct({ x, y }).bin(Bin.hex(...))`) also has
+A cell of a binned struct (`struct({ x, y }).bin(Binning.hex(...))`) also has
 an outline, the cell's polygon; every other cell is a box.
 
 #### The shape a parent gives a child
@@ -768,15 +769,15 @@ order. Three parents make one, and two nodes read it:
   to the child in that cell. The cell's span and placement
   still go through the data position above; only the outline goes through
   the shape.
-- A `treemap` hands each child its tile: a box for a rectangular tiling
-  (`boxRing`), a convex polygon for `Tile.voronoi`
+- A `tile` hands each child its cell: a box for a rectangular tiling
+  (`boxRing`), a convex polygon for `Tiling.voronoi`
   (`src/ast/geometry/voronoiTiling.ts`: a power diagram of the region,
   clipped half-plane by half-plane with `clipToHalfPlane`. Each round
   moves every site to its cell's centroid, then fits the weights with a
   damped Newton step, until each cell's area is within 2% of its share
   and the sites have settled). Every
-  `Tile` strategy is one function, a `Tiling` in `treemap.tsx`, from the
-  region and the weights to one ring per child, so the treemap has one
+  `Tiling` strategy is one function, a `CellsFn` in `tile.tsx`, from the
+  region and the weights to one ring per child, so the `tile` has one
   placement loop. The child's size is the ring's box, and the ring is
   shifted into it (`inItsBox`). On an axis where the child fills its room
   (`fillsRoom`) it is centered on that box; on an axis where it does not (a
@@ -784,9 +785,9 @@ order. Three parents make one, and two nodes read it:
   convex cell, where a polygon's box center may not be. A ring with no area
   (`hasArea`: a tile rounded to no width, a cell its `spacing` ate, or a
   Voronoi region with no area, whose cells are all empty) gets a child laid
-  out at size zero with no shape, at the cell's center. `Tile.voronoi`
+  out at size zero with no shape, at the cell's center. `Tiling.voronoi`
   checks that its region is convex whatever the padding, and does not
-  `round` its cells. The treemap's own box is always the region it was
+  `round` its cells. The `tile`'s own box is always the region it was
   given, `[0, w] × [0, h]`, so its `padding` stays inside it.
 - An `enclose` around a member with no size of its own (`fillingLayout`,
   see [Enclose](/internals/frontend/enclose)) hands down its outline.
@@ -797,7 +798,7 @@ a `layer([region, text])` in a cell still finds the cell; a cell's outline
 with the cell's span; and no shape with any other room (a grid cell, a
 share of a scope, a span with no outline, a size a `nest` derives, or what
 a ring's chrome leaves). A
-`treemap` with no size of its own reads its shape as the region it tiles
+`tile` with no size of its own reads its shape as the region it tiles
 (a rectangular tiling there is an error unless the shape is the whole
 box), and a `region` draws it. Every other node ignores it.
 
@@ -876,7 +877,7 @@ fixed-size nodes report their size).
   whose room is fixed from outside its content. That is the render root in
   the canvas, a node with a size of its own, a coordinate space (in its
   own coordinates), a node whose room its parent
-  gives it (a region's cell or a treemap tile, `GoFishNode.givenRoom`, which
+  gives it (a region's cell or a `tile` cell, `GoFishNode.givenRoom`, which
   the plan lists in `SharingPlan.rooms`) when σ sizes its content and its
   data does not place it in its parent's frame (`placedByOwnData`: a layer of marks in a cell,
   or a partition inside another's cell, reads the parent's frame), and a
@@ -1118,7 +1119,9 @@ a shape's outline, drawn past its box: the drawing is the hull of the root's
 box, of every ink child's box, and of every node's box grown by its outline.
 A coordinate space's box stands for its interior, and a node that clips its
 content to its box (an `intersect`, `subtract` or `atop` composite: `GoFishNode.clipsToBox`)
-draws nothing past it. The claim walk records the layers that found ink
+draws nothing past it. An overlay (`GoFishNode.overlay`: a tooltip's box and
+the marker on a line's point) is drawn over the graphic and left out, so
+opening a tooltip never resizes the canvas. The claim walk records the layers that found ink
 children on the render session, and layout records whether a shape draws an
 outline, so a render with neither skips the walk. A literal start or
 pixel offset (`spread({ y: 50 })`, `.translate()`) moves a box, and its claim
@@ -1198,8 +1201,9 @@ Once a node is laid out, `node.geometry()` describes its shape in the same
 local frame as `intrinsicDims`, with no translate applied (`src/ast/geometry/`).
 The result always has a `box`, which is `intrinsicDims` as a plain box. It may
 also answer optional queries, one file per query in `src/ast/geometry/`, joined
-into `Geometry` with `extends`. There are three. A consumer calls each query's
-helper, which falls back to the box when the node does not answer.
+into `Geometry` with `extends`. There are four. A consumer calls each query's
+helper, which falls back to the box when the node does not answer, except
+`rowPoints`, which has no fallback.
 
 - `crossSection` (`crossSection(g, axis)`): for each position u on the other
   axis, the interval the shape covers along `axis` there, as a function
@@ -1245,6 +1249,13 @@ helper, which falls back to the box when the node does not answer.
   placed node's outlines in its parent's frame, moved so the geometry's box
   sits where `p.dims` puts it. Labels and `enclose` read members this way,
   and `outlineSegments` walks an outline's straight pieces for both.
+
+- `rowPoints` (`g.rowPoints?.()`, `geometry/rowPoints.ts`): for a shape drawn
+  through data rows, the point where it draws each row, in the same frame as
+  its outline. Only the shape form of `line` built from rows answers it
+  (`Band`), with each row on its drawn edge; a ribbon is a region and a line
+  drawn from a function has no rows, so neither does. A tooltip seats a
+  row's box beside its point (`tooltipPlace`). It has no fallback.
 
 - A node definition may pass a `geometry` function next to `lower`. `ellipse`
   answers with the circle of its larger radius and its sampled outline,
@@ -1347,14 +1358,14 @@ inside a non-linear coordinate space, where the layout frame is not the screen
 (#1002); the axis scope the scatter elaborates in carries the nearest
 non-linear space (`AxisScope.warpedBy`), so the scatter can tell.
 
-The third consumer is `.label()` with a `Place` strategy (see
+The third consumer is `.label()` with a `Placement` strategy (see
 [Labels](/internals/frontend/labels)). Its label layer gets a `labelPlace`
 constraint (`labels/placeStep.ts`), another step the solver never sees:
 `applyConstraints` runs it last, after `overlap`, when the labeled marks and
 the labels a position string placed are where they land. It reads each
 labeled mark's `outline` through its `ref()`, picks each label's first free
 candidate spot, and writes the label's box with `setExtent`. A node definition
-may also pass `labelPosition`, where a `.label()` with no `position` goes on
+may also pass `labelPlacement`, where a `.label()` with no `placement` goes on
 it: a strategy by convention, or `"outline"`, read from its outline when the
 label is placed. After the root's layout, `gofish.tsx` prints one note for the
 labels the step hid (`reportHiddenLabels`).

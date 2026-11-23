@@ -12,7 +12,7 @@
 
 import "../lib";
 import { field } from "../ast/data";
-import * as Bin from "../families/bin";
+import * as Binning from "../families/binning";
 import { RESOLVE_ROWS, resolveChannelAccessors } from "../ast/channels";
 import { splitEntries } from "../ast/datumProjection";
 import { setColumnTypes } from "../ast/schema";
@@ -155,7 +155,7 @@ console.log("# splits hand inference the input's own rows");
     "a bin split",
     sameRows(
       splitEntries(
-        field("v").bin(Bin.thresholds(2)),
+        field("v").bin(Binning.thresholds(2)),
         // Typed as a chart's data is: `v` has the domain [1, 3].
         setColumnTypes([...rows], { v: { HasDomain: { lo: 1, hi: 3 } } })
       )

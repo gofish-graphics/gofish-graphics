@@ -58,10 +58,10 @@ as chart data alongside `selectAll`.
 
 ## Parameters
 
-| Parameter   | Type              | Description                                                                        |
-| ----------- | ----------------- | ---------------------------------------------------------------------------------- |
-| `name`      | `string`          | The name of the layer to reference (registered via `.name()` on a mark)            |
-| `layerName` | `string \| Token` | The name `selectAll` gathers: a string, or a `createName` token given to `.name()` |
+| Parameter   | Type              | Description                                                                            |
+| ----------- | ----------------- | -------------------------------------------------------------------------------------- |
+| `name`      | `string`          | The name of the layer to reference (registered via `.name()` on a mark or an operator) |
+| `layerName` | `string \| Token` | The name `selectAll` gathers: a string, or a `createName` token given to `.name()`     |
 
 ## Singular as data: exactly one
 
@@ -98,6 +98,35 @@ bars[0].datum; // the raw row-bag behind the first bar
 See [`ref.datum`](/js/api/marks/ref#datum) for what the bag contains (a 1-row
 array for a fully-split leaf, all the partition's rows for an auto-summed
 aggregate).
+
+An operator can be named too. `spread({ by: "lake", dir: "x" }).name("lakes")`
+files each group the spread makes under `"lakes"`, so `selectAll("lakes")` is
+one ref per lake, and `ref.datum` is that lake's rows. A callout on one group:
+
+```ts
+chart(seafood)
+  .flow(
+    spread({ by: "lake", dir: "x" }).name("lakes"),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(rect({ h: "count", fill: "species" }))
+  .layer(
+    chart([{ ref: "Lake B", note: "most fish" }])
+      .flow(resolve(["ref"], { from: selectAll("lakes") }))
+      .mark((rows) =>
+        layer(
+          rows.map((r) =>
+            spread({ dir: "y", spacing: 4, alignment: "middle" }, [
+              text({ text: r.note }),
+              r.ref,
+            ])
+          )
+        )
+      )
+  );
+```
+
+See [`.name()` on operators](/js/api/core/mark#operator-name).
 
 ## Why a ref, not a "selection"?
 

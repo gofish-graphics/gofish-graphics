@@ -408,7 +408,7 @@ export function threadPath(
  * drawn as a straight connector that takes no time. So step `i` is a hold
  * from point `i`, which takes all of the step's time, and then a riser to
  * point `i + 1`, which is an instant at the next point's time. That is the
- * reading `interpolate({ method: "step" })` and `time.transition({ curve:
+ * reading `interpolate({ curve: "step" })` and `time.transition({ curve:
  * "step" })` give: at the next point's time the value is already the next
  * point's.
  *

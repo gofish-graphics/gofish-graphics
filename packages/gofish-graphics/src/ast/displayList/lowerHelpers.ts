@@ -170,7 +170,7 @@ export const fadeItem = (
  *  extra `(dx, dy)` shift — the shared body of the simple translate-only
  *  boundaries (offset, enclose, arrow). Their subtree is flattened as the
  *  root bake and `layer` flatten it (`bakeChildren`), so a fresh child that
- *  only positions its children (a `treemap`, a `pack`, a `spread`) needs no
+ *  only positions its children (a `tile`, a `pack`, a `spread`) needs no
  *  lowering of its own, and each leaf lowers at its baked absolute
  *  transform. The leaves lower under the session's `toPixel`, so this also
  *  works inside a compositor (`union`/`intersect`/…) or a `box` that remapped it to a

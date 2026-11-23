@@ -100,8 +100,8 @@ density adds up, so densities stack.
 ## Cells: `d.bin(p)`
 
 `d.bin(p)` is a key for [`partition`](/python/api/operators/partition#a-distribution-s-cells):
-the cells of `p` (`Bin.step`, `Bin.thresholds` or `Bin.quantiles`) over the
-interval the density is drawn over. `Bin.quantiles(n)` cuts at the
+the cells of `p` (`Binning.step`, `Binning.thresholds` or `Binning.quantiles`) over the
+interval the density is drawn over. `Binning.quantiles(n)` cuts at the
 distribution's own quantiles, so each cell holds `1 / n` of the mass. In a
 cell, every member is the distribution restricted to the cell: the density
 and the domain run over the cell, `d.mass()` is the cell's share of the
@@ -112,7 +112,7 @@ distribution, such as `d.density().bin(p)`, is not binned, and raises a
 
 ```python
 d = Dist.normal(mean="mean", sd="sd")
-partition(by=d.bin(Bin.quantiles(5)), dir="x")
+partition(by=d.bin(Binning.quantiles(5)), dir="x")
 ```
 
 ## `kde(column, bandwidth=None)` {#kde}
@@ -138,7 +138,7 @@ such as 0 for counts.
 The column keeps its name and unit, so `field("x").domain()` joins the
 axis of `x`. A field of the column reads the distribution: its
 [members](/python/api/operators/spread#distribution-members) are those
-above, and `field("x").bin(Bin.quantiles(n))` is a key for
+above, and `field("x").bin(Binning.quantiles(n))` is a key for
 [`partition`](/python/api/operators/partition#a-distribution-s-cells) that
 cuts it at its own quantiles. `field("x").median()` is the distribution's
 median, not the data's. `kde` runs in Python and only gathers the values;

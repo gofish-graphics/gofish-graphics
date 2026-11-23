@@ -170,7 +170,7 @@ export type HasQuantity = { name: string };
  *  result's own. A binned key's cells cover it (cells.ts), so every group
  *  of a split over the column has the same cells, whatever rows it holds.
  *  `sorted` gives the same values in order, for the cells of
- *  `Bin.quantiles`, which are quantiles of them: it reads them off the rows
+ *  `Binning.quantiles`, which are quantiles of them: it reads them off the rows
  *  on its first call only, so a column no quantile reads is never copied
  *  or sorted. */
 export type HasDomain = {
@@ -957,7 +957,7 @@ export async function applySchema<T>(
  * unit as the chart knows it. The rest of the figure's occurrences meet in
  * the type walk (`Units` in measure.ts), where a stack's sum waits for
  * them. TODO(#1197 follow-up): a sum taken while a chart is built (a size
- * channel, `.sum()`, treemap, cut, normalize) cannot see a definition in
+ * channel, `.sum()`, `tile`, cut, normalize) cannot see a definition in
  * another chart, which is met only in the walk; checking it there needs
  * the chart to be built inside the figure's walk scope.
  */

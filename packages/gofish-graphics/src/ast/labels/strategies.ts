@@ -3,19 +3,19 @@
 // </gofish-wiki>
 
 /**
- * The `Place` strategies: each turns the outline of a labeled mark into
+ * The `Placement` strategies: each turns the outline of a labeled mark into
  * candidate spots for its label, best first. The chooser (`placeStep.ts`)
  * takes the first free one. All geometry is in the frame of the layer the
  * labels are placed in, in pixels with y down.
  */
 import { Frontend } from "gofish-ir";
 import type {
-  AlongPlace,
-  AroundPlace,
+  AlongPlacement,
+  AroundPlacement,
   BoundarySide,
   Direction,
   Side,
-} from "../../families/place";
+} from "../../families/placement";
 import type { Outline, OutlinePart } from "../geometry";
 import { ringExtent } from "../geometry/box";
 import { pointInRing, signedArea2 } from "../geometry/plane";
@@ -102,9 +102,9 @@ const upright = (deg: number): number => {
 
 // ── around ─────────────────────────────────────────────────────────────────
 
-/** `Place.around`'s directions when it is given none, as the `Place`
+/** `Placement.around`'s directions when it is given none, as the `Placement`
  *  family declares them. */
-const DEFAULT_DIRECTIONS = Frontend.STRATEGIES.Place.kinds.around.params
+const DEFAULT_DIRECTIONS = Frontend.STRATEGIES.Placement.kinds.around.params
   .directions.default as Direction[];
 
 const COMPASS: Record<Direction, Pt> = {
@@ -241,7 +241,7 @@ function runMiddle(run: Pt[]): Pt {
 }
 
 /**
- * `Place.around`: per direction, per side, a level label just outside (or
+ * `Placement.around`: per direction, per side, a level label just outside (or
  * inside) the outline's extreme point that way. The label's box touches the
  * point moved `offset` along the direction, from the side the direction
  * points to: its lower-left corner for top-right, its bottom edge's middle
@@ -251,11 +251,11 @@ export function* aroundCandidates(
   t: TargetShape,
   size: HalfSize,
   angle: number,
-  opts: AroundPlace,
+  opts: AroundPlacement,
   offset: number
 ): Generator<Candidate> {
   if (t.outlines.length === 0)
-    throw STRATEGY_ERROR("Place.around", "an outline", t);
+    throw STRATEGY_ERROR("Placement.around", "an outline", t);
   const directions = opts.directions ?? DEFAULT_DIRECTIONS;
   const sides: BoundarySide[] = Array.isArray(opts.side)
     ? opts.side
@@ -338,7 +338,7 @@ function* slide(
 }
 
 /**
- * `Place.along`: spots on the outline from `at` outward; at each, every side
+ * `Placement.along`: spots on the outline from `at` outward; at each, every side
  * listed. A level label beside the outline is moved off it along the side's
  * normal until its box clears the outline; a sloped one is turned to the
  * chord across its width.
@@ -347,7 +347,7 @@ export function* alongCandidates(
   t: TargetShape,
   size: HalfSize,
   angle: number,
-  opts: AlongPlace,
+  opts: AlongPlacement,
   offset: number
 ): Generator<Candidate> {
   const at = opts.at ?? "middle";
@@ -359,14 +359,14 @@ export function* alongCandidates(
   const outline = named?.outline ?? longest(t.outlines);
   const path = outline && polyline(outline.points, outline.closed);
   if (outline === undefined || path === undefined || path.length === 0)
-    throw STRATEGY_ERROR("Place.along", "an outline", t);
+    throw STRATEGY_ERROR("Placement.along", "an outline", t);
   const sides: Side[] = Array.isArray(opts.side)
     ? opts.side
     : [opts.side ?? "on"];
   for (const side of sides) {
     if ((side === "inset" || side === "outset") && !path.closed)
       throw new Error(
-        `[gofish] Place.along({ side: "${side}" }) needs a closed outline; ` +
+        `[gofish] Placement.along({ side: "${side}" }) needs a closed outline; ` +
           `${t.type} has an open one. On a path, use "left", "right", ` +
           `"above", "below" or "on".`
       );
@@ -395,7 +395,7 @@ export function* alongCandidates(
     if (part === undefined) {
       const names = t.outlines.flatMap((o) => o.parts ?? []).map((p) => p.name);
       throw new Error(
-        `[gofish] Place.along({ at: "${at}" }): ${t.type} has no part ` +
+        `[gofish] Placement.along({ at: "${at}" }): ${t.type} has no part ` +
           `"${at}"; ${
             names.length > 0
               ? `its parts are ${names.map((n) => `"${n}"`).join(", ")}`
@@ -509,7 +509,7 @@ function slopedAt(
 // ── start / end ────────────────────────────────────────────────────────────
 
 /**
- * `Place.start` / `Place.end`: the spot a level label wants just past the
+ * `Placement.start` / `Placement.end`: the spot a level label wants just past the
  * first or last point of an open path, on the side the path heads that way
  * (right of a line's end when it runs rightward). The chooser then slides
  * the ones that overlap apart vertically (`dodgeVertically`).
@@ -523,7 +523,7 @@ export function endSpot(
 ): Spot {
   const open = t.outlines.filter((o) => !o.closed && o.points.length > 0);
   if (open.length === 0)
-    throw STRATEGY_ERROR(`Place.${which}`, "an open path", t);
+    throw STRATEGY_ERROR(`Placement.${which}`, "an open path", t);
   const o = which === "end" ? open[open.length - 1] : open[0];
   const pts = o.points;
   const p = which === "end" ? pts[pts.length - 1] : pts[0];
@@ -634,7 +634,7 @@ function boxDistance(c: Pt, p: Pt, q: Pt, a: number, b: number): number {
 }
 
 /**
- * `Place.interior`: inside a filled closed outline, the spots where the label's
+ * `Placement.interior`: inside a filled closed outline, the spots where the label's
  * own box (with a little padding) can grow largest, best first; only spots
  * where it fits at its own size. The room at a point is the scale at which
  * the box centered there first touches the outline (d3-area-label's rule,
@@ -654,7 +654,7 @@ export function* interiorCandidates(
     (o) => o.closed && o.filled && o.points.length >= 3
   );
   if (rings.length === 0)
-    throw STRATEGY_ERROR("Place.interior", "a filled region", t);
+    throw STRATEGY_ERROR("Placement.interior", "a filled region", t);
   const a = size.hx + INTERIOR_PADDING;
   const b = size.hy + INTERIOR_PADDING;
   // Every spot found, best first: by room, then in the order found (for

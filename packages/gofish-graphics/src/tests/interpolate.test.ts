@@ -186,17 +186,17 @@ console.log("# interpolate(rows): step reads the previous keyframe's row");
     along: "year",
     key: "country",
     at: 1957.5,
-    method: Curve.step(),
+    curve: Curve.step(),
   });
   ok("holds the numeric field", near(stepped.life as number, 50));
-  // Non-numeric fields follow the method: at 1957.5 the NEAREST keyframe is a
+  // Non-numeric fields follow the curve: at 1957.5 the NEAREST keyframe is a
   // tie that resolves to 1955 anyway, so push the playhead past the midpoint,
   // where nearest and previous genuinely disagree.
   const [late] = interpolate(rows, {
     along: "year",
     key: "country",
     at: 1959,
-    method: Curve.step(),
+    curve: Curve.step(),
   });
   ok("copies the previous keyframe's text", late.note === "early");
   const [smooth] = interpolate(rows, {
@@ -206,6 +206,30 @@ console.log("# interpolate(rows): step reads the previous keyframe's row");
   });
   ok("the default still blends", near(smooth.life as number, 58));
   ok("and copies the nearest keyframe's text", smooth.note === "late");
+}
+
+console.log("# a bare Curve member is its call");
+{
+  const rows = [
+    { year: 1955, country: "A", life: 50 },
+    { year: 1960, country: "A", life: 60 },
+  ];
+  const read = (curve: Curve.Curve) =>
+    JSON.stringify(
+      interpolate(rows, { along: "year", key: "country", at: 1959, curve })
+    );
+  let bare: string | undefined;
+  let why: string | undefined;
+  try {
+    bare = read(Curve.step);
+  } catch (e) {
+    why = (e as Error).message;
+  }
+  ok(
+    "interpolate({ curve: Curve.step }) is interpolate({ curve: Curve.step() })",
+    bare !== undefined && bare === read(Curve.step()) && bare !== read(Curve.monotone()),
+    why
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

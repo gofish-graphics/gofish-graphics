@@ -45,7 +45,7 @@ partition({
   by: field("date").bin(Calendar.year).bin(Calendar.month),
   dir: "x",
 }); // the same cells
-partition({ by: field("rating").bin(Bin.step(0.5)), dir: "x" }); // a histogram
+partition({ by: field("rating").bin(Binning.step(0.5)), dir: "x" }); // a histogram
 ```
 
 A level binned alone that is a part of a larger level is a part of a cycle,
@@ -63,10 +63,10 @@ use [`spread`](./spread) with the same key.
 ## A distribution's cells
 
 `by` may also be a distribution binned into cells, with `p` one of
-`Bin.step`, `Bin.thresholds` or `Bin.quantiles`: `d.bin(p)` with `d` a
+`Binning.step`, `Binning.thresholds` or `Binning.quantiles`: `d.bin(p)` with `d` a
 [`Dist`](/js/api/dist) family, or `field(x).bin(p)` where the column `x` holds a
 distribution, after [`derive(kde("x"))`](/js/api/dist#kde). The cells are those of `p` over the interval the density is
-drawn over, and `Bin.quantiles(n)` cuts at the distribution's own quantiles.
+drawn over, and `Binning.quantiles(n)` cuts at the distribution's own quantiles.
 Each cell's group holds every row, and the distribution in it is the whole
 one restricted to the cell.
 
@@ -80,7 +80,7 @@ the cells of one curve meet.
 const d = Dist.normal({ mean: "mean", sd: "sd" });
 
 chart([{ mean: 0, sd: 1 }])
-  .flow(partition({ by: d.bin(Bin.quantiles(5)), dir: "x" }))
+  .flow(partition({ by: d.bin(Binning.quantiles(5)), dir: "x" }))
   .mark(
     layer([
       ribbon({ x: d.domain(), h: d.density(), inset: 3 }),
@@ -114,15 +114,18 @@ region, and `dir` and `alignment` are not allowed.
 
 ```ts
 partition({
-  by: { x: field("a").bin(Bin.step(1)), y: field("b").bin(Bin.step(0.5)) },
+  by: {
+    x: field("a").bin(Binning.step(1)),
+    y: field("b").bin(Binning.step(0.5)),
+  },
 });
 ```
 
 It is the same as the 1D partition on x, then the 1D partition on y:
 
 ```ts
-(partition({ by: field("a").bin(Bin.step(1)), dir: "x" }),
-  partition({ by: field("b").bin(Bin.step(0.5)), dir: "y" }));
+(partition({ by: field("a").bin(Binning.step(1)), dir: "x" }),
+  partition({ by: field("b").bin(Binning.step(0.5)), dir: "y" }));
 ```
 
 A partition inside a cell of another partition gives each of its groups that
@@ -147,12 +150,14 @@ draws that 0.
 ## Cells of the plane
 
 With `by` a binned struct, `partition` divides both axes at once into the
-cells of a [`Bin`](/js/api/bin) call: `Bin.hex({ radius })` for a grid of
-hexagons, or `Bin.voronoi({ seeds })` for one cell per seed. `dir` and
+cells of a [`Binning`](/js/api/binning) call: `Binning.hex({ radius })` for a grid of
+hexagons, or `Binning.voronoi({ seeds })` for one cell per seed. `dir` and
 `alignment` are not allowed.
 
 ```ts
-partition({ by: struct({ x: "lon", y: "lat" }).bin(Bin.hex({ radius: 0.5 })) });
+partition({
+  by: struct({ x: "lon", y: "lat" }).bin(Binning.hex({ radius: 0.5 })),
+});
 ```
 
 Each group gets its cell's outline. A [`region`](/js/api/marks/region) draws
@@ -166,13 +171,13 @@ hexagon is a group with no rows, so it is drawn with a count of 0.
 A mark with a size of its own is centered in its cell's box, which for a
 hexagon is its center. The example writes each count with
 [`.label()`](/js/api/core/mark#modifiers) at
-[`Place.interior()`](/js/api/place), inside the hexagon, so its color
+[`Placement.interior()`](/js/api/placement), inside the hexagon, so its color
 contrasts with the hexagon's fill.
 
 ::: gofish example:airport-counts-in-hexagons
 :::
 
-With `Bin.voronoi`, each row goes to its nearest seed.
+With `Binning.voronoi`, each row goes to its nearest seed.
 
 ::: gofish example:us-airports-by-nearest-hub
 :::

@@ -25,7 +25,7 @@ import {
 } from "./terminals";
 import { expandComposedOperator } from "./compose";
 import { resolveRefData } from "./resolveRefData";
-import { nameableMark } from "./createOperator";
+import { nameableMark, type RegistrationTag } from "./createOperator";
 import type { RelationalMark } from "./chart";
 import {
   layerKey,
@@ -131,14 +131,15 @@ export type ChartOptions = {
  * produced by createMark, can itself carry a name).
  */
 function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
-  const layerName = (node as { __layerRegistration?: string | symbol })
-    .__layerRegistration;
-  if (layerName) {
-    layerContext.register(layerName, node);
+  const tagged = node as RegistrationTag;
+  const keys = tagged.__layerRegistration;
+  if (keys) {
+    // A node is filed under each name it was given: a mark's own, and the
+    // name of each named operator whose group it is.
+    for (const key of keys) layerContext.register(key, node);
     // One-shot — repeat resolves (e.g. embedded Layer renders) would
     // otherwise re-push the same node.
-    (node as { __layerRegistration?: string | symbol }).__layerRegistration =
-      undefined;
+    tagged.__layerRegistration = undefined;
   }
 }
 

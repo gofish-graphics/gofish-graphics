@@ -10,6 +10,7 @@ import { render as solidRender } from "solid-js/web";
 import {
   debugInputSceneGraph,
   debugNodeTree,
+  breadthFirst,
   debugUnderlyingSpaceTree,
   GoFishNode,
   type RenderSession,
@@ -60,7 +61,7 @@ import {
   labelRowSettingsFromAngles,
   type LabelRowSettings,
 } from "./axes/elaborate";
-import { breadthFirst, fmtNum } from "./elaborationUtils";
+import { fmtNum } from "./elaborationUtils";
 import { width as intervalWidth } from "../util/interval";
 import { layoutWithAutoLabelAngles } from "./axes/autoLabelAngle";
 import { dumpKeyedDomains, dumpSharing } from "./debug/dump";
@@ -81,7 +82,10 @@ import {
   type ScopeSolution,
 } from "./solver/scopes";
 import { entryAmount, legendRing } from "./legends/elaborate";
-import { elaborateLabels } from "./labels/elaborate";
+import { labelLayer } from "./labels/elaborate";
+import { lowerSelectionLayers, type SelectionLayer } from "./selectionLayer";
+import { tooltipLayer } from "./tooltip/tooltip";
+import { hasTooltips } from "../interaction/tooltipFocus";
 import { reportHiddenLabels } from "./labels/placeStep";
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE
 // axis, which needs a concrete canvas to scale data into (see the per-axis
@@ -411,6 +415,7 @@ export async function layout(
     axes,
     legend,
     labelRowSettings,
+    interaction,
   }: {
     w?: number;
     h?: number;
@@ -423,6 +428,9 @@ export async function layout(
     /** Internal: how each axis label row is drawn, as chosen by
      *  `label.angle: "auto"` (see `runLayout`). Overrides the angles in `axes`. */
     labelRowSettings?: LabelRowSettings;
+    /** The chart's interaction runtime: the registrar its resolve read
+     *  inputs through, so a tooltip in it has a focus. */
+    interaction?: InteractionRuntime;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts: {
@@ -597,14 +605,24 @@ export async function layout(
     await reresolve(child);
   }
 
-  // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
-  // constraints (src/ast/labels/elaborate.tsx), the same technique the chrome
-  // pass above uses. Runs after chrome elaboration (a label may target a node
-  // the chrome pass just wrapped).
-  const labelRes = await elaborateLabels(child);
-  if (labelRes.changed) {
-    child = labelRes.node;
-    await reresolve(child);
+  // The modifiers lowered as layers over their selections
+  // (src/ast/selectionLayer.ts), after chrome elaboration (a label may target
+  // a node the chrome pass just wrapped). Labels turn every `.label(...)` spec
+  // into a real `Text` node + constraints (src/ast/labels/elaborate.tsx).
+  // Tooltips draw the box of the focused mark of each `.tooltip()`, as a
+  // layer over the whole graphic (src/ast/tooltip/tooltip.ts), after the
+  // labels, so it paints over them and the chrome.
+  // A chart with no `.tooltip()` mark in its resolve has no tooltip layer.
+  const layers: SelectionLayer<any, any>[] = hasTooltips(interaction)
+    ? [labelLayer, tooltipLayer]
+    : [labelLayer];
+  for (const modifier of layers) {
+    const lowered: { node: GoFishNode; changed: boolean } =
+      await lowerSelectionLayers(child, modifier);
+    if (lowered.changed) {
+      child = lowered.node;
+      await reresolve(child);
+    }
   }
   perfAdd("axes", perfNow() - __tAxes);
 
@@ -1032,7 +1050,8 @@ type Span = [number, number];
  * node grown by its outline. A coordinate space's interior is in its own
  * coordinates, and its box stands for it, outlines included (`coord`); a
  * node that clips its content to its box (`GoFishNode.clipsToBox`) draws
- * nothing past it.
+ * nothing past it, and an overlay (`GoFishNode.overlay`, a tooltip's box)
+ * is drawn over the graphic, so it is left out.
  *
  * `outline` is the part of it the root's claim holds: the outlines of the
  * nodes that take room, ink left out.
@@ -1114,7 +1133,7 @@ function drawnOverflow(root: GoFishNode): {
       offset[1] + (n.projectedTranslate(1) ?? 0),
     ];
     n.children.forEach((c, i) => {
-      if (!(c instanceof GoFishNode)) return;
+      if (!(c instanceof GoFishNode) || c.overlay) return;
       const isInk = ([0, 1] as const).map(
         (axis) => inkLayer && n.claimWalk?.ink[axis].has(i) === true
       ) as [boolean, boolean];
@@ -1277,6 +1296,7 @@ async function layoutOnce(
         axes,
         legend,
         labelRowSettings,
+        interaction: options.interaction,
       },
       child,
       contexts
@@ -1472,6 +1492,10 @@ export function gofish(
       warned: new Set(),
     };
   }
+
+  // The runtime listens on the container, which outlives the svg each
+  // re-render replaces (`InteractionRuntime.attachHost`).
+  options.interaction?.attachHost(container);
 
   const [layoutData] = createResource(() =>
     runLayout(options, child).then((data) => {

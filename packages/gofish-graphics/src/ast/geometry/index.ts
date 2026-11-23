@@ -20,12 +20,16 @@ import type { HasBox } from "./box";
 import type { HasCrossSection } from "./crossSection";
 import type { HasEnclosingCircle } from "./enclosingCircle";
 import type { HasOutline } from "./outline";
+import type { HasRowPoints } from "./rowPoints";
 
 export interface Geometry
   extends HasBox,
     HasCrossSection,
     HasEnclosingCircle,
-    HasOutline {}
+    HasOutline,
+    HasRowPoints {}
+
+export type { RowPoint, HasRowPoints } from "./rowPoints";
 
 export { boxOfDims, insetBox, ringExtent } from "./box";
 export type { Box, HasBox } from "./box";
