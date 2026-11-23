@@ -7,7 +7,10 @@ import "./style.css";
 import "vitepress-plugin-sandpack/dist/style.css";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
-import InternalsLink from "./components/InternalsLink.vue";
+import BookChapterHead from "./components/book/BookChapterHead.vue";
+import BookRunningHead from "./components/book/BookRunningHead.vue";
+import BookNotes from "./components/book/BookNotes.vue";
+import "./book.css";
 import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
 
@@ -35,17 +38,17 @@ const pageComponents = {
     import("../../../components/ObservablePlotEmbed.vue"),
   TutorialGrid: () => import("./components/tutorials/TutorialGrid.vue"),
   TutorialCard: () => import("./components/tutorials/TutorialCard.vue"),
+  // Under the Sea (docs/under-the-sea/).
+  TreeStepper: () => import("./components/book/TreeStepper.vue"),
+  BookSpread: () => import("./components/book/BookSpread.vue"),
 };
 export default {
   extends: DefaultTheme,
   Layout: () => {
     return h(DefaultTheme.Layout, null, {
-      // Right-hand nav cluster: the labeled Internals link, then the
-      // JavaScript / Python toggle directly before the GitHub social icon.
-      "nav-bar-content-after": () => [
-        h(InternalsLink),
-        h(LanguageToggle, { placement: "nav" }),
-      ],
+      // Right-hand nav cluster: the JavaScript / Python toggle directly
+      // before the GitHub social icon.
+      "nav-bar-content-after": () => h(LanguageToggle, { placement: "nav" }),
       "sidebar-nav-before": () => h(LanguageToggle, { placement: "sidebar" }),
       // A persistent copy of the toggle that docks into the fixed "Return to
       // top" bar (VitePress's VPLocalNav) shown when the navbar scrolls away on
@@ -54,7 +57,15 @@ export default {
       "layout-top": () => h(LanguageToggle, { placement: "localnav" }),
       // Status banner + "Source files" box for internals essays
       // (the component renders nothing on pages without the frontmatter).
-      "doc-before": () => h(EssayMeta),
+      // Under the Sea: the running head, stamp and title on top of a
+      // chapter, the note links at the end of the page (all render nothing
+      // elsewhere).
+      "doc-before": () => [
+        h(EssayMeta),
+        h(BookRunningHead),
+        h(BookChapterHead),
+      ],
+      "doc-after": () => h(BookNotes),
     });
   },
   enhanceApp({ app, router }) {
