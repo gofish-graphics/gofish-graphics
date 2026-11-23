@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/ast/solver/formula.ts
   - packages/gofish-graphics/src/ast/layoutWarnings.ts
   - packages/gofish-graphics/src/ast/_node.ts
+  - packages/gofish-graphics/src/ast/sharedEdges.ts
   - packages/gofish-graphics/src/ast/axisDirection.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
   - packages/gofish-graphics/src/ast/perf.ts
@@ -458,18 +459,37 @@ mutates the shared `args.dims` element in place (like `resolveAliases`) so the
 captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
 `embed()`) lock the flag to `true` and are never recomputed.
 
-A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
-AND, only inside a coordinate space, it is no glyph size (`GoFishNode.isGlyph`,
-#972): a size placed at a datum in another unit, by its parent's position or
-by the mark's own `min`/`center`/`max`, stays ink, a flat point at the mapped
-center (a scatter bubble), not a swept wedge. Units are read through the
-render's union-find, which `resolveEmbedding` installs as the type walk does.
-Embedding and sizing ask this one question, so a glyph is never warped and a
-length of the space always is (see
+A dim embeds by either of two routes.
+
+Route B, intrinsic: its size is a data value or unsized (`baseEmbedded`,
+`data.ts`) AND, only inside a coordinate space, it is no glyph size
+(`GoFishNode.isGlyph`, #972): a size placed at a datum in another unit, by its
+parent's position or by the mark's own `min`/`center`/`max`, stays ink, a flat
+point at the mapped center (a scatter bubble), not a swept wedge. Units are
+read through the render's union-find, which `resolveEmbedding` installs as the
+type walk does. Embedding and sizing ask this one question, so a glyph is never
+warped and a length of the space always is (see
 [Glyph sizes and lengths of the space](../core/underlying-space.md#glyph-sizes-and-lengths-of-the-space)).
 The revocation is coord-scoped, so Cartesian behavior matches the former
-construction-time inference. (Route A, relational, measure-free embedding, is
-not yet implemented; tracked under #618.)
+construction-time inference.
+
+Route A, relational: one of its edges on the axis is shared with a neighbor's,
+whatever the unit of its size. Two shared edges must stay one position after
+the transform, so they are positions of the space. The pass carries each
+node's shared edges (`start`/`end` per axis) down the tree, and
+`sharedEdgesOfChildren` (`sharedEdges.ts`) reads them off a node's
+constraints. A chain (`distribute`, a spread or a stack) with a box gap of 0
+shares each part's start with the previous part's end. A node whose own edge
+is shared passes it to a child that lies on it: an `align` at `start` or `end`
+(both for `span`), the first or last part of a chain with a gap 0 or more, and
+the content of a ring. It passes nothing when the relation misses a child or
+the node has a size of its own on the axis, since then its edge is not its
+children's hull. A center relation (`middle`, `baseline`, a pitch) pins a
+point, not an edge, and a chain with a gap pins no edge to another, so neither
+shares one. So pixel rings stacked along a polar radius are drawn as annular
+sectors that touch, while a pixel-width bar that touches nothing keeps its
+width as ink. In a linear space the three drawings of a rect are the same box,
+so Route A changes nothing there.
 
 ### Pass 9: Layout Calculation
 

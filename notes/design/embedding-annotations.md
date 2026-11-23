@@ -36,6 +36,22 @@ embeds if _either_ applies (they are OR'd):
 Measure discriminates **Route B only** (the mark's own size); it says nothing about
 Route A. The two are orthogonal.
 
+**Route A as implemented (11-23, `sharedEdges.ts`).** "Edge-metric" is refined to
+**a shared edge**: an edge embeds when a relation makes it the same position as a
+neighbor's edge, since two shared edges must stay one position after the transform. A
+chain with a box gap of 0 (a stack, or `spread({ spacing: 0 })`) shares each part's
+start with the previous part's end. A chain with a gap pins an edge to a gap, not to
+another edge, so it shares none: a pixel-width bar spread apart, or alone, stays a line
+with its width as ink. Shared edges pass down to a child that lies on them: `align`
+`start`/`end` (both for `span`), the first/last part of a chain with a gap 0 or more,
+and a ring's content, only where the relation reaches every child and the node has no
+size of its own on the axis (so its edge is its children's hull). That is how a
+sunburst leaf, aligned at the start of its siblings' stack, shares the edge that stack
+shares with the parent ring. Not handled: a center relation (`middle`, `baseline`)
+whose children happen to fill the node (the Nightingale rose's month wedges keep
+`emX` for this reason), a nested operand, and a glued stack with negative parts (its
+tail is its end).
+
 > **point / line / area = the number of axes whose edges are coordinate-space positions
 > (via Route A or Route B).**
 
@@ -67,8 +83,9 @@ A mark's render switches on which of its two dims are `embedded` (rect.tsx:300, 
   edge becomes an arc); the other axis is pixel thickness.
 - **2 embedded → area.** Both axes sweep (a wedge / annular sector).
 
-`embedded` is set:
+`embedded` is set (by the `resolveEmbedding` pass; this list predates it):
 
+0. **Route A** — a shared edge (see "Route A as implemented" above).
 1. **Explicit** — `emX`/`emY` on a `rect` (`dims.ts:81,88` → `embedded`).
 2. **By nest-growth** — an _unsized_ dim (no `w` / no `h`) on an `emX`/`emY` rect that
    `nest` grows to contain its subtree. This is the "embedded angular/radial

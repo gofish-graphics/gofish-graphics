@@ -48,6 +48,21 @@ function distance(p0: Point, p1: Point): number {
 }
 
 /**
+ * Whether a segment's ends are within the tolerance of each other on screen
+ * (`d2`, the squared chord) while its middle is not (`m2`, the squared
+ * distance from its start to its middle): a segment that closes on itself
+ * on screen, such as a full turn of a polar angle. The chord says nothing
+ * about such a segment, so it is split until its halves are short.
+ */
+function closesOnScreen(
+  d2: number,
+  m2: number,
+  options: ResamplingOptions
+): boolean {
+  return d2 <= 4 * options.delta2 && m2 > 4 * options.delta2;
+}
+
+/**
  * Source space operations for line segments
  */
 function lineSourceMidpoint(seg: LineSegment): Point {
@@ -92,17 +107,19 @@ function resampleLineSegment(
   const dy = y1 - y0;
   const d2 = dx * dx + dy * dy; // squared distance in projected space
 
-  // Check if we need to subdivide
-  if (d2 > 4 * options.delta2 && depth > 0) {
-    // Calculate midpoint in source space
-    const sMid = lineSourceMidpoint(seg);
-    const pMid = transform(sMid);
-    const [x2, y2] = pMid;
+  if (depth <= 0) return;
+  // Calculate midpoint in source space
+  const sMid = lineSourceMidpoint(seg);
+  const pMid = transform(sMid);
+  const [x2, y2] = pMid;
 
-    // Vector from start to midpoint
-    const dx2 = x2 - x0;
-    const dy2 = y2 - y0;
+  // Vector from start to midpoint
+  const dx2 = x2 - x0;
+  const dy2 = y2 - y0;
 
+  // Check if we need to subdivide (see `closesOnScreen`)
+  const closed = closesOnScreen(d2, dx2 * dx2 + dy2 * dy2, options);
+  if (closed || d2 > 4 * options.delta2) {
     // Perpendicular distance (cross product)
     const dz = dy * dx2 - dx * dy2;
 
@@ -117,7 +134,7 @@ function resampleLineSegment(
     const sourceDistanceCheck =
       lineSourceDistance(seg) > options.minSourceDistance;
 
-    if (perpendicularCheck || midpointCheck || sourceDistanceCheck) {
+    if (closed || perpendicularCheck || midpointCheck || sourceDistanceCheck) {
       // Create left and right segments
       const leftSeg: LineSegment = segment(seg.points[0], sMid);
       const rightSeg: LineSegment = segment(sMid, seg.points[1]);
@@ -155,19 +172,21 @@ function resampleBezierCurve(
   const dy = y1 - y0;
   const d2 = dx * dx + dy * dy; // squared distance in projected space
 
-  // Check if we need to subdivide
-  if (d2 > 4 * options.delta2 && depth > 0) {
-    // Use subdivideCurve1 to get midpoint AND sub-curves in one operation
-    // This avoids redundant de Casteljau evaluation
-    const [leftCurve, rightCurve] = subdivideCurve1(curve, 0.5);
-    const sMid = leftCurve.end; // This is the split point at t=0.5
-    const pMid = transform(sMid);
-    const [x2, y2] = pMid;
+  if (depth <= 0) return;
+  // Use subdivideCurve1 to get midpoint AND sub-curves in one operation
+  // This avoids redundant de Casteljau evaluation
+  const [leftCurve, rightCurve] = subdivideCurve1(curve, 0.5);
+  const sMid = leftCurve.end; // This is the split point at t=0.5
+  const pMid = transform(sMid);
+  const [x2, y2] = pMid;
 
-    // Vector from start to midpoint
-    const dx2 = x2 - x0;
-    const dy2 = y2 - y0;
+  // Vector from start to midpoint
+  const dx2 = x2 - x0;
+  const dy2 = y2 - y0;
 
+  // Check if we need to subdivide (see `closesOnScreen`)
+  const closed = closesOnScreen(d2, dx2 * dx2 + dy2 * dy2, options);
+  if (closed || d2 > 4 * options.delta2) {
     // Perpendicular distance (cross product)
     const dz = dy * dx2 - dx * dy2;
 
@@ -182,7 +201,7 @@ function resampleBezierCurve(
     const sourceDistanceCheck =
       bezierSourceDistance(curve) > options.minSourceDistance;
 
-    if (perpendicularCheck || midpointCheck || sourceDistanceCheck) {
+    if (closed || perpendicularCheck || midpointCheck || sourceDistanceCheck) {
       // Recursively process first half
       resampleBezierCurve(leftCurve, transform, options, depth - 1, result);
 

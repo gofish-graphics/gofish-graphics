@@ -63,6 +63,12 @@ import { readLive, sharedDecision } from "../interaction/live";
 import type { LiveValue } from "../interaction/live";
 import type { AnimationRule } from "../animation/paint";
 import { GoFishRef } from "./_ref";
+import {
+  NO_SHARED_EDGES,
+  sharedEdgesOfChildren,
+  sharesEdge,
+  type SharedEdges,
+} from "./sharedEdges";
 import { getScopeRegistry, type GlyphRoom } from "./solver/scopes";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -2341,7 +2347,14 @@ export class GoFishNode {
    * `emX`/`emY` (or `connect`'s `embed()`), which lock the flag to `true` and are
    * never recomputed here.
    *
-   * A dim embeds iff {@link baseEmbedded} holds (its size is a data value
+   * A dim embeds by either of two routes. Route A, relational: one of its
+   * edges is shared with a neighbor's (`edges`, from `sharedEdgesOfChildren`
+   * in sharedEdges.ts: a chain with no gap, and the edges an align or a
+   * chain passes down from a node whose own edge is shared). Two shared
+   * edges must stay one position after the transform, so they are
+   * positions of the space, whatever the unit of the size: pixel rings laid
+   * end to end along a radius are drawn as annular sectors that touch.
+   * Route B, intrinsic: {@link baseEmbedded} holds (its size is a data value
    * or unsized) and, inside a coordinate space, it is no glyph size
    * ({@link isGlyph}): a size placed at a datum in another unit, by its
    * parent or by its own `min`/`center`/`max`, stays ink, drawn flat at the
@@ -2352,11 +2365,14 @@ export class GoFishNode {
    * like {@link resolveAliases} it mutates the shared `args.dims` element so the
    * captured render closure observes it.
    */
-  public resolveEmbedding(insideCoord: boolean = false): void {
+  public resolveEmbedding(
+    insideCoord: boolean = false,
+    edges: SharedEdges = NO_SHARED_EDGES
+  ): void {
     // Unit equality reads the type walk's union-find.
     if (!hasUnits()) {
       return withUnits(this.walkUnits(), () =>
-        this.resolveEmbedding(insideCoord)
+        this.resolveEmbedding(insideCoord, edges)
       );
     }
     const within = insideCoord || this.type === "coord";
@@ -2371,17 +2387,21 @@ export class GoFishNode {
         // A length embeds as the size it fixes (`fixedSize`): its pixels
         // never do, and a share of its scope does, as a box with no size.
         const box = isLength(dim.size) ? this.fixedBox(dir) : dim;
-        // Inside a coord, a glyph size (`isGlyph`: placed at a datum in
-        // another unit, by its parent or by its own position) is ink.
+        // Route B: its own size is a length of the space. Inside a coord, a
+        // glyph size (`isGlyph`: placed at a datum in another unit, by its
+        // parent or by its own position) is ink. Route A: an edge it shares
+        // with a neighbor is a position of the space, whatever its size.
         const embedded =
-          baseEmbedded(box as Dimensions[number]) &&
-          !(within && this.isGlyph(dir));
+          (baseEmbedded(box as Dimensions[number]) &&
+            !(within && this.isGlyph(dir))) ||
+          sharesEdge(edges, dir);
         dims[dir] = { ...dim, embedded };
       }
     }
 
-    this.children.forEach((c) => {
-      if (c instanceof GoFishNode) c.resolveEmbedding(within);
+    const childEdges = sharedEdgesOfChildren(this, edges);
+    this.children.forEach((c, i) => {
+      if (c instanceof GoFishNode) c.resolveEmbedding(within, childEdges[i]);
     });
   }
 

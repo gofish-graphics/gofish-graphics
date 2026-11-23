@@ -21,6 +21,8 @@ import { Rect } from "../ast/shapes/rect";
 import { Ellipse } from "../ast/shapes/ellipse";
 import { DatumValueImpl, baseEmbedded } from "../ast/data";
 import { fresh } from "./testHelpers";
+import { Spread } from "../ast/graphicalOperators/spread";
+import { resolveReferences } from "../ast/_ref";
 
 /** A data value read from column `name`, i.e. an amount of that quantity. */
 const q = (v: number, name: string) => new DatumValueImpl(v, { name });
@@ -175,6 +177,102 @@ console.log("# embedding: Route B in context");
       )
     ) === JSON.stringify([true, true]),
     "emX/emY must override the measure gate"
+  );
+
+  console.log("# embedding: Route A (shared edges) in context");
+  // Pixel rings laid end to end along the radius: each ring's radial edge is
+  // a neighbor's, so the radius embeds (an annular sector that touches its
+  // neighbor), though the ring's height is pixels.
+  const ring = (h = 40) => Rect({ w: q(1, "amount"), h });
+  const leafEmbeds = async (rootIn: any, path: number[]) => {
+    const root = await rootIn;
+    await root.resolveAliases();
+    resolveReferences(root);
+    root.resolveUnderlyingSpace();
+    root.resolveEmbedding();
+    let n = root;
+    for (const i of path) n = n.children[i];
+    return JSON.stringify([n.args.dims[0].embedded, n.args.dims[1].embedded]);
+  };
+  const polarOf = (child: any) => coord({ transform: polar() }, [child]);
+  for (const i of [0, 1]) {
+    ok(
+      `polar pixel rings edge to edge: ring ${i} embeds on both axes`,
+      (await leafEmbeds(
+        polarOf(Spread({ dir: "y", spacing: 0 }, [ring(), ring()])),
+        [0, i]
+      )) === JSON.stringify([true, true])
+    );
+  }
+  ok(
+    "polar pixel rings apart: the radius stays ink",
+    (await leafEmbeds(
+      polarOf(Spread({ dir: "y", spacing: 4 }, [ring(), ring()])),
+      [0, 0]
+    )) === JSON.stringify([true, false])
+  );
+  // A bar of pixel width touches nothing: it keeps its width as ink.
+  const bar = () => Rect({ w: 16, h: q(5, "amount") });
+  ok(
+    "polar lone pixel-width bar: x stays ink (a line)",
+    (await leafEmbeds(polarOf(bar()), [0])) === JSON.stringify([false, true])
+  );
+  ok(
+    "polar pixel-width bars apart: x stays ink",
+    (await leafEmbeds(
+      polarOf(Spread({ dir: "x", spacing: 0.1 }, [bar(), bar()])),
+      [0, 1]
+    )) === JSON.stringify([false, true])
+  );
+  ok(
+    "polar pixel-width bars edge to edge: x embeds (wedges)",
+    (await leafEmbeds(
+      polarOf(Spread({ dir: "x", spacing: 0 }, [bar(), bar()])),
+      [0, 1]
+    )) === JSON.stringify([true, true])
+  );
+  // The sunburst's shape: a ring, then its children's rings stacked along
+  // the angle and aligned at their start on the radius. A child's inner
+  // edge lies on the stack's inner edge, which touches the parent ring, so
+  // it is shared too. Aligned at the end (or the middle), the child's inner
+  // edge touches nothing.
+  const sunburst = (alignment: string) =>
+    polarOf(
+      Spread({ dir: "y", spacing: 0, alignment: "middle" }, [
+        ring(),
+        Spread({ dir: "x", glue: true, alignment } as any, [ring(), ring(30)]),
+      ])
+    );
+  for (const i of [0, 1]) {
+    ok(
+      `sunburst child ring ${i} aligned at the start: the radius embeds`,
+      (await leafEmbeds(sunburst("start"), [0, 1, i])) ===
+        JSON.stringify([true, true])
+    );
+  }
+  ok(
+    "sunburst child ring aligned at the end: the radius stays ink",
+    (await leafEmbeds(sunburst("end"), [0, 1, 1])) ===
+      JSON.stringify([true, false])
+  );
+  ok(
+    "sunburst child ring aligned at the middle: the radius stays ink",
+    (await leafEmbeds(sunburst("middle"), [0, 1, 1])) ===
+      JSON.stringify([true, false])
+  );
+  // A chain inside a node with a size of its own: the node's edge is set by
+  // its size, not by its first part, so nothing passes down.
+  ok(
+    "a sized chain passes no edge down",
+    (await leafEmbeds(
+      polarOf(
+        Spread({ dir: "y", spacing: 0 }, [
+          ring(),
+          Spread({ dir: "y", spacing: 4, h: 200 } as any, [ring(), ring()]),
+        ])
+      ),
+      [0, 1, 0]
+    )) === JSON.stringify([true, false])
   );
 
   console.log(`\n${passed} passed, ${failed} failed`);

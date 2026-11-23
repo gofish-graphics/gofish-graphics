@@ -706,6 +706,38 @@ function testPathBounds(): boolean {
 /**
  * Run all tests
  */
+/**
+ * Test: a full turn of the angle. Its ends are one point on screen, so its
+ * chord says nothing about it; it must still be drawn as the whole circle,
+ * not as a point (a rect that spans the whole circle drew nothing).
+ */
+function testFullTurnPolar() {
+  console.log("Test: a full turn under polar transform");
+  const space = polar();
+  const r = 40;
+  let allPassed = true;
+  for (const seg of [
+    segment([0, r], [2 * Math.PI, r]),
+    curve(
+      [0, r],
+      [(2 * Math.PI) / 3, r],
+      [(4 * Math.PI) / 3, r],
+      [2 * Math.PI, r]
+    ),
+  ]) {
+    const out = transformPath([seg], space, { resample: true });
+    const box = pathBounds(out);
+    const passed =
+      Math.abs(box.maxX - box.minX - 2 * r) < 1 &&
+      Math.abs(box.maxY - box.minY - 2 * r) < 1;
+    console.log(
+      `  ${seg.type}: ${out.length} segments, box ${(box.maxX - box.minX).toFixed(2)} x ${(box.maxY - box.minY).toFixed(2)} ${passed ? "✓" : "✗"}`
+    );
+    allPassed &&= passed;
+  }
+  return allPassed;
+}
+
 export function runTests() {
   console.log("Running adaptive resampling tests...\n");
 
@@ -715,6 +747,7 @@ export function runTests() {
     testMixedPaths(),
     testEdgeCases(),
     testPathBounds(),
+    testFullTurnPolar(),
   ];
 
   const allPassed = results.every((r) => r);
@@ -731,6 +764,7 @@ export function runTests() {
       "Mixed paths (lines and beziers)",
       "Edge cases",
       "pathBounds",
+      "A full turn under polar transform",
     ];
     results.forEach((passed, i) => {
       console.log(`  ${passed ? "✓" : "✗"} ${testNames[i]}`);
